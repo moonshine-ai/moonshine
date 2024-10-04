@@ -4,6 +4,7 @@ from torch import nn
 import math
 import torch
 
+
 class RotaryEmbedding(nn.Module):
     def __init__(self, dim, base=10000):
         super().__init__()
@@ -393,9 +394,6 @@ class AudioPreprocessor(nn.Module):
         ), f"src shape[-1] {src.shape[-1]} should be at least 1023"
         src = src.unsqueeze(-2)
         return self.audio_preprocess(src)
-
-
-import time
 
 
 class MoonshineModel(nn.Module):
