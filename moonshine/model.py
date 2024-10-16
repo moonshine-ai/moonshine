@@ -625,4 +625,23 @@ class Moonshine(object):
                 [tokens, audio_features, seq_len] + cache
             )
 
-        return output[0]
+        return keras.ops.convert_to_numpy(output)
+
+
+def load_model(model_name):
+    from huggingface_hub import hf_hub_download
+
+    if model_name == "moonshine/base":
+        model = Moonshine(416, 416, 8, 8, 8)
+        preprocessor_weights = hf_hub_download(
+            "UsefulSensors/moonshine", "preprocessor.weights.h5", subfolder="base"
+        )
+        encoder_weights = hf_hub_download(
+            "UsefulSensors/moonshine", "encoder.weights.h5", subfolder="base"
+        )
+        decoder_weights = hf_hub_download(
+            "UsefulSensors/moonshine", "decoder.weights.h5", subfolder="base"
+        )
+        model._load_weights(preprocessor_weights, encoder_weights, decoder_weights)
+        return model
+    assert False, f"{model_name} not a valid moonshine model"
