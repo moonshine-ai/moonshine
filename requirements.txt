@@ -1,0 +1,5 @@
+numba
+tokenizers==0.20.0
+einops==0.8.0
+librosa==0.10.2.post1
+tensorflow==2.17.0
