@@ -1,7 +1,18 @@
-import os
+from pathlib import Path
 import tokenizers
 import keras
 from .model import load_model, Moonshine
+
+from . import ASSETS_DIR
+
+
+def load_audio(audio):
+    if isinstance(audio, (str, Path)):
+        import librosa
+
+        audio, _ = librosa.load(audio, sr=16_000)
+        audio = keras.ops.expand_dims(keras.ops.convert_to_tensor(audio), 0)
+    return audio
 
 
 def transcribe(audio, model="moonshine/base"):
@@ -11,16 +22,12 @@ def transcribe(audio, model="moonshine/base"):
         model, Moonshine
     ), f"Expected a Moonshine model or a model name, not a {type(model)}"
 
-    if isinstance(audio, str):
-        import librosa
-
-        audio, _ = librosa.load(audio, sr=16_000)
-        audio = keras.ops.expand_dims(keras.ops.convert_to_tensor(audio), 0)
+    audio = load_audio(audio)
     assert len(keras.ops.shape(audio)) == 2, "audio should be of shape [batch, samples]"
 
     tokens = model.generate(audio)
-    tokenizer_file = os.path.join(os.path.dirname(__file__), "assets", "tokenizer.json")
-    tokenizer = tokenizers.Tokenizer.from_file(tokenizer_file)
+    tokenizer_file = ASSETS_DIR / "tokenizer.json"
+    tokenizer = tokenizers.Tokenizer.from_file(str(tokenizer_file))
     return tokenizer.decode_batch(tokens)
 
 
@@ -33,11 +40,7 @@ def benchmark(audio, model="moonshine/base"):
         model, Moonshine
     ), f"Expected a Moonshine model or a model name, not a {type(model)}"
 
-    if isinstance(audio, str):
-        import librosa
-
-        audio, _ = librosa.load(audio, sr=16_000)
-        audio = keras.ops.expand_dims(keras.ops.convert_to_tensor(audio), 0)
+    audio = load_audio(audio)
     assert len(keras.ops.shape(audio)) == 2, "audio should be of shape [batch, samples]"
 
     num_seconds = keras.ops.convert_to_numpy(keras.ops.size(audio) / 16_000)
