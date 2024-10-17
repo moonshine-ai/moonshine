@@ -36,7 +36,7 @@
   ```shell
   $ python
   >>> import moonshine
-  >>> moonshine.transcribe('ever_tried10s.wav')
+  >>> moonshine.transcribe('ever_tried_10s.wav')
   ['Ever tried ever failed, no matter try again fail again fail better.']
   ```
 
