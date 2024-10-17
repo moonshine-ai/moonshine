@@ -628,20 +628,24 @@ class Moonshine(object):
         return keras.ops.convert_to_numpy(output)
 
 
-def load_model(model_name):
+def _get_weights(model_name):
     from huggingface_hub import hf_hub_download
 
+    repo = "UsefulSensors/moonshine"
+
+    return (
+        hf_hub_download(repo, f"{x}.weights.h5", subfolder=model_name)
+        for x in ("preprocessor", "encoder", "decoder")
+    )
+
+
+def load_model(model_name):
     if model_name == "moonshine/base":
         model = Moonshine(416, 416, 8, 8, 8)
-        preprocessor_weights = hf_hub_download(
-            "UsefulSensors/moonshine", "preprocessor.weights.h5", subfolder="base"
-        )
-        encoder_weights = hf_hub_download(
-            "UsefulSensors/moonshine", "encoder.weights.h5", subfolder="base"
-        )
-        decoder_weights = hf_hub_download(
-            "UsefulSensors/moonshine", "decoder.weights.h5", subfolder="base"
-        )
-        model._load_weights(preprocessor_weights, encoder_weights, decoder_weights)
+        model._load_weights(*_get_weights("base"))
+        return model
+    if model_name == "moonshine/tiny":
+        model = Moonshine(288, 288, 8, 6, 6)
+        model._load_weights(*_get_weights("tiny"))
         return model
     assert False, f"{model_name} not a valid moonshine model"
