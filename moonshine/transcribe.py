@@ -15,6 +15,15 @@ def load_audio(audio):
     return audio
 
 
+def assert_audio_size(audio):
+    assert len(keras.ops.shape(audio)) == 2, "audio should be of shape [batch, samples]"
+    num_seconds = keras.ops.convert_to_numpy(keras.ops.size(audio) / 16_000)
+    assert (
+        0.1 < num_seconds < 64
+    ), "Moonshine models support audio segments that are between 0.1s and 64s in a single transcribe call. For transcribing longer segments, pre-segment your audio and provide shorter segments."
+    return num_seconds
+
+
 def transcribe(audio, model="moonshine/base"):
     if isinstance(model, str):
         model = load_model(model)
@@ -23,7 +32,7 @@ def transcribe(audio, model="moonshine/base"):
     ), f"Expected a Moonshine model or a model name, not a {type(model)}"
 
     audio = load_audio(audio)
-    assert len(keras.ops.shape(audio)) == 2, "audio should be of shape [batch, samples]"
+    assert_audio_size(audio)
 
     tokens = model.generate(audio)
     tokenizer_file = ASSETS_DIR / "tokenizer.json"
@@ -41,9 +50,7 @@ def benchmark(audio, model="moonshine/base"):
     ), f"Expected a Moonshine model or a model name, not a {type(model)}"
 
     audio = load_audio(audio)
-    assert len(keras.ops.shape(audio)) == 2, "audio should be of shape [batch, samples]"
-
-    num_seconds = keras.ops.convert_to_numpy(keras.ops.size(audio) / 16_000)
+    num_seconds = assert_audio_size(audio)
 
     print("Warming up...")
     for _ in range(4):

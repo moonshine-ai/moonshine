@@ -31,7 +31,7 @@ setup(
         )
     ],
     extras_require={
-        "torch": ["torch==2.4.1", "keras==3.6.0"],
+        "tensorflow": ["tensorflow==2.17.0"],
         "jax": ["jax==0.4.34", "keras==3.6.0"],
         "jax-cuda": ["jax[cuda12]", "keras==3.6.0"],
     },

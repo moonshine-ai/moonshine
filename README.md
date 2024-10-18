@@ -19,11 +19,17 @@
   uv pip install useful-moonshine@git+https://github.com/usefulsensors/moonshine.git
   ```
   
-  `moonshine` inference code is written in Keras and can run with the backends that Keras supports. The about command install with the default `tensorflow` backend. To install and run with PyTorch backend, run the following :
+  `moonshine` inference code is written in Keras and can run with the backends that Keras supports. The above command will install with the PyTorch backend. To run the provided inference code, you have to instruct Keras to use the PyTorch backend by setting and environment variable .
   
   ```shell
-  uv pip install useful-moonshine[torch]@git+https://github.com/usefulsensors/moonshine.git
   export KERAS_BACKEND=torch
+  ```
+
+  To run with TensorFlow backend, run the following to install Moonshine.
+
+  ```shell
+  uv pip install useful-moonshine[tensorflow]@git+https://github.com/usefulsensors/moonshine.git
+  export KERAS_BACKEND=tensorflow
   ```
 
   To run with jax backend, run the following:
@@ -47,7 +53,7 @@
     ```
 
 * Test transcribing an audio file
-  
+
   ```shell
   python
   >>> import moonshine
