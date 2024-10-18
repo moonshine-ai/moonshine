@@ -19,8 +19,23 @@
   uv pip install useful-moonshine@git+https://github.com/usefulsensors/moonshine.git
   ```
   
-  * _Note for UsefulSensors: Since the repo is not public yet, installing from the github URI is not possible yet. Do this instead:_
+  `moonshine` inference code is written in Keras and can run with the backends that Keras supports. The about command install with the default `tensorflow` backend. To install and run with PyTorch backend, run the following :
   
+  ```shell
+  uv pip install useful-moonshine[torch]@git+https://github.com/usefulsensors/moonshine.git
+  export KERAS_BACKEND=torch
+  ```
+
+  To run with jax backend, run the following:
+
+  ```shell
+  uv pip install useful-moonshine[jax]@git+https://github.com/usefulsensors/moonshine.git
+  export KERAS_BACKEND=jax
+  # Use useful-moonshine[jax-cuda] for jax on GPU
+  ```
+
+  * _Note for UsefulSensors: Since the repo is not public yet, installing from the github URI is not possible yet. Do this instead:_
+
   * ```shell
     git clone git@github.com:usefulsensors/moonshine.git
     cd moonshine

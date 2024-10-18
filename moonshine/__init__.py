@@ -3,4 +3,5 @@ from .version import __version__
 
 ASSETS_DIR = Path(__file__).parents[0] / "assets"
 
+from .model import load_model, Moonshine
 from .transcribe import transcribe, benchmark
