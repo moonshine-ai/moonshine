@@ -1,5 +1,40 @@
 # Moonshine
 
+---
+
+[[Blog]](https://petewarden.com/2024/10/20/introducing-moonshine-the-new-state-of-the-art-for-speech-to-text/) [[Paper]](TBD) [[Model card]](https://github.com/usefulsensors/moonshine/blob/main/model-card.md)
+
+Moonshine is an automatic speech recognition (ASR) for English. It's intended
+use is in real time scenarios such as live transcription and voice command
+recognition. Moonshine obtains word-error rates (WER) better than similarly
+sized Whisper models from OpenAI on the datasets used in the [OpenASR
+leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard)
+maintained by HuggingFace.
+
+| WER        | Moonshine Tiny | Whisper Tiny.en |
+| ---------- | -------------- | --------------- |
+| Average    | **12.66**      | 12.81           |
+| AMI        | 22.77          | 24.24           |
+| Earnings22 | 21.25          | 19.12           |
+| Gigaspeech | 14.41          | 14.08           |
+| LS Clean   | 4.52           | 5.66            |
+| LS Other   | 11.71          | 15.45           |
+| SPGISpeech | 7.70           | 5.93            |
+| Tedlium    | 5.64           | 5.97            |
+| Voxpopuli  | 13.27          | 12.00           |
+
+| WER        | Moonshine Base | Whisper Base.en |
+| ---------- | -------------- | --------------- |
+| Average    | **10.07**      | 10.32           |
+| AMI        | 17.79          | 21.13           |
+| Earnings22 | 17.65          | 15.09           |
+| Gigaspeech | 12.19          | 12.83           |
+| LS Clean   | 3.23           | 4.25            |
+| LS Other   | 8.18           | 10.35           |
+| SPGISpeech | 5.46           | 4.26            |
+| Tedlium    | 5.22           | 4.87            |
+| Voxpopuli  | 10.81          | 9.76            |
+
 ## Setup
 
 * Install `uv` for Python environment management
@@ -14,13 +49,16 @@
   ```
 
 * Install the `useful-moonshine` package from this github repo
-  
+
   ```shell
   uv pip install useful-moonshine@git+https://github.com/usefulsensors/moonshine.git
   ```
-  
-  `moonshine` inference code is written in Keras and can run with the backends that Keras supports. The above command will install with the PyTorch backend. To run the provided inference code, you have to instruct Keras to use the PyTorch backend by setting and environment variable .
-  
+
+  `moonshine` inference code is written in Keras and can run with the backends
+  that Keras supports. The above command will install with the PyTorch
+  backend. To run the provided inference code, you have to instruct Keras to use
+  the PyTorch backend by setting and environment variable .
+
   ```shell
   export KERAS_BACKEND=torch
   ```
@@ -39,18 +77,6 @@
   export KERAS_BACKEND=jax
   # Use useful-moonshine[jax-cuda] for jax on GPU
   ```
-
-  * _Note for UsefulSensors: Since the repo is not public yet, installing from the github URI is not possible yet. Do this instead:_
-
-  * ```shell
-    git clone git@github.com:usefulsensors/moonshine.git
-    cd moonshine
-    uv pip install -e .
-    cd ../
-    # Make sure you are out of the current directory too, as you
-    # don't want moonshine in your path (import moonshine in python
-    # will mistakenly use the wrong path)
-    ```
 
 * Test transcribing an audio file
 
