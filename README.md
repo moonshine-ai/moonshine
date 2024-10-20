@@ -2,7 +2,7 @@
 
 ---
 
-[[Blog]](https://petewarden.com/2024/10/20/introducing-moonshine-the-new-state-of-the-art-for-speech-to-text/) [[Paper]](TBD) [[Model card]](https://github.com/usefulsensors/moonshine/blob/main/model-card.md)
+[[Blog]](https://petewarden.com/2024/10/20/introducing-moonshine-the-new-state-of-the-art-for-speech-to-text/) [[Paper]](https://github.com/usefulsensors/moonshine/blob/main/moonshine_paper.pdf) [[Model card]](https://github.com/usefulsensors/moonshine/blob/main/model-card.md) [[Podcast]](https://notebooklm.google.com/notebook/d787d6c2-7d7b-478c-b7d5-a0be4c74ae19/audio)
 
 Moonshine is an automatic speech recognition (ASR) for English. It's intended
 use is in real time scenarios such as live transcription and voice command
