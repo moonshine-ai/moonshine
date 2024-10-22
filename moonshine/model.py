@@ -257,7 +257,7 @@ class MHACausalWithRope(keras.layers.MultiHeadAttention):
         if value_cache is not None:
             assert (
                 key_cache is not None
-            ), f"key_cache should not be None when value_cache is not"
+            ), "key_cache should not be None when value_cache is not"
 
             key = keras.ops.concatenate((key_cache, key), axis=-3)
             value = keras.ops.concatenate((value_cache, value), axis=-3)
