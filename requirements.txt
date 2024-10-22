@@ -1,6 +1,6 @@
 numba
 tokenizers==0.20.0
 einops==0.8.0
-librosa==0.10.2.post1
-torch==2.4.1
+librosa>=0.9.0
+torch>=2.4.0
 keras==3.6.0
