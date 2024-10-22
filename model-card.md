@@ -2,7 +2,7 @@
 
 This is the reference codebase for running the automatic speech recognition (ASR) models (Moonshine models) trained and released by Useful Sensors.
 
-Following [Model Cards for Model Reporting (Mitchell et al.)](https://arxiv.org/abs/1810.03993), we're providing some information about the automatic speech recognition model. More information on how these models were trained and evaluated can be found [in the paper](TBD). Note, lot of the text has been copied verbatim from the [model card](https://github.com/openai/whisper/blob/main/model-card.md) for the Whisper model developed by OpenAI, because both models serve identical purposes, and carry identical risks.
+Following [Model Cards for Model Reporting (Mitchell et al.)](https://arxiv.org/abs/1810.03993), we're providing some information about the automatic speech recognition model. More information on how these models were trained and evaluated can be found [in the paper](https://arxiv.org/abs/2410.15608). Note, lot of the text has been copied verbatim from the [model card](https://github.com/openai/whisper/blob/main/model-card.md) for the Whisper model developed by OpenAI, because both models serve identical purposes, and carry identical risks.
 
 ## Model Details
 
@@ -23,7 +23,7 @@ Sequence-to-sequence ASR (automatic speech recognition) and speech translation m
 
 ### Paper & samples
 
-[Paper](TBD) / [Blog](TBD)
+[Paper](https://arxiv.org/abs/2410.15608) / [Blog](https://petewarden.com/2024/10/21/introducing-moonshine-the-new-state-of-the-art-for-speech-to-text/)
 
 ## Model Use
 
@@ -37,7 +37,7 @@ In particular, we caution against using Moonshine models to transcribe recording
 
 ## Training Data
 
-The models are trained on 200,000 hours of audio and the corresponding transcripts collected from the internet, as well as datasets openly available and accessible on HuggingFace. The open datasets used are listed in the [the accompanying paper](TBD).
+The models are trained on 200,000 hours of audio and the corresponding transcripts collected from the internet, as well as datasets openly available and accessible on HuggingFace. The open datasets used are listed in the [the accompanying paper](https://arxiv.org/abs/2410.15608).
 
 ## Performance and Limitations
 
