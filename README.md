@@ -101,6 +101,15 @@ python
 
 The first argument is a path to an audio file and the second is the name of a Moonshine model. `moonshine/tiny` and `moonshine/base` are the currently available models.
 
+## TODO
+* [ ] Live transcription demo
+    
+* [ ] ONNX model
+    
+* [ ] CTranslate2 support
+    
+* [ ] MLX support
+
 ## Citation
 If you benefit from our work, please cite us:
 ```
