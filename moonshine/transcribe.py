@@ -35,10 +35,12 @@ def transcribe(audio, model="moonshine/base"):
     assert_audio_size(audio)
 
     tokens = model.generate(audio)
+    return load_tokenizer().decode_batch(tokens)
+
+def load_tokenizer():
     tokenizer_file = ASSETS_DIR / "tokenizer.json"
     tokenizer = tokenizers.Tokenizer.from_file(str(tokenizer_file))
-    return tokenizer.decode_batch(tokens)
-
+    return tokenizer
 
 def benchmark(audio, model="moonshine/base"):
     import time
