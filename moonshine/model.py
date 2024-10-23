@@ -221,7 +221,7 @@ class Encoder(object):
             axis=-1, epsilon=1e-5, center=False, scale=True
         )
         inputs = keras.layers.Input(shape=[None, dim])
-        seq_len = keras.layers.Input(shape=[], batch_size=1)
+        seq_len = keras.layers.Input(shape=[], batch_size=1, dtype="int32")
         pos_emb = rot_pos_emb(Arange()(inputs=seq_len))
 
         x = inputs
@@ -504,9 +504,9 @@ class Decoder(object):
         )
 
     def get_uncached_call(self, dim, rot_embed_dim):
-        inputs = keras.layers.Input(shape=[None])
-        seq_len = keras.layers.Input(shape=[], batch_size=1)
-        context = keras.layers.Input(shape=[None, dim])
+        inputs = keras.layers.Input(shape=[None], dtype="int32")
+        seq_len = keras.layers.Input(shape=[], batch_size=1, dtype="int32")
+        context = keras.layers.Input(shape=[None, dim], dtype="float32")
         rot_pos_emb = RotaryEmbedding(rot_embed_dim)
 
         x = inputs
@@ -526,17 +526,17 @@ class Decoder(object):
         return Model(inputs=[inputs, context, seq_len], outputs=[logits] + outputs)
 
     def get_cached_call(self, dim, rot_embed_dim, key_dim, n_head, n_layers):
-        inputs = keras.layers.Input(shape=[None])
-        seq_len = keras.layers.Input(shape=[], batch_size=1)
-        context = keras.layers.Input(shape=[None, dim])
+        inputs = keras.layers.Input(shape=[None], dtype="int32")
+        seq_len = keras.layers.Input(shape=[], batch_size=1, dtype="int32")
+        context = keras.layers.Input(shape=[None, dim], dtype="float32")
         rot_pos_emb = RotaryEmbedding(rot_embed_dim)
 
         cache = [
             [
-                keras.layers.Input(shape=[None, n_head, key_dim]),
-                keras.layers.Input(shape=[None, n_head, key_dim]),
-                keras.layers.Input(shape=[None, n_head, key_dim]),
-                keras.layers.Input(shape=[None, n_head, key_dim]),
+                keras.layers.Input(shape=[None, n_head, key_dim], dtype="float32"),
+                keras.layers.Input(shape=[None, n_head, key_dim], dtype="float32"),
+                keras.layers.Input(shape=[None, n_head, key_dim], dtype="float32"),
+                keras.layers.Input(shape=[None, n_head, key_dim], dtype="float32"),
             ]
             for _ in range(n_layers)
         ]
@@ -596,6 +596,11 @@ class Moonshine(object):
         self.decoder = Decoder(
             dec_n_layers, dim, inner_dim, n_head, vocab_size, dec_ff_mult, dec_ff_swiglu
         )
+        self.dim = dim
+        self.inner_dim = inner_dim
+        self.n_head = n_head
+        self.enc_n_layers = enc_n_layers
+        self.dec_n_layers = dec_n_layers
 
     def _load_weights(self, preprocessor_weights, encoder_weights, decoder_weights):
         self.preprocessor.preprocess.load_weights(preprocessor_weights)
