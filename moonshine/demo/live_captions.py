@@ -63,8 +63,9 @@ def print_captions(text, new_cached_caption=False):
     print('\r' + text, end='', flush=True)
 
 
-print("Loading Moonshine model ...")
-transcribe = TranscriberMoonshine(rate=SAMPLING_RATE)
+model_name = "moonshine/tiny"
+print(f"Loading Moonshine model '{model_name}' ...")
+transcribe = TranscriberMoonshine(model_name=model_name, rate=SAMPLING_RATE)
 
 vad_model = load_silero_vad(onnx=True)
 vad_iterator = VADIterator(

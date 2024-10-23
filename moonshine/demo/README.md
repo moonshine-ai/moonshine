@@ -98,7 +98,7 @@ Being in Germany after nearly dying from being poisoned by Russian agents, and y
 You may customize this script to display Moonshine text transcriptions as you wish.
 
 The script `live_captions.py` loads the English language version of Moonshine
-model.  The script includes logic to detect speech activity and limit the
+tiny model.  The script includes logic to detect speech activity and limit the
 context window of speech fed to the Moonshine model.  The returned
 transcriptions are displayed as scrolling captions.  Speech segments with pauses
 are cached and these cached captions are printed on exit.  The printed captions

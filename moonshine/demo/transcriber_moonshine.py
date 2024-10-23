@@ -7,10 +7,10 @@ import tokenizers
 from moonshine import load_model, ASSETS_DIR
 
 class TranscriberMoonshine(object):
-    def __init__(self, rate=16000):
+    def __init__(self, model_name="moonshine/tiny", rate=16000):
         if rate != 16000:
             raise ValueError("Moonshine supports sampling rate 16000 Hz.")
-        self.model = load_model("moonshine/tiny")
+        self.model = load_model(model_name=model_name)
         self.rate = rate
         tokenizer_file = ASSETS_DIR / "tokenizer.json"
         self.tokenizer = tokenizers.Tokenizer.from_file(str(tokenizer_file))
