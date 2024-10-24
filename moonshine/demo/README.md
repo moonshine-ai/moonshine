@@ -4,7 +4,7 @@ This folder contains the demo Python script
 [live_captions.py](/moonshine/demo/live_captions.py).
 The script runs Moonshine model on segments of speech detected in the microphone
 signal using a voice activity detector called
-[SileroVAD](https://github.com/snakers4/silero-vad).  The script prints
+[silero-vad](https://github.com/snakers4/silero-vad).  The script prints
 scrolling text or "live captions" assembled from the model predictions.
 
 The following steps were tested in `uv` virtual environment v0.4.25 created in
