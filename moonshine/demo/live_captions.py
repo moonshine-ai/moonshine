@@ -1,4 +1,5 @@
 """Live captions from microphone using Moonshine and SileroVAD models."""
+import os
 import time
 
 from queue import Queue
@@ -9,7 +10,7 @@ from silero_vad import load_silero_vad, VADIterator
 from sounddevice import InputStream
 
 # Local import.
-from transcriber_moonshine import TranscriberMoonshine
+from transcriber_moonshine_onnx import TranscriberMoonshine
 
 SAMPLING_RATE = 16000
 
@@ -21,7 +22,7 @@ SHOW_NEW_CAPTION = False
 
 # These affect live caption updating - adjust for your platform speed.
 MAX_SPEECH_SECS = 15
-MIN_REFRESH_SECS = 0.5
+MIN_REFRESH_SECS = 0.3
 
 VERBOSE = False
 
@@ -62,10 +63,9 @@ def print_captions(text, new_cached_caption=False):
     text = " " * (MAX_LINE_LENGTH - len(text)) + text
     print('\r' + text, end='', flush=True)
 
-
-model_name = "moonshine/tiny"
-print(f"Loading Moonshine model '{model_name}' ...")
-transcribe = TranscriberMoonshine(model_name=model_name, rate=SAMPLING_RATE)
+models_dir = f"{os.path.join(os.path.dirname(__file__), 'models', 'base')}"
+print(f"Loading Moonshine model '{models_dir}' ...")
+transcribe = TranscriberMoonshine(models_dir=models_dir, rate=SAMPLING_RATE)
 
 vad_model = load_silero_vad(onnx=True)
 vad_iterator = VADIterator(

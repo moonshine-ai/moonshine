@@ -1,9 +1,15 @@
+import os
+import sys
+
 from pathlib import Path
 import tokenizers
 import keras
-from .model import load_model, Moonshine
 
-from . import ASSETS_DIR
+# TODO(guy): review this change.
+# from .model import load_model, Moonshine
+# from . import ASSETS_DIR
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from model import load_model, Moonshine
 
 
 def load_audio(audio, return_numpy=False):
@@ -41,7 +47,10 @@ def transcribe(audio, model="moonshine/base"):
 
 
 def load_tokenizer():
-    tokenizer_file = ASSETS_DIR / "tokenizer.json"
+    # TODO(guy): review this change.
+    # tokenizer_file = ASSETS_DIR / "tokenizer.json"
+    assets_dir = f"{os.path.join(os.path.dirname(__file__), 'assets')}"
+    tokenizer_file = f"{assets_dir}{os.sep}tokenizer.json"
     tokenizer = tokenizers.Tokenizer.from_file(str(tokenizer_file))
     return tokenizer
 

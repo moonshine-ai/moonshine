@@ -12,12 +12,16 @@ Ubuntu 22.04 home folder running on a MacBook Pro M2 virtual machine.
 
 - [Live caption microphone demo.](#live-caption-microphone-demo)
 - [Installation.](#installation)
+  - [Environment.](#environment)
+  - [Download the ONNX models.](#download-the-onnx-models)
 - [Run the demo.](#run-the-demo)
 - [Script notes.](#script-notes)
 - [Future work.](#future-work)
 - [Citation.](#citation)
 
 # Installation.
+
+## Environment.
 
 Moonshine installation steps are available in the
 [top level README](/README.md) of this repo.  The same set of steps are included
@@ -56,6 +60,14 @@ git clone git@github.com:usefulsensors/moonshine.git
 uv pip install useful-moonshine@git+https://github.com/usefulsensors/moonshine.git
 uv pip install -r moonshine/moonshine/demo/requirements.txt
 ```
+
+## Download the ONNX models.
+
+The script is coded to find ONNX base model in `demo/models` subfolder.  ONNX
+tiny model can also be run after editing `models_dir` string in
+`live_captions.py`.
+
+TODO: add download for the ONNX model.
 
 # Run the demo.
 
@@ -119,13 +131,13 @@ will be ineffective when the model inference time exceeds this value.
 Conversely on a faster processor consider reducing this value for more frequent
 caption updates.  For example on Microsoft Surface Pro 11 Snapdragon with ONNX
 runtime and Moonshine base model we're running a value of
-`MIN_REFRESH_SECS = 0.2` which looks faster to the eye.  Also on a slower
+`MIN_REFRESH_SECS = 0.2` which looks fast to the eye.  Also on a slower
 processor you might consider reducing the value of `MAX_SPEECH_SECS` to avoid
 slower model inferencing encountered with longer speech segments.
 
 # Future work.
 
-* [ ] ONNX runtime model version.
+* [x] ONNX runtime model version.
 
 # Citation.
 

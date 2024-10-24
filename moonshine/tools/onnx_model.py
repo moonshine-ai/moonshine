@@ -1,5 +1,11 @@
+import os
+import sys
 import onnxruntime
-import moonshine
+
+# TODO(guy): review this change.
+# import moonshine
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from transcribe import load_audio, load_tokenizer
 
 
 class MoonshineOnnxModel(object):
@@ -12,10 +18,14 @@ class MoonshineOnnxModel(object):
         self.cached_decode = onnxruntime.InferenceSession(
             f"{models_dir}/cached_decode.onnx"
         )
-        self.tokenizer = moonshine.load_tokenizer()
+        # TODO(guy): review this change.
+        # self.tokenizer = moonshine.load_tokenizer()
+        self.tokenizer = load_tokenizer()
 
     def generate(self, audio, max_len=None):
-        audio = moonshine.load_audio(audio, return_numpy=True)
+        # TODO(guy): review this change.
+        # audio = moonshine.load_audio(audio, return_numpy=True)
+        audio = load_audio(audio, return_numpy=True)
         if max_len is None:
             # max 6 tokens per second of audio
             max_len = int((audio.shape[-1] / 16_000) * 6)
