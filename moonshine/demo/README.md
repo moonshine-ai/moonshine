@@ -76,11 +76,10 @@ sudo apt install -y portaudio19-dev
 
 ## Download the ONNX models.
 
-The script is coded to find ONNX base model in `demo/models` subfolder.  ONNX
-tiny model can also be run after editing `models_dir` string in
-`live_captions.py`.
+The script finds ONNX base or tiny models in the `demo/models/base` and
+`demo/models/tiny` sub-folders.
 
-TODO: add download for the ONNX model.
+TODO: add download instructions for the ONNX models.
 
 # Run the demo.
 
