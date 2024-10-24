@@ -27,6 +27,7 @@ MIN_REFRESH_SECS = 0.2
 
 VERBOSE = False
 
+
 def create_source_callback(q):
     def source_callback(data, frames, time, status):
         if status:
