@@ -1,4 +1,8 @@
-"""Moonshine model transcriber."""
+"""Moonshine model transcriber Torch version.
+
+Prior to running live_captions.py script run this command.
+  export KERAS_BACKEND=torch
+"""
 import time
 
 import numpy as np
