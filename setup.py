@@ -32,6 +32,7 @@ setup(
         "tensorflow": ["tensorflow==2.17.0"],
         "jax": ["jax==0.4.34", "keras==3.6.0"],
         "jax-cuda": ["jax[cuda12]", "keras==3.6.0"],
+        "onnx": ["onnxruntime>=1.19.2"],
     },
     include_package_data=True,
 )

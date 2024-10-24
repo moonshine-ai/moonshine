@@ -88,6 +88,12 @@ export KERAS_BACKEND=jax
 # Use useful-moonshine[jax-cuda] for jax on GPU
 ```
 
+To run with ONNX runtime that is supported on platforms, run the following:
+
+```shell
+uv pip install useful-moonshine[onnx]@git+https://github.com/usefulsensors/moonshine.git
+```
+
 ### 3. Try it out
 
 You can test Moonshine by transcribing the provided example audio file with the `.transcribe` function:
@@ -100,6 +106,7 @@ python
 ```
 
 The first argument is a path to an audio file and the second is the name of a Moonshine model. `moonshine/tiny` and `moonshine/base` are the currently available models.
+Use the `moonshine.transcribe_with_onnx` function to use the ONNX runtime for inference. The parameters are the same as they are for `moonshine.transcribe`.
 
 ## TODO
 * [ ] Live transcription demo
