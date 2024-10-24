@@ -17,6 +17,9 @@ virtual machine.
   - [Download the ONNX models.](#download-the-onnx-models)
 - [Run the demo.](#run-the-demo)
 - [Script notes.](#script-notes)
+  - [Speech truncation.](#speech-truncation)
+  - [Running on a slower processor.](#running-on-a-slower-processor)
+  - [Metrics.](#metrics)
 - [Future work.](#future-work)
 - [Citation.](#citation)
 
@@ -87,17 +90,13 @@ muted in your host OS or system audio drivers.
 cd
 source env_moonshine_demo/bin/activate
 
-cd moonshine/moonshine
-
-export KERAS_BACKEND=torch  # Not needed for ONNX model.
-
-python3 ./demo/live_captions.py
+python3 ./moonshine/moonshine/demo/live_captions.py base
 ```
 Speak in English language to the microphone and observe live captions in the
 terminal.  Quit the demo with ctrl + C to see console print of the captions.
 
 An example run on Ubuntu 24.04 VM on MacBook Pro M2 with Moonshine base ONNX
-model.
+model (Credit: BBC World Service).
 ```console
 (env_moonshine_demo) parallels@ubuntu-linux-2404:~$ python3 moonshine/moonshine/demo/live_captions.py
 Error in cpuinfo: prctl(PR_SVE_GET_VL) failed
@@ -119,8 +118,8 @@ Kamala Harris and Donald Trump have seen President Zelensky's victory plan setti
 You may customize this script to display Moonshine text transcriptions as you wish.
 
 The script `live_captions.py` loads the English language version of Moonshine
-tiny model.  The script includes logic to detect speech activity and limit the
-context window of speech fed to the Moonshine model.  The returned
+base ONNX model.  The script includes logic to detect speech activity and limit
+the context window of speech fed to the Moonshine model.  The returned
 transcriptions are displayed as scrolling captions.  Speech segments with pauses
 are cached and these cached captions are printed on exit.  The printed captions
 on exit will not contain the latest displayed caption when there was no pause
@@ -129,20 +128,35 @@ before pressing ctrl + C.  If you are running on a slow or throttled processor
 such that the model inferences are not realtime, after speaking stops you should
 wait longer for the speech queue to be processed before pressing ctrl + C.
 
+## Speech truncation.
+
 Some hallucinations will be seen when the script is running: one reason is
 speech gets truncated out of necessity to generate the frequent refresh and
 timeout transcriptions.  Truncated speech contains partial or sliced words for
 which transcriber model transcriptions are unpredictable.  See the printed
 captions on script exit for the best results.
 
-If you run this script on a slower processor, the value of `MIN_REFRESH_SECS`
-will be ineffective when the model inference time exceeds this value.
-Conversely on a faster processor consider reducing this value for more frequent
-caption updates.  For example on Microsoft Surface Pro 11 Snapdragon with ONNX
-runtime and Moonshine base model we're running a value of
-`MIN_REFRESH_SECS = 0.2` which looks fast to the eye.  Also on a slower
-processor you might consider reducing the value of `MAX_SPEECH_SECS` to avoid
-slower model inferencing encountered with longer speech segments.
+## Running on a slower processor.
+If you run this script on a slower processor consider using the `tiny` model.
+```console
+cd
+source env_moonshine_demo/bin/activate
+
+python3 ./moonshine/moonshine/demo/live_captions.py tiny
+```
+The value of `MIN_REFRESH_SECS` will be ineffective when the model inference
+time exceeds that value.  Conversely on a faster processor consider reducing
+the value of `MIN_REFRESH_SECS` for more frequent caption updates.  On a slower
+processor you might also consider reducing the value of `MAX_SPEECH_SECS` to
+avoid slower model inferencing encountered with longer speech segments.
+
+## Metrics.
+The metrics shown on program exit will vary based on the talker's speaking
+style.  If the talker speaks with more frequent pauses the speech segments are
+shorter and the mean inference time will be lower.  This is a feature of the
+Moonshine model described in
+[our paper](https://arxiv.org/abs/2410.15608).
+When benchmarking use the same speech such as a recording of someone talking.
 
 # Future work.
 
