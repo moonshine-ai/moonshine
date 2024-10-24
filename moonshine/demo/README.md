@@ -8,7 +8,8 @@ signal using a voice activity detector called
 scrolling text or "live captions" assembled from the model predictions.
 
 The following steps were tested in `uv` virtual environment v0.4.25 created in
-Ubuntu 22.04 home folder running on a MacBook Pro M2 virtual machine.
+Ubuntu 22.04 and Ubuntu 24.04 home folders running on a MacBook Pro M2 (ARM)
+virtual machine.
 
 - [Live caption microphone demo.](#live-caption-microphone-demo)
 - [Installation.](#installation)
@@ -95,23 +96,22 @@ python3 ./demo/live_captions.py
 Speak in English language to the microphone and observe live captions in the
 terminal.  Quit the demo with ctrl + C to see console print of the captions.
 
-An example run on Ubuntu VM on MacBook Pro M2.
+An example run on Ubuntu 24.04 VM on MacBook Pro M2 with Moonshine base ONNX
+model.
 ```console
-(env_moonshine_demo) parallels@ubuntu-linux-22-04-02-desktop:~/moonshine/moonshine$ export KERAS_BACKEND=torch
-(env_moonshine_demo) parallels@ubuntu-linux-22-04-02-desktop:~/moonshine/moonshine$ python3 ./demo/live_captions.py
-Loading Moonshine model ...
-/home/parallels/env_moonshine_demo/lib/python3.10/site-packages/keras/src/ops/nn.py:545: UserWarning: You are using a softmax over axis 3 of a tensor of shape torch.Size([1, 8, 1, 1]). This axis has size 1. The softmax operation will always return the value 1, which is likely not what you intended. Did you mean to use a sigmoid instead?
-  warnings.warn(
+(env_moonshine_demo) parallels@ubuntu-linux-2404:~$ python3 moonshine/moonshine/demo/live_captions.py
+Error in cpuinfo: prctl(PR_SVE_GET_VL) failed
+Loading Moonshine model '/home/parallels/moonshine/moonshine/demo/models/base' ...
 Press Ctrl+C to quit live captions.
 
-^C
-      number inferences :  40
-    mean inference time :  0.77s
-  model realtime factor :  7.10x
+ca at bbcworldservice.com/documentaries or wherever you get your BBC podcasts.  ^C
+      number inferences :  179
+    mean inference time :  0.20s
+  model realtime factor :  21.20x
 
 Cached captions.
-Being in Germany after nearly dying from being poisoned by Russian agents, and you and he walked through the terminal after he landed, and then he was immediately arrested in customs, and imprisoned never to be free again. Did you know at that moment that that may be the last time you were together? I didn't think about that at this moment. I knew that we are going at our homeland. We wanted to go there on you that it was very important for. My husband to cop back to russia to show that he is not afraid to show and to encourage all his supporters not to be afraid i knew that it's very important for him and I knew that it could be dangerous but I knew that he would never do it in another way.
-(env_moonshine_demo) parallels@ubuntu-linux-22-04-02-desktop:~/moonshine/moonshine$
+Kamala Harris and Donald Trump have seen President Zelensky's victory plan setting out his country's vision for the future. Ukrainians are just days away from discovering how much and for how long the next president of its biggest aid provider is willing to help them to stay in the fight. This edition of the inquiry was presented by me, Charmaine Cozier. The producer was Jill Collins, researcher Matt Dawson, editor Tara McDermott and Technica producer Ben Howton. This is the BBC World Service, and Alvin Hole is going home. This is Wakala County, Florida. When you cross that Kana line, oh yeah, you're going to feel free. As a child, I thought of it as a place of incredible beauty. But this is also a place where the past is very, very, Part from being the past. You go down the road and the like people left on the left And white people have on the right. I believe that to understand the United States, you need to know about places like Wakala County. It's a power struggle. That's what i feel you know fear Do you make you do a lot of things? In an election year, in a divided country, I've come home to see family and friends and to share their America. Alvin holes are the ramarica at bbcworldservice.com/documentaries or wherever you get your BBC podcasts.
+(env_moonshine_demo) parallels@ubuntu-linux-2404:~$
 ```
 
 # Script notes.
