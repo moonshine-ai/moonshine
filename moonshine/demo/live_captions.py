@@ -1,5 +1,6 @@
-"""Live captions from microphone using Moonshine and SileroVAD models."""
+"""Live captions from microphone using Moonshine and SileroVAD ONNX models."""
 import os
+import sys
 import time
 
 from queue import Queue
@@ -18,11 +19,11 @@ CHUNK_SIZE = 512  # Silero VAD requirement with sampling rate 16000.
 LOOKBACK_CHUNKS = 5
 MARKER_LENGTH = 6
 MAX_LINE_LENGTH = 80
-SHOW_NEW_CAPTION = False
+SHOW_NEW_CAPTION = False  # Stacks cached captions above scrolling captions.
 
-# These affect live caption updating - adjust for your platform speed.
+# These affect live caption updating - adjust for your platform speed and model.
 MAX_SPEECH_SECS = 15
-MIN_REFRESH_SECS = 0.3
+MIN_REFRESH_SECS = 0.2
 
 VERBOSE = False
 
@@ -63,84 +64,90 @@ def print_captions(text, new_cached_caption=False):
     text = " " * (MAX_LINE_LENGTH - len(text)) + text
     print('\r' + text, end='', flush=True)
 
-models_dir = f"{os.path.join(os.path.dirname(__file__), 'models', 'base')}"
-print(f"Loading Moonshine model '{models_dir}' ...")
-transcribe = TranscriberMoonshine(models_dir=models_dir, rate=SAMPLING_RATE)
 
-vad_model = load_silero_vad(onnx=True)
-vad_iterator = VADIterator(
-    model=vad_model,
-    sampling_rate=SAMPLING_RATE,
-    threshold=0.5,
-    min_silence_duration_ms=300,
-)
+if __name__ == '__main__':
+    model_size = "base" if len(sys.argv) < 2 else sys.argv[1]
+    if model_size not in ["base", "tiny"]:
+        raise ValueError("Model size is not supported.")
 
-q = Queue()
-stream = InputStream(
-    samplerate=SAMPLING_RATE,
-    channels=1,
-    blocksize=CHUNK_SIZE,
-    dtype=np.float32,
-    callback=create_source_callback(q),
-)
-stream.start()
+    models_dir = os.path.join(os.path.dirname(__file__), 'models', f"{model_size}")
+    print(f"Loading Moonshine model '{models_dir}' ...")
+    transcribe = TranscriberMoonshine(models_dir=models_dir, rate=SAMPLING_RATE)
 
-caption_cache = []
-lookback_size = LOOKBACK_CHUNKS * CHUNK_SIZE
-speech = np.empty(0, dtype=np.float32)
+    vad_model = load_silero_vad(onnx=True)
+    vad_iterator = VADIterator(
+        model=vad_model,
+        sampling_rate=SAMPLING_RATE,
+        threshold=0.5,
+        min_silence_duration_ms=300,
+    )
 
-recording = False
+    q = Queue()
+    stream = InputStream(
+        samplerate=SAMPLING_RATE,
+        channels=1,
+        blocksize=CHUNK_SIZE,
+        dtype=np.float32,
+        callback=create_source_callback(q),
+    )
+    stream.start()
 
-print("Press Ctrl+C to quit live captions.\n")
+    caption_cache = []
+    lookback_size = LOOKBACK_CHUNKS * CHUNK_SIZE
+    speech = np.empty(0, dtype=np.float32)
 
-with stream:
-    print_captions("Ready...")
-    try:
-        while True:
-            data, status = q.get()
-            if VERBOSE and status:
-                print(status)
+    recording = False
 
-            chunk = np.array(data).flatten()
+    print("Press Ctrl+C to quit live captions.\n")
 
-            speech = np.concatenate((speech, chunk))
-            if not recording:
-                speech = speech[-lookback_size:]
+    with stream:
+        print_captions("Ready...")
+        try:
+            while True:
+                data, status = q.get()
+                if VERBOSE and status:
+                    print(status)
 
-            speech_dict = vad_iterator(chunk)
-            if speech_dict:
-                if 'start' in speech_dict and not recording:
-                    recording = True
-                    start_time = time.time()
+                chunk = np.array(data).flatten()
 
-                if 'end' in speech_dict and recording:
-                    recording = False
-                    end_recording(speech, "<STOP>")
+                speech = np.concatenate((speech, chunk))
+                if not recording:
+                    speech = speech[-lookback_size:]
 
-            elif recording:
-                # Possible speech truncation can cause hallucination.
+                speech_dict = vad_iterator(chunk)
+                if speech_dict:
+                    if 'start' in speech_dict and not recording:
+                        recording = True
+                        start_time = time.time()
 
-                if (len(speech) / SAMPLING_RATE) > MAX_SPEECH_SECS:
-                    recording = False
-                    end_recording(speech, "<SNIP>")
-                    # Soft reset without affecting VAD model state.
-                    vad_iterator.triggered = False
-                    vad_iterator.temp_end = 0
-                    vad_iterator.current_sample = 0
+                    if 'end' in speech_dict and recording:
+                        recording = False
+                        end_recording(speech, "<STOP>")
 
-                if (time.time() - start_time) > MIN_REFRESH_SECS:
-                    print_captions(transcribe(speech))
-                    start_time = time.time()
+                elif recording:
+                    # Possible speech truncation can cause hallucination.
 
-    except KeyboardInterrupt:
-        stream.close()
-        print(f"""
-      number inferences :  {transcribe.number_inferences}
-    mean inference time :  {(transcribe.inference_secs / transcribe.number_inferences):.2f}s
-  model realtime factor :  {(transcribe.speech_secs / transcribe.inference_secs):0.2f}x
-""")
-        if caption_cache:
-            print("Cached captions.")
-            for caption in caption_cache:
-                print(caption[:-MARKER_LENGTH], end="", flush=True)
-        print("")
+                    if (len(speech) / SAMPLING_RATE) > MAX_SPEECH_SECS:
+                        recording = False
+                        end_recording(speech, "<SNIP>")
+                        # Soft reset without affecting VAD model state.
+                        vad_iterator.triggered = False
+                        vad_iterator.temp_end = 0
+                        vad_iterator.current_sample = 0
+
+                    if (time.time() - start_time) > MIN_REFRESH_SECS:
+                        print_captions(transcribe(speech))
+                        start_time = time.time()
+
+        except KeyboardInterrupt:
+            stream.close()
+            print(f"""
+    number inferences :  {transcribe.number_inferences}
+  mean inference time :  {(transcribe.inference_secs / transcribe.number_inferences):.2f}s
+model realtime factor :  {(transcribe.speech_secs / transcribe.inference_secs):0.2f}x
+    """)
+            if caption_cache:
+                print("Cached captions.")
+                for caption in caption_cache:
+                    print(caption[:-MARKER_LENGTH], end="", flush=True)
+            print("")
