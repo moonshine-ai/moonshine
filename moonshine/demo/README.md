@@ -50,7 +50,7 @@ uv pip install -r moonshine/moonshine/demo/requirements.txt
 If you can not find the `moonshine` repo folder in your home folder then
 clone with git command and then run pip installs (this issue seen on an single
 board computer running Ubuntu).
-```
+```console
 cd
 uv venv env_moonshine_demo
 source env_moonshine_demo/bin/activate
@@ -59,6 +59,15 @@ git clone git@github.com:usefulsensors/moonshine.git
 
 uv pip install useful-moonshine@git+https://github.com/usefulsensors/moonshine.git
 uv pip install -r moonshine/moonshine/demo/requirements.txt
+```
+
+Ubuntu needs PortAudio installing for the package `sounddevice` to run.  The
+latest version 19.6.0-1.2build3 is suitable.
+```console
+cd
+sudo apt update
+sudo apt upgrade -y
+sudo apt install -y portaudio19-dev
 ```
 
 ## Download the ONNX models.
@@ -79,7 +88,7 @@ source env_moonshine_demo/bin/activate
 
 cd moonshine/moonshine
 
-export KERAS_BACKEND=torch
+export KERAS_BACKEND=torch  # Not needed for ONNX model.
 
 python3 ./demo/live_captions.py
 ```
