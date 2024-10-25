@@ -84,8 +84,8 @@ which has `torch` dependency.
 ### Environment.
 
 Moonshine installation steps are available in the
-[top level README](/README.md) of this repo.  The same set of steps are included
-here.
+[top level README](/README.md) of this repo.  Note that this demo is standalone
+and has no requirement to install `useful-moonshine`.
 
 First install the `uv` standalone installer as
 [described here](https://github.com/astral-sh/uv?tab=readme-ov-file#installation).
