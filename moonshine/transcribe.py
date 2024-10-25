@@ -46,6 +46,21 @@ def transcribe(audio, model="moonshine/base"):
     return load_tokenizer().decode_batch(tokens)
 
 
+def transcribe_with_onnx(audio, model="moonshine/base"):
+    from .onnx_model import MoonshineOnnxModel
+
+    if isinstance(model, str):
+        model = MoonshineOnnxModel(model_name=model)
+    assert isinstance(
+        model, MoonshineOnnxModel
+    ), f"Expected a MoonshineOnnxModel model or a model name, not a {type(model)}"
+    audio = load_audio(audio, return_numpy=True)
+    assert_audio_size(audio)
+
+    tokens = model.generate(audio)
+    return load_tokenizer().decode_batch(tokens)
+
+
 def load_tokenizer():
     # TODO(guy): review this change.
     # tokenizer_file = ASSETS_DIR / "tokenizer.json"
