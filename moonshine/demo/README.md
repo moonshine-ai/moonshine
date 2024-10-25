@@ -99,7 +99,12 @@ uv pip install useful-moonshine[tensorflow]@git+https://github.com/usefulsensors
 uv pip install useful-moonshine[onnx]@git+https://github.com/usefulsensors/moonshine.git
 ```
 
-The demo requires these additional dependencies.
+You will need to clone the repo first:
+```console
+git clone git@github.com:usefulsensors/moonshine.git
+```
+
+Then install the demo's extra requirements:
 ```console
 uv pip install -r moonshine/moonshine/demo/requirements.txt
 ```

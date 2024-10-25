@@ -7,10 +7,15 @@ from queue import Queue
 
 import numpy as np
 
-from moonshine import MoonshineOnnxModel
 from silero_vad import load_silero_vad, VADIterator
 from sounddevice import InputStream
 from tokenizers import Tokenizer
+
+# Local import of Moonshine ONNX model.
+MOONSHINE_DEMO_DIR = os.path.dirname(__file__)
+sys.path.append(os.path.join(MOONSHINE_DEMO_DIR, ".."))
+
+from onnx_model import MoonshineOnnxModel
 
 SAMPLING_RATE = 16000
 
