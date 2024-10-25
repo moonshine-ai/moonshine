@@ -170,14 +170,15 @@ if __name__ == '__main__':
 
         except KeyboardInterrupt:
             stream.close()
+
             print(f"""
 
-           model_size :  {model_size}
-     MIN_REFRESH_SECS :  {MIN_REFRESH_SECS}s
+             model_size :  {model_size}
+       MIN_REFRESH_SECS :  {MIN_REFRESH_SECS}s
 
-    number inferences :  {transcribe.number_inferences}
-  mean inference time :  {(transcribe.inference_secs / transcribe.number_inferences):.2f}s
-model realtime factor :  {(transcribe.speech_secs / transcribe.inference_secs):0.2f}x
+      number inferences :  {transcribe.number_inferences}
+    mean inference time :  {(transcribe.inference_secs / transcribe.number_inferences):.2f}s
+  model realtime factor :  {(transcribe.speech_secs / transcribe.inference_secs):0.2f}x
 """)
             if caption_cache:
                 print("Cached captions.")
