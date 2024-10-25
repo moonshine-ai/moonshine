@@ -3,9 +3,26 @@
 This directory contains various scripts to demonstrate the capabilities of the
 Moonshine ASR models.
 
-## onnx_standalone.py
+- [Moonshine Demos](#moonshine-demos)
+- [Standalone file transcription.](#standalone-file-transcription)
+- [Live caption microphone demo.](#live-caption-microphone-demo)
+  - [Installation.](#installation)
+    - [Environment.](#environment)
+    - [Download the ONNX models.](#download-the-onnx-models)
+  - [Run the demo.](#run-the-demo)
+  - [Script notes.](#script-notes)
+    - [Speech truncation.](#speech-truncation)
+    - [Running on a slower processor.](#running-on-a-slower-processor)
+    - [Metrics.](#metrics)
+- [Future work.](#future-work)
+- [Citation.](#citation)
 
-This script demonstrates how to run a Moonshine model with the `onnxruntime`
+
+# Standalone file transcription.
+
+The script
+[onnx_standalone.py](/moonshine/demo/onnx_standalone.py)
+demonstrates how to run a Moonshine model with the `onnxruntime`
 package alone, without depending on `torch` or `tensorflow`. This enables
 running on SBCs such as Raspberry Pi. Follow the instructions below to setup
 and run.
@@ -30,11 +47,12 @@ and run.
   moonshine/moonshine/demo/onnx_standalone.py --models_dir moonshine_base_onnx --wav_file moonshine/moonshine/assets/beckett.wav
   ['Ever tried ever failed, no matter try again fail again fail better.']
   ```
+
+
 # Live caption microphone demo.
 
-This folder contains the demo Python script
-[live_captions.py](/moonshine/demo/live_captions.py).
-The script runs Moonshine model on segments of speech detected in the microphone
+The script
+[live_captions.py](/moonshine/demo/live_captions.py) runs Moonshine model on segments of speech detected in the microphone
 signal using a voice activity detector called
 [silero-vad](https://github.com/snakers4/silero-vad).  The script prints
 scrolling text or "live captions" assembled from the model predictions.
@@ -44,22 +62,22 @@ Ubuntu 22.04 and Ubuntu 24.04 home folders running on a MacBook Pro M2 (ARM)
 virtual machine.
 
 - [Moonshine Demos](#moonshine-demos)
-  - [onnx\_standalone.py](#onnx_standalonepy)
+- [Standalone file transcription.](#standalone-file-transcription)
 - [Live caption microphone demo.](#live-caption-microphone-demo)
-- [Installation.](#installation)
-  - [Environment.](#environment)
-  - [Download the ONNX models.](#download-the-onnx-models)
-- [Run the demo.](#run-the-demo)
-- [Script notes.](#script-notes)
-  - [Speech truncation.](#speech-truncation)
-  - [Running on a slower processor.](#running-on-a-slower-processor)
-  - [Metrics.](#metrics)
+  - [Installation.](#installation)
+    - [Environment.](#environment)
+    - [Download the ONNX models.](#download-the-onnx-models)
+  - [Run the demo.](#run-the-demo)
+  - [Script notes.](#script-notes)
+    - [Speech truncation.](#speech-truncation)
+    - [Running on a slower processor.](#running-on-a-slower-processor)
+    - [Metrics.](#metrics)
 - [Future work.](#future-work)
 - [Citation.](#citation)
 
-# Installation.
+## Installation.
 
-## Environment.
+### Environment.
 
 Moonshine installation steps are available in the
 [top level README](/README.md) of this repo.  The same set of steps are included
@@ -77,25 +95,12 @@ cd
 uv venv env_moonshine_demo
 source env_moonshine_demo/bin/activate
 
-uv pip install useful-moonshine@git+https://github.com/usefulsensors/moonshine.git
+uv pip install useful-moonshine[tensorflow]@git+https://github.com/usefulsensors/moonshine.git
+uv pip install useful-moonshine[onnx]@git+https://github.com/usefulsensors/moonshine.git
 ```
 
 The demo requires these additional dependencies.
 ```console
-uv pip install -r moonshine/moonshine/demo/requirements.txt
-```
-
-If you can not find the `moonshine` repo folder in your home folder then
-clone with git command and then run pip installs (this issue seen on an single
-board computer running Ubuntu).
-```console
-cd
-uv venv env_moonshine_demo
-source env_moonshine_demo/bin/activate
-
-git clone git@github.com:usefulsensors/moonshine.git
-
-uv pip install useful-moonshine@git+https://github.com/usefulsensors/moonshine.git
 uv pip install -r moonshine/moonshine/demo/requirements.txt
 ```
 
@@ -108,14 +113,35 @@ sudo apt upgrade -y
 sudo apt install -y portaudio19-dev
 ```
 
-## Download the ONNX models.
+### Download the ONNX models.
 
-The script finds ONNX base or tiny models in the `demo/models/base` and
-`demo/models/tiny` sub-folders.
+The script finds ONNX base or tiny models in the
+`demo/models//moonshine_base_onnx` and `demo/models//moonshine_tiny_onnx`
+sub-folders.
 
-TODO: add download instructions for the ONNX models.
+Download Moonshine `onnx` model files from huggingface hub.
+```console
+cd
+mkdir moonshine/moonshine/demo/models
+mkdir moonshine/moonshine/demo/models/moonshine_base_onnx
+mkdir moonshine/moonshine/demo/models/moonshine_tiny_onnx
 
-# Run the demo.
+cd
+cd moonshine/moonshine/demo/models/moonshine_base_onnx
+wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/preprocess.onnx
+wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/encode.onnx
+wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/uncached_decode.onnx
+wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/cached_decode.onnx
+
+cd
+cd moonshine/moonshine/demo/models/moonshine_tiny_onnx
+wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/tiny/preprocess.onnx
+wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/tiny/encode.onnx
+wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/tiny/uncached_decode.onnx
+wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/tiny/cached_decode.onnx
+```
+
+## Run the demo.
 
 Check your microphone is connected and the microphone volume setting is not
 muted in your host OS or system audio drivers.
@@ -123,7 +149,7 @@ muted in your host OS or system audio drivers.
 cd
 source env_moonshine_demo/bin/activate
 
-python3 ./moonshine/moonshine/demo/live_captions.py base
+python3 moonshine/moonshine/demo/live_captions.py
 ```
 Speak in English language to the microphone and observe live captions in the
 terminal.  Quit the demo with ctrl + C to see console print of the captions.
@@ -146,7 +172,7 @@ Kamala Harris and Donald Trump have seen President Zelensky's victory plan setti
 (env_moonshine_demo) parallels@ubuntu-linux-2404:~$
 ```
 
-# Script notes.
+## Script notes.
 
 You may customize this script to display Moonshine text transcriptions as you wish.
 
@@ -161,7 +187,7 @@ before pressing ctrl + C.  If you are running on a slow or throttled processor
 such that the model inferences are not realtime, after speaking stops you should
 wait longer for the speech queue to be processed before pressing ctrl + C.
 
-## Speech truncation.
+### Speech truncation.
 
 Some hallucinations will be seen when the script is running: one reason is
 speech gets truncated out of necessity to generate the frequent refresh and
@@ -169,13 +195,13 @@ timeout transcriptions.  Truncated speech contains partial or sliced words for
 which transcriber model transcriptions are unpredictable.  See the printed
 captions on script exit for the best results.
 
-## Running on a slower processor.
+### Running on a slower processor.
 If you run this script on a slower processor consider using the `tiny` model.
 ```console
 cd
 source env_moonshine_demo/bin/activate
 
-python3 ./moonshine/moonshine/demo/live_captions.py tiny
+python3 ./moonshine/moonshine/demo/live_captions.py moonshine_tiny_onnx
 ```
 The value of `MIN_REFRESH_SECS` will be ineffective when the model inference
 time exceeds that value.  Conversely on a faster processor consider reducing
@@ -183,7 +209,7 @@ the value of `MIN_REFRESH_SECS` for more frequent caption updates.  On a slower
 processor you might also consider reducing the value of `MAX_SPEECH_SECS` to
 avoid slower model inferencing encountered with longer speech segments.
 
-## Metrics.
+### Metrics.
 The metrics shown on program exit will vary based on the talker's speaking
 style.  If the talker speaks with more frequent pauses the speech segments are
 shorter and the mean inference time will be lower.  This is a feature of the
