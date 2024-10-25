@@ -7,11 +7,10 @@ from queue import Queue
 
 import numpy as np
 
+from moonshine import MoonshineOnnxModel
 from silero_vad import load_silero_vad, VADIterator
 from sounddevice import InputStream
-
-# Local import.
-from transcriber_moonshine_onnx import TranscriberMoonshine
+from tokenizers import Tokenizer
 
 SAMPLING_RATE = 16000
 
@@ -28,12 +27,41 @@ MIN_REFRESH_SECS = 0.2
 VERBOSE = False
 
 
-def create_source_callback(q):
-    def source_callback(data, frames, time, status):
+class Transcriber(object):
+    def __init__(self, models_dir=None, rate=16000):
+        if rate != 16000:
+            raise ValueError("Moonshine supports sampling rate 16000 Hz.")
+        self.model = MoonshineOnnxModel(models_dir=models_dir)
+        self.rate = rate
+        assets_dir = f"{os.path.join(os.path.dirname(__file__), '..', 'assets')}"
+        tokenizer_file = f"{assets_dir}{os.sep}tokenizer.json"
+        self.tokenizer = Tokenizer.from_file(str(tokenizer_file))
+
+        self.inference_secs = 0
+        self.number_inferences = 0
+        self.speech_secs = 0
+        self.__call__(np.zeros(int(rate), dtype=np.float32))  # Warmup.
+
+    def __call__(self, speech):
+        """Returns string containing Moonshine transcription of speech."""
+        self.number_inferences += 1
+        self.speech_secs += len(speech) / self.rate
+        start_time = time.time()
+
+        tokens = self.model.generate(speech[np.newaxis, :].astype(np.float32))
+        text = self.tokenizer.decode_batch(tokens)[0]
+
+        self.inference_secs += time.time() - start_time
+        return text
+
+
+def create_input_callback(q):
+    """Callback method for sounddevice InputStream."""
+    def input_callback(data, frames, time, status):
         if status:
             print(status)
         q.put((data.copy(), status))
-    return source_callback
+    return input_callback
 
 
 def end_recording(speech, marker=""):
@@ -67,13 +95,13 @@ def print_captions(text, new_cached_caption=False):
 
 
 if __name__ == '__main__':
-    model_size = "base" if len(sys.argv) < 2 else sys.argv[1]
-    if model_size not in ["base", "tiny"]:
-        raise ValueError("Model size is not supported.")
+    model_size = "moonshine_base_onnx" if len(sys.argv) < 2 else sys.argv[1]
+    if model_size not in ["moonshine_base_onnx", "moonshine_tiny_onnx"]:
+        raise ValueError(f"Model size {model_size} is not supported.")
 
     models_dir = os.path.join(os.path.dirname(__file__), 'models', f"{model_size}")
     print(f"Loading Moonshine model '{models_dir}' ...")
-    transcribe = TranscriberMoonshine(models_dir=models_dir, rate=SAMPLING_RATE)
+    transcribe = Transcriber(models_dir=models_dir, rate=SAMPLING_RATE)
 
     vad_model = load_silero_vad(onnx=True)
     vad_iterator = VADIterator(
@@ -89,7 +117,7 @@ if __name__ == '__main__':
         channels=1,
         blocksize=CHUNK_SIZE,
         dtype=np.float32,
-        callback=create_source_callback(q),
+        callback=create_input_callback(q),
     )
     stream.start()
 
@@ -143,14 +171,16 @@ if __name__ == '__main__':
         except KeyboardInterrupt:
             stream.close()
             print(f"""
+
            model_size :  {model_size}
-     min_refresh_secs :  {MIN_REFRESH_SECS}s
+     MIN_REFRESH_SECS :  {MIN_REFRESH_SECS}s
+
     number inferences :  {transcribe.number_inferences}
   mean inference time :  {(transcribe.inference_secs / transcribe.number_inferences):.2f}s
 model realtime factor :  {(transcribe.speech_secs / transcribe.inference_secs):0.2f}x
-    """)
+""")
             if caption_cache:
                 print("Cached captions.")
                 for caption in caption_cache:
                     print(caption[:-MARKER_LENGTH], end="", flush=True)
-            print("")
+                print("")
