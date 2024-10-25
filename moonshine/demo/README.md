@@ -182,6 +182,29 @@ This is an example of the Moonshine base model being used to generate live capti
 (env_moonshine_demo) parallels@ubuntu-linux-2404:~$
 ```
 
+For comparison this is the Faster-Whisper int8 base model on the same instance.
+The value of `MIN_REFRESH_SECS` was increased as the model inference is too slow
+for a vaklues of 0.2 seconds.
+```console
+(env_moonshine_faster_whisper) parallels@ubuntu-linux-2404:~$ python3 moonshine/moonshine/demo/live_captions.py
+Error in cpuinfo: prctl(PR_SVE_GET_VL) failed
+Loading Faster-Whisper int8 base.en model  ...
+Press Ctrl+C to quit live captions.
+
+sper int8 base model being used to generate captions while someone is speaking. ^C
+
+             model_size :  base.en
+       MIN_REFRESH_SECS :  1.0s
+
+      number inferences :  7
+    mean inference time :  0.86s
+  model realtime factor :  5.77x
+
+Cached captions.
+This is an example of the faster whisper int8 base model being used to generate captions while someone is speaking.
+(env_moonshine_faster_whisper) parallels@ubuntu-linux-2404:~$
+```
+
 ## Script notes.
 
 You may customize this script to display Moonshine text transcriptions as you wish.
