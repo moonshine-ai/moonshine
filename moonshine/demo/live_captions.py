@@ -2,6 +2,7 @@
 import os
 import sys
 import time
+import argparse
 
 from queue import Queue
 
@@ -100,10 +101,16 @@ def print_captions(text, new_cached_caption=False):
 
 
 if __name__ == '__main__':
-    model_size = "moonshine_base_onnx" if len(sys.argv) < 2 else sys.argv[1]
-    if model_size not in ["moonshine_base_onnx", "moonshine_tiny_onnx"]:
-        raise ValueError(f"Model size {model_size} is not supported.")
-
+    parser = argparse.ArgumentParser(
+        prog="live_captions",
+        description="Live captioning demo of Moonshine models",
+    )
+    parser.add_argument(
+        "--model_size", help="Model to run the demo with", default="moonshine_base_onnx",
+        choices=["moonshine_base_onnx", "moonshine_tiny_onnx"]
+    )
+    args = parser.parse_args()
+    model_size = args.model_size
     models_dir = os.path.join(os.path.dirname(__file__), 'models', f"{model_size}")
     print(f"Loading Moonshine model '{models_dir}' ...")
     transcribe = Transcriber(models_dir=models_dir, rate=SAMPLING_RATE)

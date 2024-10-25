@@ -126,7 +126,7 @@ First, check that your microphone is connected and that the volume setting is no
 python3 moonshine/moonshine/demo/live_captions.py
 ```
 
-By default, this will run the demo with the Moonshine base ONNX model. Supported arguments are `moonshine_base_onnx` and `moonshine_tiny_onnx`. 
+By default, this will run the demo with the Moonshine base ONNX model. The `--model_size` argument sets the model to use: supported arguments are `moonshine_base_onnx` and `moonshine_tiny_onnx`. 
 
 When running, speak in English language to the microphone and observe live captions in the terminal. Quit the demo with `Ctrl+C` to see a full printout of the captions.
 
@@ -192,7 +192,7 @@ Some hallucinations will be seen when the script is running: one reason is speec
 If you run this script on a slower processor, consider using the `tiny` model.
 
 ```shell
-python3 ./moonshine/moonshine/demo/live_captions.py moonshine_tiny_onnx
+python3 ./moonshine/moonshine/demo/live_captions.py --model_size moonshine_tiny_onnx
 ```
 
 The value of `MIN_REFRESH_SECS` will be ineffective when the model inference time exceeds that value.  Conversely on a faster processor consider reducing the value of `MIN_REFRESH_SECS` for more frequent caption updates.  On a slower processor you might also consider reducing the value of `MAX_SPEECH_SECS` to avoid slower model inferencing encountered with longer speech segments.
