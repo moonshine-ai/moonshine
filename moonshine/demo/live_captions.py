@@ -1,4 +1,5 @@
 """Live captions from microphone using Moonshine and SileroVAD ONNX models."""
+
 import os
 import sys
 import time
@@ -62,10 +63,12 @@ class Transcriber(object):
 
 def create_input_callback(q):
     """Callback method for sounddevice InputStream."""
+
     def input_callback(data, frames, time, status):
         if status:
             print(status)
         q.put((data.copy(), status))
+
     return input_callback
 
 
@@ -81,33 +84,34 @@ def end_recording(speech, marker=""):
 
 def print_captions(text, new_cached_caption=False):
     """Prints right justified on same line, prepending cached captions."""
-    print('\r' + " " * MAX_LINE_LENGTH, end='', flush=True)
+    print("\r" + " " * MAX_LINE_LENGTH, end="", flush=True)
     if len(text) > MAX_LINE_LENGTH:
         text = text[-MAX_LINE_LENGTH:]
     elif text != "\n":
         for caption in caption_cache[::-1]:
-            text = (caption[:-MARKER_LENGTH] if not VERBOSE else
-                    caption + " ") + text
+            text = (caption[:-MARKER_LENGTH] if not VERBOSE else caption + " ") + text
             if len(text) > MAX_LINE_LENGTH:
                 break
         if len(text) > MAX_LINE_LENGTH:
             text = text[-MAX_LINE_LENGTH:]
     text = " " * (MAX_LINE_LENGTH - len(text)) + text
-    print('\r' + text, end='', flush=True)
+    print("\r" + text, end="", flush=True)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         prog="live_captions",
         description="Live captioning demo of Moonshine models",
     )
     parser.add_argument(
-        "--model_size", help="Model to run the demo with", default="moonshine_base_onnx",
-        choices=["moonshine_base_onnx", "moonshine_tiny_onnx"]
+        "--model_size",
+        help="Model to run the demo with",
+        default="moonshine_base_onnx",
+        choices=["moonshine_base_onnx", "moonshine_tiny_onnx"],
     )
     args = parser.parse_args()
     model_size = args.model_size
-    models_dir = os.path.join(os.path.dirname(__file__), 'models', f"{model_size}")
+    models_dir = os.path.join(os.path.dirname(__file__), "models", f"{model_size}")
     print(f"Loading Moonshine model '{models_dir}' ...")
     transcribe = Transcriber(models_dir=models_dir, rate=SAMPLING_RATE)
 
@@ -153,11 +157,11 @@ if __name__ == '__main__':
 
                 speech_dict = vad_iterator(chunk)
                 if speech_dict:
-                    if 'start' in speech_dict and not recording:
+                    if "start" in speech_dict and not recording:
                         recording = True
                         start_time = time.time()
 
-                    if 'end' in speech_dict and recording:
+                    if "end" in speech_dict and recording:
                         recording = False
                         end_recording(speech, "<STOP>")
 
