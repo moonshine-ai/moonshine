@@ -4,18 +4,18 @@ This directory contains various scripts to demonstrate the capabilities of the
 Moonshine ASR models.
 
 - [Moonshine Demos](#moonshine-demos)
-- [Standalone file transcription.](#standalone-file-transcription)
-- [Live caption microphone demo.](#live-caption-microphone-demo)
+- [Demo: Standalone file transcription with ONNX](#demo-standalone-file-transcription-with-onnx)
+- [Demo: Live captioning from microphone input](#demo-live-captioning-from-microphone-input)
   - [Installation.](#installation)
-    - [Environment.](#environment)
-    - [Download the ONNX models.](#download-the-onnx-models)
-  - [Run the demo.](#run-the-demo)
-  - [Script notes.](#script-notes)
-    - [Speech truncation.](#speech-truncation)
-    - [Running on a slower processor.](#running-on-a-slower-processor)
-    - [Metrics.](#metrics)
-- [Future work.](#future-work)
-- [Citation.](#citation)
+    - [0. Setup environment](#0-setup-environment)
+    - [1. Clone the repo and install extra dependencies](#1-clone-the-repo-and-install-extra-dependencies)
+    - [2. Download the ONNX models](#download-the-onnx-models)
+  - [Running the demo](#running-the-demo)
+  - [Script notes](#script-notes)
+    - [Speech truncation and hallucination](#speech-truncation-and-hallucination)
+    - [Running on a slower processor](#running-on-a-slower-processor)
+    - [Metrics](#metrics)
+- [Citation](#citation)
 
 
 # Demo: Standalone file transcription with ONNX
@@ -26,26 +26,26 @@ package alone, without depending on `torch` or `tensorflow`. This enables
 running on SBCs such as Raspberry Pi. Follow the instructions below to setup
 and run.
 
-* Install `onnxruntime` (or `onnxruntime-gpu` if you want to run on GPUs) and `tokenizers` packages using your Python package manager of choice, such as `pip`.
+1. Install `onnxruntime` (or `onnxruntime-gpu` if you want to run on GPUs) and `tokenizers` packages using your Python package manager of choice, such as `pip`.
 
-* Download the `onnx` files from huggingface hub to a directory.
+2. Download the `onnx` files from huggingface hub to a directory.
 
-  ```shell
-  mkdir moonshine_base_onnx
-  cd moonshine_base_onnx
-  wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/preprocess.onnx
-  wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/encode.onnx
-  wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/uncached_decode.onnx
-  wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/cached_decode.onnx
-  cd ..
-  ```
+```shell
+mkdir moonshine_base_onnx
+cd moonshine_base_onnx
+wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/preprocess.onnx
+wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/encode.onnx
+wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/uncached_decode.onnx
+wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/cached_decode.onnx
+cd ..
+```
 
-* Run `onnx_standalone.py` to transcribe a wav file
+3. Run `onnx_standalone.py` to transcribe a wav file
 
-  ```shell
-  moonshine/moonshine/demo/onnx_standalone.py --models_dir moonshine_base_onnx --wav_file moonshine/moonshine/assets/beckett.wav
-  ['Ever tried ever failed, no matter try again fail again fail better.']
-  ```
+```shell
+moonshine/moonshine/demo/onnx_standalone.py --models_dir moonshine_base_onnx --wav_file moonshine/moonshine/assets/beckett.wav
+['Ever tried ever failed, no matter try again fail again fail better.']
+```
 
 
 # Demo: Live captioning from microphone input
@@ -62,9 +62,9 @@ The following steps have been tested in a `uv` (v0.4.25) virtual environment on 
 
 ## Installation
 
-### 0. Setup environment and install the Moonshine package
+### 0. Setup environment
 
-Moonshine installation steps are available in the [top level README](/README.md) of this repo. Ensure you have the package installed before moving onto the next steps.
+Steps to set up a virtual environment are available in the [top level README](/README.md) of this repo. Note that this demo is standalone and has no requirement to install the `useful-moonshine` package. Instead, you will clone the repo.
 
 ### 1. Clone the repo and install extra dependencies
 
@@ -80,9 +80,10 @@ Then install the demo's extra requirements:
 uv pip install -r moonshine/moonshine/demo/requirements.txt
 ```
 
-### Ubuntu: Install PortAudio
+#### Ubuntu: Install PortAudio
 
 Ubuntu needs PortAudio for the `sounddevice` package to run. The latest version (19.6.0-1.2build3 as of writing) is suitable.
+
 ```shell
 sudo apt update
 sudo apt upgrade -y
@@ -96,7 +97,7 @@ The script finds ONNX base or tiny models in the
 sub-folders.
 
 Download Moonshine `onnx` model files from HuggingFace hub.
-```console
+```shell
 cd
 mkdir moonshine/moonshine/demo/models
 mkdir moonshine/moonshine/demo/models/moonshine_base_onnx
@@ -117,18 +118,21 @@ wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/tiny/uncac
 wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/tiny/cached_decode.onnx
 ```
 
-### 3. Run the demo
+## Running the demo
 
-First, check that your microphone is connected and that the volume setting is not muted in your host OS or system audio drivers.
+First, check that your microphone is connected and that the volume setting is not muted in your host OS or system audio drivers. Then, run the script:
 
 ``` shell
 python3 moonshine/moonshine/demo/live_captions.py
 ```
 
-Speak in English language to the microphone and observe live captions in the terminal. Quit the demo with `Ctrl+C` to see a full printout of the captions.
+By default, this will run the demo with the Moonshine base ONNX model. Supported arguments are `moonshine_base_onnx` and `moonshine_tiny_onnx`. 
+
+When running, speak in English language to the microphone and observe live captions in the terminal. Quit the demo with `Ctrl+C` to see a full printout of the captions.
 
 An example run on Ubuntu 24.04 VM on MacBook Pro M2 with Moonshine base ONNX
-model.
+model:
+
 ```console
 (env_moonshine_demo) parallels@ubuntu-linux-2404:~$ python3 moonshine/moonshine/demo/live_captions.py
 Error in cpuinfo: prctl(PR_SVE_GET_VL) failed
@@ -149,7 +153,7 @@ This is an example of the Moonshine base model being used to generate live capti
 (env_moonshine_demo) parallels@ubuntu-linux-2404:~$
 ```
 
-For comparison this is the Faster-Whisper int8 base model on the same instance.
+For comparison, this is the `faster-whisper` int8 base model on the same instance.
 The value of `MIN_REFRESH_SECS` was increased as the model inference is too slow
 for a value of 0.2 seconds.
 
@@ -193,7 +197,7 @@ python3 ./moonshine/moonshine/demo/live_captions.py moonshine_tiny_onnx
 
 The value of `MIN_REFRESH_SECS` will be ineffective when the model inference time exceeds that value.  Conversely on a faster processor consider reducing the value of `MIN_REFRESH_SECS` for more frequent caption updates.  On a slower processor you might also consider reducing the value of `MAX_SPEECH_SECS` to avoid slower model inferencing encountered with longer speech segments.
 
-### Understanding metrics
+### Metrics
 
 The metrics shown on program exit will vary based on the talker's speaking style. If the talker speaks with more frequent pauses, the speech segments are shorter and the mean inference time will be lower. This is a feature of the Moonshine model described in [our paper](https://arxiv.org/abs/2410.15608). When benchmarking, use the same speech, e.g., a recording of someone talking.
 
