@@ -24,7 +24,6 @@ CHUNK_SIZE = 512  # Silero VAD requirement with sampling rate 16000.
 LOOKBACK_CHUNKS = 5
 MARKER_LENGTH = 6
 MAX_LINE_LENGTH = 80
-SHOW_NEW_CAPTION = False  # Stacks cached captions above scrolling captions.
 
 # These affect live caption updating - adjust for your platform speed and model.
 MAX_SPEECH_SECS = 15
@@ -83,9 +82,6 @@ def end_recording(speech, marker=""):
 def print_captions(text, new_cached_caption=False):
     """Prints right justified on same line, prepending cached captions."""
     print('\r' + " " * MAX_LINE_LENGTH, end='', flush=True)
-    if SHOW_NEW_CAPTION and new_cached_caption:
-        print('\r', end='', flush=True)
-        print(caption_cache[-1][:-MARKER_LENGTH])
     if len(text) > MAX_LINE_LENGTH:
         text = text[-MAX_LINE_LENGTH:]
     elif text != "\n":
