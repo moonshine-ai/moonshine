@@ -188,20 +188,20 @@ for a value of 0.2 seconds.
 ```console
 (env_moonshine_faster_whisper) parallels@ubuntu-linux-2404:~$ python3 moonshine/moonshine/demo/live_captions.py
 Error in cpuinfo: prctl(PR_SVE_GET_VL) failed
-Loading Faster-Whisper int8 base.en model  ...
+Loading Faster-Whisper float32 base.en model  ...
 Press Ctrl+C to quit live captions.
 
-sper int8 base model being used to generate captions while someone is speaking. ^C
+r float32 base model being used to generate captions while someone is speaking. ^C
 
              model_size :  base.en
-       MIN_REFRESH_SECS :  1.0s
+       MIN_REFRESH_SECS :  1.2s
 
-      number inferences :  7
-    mean inference time :  0.86s
-  model realtime factor :  5.77x
+      number inferences :  6
+    mean inference time :  1.02s
+  model realtime factor :  4.82x
 
 Cached captions.
-This is an example of the faster whisper int8 base model being used to generate captions while someone is speaking.
+This is an example of the Faster Whisper float32 base model being used to generate captions while someone is speaking.
 (env_moonshine_faster_whisper) parallels@ubuntu-linux-2404:~$
 ```
 
