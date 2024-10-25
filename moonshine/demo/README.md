@@ -161,20 +161,24 @@ Speak in English language to the microphone and observe live captions in the
 terminal.  Quit the demo with ctrl + C to see console print of the captions.
 
 An example run on Ubuntu 24.04 VM on MacBook Pro M2 with Moonshine base ONNX
-model (Credit: BBC World Service).
+model.
 ```console
 (env_moonshine_demo) parallels@ubuntu-linux-2404:~$ python3 moonshine/moonshine/demo/live_captions.py
 Error in cpuinfo: prctl(PR_SVE_GET_VL) failed
-Loading Moonshine model '/home/parallels/moonshine/moonshine/demo/models/base' ...
+Loading Moonshine model '/home/parallels/moonshine/moonshine/demo/models/moonshine_base_onnx' ...
 Press Ctrl+C to quit live captions.
 
-ca at bbcworldservice.com/documentaries or wherever you get your BBC podcasts.  ^C
-      number inferences :  179
-    mean inference time :  0.20s
-  model realtime factor :  21.20x
+hine base model being used to generate live captions while someone is speaking. ^C
+
+             model_size :  moonshine_base_onnx
+       MIN_REFRESH_SECS :  0.2s
+
+      number inferences :  25
+    mean inference time :  0.14s
+  model realtime factor :  27.82x
 
 Cached captions.
-Kamala Harris and Donald Trump have seen President Zelensky's victory plan setting out his country's vision for the future. Ukrainians are just days away from discovering how much and for how long the next president of its biggest aid provider is willing to help them to stay in the fight. This edition of the inquiry was presented by me, Charmaine Cozier. The producer was Jill Collins, researcher Matt Dawson, editor Tara McDermott and Technica producer Ben Howton. This is the BBC World Service, and Alvin Hole is going home. This is Wakala County, Florida. When you cross that Kana line, oh yeah, you're going to feel free. As a child, I thought of it as a place of incredible beauty. But this is also a place where the past is very, very, Part from being the past. You go down the road and the like people left on the left And white people have on the right. I believe that to understand the United States, you need to know about places like Wakala County. It's a power struggle. That's what i feel you know fear Do you make you do a lot of things? In an election year, in a divided country, I've come home to see family and friends and to share their America. Alvin holes are the ramarica at bbcworldservice.com/documentaries or wherever you get your BBC podcasts.
+This is an example of the Moonshine base model being used to generate live captions while someone is speaking.
 (env_moonshine_demo) parallels@ubuntu-linux-2404:~$
 ```
 
