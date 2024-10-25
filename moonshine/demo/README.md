@@ -77,8 +77,9 @@ virtual machine.
 
 ## Installation.
 
-This install does not depend on `tensorflow`.  We're using SileroVAD which has
-`torch` dependency.
+This install does not depend on `tensorflow`.  We're using
+[silero-vad](https://github.com/snakers4/silero-vad)
+which has `torch` dependency.
 
 ### Environment.
 
