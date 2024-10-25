@@ -1,4 +1,2 @@
-moonshine/__pycache__*
-moonshine/demo/__pycache__*
 moonshine/demo/models/*
-moonshine/tools/__pycache__*
+moonshine/__pycache__/onnx_model.cpython-312.pyc

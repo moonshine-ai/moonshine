@@ -1,15 +1,9 @@
-import os
-import sys
-
 from pathlib import Path
 import tokenizers
 import keras
+from .model import load_model, Moonshine
 
-# TODO(guy): review this change.
-# from .model import load_model, Moonshine
-# from . import ASSETS_DIR
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from model import load_model, Moonshine
+from . import ASSETS_DIR
 
 
 def load_audio(audio, return_numpy=False):
@@ -46,11 +40,23 @@ def transcribe(audio, model="moonshine/base"):
     return load_tokenizer().decode_batch(tokens)
 
 
+def transcribe_with_onnx(audio, model="moonshine/base"):
+    from .onnx_model import MoonshineOnnxModel
+
+    if isinstance(model, str):
+        model = MoonshineOnnxModel(model_name=model)
+    assert isinstance(
+        model, MoonshineOnnxModel
+    ), f"Expected a MoonshineOnnxModel model or a model name, not a {type(model)}"
+    audio = load_audio(audio, return_numpy=True)
+    assert_audio_size(audio)
+
+    tokens = model.generate(audio)
+    return load_tokenizer().decode_batch(tokens)
+
+
 def load_tokenizer():
-    # TODO(guy): review this change.
-    # tokenizer_file = ASSETS_DIR / "tokenizer.json"
-    assets_dir = f"{os.path.join(os.path.dirname(__file__), 'assets')}"
-    tokenizer_file = f"{assets_dir}{os.sep}tokenizer.json"
+    tokenizer_file = ASSETS_DIR / "tokenizer.json"
     tokenizer = tokenizers.Tokenizer.from_file(str(tokenizer_file))
     return tokenizer
 

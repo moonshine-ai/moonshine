@@ -1,7 +1,56 @@
+# Moonshine Demos
 
-https://github.com/user-attachments/assets/aa65ef54-d4ac-4d31-864f-222b0e6ccbd3
+This directory contains various scripts to demonstrate the capabilities of the
+Moonshine ASR models.
+
+- [Moonshine Demos](#moonshine-demos)
+- [Standalone file transcription.](#standalone-file-transcription)
+- [Live caption microphone demo.](#live-caption-microphone-demo)
+  - [Installation.](#installation)
+    - [Environment.](#environment)
+    - [Download the ONNX models.](#download-the-onnx-models)
+  - [Run the demo.](#run-the-demo)
+  - [Script notes.](#script-notes)
+    - [Speech truncation.](#speech-truncation)
+    - [Running on a slower processor.](#running-on-a-slower-processor)
+    - [Metrics.](#metrics)
+- [Future work.](#future-work)
+- [Citation.](#citation)
+
+
+# Demo: Standalone file transcription with ONNX
+
+The script [onnx_standalone.py](/moonshine/demo/onnx_standalone.py)
+demonstrates how to run a Moonshine model with the `onnxruntime`
+package alone, without depending on `torch` or `tensorflow`. This enables
+running on SBCs such as Raspberry Pi. Follow the instructions below to setup
+and run.
+
+* Install `onnxruntime` (or `onnxruntime-gpu` if you want to run on GPUs) and `tokenizers` packages using your Python package manager of choice, such as `pip`.
+
+* Download the `onnx` files from huggingface hub to a directory.
+
+  ```shell
+  mkdir moonshine_base_onnx
+  cd moonshine_base_onnx
+  wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/preprocess.onnx
+  wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/encode.onnx
+  wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/uncached_decode.onnx
+  wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/cached_decode.onnx
+  cd ..
+  ```
+
+* Run `onnx_standalone.py` to transcribe a wav file
+
+  ```shell
+  moonshine/moonshine/demo/onnx_standalone.py --models_dir moonshine_base_onnx --wav_file moonshine/moonshine/assets/beckett.wav
+  ['Ever tried ever failed, no matter try again fail again fail better.']
+  ```
+
 
 # Demo: Live captioning from microphone input
+
+https://github.com/user-attachments/assets/aa65ef54-d4ac-4d31-864f-222b0e6ccbd3
 
 This folder contains a demo of live captioning from microphone input, built on Moonshine. The script runs the Moonshine model on segments of speech detected in the microphone signal using a voice activity detector called [`silero-vad`](https://github.com/snakers4/silero-vad). The script prints scrolling text or "live captions" assembled from the model predictions to the console.
 
@@ -40,56 +89,91 @@ sudo apt upgrade -y
 sudo apt install -y portaudio19-dev
 ```
 
-### 2. Prepare ONNX models
+### 2. Download the ONNX models
 
-The script finds ONNX base or tiny models in the `demo/models/base` and `demo/models/tiny` sub-folders.
+The script finds ONNX base or tiny models in the
+`demo/models/moonshine_base_onnx` and `demo/models/moonshine_tiny_onnx`
+sub-folders.
 
-TODO: add instructions for the ONNX models.
+Download Moonshine `onnx` model files from HuggingFace hub.
+```console
+cd
+mkdir moonshine/moonshine/demo/models
+mkdir moonshine/moonshine/demo/models/moonshine_base_onnx
+mkdir moonshine/moonshine/demo/models/moonshine_tiny_onnx
+
+cd
+cd moonshine/moonshine/demo/models/moonshine_base_onnx
+wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/preprocess.onnx
+wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/encode.onnx
+wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/uncached_decode.onnx
+wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/cached_decode.onnx
+
+cd
+cd moonshine/moonshine/demo/models/moonshine_tiny_onnx
+wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/tiny/preprocess.onnx
+wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/tiny/encode.onnx
+wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/tiny/uncached_decode.onnx
+wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/tiny/cached_decode.onnx
+```
 
 ### 3. Run the demo
 
 First, check that your microphone is connected and that the volume setting is not muted in your host OS or system audio drivers.
 
-Then, run the demo:
-
-```shell
-python3 ./moonshine/moonshine/demo/live_captions.py base
+``` shell
+python3 moonshine/moonshine/demo/live_captions.py
 ```
 
 Speak in English language to the microphone and observe live captions in the terminal. Quit the demo with `Ctrl+C` to see a full printout of the captions.
 
 An example run on Ubuntu 24.04 VM on MacBook Pro M2 with Moonshine base ONNX
-model (Credit: BBC World Service).
-
+model.
 ```console
 (env_moonshine_demo) parallels@ubuntu-linux-2404:~$ python3 moonshine/moonshine/demo/live_captions.py
 Error in cpuinfo: prctl(PR_SVE_GET_VL) failed
-Loading Moonshine model '/home/parallels/moonshine/moonshine/demo/models/base' ...
+Loading Moonshine model '/home/parallels/moonshine/moonshine/demo/models/moonshine_base_onnx' ...
 Press Ctrl+C to quit live captions.
 
-ca at bbcworldservice.com/documentaries or wherever you get your BBC podcasts.  ^C
-      number inferences :  179
-    mean inference time :  0.20s
-  model realtime factor :  21.20x
+hine base model being used to generate live captions while someone is speaking. ^C
+
+             model_size :  moonshine_base_onnx
+       MIN_REFRESH_SECS :  0.2s
+
+      number inferences :  25
+    mean inference time :  0.14s
+  model realtime factor :  27.82x
 
 Cached captions.
-Kamala Harris and Donald Trump have seen President Zelensky's victory plan setting out his country's
-vision for the future. Ukrainians are just days away from discovering how much and for how long the
-next president of its biggest aid provider is willing to help them to stay in the fight. This edition
-of the inquiry was presented by me, Charmaine Cozier. The producer was Jill Collins, researcher Matt
-Dawson, editor Tara McDermott and Technica producer Ben Howton. This is the BBC World Service, and Alvin
-Hole is going home. This is Wakala County, Florida. When you cross that Kana line, oh yeah, you're going
-to feel free. As a child, I thought of it as a place of incredible beauty. But this is also a place where
-the past is very, very, Part from being the past. You go down the road and the like people left on the
-left And white people have on the right. I believe that to understand the United States, you need to know
-about places like Wakala County. It's a power struggle. That's what i feel you know fear Do you make you
-do a lot of things? In an election year, in a divided country, I've come home to see family and friends
-and to share their America. Alvin holes are the ramarica at bbcworldservice.com/documentaries or wherever
-you get your BBC podcasts.
+This is an example of the Moonshine base model being used to generate live captions while someone is speaking.
 (env_moonshine_demo) parallels@ubuntu-linux-2404:~$
 ```
 
-## Notes
+For comparison this is the Faster-Whisper int8 base model on the same instance.
+The value of `MIN_REFRESH_SECS` was increased as the model inference is too slow
+for a value of 0.2 seconds.
+
+```console
+(env_moonshine_faster_whisper) parallels@ubuntu-linux-2404:~$ python3 moonshine/moonshine/demo/live_captions.py
+Error in cpuinfo: prctl(PR_SVE_GET_VL) failed
+Loading Faster-Whisper int8 base.en model  ...
+Press Ctrl+C to quit live captions.
+
+sper int8 base model being used to generate captions while someone is speaking. ^C
+
+             model_size :  base.en
+       MIN_REFRESH_SECS :  1.0s
+
+      number inferences :  7
+    mean inference time :  0.86s
+  model realtime factor :  5.77x
+
+Cached captions.
+This is an example of the faster whisper int8 base model being used to generate captions while someone is speaking.
+(env_moonshine_faster_whisper) parallels@ubuntu-linux-2404:~$
+```
+
+## Script notes
 
 You may customize this script to display Moonshine text transcriptions as you wish.
 
@@ -99,24 +183,22 @@ The script `live_captions.py` loads the English language version of Moonshine ba
 
 Some hallucinations will be seen when the script is running: one reason is speech gets truncated out of necessity to generate the frequent refresh and timeout transcriptions. Truncated speech contains partial or sliced words for which transcriber model transcriptions are unpredictable. See the printed captions on script exit for the best results.
 
-### Running on slower processors
+### Running on a slower processor
 
-If you run this script on a slower processor, consider using the `tiny` model:
+If you run this script on a slower processor consider using the `tiny` model.
 
 ```shell
-python3 ./moonshine/moonshine/demo/live_captions.py tiny
+python3 ./moonshine/moonshine/demo/live_captions.py moonshine_tiny_onnx
 ```
+
 The value of `MIN_REFRESH_SECS` will be ineffective when the model inference time exceeds that value.  Conversely on a faster processor consider reducing the value of `MIN_REFRESH_SECS` for more frequent caption updates.  On a slower processor you might also consider reducing the value of `MAX_SPEECH_SECS` to avoid slower model inferencing encountered with longer speech segments.
 
 ### Understanding metrics
 
 The metrics shown on program exit will vary based on the talker's speaking style. If the talker speaks with more frequent pauses, the speech segments are shorter and the mean inference time will be lower. This is a feature of the Moonshine model described in [our paper](https://arxiv.org/abs/2410.15608). When benchmarking, use the same speech, e.g., a recording of someone talking.
 
-## TODO
 
-* [x] ONNX runtime model version
-
-## Citation
+# Citation
 
 If you benefit from our work, please cite us:
 ```
