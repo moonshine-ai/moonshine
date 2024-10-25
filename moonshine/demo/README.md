@@ -20,7 +20,7 @@ Moonshine ASR models.
 
 # Demo: Standalone file transcription with ONNX
 
-The script [onnx_standalone.py](/moonshine/demo/onnx_standalone.py)
+The script [`onnx_standalone.py`](/moonshine/demo/onnx_standalone.py)
 demonstrates how to run a Moonshine model with the `onnxruntime`
 package alone, without depending on `torch` or `tensorflow`. This enables
 running on SBCs such as Raspberry Pi. Follow the instructions below to setup
@@ -189,7 +189,7 @@ Some hallucinations will be seen when the script is running: one reason is speec
 
 ### Running on a slower processor
 
-If you run this script on a slower processor consider using the `tiny` model.
+If you run this script on a slower processor, consider using the `tiny` model.
 
 ```shell
 python3 ./moonshine/moonshine/demo/live_captions.py moonshine_tiny_onnx
