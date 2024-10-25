@@ -77,6 +77,9 @@ virtual machine.
 
 ## Installation.
 
+This install does not depend on `tensorflow`.  We're using SileroVAD which has
+`torch` dependency.
+
 ### Environment.
 
 Moonshine installation steps are available in the
@@ -94,9 +97,6 @@ Create the virtual environment and install dependences for Moonshine.
 cd
 uv venv env_moonshine_demo
 source env_moonshine_demo/bin/activate
-
-uv pip install useful-moonshine[tensorflow]@git+https://github.com/usefulsensors/moonshine.git
-uv pip install useful-moonshine[onnx]@git+https://github.com/usefulsensors/moonshine.git
 ```
 
 You will need to clone the repo first:
