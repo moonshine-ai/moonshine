@@ -1,0 +1,3 @@
+silero_vad
+sounddevice
+tokenizers
