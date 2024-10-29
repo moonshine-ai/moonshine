@@ -44,6 +44,17 @@ Moonshine's compute requirements scale with the length of input audio. This mean
 
 This repo hosts the inference code for Moonshine.
 
+- [Installation](#installation)
+  - [1. Create a virtual environment](#1-create-a-virtual-environment)
+  - [2. Install the Moonshine package](#2-install-the-moonshine-package)
+  - [3. Try it out](#3-try-it-out)
+- [Examples](#examples)
+  - [Onnx standalone](#onnx-standalone)
+  - [Live Captions](#live-captions)
+  - [CTranslate2](#ctranslate2)
+- [TODO](#todo)
+- [Citation](#citation)
+
 ## Installation
 
 We like `uv` for managing Python environments, so we use it here. If you don't want to use it, simply skip the first step and leave `uv` off of your shell commands.
@@ -107,6 +118,22 @@ python
 
 The first argument is a path to an audio file and the second is the name of a Moonshine model. `moonshine/tiny` and `moonshine/base` are the currently available models.
 Use the `moonshine.transcribe_with_onnx` function to use the ONNX runtime for inference. The parameters are the same as they are for `moonshine.transcribe`.
+
+## Examples
+
+The Moonshine models can be used with a variety of different runtimes and applications, so we've included code samples showing how to use them in different situations. The [`moonshine/demo`](/moonshine/demo/) folder in this repository also has more information on many of them.
+
+### Onnx standalone
+
+The latest versions of the Onnx Moonshine models are available on HuggingFace at [huggingface.co/UsefulSensors/moonshine/tree/main/onnx](https://huggingface.co/UsefulSensors/moonshine/tree/main/onnx). You can find [an example Python script](/moonshine/demo/onnx_standalone.py) and more information about running them [in the demo folder](/moonshine/demo/README.md#demo-standalone-file-transcription-with-onnx).
+
+### Live Captions
+
+You can try the Moonshine models with live input from a microphone on many platforms with the [live captions demo](/moonshine/demo/README.md#demo-live-captioning-from-microphone-input).
+
+### CTranslate2
+
+The files for the CTranslate2 versions of Moonshine are available at [huggingface.co/UsefulSensors/moonshine/tree/main/ctranslate2](https://huggingface.co/UsefulSensors/moonshine/tree/main/ctranslate2), but they require [a pull request to be merged](https://github.com/OpenNMT/CTranslate2/pull/1808) before they can be used with the mainline version of the framework. Until then, you should be able to try them with [our branch](https://github.com/njeffrie/CTranslate2/tree/master), with [this example script](https://github.com/OpenNMT/CTranslate2/pull/1808#issuecomment-2439725339).
 
 ## TODO
 * [x] Live transcription demo
