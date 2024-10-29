@@ -109,13 +109,17 @@ The first argument is a path to an audio file and the second is the name of a Mo
 Use the `moonshine.transcribe_with_onnx` function to use the ONNX runtime for inference. The parameters are the same as they are for `moonshine.transcribe`.
 
 ## TODO
-* [ ] Live transcription demo
+* [ x ] Live transcription demo
     
-* [ ] ONNX model
+* [ x ] ONNX model
     
 * [ ] CTranslate2 support
     
 * [ ] MLX support
+
+* [ ] Fine-tuning code
+
+* [ ] HF transformers/transformers.js support
 
 ## Citation
 If you benefit from our work, please cite us:
