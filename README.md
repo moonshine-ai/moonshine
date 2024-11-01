@@ -51,6 +51,7 @@ This repo hosts the inference code for Moonshine.
 - [Examples](#examples)
   - [Onnx standalone](#onnx-standalone)
   - [Live Captions](#live-captions)
+  - [Long-form transcription](#long-form-transcription)
   - [CTranslate2](#ctranslate2)
 - [TODO](#todo)
 - [Citation](#citation)
@@ -131,17 +132,21 @@ The latest versions of the Onnx Moonshine models are available on HuggingFace at
 
 You can try the Moonshine models with live input from a microphone on many platforms with the [live captions demo](/moonshine/demo/README.md#demo-live-captioning-from-microphone-input).
 
+### Long-form transcription
+
+A common approach to "long-form" transcription involves segmenting speech before running a model transcription for each segment.  A single transcription is then assembled from the results.  One method for segmentation is to locate pauses in the speech.  You can try the Moonshine models with this segmentation method for long-form WAV files in the [file transcription demo](/moonshine/demo/README.md#demo-standalone-long-form-file-transcription).
+
 ### CTranslate2
 
 The files for the CTranslate2 versions of Moonshine are available at [huggingface.co/UsefulSensors/moonshine/tree/main/ctranslate2](https://huggingface.co/UsefulSensors/moonshine/tree/main/ctranslate2), but they require [a pull request to be merged](https://github.com/OpenNMT/CTranslate2/pull/1808) before they can be used with the mainline version of the framework. Until then, you should be able to try them with [our branch](https://github.com/njeffrie/CTranslate2/tree/master), with [this example script](https://github.com/OpenNMT/CTranslate2/pull/1808#issuecomment-2439725339).
 
 ## TODO
 * [x] Live transcription demo
-    
+
 * [x] ONNX model
-    
+
 * [ ] CTranslate2 support
-    
+
 * [ ] MLX support
 
 * [ ] Fine-tuning code
@@ -152,12 +157,12 @@ The files for the CTranslate2 versions of Moonshine are available at [huggingfac
 If you benefit from our work, please cite us:
 ```
 @misc{jeffries2024moonshinespeechrecognitionlive,
-      title={Moonshine: Speech Recognition for Live Transcription and Voice Commands}, 
+      title={Moonshine: Speech Recognition for Live Transcription and Voice Commands},
       author={Nat Jeffries and Evan King and Manjunath Kudlur and Guy Nicholson and James Wang and Pete Warden},
       year={2024},
       eprint={2410.15608},
       archivePrefix={arXiv},
       primaryClass={cs.SD},
-      url={https://arxiv.org/abs/2410.15608}, 
+      url={https://arxiv.org/abs/2410.15608},
 }
 ```
