@@ -36,8 +36,9 @@ class Transcriber(object):
             raise ValueError("Moonshine supports sampling rate 16000 Hz.")
         self.model = MoonshineOnnxModel(model_name=model_name)
         self.rate = rate
-        tokenizer_path = (
-            os.path.join(MOONSHINE_DEMO_DIR, '..', 'assets', 'tokenizer.json'))
+        tokenizer_path = os.path.join(
+            MOONSHINE_DEMO_DIR, "..", "assets", "tokenizer.json"
+        )
         self.tokenizer = Tokenizer.from_file(tokenizer_path)
 
         self.inference_secs = 0
