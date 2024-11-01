@@ -6,14 +6,19 @@ Moonshine ASR models.
 - [Moonshine Demos](#moonshine-demos)
 - [Demo: Standalone file transcription with ONNX](#demo-standalone-file-transcription-with-onnx)
 - [Demo: Live captioning from microphone input](#demo-live-captioning-from-microphone-input)
-  - [Installation.](#installation)
+  - [Installation](#installation)
     - [0. Setup environment](#0-setup-environment)
     - [1. Clone the repo and install extra dependencies](#1-clone-the-repo-and-install-extra-dependencies)
+      - [Ubuntu: Install PortAudio](#ubuntu-install-portaudio)
   - [Running the demo](#running-the-demo)
   - [Script notes](#script-notes)
     - [Speech truncation and hallucination](#speech-truncation-and-hallucination)
     - [Running on a slower processor](#running-on-a-slower-processor)
     - [Metrics](#metrics)
+- [Demo: Standalone long-form file transcription](#demo-standalone-long-form-file-transcription)
+  - [Installation](#installation-1)
+  - [Running the demo](#running-the-demo-1)
+  - [Script notes](#script-notes-1)
 - [Citation](#citation)
 
 
@@ -176,6 +181,53 @@ The value of `MIN_REFRESH_SECS` will be ineffective when the model inference tim
 
 The metrics shown on program exit will vary based on the talker's speaking style. If the talker speaks with more frequent pauses, the speech segments are shorter and the mean inference time will be lower. This is a feature of the Moonshine model described in [our paper](https://arxiv.org/abs/2410.15608). When benchmarking, use the same speech, e.g., a recording of someone talking.
 
+# Demo: Standalone long-form file transcription
+
+The script [`file_transcription.py`](/moonshine/demo/file_transcription.py)
+demonstrates "long-form" transcription using a WAV file as input to the
+Moonshine ONNX model.  The demo loads a WAV file of length 1.5 minutes.
+
+## Installation
+
+Follow the [same installation steps](#installation) used for live captions demo.
+
+## Running the demo
+
+``` shell
+python3 moonshine/moonshine/demo/file_transcription.py
+```
+
+An example run on Ubuntu 22.04 VM on MacBook Pro x86 with Moonshine base ONNX
+model:
+
+```console
+(env_moonshine_demo) parallels@ubuntu-linux-22-04-02-desktop:~$ python3 moonshine/moonshine/demo/file_transcription.py
+
+It was the best of times, it was the worst of times. It was the age of wisdom, it was the age of foolishness. It was the epoch of belief, it was the epoch of incredulity. It was the season of light, it was the season of darkness. It was the spring of hope, it was the winter of despair. We had everything before us, we had nothing before us. We were all going direct to heaven, we were all going direct the other way. In short, the period was so far like the present period that some of its noisiest authorities insisted on its being received for good or for evil in the superlative degree of comparison only. There were a king with a large jaw and a queen with a plain face on the throne of England. There were a king with a large jaw and a queen with a fair face on the throne of France. In both countries it was clearer than crystal to the lords of the state preserves of loaves and fishes that things in general were settled forever. It was the year of our Lord 1775.
+
+  model realtime factor:  10.31x
+
+(env_moonshine_demo) parallels@ubuntu-linux-22-04-02-desktop:~$
+```
+
+You may load other WAV files using the command line argument `--wav_path`.
+
+## Script notes
+
+This demo script uses
+[`silero-vad`](https://github.com/snakers4/silero-vad) voice activity detector
+to segment the speech based on talker pauses.  The parameters used in our script
+are the same used in faster-whisper's
+[implementation](https://github.com/SYSTRAN/faster-whisper/blob/814472fdbf7faf5d77d65cdb81b1528c0dead02a/faster_whisper/vad.py#L14)
+for silero-vad.  We validated these parameters for Moonshine base model by WER
+testing several long-form datasets and saw similar WER values compared with
+OpenAI Whisper base.en and faster-whisper base.en models.
+
+We adopt a simple strategy of concatenation of the predicted texts for this
+demo.  We note there are other published methods such as overlap and common
+sequence matching and thus we see room for improvement on our demo method.  For
+instance other methods may generate more accurate transcriptions for talkers who
+rarely pause when speaking for extended periods.
 
 # Citation
 
