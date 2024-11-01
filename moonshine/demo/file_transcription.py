@@ -1,4 +1,5 @@
 """WAV file long-form transcription with Moonshine ONNX models."""
+
 import argparse
 import os
 import sys
@@ -26,9 +27,9 @@ def main(model_name, wav_path):
     with wave.open(wav_path) as f:
         params = f.getparams()
         assert (
-            params.nchannels == 1 and
-            params.framerate == 16000 and
-            params.sampwidth == 2
+            params.nchannels == 1
+            and params.framerate == 16000
+            and params.sampwidth == 2
         ), f"WAV file must have 1 channel, 16KHz rate, and int16 precision."
         audio = f.readframes(params.nframes)
     audio = np.frombuffer(audio, np.int16) / np.iinfo(np.int16).max
@@ -42,8 +43,8 @@ def main(model_name, wav_path):
         min_silence_duration_ms=2000,
         min_speech_duration_ms=250,
         speech_pad_ms=400,
-        )
-    chunks = [audio[ts['start']:ts['end']] for ts in speech_timestamps]
+    )
+    chunks = [audio[ts["start"] : ts["end"]] for ts in speech_timestamps]
 
     chunks_length = 0
     transcription = ""
@@ -80,7 +81,8 @@ if __name__ == "__main__":
         "--wav_path",
         help="Path to speech WAV file.",
         default=os.path.join(
-            MOONSHINE_DEMO_DIR, "..", "assets", "a_tale_of_two_cities.wav"),
+            MOONSHINE_DEMO_DIR, "..", "assets", "a_tale_of_two_cities.wav"
+        ),
     )
     args = parser.parse_args()
     main(**vars(args))
