@@ -4,12 +4,10 @@ import argparse
 import os
 import sys
 import time
-
 from queue import Queue
 
 import numpy as np
-
-from silero_vad import load_silero_vad, VADIterator
+from silero_vad import VADIterator, load_silero_vad
 from sounddevice import InputStream
 from tokenizers import Tokenizer
 
@@ -70,17 +68,17 @@ def create_input_callback(q):
     return input_callback
 
 
-def end_recording(speech):
-    """Transcribes, caches and prints the caption.  Clears speech buffer."""
+def end_recording(speech, do_print=True):
+    """Transcribes, prints and caches the caption then clears speech buffer."""
     text = transcribe(speech)
+    if do_print:
+        print_captions(text)
     caption_cache.append(text)
-    print_captions(text, new_cached_caption=True)
     speech *= 0.0
 
 
-def print_captions(text, new_cached_caption=False):
+def print_captions(text):
     """Prints right justified on same line, prepending cached captions."""
-    print("\r" + " " * MAX_LINE_LENGTH, end="", flush=True)
     if len(text) < MAX_LINE_LENGTH:
         for caption in caption_cache[::-1]:
             text = caption + " " + text
@@ -88,8 +86,9 @@ def print_captions(text, new_cached_caption=False):
                 break
     if len(text) > MAX_LINE_LENGTH:
         text = text[-MAX_LINE_LENGTH:]
-    text = " " * (MAX_LINE_LENGTH - len(text)) + text
-    print("\r" + text, end="", flush=True)
+    else:
+        text = " " * (MAX_LINE_LENGTH - len(text)) + text
+    print("\r" + (" " * MAX_LINE_LENGTH) + "\r" + text, end="", flush=True)
 
 
 def soft_reset(vad_iterator):
@@ -182,7 +181,7 @@ if __name__ == "__main__":
                 while not q.empty():
                     chunk, _ = q.get()
                     speech = np.concatenate((speech, chunk))
-                end_recording(speech)
+                end_recording(speech, do_print=False)
 
             print(f"""
 
