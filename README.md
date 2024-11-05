@@ -6,7 +6,7 @@
 
 [[Blog]](https://petewarden.com/2024/10/21/introducing-moonshine-the-new-state-of-the-art-for-speech-to-text/) [[Paper]](https://arxiv.org/abs/2410.15608) [[Model Card]](https://github.com/usefulsensors/moonshine/blob/main/model-card.md) [[Podcast]](https://notebooklm.google.com/notebook/d787d6c2-7d7b-478c-b7d5-a0be4c74ae19/audio)
 
-Moonshine is a family of speech-to-text models optimized for fast and accurate automatic speech recognition (ASR) on resource-constrained devices. It is well-suited to real-time, on-device applications like live transcription and voice command recognition. Moonshine obtains word-error rates (WER) better than similarly-sized Whisper models from OpenAI on the datasets used in the [OpenASR leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard) maintained by HuggingFace:
+Moonshine is a family of speech-to-text models optimized for fast and accurate automatic speech recognition (ASR) on resource-constrained devices. It is well-suited to real-time, on-device applications like live transcription and voice command recognition. Moonshine obtains word-error rates (WER) better than similarly-sized tiny.en and base.en Whisper models from OpenAI on the datasets used in the [OpenASR leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard) maintained by HuggingFace:
 
 <table>
 <tr><th>Tiny</th><th>Base</th></tr>
@@ -42,7 +42,9 @@ Moonshine is a family of speech-to-text models optimized for fast and accurate a
 
 Moonshine's compute requirements scale with the length of input audio. This means that shorter input audio is processed faster, unlike existing Whisper models that process everything as 30-second chunks. To give you an idea of the benefits: Moonshine processes 10-second audio segments _5x faster_ than Whisper while maintaining the same (or better!) WER.
 
-This repo hosts the inference code for Moonshine.
+Moonshine Base is approximately 400MB, while Tiny is around 190MB. Both publicly-released models currently support English only.
+
+This repo hosts inference code and demos for Moonshine.
 
 - [Installation](#installation)
   - [1. Create a virtual environment](#1-create-a-virtual-environment)
@@ -52,6 +54,7 @@ This repo hosts the inference code for Moonshine.
   - [Onnx standalone](#onnx-standalone)
   - [Live Captions](#live-captions)
   - [CTranslate2](#ctranslate2)
+  - [HuggingFace Transformers](#huggingface-transformers)
 - [TODO](#todo)
 - [Citation](#citation)
 
@@ -135,18 +138,44 @@ You can try the Moonshine models with live input from a microphone on many platf
 
 The files for the CTranslate2 versions of Moonshine are available at [huggingface.co/UsefulSensors/moonshine/tree/main/ctranslate2](https://huggingface.co/UsefulSensors/moonshine/tree/main/ctranslate2), but they require [a pull request to be merged](https://github.com/OpenNMT/CTranslate2/pull/1808) before they can be used with the mainline version of the framework. Until then, you should be able to try them with [our branch](https://github.com/njeffrie/CTranslate2/tree/master), with [this example script](https://github.com/OpenNMT/CTranslate2/pull/1808#issuecomment-2439725339).
 
+### HuggingFace Transformers
+
+Both models are also available on the HuggingFace hub and can be used with the `transformers` library, as follows:
+
+```python
+from transformers import AutoModelForSpeechSeq2Seq, AutoConfig, PreTrainedTokenizerFast
+
+import torchaudio
+import sys
+
+audio, sr = torchaudio.load(sys.argv[1])
+if sr != 16000:
+  audio = torchaudio.functional.resample(audio, sr, 16000)
+
+# 'usefulsensors/moonshine-base' for the base model
+model = AutoModelForSpeechSeq2Seq.from_pretrained('usefulsensors/moonshine-tiny', trust_remote_code=True)
+tokenizer = PreTrainedTokenizerFast.from_pretrained('usefulsensors/moonshine-tiny')
+
+tokens = model(audio)
+print(tokenizer.decode(tokens[0], skip_special_tokens=True))
+```
+
 ## TODO
 * [x] Live transcription demo
-    
+
 * [x] ONNX model
-    
-* [ ] CTranslate2 support
-    
+
+* [x] HF transformers support
+
+* [ ] CTranslate2 support (complete but [awaiting a merge](https://github.com/OpenNMT/CTranslate2/pull/1808))
+
 * [ ] MLX support
 
 * [ ] Fine-tuning code
 
-* [ ] HF transformers/transformers.js support
+* [ ] HF transformers.js support
+
+* [ ] Long-form transcription demo 
 
 ## Citation
 If you benefit from our work, please cite us:
