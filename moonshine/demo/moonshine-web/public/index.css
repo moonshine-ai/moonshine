@@ -1,0 +1,49 @@
+body {
+  font-family: Arial, Helvetica, sans-serif;
+}
+div {
+  margin-bottom: 1em;
+}
+button {
+  height: 3em;
+  width: 6em;
+  margin-left: 0.5em;
+}
+.container {
+  max-width: 600px;
+  margin: 0 auto;
+}
+.justify-center {
+  display: flex;
+  justify-content: center;
+}
+.logo-container {
+  text-align: center;
+}
+#logo {
+  width: 196px;
+}
+#sound {
+  width: 100%;
+}
+#transcription {
+  color: #447ff7;
+}
+#audioPanel {
+  display: none;
+}
+.st0 {
+  fill: #ffffff;
+  stroke: #3a4966;
+  stroke-width: 20;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-miterlimit: 10;
+}
+.st1 {
+  fill: none;
+  stroke: #447ff7;
+  stroke-width: 30;
+  stroke-linecap: round;
+  stroke-miterlimit: 10;
+}
