@@ -4,6 +4,7 @@ This directory contains various scripts to demonstrate the capabilities of the
 Moonshine ASR models.
 
 - [Moonshine Demos](#moonshine-demos)
+- [Demo: Moonshine running in the browser with ONNX](#demo-moonshine-running-in-the-browser-with-onnx)
 - [Demo: Standalone file transcription with ONNX](#demo-standalone-file-transcription-with-onnx)
 - [Demo: Live captioning from microphone input](#demo-live-captioning-from-microphone-input)
   - [Installation.](#installation)
@@ -16,6 +17,10 @@ Moonshine ASR models.
     - [Metrics](#metrics)
 - [Citation](#citation)
 
+# Demo: Moonshine running in the browser with ONNX
+
+The Node.js project in [`moonshine-web`](/moonshine/demo/moonshine-web/) demonstrates how to run the
+Moonshine models in the web browser using `onnxruntime-web`. You can try this demo on your own device using our [HuggingFace space](https://huggingface.co/spaces/UsefulSensors/moonshine-web) without having to run the project from the source here. Of note, the [`moonshine.js`](/moonshine/demo/moonshine-web/src/moonshine.js) script contains everything you need to perform inferences with the Moonshine ONNX models in the browser. If you would like to build on the web demo, follow the instructions in the demo directory to get started.
 
 # Demo: Standalone file transcription with ONNX
 

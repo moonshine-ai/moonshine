@@ -51,8 +51,9 @@ This repo hosts inference code and demos for Moonshine.
   - [2. Install the Moonshine package](#2-install-the-moonshine-package)
   - [3. Try it out](#3-try-it-out)
 - [Examples](#examples)
-  - [Onnx standalone](#onnx-standalone)
+  - [Onnx Standalone](#onnx-standalone)
   - [Live Captions](#live-captions)
+  - [Running in the Browser](#running-in-the-browser)
   - [CTranslate2](#ctranslate2)
   - [HuggingFace Transformers](#huggingface-transformers)
 - [TODO](#todo)
@@ -126,13 +127,17 @@ Use the `moonshine.transcribe_with_onnx` function to use the ONNX runtime for in
 
 The Moonshine models can be used with a variety of different runtimes and applications, so we've included code samples showing how to use them in different situations. The [`moonshine/demo`](/moonshine/demo/) folder in this repository also has more information on many of them.
 
-### Onnx standalone
+### Onnx Standalone
 
 The latest versions of the Onnx Moonshine models are available on HuggingFace at [huggingface.co/UsefulSensors/moonshine/tree/main/onnx](https://huggingface.co/UsefulSensors/moonshine/tree/main/onnx). You can find [an example Python script](/moonshine/demo/onnx_standalone.py) and more information about running them [in the demo folder](/moonshine/demo/README.md#demo-standalone-file-transcription-with-onnx).
 
 ### Live Captions
 
 You can try the Moonshine models with live input from a microphone on many platforms with the [live captions demo](/moonshine/demo/README.md#demo-live-captioning-from-microphone-input).
+
+### Running in the Browser
+
+You can try out the Moonshine models on your device in a web browser with our [HuggingFace space](https://huggingface.co/spaces/UsefulSensors/moonshine-web). We've included the [source for this demo](/moonshine/demo/moonshine-web/) in this repository; this is a great starting place for those wishing to build web-based applications with Moonshine.
 
 ### CTranslate2
 
@@ -166,6 +171,8 @@ print(tokenizer.decode(tokens[0], skip_special_tokens=True))
 * [x] ONNX model
 
 * [x] HF transformers support
+
+* [x] Demo Moonshine running in the browser
 
 * [ ] CTranslate2 support (complete but [awaiting a merge](https://github.com/OpenNMT/CTranslate2/pull/1808))
 
