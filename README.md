@@ -184,6 +184,11 @@ print(tokenizer.decode(tokens[0], skip_special_tokens=True))
 
 * [ ] Long-form transcription demo 
 
+## Known Issues
+
+### UserWarning: You are using a softmax over axis 3 of a tensor of shape torch.Size([1, 8, 1, 1])
+This is a benign warning arising from Keras. For the first token in the decoding loop, the attention score matrix's shape is 1x1, which triggers this warning. You can safely ignore it, or run with `python -W ignore` to suppress the warning.
+
 ## Citation
 If you benefit from our work, please cite us:
 ```
