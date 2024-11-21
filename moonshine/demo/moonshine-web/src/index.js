@@ -2,6 +2,7 @@ import Moonshine from "./moonshine.js"
 
 
 function setTranscription(text) {
+    console.log("setTranscription: " + text)
     document.getElementById("transcription").innerHTML = text
 }
 
@@ -45,7 +46,6 @@ function toggleControls(isEnabled) {
 }
 
 function setAudio(audioBlob) {
-    console.log(audioBlob.length)
     var sound = document.getElementById("sound")
     sound.src = URL.createObjectURL(audioBlob)
 }
@@ -96,7 +96,7 @@ window.onload = (event) => {
             }
             decoded.copyFromChannel(floatArray, 0)
             moonshine.generate(floatArray).then((r) => {
-                document.getElementById("transcription").innerText = r
+                setTranscription(r)
                 toggleControls(true)
             })
         }
