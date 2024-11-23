@@ -31,7 +31,7 @@ setup(
     extras_require={
         "tensorflow": ["tensorflow==2.17.0"],
         "jax": ["jax==0.4.34", "keras==3.6.0"],
-        "jax-cuda": ["jax[cuda12]", "keras==3.6.0"]
+        "jax-cuda": ["jax[cuda12]", "keras==3.6.0"],
     },
     include_package_data=True,
 )
