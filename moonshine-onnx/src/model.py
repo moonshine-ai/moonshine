@@ -41,7 +41,6 @@ class MoonshineOnnxModel(object):
             max_len = int((audio.shape[-1] / 16_000) * 6)
         preprocessed = self.preprocess.run([], dict(args_0=audio))[0]
         seq_len = [preprocessed.shape[-2]]
-
         context = self.encode.run([], dict(args_0=preprocessed, args_1=seq_len))[0]
         inputs = [[1]]
         seq_len = [1]

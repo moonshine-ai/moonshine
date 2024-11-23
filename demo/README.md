@@ -1,11 +1,10 @@
 # Moonshine Demos
 
-This directory contains various scripts to demonstrate the capabilities of the
+This directory contains scripts to demonstrate the capabilities of the
 Moonshine ASR models.
 
 - [Moonshine Demos](#moonshine-demos)
-- [Demo: Moonshine running in the browser with ONNX](#demo-moonshine-running-in-the-browser-with-onnx)
-- [Demo: Standalone file transcription with ONNX](#demo-standalone-file-transcription-with-onnx)
+- [Demo: Running in the browser](#demo-running-in-the-browser)
 - [Demo: Live captioning from microphone input](#demo-live-captioning-from-microphone-input)
   - [Installation.](#installation)
     - [0. Setup environment](#0-setup-environment)
@@ -17,46 +16,45 @@ Moonshine ASR models.
     - [Metrics](#metrics)
 - [Citation](#citation)
 
-# Demo: Moonshine running in the browser with ONNX
+# Demo: Running in the browser
 
-The Node.js project in [`moonshine-web`](/moonshine/demo/moonshine-web/) demonstrates how to run the
-Moonshine models in the web browser using `onnxruntime-web`. You can try this demo on your own device using our [HuggingFace space](https://huggingface.co/spaces/UsefulSensors/moonshine-web) without having to run the project from the source here. Of note, the [`moonshine.js`](/moonshine/demo/moonshine-web/src/moonshine.js) script contains everything you need to perform inferences with the Moonshine ONNX models in the browser. If you would like to build on the web demo, follow the instructions in the demo directory to get started.
+The Node.js project in [`moonshine-web`](/demo/moonshine-web/) demonstrates how to run the
+Moonshine models in the web browser using `onnxruntime-web`. You can try this demo on your own device using our [HuggingFace space](https://huggingface.co/spaces/UsefulSensors/moonshine-web) without having to run the project from the source here. Of note, the [`moonshine.js`](/demo/moonshine-web/src/moonshine.js) script contains everything you need to perform inferences with the Moonshine ONNX models in the browser. If you would like to build on the web demo, follow these instructions to get started.
 
-# Demo: Standalone file transcription with ONNX
+## Installation
 
-The script [`onnx_standalone.py`](/moonshine/demo/onnx_standalone.py)
-demonstrates how to run a Moonshine model with the `onnxruntime`
-package alone, without depending on `torch` or `tensorflow`. This enables
-running on SBCs such as Raspberry Pi. Follow the instructions below to setup
-and run.
+You must have Node.js (or another JavaScript toolkit like [Bun](https://bun.sh/)) installed to get started. Install [Node.js](https://nodejs.org/en) if you don't have it already.
 
-1. Install `onnxruntime` (or `onnxruntime-gpu` if you want to run on GPUs) and `tokenizers` packages using your Python package manager of choice, such as `pip`.
-
-2. Download the `onnx` files from huggingface hub to a directory.
+Once you have your JavaScript toolkit installed, clone the `moonshine` repo and navigate to this directory:
 
 ```shell
-mkdir moonshine_base_onnx
-cd moonshine_base_onnx
-wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/preprocess.onnx
-wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/encode.onnx
-wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/uncached_decode.onnx
-wget https://huggingface.co/UsefulSensors/moonshine/resolve/main/onnx/base/cached_decode.onnx
-cd ..
+git clone git@github.com:usefulsensors/moonshine.git
+cd moonshine/demo/moonshine-web
 ```
 
-3. Run `onnx_standalone.py` to transcribe a wav file
+Then install the project's dependencies:
 
 ```shell
-moonshine/moonshine/demo/onnx_standalone.py --models_dir moonshine_base_onnx --wav_file moonshine/moonshine/assets/beckett.wav
-['Ever tried ever failed, no matter try again fail again fail better.']
+npm install
 ```
 
+The demo expects the Moonshine Tiny and Base ONNX models to be available in `public/moonshine/tiny` and `public/moonshine/base`, respectively. To preserve space, they are not included here. However, we've included a helper script that you can run to conveniently download them from HuggingFace:
+
+```shell
+npm run get-models
+```
+
+This project uses Vite for bundling and development. Run the following to start a development server and open the demo in your web browser:
+
+```shell
+npm run dev
+```
 
 # Demo: Live captioning from microphone input
 
 https://github.com/user-attachments/assets/aa65ef54-d4ac-4d31-864f-222b0e6ccbd3
 
-This folder contains a demo of live captioning from microphone input, built on Moonshine. The script runs the Moonshine ONNX model on segments of speech detected in the microphone signal using a voice activity detector called [`silero-vad`](https://github.com/snakers4/silero-vad). The script prints scrolling text or "live captions" assembled from the model predictions to the console.
+The [`moonshine-onnx/live_captions.py`](/demo/moonshine-onnx/live_captions.py) script contains a demo of live captioning from microphone input, built on Moonshine. The script runs the Moonshine ONNX model on segments of speech detected in the microphone signal using a voice activity detector called [`silero-vad`](https://github.com/snakers4/silero-vad). The script prints scrolling text or "live captions" assembled from the model predictions to the console.
 
 The following steps have been tested in a `uv` (v0.4.25) virtual environment on these platforms:
 
@@ -68,7 +66,7 @@ The following steps have been tested in a `uv` (v0.4.25) virtual environment on 
 
 ### 0. Setup environment
 
-Steps to set up a virtual environment are available in the [top level README](/README.md) of this repo. Note that this demo is standalone and has no requirement to install the `useful-moonshine` package. Instead, you will clone the repo.
+Steps to set up a virtual environment are available in the [top level README](/README.md) of this repo. After creating a virtual environment, do the following:
 
 ### 1. Clone the repo and install extra dependencies
 
@@ -81,11 +79,10 @@ git clone git@github.com:usefulsensors/moonshine.git
 Then install the demo's requirements:
 
 ```shell
-uv pip install -r moonshine/moonshine/demo/requirements.txt
+uv pip install -r moonshine/demo/moonshine-onnx/requirements.txt
 ```
 
-There is a dependency on `torch` because of `silero-vad` package.  There is no
-dependency on `tensorflow`.
+Note that while `useful-moonshine-onnx` has no requirement for `torch`, this demo introduces a dependency for it because of the `silero-vad` package.
 
 #### Ubuntu: Install PortAudio
 
@@ -102,7 +99,7 @@ sudo apt install -y portaudio19-dev
 First, check that your microphone is connected and that the volume setting is not muted in your host OS or system audio drivers. Then, run the script:
 
 ``` shell
-python3 moonshine/moonshine/demo/live_captions.py
+python3 moonshine/demo/moonshine-onnx/live_captions.py
 ```
 
 By default, this will run the demo with the Moonshine Base model using the ONNX runtime. The optional `--model_name` argument sets the model to use: supported arguments are `moonshine/base` and `moonshine/tiny`.
@@ -113,7 +110,7 @@ An example run on Ubuntu 24.04 VM on MacBook Pro M2 with Moonshine base ONNX
 model:
 
 ```console
-(env_moonshine_demo) parallels@ubuntu-linux-2404:~$ python3 moonshine/moonshine/demo/live_captions.py
+(env_moonshine_demo) parallels@ubuntu-linux-2404:~$ python3 moonshine/demo/moonshine-onnx/live_captions.py
 Error in cpuinfo: prctl(PR_SVE_GET_VL) failed
 Loading Moonshine model 'moonshine/base' (ONNX runtime) ...
 Press Ctrl+C to quit live captions.
@@ -138,7 +135,7 @@ for a value of 0.2 seconds.  Our Moonshine base model runs ~ 7x faster for this
 example.
 
 ```console
-(env_moonshine_faster_whisper) parallels@ubuntu-linux-2404:~$ python3 moonshine/moonshine/demo/live_captions.py
+(env_moonshine_faster_whisper) parallels@ubuntu-linux-2404:~$ python3 moonshine/demo/moonshine-onnx/live_captions.py
 Error in cpuinfo: prctl(PR_SVE_GET_VL) failed
 Loading Faster-Whisper float32 base.en model  ...
 Press Ctrl+C to quit live captions.
@@ -161,7 +158,7 @@ This is an example of the Faster Whisper float32 base model being used to genera
 
 You may customize this script to display Moonshine text transcriptions as you wish.
 
-The script `live_captions.py` loads the English language version of Moonshine base ONNX model. It includes logic to detect speech activity and limit the context window of speech fed to the Moonshine model. The returned transcriptions are displayed as scrolling captions. Speech segments with pauses are cached and these cached captions are printed on exit.
+The script `moonshine-onnx/live_captions.py` loads the English language version of Moonshine base ONNX model. It includes logic to detect speech activity and limit the context window of speech fed to the Moonshine model. The returned transcriptions are displayed as scrolling captions. Speech segments with pauses are cached and these cached captions are printed on exit.
 
 ### Speech truncation and hallucination
 
@@ -172,7 +169,7 @@ Some hallucinations will be seen when the script is running: one reason is speec
 If you run this script on a slower processor, consider using the `tiny` model.
 
 ```shell
-python3 ./moonshine/moonshine/demo/live_captions.py --model_name moonshine/tiny
+python3 ./moonshine/demo/moonshine-onnx/live_captions.py --model_name moonshine/tiny
 ```
 
 The value of `MIN_REFRESH_SECS` will be ineffective when the model inference time exceeds that value.  Conversely on a faster processor consider reducing the value of `MIN_REFRESH_SECS` for more frequent caption updates.  On a slower processor you might also consider reducing the value of `MAX_SPEECH_SECS` to avoid slower model inferencing encountered with longer speech segments.

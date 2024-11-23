@@ -2,20 +2,14 @@
 
 import argparse
 import os
-import sys
 import time
 from queue import Queue
 
 import numpy as np
 from silero_vad import VADIterator, load_silero_vad
 from sounddevice import InputStream
-from tokenizers import Tokenizer
 
-# Local import of Moonshine ONNX model.
-MOONSHINE_DEMO_DIR = os.path.dirname(__file__)
-sys.path.append(os.path.join(MOONSHINE_DEMO_DIR, ".."))
-
-from onnx_model import MoonshineOnnxModel
+from moonshine_onnx import MoonshineOnnxModel, load_tokenizer
 
 SAMPLING_RATE = 16000
 
@@ -34,10 +28,7 @@ class Transcriber(object):
             raise ValueError("Moonshine supports sampling rate 16000 Hz.")
         self.model = MoonshineOnnxModel(model_name=model_name)
         self.rate = rate
-        tokenizer_path = os.path.join(
-            MOONSHINE_DEMO_DIR, "..", "assets", "tokenizer.json"
-        )
-        self.tokenizer = Tokenizer.from_file(tokenizer_path)
+        self.tokenizer = load_tokenizer()
 
         self.inference_secs = 0
         self.number_inferences = 0
