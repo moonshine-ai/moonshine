@@ -48,10 +48,10 @@ This repo hosts inference code and demos for Moonshine.
 
 - [Installation](#installation)
   - [1. Create a virtual environment](#1-create-a-virtual-environment)
-  - [2. Install the Moonshine package](#2-install-the-moonshine-package)
+  - [2a. Install the `useful-moonshine` package to use Moonshine with Torch, TensorFlow, or JAX](#2a-install-the-useful-moonshine-package-to-use-moonshine-with-torch-tensorflow-or-jax)
+  - [2b. Install the `useful-moonshine-onnx` package to use Moonshine with ONNX](#2b-install-the-useful-moonshine-onnx-package-to-use-moonshine-with-onnx)
   - [3. Try it out](#3-try-it-out)
 - [Examples](#examples)
-  - [Onnx Standalone](#onnx-standalone)
   - [Live Captions](#live-captions)
   - [Running in the Browser](#running-in-the-browser)
   - [CTranslate2](#ctranslate2)
@@ -61,7 +61,14 @@ This repo hosts inference code and demos for Moonshine.
 
 ## Installation
 
-We like `uv` for managing Python environments, so we use it here. If you don't want to use it, simply skip the first step and leave `uv` off of your shell commands.
+We currently offer two options for installing Moonshine:
+
+1. `useful-moonshine`, which uses Keras (with support for Torch, TensorFlow, and JAX backends)
+2. `useful-moonshine-onnx`, which uses the ONNX runtime
+
+These instructions apply to both options; follow along to get started.
+
+Note: We like `uv` for managing Python environments, so we use it here. If you don't want to use it, simply skip the `uv` installation and leave `uv` off of your shell commands.
 
 ### 1. Create a virtual environment
 
@@ -74,9 +81,9 @@ uv venv env_moonshine
 source env_moonshine/bin/activate
 ```
 
-### 2. Install the Moonshine package
+### 2a. Install the `useful-moonshine` package to use Moonshine with Torch, TensorFlow, or JAX
 
-The `moonshine` inference code is written in Keras and can run with each of the backends that Keras supports: Torch, TensorFlow, and JAX. The backend you choose will determine which flavor of the `moonshine` package to install. If you're just getting started, we suggest installing the (default) Torch backend:
+The `useful-moonshine` inference code is written in Keras and can run with each of the backends that Keras supports: Torch, TensorFlow, and JAX. The backend you choose will determine which flavor of the `useful-moonshine` package to install. If you're just getting started, we suggest installing the (default) Torch backend:
 
 ```shell
 uv pip install useful-moonshine@git+https://github.com/usefulsensors/moonshine.git
@@ -103,41 +110,39 @@ export KERAS_BACKEND=jax
 # Use useful-moonshine[jax-cuda] for jax on GPU
 ```
 
-To run with ONNX runtime that is supported on platforms, run the following:
+### 2b. Install the `useful-moonshine-onnx` package to use Moonshine with ONNX
+
+Using Moonshine with the ONNX runtime is preferable if you want to run the models on SBCs like the Raspberry Pi. We've prepared a separate version of
+the package with minimal dependencies to support these use cases. To use it, run the following:
 
 ```shell
-uv pip install useful-moonshine[onnx]@git+https://github.com/usefulsensors/moonshine.git
+uv pip install useful-moonshine-onnx @ git+https://git@github.com/usefulsensors/moonshine.git#subdirectory=moonshine-onnx
 ```
 
 ### 3. Try it out
 
-You can test Moonshine by transcribing the provided example audio file with the `.transcribe` function:
+You can test whichever type of Moonshine you installed by transcribing the provided example audio file with the `.transcribe` function:
 
 ```shell
 python
->>> import moonshine
->>> moonshine.transcribe(moonshine.ASSETS_DIR / 'beckett.wav', 'moonshine/tiny')
+>>> import moonshine # or import moonshine_onnx
+>>> moonshine.transcribe(moonshine.ASSETS_DIR / 'beckett.wav', 'moonshine/tiny') # or moonshine_onnx.transcribe(...)
 ['Ever tried ever failed, no matter try again, fail again, fail better.']
 ```
 
 The first argument is a path to an audio file and the second is the name of a Moonshine model. `moonshine/tiny` and `moonshine/base` are the currently available models.
-Use the `moonshine.transcribe_with_onnx` function to use the ONNX runtime for inference. The parameters are the same as they are for `moonshine.transcribe`.
 
 ## Examples
 
-The Moonshine models can be used with a variety of different runtimes and applications, so we've included code samples showing how to use them in different situations. The [`moonshine/demo`](/moonshine/demo/) folder in this repository also has more information on many of them.
-
-### Onnx Standalone
-
-The latest versions of the Onnx Moonshine models are available on HuggingFace at [huggingface.co/UsefulSensors/moonshine/tree/main/onnx](https://huggingface.co/UsefulSensors/moonshine/tree/main/onnx). You can find [an example Python script](/moonshine/demo/onnx_standalone.py) and more information about running them [in the demo folder](/moonshine/demo/README.md#demo-standalone-file-transcription-with-onnx).
+Since the Moonshine models can be used with a variety of different runtimes and applications, we've included code samples showing how to use them in different situations. The [`demo`](/demo/) folder in this repository also has more information on many of them.
 
 ### Live Captions
 
-You can try the Moonshine models with live input from a microphone on many platforms with the [live captions demo](/moonshine/demo/README.md#demo-live-captioning-from-microphone-input).
+You can try the Moonshine ONNX models with live input from a microphone with the [live captions demo](/demo/README.md#demo-live-captioning-from-microphone-input).
 
 ### Running in the Browser
 
-You can try out the Moonshine models on your device in a web browser with our [HuggingFace space](https://huggingface.co/spaces/UsefulSensors/moonshine-web). We've included the [source for this demo](/moonshine/demo/moonshine-web/) in this repository; this is a great starting place for those wishing to build web-based applications with Moonshine.
+You can try out the Moonshine ONNX models locally in a web browser with our [HuggingFace space](https://huggingface.co/spaces/UsefulSensors/moonshine-web). We've included the [source for this demo](/demo/moonshine-web/) in this repository; this is a great starting place for those wishing to build web-based applications with Moonshine.
 
 ### CTranslate2
 
