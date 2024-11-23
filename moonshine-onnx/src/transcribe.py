@@ -8,6 +8,7 @@ from . import ASSETS_DIR
 def load_audio(audio):
     if isinstance(audio, (str, Path)):
         import librosa
+
         audio, _ = librosa.load(audio, sr=16_000)
     return audio[None, ...]
 
