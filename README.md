@@ -116,7 +116,7 @@ Using Moonshine with the ONNX runtime is preferable if you want to run the model
 the package with minimal dependencies to support these use cases. To use it, run the following:
 
 ```shell
-uv pip install useful-moonshine-onnx @ git+https://git@github.com/usefulsensors/moonshine.git#subdirectory=moonshine-onnx
+uv pip install useful-moonshine-onnx@git+https://git@github.com/usefulsensors/moonshine.git#subdirectory=moonshine-onnx
 ```
 
 ### 3. Try it out
