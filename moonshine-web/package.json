@@ -1,0 +1,23 @@
+{
+  "name": "useful-moonshine-web",
+  "version": "1.0.0",
+  "description": "On-device speech-to-text for web applications with Moonshine.",
+  "type": "module",
+  "scripts": {
+    "build": "npx rollup --config",
+    "dev": "npm run build && cp dist/moonshine.min.js example/moonshine/ && cd example && python app.py",
+    "get-models": "node downloader.js"
+  },
+  "author": "Useful Sensors",
+  "license": "MIT",
+  "dependencies": {
+    "llama-tokenizer-js": "^1.2.2",
+    "onnxruntime-web": "^1.20.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^15.3.0",
+    "@rollup/plugin-terser": "^0.4.4",
+    "rollup": "^4.27.4",
+    "@huggingface/hub": "^0.19.0"
+  }
+}

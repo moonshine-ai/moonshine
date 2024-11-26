@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+    <head>
+        <title>useful-moonshine-web</title>
+        <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
+        <script type="module" src="http://localhost:5000/moonshine/moonshine.min.js"></script>
+    </head>
+    <body>
+        <textarea id="firstInput" style="width: 512px; height: 128px;"></textarea>
+        <button data-moonshine-target="#firstInput"></button>
+        <br />
+        <br />
+        <input id="secondInput" style="width: 512px;"></input>
+        <button data-moonshine-target="#secondInput"></button>
+        <br />
+        <br />
+        <textarea id="thirdInput" style="width: 512px; height: 128px;"></textarea>
+        <button data-moonshine-target="#thirdInput" data-moonshine-live></button>
+    </body>
+</html>
