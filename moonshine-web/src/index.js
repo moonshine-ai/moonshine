@@ -28,7 +28,6 @@ async function runMoonshineToggleTranscription(origin, target) {
     // fires every MOONSHINE_FRAME_SIZE ms
     moonshineMediaRecorder.ondataavailable = event => {
         audioChunks.push(event.data);
-        // TODO implement pseudo-streaming transcription here
     };
 
     moonshineMediaRecorder.start(MoonshineSettings.FRAME_SIZE);
@@ -70,8 +69,62 @@ async function runMoonshineToggleTranscription(origin, target) {
     });
 }
 
-async function runMoonshineLiveTranscription() {
+async function runMoonshineLiveTranscription(origin, target) {
+    // load model if not loaded
+    if (!moonshineModel) {
+        origin.dispatchEvent(new CustomEvent("moonshineLoadStarted"))
+        moonshineModel = new MoonshineModel("moonshine/tiny")
+        await moonshineModel.loadModel()
+    }
 
+    // set audio input device
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    moonshineMediaRecorder = new MediaRecorder(stream);
+
+    const audioChunks = [];
+
+    // fires every MOONSHINE_FRAME_SIZE ms
+    moonshineMediaRecorder.ondataavailable = event => {
+        audioChunks.push(event.data);
+
+        const audioBlob = new Blob(audioChunks, { 
+            type: 'audio/wav' 
+        });
+
+        const audioCTX = new AudioContext({
+            sampleRate: 16000,
+        });
+        audioBlob.arrayBuffer().then(arrayBuffer => {
+            audioCTX.decodeAudioData(arrayBuffer).then(decoded => {
+                let floatArray = new Float32Array(decoded.length)
+                if (floatArray.length > (16000 * 30)) {
+                    floatArray = floatArray.subarray(0, 16000 * 30)
+                }
+                decoded.copyFromChannel(floatArray, 0)
+                moonshineModel.generate(floatArray).then(text => {
+                    target.value = text
+                })
+            });
+        })
+    };
+
+    moonshineMediaRecorder.start(MoonshineSettings.FRAME_SIZE);
+    origin.dispatchEvent(new CustomEvent("moonshineRecordStarted"))
+    origin.dispatchEvent(new CustomEvent("moonshineTranscribeStarted"))
+
+    return new Promise(resolve => {
+        moonshineMediaRecorder.onstop = () => {
+            origin.dispatchEvent(new CustomEvent("moonshineRecordStopped"))
+            origin.dispatchEvent(new CustomEvent("moonshineTranscribeStopped"))
+            resolve()
+        };
+        // stop recording (if active) after 30 seconds
+        setTimeout(() => {
+            if (moonshineMediaRecorder) {
+                moonshineMediaRecorder.stop()
+            }
+        }, 30000);
+    });
 }
 
 const moonshineControlElements = document.querySelectorAll('[data-moonshine-target]');
