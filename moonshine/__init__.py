@@ -9,6 +9,4 @@ from .transcribe import (
     benchmark,
     load_tokenizer,
     load_audio,
-    transcribe_with_onnx,
 )
-from .onnx_model import MoonshineOnnxModel
