@@ -22,19 +22,19 @@ export default class Moonshine {
         const sessionOption = { executionProviders: ['wasm', 'cpu'] };
 
         this.model.preprocess = await ort.InferenceSession.create(
-            "moonshine/" + this.model_name + "/preprocess.onnx", sessionOption)
+            "moonshine/" + this.model_name + "/preprocess.ort", sessionOption)
         console.log("preprocess loaded")
 
         this.model.encode = await ort.InferenceSession.create(
-            "moonshine/" + this.model_name + "/encode.onnx", sessionOption)
+            "moonshine/" + this.model_name + "/encode.ort", sessionOption)
         console.log("encode loaded")
 
         this.model.uncached_decode = await ort.InferenceSession.create(
-            "moonshine/" + this.model_name + "/uncached_decode.onnx", sessionOption)
+            "moonshine/" + this.model_name + "/uncached_decode.ort", sessionOption)
         console.log("uncached_decode loaded")
 
         this.model.cached_decode = await ort.InferenceSession.create(
-            "moonshine/" + this.model_name + "/cached_decode.onnx", sessionOption)
+            "moonshine/" + this.model_name + "/cached_decode.ort", sessionOption)
         console.log("cached_decode loaded")
         console.log(this.model_name + " loaded")
     }

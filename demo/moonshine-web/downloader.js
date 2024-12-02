@@ -10,10 +10,10 @@ var models = [
 ]
 
 var layers = [
-    "preprocess.onnx",
-    "encode.onnx",
-    "uncached_decode.onnx",
-    "cached_decode.onnx"
+    "preprocess.ort",
+    "encode.ort",
+    "uncached_decode.ort",
+    "cached_decode.ort"
 ]
 
 console.log("Downloading Moonshine ONNX models from HuggingFace...")
@@ -24,7 +24,7 @@ models.forEach(model => {
         fs.mkdirSync(dir, { recursive: true });
     }
     layers.forEach(layer => {
-        hub.downloadFile({ repo, path: "onnx/" + model + "/" + layer }).then((file) => {
+        hub.downloadFile({ repo, path: "ort/" + model + "/" + layer }).then((file) => {
             file.arrayBuffer().then((buffer) => {
                 fs.writeFile(dir + "/" + layer, Buffer.from(buffer), () => {
                     console.log("\tDownloaded " + model + "/" + layer + " successfully.") 
