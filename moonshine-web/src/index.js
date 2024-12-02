@@ -127,13 +127,62 @@ async function runMoonshineLiveTranscription(origin, target) {
     });
 }
 
+const lifecycleAttributes = ["loading", "recording", "transcribing", "idle"]
+
+function initMoonshineLifecycleIcons(parentButton) {
+    // inject innerHTML for lifecycle icons wherever inline overrides are not specified
+    lifecycleAttributes.forEach(attr => {
+        const iconElement = parentButton.querySelector(":scope > [data-moonshine-"+attr+"]")
+        if (!iconElement) {
+            let injectedIconElement = document.createElement("span")
+            injectedIconElement.innerHTML = getMoonshineLifecycleInnerHTML(attr)
+            injectedIconElement.setAttribute("data-moonshine-"+attr, "")
+            parentButton.appendChild(injectedIconElement)
+        }
+        else {
+            // inline override set; do nothing
+        }
+    })
+    showMoonshineLifecycleIcon(parentButton, "idle")
+}
+
+function showMoonshineLifecycleIcon(parentButton, icon) {
+    const hideAttributes = lifecycleAttributes.filter((attr) => attr != icon);
+
+    hideAttributes.forEach(attr => {
+        const hideElements = parentButton.querySelectorAll(":scope > [data-moonshine-"+attr+"]")
+        hideElements.forEach(hideElement => {
+            hideElement.style.display = "none"
+        })
+    })
+
+    const showElements = parentButton.querySelectorAll(":scope > [data-moonshine-"+icon+"]")
+    showElements.forEach(showElement => {
+        showElement.style.display = "inline-block"
+    })
+}
+
+function getMoonshineLifecycleInnerHTML(icon) {
+    switch(icon) {
+        case "loading":
+            return "Loading";
+        case "recording":
+            return "Recording";
+        case "transcribing":
+            return "Transcribing";
+        default:
+        case "idle":
+            return "Click me";
+    }
+}
+
 const moonshineControlElements = document.querySelectorAll('[data-moonshine-target]');
 
 moonshineControlElements.forEach(controlElement => {
     var targetElementSelector = controlElement.attributes["data-moonshine-target"].value
     var targetElements = document.querySelectorAll(targetElementSelector)
+    initMoonshineLifecycleIcons(controlElement)
     targetElements.forEach(targetElement => {
-        controlElement.innerHTML = "Click for voice input."
         controlElement.addEventListener("click", () => {
             // if not transcribing, start transcribing
             if (!controlElement.attributes["data-moonshine-active"]) {
@@ -172,22 +221,23 @@ moonshineControlElements.forEach(controlElement => {
         })
         controlElement.addEventListener("moonshineLoadStarted", () => {
             console.log("moonshineLoadStarted")
-            controlElement.innerHTML = "Loading..."
+            showMoonshineLifecycleIcon(controlElement, "loading")
         })
         controlElement.addEventListener("moonshineRecordStarted", () => {
             console.log("moonshineRecordStarted")
-            controlElement.innerHTML = "Speak now..."
+            showMoonshineLifecycleIcon(controlElement, "recording")
         })
         controlElement.addEventListener("moonshineRecordStopped", () => {
             console.log("moonshineRecordStopped")
+            showMoonshineLifecycleIcon(controlElement, "idle")
         })
         controlElement.addEventListener("moonshineTranscribeStarted", () => {
             console.log("moonshineTranscribeStarted")
-            controlElement.innerHTML = "Transcribing..."
+            showMoonshineLifecycleIcon(controlElement, "transcribing")
         })
         controlElement.addEventListener("moonshineTranscribeStopped", () => {
             console.log("moonshineTranscribeStopped")
-            controlElement.innerHTML = "Click for voice input."
+            showMoonshineLifecycleIcon(controlElement, "idle")
         })
     })
 });
