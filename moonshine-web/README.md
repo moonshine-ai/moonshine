@@ -28,7 +28,7 @@ Control elements point to corresponding target elements that should recieve the 
 
 ```html
 <textarea id="myTextArea"></textarea>
-<button data-moonshine-target="#myTextArea">
+<button data-moonshine-target="#myTextArea"></button>
 ```
 
 When a page visitor clicks the button, the model will be loaded on their device, recording will begin, and speech-to-text will be activated. Upon stopping, the transcription will be output to the target `<textarea>`.
@@ -39,7 +39,7 @@ By default, `moonshine-web` uses a "toggle"-style speech-to-text: a page visitor
 
 ```html
 <textarea id="myTextArea"></textarea>
-<button data-moonshine-target="#myTextArea" data-moonshine-live>
+<button data-moonshine-target="#myTextArea" data-moonshine-live></button>
 ```
 
 ### Lifecycle Icons
