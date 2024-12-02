@@ -6,7 +6,15 @@
     </head>
     <body>
         <textarea id="firstInput" style="width: 512px; height: 128px;"></textarea>
-        <button data-moonshine-target="#firstInput"></button>
+        <button data-moonshine-target="#firstInput">
+            <!--
+                These inline <span> tags will override the default display text/icon for this button only
+            -->
+            <span data-moonshine-loading>Loading</span>
+            <span data-moonshine-recording>Recording</span>
+            <span data-moonshine-transcribing>Transcribing</span>
+            <span data-moonshine-idle>Click for voice input</span>
+        </button>
         <br />
         <br />
         <input id="secondInput" style="width: 512px;"></input>
