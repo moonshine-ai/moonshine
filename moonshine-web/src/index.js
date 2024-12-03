@@ -12,74 +12,17 @@ const MoonshineSettings = {
     LOOKBACK_SIZE: 500 * 5
 }
 
-async function runMoonshineToggleTranscription(origin, target) {
-    // load model if not loaded
-    if (!moonshineModel) {
-        origin.dispatchEvent(new CustomEvent("moonshineLoadStarted"))
-        moonshineModel = new MoonshineModel("moonshine/tiny")
-        await moonshineModel.loadModel()
-    }
-    // set audio input device
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    moonshineMediaRecorder = new MediaRecorder(stream);
-
-    const audioChunks = [];
-
-    // fires every MOONSHINE_FRAME_SIZE ms
-    moonshineMediaRecorder.ondataavailable = event => {
-        audioChunks.push(event.data);
-    };
-
-    moonshineMediaRecorder.start(MoonshineSettings.FRAME_SIZE);
-    origin.dispatchEvent(new CustomEvent("moonshineRecordStarted"))
-
-    return new Promise(resolve => {
-        moonshineMediaRecorder.onstop = () => {
-            const audioBlob = new Blob(audioChunks, { 
-                type: 'audio/wav' 
-            });
-            origin.dispatchEvent(new CustomEvent("moonshineRecordStopped"))
-
-            origin.dispatchEvent(new CustomEvent("moonshineTranscribeStarted"))
-            const audioCTX = new AudioContext({
-                sampleRate: 16000,
-            });
-            audioBlob.arrayBuffer().then(arrayBuffer => {
-                audioCTX.decodeAudioData(arrayBuffer).then(decoded => {
-                    let floatArray = new Float32Array(decoded.length)
-                    if (floatArray.length > (16000 * 30)) {
-                        floatArray = floatArray.subarray(0, 16000 * 30)
-                    }
-                    decoded.copyFromChannel(floatArray, 0)
-                    moonshineModel.generate(floatArray).then(text => {
-                        console.log("Transcription: " + text)
-                        origin.dispatchEvent(new CustomEvent("moonshineTranscribeStopped"))
-                        target.value = text
-                        resolve(text)
-                    })
-                });
-            })
-        };
-        // stop recording (if active) after 30 seconds
-        setTimeout(() => {
-            if (moonshineMediaRecorder) {
-                moonshineMediaRecorder.stop()
-            }
-        }, 30000);
-    });
-}
-
 async function runMoonshineLiveTranscription(origin, target) {
+    // set audio input device
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    moonshineMediaRecorder = new MediaRecorder(stream);
+
     // load model if not loaded
     if (!moonshineModel) {
         origin.dispatchEvent(new CustomEvent("moonshineLoadStarted"))
         moonshineModel = new MoonshineModel("moonshine/tiny")
         await moonshineModel.loadModel()
     }
-
-    // set audio input device
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    moonshineMediaRecorder = new MediaRecorder(stream);
 
     const audioChunks = [];
 
@@ -109,12 +52,10 @@ async function runMoonshineLiveTranscription(origin, target) {
     };
 
     moonshineMediaRecorder.start(MoonshineSettings.FRAME_SIZE);
-    origin.dispatchEvent(new CustomEvent("moonshineRecordStarted"))
     origin.dispatchEvent(new CustomEvent("moonshineTranscribeStarted"))
 
     return new Promise(resolve => {
         moonshineMediaRecorder.onstop = () => {
-            origin.dispatchEvent(new CustomEvent("moonshineRecordStopped"))
             origin.dispatchEvent(new CustomEvent("moonshineTranscribeStopped"))
             resolve()
         };
@@ -194,12 +135,6 @@ function getMoonshineLifecycleInnerHTML(icon) {
                         c5-5,8.2-12.1,8.2-19.7L619.4,252.7z"/>
                 </g>
             </svg>`;
-        case "recording":
-            return `
-            <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
-                viewBox="0 0 600 600" height="100%" width="100%" xml:space="preserve">
-                <circle fill="red" cx="300" cy="299.9" r="151.2"/>
-            </svg>`;
         case "transcribing":
             return `
             <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
@@ -250,19 +185,10 @@ moonshineControlElements.forEach(controlElement => {
                     }
                 })
                 controlElement.setAttribute("data-moonshine-active", "")
-                // bind transcription type based on data-moonshine-live attribute
-                if (controlElement.attributes["data-moonshine-live"]) {
-                    runMoonshineLiveTranscription(controlElement, targetElement).then(() => {
-                        controlElement.removeAttribute("data-moonshine-active")
-                        moonshineMediaRecorder = undefined
-                    })
-                }
-                else {
-                    runMoonshineToggleTranscription(controlElement, targetElement).then(() => {
-                        controlElement.removeAttribute("data-moonshine-active")
-                        moonshineMediaRecorder = undefined
-                    })
-                }
+                runMoonshineLiveTranscription(controlElement, targetElement).then(() => {
+                    controlElement.removeAttribute("data-moonshine-active")
+                    moonshineMediaRecorder = undefined
+                })
             }
             // if transcribing, stop transcribing
             else {
@@ -279,14 +205,6 @@ moonshineControlElements.forEach(controlElement => {
         controlElement.addEventListener("moonshineLoadStarted", () => {
             console.log("moonshineLoadStarted")
             showMoonshineLifecycleIcon(controlElement, "loading")
-        })
-        controlElement.addEventListener("moonshineRecordStarted", () => {
-            console.log("moonshineRecordStarted")
-            showMoonshineLifecycleIcon(controlElement, "recording")
-        })
-        controlElement.addEventListener("moonshineRecordStopped", () => {
-            console.log("moonshineRecordStopped")
-            showMoonshineLifecycleIcon(controlElement, "idle")
         })
         controlElement.addEventListener("moonshineTranscribeStarted", () => {
             console.log("moonshineTranscribeStarted")

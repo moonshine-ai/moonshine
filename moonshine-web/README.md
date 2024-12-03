@@ -31,20 +31,11 @@ Control elements point to corresponding target elements that should recieve the 
 <button data-moonshine-target="#myTextArea"></button>
 ```
 
-When a page visitor clicks the button, the model will be loaded on their device, recording will begin, and speech-to-text will be activated. Upon stopping, the transcription will be output to the target `<textarea>`.
-
-### Live Transcription
-
-By default, `moonshine-web` uses a "toggle"-style speech-to-text: a page visitor clicks to begin recording, then clicks again to stop and generate the transcription. However, we also support "live transcription", where the text is updated and continuously output to the target element as the user speaks. Simply add the `data-moonshine-live` attribute to the control element to enable this:
-
-```html
-<textarea id="myTextArea"></textarea>
-<button data-moonshine-target="#myTextArea" data-moonshine-live></button>
-```
+When a page visitor clicks the button, mic access will be requested, the model will be loaded on their device, and live speech-to-text will begin. As the visitor speaks, the transcription will be updated and output to the target `<textarea>`.
 
 ### Lifecycle Icons
 
-During each phase of the speech-to-text lifecycle (model loading, recording, etc.), a corresponding event is dispatched on the currently-active control element, which changes the icon currently displayed. We provide default icons; however, you may wish to override these to better match the design of your site. You have two options for doing so:
+During each phase of the speech-to-text lifecycle (idle, model loading, and transcribing), a corresponding event is dispatched on the currently-active control element, which changes the icon currently displayed. We provide default icons; however, you may wish to override these to better match the design of your site. You have two options for doing so:
 
 #### Option 1: Inline Override
 
@@ -55,7 +46,6 @@ You can specify what to display at each step of the lifecycle by adding inline `
 <button data-moonshine-target="#myTextArea">
     <span data-moonshine-idle>This is custom content that will show while waiting to be clicked to start speech-to-text...</span>
     <span data-moonshine-loading>...and while loading the model...</span>
-    <span data-moonshine-recording>...and during recording...</span>
     <span data-moonshine-transcribing>...and during transcription!</span>
 </button>
 ```
@@ -71,7 +61,6 @@ To override the styling for every Moonshine control element on the page, simply 
 <button data-moonshine-target="#myTextArea" data-moonshine-template>
     <span data-moonshine-idle>This is custom content that will show while waiting to be clicked to start speech-to-text...</span>
     <span data-moonshine-loading>...and while loading the model...</span>
-    <span data-moonshine-recording>...and during recording...</span>
     <span data-moonshine-transcribing>...and during transcription!</span>
 </button>
 <textarea id="myOtherTextArea"></textarea>
