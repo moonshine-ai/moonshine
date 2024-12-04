@@ -1,5 +1,4 @@
-import { MoonshineEvents } from "./constants.js"
-import { startTranscription, stopTranscription } from "./transcriber.js"
+import { MoonshineTranscriber } from "./transcriber"
 
 const lifecycleAttributes = ["loading", "transcribing", "idle"]
 
@@ -106,6 +105,20 @@ moonshineControlElements.forEach(controlElement => {
     var targetElements = document.querySelectorAll(targetElementSelector)
     initMoonshineLifecycleIcons(controlElement)
     targetElements.forEach(targetElement => {
+        var transcriber = new MoonshineTranscriber({
+            onModelLoadStarted() {
+                showMoonshineLifecycleIcon(controlElement, "loading")
+            },
+            onTranscribeStarted() {
+                showMoonshineLifecycleIcon(controlElement, "transcribing")
+            },
+            onTranscribeStopped() {
+                showMoonshineLifecycleIcon(controlElement, "idle")
+            },
+            onTranscriptionUpdated(text) {
+                targetElement.innerHTML = text
+            }
+        })
         controlElement.addEventListener("click", () => {
             // TODO fix for elements where the "disabled" attribute does not block click events (e.g., divs)
             // if not transcribing, start transcribing
@@ -117,9 +130,7 @@ moonshineControlElements.forEach(controlElement => {
                     }
                 })
                 controlElement.setAttribute("data-moonshine-active", "")
-                startTranscription(controlElement, targetElement).then(() => {
-                    controlElement.removeAttribute("data-moonshine-active")
-                })
+                transcriber.start()
             }
             // if transcribing, stop transcribing
             else {
@@ -129,18 +140,9 @@ moonshineControlElements.forEach(controlElement => {
                         element.removeAttribute("disabled")
                     }
                 })
-                stopTranscription()
+                transcriber.stop()
                 controlElement.removeAttribute("data-moonshine-active")
             }
-        })
-        controlElement.addEventListener(MoonshineEvents.LOAD_STARTED, () => {
-            showMoonshineLifecycleIcon(controlElement, "loading")
-        })
-        controlElement.addEventListener(MoonshineEvents.TRANSCRIBE_STARTED, () => {
-            showMoonshineLifecycleIcon(controlElement, "transcribing")
-        })
-        controlElement.addEventListener(MoonshineEvents.TRANSCRIBE_STOPPED, () => {
-            showMoonshineLifecycleIcon(controlElement, "idle")
         })
     })
 });
