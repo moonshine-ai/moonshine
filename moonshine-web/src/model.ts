@@ -6,7 +6,10 @@ function argMax(array) {
 }
 
 export default class MoonshineModel {
-    constructor(model_name) {
+    private model_name: String
+    private model: any
+
+    public constructor(model_name: String) {
         this.model_name = model_name
         this.model = {
             preprocess: undefined,
@@ -16,30 +19,24 @@ export default class MoonshineModel {
         }
     }
 
-    async loadModel() {
-        console.log("loading " + this.model_name + "...")
+    public async loadModel() {
         // const sessionOption = { executionProviders: ['webgpu', 'webgl', 'wasm', 'cpu'] };
         const sessionOption = { executionProviders: ['wasm', 'cpu'] };
 
         this.model.preprocess = await ort.InferenceSession.create(
             this.model_name + "/preprocess.ort", sessionOption)
-        console.log("preprocess loaded")
 
         this.model.encode = await ort.InferenceSession.create(
             this.model_name + "/encode.ort", sessionOption)
-        console.log("encode loaded")
 
         this.model.uncached_decode = await ort.InferenceSession.create(
             this.model_name + "/uncached_decode.ort", sessionOption)
-        console.log("uncached_decode loaded")
 
         this.model.cached_decode = await ort.InferenceSession.create(
             this.model_name + "/cached_decode.ort", sessionOption)
-        console.log("cached_decode loaded")
-        console.log(this.model_name + " loaded")
     }
 
-    async generate(audio) {
+    public async generate(audio: Float32Array) {
         if (this.model.preprocess && this.model.encode && this.model.uncached_decode
             && this.model.cached_decode) {
             const max_len = Math.trunc((audio.length / 16000) * 6)
@@ -91,7 +88,7 @@ export default class MoonshineModel {
             return llamaTokenizer.decode(tokens)
         }
         else {
-            console.warn("Tried to call Moonshine.generate() before the model was loaded.")
+            console.warn("MoonshineModel.generate(): Tried to call generate before the model was loaded.")
         }
     }
 }

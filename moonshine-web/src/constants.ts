@@ -1,9 +1,3 @@
-export const MoonshineEvents = {
-    LOAD_STARTED: "moonshineLoadStarted",
-    TRANSCRIBE_STARTED: "moonshineTranscribeStarted",
-    TRANSCRIBE_STOPPED: "moonshineTranscribeStopped"
-}
-
 export const MoonshineSettings = {
     FRAME_SIZE: 250,
     LOOKBACK_FRAMES: 5,
