@@ -6,3 +6,9 @@ export const MoonshineSettings = {
     LOOKBACK_SIZE: 500 * 5,
     MAX_RECORD_MS: 30000
 }
+
+export enum MoonshineLifecycle {
+    idle = "idle",
+    loading = "loading",
+    transcribing = "transcribing"
+}

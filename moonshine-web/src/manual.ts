@@ -1,49 +1,50 @@
 import { MoonshineTranscriber } from "./transcriber"
+import { MoonshineLifecycle } from "./constants"
 
 const lifecycleAttributes = ["loading", "transcribing", "idle"]
 
 
 function initMoonshineLifecycleIcons(parentButton) {
     // inject innerHTML for lifecycle icons wherever inline overrides are not specified
-    lifecycleAttributes.forEach(attr => {
-        const iconElement = parentButton.querySelector(":scope > [data-moonshine-"+attr+"]")
+    lifecycleAttributes.forEach((attr: string) => {
+        const iconElement = parentButton.querySelector(":scope > [data-moonshine-" + attr + "]")
         if (!iconElement) {
             let injectedIconElement = document.createElement("span")
-            injectedIconElement.innerHTML = getMoonshineLifecycleInnerHTML(attr)
-            injectedIconElement.setAttribute("data-moonshine-"+attr, "")
+            injectedIconElement.innerHTML = getMoonshineLifecycleInnerHTML(MoonshineLifecycle[attr])
+            injectedIconElement.setAttribute("data-moonshine-" + attr, "")
             parentButton.appendChild(injectedIconElement)
         }
     })
-    showMoonshineLifecycleIcon(parentButton, "idle")
+    showMoonshineLifecycleIcon(parentButton, MoonshineLifecycle.idle)
 }
 
-function showMoonshineLifecycleIcon(parentButton, icon) {
-    const hideAttributes = lifecycleAttributes.filter((attr) => attr != icon);
+function showMoonshineLifecycleIcon(parentButton, lifecycle: MoonshineLifecycle) {
+    const hideAttributes = lifecycleAttributes.filter((attr) => attr != lifecycle);
 
     hideAttributes.forEach(attr => {
-        const hideElements = parentButton.querySelectorAll(":scope > [data-moonshine-"+attr+"]")
+        const hideElements = parentButton.querySelectorAll(":scope > [data-moonshine-" + attr + "]")
         hideElements.forEach(hideElement => {
             hideElement.style.display = "none"
         })
     })
 
-    const showElements = parentButton.querySelectorAll(":scope > [data-moonshine-"+icon+"]")
+    const showElements = parentButton.querySelectorAll(":scope > [data-moonshine-" + lifecycle + "]")
     showElements.forEach(showElement => {
         showElement.style.display = "inline-block"
     })
 }
 
-function getMoonshineLifecycleInnerHTML(icon) {
+function getMoonshineLifecycleInnerHTML(lifecycle: MoonshineLifecycle) {
     const globalDefinitionElement = document.querySelector("[data-moonshine-template]")
     if (globalDefinitionElement) {
-        const definitionElement = globalDefinitionElement.querySelector("[data-moonshine-"+icon+"]")
+        const definitionElement = globalDefinitionElement.querySelector("[data-moonshine-" + lifecycle + "]")
         if (definitionElement) {
             return definitionElement.innerHTML
         }
     }
     // TODO fetch these rather than returning inline svg
-    switch(icon) {
-        case "loading":
+    switch (lifecycle) {
+        case MoonshineLifecycle.loading:
             return `
             <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
                 viewBox="0 0 1200 1200" width="100%" height="100%" xml:space="preserve">
@@ -66,7 +67,7 @@ function getMoonshineLifecycleInnerHTML(icon) {
                         c5-5,8.2-12.1,8.2-19.7L619.4,252.7z"/>
                 </g>
             </svg>`;
-        case "transcribing":
+        case MoonshineLifecycle.transcribing:
             return `
             <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
                 viewBox="0 0 1200 1200" width="100%" height="100%" xml:space="preserve">
@@ -83,7 +84,7 @@ function getMoonshineLifecycleInnerHTML(icon) {
                     C744.9,477.4,772.3,477.4,789.2,494.3"/>
             </svg>`;
         default:
-        case "idle":
+        case MoonshineLifecycle.idle:
             return `
             <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
                 viewBox="0 0 1200 1200" width="100%" height="100%" xml:space="preserve">
@@ -107,13 +108,34 @@ moonshineControlElements.forEach(controlElement => {
     targetElements.forEach(targetElement => {
         var transcriber = new MoonshineTranscriber({
             onModelLoadStarted() {
-                showMoonshineLifecycleIcon(controlElement, "loading")
+                // disable other s2t buttons
+                moonshineControlElements.forEach(element => {
+                    if (element != controlElement) {
+                        element.setAttribute("disabled", "")
+                    }
+                })
+                showMoonshineLifecycleIcon(controlElement, MoonshineLifecycle.loading)
             },
             onTranscribeStarted() {
-                showMoonshineLifecycleIcon(controlElement, "transcribing")
+                // disable other s2t buttons
+                moonshineControlElements.forEach(element => {
+                    if (element != controlElement) {
+                        element.setAttribute("disabled", "")
+                    }
+                })
+                controlElement.setAttribute("data-moonshine-active", "")
+                showMoonshineLifecycleIcon(controlElement, MoonshineLifecycle.transcribing)
             },
             onTranscribeStopped() {
-                showMoonshineLifecycleIcon(controlElement, "idle")
+                controlElement.removeAttribute("data-moonshine-active")
+                showMoonshineLifecycleIcon(controlElement, MoonshineLifecycle.idle)
+                
+                // re-enable other s2t buttons
+                moonshineControlElements.forEach(element => {
+                    if (element != controlElement) {
+                        element.removeAttribute("disabled")
+                    }
+                })
             },
             onTranscriptionUpdated(text) {
                 targetElement.innerHTML = text
@@ -123,25 +145,11 @@ moonshineControlElements.forEach(controlElement => {
             // TODO fix for elements where the "disabled" attribute does not block click events (e.g., divs)
             // if not transcribing, start transcribing
             if (!controlElement.attributes["data-moonshine-active"]) {
-                moonshineControlElements.forEach(element => {
-                    // disable other s2t buttons
-                    if (element != controlElement) {
-                        element.setAttribute("disabled", "")
-                    }
-                })
-                controlElement.setAttribute("data-moonshine-active", "")
                 transcriber.start()
             }
             // if transcribing, stop transcribing
             else {
-                moonshineControlElements.forEach(element => {
-                    // re-enable other s2t buttons
-                    if (element != controlElement) {
-                        element.removeAttribute("disabled")
-                    }
-                })
                 transcriber.stop()
-                controlElement.removeAttribute("data-moonshine-active")
             }
         })
     })
