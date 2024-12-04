@@ -57,7 +57,7 @@ class MoonshineTranscriber {
             await MoonshineTranscriber.model.loadModel()
         }
 
-        const audioChunks = [];
+        const audioChunks: Blob[] = [];
 
         // fires every MOONSHINE_FRAME_SIZE ms
         MoonshineTranscriber.mediaRecorder.ondataavailable = event => {
@@ -80,7 +80,7 @@ class MoonshineTranscriber {
                             this.callbacks.onTranscriptionUpdated(text)
                         }
                     })
-                }).catch((e) => {console.log(e)});
+                }).catch(() => {});
             })
         };
 
