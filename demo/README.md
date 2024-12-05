@@ -5,10 +5,12 @@ Moonshine ASR models.
 
 - [Moonshine Demos](#moonshine-demos)
 - [Demo: Running in the browser](#demo-running-in-the-browser)
+  - [Installation](#installation)
 - [Demo: Live captioning from microphone input](#demo-live-captioning-from-microphone-input)
-  - [Installation.](#installation)
+  - [Installation](#installation-1)
     - [0. Setup environment](#0-setup-environment)
     - [1. Clone the repo and install extra dependencies](#1-clone-the-repo-and-install-extra-dependencies)
+      - [Ubuntu: Install PortAudio](#ubuntu-install-portaudio)
   - [Running the demo](#running-the-demo)
   - [Script notes](#script-notes)
     - [Speech truncation and hallucination](#speech-truncation-and-hallucination)
@@ -56,11 +58,12 @@ https://github.com/user-attachments/assets/aa65ef54-d4ac-4d31-864f-222b0e6ccbd3
 
 The [`moonshine-onnx/live_captions.py`](/demo/moonshine-onnx/live_captions.py) script contains a demo of live captioning from microphone input, built on Moonshine. The script runs the Moonshine ONNX model on segments of speech detected in the microphone signal using a voice activity detector called [`silero-vad`](https://github.com/snakers4/silero-vad). The script prints scrolling text or "live captions" assembled from the model predictions to the console.
 
-The following steps have been tested in a `uv` (v0.4.25) virtual environment on these platforms:
+The following steps have been tested in `uv` virtual environments on these platforms:
 
 - macOS 14.1 on a MacBook Pro M3
 - Ubuntu 22.04 VM on a MacBook Pro M2
 - Ubuntu 24.04 VM on a MacBook Pro M2
+- Debian 12.8 (64-bit) on a Raspberry Pi 5 (Model B Rev 1.0)
 
 ## Installation
 
@@ -76,9 +79,12 @@ You will need to clone the repo first:
 git clone git@github.com:usefulsensors/moonshine.git
 ```
 
-Then install the demo's requirements:
+Then install the demo's requirements including mitigation for a failure to build
+and install `llvmlite` without `numba` package:
 
 ```shell
+uv pip install numba
+
 uv pip install -r moonshine/demo/moonshine-onnx/requirements.txt
 ```
 
