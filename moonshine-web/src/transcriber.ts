@@ -68,14 +68,14 @@ class MoonshineTranscriber {
             });
 
             audioBlob.arrayBuffer().then(arrayBuffer => {
-                MoonshineTranscriber.audioContext.decodeAudioData(arrayBuffer).then(decoded => {
+                MoonshineTranscriber.audioContext?.decodeAudioData(arrayBuffer).then(decoded => {
                     let floatArray = new Float32Array(decoded.length)
                     // TODO segment array > x seconds and transcribe segments
                     if (floatArray.length > (16000 * 30)) {
                         floatArray = floatArray.subarray(0, 16000 * 30)
                     }
                     decoded.copyFromChannel(floatArray, 0)
-                    MoonshineTranscriber.model.generate(floatArray).then(text => {
+                    MoonshineTranscriber.model?.generate(floatArray).then(text => {
                         if (text) {
                             this.callbacks.onTranscriptionUpdated(text)
                         }
