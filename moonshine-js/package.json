@@ -1,11 +1,11 @@
 {
-  "name": "useful-moonshine-web",
+  "name": "useful-moonshine-js",
   "version": "1.0.0",
   "description": "On-device speech-to-text for web applications with Moonshine.",
   "type": "module",
   "scripts": {
     "build": "npx rollup --config",
-    "dev": "npm run build && cp dist/moonshine.min.js example/moonshine/ && cd example && python app.py",
+    "dev": "npm run build && cp -a dist/. example/moonshine/ && cd example && python app.py",
     "get-models": "node downloader.js"
   },
   "author": "Useful Sensors",

@@ -18,4 +18,4 @@ def serve_index():
     return send_from_directory(FILES_DIRECTORY, "index.html")
 
 if __name__ == '__main__':
-    app.run(host="localhost")
+    app.run(host="localhost", port="5001")

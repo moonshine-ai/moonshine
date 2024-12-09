@@ -1,16 +1,17 @@
 import * as ort from 'onnxruntime-web';
 import llamaTokenizer from 'llama-tokenizer-js'
 
+
 function argMax(array) {
     return [].map.call(array, (x, i) => [x, i]).reduce((r, a) => (a[0] > r[0] ? a : r))[1];
 }
 
 export default class MoonshineModel {
-    private model_name: String
+    private modelURL: String
     private model: any
 
-    public constructor(model_name: String) {
-        this.model_name = model_name
+    public constructor(modelURL: String) {
+        this.modelURL = modelURL
         this.model = {
             preprocess: undefined,
             encode: undefined,
@@ -24,16 +25,16 @@ export default class MoonshineModel {
         const sessionOption = { executionProviders: ['wasm', 'cpu'] };
 
         this.model.preprocess = await ort.InferenceSession.create(
-            this.model_name + "/preprocess.ort", sessionOption)
+            this.modelURL + "/preprocess.ort", sessionOption)
 
         this.model.encode = await ort.InferenceSession.create(
-            this.model_name + "/encode.ort", sessionOption)
+            this.modelURL + "/encode.ort", sessionOption)
 
         this.model.uncached_decode = await ort.InferenceSession.create(
-            this.model_name + "/uncached_decode.ort", sessionOption)
+            this.modelURL + "/uncached_decode.ort", sessionOption)
 
         this.model.cached_decode = await ort.InferenceSession.create(
-            this.model_name + "/cached_decode.ort", sessionOption)
+            this.modelURL + "/cached_decode.ort", sessionOption)
     }
 
     public async generate(audio: Float32Array) {
