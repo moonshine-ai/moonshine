@@ -1,4 +1,4 @@
-# moonshine-web
+# moonshine-js
 
 Moonshine Web is a JavaScript package that provides quick and easy integration of client-side, on-device speech-to-text on web pages and in web applications.
 

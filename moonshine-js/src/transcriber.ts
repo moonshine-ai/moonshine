@@ -31,10 +31,12 @@ class MoonshineTranscriber {
     private static mediaRecorder: MediaRecorder | undefined = undefined
     private static model: MoonshineModel | undefined = undefined
     private static audioContext: AudioContext | undefined = undefined
+    private static modelURL: String
     private callbacks: MoonshineTranscriberCallbacks
 
-    public constructor(callbacks: Partial<MoonshineTranscriberCallbacks> = {}) {
+    public constructor(callbacks: Partial<MoonshineTranscriberCallbacks> = {}, modelURL: String) {
         this.callbacks = { ...defaultTranscriberCallbacks, ...callbacks }
+        MoonshineTranscriber.modelURL = modelURL
     }
 
     async start() {
@@ -53,7 +55,7 @@ class MoonshineTranscriber {
         // load model if not loaded
         if (!MoonshineTranscriber.model) {
             this.callbacks.onModelLoadStarted()
-            MoonshineTranscriber.model = new MoonshineModel("moonshine/tiny")
+            MoonshineTranscriber.model = new MoonshineModel(MoonshineTranscriber.modelURL)
             await MoonshineTranscriber.model.loadModel()
         }
 
@@ -103,6 +105,5 @@ class MoonshineTranscriber {
         }
     }
 }
-
 
 export { MoonshineTranscriber }
