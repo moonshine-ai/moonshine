@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Moonshine",
+  "version": "1.0",
+  "description": "Adds Moonshine speech-to-text to textareas on webpages.",
+  "content_scripts": [
+    {
+      "js": ["moonshine.extension.min.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["*.wasm", "*.ort"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
