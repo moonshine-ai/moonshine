@@ -16,5 +16,5 @@ if (typeof chrome !== "undefined") {
 import * as ort from "onnxruntime-web"
 ort.env.wasm.wasmPaths = wasmURL
 
-import { autoInjectMoonshineControlElements } from "./auto"
+import { autoInjectMoonshineControlElements } from "./common"
 autoInjectMoonshineControlElements(modelURL)
