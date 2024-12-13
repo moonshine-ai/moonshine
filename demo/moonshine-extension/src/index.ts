@@ -10,7 +10,9 @@ if (typeof chrome !== "undefined") {
     }
 }
 
-import { autoInjectMoonshineControlElements } from "@usefulsensors/moonshine"
+import { MoonshineElementManager } from "@usefulsensors/moonshine"
+var elementManager = new MoonshineElementManager("/model/tiny/")
 setInterval(() => {
-    autoInjectMoonshineControlElements("/model/tiny/")
+    // re-autoinject every second, since some elements may not exist on page load (e.g., in react-based sites)
+    elementManager.autoInjectElements()
 }, 1000);
