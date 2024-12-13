@@ -1,5 +1,5 @@
 {
-  "name": "useful-moonshine-js",
+  "name": "moonshine-js",
   "version": "1.0.0",
   "description": "On-device speech-to-text for web applications with Moonshine.",
   "type": "module",
@@ -22,5 +22,10 @@
     "rollup": "^4.27.4",
     "tslib": "^2.8.1",
     "typescript": "^5.7.2"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/moonshine.min.js"
+    }
   }
 }

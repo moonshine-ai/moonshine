@@ -1,7 +1,6 @@
 import * as ort from 'onnxruntime-web';
 import llamaTokenizer from 'llama-tokenizer-js'
 
-
 function argMax(array) {
     return [].map.call(array, (x, i) => [x, i]).reduce((r, a) => (a[0] > r[0] ? a : r))[1];
 }

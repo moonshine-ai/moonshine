@@ -1,7 +1,6 @@
 import MoonshineModel from "./model";
 import { MoonshineSettings } from "./constants"
 
-
 interface MoonshineTranscriberCallbacks {
     onModelLoadStarted: () => any
 
