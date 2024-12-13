@@ -1,3 +1,3 @@
 import { autoInjectMoonshineControlElements } from "./common";
 
-autoInjectMoonshineControlElements("moonshine/tiny")
+autoInjectMoonshineControlElements("model/tiny")

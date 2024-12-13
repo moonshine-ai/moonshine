@@ -105,4 +105,4 @@ class MoonshineTranscriber {
     }
 }
 
-export { MoonshineTranscriber }
+export default MoonshineTranscriber

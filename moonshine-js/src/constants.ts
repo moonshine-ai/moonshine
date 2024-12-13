@@ -4,7 +4,8 @@ export const MoonshineSettings = {
     // MAX_SPEECH_SECS: 5,
     // MIN_REFRESH_SECS: 0.3,
     LOOKBACK_SIZE: 500 * 5,
-    MAX_RECORD_MS: 30000
+    MAX_RECORD_MS: 30000,
+    BASE_ASSET_PATH: "/dist/"
 }
 
 export enum MoonshineLifecycle {

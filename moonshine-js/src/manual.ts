@@ -1,3 +1,3 @@
 import { initMoonshineControlElements } from "./common";
 
-initMoonshineControlElements("moonshine/tiny")
+initMoonshineControlElements("model/tiny")

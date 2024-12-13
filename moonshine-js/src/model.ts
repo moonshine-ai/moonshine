@@ -1,5 +1,6 @@
 import * as ort from 'onnxruntime-web';
 import llamaTokenizer from 'llama-tokenizer-js'
+import { MoonshineSettings } from './constants';
 
 function argMax(array) {
     return [].map.call(array, (x, i) => [x, i]).reduce((r, a) => (a[0] > r[0] ? a : r))[1];
@@ -10,7 +11,9 @@ export default class MoonshineModel {
     private model: any
 
     public constructor(modelURL: String) {
-        this.modelURL = modelURL
+        // set the base path for the .ort models and the onnx runtime wasm
+        this.modelURL = MoonshineSettings.BASE_ASSET_PATH + modelURL
+        ort.env.wasm.wasmPaths = MoonshineSettings.BASE_ASSET_PATH
         this.model = {
             preprocess: undefined,
             encode: undefined,

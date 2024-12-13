@@ -1,22 +1,16 @@
-var wasmURL = ""
-var modelURL = ""
+import { MoonshineSettings } from "@usefulsensors/moonshine"
 
 if (typeof chrome !== "undefined") {
     if (typeof browser !== "undefined") {
         // firefox
-        wasmURL = browser.runtime.getURL("/wasm/")
-        modelURL = browser.runtime.getURL("/model/tiny/")
+        MoonshineSettings.BASE_ASSET_PATH = browser.runtime.getURL("/")
     } else {
         // chrome
-        wasmURL = chrome.runtime.getURL("/wasm/")
-        modelURL = chrome.runtime.getURL("/model/tiny/")
+        MoonshineSettings.BASE_ASSET_PATH = chrome.runtime.getURL("/")
     }
 }
 
-import { ort } from "moonshine-js"
-ort.env.wasm.wasmPaths = wasmURL
-
-import { autoInjectMoonshineControlElements } from "moonshine-js"
+import { autoInjectMoonshineControlElements } from "@usefulsensors/moonshine"
 setInterval(() => {
-    autoInjectMoonshineControlElements(modelURL)
+    autoInjectMoonshineControlElements("/model/tiny/")
 }, 1000);
