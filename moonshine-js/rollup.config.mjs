@@ -3,18 +3,26 @@ import terser from '@rollup/plugin-terser';
 import typescript from '@rollup/plugin-typescript';
 
 export default [
-  // manual moonshine-ify
+  // moonshine module for development/npm
   {
-    input: "src/manual.ts",
-    external: ["onnxruntime-web"], // assumes onnxruntime-web <script> will be included separately
+    input: "src/index.ts",
     output: {
       file: "dist/moonshine.min.js",
+      format: "es"
+    },
+    plugins: [nodeResolve({browser: true}), typescript(), terser()]
+  },
+  // manual moonshine-ify from CDN
+  {
+    input: "src/manual.ts",
+    output: {
+      file: "dist/moonshine.manual.min.js",
       format: "iife",
       name: "UsefulMoonshine",
     },
     plugins: [nodeResolve({browser: true}), typescript(), terser()]
   },
-  // auto moonshine-ify
+  // auto moonshine-ify from CDN
   {
     input: "src/auto.ts",
     output: {
@@ -23,15 +31,5 @@ export default [
       name: "UsefulMoonshine",
     },
     plugins: [nodeResolve({browser: true}), typescript(), terser()]
-  },  
-  // browser extension
-  {
-    input: "src/extension.ts",
-    output: {
-      file: "extension/moonshine.extension.min.js",
-      format: "iife",
-      name: "UsefulMoonshine",
-    },
-    plugins: [nodeResolve({browser: true}), typescript(), terser()]
-  },
+  }
 ];
