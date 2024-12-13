@@ -1,3 +1,4 @@
-import { autoInjectMoonshineControlElements } from "./common";
+import MoonshineElementManager from "./common";
 
-autoInjectMoonshineControlElements("model/tiny")
+var elementManager = new MoonshineElementManager("model/tiny")
+elementManager.autoInjectElements()

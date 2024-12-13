@@ -30,10 +30,10 @@ class MoonshineTranscriber {
     private static mediaRecorder: MediaRecorder | undefined = undefined
     private static model: MoonshineModel | undefined = undefined
     private static audioContext: AudioContext | undefined = undefined
-    private static modelURL: String
+    private static modelURL: string
     private callbacks: MoonshineTranscriberCallbacks
 
-    public constructor(callbacks: Partial<MoonshineTranscriberCallbacks> = {}, modelURL: String) {
+    public constructor(callbacks: Partial<MoonshineTranscriberCallbacks> = {}, modelURL: string) {
         this.callbacks = { ...defaultTranscriberCallbacks, ...callbacks }
         MoonshineTranscriber.modelURL = modelURL
     }

@@ -1,3 +1,4 @@
-import { initMoonshineControlElements } from "./common";
+import MoonshineElementManager from "./common"
 
-initMoonshineControlElements("model/tiny")
+var elementManager = new MoonshineElementManager("model/tiny")
+elementManager.initControlElements()

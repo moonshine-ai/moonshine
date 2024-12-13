@@ -7,10 +7,10 @@ function argMax(array) {
 }
 
 export default class MoonshineModel {
-    private modelURL: String
+    private modelURL: string
     private model: any
 
-    public constructor(modelURL: String) {
+    public constructor(modelURL: string) {
         // set the base path for the .ort models and the onnx runtime wasm
         this.modelURL = MoonshineSettings.BASE_ASSET_PATH + modelURL
         ort.env.wasm.wasmPaths = MoonshineSettings.BASE_ASSET_PATH
