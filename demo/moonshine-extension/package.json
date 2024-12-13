@@ -17,6 +17,6 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
-    "moonshine-js": "file:../../moonshine-js"
+    "@usefulsensors/moonshine": "file:../../moonshine-js"
   }
 }
