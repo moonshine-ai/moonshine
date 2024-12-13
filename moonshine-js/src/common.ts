@@ -53,9 +53,35 @@ const defaultPageIntegrations: MoonshinePageIntegrations = {
                 }
             }
 
-            *[data-moonshine-loading] {
+            *[data-moonshine-loading] svg {
                 animation: loading 2s linear infinite;
                 transform-origin: 50% 50%;
+            }
+
+            @keyframes transcribing {
+                from {
+                    transform: translateY(0);
+                }
+                25% {
+                    transform: translateY(-5%);
+                }
+                50%, 100% {
+                    transform: translateY(0);
+                }
+            }
+
+            *[data-moonshine-transcribing] .moonshine-transcribe-1 {
+                animation: transcribing 0.75s linear infinite;
+            }
+
+            *[data-moonshine-transcribing] .moonshine-transcribe-2 {
+                animation: transcribing 0.75s linear infinite;
+                animation-delay: 0.25s;
+            }
+
+            *[data-moonshine-transcribing] .moonshine-transcribe-3 {
+                animation: transcribing 0.75s linear infinite;
+                animation-delay: 0.5s;
             }
             `
     }
@@ -266,11 +292,11 @@ export default class MoonshineElementManager {
                           c-5.4,6.9-13.5,10.8-22.1,10.8L725.3,954.5z M310.8,301.2c-21.6,0-39.2,17.5-39.2,39.1v356.5c0,21.6,17.5,39.1,39.2,39.1h427.5
                           c7.8,0,15.2,3.2,20.4,9c5.3,5.8,7.9,13.3,7.3,21.1l-5.6,69.2l68.3-88.5c5.3-6.8,13.5-10.8,22.1-10.8h38.3
                           c21.6,0,39.2-17.5,39.2-39.1V340.5c0-21.6-17.5-39.1-39.2-39.1L310.8,301.2L310.8,301.2z"/>
-                      <path d="M472,494.4c16.9,16.9,16.9,44.3,0,61.2c-16.9,16.9-44.3,16.9-61.2,0c-16.9-16.9-16.9-44.3,0-61.2
+                      <path class="moonshine-transcribe-1" d="M472,494.4c16.9,16.9,16.9,44.3,0,61.2c-16.9,16.9-44.3,16.9-61.2,0c-16.9-16.9-16.9-44.3,0-61.2
                           C427.6,477.5,455.1,477.5,472,494.4"/>
-                      <path d="M630.6,494.4c16.9,16.9,16.9,44.3,0,61.2c-16.9,16.9-44.3,16.9-61.2,0c-16.9-16.9-16.9-44.3,0-61.2
+                      <path class="moonshine-transcribe-2" d="M630.6,494.4c16.9,16.9,16.9,44.3,0,61.2c-16.9,16.9-44.3,16.9-61.2,0c-16.9-16.9-16.9-44.3,0-61.2
                           C586.3,477.4,613.7,477.4,630.6,494.4"/>
-                      <path d="M789.2,494.3c16.9,16.9,16.9,44.3,0,61.2c-16.9,16.9-44.3,16.9-61.2,0c-16.9-16.9-16.9-44.3,0-61.2
+                      <path class="moonshine-transcribe-3" d="M789.2,494.3c16.9,16.9,16.9,44.3,0,61.2c-16.9,16.9-44.3,16.9-61.2,0c-16.9-16.9-16.9-44.3,0-61.2
                           C744.9,477.4,772.3,477.4,789.2,494.3"/>
                   </svg>`;
             default:
