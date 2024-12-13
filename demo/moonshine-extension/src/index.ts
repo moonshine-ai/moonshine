@@ -13,8 +13,10 @@ if (typeof chrome !== "undefined") {
     }
 }
 
-import * as ort from "onnxruntime-web"
+import { ort } from "moonshine-js"
 ort.env.wasm.wasmPaths = wasmURL
 
-import { autoInjectMoonshineControlElements } from "./common"
-autoInjectMoonshineControlElements(modelURL)
+import { autoInjectMoonshineControlElements } from "moonshine-js"
+setInterval(() => {
+    autoInjectMoonshineControlElements(modelURL)
+}, 1000);
