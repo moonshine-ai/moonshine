@@ -30,11 +30,11 @@ class MoonshineOnnxModel(object):
         self.encoder = onnxruntime.InferenceSession(encoder)
         self.decoder = onnxruntime.InferenceSession(decoder)
 
-        if 'tiny' in model_name:
+        if "tiny" in model_name:
             self.num_layers = 6
             self.num_key_value_heads = 8
             self.head_dim = 36
-        elif 'base' in model_name:
+        elif "base" in model_name:
             self.num_layers = 8
             self.num_key_value_heads = 8
             self.head_dim = 52
@@ -84,7 +84,7 @@ class MoonshineOnnxModel(object):
             # Update values for next iteration
             input_ids = [[next_token]]
             for k, v in zip(past_key_values.keys(), present_key_values):
-                if not use_cache_branch or 'decoder' in k:
+                if not use_cache_branch or "decoder" in k:
                     past_key_values[k] = v
 
         return [tokens]
