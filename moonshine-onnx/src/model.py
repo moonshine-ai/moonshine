@@ -7,7 +7,7 @@ def _get_onnx_weights(model_name):
 
     return (
         hf_hub_download(repo, f"{x}.onnx", subfolder="onnx")
-        for x in ("encoder_model", "decoder_model_merged_q4")
+        for x in ("encoder_model", "decoder_model_merged")
     )
 
 
