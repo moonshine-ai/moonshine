@@ -1,5 +1,6 @@
 import MoonshineTranscriber from "./transcriber";
 import { MoonshineLifecycle } from "./constants";
+import { WatchDirectoryFlags } from "typescript";
 
 function getRandomID() {
     const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -12,92 +13,150 @@ function getRandomID() {
     return result;
 }
 
-interface MoonshinePageIntegrations {
-    getInputAreaSelectors: () => Array<string>,
-    getStylesheet: () => string
-}
-
-const defaultPageIntegrations: MoonshinePageIntegrations = {
-    getInputAreaSelectors() {
-        return [
-            "textarea",
-            'input[type="text"], input[type="search"]',
-            'div[contenteditable="true"]',
-            'span[contenteditable="true"]',
-        ];
-    },
-    getStylesheet() {
-        return `
-            .moonshine-container {
-                position: relative;
-                display: inline-block;
-                width: 100%;
-                overflow: hidden;
-            }
-    
-            .moonshine-button {
-                position: absolute;
-                max-width: 32px;
-                max-height: 32px;
-                top: 0;
-                right: 0;
-                cursor: pointer;
-            }
-    
-            @keyframes loading {
-                from {
-                    transform: rotate(0deg);
-                }
-                to {
-                    transform: rotate(360deg);
-                }
-            }
-
-            *[data-moonshine-loading] svg {
-                animation: loading 2s linear infinite;
-                transform-origin: 50% 50%;
-            }
-
-            @keyframes transcribing {
-                from {
-                    transform: translateY(0);
-                }
-                25% {
-                    transform: translateY(-5%);
-                }
-                50%, 100% {
-                    transform: translateY(0);
-                }
-            }
-
-            *[data-moonshine-transcribing] .moonshine-transcribe-1 {
-                animation: transcribing 0.75s linear infinite;
-            }
-
-            *[data-moonshine-transcribing] .moonshine-transcribe-2 {
-                animation: transcribing 0.75s linear infinite;
-                animation-delay: 0.25s;
-            }
-
-            *[data-moonshine-transcribing] .moonshine-transcribe-3 {
-                animation: transcribing 0.75s linear infinite;
-                animation-delay: 0.5s;
-            }
-            `
-    }
-}
-
 export default class MoonshineElementManager {
+    private inputAreaSelectors: Array<string> = [
+        "textarea",
+        'input[type="text"], input[type="search"]',
+        'div[contenteditable="true"]',
+        'span[contenteditable="true"]',
+    ];
+    // TODO fetching this from .css rather than inlining would be preferable
+    private styleSheet: string = `
+        .moonshine-container {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+            overflow: hidden;
+        }
+    
+        .moonshine-button {
+            position: absolute;
+            max-width: 32px;
+            max-height: 32px;
+            top: 0;
+            right: 0;
+            cursor: pointer;
+        }
+    
+        @keyframes loading {
+            from {
+                transform: rotate(0deg);
+            }
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    
+        *[data-moonshine-loading] svg {
+            animation: loading 2s linear infinite;
+            transform-origin: 50% 50%;
+        }
+    
+        @keyframes transcribing {
+            from {
+                transform: translateY(0);
+            }
+            25% {
+                transform: translateY(-5%);
+            }
+            50%, 100% {
+                transform: translateY(0);
+            }
+        }
+    
+        *[data-moonshine-transcribing] .moonshine-transcribe-1 {
+            animation: transcribing 0.75s linear infinite;
+        }
+    
+        *[data-moonshine-transcribing] .moonshine-transcribe-2 {
+            animation: transcribing 0.75s linear infinite;
+            animation-delay: 0.25s;
+        }
+    
+        *[data-moonshine-transcribing] .moonshine-transcribe-3 {
+            animation: transcribing 0.75s linear infinite;
+            animation-delay: 0.5s;
+        }
+        `;
     private boundControlElements: Array<string> = [];
-    private modelURL: string = ""; // defaults to MoonshineSettings.BASE_ASSET_URL
-    private pageIntegrations: MoonshinePageIntegrations = defaultPageIntegrations
+    private modelURL: string = ""; // defaults to MoonshineSettings.BASE_ASSET_URL in MoonshineModel
+    private postInjectionFunction: Function = (
+        controlElement,
+        targetInputElement
+    ) => {
+        const targetID = targetInputElement.id;
+        // squeeze button into smaller inputs if they exceed the button's max height
+        // note: need to get the injected button from the DOM to determine its actual height
+        const computedButtonHeight = parseInt(
+            window
+                .getComputedStyle(controlElement)
+                .getPropertyValue("max-height"),
+            10
+        );
+        const inputRect = targetInputElement.getBoundingClientRect();
 
-    public constructor(modelURL?: string, pageIntegrations: Partial<MoonshinePageIntegrations> = {}) {
-        this.injectStyle();
+        if (inputRect.height < computedButtonHeight) {
+            controlElement.style.height = inputRect.height + "px";
+            controlElement.style.width = inputRect.height + "px";
+        }
+
+        // vertically center the button if the input height is close to (but greater than) the button height
+        if (
+            inputRect.height < 2 * computedButtonHeight &&
+            inputRect.height > computedButtonHeight
+        ) {
+            controlElement.style.top =
+                (inputRect.height - computedButtonHeight) / 2 + "px";
+        }
+        const container = controlElement.parentNode;
+
+        container.style.width = inputRect.width;
+    };
+
+    public constructor(
+        modelURL?: string,
+        inputAreaSelectors?: Array<string>,
+        styleSheet?: string,
+        postInjectionFunction?: Function
+    ) {
+        if (inputAreaSelectors) {
+            this.inputAreaSelectors = inputAreaSelectors;
+        }
+        if (styleSheet) {
+            this.styleSheet += styleSheet;
+        }
         if (modelURL) {
             this.modelURL = modelURL;
         }
-        this.pageIntegrations = { ...defaultPageIntegrations, ...pageIntegrations }
+        if (postInjectionFunction) {
+            this.postInjectionFunction = postInjectionFunction;
+        }
+        this.injectStyle();
+    }
+
+    public autoInjectElements() {
+        // query selectors for each type of input element we want to add buttons to
+        this.inputAreaSelectors.forEach((querySelector) => {
+            const elements = document.querySelectorAll(querySelector);
+            elements.forEach((element) => {
+                if (
+                    !document.querySelector(
+                        '[data-moonshine-target="#' + element.id + '"]'
+                    )
+                ) {
+                    this.wrapAndReinjectInputElement(element);
+                    // the element should not be bound yet; if it is, the page may have reloaded since then
+                    if (this.boundControlElements.includes("#" + element.id)) {
+                        const index = this.boundControlElements.indexOf(
+                            "#" + element.id
+                        );
+                        if (index !== -1) {
+                            this.boundControlElements.splice(index, 1);
+                        }
+                    }
+                }
+            });
+        });
     }
 
     public initControlElements() {
@@ -188,24 +247,41 @@ export default class MoonshineElementManager {
                         }
                     });
                 });
+                // // add a mutation observer to check if this element gets removed (so we can potentially re-add it later)
+                // var mutationObserver = new MutationObserver(
+                //     (mutationsList, observer) => {
+                //         console.log(mutationsList);
+                //         mutationsList.forEach((mutationRecord) => {
+                //             if (mutationRecord.removedNodes) {
+                //                 mutationRecord.removedNodes.forEach((node) => {
+                //                     if (
+                //                         this.boundControlElements.includes(
+                //                             "#" + node.id
+                //                         )
+                //                     ) {
+                //                         const index =
+                //                             this.boundControlElements.indexOf(
+                //                                 "#" + node.id
+                //                             );
+                //                         if (index !== -1) {
+                //                             this.boundControlElements.splice(
+                //                                 index,
+                //                                 1
+                //                             );
+                //                         }
+                //                     }
+                //                 });
+                //             }
+                //         });
+                //     }
+                // );
+                // mutationObserver.observe(controlElement.parentNode.parentNode, {
+                //     childList: true,
+                //     subtree: true,
+                // });
                 this.boundControlElements.push(targetElementSelector);
             }
         });
-    }
-
-    public autoInjectElements() {
-        // query selectors for each type of input element we want to add buttons to
-        const injectionQuerySelectors = this.pageIntegrations.getInputAreaSelectors()
-
-        injectionQuerySelectors.forEach((querySelector) => {
-            const elements = document.querySelectorAll(querySelector);
-            elements.forEach((element) => {
-                if (!this.boundControlElements.includes("#" + element.id)) {
-                    this.wrapAndReinjectInputElement(element);
-                }
-            });
-        });
-        this.initControlElements();
     }
 
     static initLifecycleIcons(parentButton) {
@@ -223,7 +299,10 @@ export default class MoonshineElementManager {
                 parentButton.appendChild(injectedIconElement);
             }
         });
-        MoonshineElementManager.showLifecycleIcon(parentButton, MoonshineLifecycle.idle);
+        MoonshineElementManager.showLifecycleIcon(
+            parentButton,
+            MoonshineLifecycle.idle
+        );
     }
 
     static showLifecycleIcon(parentButton, lifecycle: MoonshineLifecycle) {
@@ -333,44 +412,13 @@ export default class MoonshineElementManager {
         container.appendChild(inputElement);
         container.appendChild(button);
 
-        // squeeze button into smaller inputs if they exceed the button's max height
-        // note: need to get the injected button from the DOM to determine its actual height
-        const injectedButton = document.querySelector(
-            '[data-moonshine-target="#' + targetID + '"]'
-        );
-        const computedButtonHeight = parseInt(
-            window
-                .getComputedStyle(injectedButton)
-                .getPropertyValue("max-height"),
-            10
-        );
-        const inputRect = inputElement.getBoundingClientRect();
-
-        if (inputRect.height < computedButtonHeight) {
-            button.style.height = inputRect.height + "px";
-            button.style.width = inputRect.height + "px";
-        }
-
-        // vertically center the button if the input height is close to (but greater than) the button height
-        if (
-            inputRect.height < 2 * computedButtonHeight &&
-            inputRect.height > computedButtonHeight
-        ) {
-            button.style.top =
-                (inputRect.height - computedButtonHeight) / 2 + "px";
-        }
-
-        container.style.width = inputRect.width;
-        console.log("Injected Moonshine at " + inputElement);
+        this.postInjectionFunction(button, inputElement);
     }
 
     private injectStyle() {
-        // TODO use external css rather than inline
-        const styles = this.pageIntegrations.getStylesheet();
-
         const styleElement = document.createElement("style");
         styleElement.type = "text/css";
         document.head.appendChild(styleElement);
-        styleElement.innerHTML = styles;
+        styleElement.innerHTML = this.styleSheet;
     }
 }
