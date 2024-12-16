@@ -17,5 +17,9 @@
       "resources": ["*.wasm", "*.ort"],
       "matches": ["<all_urls>"]
     }
+  ],
+  "permissions": [
+    "tabs",
+    "activeTab"
   ]
 }
