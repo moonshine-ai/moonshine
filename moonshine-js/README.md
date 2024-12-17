@@ -1,6 +1,6 @@
 # moonshine-js
 
-This package provides quick and easy integration of client-side, on-device speech-to-text on web pages and in web applications. It includes the following:
+This package provides quick and easy integration of client-side, on-device speech-to-text on web pages and in web applications with Useful Sensors' Moonshine models. It includes the following:
 
 - 🌙 **Easy UI integration**: add a single `<script>` that automatically adds speech-to-text to all text inputs on a page, or design your own UI integration in a few easy steps.
 - 🌙 **Simple client-side speech-to-text interfaces**: just import [a single class]() to handle user mic permissions, model loading, and audio transcription, or use our [lower-level model implementation]() to easily transcribe audio from other sources.
@@ -9,16 +9,13 @@ _Note: This package is currently in alpha, and breaking changes may occur betwee
 
 ## Quickstart
 
-You can easily include `moonshine-js` on your site using our CDN-hosted solution. Simply add the following inside the `<head>` tag:
+You can easily include `moonshine-js` on your site using our CDN-hosted solution. Including the following will automatically add speech-to-text to all input fields on your page:
 
 ```html
 <head>
-    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
-    <script type="module" src="https://cdn.jsdelivr.net/npm/useful-moonshine-web@.../dist/moonshine.min.js"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@usefulsensors/moonshine@0.0.1/dist/moonshine.auto.min.js"></script>
 </head>
 ```
-
-The first script includes the required `onnxruntime-web` package.
 
 ## Usage
 

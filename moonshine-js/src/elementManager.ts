@@ -18,7 +18,7 @@ function getRandomID() {
 
 /**
  * Handles the injection, initialization, and management of HTML elements, CSS styles, and JS event listeners
- * that integrate a speech-to-text UI on pages.
+ * to integrate speech-to-text UI on pages.
  *
  * Automatic and custom integration with the UI are implemented here. {@link autoInjectElements} injects HTML for adding
  * speech-to-text buttons to input text areas, while {@link initControlElements} binds event listeners for these buttons.

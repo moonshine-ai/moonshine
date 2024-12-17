@@ -18,7 +18,6 @@ var postInjectionFunction: Function | undefined = undefined;
 
 switch (window.location.host) {
     case "chatgpt.com":
-        inputAreaSelectors = ["#prompt-textarea"];
         styleSheet = `
         .moonshine-container {
             position: inherit !important;
@@ -39,6 +38,7 @@ switch (window.location.host) {
             }
         }
         `;
+        inputAreaSelectors = ["#prompt-textarea"];
         postInjectionFunction = (controlElement, targetInputElement) => {};
 }
 
