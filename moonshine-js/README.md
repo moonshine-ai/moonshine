@@ -1,12 +1,15 @@
 # moonshine-js
 
-Moonshine Web is a JavaScript package that provides quick and easy integration of client-side, on-device speech-to-text on web pages and in web applications.
+This package provides quick and easy integration of client-side, on-device speech-to-text on web pages and in web applications. It includes the following:
+
+- 🌙 **Easy UI integration**: add a single `<script>` that automatically adds speech-to-text to all text inputs on a page, or design your own UI integration in a few easy steps.
+- 🌙 **Simple client-side speech-to-text interfaces**: just import [a single class]() to handle user mic permissions, model loading, and audio transcription, or use our [lower-level model implementation]() to easily transcribe audio from other sources.
 
 _Note: This package is currently in alpha, and breaking changes may occur between versions. User feedback and developer contributions are welcome._
 
 ## Quickstart
 
-You can easily include `moonshine-web` on your site using our CDN-hosted solution. Simply add the following inside the `<head>` tag:
+You can easily include `moonshine-js` on your site using our CDN-hosted solution. Simply add the following inside the `<head>` tag:
 
 ```html
 <head>
@@ -19,7 +22,7 @@ The first script includes the required `onnxruntime-web` package.
 
 ## Usage
 
-Using `moonshine-web` requires adding the following elements to your page:
+Using `moonshine-js` requires adding the following elements to your page:
 
 1. _Target elements_. These are elements that you want to output the results of speech-to-text to.
 2. _Control elements_, specified by adding a `data-moonshine-target` attribute that specifies a corresponding target element selector. These are clickable elements, like `<button>`s or `<div>`s, that should trigger speech-to-text.
@@ -68,30 +71,3 @@ To override the styling for every Moonshine control element on the page, simply 
     <!--- The content from the other button will be automatically filled in here; no need to define it again. -->
 </button>
 ```
-
-## TODO
-* [x] IIFE- and CDN-based quickstart implementation
-
-* [ ] Vanilla component-based impementation
-
-* [ ] Component-based implementation for popular frontend frameworks (e.g., React)
-
-## Developer Setup
-
-1. Install `flask`, JS dependencies, and get models:
-
-```shell
-pip install Flask
-npm install
-npm run get-models
-```
-
-Flask is used to run a minimal web server for serving up the `example/index.html` page, minified JS bundle, and `.ort` files. 
-
-2. Run dev server:
-
-```shell
-npm run dev
-```
-
-3. Open http://localhost:5000 in browser.

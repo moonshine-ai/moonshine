@@ -59,7 +59,7 @@ export default class MoonshineModel {
                 }
             }
             const uncached_decoded = await this.model.uncached_decode.run({
-                args_0: new ort.Tensor("int32", [[1]], [1, 1]),
+                args_0: new ort.Tensor("int32", [1], [1, 1]),
                 args_1: new ort.Tensor("float32", context[layer_norm_key]["data"], context[layer_norm_key]["dims"]),
                 args_2: new ort.Tensor("int32", [seq_len], [1])
             })
@@ -72,7 +72,7 @@ export default class MoonshineModel {
                     break;
                 }
                 tokens = tokens.concat([next_token])
-                const inputs = [[next_token]]
+                const inputs = [next_token]
                 seq_len += 1
                 const feed = {
                     args_0: new ort.Tensor("int32", inputs, [1, 1]),
