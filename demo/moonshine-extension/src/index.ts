@@ -11,13 +11,12 @@ if (typeof chrome !== "undefined") {
 }
 
 import { MoonshineElementManager } from "@usefulsensors/moonshine";
-const hostName = window.location.host;
 
 var inputAreaSelectors: Array<string> | undefined = undefined;
 var styleSheet: string | undefined = undefined;
 var postInjectionFunction: Function | undefined = undefined;
 
-switch (hostName) {
+switch (window.location.host) {
     case "chatgpt.com":
         inputAreaSelectors = ["#prompt-textarea"];
         styleSheet = `
@@ -28,6 +27,16 @@ switch (hostName) {
         .moonshine-button {
             top: 8px !important;
             right: 11px !important;
+        }
+        @media (prefers-color-scheme: dark) {
+            .moonshine-button span svg path {
+                fill: white;
+            }
+        }
+        @media (prefers-color-scheme: light) {
+            .moonshine-button span svg path {
+                fill: black;
+            }
         }
         `;
         postInjectionFunction = (controlElement, targetInputElement) => {};

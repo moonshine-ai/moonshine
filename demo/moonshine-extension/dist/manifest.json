@@ -14,7 +14,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["*.wasm", "*.ort"],
+      "resources": ["*.wasm", "*.ort", "*.onnx"],
       "matches": ["<all_urls>"]
     }
   ],
