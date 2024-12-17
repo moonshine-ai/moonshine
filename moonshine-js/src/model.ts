@@ -27,16 +27,16 @@ export default class MoonshineModel {
         const sessionOption = { executionProviders: ['wasm', 'cpu'] };
 
         this.model.preprocess = await ort.InferenceSession.create(
-            this.modelURL + "/preprocess.ort", sessionOption)
+            this.modelURL + "/preprocess_quantized_weights.onnx", sessionOption)
 
         this.model.encode = await ort.InferenceSession.create(
-            this.modelURL + "/encode.ort", sessionOption)
+            this.modelURL + "/encode_quantized_weights.onnx", sessionOption)
 
         this.model.uncached_decode = await ort.InferenceSession.create(
-            this.modelURL + "/uncached_decode.ort", sessionOption)
+            this.modelURL + "/uncached_decode_quantized_weights.onnx", sessionOption)
 
         this.model.cached_decode = await ort.InferenceSession.create(
-            this.modelURL + "/cached_decode.ort", sessionOption)
+            this.modelURL + "/cached_decode_quantized_weights.onnx", sessionOption)
     }
 
     public async generate(audio: Float32Array) {
