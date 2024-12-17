@@ -4,26 +4,41 @@
         <script type="module" src="/dist/moonshine.auto.min.js"></script>
     </head>
     <style>
-        .test-input {
+        .test-container {
             width: 512px;
+        }
+        .test-input {
+            width: 100%;
             height: 128px;
         }
     </style>
     <body>
         <p>Demonstrating the auto moonshine-ify script.</p>
         <h1>textarea</h1>
-        <textarea class="test-input"></textarea>
+        <div class="test-container">
+            <textarea class="test-input"></textarea>
+        </div>
         <h1>textarea (with ID set)</h1>
-        <textarea class="test-input" id="myTextArea"></textarea>
+        <div class="test-container">
+            <textarea class="test-input" id="myTextArea"></textarea>
+        </div>
         <h1>input</h1>
         <h2>type="text"</h2>
-        <input type="text"></input>
+        <div class="test-container">
+            <input type="text"></input>
+        </div>
         <h2>type="search"</h2>
-        <input type="search"></input>
+        <div class="test-container">
+            <input type="search"></input>
+        </div>
         <h1>contenteditable="true"</h1>
         <h2>div</h2>
-        <div class="test-input" contenteditable="true"></div>
+        <div class="test-container">
+            <div class="test-input" contenteditable="true"></div>
+        </div>
         <h2>span</h2>
-        <span class="test-input" contenteditable="true">pre-filled content here</span>
+        <div class="test-container">
+            <span class="test-input" contenteditable="true">pre-filled content here</span>
+        </div>
     </body>
 </html>
