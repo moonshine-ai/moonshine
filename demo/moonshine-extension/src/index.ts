@@ -44,12 +44,10 @@ switch (window.location.host) {
 
 var elementManager = new MoonshineElementManager(
     "/model/tiny/",
-    inputAreaSelectors,
-    styleSheet,
-    postInjectionFunction
+    styleSheet
 );
 setInterval(() => {
     // re-autoinject every second, since some elements may not exist on page load (e.g., in react-based sites)
-    elementManager.autoInjectElements();
+    elementManager.autoInjectElements(inputAreaSelectors, postInjectionFunction);
     elementManager.initControlElements();
 }, 1000);

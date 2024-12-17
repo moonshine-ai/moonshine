@@ -14,12 +14,11 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["*.wasm", "*.ort", "*.onnx"],
+      "resources": ["*.wasm", "*.onnx"],
       "matches": ["<all_urls>"]
     }
   ],
   "permissions": [
-    "tabs",
     "activeTab"
   ]
 }
