@@ -6,12 +6,21 @@ function argMax(array) {
     return [].map.call(array, (x, i) => [x, i]).reduce((r, a) => (a[0] > r[0] ? a : r))[1];
 }
 
+/**
+ * Implements inference for moonshine models using the onnxruntime.
+ */
 export default class MoonshineModel {
     private modelURL: string
     private model: any
 
+    /**
+     * Create (but do not load (yet)) a new MoonshineModel for inference.
+     * 
+     * @param modelURL - a string (relative to {@link MoonshineSettings.BASE_ASSET_PATH}) where the .onnx model weights are located.
+     * 
+     * @remark Creating a MoonshineModel has the side effect of setting the path to the onnxruntime .wasm to the {@link MoonshineSettings.BASE_ASSET_PATH}
+     */
     public constructor(modelURL: string) {
-        // set the base path for the .ort models and the onnx runtime wasm
         this.modelURL = MoonshineSettings.BASE_ASSET_PATH + modelURL
         ort.env.wasm.wasmPaths = MoonshineSettings.BASE_ASSET_PATH
         this.model = {
@@ -22,7 +31,11 @@ export default class MoonshineModel {
         }
     }
 
+    /**
+     * Load the model weights.
+     */
     public async loadModel() {
+        // TODO choose the best sessionOption available
         // const sessionOption = { executionProviders: ['webgpu', 'webgl', 'wasm', 'cpu'] };
         const sessionOption = { executionProviders: ['wasm', 'cpu'] };
 
@@ -39,6 +52,11 @@ export default class MoonshineModel {
             this.modelURL + "/cached_decode_quantized_weights.onnx", sessionOption)
     }
 
+    /**
+     * Generate a transcription of the passed audio.
+     * @param audio - a Float32Array containing raw audio samples from an audio source (e.g., a wav file, or a user's microphone)
+     * @returns - a Promise that resolves with the generated transcription.
+     */
     public async generate(audio: Float32Array) {
         if (this.model.preprocess && this.model.encode && this.model.uncached_decode
             && this.model.cached_decode) {
