@@ -7,18 +7,18 @@ function argMax(array) {
 }
 
 /**
- * Implements inference for moonshine models using the onnxruntime.
+ * Implements speech-to-text inferences with Moonshine models using `onnxruntime-web`.
  */
 export default class MoonshineModel {
     private modelURL: string
     private model: any
 
     /**
-     * Create (but do not load (yet)) a new MoonshineModel for inference.
+     * Create (but do not load) a new MoonshineModel for inference.
      * 
-     * @param modelURL - a string (relative to {@link MoonshineSettings.BASE_ASSET_PATH}) where the .onnx model weights are located.
+     * @param modelURL - a string (relative to {@link MoonshineSettings.BASE_ASSET_PATH}) where the `.onnx` model weights are located.
      * 
-     * @remark Creating a MoonshineModel has the side effect of setting the path to the onnxruntime .wasm to the {@link MoonshineSettings.BASE_ASSET_PATH}
+     * @remark Creating a MoonshineModel has the side effect of setting the path to the `onnxruntime-web` `.wasm` to the {@link MoonshineSettings.BASE_ASSET_PATH}
      */
     public constructor(modelURL: string) {
         this.modelURL = MoonshineSettings.BASE_ASSET_PATH + modelURL
