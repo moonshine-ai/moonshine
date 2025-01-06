@@ -124,10 +124,17 @@ class MoonshineTranscriber {
             await MoonshineTranscriber.model.loadModel();
         }
 
-        const audioChunks: Blob[] = [];
+        let audioChunks: Blob[] = [];       // buffer of audio blobs from the user mic
+        let commitChunk: boolean = false;   // flag to indicate whether the next generation should be committed (and buffer cleared)
+        let transcript: string = "";        // running transcript collected from subsequent buffers
 
         // fires every MOONSHINE_FRAME_SIZE ms
         MoonshineTranscriber.mediaRecorder.ondataavailable = (event) => {
+            let bufferSecs = Math.floor((audioChunks.length * MoonshineSettings.FRAME_SIZE) / 1000)
+            if (bufferSecs >= MoonshineSettings.MAX_SPEECH_SECS) {
+                // the next transcript should be "committed" and we should erase the buffer afterwards
+                commitChunk = true
+            }
             audioChunks.push(event.data);
 
             const audioBlob = new Blob(audioChunks, {
@@ -139,7 +146,6 @@ class MoonshineTranscriber {
                     ?.decodeAudioData(arrayBuffer)
                     .then((decoded) => {
                         let floatArray = new Float32Array(decoded.length);
-                        // TODO segment array > x seconds and transcribe segments
                         if (floatArray.length > 16000 * 30) {
                             floatArray = floatArray.subarray(0, 16000 * 30);
                         }
@@ -148,7 +154,19 @@ class MoonshineTranscriber {
                             ?.generate(floatArray)
                             .then((text) => {
                                 if (text) {
-                                    this.callbacks.onTranscriptionUpdated(text);
+                                    if (commitChunk) {
+                                        transcript = transcript + " " + text
+                                        this.callbacks.onTranscriptionUpdated(transcript);
+
+                                        let headerBlob = audioChunks[0]
+                                        // TODO lookback frames?
+                                        audioChunks = []
+                                        audioChunks.push(headerBlob)
+                                        commitChunk = false
+                                    }
+                                    else {
+                                        this.callbacks.onTranscriptionUpdated(transcript + " " + text);
+                                    }
                                 }
                             });
                     })
