@@ -5,20 +5,29 @@
   "description": "Adds Moonshine speech-to-text to textareas on webpages.",
   "content_scripts": [
     {
-      "js": ["moonshine.extension.min.js"],
-      "matches": ["<all_urls>"]
+      "js": [
+        "moonshine.extension.min.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
-  "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'"
-  },
   "web_accessible_resources": [
     {
-      "resources": ["*.wasm", "*.onnx"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "*.wasm",
+        "*.onnx"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "permissions": [
     "activeTab"
-  ]
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'"
+  }
 }
