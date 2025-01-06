@@ -43,7 +43,7 @@ switch (window.location.host) {
 }
 
 var elementManager = new MoonshineElementManager(
-    "/model/tiny/",
+    "model/tiny",
     styleSheet
 );
 setInterval(() => {
