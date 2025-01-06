@@ -18,7 +18,7 @@ export default class MoonshineModel {
      * 
      * @param modelURL - a string (relative to {@link MoonshineSettings.BASE_ASSET_PATH}) where the `.onnx` model weights are located.
      * 
-     * @remark Creating a MoonshineModel has the side effect of setting the path to the `onnxruntime-web` `.wasm` to the {@link MoonshineSettings.BASE_ASSET_PATH}
+     * @remarks Creating a MoonshineModel has the side effect of setting the path to the `onnxruntime-web` `.wasm` to the {@link MoonshineSettings.BASE_ASSET_PATH}
      */
     public constructor(modelURL: string) {
         this.modelURL = MoonshineSettings.BASE_ASSET_PATH + modelURL

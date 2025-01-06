@@ -71,7 +71,7 @@ export default class MoonshineElementManager {
      */
     public constructor(modelURL: string = "", styleSheet: string = styles) {
         this.modelURL = modelURL;
-        this.injectStyle(styleSheet);
+        this.injectStyle(styles + styleSheet);
     }
 
     /**
