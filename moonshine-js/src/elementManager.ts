@@ -140,9 +140,7 @@ export default class MoonshineElementManager {
                             onModelLoadStarted() {
                                 // disable other s2t buttons
                                 moonshineControlElements.forEach((element) => {
-                                    if (element != controlElement) {
-                                        element.setAttribute("disabled", "");
-                                    }
+                                    element.setAttribute("disabled", "");
                                 });
                                 MoonshineElementManager.showLifecycleIcon(
                                     controlElement,
@@ -154,6 +152,9 @@ export default class MoonshineElementManager {
                                 moonshineControlElements.forEach((element) => {
                                     if (element != controlElement) {
                                         element.setAttribute("disabled", "");
+                                    }
+                                    else {
+                                        element.removeAttribute("disabled");
                                     }
                                 });
                                 controlElement.setAttribute(
@@ -189,23 +190,24 @@ export default class MoonshineElementManager {
                         this.modelURL
                     );
                     controlElement.addEventListener("click", () => {
-                        // TODO fix for elements where the "disabled" attribute does not block click events (e.g., divs)
-                        // if not transcribing, start transcribing
-                        if (
-                            !controlElement.attributes["data-moonshine-active"]
-                        ) {
-                            transcriber.start();
-                        }
-                        // if transcribing, stop transcribing
-                        else {
-                            transcriber.stop();
-                            // const enterKeyEvent = new KeyboardEvent("keydown", {
-                            //     key: "Enter",
-                            //     code: "Enter",
-                            //     which: 13,
-                            //     keyCode: 13,
-                            // });
-                            // targetElement.dispatchEvent(enterKeyEvent);
+                        if (!controlElement.attributes["disabled"]) {
+                            // if not transcribing, start transcribing
+                            if (
+                                !controlElement.attributes["data-moonshine-active"]
+                            ) {
+                                transcriber.start();
+                            }
+                            // if transcribing, stop transcribing
+                            else {
+                                transcriber.stop();
+                                // const enterKeyEvent = new KeyboardEvent("keydown", {
+                                //     key: "Enter",
+                                //     code: "Enter",
+                                //     which: 13,
+                                //     keyCode: 13,
+                                // });
+                                // targetElement.dispatchEvent(enterKeyEvent);
+                            }
                         }
                     });
                 });
