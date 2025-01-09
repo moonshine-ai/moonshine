@@ -1,0 +1,39 @@
+@keyframes loading {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+*[data-moonshine-loading] svg {
+    animation: loading 2s linear infinite;
+    transform-origin: 50% 50%;
+}
+
+@keyframes transcribing {
+    from {
+        transform: translateY(0);
+    }
+    25% {
+        transform: translateY(-5%);
+    }
+    50%, 100% {
+        transform: translateY(0);
+    }
+}
+
+*[data-moonshine-transcribing] .moonshine-transcribe-1 {
+    animation: transcribing 0.75s linear infinite;
+}
+
+*[data-moonshine-transcribing] .moonshine-transcribe-2 {
+    animation: transcribing 0.75s linear infinite;
+    animation-delay: 0.25s;
+}
+
+*[data-moonshine-transcribing] .moonshine-transcribe-3 {
+    animation: transcribing 0.75s linear infinite;
+    animation-delay: 0.5s;
+}
