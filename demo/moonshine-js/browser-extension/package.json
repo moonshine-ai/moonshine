@@ -1,5 +1,5 @@
 {
-  "name": "moonshine-extension",
+  "name": "moonshine-browser-extension",
   "version": "1.0.0",
   "description": "A browser extension that adds an on-device speech-to-text option to text inputs on web pages as you browse.",
   "main": "dist/moonshine.extension.min.js",
@@ -17,6 +17,6 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
-    "@usefulsensors/moonshine": "file:../../moonshine-js"
+    "@usefulsensors/moonshine": "file:../../../moonshine-js"
   }
 }
