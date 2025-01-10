@@ -164,9 +164,8 @@ ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="v
 audio_array = ds[0]["audio"]["array"]
 
 inputs = processor(audio_array, return_tensors="pt")
-input_values = inputs.input_values
 
-generated_ids = model.generate(input_values, max_new_tokens=100)
+generated_ids = model.generate(**inputs)
 
 transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 print(transcription)
