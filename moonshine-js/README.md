@@ -5,7 +5,7 @@ This package provides quick and easy integration of client-side, on-device speec
 - 🌙 **Easy UI integration**: add a single `<script>` that automatically adds speech-to-text to all text inputs on a page, or design your own UI integration in a few easy steps.
 - 🌙 **Simple client-side speech-to-text interfaces**: just import [a single class]() to handle user mic permissions, model loading, and audio transcription, or use our [lower-level model implementation]() to easily transcribe audio from other sources.
 
-If you are looking for a quick integration with your React application, check out [moonshine-react]().
+If you are looking for a quick integration with your React application, check out [`moonshine-react`]().
 
 _Note: This package is currently in beta, and breaking changes may occur between versions. User feedback and developer contributions are welcome._
 
