@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+    <head>
+        <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+        <meta content="utf-8" http-equiv="encoding">
+        <title>useful-moonshine-web</title>
+        <!-- Include this script to enable manual moonshine-js on the page. -->
+        <script type="module" src="https://cdn.jsdelivr.net/npm/@usefulsensors/moonshine-js@latest/dist/moonshine.manual.min.js"></script>
+    </head>
+    <style>
+        button {
+            width: 32px;
+            height: 32px;
+        }
+        textarea {
+            width: 512px;
+            height: 128px;
+        }
+    </style>
+    <body>
+        <p>Demonstrating the manual moonshine-ify script.</p>
+        <h1>Quickstart</h1>
+        <!-- The <button> element will be initialized with default icons; whenever it is clicked, it will output the transcription
+            to the element with id = firstInput.
+        -->
+        <textarea id="firstInput"></textarea>
+        <button data-moonshine-target="#firstInput"></button>
+        <h1>Icon Overrides</h1>
+        <!-- Adding <span> elements with data-moonshine-{loading, transcribing, idle} attributes inside your clickable element
+            allows you to override the default icons.
+        -->
+        <textarea id="secondInput"></textarea>
+        <button data-moonshine-target="#secondInput">
+            <span data-moonshine-loading>⬇️</span>
+            <span data-moonshine-transcribing>💬</span>
+            <span data-moonshine-idle>🗣️</span>
+        </button>
+        <!-- This override will apply ONLY to this button; if you want to define it once and apply it globally to, add a data-moonshine-template attribute
+         to the clickable element (in this case, the <button>):
+        
+        <textarea id="secondInput"></textarea>
+        <button data-moonshine-target="#secondInput" data-moonshine-template>
+            <span data-moonshine-loading>⬇️</span>
+            <span data-moonshine-transcribing>💬</span>
+            <span data-moonshine-idle>🗣️</span>
+        </button>
+        -->
+    </body>
+</html>
