@@ -20,7 +20,7 @@ setup(
     readme="README.md",
     python_requires=">=3.8",
     author="Useful Sensors",
-    url="https://github.com/usefulesensors/moonshine",
+    url="https://github.com/usefulsensors/moonshine",
     license="MIT",
     install_requires=[
         str(r)
