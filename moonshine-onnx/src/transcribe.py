@@ -16,18 +16,18 @@ def load_audio(audio):
 def assert_audio_size(audio):
     assert len(audio.shape) == 2, "audio should be of shape [batch, samples]"
     num_seconds = audio.size / 16000
-    assert (
-        0.1 < num_seconds < 64
-    ), "Moonshine models support audio segments that are between 0.1s and 64s in a single transcribe call. For transcribing longer segments, pre-segment your audio and provide shorter segments."
+    assert 0.1 < num_seconds < 64, (
+        "Moonshine models support audio segments that are between 0.1s and 64s in a single transcribe call. For transcribing longer segments, pre-segment your audio and provide shorter segments."
+    )
     return num_seconds
 
 
 def transcribe(audio, model="moonshine/base"):
     if isinstance(model, str):
         model = MoonshineOnnxModel(model_name=model)
-    assert isinstance(
-        model, MoonshineOnnxModel
-    ), f"Expected a MoonshineOnnxModel model or a model name, not a {type(model)}"
+    assert isinstance(model, MoonshineOnnxModel), (
+        f"Expected a MoonshineOnnxModel model or a model name, not a {type(model)}"
+    )
     audio = load_audio(audio)
     assert_audio_size(audio)
 
@@ -46,9 +46,9 @@ def benchmark(audio, model="moonshine/base"):
 
     if isinstance(model, str):
         model = MoonshineOnnxModel(model_name=model)
-    assert isinstance(
-        model, MoonshineOnnxModel
-    ), f"Expected a MoonshineOnnxModel model or a model name, not a {type(model)}"
+    assert isinstance(model, MoonshineOnnxModel), (
+        f"Expected a MoonshineOnnxModel model or a model name, not a {type(model)}"
+    )
 
     audio = load_audio(audio)
     num_seconds = assert_audio_size(audio)

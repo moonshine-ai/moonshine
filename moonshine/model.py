@@ -255,9 +255,9 @@ class MHACausalWithRope(keras.layers.MultiHeadAttention):
         key = apply_rotary_pos_emb(key, rot_pos_emb)
 
         if value_cache is not None:
-            assert (
-                key_cache is not None
-            ), "key_cache should not be None when value_cache is not"
+            assert key_cache is not None, (
+                "key_cache should not be None when value_cache is not"
+            )
 
             key = keras.ops.concatenate((key_cache, key), axis=-3)
             value = keras.ops.concatenate((value_cache, value), axis=-3)
