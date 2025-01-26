@@ -14,9 +14,9 @@ class MoonshineOnnxModel(object):
         import onnxruntime
 
         if models_dir is None:
-            assert (
-                model_name is not None
-            ), "model_name should be specified if models_dir is not"
+            assert model_name is not None, (
+                "model_name should be specified if models_dir is not"
+            )
             preprocess, encode, uncached_decode, cached_decode = (
                 self._load_weights_from_hf_hub(model_name)
             )
@@ -63,7 +63,7 @@ class MoonshineOnnxModel(object):
                     args_0=inputs,
                     args_1=context,
                     args_2=seq_len,
-                    **{f"args_{i+3}": x for i, x in enumerate(cache)},
+                    **{f"args_{i + 3}": x for i, x in enumerate(cache)},
                 ),
             )
         return [tokens]
