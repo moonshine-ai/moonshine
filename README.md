@@ -153,21 +153,22 @@ The files for the CTranslate2 versions of Moonshine are available at [huggingfac
 Both models are also available on the HuggingFace hub and can be used with the `transformers` library, as follows:
 
 ```python
-from transformers import AutoModelForSpeechSeq2Seq, AutoConfig, PreTrainedTokenizerFast
+import torch
+from transformers import AutoProcessor, MoonshineForConditionalGeneration
+from datasets import load_dataset
 
-import torchaudio
-import sys
+processor = AutoProcessor.from_pretrained("UsefulSensors/moonshine-tiny")
+model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-tiny")
 
-audio, sr = torchaudio.load(sys.argv[1])
-if sr != 16000:
-  audio = torchaudio.functional.resample(audio, sr, 16000)
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+audio_array = ds[0]["audio"]["array"]
 
-# 'usefulsensors/moonshine-base' for the base model
-model = AutoModelForSpeechSeq2Seq.from_pretrained('usefulsensors/moonshine-tiny', trust_remote_code=True)
-tokenizer = PreTrainedTokenizerFast.from_pretrained('usefulsensors/moonshine-tiny')
+inputs = processor(audio_array, return_tensors="pt")
 
-tokens = model(audio)
-print(tokenizer.decode(tokens[0], skip_special_tokens=True))
+generated_ids = model.generate(**inputs)
+
+transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+print(transcription)
 ```
 
 ## TODO

@@ -16,12 +16,12 @@ def convert_and_store(model, input_signature, output_file):
 
 
 def main():
-    assert (
-        len(sys.argv) == 3
-    ), "Usage: convert_to_onnx.py <moonshine model name> <output directory name>"
-    assert (
-        keras.config.backend() == "tensorflow"
-    ), "Should be run with the tensorflow backend"
+    assert len(sys.argv) == 3, (
+        "Usage: convert_to_onnx.py <moonshine model name> <output directory name>"
+    )
+    assert keras.config.backend() == "tensorflow", (
+        "Should be run with the tensorflow backend"
+    )
 
     import tensorflow as tf
 
