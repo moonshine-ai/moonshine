@@ -1,8 +1,8 @@
 def _get_onnx_weights(model_name, precision="float"):
     from huggingface_hub import hf_hub_download
-    
+
     if model_name not in ["tiny", "base"]:
-        raise ValueError(f"Unknown model \"{model_name}\"")
+        raise ValueError(f'Unknown model "{model_name}"')
     repo = "UsefulSensors/moonshine"
     subfolder = f"onnx/merged/{model_name}/{precision}"
 
@@ -17,11 +17,11 @@ class MoonshineOnnxModel(object):
         import onnxruntime
 
         if models_dir is None:
-            assert (
-                model_name is not None
-            ), "model_name should be specified if models_dir is not"
-            encoder, decoder = (
-                self._load_weights_from_hf_hub(model_name, model_precision)
+            assert model_name is not None, (
+                "model_name should be specified if models_dir is not"
+            )
+            encoder, decoder = self._load_weights_from_hf_hub(
+                model_name, model_precision
             )
         else:
             encoder, decoder = [
@@ -40,7 +40,7 @@ class MoonshineOnnxModel(object):
             self.num_key_value_heads = 8
             self.head_dim = 52
         else:
-            raise ValueError(f"Unknown model \"{model_name}\"")
+            raise ValueError(f'Unknown model "{model_name}"')
 
         self.decoder_start_token_id = 1
         self.eos_token_id = 2
@@ -60,7 +60,9 @@ class MoonshineOnnxModel(object):
         last_hidden_state = self.encoder.run(None, dict(input_values=audio))[0]
 
         past_key_values = {
-            f"past_key_values.{i}.{a}.{b}": np.zeros((0, self.num_key_value_heads, 1, self.head_dim), dtype=np.float32)
+            f"past_key_values.{i}.{a}.{b}": np.zeros(
+                (0, self.num_key_value_heads, 1, self.head_dim), dtype=np.float32
+            )
             for i in range(self.num_layers)
             for a in ("decoder", "encoder")
             for b in ("key", "value")
