@@ -1,18 +1,19 @@
-def _get_onnx_weights(model_name):
+def _get_onnx_weights(model_name, precision="float"):
     from huggingface_hub import hf_hub_download
     
     if model_name not in ["tiny", "base"]:
         raise ValueError(f"Unknown model \"{model_name}\"")
-    repo = f"onnx-community/moonshine-{model_name}-ONNX"
+    repo = "UsefulSensors/moonshine"
+    subfolder = f"onnx/merged/{model_name}/{precision}"
 
     return (
-        hf_hub_download(repo, f"{x}.onnx", subfolder="onnx")
+        hf_hub_download(repo, f"{x}.onnx", subfolder=subfolder)
         for x in ("encoder_model", "decoder_model_merged")
     )
 
 
 class MoonshineOnnxModel(object):
-    def __init__(self, models_dir=None, model_name=None):
+    def __init__(self, models_dir=None, model_name=None, model_precision="float"):
         import onnxruntime
 
         if models_dir is None:
@@ -20,7 +21,7 @@ class MoonshineOnnxModel(object):
                 model_name is not None
             ), "model_name should be specified if models_dir is not"
             encoder, decoder = (
-                self._load_weights_from_hf_hub(model_name)
+                self._load_weights_from_hf_hub(model_name, model_precision)
             )
         else:
             encoder, decoder = [
@@ -44,9 +45,9 @@ class MoonshineOnnxModel(object):
         self.decoder_start_token_id = 1
         self.eos_token_id = 2
 
-    def _load_weights_from_hf_hub(self, model_name):
+    def _load_weights_from_hf_hub(self, model_name, model_precision):
         model_name = model_name.split("/")[-1]
-        return _get_onnx_weights(model_name)
+        return _get_onnx_weights(model_name, model_precision)
 
     def generate(self, audio, max_len=None):
         "audio has to be a numpy array of shape [1, num_audio_samples]"
