@@ -4,13 +4,39 @@ from pathlib import Path
 import re
 import tensorflow as tf
 
+def _get_tflite_weights(model_name, precision="float"):
+    from huggingface_hub import hf_hub_download
+
+    if model_name not in ["tiny", "base"]:
+        raise ValueError(f'Unknown model "{model_name}"')
+    repo = "UsefulSensors/moonshine"
+    subfolder = f"tflite/{model_name}/{precision}"
+
+    return (
+        hf_hub_download(repo, f"{x}.tfl", subfolder=subfolder)
+        for x in ("decoder_initial", "decoder", "encoder", "preprocessor")
+    )
+
 
 class MoonshineTFLite:
-    def __init__(self, model_dir=os.path.join("base", "float")):
-        self.preprocessor = tf.lite.Interpreter(os.path.join(model_dir, "preprocessor.tfl"))
-        self.encoder = tf.lite.Interpreter(os.path.join(model_dir, "encoder.tfl"))
-        self.decoder_initial = tf.lite.Interpreter(os.path.join(model_dir, "decoder_initial.tfl"))
-        self.decoder = tf.lite.Interpreter(os.path.join(model_dir, "decoder.tfl"))
+    def __init__(self, model_dir=None, model_name=None, model_precision="float"): 
+        if model_dir is None:
+            assert model_name is not None, (
+                "model_name should be specified if models_dir is not"
+            )
+            decoder_initial, decoder, encoder, preprocessor = self._load_weights_from_hf_hub(
+                model_name, model_precision
+            )
+        else:
+            decoder_initial, decoder, encoder, preprocessor = [
+                f"{model_dir}/{x}.tfl"
+                for x in ("decoder_initial", "decoder", "encoder", "preprocessor")
+            ]
+ 
+        self.preprocessor = tf.lite.Interpreter(preprocessor)
+        self.encoder = tf.lite.Interpreter(encoder)
+        self.decoder_initial = tf.lite.Interpreter(decoder_initial)
+        self.decoder = tf.lite.Interpreter(decoder)
 
         self.preprocessor.allocate_tensors()
         self.encoder.allocate_tensors()
@@ -68,6 +94,9 @@ class MoonshineTFLite:
 
         return indices
 
+    def _load_weights_from_hf_hub(self, model_name, model_precision):
+        model_name = model_name.split("/")[-1]
+        return _get_tflite_weights(model_name, model_precision)
 
     def _invoke_tflite(self, interpreter, args, cached_decoder=False):
         input_details = interpreter.get_input_details()
@@ -119,15 +148,25 @@ if __name__ == '__main__':
 
     ASSETS_DIR = os.path.join(Path(__file__).parents[1], "moonshine", "assets")
 
-    model = MoonshineTFLite()
-    tokenizer_filename = os.path.join(ASSETS_DIR, "tokenizer.json")
-    print(tokenizer_filename)
-    tokenizer = tokenizers.Tokenizer.from_file(tokenizer_filename)
-
     if len(sys.argv) < 2:
         audio_filename = os.path.join(ASSETS_DIR, "beckett.wav")
     else:
         audio_filename = sys.argv[1]
+
+    if len(sys.argv) < 3:
+        model_name = "moonshine/base"
+    else:
+        model_name = sys.argv[2]
+
+    if len(sys.argv) < 4:
+        model_dir = None
+    else:
+        model_name = None
+        model_dir = sys.argv[3]
+
+    model = MoonshineTFLite(model_name=model_name, model_dir=model_dir)
+    tokenizer_filename = os.path.join(ASSETS_DIR, "tokenizer.json")
+    tokenizer = tokenizers.Tokenizer.from_file(tokenizer_filename)
 
     audio, sr = torchaudio.load(audio_filename)
     if sr != 16000:
