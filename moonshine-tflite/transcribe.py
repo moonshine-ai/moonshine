@@ -20,10 +20,20 @@ def _get_tflite_weights(model_name, precision="float"):
 
 class MoonshineTFLite:
     def __init__(self, model_dir=None, model_name=None, model_precision="float"): 
+        assert model_name is not None, (
+            "model_name should always be specified"
+        )
+        assert model_name in ["moonshine/tiny", "moonshine/base"], (
+            "model_name should be 'moonshine/tiny' or 'moonshine/base'"
+        )
+        # These orders were obtained by loading the model in Netron, searching
+        # for "StatefulPartitionedCall_" and observing the results.
+        if model_name == "moonshine/tiny":
+            self.decoder_layer_order = [0, 1, 12, 20, 21, 24, 2, 5, 6, 9, 10, 14, 15]
+        elif model_name == "moonshine/base":
+            self.decoder_layer_order = [0, 1, 12, 28, 29, 32, 2, 5, 6, 9, 10, 14, 15, 18, 19, 22, 24]
+        
         if model_dir is None:
-            assert model_name is not None, (
-                "model_name should be specified if models_dir is not"
-            )
             decoder_initial, decoder, encoder, preprocessor = self._load_weights_from_hf_hub(
                 model_name, model_precision
             )
@@ -81,7 +91,7 @@ class MoonshineTFLite:
 
         # Since outputs are interleaved, there is no clean way to auto map them,
         # henice this horrible manual map.
-        names_self_attn = [f'StatefulPartitionedCall_1:{d}' for d in [0, 1, 12, 28, 29, 32, 2, 5, 6, 9, 10, 14, 15, 18, 19, 22, 24]]
+        names_self_attn = [f'StatefulPartitionedCall_1:{d}' for d in self.decoder_layer_order]
         indices_self_attn = [name_dict[key] for key in names_self_attn]
 
         # Logits should be first output.
