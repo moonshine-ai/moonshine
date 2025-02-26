@@ -1,3 +1,4 @@
 silero_vad
 sounddevice
+fastrtc>=0.0.6
 useful-moonshine-onnx@git+https://git@github.com/usefulsensors/moonshine.git#subdirectory=moonshine-onnx
