@@ -3,20 +3,21 @@
 This directory contains scripts to demonstrate the capabilities of the
 Moonshine ASR models.
 
-- [Moonshine Demos](#moonshine-demos)
-- [Demo: Running in the browser](#demo-running-in-the-browser)
-  - [Installation](#installation)
-- [Demo: Live captioning from microphone input](#demo-live-captioning-from-microphone-input)
-  - [Installation](#installation-1)
-    - [0. Setup environment](#0-setup-environment)
-    - [1. Clone the repo and install extra dependencies](#1-clone-the-repo-and-install-extra-dependencies)
-      - [Ubuntu: Install PortAudio](#ubuntu-install-portaudio)
-  - [Running the demo](#running-the-demo)
-  - [Script notes](#script-notes)
-    - [Speech truncation and hallucination](#speech-truncation-and-hallucination)
-    - [Running on a slower processor](#running-on-a-slower-processor)
-    - [Metrics](#metrics)
-- [Citation](#citation)
+-   [Moonshine Demos](#moonshine-demos)
+-   [Demo: Running in the browser](#demo-running-in-the-browser)
+    -   [Installation](#installation)
+-   [Demo: Live captioning from microphone input](#demo-live-captioning-from-microphone-input)
+    -   [Installation](#installation-1)
+        -   [0. Setup environment](#0-setup-environment)
+        -   [1. Clone the repo and install extra dependencies](#1-clone-the-repo-and-install-extra-dependencies)
+            -   [Ubuntu: Install PortAudio](#ubuntu-install-portaudio)
+    -   [Running the demo](#running-the-demo)
+    -   [Script notes](#script-notes)
+        -   [Speech truncation and hallucination](#speech-truncation-and-hallucination)
+        -   [Running on a slower processor](#running-on-a-slower-processor)
+        -   [Metrics](#metrics)
+-   [Demo: Live captioning a WebRTC stream with FastRTC](#demo-live-captioning-a-webrtc-stream-with-fastrtc)
+-   [Citation](#citation)
 
 # Demo: Running in the browser
 
@@ -60,10 +61,10 @@ The [`moonshine-onnx/live_captions.py`](/demo/moonshine-onnx/live_captions.py) s
 
 The following steps have been tested in `uv` virtual environments on these platforms:
 
-- macOS 14.1 on a MacBook Pro M3
-- Ubuntu 22.04 VM on a MacBook Pro M2
-- Ubuntu 24.04 VM on a MacBook Pro M2
-- Debian 12.8 (64-bit) on a Raspberry Pi 5 (Model B Rev 1.0)
+-   macOS 14.1 on a MacBook Pro M3
+-   Ubuntu 22.04 VM on a MacBook Pro M2
+-   Ubuntu 24.04 VM on a MacBook Pro M2
+-   Debian 12.8 (64-bit) on a Raspberry Pi 5 (Model B Rev 1.0)
 
 ## Installation
 
@@ -104,7 +105,7 @@ sudo apt install -y portaudio19-dev
 
 First, check that your microphone is connected and that the volume setting is not muted in your host OS or system audio drivers. Then, run the script:
 
-``` shell
+```shell
 python3 moonshine/demo/moonshine-onnx/live_captions.py
 ```
 
@@ -137,7 +138,7 @@ This is an example of the Moonshine base model being used to generate live capti
 
 For comparison, this is the `faster-whisper` base model on the same instance.
 The value of `MIN_REFRESH_SECS` was increased as the model inference is too slow
-for a value of 0.2 seconds.  Our Moonshine base model runs ~ 7x faster for this
+for a value of 0.2 seconds. Our Moonshine base model runs ~ 7x faster for this
 example.
 
 ```console
@@ -178,16 +179,34 @@ If you run this script on a slower processor, consider using the `tiny` model.
 python3 ./moonshine/demo/moonshine-onnx/live_captions.py --model_name moonshine/tiny
 ```
 
-The value of `MIN_REFRESH_SECS` will be ineffective when the model inference time exceeds that value.  Conversely on a faster processor consider reducing the value of `MIN_REFRESH_SECS` for more frequent caption updates.  On a slower processor you might also consider reducing the value of `MAX_SPEECH_SECS` to avoid slower model inferencing encountered with longer speech segments.
+The value of `MIN_REFRESH_SECS` will be ineffective when the model inference time exceeds that value. Conversely on a faster processor consider reducing the value of `MIN_REFRESH_SECS` for more frequent caption updates. On a slower processor you might also consider reducing the value of `MAX_SPEECH_SECS` to avoid slower model inferencing encountered with longer speech segments.
 
 ### Metrics
 
 The metrics shown on program exit will vary based on the talker's speaking style. If the talker speaks with more frequent pauses, the speech segments are shorter and the mean inference time will be lower. This is a feature of the Moonshine model described in [our paper](https://arxiv.org/abs/2410.15608). When benchmarking, use the same speech, e.g., a recording of someone talking.
 
+# Demo: Live captioning a WebRTC stream with FastRTC
+
+https://github.com/user-attachments/assets/dbf21903-7d95-46c0-b07e-d5cba8a0d45b
+
+The [`moonshine-onnx/live_captions_web.py`](/demo/moonshine-onnx/live_captions_web.py) script demonstrates the use of Moonshine for live captioning of a WebRTC stream using [FastRTC](https://github.com/freddyaboulton/fastrtc). This demo is intended to show ML engineers who are mainly comfortable with or prefer Python how to build realtime web applications with Moonshine entirely in Python. To run the demo, make sure you've installed the requirements:
+
+```shell
+uv pip install -r moonshine/demo/moonshine-onnx/requirements.txt
+```
+
+Then run the script and navigate to the Gradio UI in your browser using the URL given:
+
+```shell
+python moonshine/demo/moonshine-onnx/live_captions_web.py
+...
+* Running on local URL:  http://127.0.0.1:7860
+```
 
 # Citation
 
 If you benefit from our work, please cite us:
+
 ```
 @misc{jeffries2024moonshinespeechrecognitionlive,
       title={Moonshine: Speech Recognition for Live Transcription and Voice Commands},
