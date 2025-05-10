@@ -5,9 +5,9 @@ from setuptools import find_packages, setup
 
 
 def read_version(fname="moonshine/version.py"):
-    exec(compile(open(fname, encoding="utf-8").read(), fname, "exec"))
-    return locals()["__version__"]
-
+    my_locals = {}
+    exec(compile(open(fname, encoding="utf-8").read(), fname, "exec"), locals=my_locals)
+    return my_locals["__version__"]
 
 setup(
     name="useful-moonshine",
