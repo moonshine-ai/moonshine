@@ -6,7 +6,7 @@ from setuptools import setup
 
 def read_version(fname="src/version.py"):
     my_locals = {}
-    exec(compile(open(fname, encoding="utf-8").read(), fname, "exec"), locals=my_locals)
+    exec(compile(open(fname, encoding="utf-8").read(), fname, "exec"), globals(), my_locals)
     return my_locals["__version__"]
 
 setup(
