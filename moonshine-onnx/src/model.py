@@ -42,7 +42,7 @@ class MoonshineOnnxModel(object):
 
         # handle e.g., "moonshine/tiny" and "tiny"
         if model_name is not None:
-            model_name = model_name.split('/')[-1]
+            model_name = model_name.split("/")[-1]
 
         if models_dir is None:
             assert model_name is not None, (
