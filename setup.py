@@ -6,8 +6,13 @@ from setuptools import find_packages, setup
 
 def read_version(fname="moonshine/version.py"):
     my_locals = {}
-    exec(compile(open(fname, encoding="utf-8").read(), fname, "exec"), globals(), my_locals)
+    exec(
+        compile(open(fname, encoding="utf-8").read(), fname, "exec"),
+        globals(),
+        my_locals,
+    )
     return my_locals["__version__"]
+
 
 setup(
     name="useful-moonshine",
@@ -19,7 +24,7 @@ setup(
     readme="README.md",
     python_requires=">=3.8",
     author="Useful Sensors",
-    url="https://github.com/usefulesensors/moonshine",
+    url="https://github.com/moonshine-ai/moonshine",
     license="MIT",
     packages=find_packages(exclude=["tests*"]),
     install_requires=[
