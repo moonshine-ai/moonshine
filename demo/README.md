@@ -31,7 +31,7 @@ You must have Node.js (or another JavaScript toolkit like [Bun](https://bun.sh/)
 Once you have your JavaScript toolkit installed, clone the `moonshine` repo and navigate to this directory:
 
 ```shell
-git clone git@github.com:usefulsensors/moonshine.git
+git clone git@github.com:moonshine-ai/moonshine.git
 cd moonshine/demo/moonshine-web
 ```
 
@@ -77,7 +77,7 @@ Steps to set up a virtual environment are available in the [top level README](/R
 You will need to clone the repo first:
 
 ```shell
-git clone git@github.com:usefulsensors/moonshine.git
+git clone git@github.com:moonshine-ai/moonshine.git
 ```
 
 Then install the demo's requirements including mitigation for a failure to build
