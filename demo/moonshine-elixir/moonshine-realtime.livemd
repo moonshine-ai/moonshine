@@ -1,0 +1,267 @@
+<!-- livebook:{"app_settings":{"access_type":"public","output_type":"rich","show_source":true,"slug":"vad"}} -->
+
+# Moonshine Elixir
+
+```elixir
+System.put_env(
+  "PATH",
+  "/usr/bin:/opt/homebrew/bin:/Library/Developer/CommandLineTools/usr/bin:#{System.get_env("PATH")}"
+)
+
+
+Mix.install(
+  [
+    :nx,
+    :bumblebee,
+    :kino_bumblebee,
+    :exla,
+    :ortex,
+    :kino,
+    :jason,
+    :kino_live_audio
+  ],
+  config: [nx: [default_backend: EXLA.Backend]]
+)
+
+```
+
+## Section
+
+```elixir
+defmodule Moonshine.Model do
+  # Set the correct assets directory
+  @assets_dir Path.expand("path-to-assets-including-models-and-tokenziers") 
+
+  def load_audio(audio) when is_tuple(audio) do
+    Nx.reshape(audio, [1, Nx.axis_size(audio, 0)])
+  end
+
+  def assert_audio_size(audio) do
+    shape = Nx.shape(audio)
+    unless length(shape) == 2 do
+      raise "audio should be of shape [batch, samples]"
+    end
+    num_samples = elem(shape, 1)
+    num_seconds = num_samples / 16_000
+    unless 0.1 < num_seconds and num_seconds < 64 do
+      raise "Moonshine models support audio segments between 0.1s and 64s."
+    end
+    num_seconds
+  end
+
+  def transcribe(audio, model \\ "moonshine/base") do
+    model = if is_binary(model), do: load_model(model), else: model
+    audio = load_audio(audio)
+    _ = assert_audio_size(audio)
+    tokens = model.generate(audio)
+    tokenizer = load_tokenizer()
+    decoded = decode_tokens(tokens, tokenizer)
+    decoded
+  end
+  
+  def decode_tokens(tokens, tokenizer) do
+    tokens |> Enum.map(&Map.fetch!(tokenizer, &1)) |> Enum.join(" ")
+  end
+
+  def id_to_label(id) do
+    {:ok, config_json} = Path.join(@assets_dir, "config.json")
+    {:ok, %{"id2label" => id2label}} = Jason.decode(config_json)
+    Map.get(id2label, to_string(id))
+  end
+
+  def load_tokenizer do
+    {:ok, tokenizer} = Tokenizers.Tokenizer.from_file(Path.join(@assets_dir, "tokenizer.json"))
+    tokenizer
+  end
+
+  def load_model(model_name) do
+    IO.puts("Loading Module")
+    [preprocess, encode, uncached_decode, cached_decode] = get_onnx_weights(model_name)
+    preprocess = Ortex.load(preprocess)
+    encode = Ortex.load(encode)
+    uncached_decode = Ortex.load(uncached_decode)
+    cached_decode = Ortex.load(cached_decode)
+    %{
+      preprocess: preprocess,
+      encode: encode,
+      uncached_decode: uncached_decode,
+      cached_decode: cached_decode
+    }
+  end
+
+  def get_onnx_weights(_model_name) do
+    # model_name = String.split(model_name, "/") |> List.last()
+    onnx_files = ["preprocess", "encode", "uncached_decode", "cached_decode"]
+    Enum.map(onnx_files, &Path.join(@assets_dir, "#{&1}.onnx"))
+  end
+
+  def generate(model, audio, max_len \\ nil) do
+    max_len = if max_len == nil do
+       div(Nx.axis_size(audio, 1), 16_000) * 6
+    end
+    preprocessed = model.preprocess.run(%{"args_0" => audio}) |> hd()
+    seq_len = Nx.shape(preprocessed) |> elem(1)
+    context = model.encode.run(%{"args_0" => preprocessed, "args_1" => [seq_len]}) |> hd()
+    inputs = Nx.tensor([[1]], type: :f32)
+    seq_len_tensor = Nx.tensor([1], type: :i64)
+    tokens = [1]
+    {logits, cache} = model.uncached_decode.run(%{
+      "args_0" => inputs,
+      "args_1" => context,
+      "args_2" => seq_len_tensor
+    })
+    next_token = Nx.argmax(logits, axes: -1) |> Nx.to_number()
+    tokens = tokens ++ [next_token]
+    tokens
+  end
+end
+```
+
+```elixir
+tokenizer = Moonshine.Model.load_tokenizer()
+```
+
+```elixir
+Tokenizers.Tokenizer.decode(
+    tokenizer,
+    [1, 1128, 29915, 29879, 372, 2675, 9826, 29973, 2]
+  )
+```
+
+```elixir
+model = Moonshine.Model.load_model("base")
+model
+```
+
+```elixir
+model.encode
+```
+
+```elixir
+model.uncached_decode
+```
+
+```elixir
+model.cached_decode
+```
+
+```elixir
+defmodule SequenceParser do
+  def generate_transcription(model, tokenizer, audio) do
+    max_len = div(Nx.axis_size(audio, 1), 16_000) * 6
+    {preprocess_output} = Ortex.run(model.preprocess, {audio})
+    seq_len = Nx.tensor([Nx.shape(preprocess_output) |> elem(1)])
+    {context} = Ortex.run(model.encode, {preprocess_output, seq_len})
+    # IO.inspect(context, label: "Root Seq Length")
+    inputs = Nx.tensor([[1]])
+    seq_len = Nx.tensor([1])
+    tokens = [1]
+    
+    [logits | cache] = Ortex.run(model.uncached_decode, {
+      inputs,
+      context,
+      seq_len
+    }) |> Tuple.to_list()
+    next_token = logits |> Nx.backend_transfer() |> Nx.squeeze() |> Nx.argmax() |> Nx.to_number()
+    tokens = tokens ++ [next_token]
+    new_seq_len = [length(tokens)]
+    new_inputs = [[next_token]]
+    tokens = generate_loop(model, context, tokens, cache, new_seq_len, new_inputs, max_len)
+    {:ok, result} = Tokenizers.Tokenizer.decode(
+                      tokenizer, tokens |> List.flatten())
+    result
+  end
+  
+  def generate_loop(model, context, tokens, cache, seq_len, inputs, max_len) do
+    if length(tokens) >= max_len do
+        [tokens]
+    else
+        run_args = [
+            Nx.tensor(inputs),
+            context,
+            Nx.tensor(seq_len)
+        ] ++ cache
+        |> List.to_tuple()
+      
+        [next_logits | new_cache] = Ortex.run(model.cached_decode, run_args) |> Tuple.to_list()
+        next_token = next_logits |> Nx.backend_transfer() |> Nx.argmax() |> Nx.to_number()
+        tokens = tokens ++ [next_token]
+        if next_token == 2 do
+            [tokens]
+        else
+            new_seq_len = [length(tokens)]
+            new_inputs = [[next_token]]
+            generate_loop(model, context, tokens, new_cache, new_seq_len, new_inputs, max_len)
+        end
+    end
+  end
+end
+```
+
+```elixir
+liveAudio = KinoLiveAudio.new(chunk_size: 500, unit: :ms, sample_rate: 16000)
+```
+
+```elixir
+defmodule Moonshine.S2TState do
+  use Agent
+
+  def start_link(initial_value) do
+    Agent.start_link(fn -> initial_value end, name: __MODULE__)
+  end
+
+  def value do
+    Agent.get(__MODULE__, & &1)
+  end
+end
+```
+
+```elixir
+Moonshine.S2TState.start_link(%{model: model, tokenizer: tokenizer})
+```
+
+```elixir
+defmodule Moonshine.SpeechToText do
+  def transcribe(audio) do
+    %{model: model, tokenizer: tokenizer} = Moonshine.S2TState.value()
+    transcription = SequenceParser.generate_transcription(
+      model, 
+      tokenizer,
+      audio)
+    transcription
+  end
+end
+```
+
+```elixir
+init_state = %{
+  audio: []
+}
+
+live_transcription = Kino.Frame.new()
+
+
+liveAudio
+|> Kino.Control.stream()
+|> Kino.listen(init_state, fn
+  %{event: :start_audio}, state ->
+    IO.puts("Start Audio")
+    {:cont, state}
+  %{event: :stop_audio}, state ->
+    IO.puts("Stop Audio")
+    {:cont, state}
+  %{event: :audio_chunk, chunk: data}, state ->
+    audio = state.audio ++ data
+
+     audio_tensor = 
+      Nx.tensor(audio, type: :f32)
+      |> Nx.reshape({1, :auto})
+    
+    transcription = Moonshine.SpeechToText.transcribe(audio_tensor)
+    Kino.Frame.render(live_transcription, Kino.Text.new(transcription, chunk: true))
+    state = %{state | audio: audio}
+    {:cont, state}
+end)
+
+Kino.Layout.grid([live_transcription], boxed: true, gap: 16)
+```

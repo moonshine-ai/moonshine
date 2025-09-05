@@ -17,6 +17,7 @@ Moonshine ASR models.
         -   [Running on a slower processor](#running-on-a-slower-processor)
         -   [Metrics](#metrics)
 -   [Demo: Live captioning a WebRTC stream with FastRTC](#demo-live-captioning-a-webrtc-stream-with-fastrtc)
+-   [Demo: Elixir w/ Ortex](#demo-elixir-livebook-with-ortex)
 -   [Citation](#citation)
 
 # Demo: Running in the browser
@@ -201,6 +202,11 @@ Then run the script and navigate to the Gradio UI in your browser using the URL 
 python moonshine/demo/moonshine-onnx/live_captions_web.py
 ...
 * Running on local URL:  http://127.0.0.1:7860
+```
+
+# Demo: Elixir Livebook with Ortex
+
+The [`moonshine-elixir/moonshine-realtime.livemd`](/demo/moonshine-elixir/moonshine-realtime.livemd) script demonstrates the use of Moonshine with Elixir [Livebook](https://https://github.com/livebook-dev/livebook). This demo is intended to show ML engineers who are mainly comfortable with or prefer Elixir how to build realtime web applications with Moonshine entirely in Elixir. To run the demo, make sure you've installed the requirements for livebook and run the file. Make sure you change the location of the folder for the assets that includes the models as well as the tokenzier.json file
 ```
 
 # Citation
