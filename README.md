@@ -4,7 +4,7 @@
 
 <h1 style="text-align:center;">Moonshine</h1>
 
-[[Blog]](https://petewarden.com/2024/10/21/introducing-moonshine-the-new-state-of-the-art-for-speech-to-text/) [[Paper 1]](https://arxiv.org/abs/2410.15608) [[Paper 2]](https://arxiv.org/abs/2509.02523) [[Model Card]](https://github.com/moonshine-ai/moonshine/blob/main/model-card.md) [[Podcast]](https://notebooklm.google.com/notebook/d787d6c2-7d7b-478c-b7d5-a0be4c74ae19/audio)
+[[Blog]](https://petewarden.com/2024/10/21/introducing-moonshine-the-new-state-of-the-art-for-speech-to-text/) [[Paper 1]](https://arxiv.org/abs/2410.15608) [[Paper 2]](https://arxiv.org/abs/2509.02523) [[Model Card]](https://github.com/moonshine-ai/moonshine/blob/main/model-card.md) [[Podcast]](https://notebooklm.google.com/notebook/d787d6c2-7d7b-478c-b7d5-a0be4c74ae19/audio) | [[Join our Discord for questions and support](https://discord.gg/27qp9zSRXF)]
 
 Moonshine is a family of speech-to-text models optimized for fast and accurate automatic speech recognition (ASR) on resource-constrained devices. It is well-suited to real-time, on-device applications like live transcription and voice command recognition. English Moonshine obtains word-error rates (WER) better than similarly-sized Tiny and Base Whisper on the [OpenASR leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard), and non-English Moonshine variants [outperform](#supported-languages) Whisper Small and Medium, which are 9x and 28x larger, respectively.
 
