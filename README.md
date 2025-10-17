@@ -58,6 +58,7 @@ With the release of new Moonshine languages, we have deprecated the Keras-based 
   - [Live Captions](#live-captions)
   - [CTranslate2](#ctranslate2)
   - [Web Applications](#web-applications)
+  - [Discord](#discord)
 - [License](#license)
 - [Citation](#citation)
 
@@ -137,6 +138,10 @@ The files for the CTranslate2 versions of Moonshine are available at [huggingfac
 ### Web Applications
 
 Use our [MoonshineJS](https://github.com/moonshine-ai/moonshine-js) library to run Moonshine models in the web browser with a few lines of Javascript.
+
+### Discord
+
+We have [an active Discord server](https://discord.gg/27qp9zSRXF) where we're happy to answer questions, offer support, and generally geek out about voice AI, so please come [join the conversations](https://discord.gg/27qp9zSRXF). 
 
 ## License
 All inference code in this repo is released under the MIT license. The English Moonshine models are also released under the MIT license. 
