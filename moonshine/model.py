@@ -3,9 +3,22 @@ from keras import Model
 from einops import rearrange
 
 
+# See https://github.com/tensorflow/tensorflow/issues/47927#issuecomment-1499781808
+# for why this workaround is needed to get consistent output ordering when exporting to TFLite.
+def add_output_identity_dict(x):
+    if not isinstance(x, list):
+        x = [x]
+    result = {}
+    for layer in x:
+        identity_layer = keras.layers.Identity()(layer)
+        identity_layer.name = "output_identity_" + layer.name
+        result[layer.name] = identity_layer
+    return result
+
+
 class AudioPreprocessor(object):
     def __init__(self, dim):
-        inputs = keras.layers.Input([None, 1])
+        inputs = keras.layers.Input([None, 1], name="audio_input")
         conv1 = keras.layers.Conv1D(
             filters=dim, kernel_size=127, strides=64, use_bias=False
         )
@@ -23,6 +36,8 @@ class AudioPreprocessor(object):
             [conv1, tanh, group_norm, conv2, gelu1, conv3, gelu2]
         )
         outputs = preprocess(inputs)
+        outputs.name = "audio_features"
+        outputs = add_output_identity_dict(outputs)
         self.preprocess = Model(inputs=inputs, outputs=outputs)
 
     def set_weights(self, weights):
@@ -220,14 +235,18 @@ class Encoder(object):
         final_norm = keras.layers.LayerNormalization(
             axis=-1, epsilon=1e-5, center=False, scale=True
         )
-        inputs = keras.layers.Input(shape=[None, dim])
-        seq_len = keras.layers.Input(shape=[], batch_size=1, dtype="int32")
+        inputs = keras.layers.Input(shape=[None, dim], name="audio_features")
+        seq_len = keras.layers.Input(
+            shape=[], batch_size=1, dtype="int32", name="seq_len"
+        )
         pos_emb = rot_pos_emb(Arange()(inputs=seq_len))
 
         x = inputs
         for layer in encoder_layers:
             x = layer(x, pos_emb)
         outputs = final_norm(x)
+        outputs.name = "last_hidden_state"
+        outputs = add_output_identity_dict(outputs)
         self.encoder = Model(inputs=[inputs, seq_len], outputs=outputs)
 
     def set_weights(self, weights):
@@ -504,9 +523,13 @@ class Decoder(object):
         )
 
     def get_uncached_call(self, dim, rot_embed_dim):
-        inputs = keras.layers.Input(shape=[None], dtype="int32")
-        seq_len = keras.layers.Input(shape=[], batch_size=1, dtype="int32")
-        context = keras.layers.Input(shape=[None, dim], dtype="float32")
+        inputs = keras.layers.Input(shape=[None], dtype="int32", name="input_ids")
+        seq_len = keras.layers.Input(
+            shape=[], batch_size=1, dtype="int32", name="seq_len"
+        )
+        context = keras.layers.Input(
+            shape=[None, dim], dtype="float32", name="last_hidden_state"
+        )
         rot_pos_emb = RotaryEmbedding(rot_embed_dim)
 
         x = inputs
@@ -514,31 +537,51 @@ class Decoder(object):
         rot_pos_emb = rot_pos_emb(Arange()(inputs=seq_len))
 
         outputs = []
-        for d in self.decoder_layers:
+        for i, d in enumerate(self.decoder_layers):
             x, cache_k, cache_v, x_attn_cache_k, x_attn_cache_v = d.uncached_call(
                 [x, context, rot_pos_emb]
             )
+            cache_k.name = f"cache_k_{i}"
+            cache_v.name = f"cache_v_{i}"
+            x_attn_cache_k.name = f"x_attn_cache_k_{i}"
+            x_attn_cache_v.name = f"x_attn_cache_v_{i}"
             outputs.extend([cache_k, cache_v, x_attn_cache_k, x_attn_cache_v])
         x = self.post_norm(x)
 
         logits = self.embedding_layer(x, reverse=True)
-
+        logits.name = "logits"
         return Model(inputs=[inputs, context, seq_len], outputs=[logits] + outputs)
 
     def get_cached_call(self, dim, rot_embed_dim, key_dim, n_head, n_layers):
-        inputs = keras.layers.Input(shape=[None], dtype="int32")
-        seq_len = keras.layers.Input(shape=[], batch_size=1, dtype="int32")
-        context = keras.layers.Input(shape=[None, dim], dtype="float32")
+        inputs = keras.layers.Input(shape=[None], dtype="int32", name="input_ids")
+        seq_len = keras.layers.Input(
+            shape=[], batch_size=1, dtype="int32", name="seq_len"
+        )
+        context = keras.layers.Input(
+            shape=[None, dim], dtype="float32", name="last_hidden_state"
+        )
         rot_pos_emb = RotaryEmbedding(rot_embed_dim)
 
         cache = [
             [
-                keras.layers.Input(shape=[None, n_head, key_dim], dtype="float32"),
-                keras.layers.Input(shape=[None, n_head, key_dim], dtype="float32"),
-                keras.layers.Input(shape=[None, n_head, key_dim], dtype="float32"),
-                keras.layers.Input(shape=[None, n_head, key_dim], dtype="float32"),
+                keras.layers.Input(
+                    shape=[None, n_head, key_dim], dtype="float32", name=f"cache_k_{i}"
+                ),
+                keras.layers.Input(
+                    shape=[None, n_head, key_dim], dtype="float32", name=f"cache_v_{i}"
+                ),
+                keras.layers.Input(
+                    shape=[None, n_head, key_dim],
+                    dtype="float32",
+                    name=f"x_attn_cache_k_{i}",
+                ),
+                keras.layers.Input(
+                    shape=[None, n_head, key_dim],
+                    dtype="float32",
+                    name=f"x_attn_cache_v_{i}",
+                ),
             ]
-            for _ in range(n_layers)
+            for i in range(n_layers)
         ]
         cache = sum(cache, [])
 
@@ -559,6 +602,8 @@ class Decoder(object):
                     rot_pos_emb,
                 ]
             )
+            new_cache_k.name = f"cache_k_{i}"
+            new_cache_v.name = f"cache_v_{i}"
             outputs.extend(
                 [new_cache_k, new_cache_v, cache[4 * i + 2], cache[4 * i + 3]]
             )
@@ -566,6 +611,7 @@ class Decoder(object):
         x = self.post_norm(x)
 
         logits = self.embedding_layer(x, reverse=True)
+        logits.name = "logits"
 
         return Model(
             inputs=[inputs, context, seq_len] + cache, outputs=[logits] + outputs
@@ -611,14 +657,15 @@ class Moonshine(object):
         if max_len is None:
             # max 6 tokens per second of audio
             max_len = int((audio.shape[-1] / 16_000) * 6)
-        audio_preprocessed = self.preprocessor(audio)
-        audio_features = self.encoder(
-            audio_preprocessed,
-            keras.ops.convert_to_tensor([audio_preprocessed.shape[-2]]),
-        )
+        audio_features = self.preprocessor(audio)["audio_features"]
+
+        last_hidden_state = self.encoder(
+            audio_features, keras.ops.convert_to_tensor([audio_features.shape[-2]])
+        )["last_hidden_state"]
+
         tokens = keras.ops.convert_to_tensor([[1]])
         seq_len = keras.ops.convert_to_tensor([1])
-        logits, *cache = self.decoder.uncached_call([tokens, audio_features, seq_len])
+        logits, *cache = self.decoder.uncached_call([tokens, last_hidden_state, seq_len])
         output = tokens
         for _ in range(max_len):
             tokens = keras.ops.argmax(logits, axis=-1)
@@ -627,7 +674,7 @@ class Moonshine(object):
                 break
             seq_len = seq_len + 1
             logits, *cache = self.decoder.cached_call(
-                [tokens, audio_features, seq_len] + cache
+                [tokens, last_hidden_state, seq_len] + cache
             )
 
         return keras.ops.convert_to_numpy(output)
