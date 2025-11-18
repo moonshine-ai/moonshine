@@ -45,9 +45,9 @@ class MoonshineOnnxModel(object):
             model_name = model_name.split("/")[-1]
 
         if models_dir is None:
-            assert model_name is not None, (
-                "model_name should be specified if models_dir is not"
-            )
+            assert (
+                model_name is not None
+            ), "model_name should be specified if models_dir is not"
             encoder, decoder = self._load_weights_from_hf_hub(
                 model_name, model_precision
             )
@@ -63,6 +63,9 @@ class MoonshineOnnxModel(object):
 
         self.encoder = onnxruntime.InferenceSession(encoder)
         self.decoder = onnxruntime.InferenceSession(decoder)
+
+        self.encoder_input_names = [x.name for x in self.encoder.get_inputs()]
+        self.decoder_input_names = [x.name for x in self.decoder.get_inputs()]
 
         if "tiny" in model_name:
             self.num_layers = 6
@@ -88,7 +91,13 @@ class MoonshineOnnxModel(object):
 
         import numpy as np
 
-        last_hidden_state = self.encoder.run(None, dict(input_values=audio))[0]
+        encoder_inputs = dict(input_values=audio)
+        audio_attention_mask = np.ones_like(audio, dtype=np.int64)
+
+        if "attention_mask" in self.encoder_input_names:
+            encoder_inputs = dict(attention_mask=audio_attention_mask, **encoder_inputs)
+
+        last_hidden_state = self.encoder.run(None, encoder_inputs)[0]
 
         past_key_values = {
             f"past_key_values.{i}.{a}.{b}": np.zeros(
@@ -109,6 +118,12 @@ class MoonshineOnnxModel(object):
                 use_cache_branch=[use_cache_branch],
                 **past_key_values,
             )
+
+            if "encoder_attention_mask" in self.decoder_input_names:
+                decoder_inputs = dict(
+                    encoder_attention_mask=audio_attention_mask, **decoder_inputs
+                )
+
             logits, *present_key_values = self.decoder.run(None, decoder_inputs)
             next_token = logits[0, -1].argmax().item()
             tokens.append(next_token)
