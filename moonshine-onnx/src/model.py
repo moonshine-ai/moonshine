@@ -45,9 +45,9 @@ class MoonshineOnnxModel(object):
             model_name = model_name.split("/")[-1]
 
         if models_dir is None:
-            assert (
-                model_name is not None
-            ), "model_name should be specified if models_dir is not"
+            assert model_name is not None, (
+                "model_name should be specified if models_dir is not"
+            )
             encoder, decoder = self._load_weights_from_hf_hub(
                 model_name, model_precision
             )
