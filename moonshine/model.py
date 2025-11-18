@@ -665,7 +665,9 @@ class Moonshine(object):
 
         tokens = keras.ops.convert_to_tensor([[1]])
         seq_len = keras.ops.convert_to_tensor([1])
-        logits, *cache = self.decoder.uncached_call([tokens, last_hidden_state, seq_len])
+        logits, *cache = self.decoder.uncached_call(
+            [tokens, last_hidden_state, seq_len]
+        )
         output = tokens
         for _ in range(max_len):
             tokens = keras.ops.argmax(logits, axis=-1)
