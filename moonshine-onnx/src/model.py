@@ -36,7 +36,7 @@ def _get_onnx_weights(model_name, precision="float"):
 
 class MoonshineOnnxModel(object):
     def __init__(
-        self, models_dir=None, model_name=None, model_precision="float", token_rate=None
+        self, models_dir=None, model_name=None, model_precision="float", token_rate=None, model_format="onnx"
     ):
         import onnxruntime
 
@@ -53,7 +53,7 @@ class MoonshineOnnxModel(object):
             )
         else:
             encoder, decoder = [
-                f"{models_dir}/{x}.onnx"
+                f"{models_dir}/{x}.{model_format}"
                 for x in ("encoder_model", "decoder_model_merged")
             ]
             self.token_rate = token_rate
