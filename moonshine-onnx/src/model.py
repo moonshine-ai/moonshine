@@ -1,29 +1,6 @@
-_MOONSHINE_FLAVORS = {
-    "tiny": {"language": "English", "token_rate": 6},
-    "tiny-ar": {"language": "Arabic", "token_rate": 13},
-    "tiny-zh": {"language": "Chinese", "token_rate": 13},
-    "tiny-ja": {"language": "Japanese", "token_rate": 13},
-    "tiny-ko": {"language": "Korean", "token_rate": 13},
-    "tiny-uk": {"language": "Ukrainian", "token_rate": 8},
-    "tiny-vi": {"language": "Vietnamese", "token_rate": 13},
-    "base": {"language": "English", "token_rate": 6},
-    "base-es": {"language": "Spanish", "token_rate": 6},
-}
-
-
-def get_supported_languages():
-    models = {k: v["language"] for k, v in _MOONSHINE_FLAVORS.items()}
-    languages = sorted(list(set(models.values())))
-    return {
-        l: [k for k, v in _MOONSHINE_FLAVORS.items() if v["language"] == l]
-        for l in languages
-    }
-
 
 def _get_onnx_weights(model_name, precision="float"):
     from huggingface_hub import hf_hub_download
-
-    assert model_name in _MOONSHINE_FLAVORS, f'Unknown model "{model_name}"'
 
     repo = "UsefulSensors/moonshine"
     subfolder = f"onnx/merged/{model_name}/{precision}"
@@ -56,10 +33,6 @@ class MoonshineOnnxModel(object):
                 f"{models_dir}/{x}.{model_format}"
                 for x in ("encoder_model", "decoder_model_merged")
             ]
-            self.token_rate = token_rate
-
-        if token_rate is None:
-            self.token_rate = _MOONSHINE_FLAVORS[model_name]["token_rate"]
 
         self.encoder = onnxruntime.InferenceSession(encoder)
         self.decoder = onnxruntime.InferenceSession(decoder)
@@ -87,7 +60,7 @@ class MoonshineOnnxModel(object):
     def generate(self, audio, max_len=None):
         "audio has to be a numpy array of shape [1, num_audio_samples]"
         if max_len is None:
-            max_len = int((audio.shape[-1] / 16_000) * self.token_rate)
+            max_len = 192
 
         import numpy as np
 

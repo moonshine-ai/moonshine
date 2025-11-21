@@ -3,7 +3,7 @@ from .version import __version__
 
 ASSETS_DIR = Path(__file__).parents[0] / "assets"
 
-from .model import MoonshineOnnxModel, get_supported_languages
+from .model import MoonshineOnnxModel
 from .transcribe import (
     transcribe,
     benchmark,
