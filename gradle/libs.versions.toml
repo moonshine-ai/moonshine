@@ -1,0 +1,38 @@
+[versions]
+agp = "8.5.2"
+kotlin = "2.1.10"
+junit = "4.13.2"
+junitVersion = "1.1.5"
+espressoCore = "3.5.1"
+appcompat = "1.6.1"
+material = "1.10.0"
+constraintlayout = "2.1.4"
+qnn-runtime = "2.33.0"
+qnn-litert-delegate = "2.33.0"
+tensorflow-lite = "2.14.0"
+google-auth = "1.19.0"
+flagkit-android = "1.0.0"
+kage = "0.3.0"
+encrypted-preferences = "1.1.0-alpha06"
+
+[libraries]
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
+espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
+appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
+qnn-runtime = { group = "com.qualcomm.qti", name = "qnn-runtime", version.ref = "qnn-runtime" }
+qnn-litert-delegate = { group = "com.qualcomm.qti", name = "qnn-litert-delegate", version.ref = "qnn-litert-delegate" }
+tensorflow-lite = { group = "org.tensorflow", name = "tensorflow-lite", version.ref = "tensorflow-lite" }
+tensorflow-lite-gpu = { group = "org.tensorflow", name = "tensorflow-lite-gpu", version.ref = "tensorflow-lite" }
+google-auth = { group = "com.google.auth", name = "google-auth-library-oauth2-http", version.ref = "google-auth" }
+flagkit-android = { group = "dev.carlsen.flagkit", name = "flagkit-android", version.ref = "flagkit-android" }
+kage = { group = "com.github.android-password-store", name = "kage", version.ref = "kage"}
+encrypted-preferences = { group = "androidx.security", name = "security-crypto", version.ref = "encrypted-preferences"}
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+

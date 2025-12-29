@@ -1,5 +1,6 @@
 #include "transcriber.h"
 
+#include <cstdio>
 #include <filesystem>
 #include <string>
 
@@ -24,7 +25,7 @@ void validate_model_arch(uint32_t model_arch) {
     }
   }
   throw std::runtime_error(
-      std::format("Invalid model architecture: {0}", model_arch));
+      "Invalid model architecture: " + std::to_string(model_arch));
 }
 } // namespace
 
@@ -44,7 +45,7 @@ Transcriber::Transcriber(const TranscriberOptions &options)
     this->stt_model = nullptr;
   } else {
     throw std::runtime_error(
-        std::format("Invalid model source: {0}", (int)(model_source)));
+        "Invalid model source: " + std::to_string((int)(model_source)));
   }
 }
 
@@ -55,8 +56,8 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
   }
   validate_model_arch(model_arch);
   if (!std::filesystem::exists(model_path)) {
-    throw std::runtime_error(std::format(
-        "Model directory does not exist at path '{0}'", model_path));
+    throw std::runtime_error(
+        "Model directory does not exist at path '" + std::string(model_path) + "'");
   }
   std::string encoder_model_path =
       append_path_component(model_path, "encoder_model.ort");
@@ -177,10 +178,9 @@ void Transcriber::add_audio_to_stream(int32_t stream_id,
   std::lock_guard<std::mutex> lock(this->streams_mutex);
   TranscriberStream *stream = this->streams[stream_id];
   if (!stream->vad->is_active()) {
-    std::string error_message = std::format(
-        "Adding new audio for stream with ID {0} but VAD is not active. Did "
-        "you call start_stream()?",
-        stream_id);
+    std::string error_message =
+        "Adding new audio for stream with ID " + std::to_string(stream_id) +
+        " but VAD is not active. Did you call start_stream()?";
     throw std::runtime_error(error_message);
   }
   stream->add_to_new_audio_buffer(audio_data, audio_length, sample_rate);
@@ -192,12 +192,14 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
   {
     std::lock_guard<std::mutex> lock(this->streams_mutex);
     if (this->streams.find(stream_id) == this->streams.end()) {
-      std::string error_message = std::format(
-          "Stream with ID {0} not found in {1} streams: ", stream_id,
-          this->streams.size());
+      std::string error_message =
+          "Stream with ID " + std::to_string(stream_id) + " not found in " +
+          std::to_string(this->streams.size()) + " streams: ";
       for (const auto &stream : this->streams) {
-        error_message += std::format("ID: {0}, Address: {1}\n", stream.first,
-                                     (void *)stream.second);
+        char addr_str[32];
+        snprintf(addr_str, sizeof(addr_str), "%p", (void *)stream.second);
+        error_message += "ID: " + std::to_string(stream.first) +
+                         ", Address: " + std::string(addr_str) + "\n";
       }
       throw std::runtime_error(error_message);
     }
@@ -206,7 +208,7 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
   stream = this->streams[stream_id];
   if (stream == nullptr) {
     std::string error_message =
-        std::format("Stream with ID {0} is null", stream_id);
+        "Stream with ID " + std::to_string(stream_id) + " is null";
     throw std::runtime_error(error_message);
   }
 
@@ -242,7 +244,9 @@ Transcriber::transcript_to_string(const struct transcript_t *transcript) {
   result += std::to_string(transcript->line_count) + " lines\n";
   for (size_t i = 0; i < transcript->line_count; i++) {
     const struct transcript_line_t &line = transcript->lines[i];
-    result += std::format("{:.1f}s: ", line.start_time);
+    char time_str[32];
+    snprintf(time_str, sizeof(time_str), "%.1fs: ", line.start_time);
+    result += time_str;
     if (line.text == nullptr) {
       result += "<null>\n";
     } else {
@@ -256,16 +260,18 @@ Transcriber::transcript_to_string(const struct transcript_t *transcript) {
 std::string
 Transcriber::transcript_line_to_string(const struct transcript_line_t *line) {
   std::string result;
-  result += std::format(
-      "text: '{}'", line->text == nullptr ? "<null>" : std::string(line->text));
-  result += std::format(", audio_data_count: {}", line->audio_data_count);
-  result += std::format(", start_time: {:.2f}s", line->start_time);
-  result += std::format(", duration: {:.2f}s", line->duration);
-  result += std::format(", is_complete: {}", line->is_complete);
-  result += std::format(", is_updated: {}", line->is_updated);
-  result += std::format(", is_new: {}", line->is_new);
-  result += std::format(", has_text_changed: {}", line->has_text_changed);
-  result += std::format(", id: {}", line->id);
+  result += "text: '" + (line->text == nullptr ? std::string("<null>") : std::string(line->text)) + "'";
+  result += ", audio_data_count: " + std::to_string(line->audio_data_count);
+  char time_str[64];
+  snprintf(time_str, sizeof(time_str), ", start_time: %.2fs", line->start_time);
+  result += time_str;
+  snprintf(time_str, sizeof(time_str), ", duration: %.2fs", line->duration);
+  result += time_str;
+  result += ", is_complete: " + std::to_string(line->is_complete);
+  result += ", is_updated: " + std::to_string(line->is_updated);
+  result += ", is_new: " + std::to_string(line->is_new);
+  result += ", has_text_changed: " + std::to_string(line->has_text_changed);
+  result += ", id: " + std::to_string(line->id);
   return result;
 }
 
@@ -297,7 +303,7 @@ void Transcriber::update_transcript_from_segments(
       if (transcribe_error != 0) {
         LOGF("Failed to transcribe: %d", transcribe_error);
         throw std::runtime_error(
-            std::format("Failed to transcribe: {0}", transcribe_error));
+            "Failed to transcribe: " + std::to_string(transcribe_error));
       }
       // Ensure the output text is valid UTF-8.
       line.text = sanitize_text(out_text);
@@ -418,8 +424,8 @@ void TranscriptStreamOutput::add_or_update_line(TranscriberLine &line) {
   } else {
     if (line_index > this->internal_lines.size()) {
       throw std::runtime_error(
-          std::format("Line added out of order: {0}, for length {1}",
-                      line_index, this->internal_lines.size()));
+          "Line added out of order: " + std::to_string(line_index) +
+          ", for length " + std::to_string(this->internal_lines.size()));
     }
     line.is_new = true;
     line.has_text_changed = line.text != nullptr;

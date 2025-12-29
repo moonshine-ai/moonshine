@@ -179,8 +179,10 @@ static inline size_t debug_alloc_get_size(void *voidMemPtr) {
 #define THROW_WITH_LOG(message)                                                \
   do {                                                                         \
     LOG(message);                                                              \
-    throw std::runtime_error(std::format("{}:{}:{} - {}", FILENAME_ONLY,       \
-                                         __LINE__, __func__, message));        \
+    throw std::runtime_error(std::string(FILENAME_ONLY) + ":" +                 \
+                             std::to_string(__LINE__) + ":" +                  \
+                             std::string(__func__) + " - " +                    \
+                             std::string(message));                             \
   } while (0)
 
 #define LOG_INT(x) LOGF(#x " = %d", (x));
