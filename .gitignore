@@ -3,3 +3,4 @@ build/
 .gradle/
 .env
 .cxx/
+output/
