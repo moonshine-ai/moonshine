@@ -1,0 +1,107 @@
+#include "debug-utils.h"
+
+#include <cstdio>
+
+#include <filesystem>
+
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+#include <doctest.h>
+
+namespace {
+int return_on_error_test() {
+    RETURN_ON_ERROR(1);
+    return 0;
+}
+
+int return_on_false_test() {
+    RETURN_ON_FALSE(false);
+    return 0;
+}
+
+int return_on_null_test() {
+    RETURN_ON_NULL(nullptr);
+    return 0;
+}
+
+int return_on_not_equal_test() {
+    RETURN_ON_NOT_EQUAL(1, 2);
+    return 0;
+}
+}
+
+TEST_CASE("debug-utils") {
+    SUBCASE("LOG") {
+        LOG("Hello, world!");
+        CHECK(true);
+    }
+    SUBCASE("RETURN_ON_ERROR") {
+        CHECK(return_on_error_test() == -1);
+    }
+    SUBCASE("RETURN_ON_FALSE") {
+        CHECK(return_on_false_test() == -1);
+    }
+    SUBCASE("RETURN_ON_NULL") {
+        CHECK(return_on_null_test() == -1);
+    }
+    SUBCASE("RETURN_ON_NOT_EQUAL") {
+        CHECK(return_on_not_equal_test() == -1);
+    }
+    SUBCASE("TIMER") {
+        TIMER_START(my_timer);
+        TIMER_END(my_timer);
+        CHECK(true);
+    }
+    SUBCASE("DEBUG_CALLOC") {
+        void *ptr = DEBUG_CALLOC(1, 1);
+        CHECK(ptr != nullptr);
+        DEBUG_FREE(ptr);
+        CHECK(true);
+    }
+    SUBCASE("TRACE") {
+        TRACE();
+        CHECK(true);
+    }
+    SUBCASE("LOG_VARS") {
+        LOG_INT(1);
+        LOG_INT64((int64_t)(1));
+        LOG_LONG((long)(1));
+        LOG_SIZET((size_t)(1));
+        LOG_PTR(nullptr);
+        std::vector<int64_t> vector = {1, 2, 3, 4, 5};
+        LOG_VECTOR(vector);
+        LOG_FLOAT(1.0f);
+        std::vector<float> float_vector = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
+        LOG_VECTOR(float_vector);
+        LOG_STRING(std::string("Hello, world!"));
+        std::vector<std::string> string_vector = {"Hello", "world"};
+        LOG_VECTOR(string_vector);
+        LOG_BOOL(true);
+        std::string bytes = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor";
+        LOG_BYTES(bytes.c_str(), bytes.size());
+        CHECK(true);
+    }
+    SUBCASE("load_file_into_memory") {
+        std::string file_contents = "Hello, world!";
+        FILE *file = std::fopen("test.txt", "w");
+        std::fwrite(file_contents.c_str(), 1, file_contents.size(), file);
+        std::fclose(file);
+
+        std::vector<uint8_t> data = load_file_into_memory("test.txt");
+        CHECK(data.size() == file_contents.size());
+        CHECK(std::string(data.begin(), data.end()) == file_contents);
+        std::remove("test.txt");
+    }
+    SUBCASE("save_memory_to_file") {
+        std::vector<uint8_t> data = {1, 2, 3, 4, 5};
+        save_memory_to_file("test.bin", data);
+        REQUIRE(std::filesystem::exists("test.bin"));
+        REQUIRE(std::filesystem::file_size("test.bin") == data.size());
+        FILE *file = std::fopen("test.bin", "rb");
+        std::vector<uint8_t> read_data(data.size());
+        size_t bytes_read = std::fread(read_data.data(), 1, data.size(), file);
+        REQUIRE(bytes_read == data.size());
+        std::fclose(file);
+        CHECK(read_data == data);
+        std::remove("test.bin");
+    }
+}
