@@ -2,6 +2,14 @@ cmake_minimum_required(VERSION 3.22.1)
 
 project("moonshine")
 
+set(CMAKE_CXX_STANDARD 20)
+
+# Ensure the standard is strictly enforced (optional, but recommended)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Disable compiler-specific extensions (optional, but recommended)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 add_compile_options(-Wall -Wextra -pedantic -Werror)
 # Enable this to catch memory leaks and access violations.
 # This is only supported on Linux.

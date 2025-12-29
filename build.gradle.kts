@@ -1,10 +1,14 @@
+import com.vanniktech.maven.publish.SonatypeHost
+
 plugins {
     alias(libs.plugins.android.library)
+    id("com.vanniktech.maven.publish") version "0.28.0"
 }
 
 android {
     namespace = "ai.moonshine.voice"
     compileSdk = 35
+    ndkVersion = "25.2.9519653"
 
     defaultConfig {
         minSdk = 35
@@ -43,6 +47,37 @@ android {
         cmake {
             path = file("core/CMakeLists.txt")
             version = "3.22.1"
+        }
+    }
+}
+
+mavenPublishing {
+    publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
+    signAllPublications()
+    
+    coordinates("ai.moonshine", "moonshine-voice", "0.0.1")
+
+    pom {
+        name.set("Moonshine Voice")
+        description.set("Build fast, local and accurate transcription and voice interfaces with Moonshine Voice.")
+        url.set("https://github.com/moonshine-ai/moonshine")
+        licenses {
+            license {
+                name.set("MIT")
+                url.set("https://opensource.org/licenses/MIT")
+            }
+        }
+        developers {
+            developer {
+                id.set("moonshine-ai")
+                name.set("Moonshine AI")
+                email.set("contact@moonshine.ai")
+            }
+        }
+       scm {
+            url.set("https://github.com/moonshine-ai/moonshine")
+            connection.set("scm:git:git://github.com/moonshine-ai/moonshine.git")
+            developerConnection.set("scm:git:ssh://git@github.com/moonshine-ai/moonshine.git")
         }
     }
 }

@@ -1,6 +1,6 @@
 #include "string-utils.h"
 
-#include <format>
+#include <cstdio>
 
 // See
 // https://stackoverflow.com/questions/2896600/how-to-replace-all-occurrences-of-a-character-in-string
@@ -96,7 +96,7 @@ bool bool_from_string(const char* input) {
     return false;
   }
   throw std::runtime_error(
-      std::format("Invalid boolean string: '{0}'", input));
+      "Invalid boolean string: '" + std::string(input) + "'");
   return false;
 }
 
@@ -108,7 +108,7 @@ float float_from_string(const char* input) {
   try { 
     result = std::stof(input);
   } catch (const std::exception &e) {
-    throw std::runtime_error(std::format("Invalid float string: '{0}': {1}", input, e.what()));
+    throw std::runtime_error("Invalid float string: '" + std::string(input) + "': " + e.what());
   }
   return result;
 }

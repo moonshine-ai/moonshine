@@ -222,7 +222,7 @@ void parse_transcriber_options(const transcriber_option_t *in_options,
       out_options.vad_threshold = float_from_string(in_option.value);
     } else {
       throw std::runtime_error(
-          std::format("Unknown transcriber option: '{0}'", in_option.name));
+          "Unknown transcriber option: '" + std::string(in_option.name) + "'");
     }
   }
 }

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <numeric>
 
@@ -201,7 +202,7 @@ std::string float_vector_stats_to_string(const std::vector<float> &vector) {
 std::vector<uint8_t> load_file_into_memory(const std::string &path) {
   FILE *file = std::fopen(path.c_str(), "rb");
   if (!file) {
-    THROW_WITH_LOG(std::format("Failed to open file: '{}'", path).c_str());
+    THROW_WITH_LOG(("Failed to open file: '" + path + "'").c_str());
   }
   std::fseek(file, 0, SEEK_END);
   size_t size = std::ftell(file);
@@ -209,9 +210,9 @@ std::vector<uint8_t> load_file_into_memory(const std::string &path) {
   std::vector<uint8_t> data(size);
   size_t bytes_read = std::fread(data.data(), 1, size, file);
   if (bytes_read != size) {
-    THROW_WITH_LOG(std::format("Failed to read file: '{}' completely. Expected "
-                               "{} bytes, but read {} bytes.",
-                               path, size, bytes_read).c_str());
+    THROW_WITH_LOG(("Failed to read file: '" + path + "' completely. Expected " +
+                    std::to_string(size) + " bytes, but read " +
+                    std::to_string(bytes_read) + " bytes.").c_str());
   }
   std::fclose(file);
   return data;
@@ -221,13 +222,13 @@ void save_memory_to_file(const std::string &path,
                          const std::vector<uint8_t> &data) {
   FILE *file = std::fopen(path.c_str(), "wb");
   if (!file) {
-    THROW_WITH_LOG(std::format("Failed to open file: '{}'", path).c_str());
+    THROW_WITH_LOG(("Failed to open file: '" + path + "'").c_str());
   }
   size_t bytes_written = std::fwrite(data.data(), 1, data.size(), file);
   if (bytes_written != data.size()) {
-    THROW_WITH_LOG(std::format("Failed to write file: '{}' completely. Expected "
-                               "{} bytes, but wrote {} bytes.",
-                               path, data.size(), bytes_written).c_str());
+    THROW_WITH_LOG(("Failed to write file: '" + path + "' completely. Expected " +
+                    std::to_string(data.size()) + " bytes, but wrote " +
+                    std::to_string(bytes_written) + " bytes.").c_str());
   }
   std::fclose(file);
 }

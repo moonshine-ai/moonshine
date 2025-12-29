@@ -1,5 +1,6 @@
 #include "transcriber.h"
 
+#include <cstdio>
 #include <filesystem>
 #include <string>
 
@@ -64,7 +65,9 @@ TEST_CASE("transcriber-test") {
     }
     for (size_t i = 0; i < transcript->line_count; i++) {
       const struct transcript_line_t &line = transcript->lines[i];
-      std::string filename = std::format("output/line_{:02d}.wav", i);
+      char filename_buf[64];
+      snprintf(filename_buf, sizeof(filename_buf), "output/line_%02zu.wav", i);
+      std::string filename = filename_buf;
       save_wav_data(filename.c_str(), line.audio_data, line.audio_data_count,
                     16000);
       LOGF("Saved %s", filename.c_str());
@@ -150,7 +153,9 @@ TEST_CASE("transcriber-test") {
     }
     for (size_t i = 0; i < transcript->line_count; i++) {
       const struct transcript_line_t &line = transcript->lines[i];
-      std::string filename = std::format("output/line_{:02d}.wav", i);
+      char filename_buf[64];
+      snprintf(filename_buf, sizeof(filename_buf), "output/line_%02zu.wav", i);
+      std::string filename = filename_buf;
       save_wav_data(filename.c_str(), line.audio_data, line.audio_data_count,
                     16000);
       LOGF("Saved %s", filename.c_str());
