@@ -56,7 +56,7 @@ stream.start()
 while True:
     audio_chunk = get_audio_chunk()  # Your audio capture function
     stream.add_audio(audio_chunk, sample_rate=16000)
-    
+
     # Get updated transcript
     transcript = stream.transcribe()
     for line in transcript.lines:
@@ -97,4 +97,3 @@ MIT License - see the main project repository for details.
 ## Documentation
 
 For more information, see the [main Moonshine Voice documentation](https://github.com/usefulsensors/moonshine-v2).
-
