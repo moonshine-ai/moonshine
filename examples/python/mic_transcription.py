@@ -1,13 +1,13 @@
 """Uses the MicTranscriber class to transcribe audio from a microphone."""
 
+import argparse
 import sys
 import time
 
 from moonshine_voice import (
     MicTranscriber,
-    ModelArch,
-    get_model_path,
     TranscriptEventListener,
+    get_model_for_language,
 )
 
 
@@ -46,8 +46,14 @@ class FileListener(TranscriptEventListener):
 
 
 if __name__ == "__main__":
-    model_path = str(get_model_path("tiny-en"))
-    model_arch = ModelArch.TINY
+    parser = argparse.ArgumentParser(description="Basic transcription example")
+    parser.add_argument("--language", type=str, default="en",
+                        help="Language to use for transcription")
+    parser.add_argument("--model-arch", type=str, default=None,
+                        help="Model architecture to use for transcription")
+    args = parser.parse_args()
+    model_path, model_arch = get_model_for_language(
+        args.language, args.model_arch)
 
     mic_transcriber = MicTranscriber(
         model_path=model_path, model_arch=model_arch)
