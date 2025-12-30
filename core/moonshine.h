@@ -1,89 +1,11 @@
 #ifndef MOONSHINE_H
 #define MOONSHINE_H
 
-#if defined(ANDROID)
-#include <android/asset_manager.h>
-#endif
-#include <stddef.h>
-#include <stdint.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-typedef int32_t moonshine_handle_t;
-
-#define MOONSHINE_MODEL_TYPE_TINY (0)
-#define MOONSHINE_MODEL_TYPE_BASE (1)
-
-#define MOONSHINE_STREAM_STATE_PARTIAL (0)
-#define MOONSHINE_STREAM_STATE_COMPLETE (1)
-
-/* Loads the relevant model files and returns a handle to the model.
-//
-// You can download the files you need using the scripts/download-models.sh
-script.
-// Then call it like this:
-// moonshine_handle_t handle = moonshine_load_model(
-//   "models/moonshine/base/float/encoder_model.onnx",
-//   "models/moonshine/base/float/decoder_model_merged.onnx",
-// "data/tokenizer-en.bin");
-*/
-moonshine_handle_t moonshine_load_model(const char *encoder_model_path,
-                                        const char *decoder_model_path,
-                                        const char *tokenizer_path,
-                                        int32_t model_type);
-
-#if defined(ANDROID)
-moonshine_handle_t
-moonshine_load_model_from_assets(const char *encoder_model_path,
-                                 const char *decoder_model_path,
-                                 const char *tokenizer_path, int32_t model_type,
-                                 AAssetManager *assetManager);
-#endif
-
-/* Transcribes the given audio data and returns the text.
-// The audio data is expected to be a single channel array of float values,
-// between -1.0 and 1.0, at a sample rate of 16000 Hz.
-//
-// You will need to call free() on the out_text string when you are done
-with it
-// to avoid memory leaks.
-// You can transcribe like this:
-// float audio_data[32000] = {...};
-// char *out_text = 0;
-// int error = moonshine_transcribe(handle, audio_data, audio_data_size,
-&out_text);
-// if (error != 0) {
-//   printf("Error transcribing audio: %s\n", out_text);
-// }
-// printf("Transcription: %s\n", out_text);
-// free(out_text);
-*/
-int moonshine_transcribe(moonshine_handle_t handle, const float *audio_data,
-                         size_t audio_data_size, char **out_text);
-
-/* Convenience function for transcribing a WAV file.
-// Works the same as moonshine_transcribe, but loads the audio data from a WAV
-file.
-*/
-int moonshine_transcribe_wav(moonshine_handle_t handle, const char *wav_path,
-                             char **out_text);
-
-/* Releases all resources allocated by moonshine_load_model. */
-void moonshine_free_model(moonshine_handle_t handle);
-
-/* Free the text string returned by moonshine_transcribe or
- * moonshine_transcribe_wav. */
-void moonshine_free_text(char *text);
-
-/* ------------------------------------------------------------------------- */
-/* v2 of the C API                                                           */
-/* ------------------------------------------------------------------------- */
-
-/* Moonshine is a voice interface library that allows you to transcribe audio
-   data into text. It is designed to be fast, easy to use and to provide a high
-   level of accuracy. It is also designed to be easy to integrate into your
+/* Moonshine is a library for building interactive voice applications. It
+   provides a high-level API for building voice interfaces, including
+   voice-activity detection, diarization, transcription, speech understanding,
+   and text-to-speech. It is designed to be fast, easy to use and to provide a
+   high level of accuracy. It is also designed to be easy to integrate into your
    existing codebase across all major platforms.
 
    It uses the Moonshine family of speech to text models, which:
@@ -126,9 +48,8 @@ void moonshine_free_text(char *text);
      size_t audio_length = 32000;
      int32_t sample_rate = 16000;
      transcript_t *transcript = NULL;
-     int32_t error = moonshine_transcribe(transcriber_handle, audio_data,
-       audio_length, sample_rate, 0, &transcript);
-     if (error != 0) {
+     int32_t error = moonshine_transcribe_without_streaming(transcriber_handle,
+   audio_data, audio_length, sample_rate, 0, &transcript); if (error != 0) {
        fprintf(stderr, "Failed to transcribe\n");
        return 1;
      }
@@ -146,6 +67,16 @@ void moonshine_free_text(char *text);
    the transcriber is busy.
    ```
 */
+
+#if defined(ANDROID)
+#include <android/asset_manager.h>
+#endif
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* ------------------------------ CONSTANTS -------------------------------- */
 

@@ -20,6 +20,6 @@ ${REPO_ROOT_DIR}/core/moonshine-utils/build/string-utils-test
 ${REPO_ROOT_DIR}/core/build/resampler-test
 ${REPO_ROOT_DIR}/core/build/voice-activity-detector-test
 ${REPO_ROOT_DIR}/core/build/transcriber-test
-${REPO_ROOT_DIR}/core/build/moonshine-test-v2
+${REPO_ROOT_DIR}/core/build/moonshine-c-api-test
 
 echo "All tests passed"
