@@ -30,6 +30,8 @@ from moonshine_voice.transcriber import (
     Error,
 )
 
+from moonshine_voice.mic_transcriber import MicTranscriber
+
 from moonshine_voice.utils import (
     get_assets_path,
     get_model_path,
@@ -40,6 +42,7 @@ __version__ = "0.1.0"
 
 __all__ = [
     "Transcriber",
+    "MicTranscriber",
     "ModelArch",
     "TranscriptLine",
     "Transcript",
