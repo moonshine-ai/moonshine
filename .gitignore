@@ -6,3 +6,8 @@ build/
 output/
 local.properties
 .idea/
+.venv/
+*.pyc
+__pycache__/
+uv.lock
+*.egg-info/
