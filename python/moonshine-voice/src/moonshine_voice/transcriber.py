@@ -1,7 +1,9 @@
 """Transcriber module for Moonshine Voice."""
 
 import ctypes
-from typing import List
+from abc import ABC
+from dataclasses import dataclass
+from typing import Callable, List, Optional
 
 from moonshine_voice.moonshine_api import (
     _MoonshineLib,
@@ -11,6 +13,46 @@ from moonshine_voice.moonshine_api import (
     TranscriptC,
 )
 from moonshine_voice.errors import MoonshineError, check_error
+
+
+# Event classes
+@dataclass
+class TranscriptEvent:
+    """Base class for transcript events."""
+    line: TranscriptLine
+    stream_handle: int
+
+
+@dataclass
+class LineStarted(TranscriptEvent):
+    """Event emitted when a new transcription line starts."""
+    pass
+
+
+@dataclass
+class LineUpdated(TranscriptEvent):
+    """Event emitted when an existing transcription line is updated."""
+    pass
+
+
+@dataclass
+class LineTextChanged(TranscriptEvent):
+    """Event emitted when the text of a transcription line changes."""
+    pass
+
+
+@dataclass
+class LineCompleted(TranscriptEvent):
+    """Event emitted when a transcription line is completed."""
+    pass
+
+
+@dataclass
+class Error:
+    """Event emitted when an error occurs."""
+    error: Exception
+    stream_handle: int
+    line: Optional[TranscriptLine] = None
 
 
 class Transcriber:
@@ -158,29 +200,64 @@ class Transcriber:
         """Get the version of the loaded Moonshine library."""
         return self._lib.moonshine_get_version()
 
-    def create_stream(self, flags: int = 0) -> "Stream":
+    def create_stream(self, update_interval: float = 0.5, flags: int = 0) -> "Stream":
         """
         Create a new stream for real-time transcription.
 
         Args:
             flags: Flags for stream creation (default: 0)
+            update_interval: Interval in seconds between updates (default: 0.5)
 
         Returns:
             Stream object for real-time transcription
         """
-        return Stream(self, flags)
+        return Stream(self, update_interval, flags)
+
+
+# Event listener interface
+class TranscriptEventListener(ABC):
+    """
+    Abstract base class for transcript event listeners.
+    
+    Subclass this and override the methods you want to handle.
+    All methods have default no-op implementations, so you only need
+    to override the ones you care about.
+    """
+
+    def on_line_started(self, event: LineStarted) -> None:
+        """Called when a new transcription line starts."""
+        pass
+
+    def on_line_updated(self, event: LineUpdated) -> None:
+        """Called when an existing transcription line is updated."""
+        pass
+
+    def on_line_text_changed(self, event: LineTextChanged) -> None:
+        """Called when the text of a transcription line changes."""
+        pass
+
+    def on_line_completed(self, event: LineCompleted) -> None:
+        """Called when a transcription line is completed."""
+        pass
+
+    def on_error(self, event: Error) -> None:
+        """Called when an error occurs."""
+        pass
 
 
 # Streaming functionality
 class Stream:
     """Stream for real-time transcription."""
 
-    def __init__(self, transcriber: Transcriber, flags: int = 0):
+    def __init__(self, transcriber: Transcriber, update_interval: float = 0.5, flags: int = 0):
         """Initialize a stream."""
         self._transcriber = transcriber
         self._lib = transcriber._lib
         self._handle = None
-
+        self._listeners: List[Callable[[TranscriptEvent], None]] = []
+        self._update_interval = update_interval
+        self._stream_time = 0.0
+        self._last_update_time = 0.0
         print(f"Creating stream with handle: {transcriber._handle} and flags: {flags}")
         handle = self._lib.moonshine_create_stream(transcriber._handle, flags)
         check_error(handle)
@@ -197,6 +274,13 @@ class Stream:
         """Stop the stream."""
         error = self._lib.moonshine_stop_stream(self._transcriber._handle, self._handle)
         check_error(error)
+        # There may be some audio left in the stream, so we need to transcribe it to
+        # get the final transcript and emit events.
+        try:
+            # transcribe() already calls _notify_from_transcript(), so we just call it
+            self.update_transcription(0)
+        except Exception as e:
+            self._emit_error(e)
 
     def add_audio(self, audio_data: List[float], sample_rate: int = 16000):
         """Add audio data to the stream."""
@@ -210,21 +294,114 @@ class Stream:
             0,
         )
         check_error(error)
+        self._stream_time += len(audio_data) / sample_rate
+        if self._stream_time - self._last_update_time >= self._update_interval:
+            self.update_transcription(0)
+            self._last_update_time = self._stream_time
 
-    def transcribe(self, flags: int = 0) -> Transcript:
-        """Get the current transcript from the stream."""
+    def update_transcription(self, flags: int = 0) -> Transcript:
+        """Update the transcription from the stream."""
         out_transcript = ctypes.POINTER(TranscriptC)()
         error = self._lib.moonshine_transcribe_stream(
             self._transcriber._handle, self._handle, flags, ctypes.byref(out_transcript)
         )
         check_error(error)
-        return self._transcriber._parse_transcript(out_transcript)
+        transcript = self._transcriber._parse_transcript(out_transcript)
+        self._notify_from_transcript(transcript)
+        return transcript
+
+    def add_listener(self, listener: Callable[[TranscriptEvent], None]) -> None:
+        """
+        Add an event listener to the stream.
+        
+        Args:
+            listener: A callable that takes a TranscriptEvent and returns None.
+                      Can be a function, lambda, or TranscriptEventListener instance.
+        """
+        self._listeners.append(listener)
+
+    def remove_listener(self, listener: Callable[[TranscriptEvent], None]) -> None:
+        """
+        Remove an event listener from the stream.
+        
+        Args:
+            listener: The listener to remove.
+        """
+        if listener in self._listeners:
+            self._listeners.remove(listener)
+
+    def remove_all_listeners(self) -> None:
+        """Remove all event listeners from the stream."""
+        self._listeners.clear()
+
+    def _notify_from_transcript(self, transcript: Transcript) -> None:
+        """Emit events based on transcript line properties."""
+        for line in transcript.lines:
+            if line.is_new:
+                self._emit(LineStarted(line=line, stream_handle=self._handle))
+            if line.is_updated and not line.is_new and not line.is_complete:
+                self._emit(LineUpdated(line=line, stream_handle=self._handle))
+            if line.has_text_changed:
+                self._emit(LineTextChanged(line=line, stream_handle=self._handle))
+            if line.is_complete and line.is_updated:
+                self._emit(LineCompleted(line=line, stream_handle=self._handle))
+
+    def _emit(self, event: TranscriptEvent) -> None:
+        """Emit an event to all registered listeners."""
+        for listener in self._listeners:
+            try:
+                # If it's a TranscriptEventListener instance, call the appropriate method
+                if isinstance(listener, TranscriptEventListener):
+                    if isinstance(event, LineStarted):
+                        listener.on_line_started(event)
+                    elif isinstance(event, LineUpdated):
+                        listener.on_line_updated(event)
+                    elif isinstance(event, LineTextChanged):
+                        listener.on_line_text_changed(event)
+                    elif isinstance(event, LineCompleted):
+                        listener.on_line_completed(event)
+                    elif isinstance(event, Error):
+                        listener.on_error(event)
+                else:
+                    # Otherwise, treat it as a callable that takes the event
+                    listener(event)
+            except Exception as e:
+                # Don't let listener errors break the stream
+                # Emit an error event if possible, but don't recurse
+                try:
+                    error_event = Error(
+                        line=None,
+                        stream_handle=self._handle,
+                        error=e
+                    )
+                    # Only emit to other listeners to avoid recursion
+                    for other_listener in self._listeners:
+                        if other_listener != listener:
+                            try:
+                                if isinstance(other_listener, TranscriptEventListener):
+                                    other_listener.on_error(error_event)
+                                else:
+                                    other_listener(error_event)
+                            except Exception:
+                                pass  # Ignore errors in error handlers
+                except Exception:
+                    pass  # If we can't even emit the error, just continue
+
+    def _emit_error(self, error: Exception) -> None:
+        """Emit an error event."""
+        error_event = Error(
+            line=None,
+            stream_handle=self._handle,
+            error=error
+        )
+        self._emit(error_event)
 
     def close(self):
         """Free the stream resources."""
         if self._handle is not None:
             self._lib.moonshine_free_stream(self._transcriber._handle, self._handle)
             self._handle = None
+        self.remove_all_listeners()
 
     def __enter__(self):
         """Context manager entry."""
