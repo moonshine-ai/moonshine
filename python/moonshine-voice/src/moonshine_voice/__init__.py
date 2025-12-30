@@ -21,6 +21,13 @@ from moonshine_voice.moonshine_api import (
 from moonshine_voice.transcriber import (
     Transcriber,
     Stream,
+    TranscriptEventListener,
+    TranscriptEvent,
+    LineStarted,
+    LineUpdated,
+    LineTextChanged,
+    LineCompleted,
+    Error,
 )
 
 from moonshine_voice.utils import (
@@ -37,6 +44,13 @@ __all__ = [
     "TranscriptLine",
     "Transcript",
     "Stream",
+    "TranscriptEventListener",
+    "TranscriptEvent",
+    "LineStarted",
+    "LineUpdated",
+    "LineTextChanged",
+    "LineCompleted",
+    "Error",
     "MoonshineError",
     "MoonshineUnknownError",
     "MoonshineInvalidHandleError",
