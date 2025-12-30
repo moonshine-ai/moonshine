@@ -178,7 +178,8 @@ class Transcriber:
             # Extract text
             text = ""
             if line_c.text:
-                text = ctypes.string_at(line_c.text).decode("utf-8", errors="ignore")
+                text = ctypes.string_at(line_c.text).decode(
+                    "utf-8", errors="ignore")
 
             # Extract audio data if available
             audio_data = None
@@ -281,7 +282,8 @@ class Stream:
 
     def stop(self):
         """Stop the stream."""
-        error = self._lib.moonshine_stop_stream(self._transcriber._handle, self._handle)
+        error = self._lib.moonshine_stop_stream(
+            self._transcriber._handle, self._handle)
         check_error(error)
         # There may be some audio left in the stream, so we need to transcribe it to
         # get the final transcript and emit events.
@@ -312,7 +314,8 @@ class Stream:
         """Update the transcription from the stream."""
         out_transcript = ctypes.POINTER(TranscriptC)()
         error = self._lib.moonshine_transcribe_stream(
-            self._transcriber._handle, self._handle, flags, ctypes.byref(out_transcript)
+            self._transcriber._handle, self._handle, flags, ctypes.byref(
+                out_transcript)
         )
         check_error(error)
         transcript = self._transcriber._parse_transcript(out_transcript)
@@ -351,9 +354,11 @@ class Stream:
             if line.is_updated and not line.is_new and not line.is_complete:
                 self._emit(LineUpdated(line=line, stream_handle=self._handle))
             if line.has_text_changed:
-                self._emit(LineTextChanged(line=line, stream_handle=self._handle))
+                self._emit(LineTextChanged(
+                    line=line, stream_handle=self._handle))
             if line.is_complete and line.is_updated:
-                self._emit(LineCompleted(line=line, stream_handle=self._handle))
+                self._emit(LineCompleted(
+                    line=line, stream_handle=self._handle))
 
     def _emit(self, event: TranscriptEvent) -> None:
         """Emit an event to all registered listeners."""
@@ -378,7 +383,8 @@ class Stream:
                 # Don't let listener errors break the stream
                 # Emit an error event if possible, but don't recurse
                 try:
-                    error_event = Error(line=None, stream_handle=self._handle, error=e)
+                    error_event = Error(
+                        line=None, stream_handle=self._handle, error=e)
                     # Only emit to other listeners to avoid recursion
                     for other_listener in self._listeners:
                         if other_listener != listener:
@@ -400,7 +406,8 @@ class Stream:
     def close(self):
         """Free the stream resources."""
         if self._handle is not None:
-            self._lib.moonshine_free_stream(self._transcriber._handle, self._handle)
+            self._lib.moonshine_free_stream(
+                self._transcriber._handle, self._handle)
             self._handle = None
         self.remove_all_listeners()
 
@@ -443,7 +450,7 @@ if __name__ == "__main__":
     chunk_duration = 0.1
     chunk_size = int(chunk_duration * sample_rate)
     for i in range(0, len(audio_data), chunk_size):
-        chunk = audio_data[i : i + chunk_size]
+        chunk = audio_data[i: i + chunk_size]
         stream.add_audio(chunk, sample_rate)
 
     stream.stop()

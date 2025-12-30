@@ -32,6 +32,13 @@ from moonshine_voice.transcriber import (
 
 from moonshine_voice.mic_transcriber import MicTranscriber
 
+from moonshine_voice.model_info import (
+    get_model_for_language,
+    log_model_info,
+    supported_languages,
+    supported_languages_friendly,
+)
+
 from moonshine_voice.utils import (
     get_assets_path,
     get_model_path,
@@ -61,5 +68,8 @@ __all__ = [
     "get_assets_path",
     "get_model_path",
     "load_wav_file",
+    "get_model_for_language",
+    "log_model_info",
+    "supported_languages",
+    "supported_languages_friendly",
 ]
-
