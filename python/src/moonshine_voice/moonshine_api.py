@@ -8,6 +8,8 @@ from typing import List, Optional
 from moonshine_voice.errors import MoonshineError
 
 # C structure definitions matching moonshine.h
+
+
 class TranscriptLineC(ctypes.Structure):
     """C structure for transcript_line_t."""
 
@@ -101,7 +103,8 @@ class _MoonshineLib:
             # In the package directory
             Path(__file__).parent.parent.parent / lib_name,
             # In the build directory (for development)
-            Path(__file__).parent.parent.parent.parent.parent / "core" / "build" / lib_name,
+            Path(__file__).parent.parent.parent.parent /
+            "core" / "build" / lib_name,
             # System library paths
             Path("/usr/local/lib") / lib_name,
             Path("/usr/lib") / lib_name,
