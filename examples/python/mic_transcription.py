@@ -10,18 +10,17 @@ from moonshine_voice import (
     TranscriptEventListener,
 )
 
-# If we're on an interactive terminal, show the transcription in real time
-# as it's being generated.
+
 class TerminalListener(TranscriptEventListener):
     def __init__(self):
         self.last_line_text_length = 0
 
-    # Assume we're on a terminal, and so we can use a carriage return to 
+    # Assume we're on a terminal, and so we can use a carriage return to
     # overwrite the last line with the latest text.
     def update_last_terminal_line(self, new_text: str):
         print(f"\r{new_text}", end="", flush=True)
         if len(new_text) < self.last_line_text_length:
-            # If the new text is shorter than the last line, we need to 
+            # If the new text is shorter than the last line, we need to
             # overwrite the last line with spaces.
             diff = self.last_line_text_length - len(new_text)
             print(f"{' ' * diff}", end="", flush=True)
@@ -39,22 +38,26 @@ class TerminalListener(TranscriptEventListener):
         print("\n", end="", flush=True)
 
 # If we're not on an interactive terminal, print each line as it's completed.
+
+
 class FileListener(TranscriptEventListener):
     def on_line_completed(self, event):
         print(event.line.text)
+
 
 if __name__ == "__main__":
     model_path = str(get_model_path("tiny-en"))
     model_arch = ModelArch.TINY
 
-    mic_transcriber = MicTranscriber(model_path=model_path, model_arch=model_arch)
+    mic_transcriber = MicTranscriber(
+        model_path=model_path, model_arch=model_arch)
 
     if sys.stdout.isatty():
         listener = TerminalListener()
     else:
         listener = FileListener()
 
-    print("Listening to the microphone, press Ctrl+C to stop...", file=sys.stderr)        
+    print("Listening to the microphone, press Ctrl+C to stop...", file=sys.stderr)
     mic_transcriber.add_listener(listener)
     mic_transcriber.start()
     try:

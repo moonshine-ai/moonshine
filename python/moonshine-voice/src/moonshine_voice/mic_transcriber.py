@@ -1,4 +1,4 @@
-from moonshine_voice.transcriber import Transcriber, TranscriptEvent,TranscriptEventListener, ModelArch
+from moonshine_voice.transcriber import Transcriber, TranscriptEvent, TranscriptEventListener, ModelArch
 from moonshine_voice.utils import get_model_path
 
 import numpy as np
@@ -79,11 +79,13 @@ class MicTranscriber:
     def remove_all_listeners(self):
         self.mic_stream.remove_all_listeners()
 
+
 if __name__ == "__main__":
     model_path = str(get_model_path("tiny-en"))
     model_arch = ModelArch.TINY
 
-    mic_transcriber = MicTranscriber(model_path=model_path, model_arch=model_arch)
+    mic_transcriber = MicTranscriber(
+        model_path=model_path, model_arch=model_arch)
 
     class TestListener(TranscriptEventListener):
         def on_line_started(self, event):
