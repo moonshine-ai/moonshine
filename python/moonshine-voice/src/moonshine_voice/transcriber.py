@@ -3,6 +3,7 @@
 import ctypes
 from abc import ABC
 from dataclasses import dataclass
+import os
 from typing import Callable, List, Optional
 
 from moonshine_voice.moonshine_api import (
@@ -13,12 +14,14 @@ from moonshine_voice.moonshine_api import (
     TranscriptC,
 )
 from moonshine_voice.errors import MoonshineError, check_error
+from moonshine_voice.utils import get_model_path, get_assets_path, load_wav_file
 
 
 # Event classes
 @dataclass
 class TranscriptEvent:
     """Base class for transcript events."""
+
     line: TranscriptLine
     stream_handle: int
 
@@ -26,30 +29,35 @@ class TranscriptEvent:
 @dataclass
 class LineStarted(TranscriptEvent):
     """Event emitted when a new transcription line starts."""
+
     pass
 
 
 @dataclass
 class LineUpdated(TranscriptEvent):
     """Event emitted when an existing transcription line is updated."""
+
     pass
 
 
 @dataclass
 class LineTextChanged(TranscriptEvent):
     """Event emitted when the text of a transcription line changes."""
+
     pass
 
 
 @dataclass
 class LineCompleted(TranscriptEvent):
     """Event emitted when a transcription line is completed."""
+
     pass
 
 
 @dataclass
 class Error:
     """Event emitted when an error occurs."""
+
     error: Exception
     stream_handle: int
     line: Optional[TranscriptLine] = None
@@ -218,7 +226,7 @@ class Transcriber:
 class TranscriptEventListener(ABC):
     """
     Abstract base class for transcript event listeners.
-    
+
     Subclass this and override the methods you want to handle.
     All methods have default no-op implementations, so you only need
     to override the ones you care about.
@@ -249,7 +257,9 @@ class TranscriptEventListener(ABC):
 class Stream:
     """Stream for real-time transcription."""
 
-    def __init__(self, transcriber: Transcriber, update_interval: float = 0.5, flags: int = 0):
+    def __init__(
+        self, transcriber: Transcriber, update_interval: float = 0.5, flags: int = 0
+    ):
         """Initialize a stream."""
         self._transcriber = transcriber
         self._lib = transcriber._lib
@@ -258,7 +268,6 @@ class Stream:
         self._update_interval = update_interval
         self._stream_time = 0.0
         self._last_update_time = 0.0
-        print(f"Creating stream with handle: {transcriber._handle} and flags: {flags}")
         handle = self._lib.moonshine_create_stream(transcriber._handle, flags)
         check_error(handle)
         self._handle = handle
@@ -313,7 +322,7 @@ class Stream:
     def add_listener(self, listener: Callable[[TranscriptEvent], None]) -> None:
         """
         Add an event listener to the stream.
-        
+
         Args:
             listener: A callable that takes a TranscriptEvent and returns None.
                       Can be a function, lambda, or TranscriptEventListener instance.
@@ -323,7 +332,7 @@ class Stream:
     def remove_listener(self, listener: Callable[[TranscriptEvent], None]) -> None:
         """
         Remove an event listener from the stream.
-        
+
         Args:
             listener: The listener to remove.
         """
@@ -369,11 +378,7 @@ class Stream:
                 # Don't let listener errors break the stream
                 # Emit an error event if possible, but don't recurse
                 try:
-                    error_event = Error(
-                        line=None,
-                        stream_handle=self._handle,
-                        error=e
-                    )
+                    error_event = Error(line=None, stream_handle=self._handle, error=e)
                     # Only emit to other listeners to avoid recursion
                     for other_listener in self._listeners:
                         if other_listener != listener:
@@ -389,11 +394,7 @@ class Stream:
 
     def _emit_error(self, error: Exception) -> None:
         """Emit an error event."""
-        error_event = Error(
-            line=None,
-            stream_handle=self._handle,
-            error=error
-        )
+        error_event = Error(line=None, stream_handle=self._handle, error=error)
         self._emit(error_event)
 
     def close(self):
@@ -410,3 +411,42 @@ class Stream:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
         self.close()
+
+
+if __name__ == "__main__":
+    model_path = str(get_model_path("tiny-en"))
+    model_arch = ModelArch.TINY
+    two_cities_wav_path = os.path.join(get_assets_path(), "two_cities.wav")
+    transcriber = Transcriber(model_path=model_path, model_arch=model_arch)
+
+    # Create a stream. The update interval is the interval in seconds between full transcriptions being generated.
+    stream = transcriber.create_stream(update_interval=0.5)
+    stream.start()
+
+    class TestListener(TranscriptEventListener):
+        def on_line_started(self, event):
+            print(f"Line started: {event.line.text}")
+
+        def on_line_text_changed(self, event):
+            print(f"Line text changed: {event.line.text}")
+
+        def on_line_completed(self, event):
+            print(f"Line completed: {event.line.text}")
+
+    listener = TestListener()
+    stream.add_listener(listener)
+
+    audio_data, sample_rate = load_wav_file(two_cities_wav_path)
+
+    # Loop through the audio data in chunks to simulate live streaming
+    # from a microphone or other source.
+    chunk_duration = 0.1
+    chunk_size = int(chunk_duration * sample_rate)
+    for i in range(0, len(audio_data), chunk_size):
+        chunk = audio_data[i : i + chunk_size]
+        stream.add_audio(chunk, sample_rate)
+
+    stream.stop()
+    stream.close()
+
+    transcriber.close()

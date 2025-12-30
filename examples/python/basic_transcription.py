@@ -15,7 +15,6 @@ from moonshine_voice import (
 # Example: Transcribe audio from a file
 def transcribe_audio_file(model_path: str, model_arch: ModelArch, audio_file: str):
     """Transcribe audio from a file."""
-    # Initialize transcriber
     transcriber = Transcriber(model_path=model_path, model_arch=model_arch)
 
     try:
