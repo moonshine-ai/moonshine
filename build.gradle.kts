@@ -7,11 +7,11 @@ plugins {
 
 android {
     namespace = "ai.moonshine.voice"
-    compileSdk = 30
+    compileSdk = 35
     ndkVersion = "25.2.9519653"
 
     defaultConfig {
-        minSdk = 30
+        minSdk = 35
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
