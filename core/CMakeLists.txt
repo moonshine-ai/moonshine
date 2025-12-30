@@ -69,28 +69,19 @@ target_link_libraries(moonshine PUBLIC
     ten_vad
 )
 
-add_executable(moonshine-test moonshine-test.c)
-target_include_directories(moonshine-test PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}
-)
-
-target_link_libraries(moonshine-test PRIVATE
-    moonshine
-)
-
-add_executable(moonshine-test-v2 moonshine-test-v2.cpp)
-set_target_properties(moonshine-test-v2 PROPERTIES
+add_executable(moonshine-c-api-test moonshine-c-api-test.cpp)
+set_target_properties(moonshine-c-api-test PROPERTIES
     CXX_STANDARD 20
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO
 )
-target_include_directories(moonshine-test-v2 PRIVATE
+target_include_directories(moonshine-c-api-test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
     ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
     ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
 )
 
-target_link_libraries(moonshine-test-v2 PRIVATE
+target_link_libraries(moonshine-c-api-test PRIVATE
     moonshine
 )
 

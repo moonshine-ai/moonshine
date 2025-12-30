@@ -46,164 +46,26 @@ SOFTWARE.
 #include <array>
 #include <chrono>
 #include <map>
+#include <mutex>
 #include <numeric>
 #include <vector>
 
 #include "bin-tokenizer.h"
+#include "debug-utils.h"
 #include "moonshine-model.h"
 #include "moonshine-ort-allocator.h"
 #include "moonshine-tensor-view.h"
+#include "ort-utils.h"
 #include "string-utils.h"
 #include "transcriber.h"
 
-#define DEBUG_ALLOC_ENABLED 1
-#include "debug-utils.h"
-#include "ort-utils.h"
-
-#define CHECK_MOONSHINE_HANDLE(handle)                                         \
-  do {                                                                         \
-    if (handle < 0 || handle >= static_cast<int32_t>(models.size())) {         \
-      fprintf(stderr, "Moonshine model failed to load\n");                     \
-      return -1;                                                               \
-    }                                                                          \
-    if (models[handle] == nullptr) {                                           \
-      fprintf(stderr, "Moonshine model has been freed\n");                     \
-      return -1;                                                               \
-    }                                                                          \
-  } while (0)
-
-std::vector<MoonshineModel *> models;
-
-extern "C" moonshine_handle_t
-moonshine_load_model(const char *encoder_model_path,
-                     const char *decoder_model_path, const char *tokenizer_path,
-                     int32_t model_type) {
-  if (models.size() >= INT32_MAX) {
-    LOG("Too many models loaded\n");
-    return -1;
-  }
-  int load_error = -1;
-  MoonshineModel *model = nullptr;
-  try {
-    model = new MoonshineModel();
-    load_error = model->load(encoder_model_path, decoder_model_path,
-                             tokenizer_path, model_type);
-  } catch (const std::exception &e) {
-    LOGF("Failed to load model: %s\n", e.what());
-    return -1;
-  }
-  if (load_error != 0) {
-    LOG("Failed to load model");
-    return -1;
-  }
-  int32_t model_index = -1;
-  for (size_t i = 0; i < models.size(); i++) {
-    if (models[i] == nullptr) {
-      models[i] = model;
-      model_index = i;
-      break;
-    }
-  }
-  if (model_index == -1) {
-    model_index = models.size();
-    models.push_back(model);
-  }
-  return model_index;
-}
-
-#if defined(ANDROID)
-extern "C" moonshine_handle_t
-moonshine_load_model_from_assets(const char *encoder_model_path,
-                                 const char *decoder_model_path,
-                                 const char *tokenizer_path, int32_t model_type,
-                                 AAssetManager *assetManager) {
-  if (models.size() >= INT32_MAX) {
-    LOG("Too many models loaded\n");
-    return -1;
-  }
-  int load_error = -1;
-  MoonshineModel *model = nullptr;
-  try {
-    model = new MoonshineModel();
-    load_error =
-        model->load_from_assets(encoder_model_path, decoder_model_path,
-                                tokenizer_path, model_type, assetManager);
-  } catch (const std::exception &e) {
-    LOGF("Failed to load model: %s", e.what());
-    return -1;
-  }
-  if (load_error != 0) {
-    LOG("Failed to load model");
-    return -1;
-  }
-  int32_t model_index = -1;
-  for (size_t i = 0; i < models.size(); i++) {
-    if (models[i] == nullptr) {
-      models[i] = model;
-      model_index = i;
-      break;
-    }
-  }
-  if (model_index == -1) {
-    model_index = models.size();
-    models.push_back(model);
-  }
-  return model_index;
-}
-#endif
-
-extern "C" int moonshine_transcribe(moonshine_handle_t handle,
-                                    const float *audio_data,
-                                    size_t audio_data_size, char **out_text) {
-  CHECK_MOONSHINE_HANDLE(handle);
-  try {
-    return models[handle]->transcribe(audio_data, audio_data_size, out_text);
-  } catch (const std::exception &e) {
-    fprintf(stderr, "Failed to transcribe: %s\n", e.what());
-    return -1;
-  }
-}
-
-extern "C" int moonshine_transcribe_wav(moonshine_handle_t handle,
-                                        const char *wav_path, char **out_text) {
-  CHECK_MOONSHINE_HANDLE(handle);
-  try {
-    return models[handle]->transcribe_wav(wav_path, out_text);
-  } catch (const std::exception &e) {
-    LOGF("Failed to transcribe WAV: %s\n", e.what());
-    return -1;
-  }
-}
-
-/* Releases all resources allocated by moonshine_load_model. */
-extern "C" void moonshine_free_model(moonshine_handle_t handle) {
-  if (handle < 0 || handle >= static_cast<int32_t>(models.size())) {
-    LOGF("Moonshine free called with invalid handle %d\n", handle);
-    return;
-  }
-  delete models[handle];
-  models[handle] = nullptr;
-}
-
-extern "C" void moonshine_free_text(char *text) { DEBUG_FREE(text); }
-
-// v2 of the C API.
-
-#include <mutex>
-
+// Defined as a macro to ensure we get meaningful line numbers in the error
+// message.
 #define CHECK_TRANSCRIBER_HANDLE(handle)                                       \
   do {                                                                         \
     if (handle < 0 || !transcriber_map.contains(handle)) {                     \
       LOGF("Moonshine transcriber handle is invalid: handle %d", handle);      \
       return MOONSHINE_ERROR_INVALID_HANDLE;                                   \
-    }                                                                          \
-  } while (0)
-
-#define RETURN_IF_ERROR(error)                                                 \
-  do {                                                                         \
-    const int32_t error_code = (error);                                        \
-    if (error_code != 0) {                                                     \
-      return error_code;                                                       \
     }                                                                          \
   } while (0)
 
@@ -221,8 +83,8 @@ void parse_transcriber_options(const transcriber_option_t *in_options,
     } else if (option_name == "vad_threshold") {
       out_options.vad_threshold = float_from_string(in_option.value);
     } else {
-      throw std::runtime_error(
-          "Unknown transcriber option: '" + std::string(in_option.name) + "'");
+      throw std::runtime_error("Unknown transcriber option: '" +
+                               std::string(in_option.name) + "'");
     }
   }
 }
@@ -404,8 +266,8 @@ int32_t moonshine_transcribe_stream(int32_t transcriber_handle,
                                     struct transcript_t **out_transcript) {
   CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
   try {
-    transcriber_map[transcriber_handle]->transcribe_stream(
-        stream_handle, flags, out_transcript);
+    transcriber_map[transcriber_handle]->transcribe_stream(stream_handle, flags,
+                                                           out_transcript);
   } catch (const std::exception &e) {
     LOGF("Failed to transcribe stream: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
