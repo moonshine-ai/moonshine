@@ -4,3 +4,5 @@ build/
 .env
 .cxx/
 output/
+local.properties
+.idea/

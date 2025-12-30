@@ -5,6 +5,7 @@ import android.content.res.AssetManager;
 import androidx.appcompat.app.AppCompatActivity;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -56,22 +57,19 @@ public class Transcriber {
     }
 
     public void loadFromAssets(AppCompatActivity parentContext, String path, int modelArch) {
-        try {
-            AssetManager assetManager = parentContext.getAssets();
-            String encoderModelPath = path + "/encoder_model.ort";
-            String decoderModelPath = path + "/decoder_model_merged.ort";
-            String tokenizerPath = path + "/tokenizer.bin";
-            byte[] encoderModelData = assetManager.open(encoderModelPath).readAllBytes();
-            byte[] decoderModelData = assetManager.open(decoderModelPath).readAllBytes();
-            byte[] tokenizerData = assetManager.open(tokenizerPath).readAllBytes();
-            this.loadFromMemory(encoderModelData, decoderModelData, tokenizerData, modelArch);
-            if (this.transcriberHandle < 0) {
-                throw new RuntimeException("Failed to load transcriber from assets: '" + path + "'");
-            }
-            this.getDefaultStreamHandle();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        AssetManager assetManager = parentContext.getAssets();
+        String encoderModelPath = path + "/encoder_model.ort";
+        String decoderModelPath = path + "/decoder_model_merged.ort";
+        String tokenizerPath = path + "/tokenizer.bin";
+
+        byte[] encoderModelData = readAllBytes(assetManager, encoderModelPath);
+        byte[] decoderModelData = readAllBytes(assetManager, decoderModelPath);
+        byte[] tokenizerData = readAllBytes(assetManager, tokenizerPath);
+        this.loadFromMemory(encoderModelData, decoderModelData, tokenizerData, modelArch);
+        if (this.transcriberHandle < 0) {
+            throw new RuntimeException("Failed to load transcriber from assets: '" + path + "'");
         }
+        this.getDefaultStreamHandle();
     }
 
     protected void finalize() throws Throwable {
@@ -172,5 +170,18 @@ public class Transcriber {
         }
         this.defaultStreamHandle = this.createStream();
         return this.defaultStreamHandle;
+    }
+
+    private static byte[] readAllBytes(AssetManager assetManager, String path) {
+        try {
+            InputStream is = assetManager.open(path);
+            int size = is.available();
+            byte[] buffer = new byte[size];
+            is.read(buffer);
+            is.close();
+            return buffer;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

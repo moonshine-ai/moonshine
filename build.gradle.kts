@@ -7,11 +7,11 @@ plugins {
 
 android {
     namespace = "ai.moonshine.voice"
-    compileSdk = 35
+    compileSdk = 30
     ndkVersion = "25.2.9519653"
 
     defaultConfig {
-        minSdk = 35
+        minSdk = 30
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
@@ -55,7 +55,7 @@ mavenPublishing {
     publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
     signAllPublications()
     
-    coordinates("ai.moonshine", "moonshine-voice", "0.0.1")
+    coordinates("ai.moonshine", "moonshine-voice", "0.0.3")
 
     pom {
         name.set("Moonshine Voice")
