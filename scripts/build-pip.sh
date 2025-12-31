@@ -19,7 +19,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 elif grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null || grep -q "BCM2" /proc/cpuinfo 2>/dev/null; then
 	cp ${CORE_DIR}/third-party/onnxruntime/lib/linux/raspberrypi/libonnxruntime*.so ${PYTHON_DIR}/src/moonshine_voice/
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-	cp ${CORE_DIR}/third-party/onnxruntime/lib/linux/x86_64/libonnxruntime*.so ${PYTHON_DIR}/src/moonshine_voice/
+	cp ${CORE_DIR}/third-party/onnxruntime/lib/linux/x86_64/libonnxruntime*.so* ${PYTHON_DIR}/src/moonshine_voice/
 elif [[ "$OSTYPE" == "msys"* ]]; then
 	cp ${CORE_DIR}/third-party/onnxruntime/lib/windows/x86_64/libonnxruntime*.dll ${PYTHON_DIR}/src/moonshine_voice/
 else
@@ -42,13 +42,13 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 		PLAT_NAME="macosx_10_9_x86_64"
 	fi
 elif grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null || grep -q "BCM2" /proc/cpuinfo 2>/dev/null; then
-	PLAT_NAME="linux_aarch64"
+	PLAT_NAME="manylinux_2_17_aarch64"
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
 	ARCH=$(uname -m)
 	if [[ "$ARCH" == "x86_64" ]]; then
-		PLAT_NAME="linux_x86_64"
+		PLAT_NAME="manylinux_2_17_x86_64"
 	else
-		PLAT_NAME="linux_${ARCH}"
+		PLAT_NAME="manylinux_2_17_${ARCH}"
 	fi
 elif [[ "$OSTYPE" == "msys"* ]]; then
 	PLAT_NAME="win_amd64"
@@ -58,6 +58,9 @@ fi
 
 # Build platform-specific wheel
 # bdist_wheel should auto-detect platform from binary files, but we can also specify it
-rm -rf dist/*
-python setup.py bdist_wheel --plat-name=${PLAT_NAME}
+rm -rf dist/* wheelhouse/*
+python setup.py bdist_wheel
+auditwheel repair dist/moonshine_voice-*.whl -w dist/
+rm -rf dist/moonshine_voice-*-linux_*.whl
+
 twine upload dist/*
