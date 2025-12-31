@@ -72,11 +72,21 @@ target_include_directories(moonshine PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/third-party/utf-8/
 )
 
-target_link_libraries(moonshine PUBLIC
-    bin-tokenizer
-    ort-utils
-    ten_vad
-)
+if (IOS)
+    target_link_libraries(moonshine PUBLIC
+        bin-tokenizer
+        ort-utils
+        ten_vad
+        "-framework CoreFoundation"
+        "-framework Foundation"
+    )
+else()
+    target_link_libraries(moonshine PUBLIC
+        bin-tokenizer
+        ort-utils
+        ten_vad
+    )
+endif()
 
 add_executable(moonshine-c-api-test moonshine-c-api-test.cpp)
 set_target_properties(moonshine-c-api-test PROPERTIES
@@ -89,6 +99,15 @@ target_include_directories(moonshine-c-api-test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
     ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
 )
+
+if (IOS)
+    set_target_properties(moonshine-c-api-test PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.moonshine-c-api-test"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+    )
+endif()
 
 target_link_libraries(moonshine-c-api-test PRIVATE
     moonshine
@@ -107,9 +126,23 @@ target_include_directories(voice-activity-detector-test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/third-party/ten_vad/
 )
 
-target_link_libraries(voice-activity-detector-test PRIVATE
-    ten_vad
-)
+if (IOS)
+    set_target_properties(voice-activity-detector-test PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.voice-activity-detector-test"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+    )
+    target_link_libraries(voice-activity-detector-test PRIVATE
+        ten_vad
+        "-framework CoreFoundation"
+        "-framework Foundation"
+    )
+else()
+    target_link_libraries(voice-activity-detector-test PRIVATE
+        ten_vad
+    )
+endif()
 
 add_executable(resampler-test resampler-test.cpp resampler.cpp)
 set_target_properties(resampler-test PROPERTIES
@@ -123,9 +156,23 @@ target_include_directories(resampler-test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
 )
 
-target_link_libraries(resampler-test PRIVATE
-    moonshine-utils
-)
+if (IOS)
+    set_target_properties(resampler-test PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.resampler-test"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+    )
+    target_link_libraries(resampler-test PRIVATE
+        moonshine-utils
+        "-framework CoreFoundation"
+        "-framework Foundation"
+    )
+else()
+    target_link_libraries(resampler-test PRIVATE
+        moonshine-utils
+    )
+endif()
 
 add_executable(transcriber-test transcriber-test.cpp transcriber.cpp voice-activity-detector.cpp resampler.cpp)
 set_target_properties(transcriber-test PROPERTIES
@@ -144,6 +191,20 @@ target_include_directories(transcriber-test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
 )
 
-target_link_libraries(transcriber-test PRIVATE
-    moonshine
-)
+if (IOS)
+    set_target_properties(transcriber-test PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.transcriber-test"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+    )
+    target_link_libraries(transcriber-test PRIVATE
+        moonshine
+        "-framework CoreFoundation"
+        "-framework Foundation"
+    )
+else()
+    target_link_libraries(transcriber-test PRIVATE
+        moonshine
+    )
+endif()

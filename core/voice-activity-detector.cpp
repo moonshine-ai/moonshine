@@ -78,7 +78,7 @@ void VoiceActivityDetector::stop() {
 }
 
 void VoiceActivityDetector::process_audio(const float *audio_data,
-                                          int32_t audio_data_size,
+                                          size_t audio_data_size,
                                           int32_t sample_rate) {
   if (!_is_active) {
     return;
@@ -101,7 +101,7 @@ void VoiceActivityDetector::process_audio(const float *audio_data,
                            resampled_audio_vector.end());
   while (processing_buffer.size() >= (size_t)(hop_size)) {
     const float *audio_data = processing_buffer.data();
-    int32_t audio_data_size = hop_size;
+    size_t audio_data_size = hop_size;
     process_audio_chunk(audio_data, audio_data_size);
     processing_buffer.erase(processing_buffer.begin(),
                             processing_buffer.begin() + hop_size);
@@ -110,8 +110,8 @@ void VoiceActivityDetector::process_audio(const float *audio_data,
 }
 
 void VoiceActivityDetector::process_audio_chunk(const float *audio_data,
-                                                int32_t audio_data_size) {
-  assert(audio_data_size == hop_size);
+                                                size_t audio_data_size) {
+  assert(audio_data_size == (size_t)(hop_size));
   samples_processed_count += audio_data_size;
   // Remove the oldest samples from look_behind_buffer and add the new samples
   // at the end.
@@ -121,7 +121,7 @@ void VoiceActivityDetector::process_audio_chunk(const float *audio_data,
             look_behind_audio_buffer.end() - audio_data_size);
 
   std::vector<int16_t> audio_int16(audio_data_size);
-  for (int32_t i = 0; i < audio_data_size; i++) {
+  for (size_t i = 0; i < audio_data_size; i++) {
     audio_int16[i] = static_cast<int16_t>(audio_data[i] * 32767);
   }
   float smoothed_probability = 0.0f;
@@ -131,7 +131,7 @@ void VoiceActivityDetector::process_audio_chunk(const float *audio_data,
       std::lock_guard<std::mutex> lock(ten_vad_mutex);
       int current_flag;
       int32_t status =
-          ten_vad_process(*handle, audio_int16.data(), audio_data_size,
+          ten_vad_process(*handle, audio_int16.data(), (int32_t)audio_data_size,
                           &current_probability, &current_flag);
       if (status < 0) {
         throw std::runtime_error("Ten VAD failed to process audio, error: " +
@@ -185,8 +185,7 @@ void VoiceActivityDetector::process_audio_chunk(const float *audio_data,
 void VoiceActivityDetector::on_voice_start() {
   segments.push_back(VoiceActivitySegment());
   VoiceActivitySegment *segment = &(segments.back());
-  const float current_time =
-      seconds_from_sample_count(samples_processed_count);
+  const float current_time = seconds_from_sample_count(samples_processed_count);
   const float segment_start_time =
       current_time -
       seconds_from_sample_count(current_segment_audio_buffer.size());

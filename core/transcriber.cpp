@@ -24,8 +24,8 @@ void validate_model_arch(uint32_t model_arch) {
       return;
     }
   }
-  throw std::runtime_error(
-      "Invalid model architecture: " + std::to_string(model_arch));
+  throw std::runtime_error("Invalid model architecture: " +
+                           std::to_string(model_arch));
 }
 } // namespace
 
@@ -44,8 +44,8 @@ Transcriber::Transcriber(const TranscriberOptions &options)
   } else if (model_source == TranscriberOptions::ModelSource::NONE) {
     this->stt_model = nullptr;
   } else {
-    throw std::runtime_error(
-        "Invalid model source: " + std::to_string((int)(model_source)));
+    throw std::runtime_error("Invalid model source: " +
+                             std::to_string((int)(model_source)));
   }
 }
 
@@ -56,8 +56,8 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
   }
   validate_model_arch(model_arch);
   if (!std::filesystem::exists(model_path)) {
-    throw std::runtime_error(
-        "Model directory does not exist at path '" + std::string(model_path) + "'");
+    throw std::runtime_error("Model directory does not exist at path '" +
+                             std::string(model_path) + "'");
   }
   std::string encoder_model_path =
       append_path_component(model_path, "encoder_model.ort");
@@ -132,7 +132,7 @@ void Transcriber::transcribe_without_streaming(
   {
     std::lock_guard<std::mutex> lock(stream->vad_mutex);
     stream->vad->start();
-    stream->vad->process_audio(audio_data, audio_length, sample_rate);
+    stream->vad->process_audio(audio_data, (int32_t)audio_length, sample_rate);
     stream->vad->stop();
     segments = *(stream->vad->get_segments());
   }
@@ -231,7 +231,8 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
   std::vector<VoiceActivitySegment> segments;
   {
     std::lock_guard<std::mutex> lock(stream->vad_mutex);
-    stream->vad->process_audio(audio_data, audio_length, INTERNAL_SAMPLE_RATE);
+    stream->vad->process_audio(audio_data, (int32_t)audio_length,
+                               INTERNAL_SAMPLE_RATE);
     segments = *(stream->vad->get_segments());
   }
   stream->clear_new_audio_buffer();
@@ -260,7 +261,10 @@ Transcriber::transcript_to_string(const struct transcript_t *transcript) {
 std::string
 Transcriber::transcript_line_to_string(const struct transcript_line_t *line) {
   std::string result;
-  result += "text: '" + (line->text == nullptr ? std::string("<null>") : std::string(line->text)) + "'";
+  result += "text: '" +
+            (line->text == nullptr ? std::string("<null>")
+                                   : std::string(line->text)) +
+            "'";
   result += ", audio_data_count: " + std::to_string(line->audio_data_count);
   char time_str[64];
   snprintf(time_str, sizeof(time_str), ", start_time: %.2fs", line->start_time);
@@ -302,8 +306,8 @@ void Transcriber::update_transcript_from_segments(
           segment.audio_data.data(), segment.audio_data.size(), &out_text);
       if (transcribe_error != 0) {
         LOGF("Failed to transcribe: %d", transcribe_error);
-        throw std::runtime_error(
-            "Failed to transcribe: " + std::to_string(transcribe_error));
+        throw std::runtime_error("Failed to transcribe: " +
+                                 std::to_string(transcribe_error));
       }
       // Ensure the output text is valid UTF-8.
       line.text = sanitize_text(out_text);
