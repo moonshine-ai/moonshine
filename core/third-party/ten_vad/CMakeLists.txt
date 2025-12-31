@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.22.1)
 
 project("ten_vad")
 
-add_library(ten_vad SHARED
+add_library(ten_vad STATIC
     aed.cc
     biquad.cc
     fftw.c

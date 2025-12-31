@@ -4,7 +4,7 @@ project("moonshine-utils")
 
 include_directories(${CMAKE_CURRENT_LIST_DIR}/../third-party/doctest)
 
-add_library(moonshine-utils SHARED
+add_library(moonshine-utils STATIC
     string-utils.cpp
     debug-utils.cpp
 )
