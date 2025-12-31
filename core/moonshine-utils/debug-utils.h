@@ -2,6 +2,8 @@
 #define UTILS_H
 
 #include <cinttypes>
+#include <cstring>
+
 #include <sstream>
 #include <string>
 #include <vector>
