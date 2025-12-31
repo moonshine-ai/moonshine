@@ -14,6 +14,7 @@ uv.lock
 libmoonshine*.so
 libmoonshine*.dylib
 libmoonshine*.dll
+/python/src/moonshine_voice/libonnxruntime*
 /python/src/moonshine_voice/*.so
 /python/src/moonshine_voice/*.dylib
 /python/src/moonshine_voice/*.dll
