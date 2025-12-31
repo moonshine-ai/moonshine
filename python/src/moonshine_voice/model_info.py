@@ -1,4 +1,5 @@
 import os
+import sys
 
 from moonshine_voice.moonshine_api import ModelArch
 from moonshine_voice.transcriber import Transcriber
@@ -123,6 +124,8 @@ def download_model_from_info(model_info: dict) -> tuple[str, ModelArch]:
 
 def get_model_for_language(wanted_language: str = "en", wanted_model_arch: ModelArch = None) -> tuple[str, ModelArch]:
     model_info = find_model_info(wanted_language, wanted_model_arch)
+    if wanted_language != "en":
+        print("Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.", file=sys.stderr)
     return download_model_from_info(model_info)
 
 
