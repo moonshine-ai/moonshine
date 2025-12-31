@@ -59,7 +59,7 @@ fi
 # Build platform-specific wheel
 # bdist_wheel should auto-detect platform from binary files, but we can also specify it
 rm -rf dist/* wheelhouse/*
-python setup.py bdist_wheel
+uv run setup.py bdist_wheel
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
 	auditwheel repair dist/moonshine_voice-*.whl -w dist/
 	rm -rf dist/moonshine_voice-*-linux_*.whl
