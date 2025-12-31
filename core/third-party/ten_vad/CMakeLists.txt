@@ -13,6 +13,10 @@ add_library(ten_vad STATIC
     ten-vad-model-data.c
 )
 
+target_compile_options(ten_vad PRIVATE
+    -fPIC
+)
+
 target_include_directories(ten_vad PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
     ${CMAKE_CURRENT_LIST_DIR}/../onnxruntime/include

@@ -1,15 +1,16 @@
-FROM ubuntu:24.04
+FROM python:3.12-slim-trixie
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install Python 3 and essential build tools
+# Installl essential build tools
 RUN apt-get update && \
     apt-get install -y \
     cmake \
-    build-essential
+    build-essential \
+    patchelf
 
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Create a directory in home for the repo
 RUN mkdir -p /home/user/moonshine

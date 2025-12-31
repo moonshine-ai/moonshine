@@ -9,6 +9,10 @@ add_library(moonshine-utils STATIC
     debug-utils.cpp
 )
 
+target_compile_options(moonshine-utils PRIVATE
+    -fPIC
+)
+
 set_target_properties(moonshine-utils PROPERTIES
     CXX_STANDARD 20
     CXX_STANDARD_REQUIRED YES
