@@ -54,6 +54,15 @@ set_target_properties(moonshine PROPERTIES
     CXX_EXTENSIONS NO
 )
 
+# On macOS, set rpath to @loader_path so the library looks for dependencies
+# (like libonnxruntime) in the same directory as libmoonshine.dylib
+if(APPLE)
+    set_target_properties(moonshine PROPERTIES
+        INSTALL_RPATH "@loader_path"
+        BUILD_WITH_INSTALL_RPATH TRUE
+    )
+endif()
+
 target_include_directories(moonshine PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
     ${CMAKE_CURRENT_LIST_DIR}/ort-utils
