@@ -11,3 +11,10 @@ local.properties
 __pycache__/
 uv.lock
 *.egg-info/
+libmoonshine*.so
+libmoonshine*.dylib
+libmoonshine*.dll
+/python/src/moonshine_voice/*.so
+/python/src/moonshine_voice/*.dylib
+/python/src/moonshine_voice/*.dll
+/python/dist/
