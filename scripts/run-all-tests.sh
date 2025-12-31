@@ -4,6 +4,7 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR=$(dirname $SCRIPTS_DIR)
 BUILD_DIR=${REPO_ROOT_DIR}/core/build
 
+rm -rf ${BUILD_DIR}
 mkdir -p ${BUILD_DIR}
 cd ${BUILD_DIR}
 cmake ..
