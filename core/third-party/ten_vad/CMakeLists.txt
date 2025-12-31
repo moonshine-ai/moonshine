@@ -29,6 +29,12 @@ if (ANDROID)
         android
         log
     )
+elseif(IOS)
+    target_link_libraries(ten_vad PUBLIC
+        ort-utils
+        "-framework CoreFoundation"
+        "-framework Foundation"
+    )
 else()
     target_link_libraries(ten_vad PUBLIC
         ort-utils
@@ -41,6 +47,15 @@ target_include_directories(ten_vad-test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
     ${CMAKE_CURRENT_LIST_DIR}/../doctest
 )
+
+if (IOS)
+    set_target_properties(ten_vad-test PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.ten_vad-test"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+    )
+endif()
 
 target_link_libraries(ten_vad-test PUBLIC
     ten_vad

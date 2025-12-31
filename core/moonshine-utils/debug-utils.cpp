@@ -145,7 +145,7 @@ bool save_wav_data(const char *path, const float *audio_data,
   char riff_header[4] = {'R', 'I', 'F', 'F'};
   std::fwrite(riff_header, 1, 4, file);
   // Write the chunk size
-  uint32_t chunk_size = 36 + num_samples * 2;
+  uint32_t chunk_size = 36 + (uint32_t)num_samples * 2;
   std::fwrite(&chunk_size, 4, 1, file);
   // Write the format
   char format[4] = {'W', 'A', 'V', 'E'};
@@ -172,7 +172,7 @@ bool save_wav_data(const char *path, const float *audio_data,
   char data_chunk[4] = {'d', 'a', 't', 'a'};
   std::fwrite(data_chunk, 1, 4, file);
   // Write the data chunk size
-  uint32_t data_chunk_size = num_samples * 2;
+  uint32_t data_chunk_size = (uint32_t)num_samples * 2;
   std::fwrite(&data_chunk_size, 4, 1, file);
   // Write the data
   std::fwrite(audio_int16.data(), 2, num_samples, file);
@@ -210,9 +210,11 @@ std::vector<uint8_t> load_file_into_memory(const std::string &path) {
   std::vector<uint8_t> data(size);
   size_t bytes_read = std::fread(data.data(), 1, size, file);
   if (bytes_read != size) {
-    THROW_WITH_LOG(("Failed to read file: '" + path + "' completely. Expected " +
-                    std::to_string(size) + " bytes, but read " +
-                    std::to_string(bytes_read) + " bytes.").c_str());
+    THROW_WITH_LOG(("Failed to read file: '" + path +
+                    "' completely. Expected " + std::to_string(size) +
+                    " bytes, but read " + std::to_string(bytes_read) +
+                    " bytes.")
+                       .c_str());
   }
   std::fclose(file);
   return data;
@@ -226,9 +228,11 @@ void save_memory_to_file(const std::string &path,
   }
   size_t bytes_written = std::fwrite(data.data(), 1, data.size(), file);
   if (bytes_written != data.size()) {
-    THROW_WITH_LOG(("Failed to write file: '" + path + "' completely. Expected " +
-                    std::to_string(data.size()) + " bytes, but wrote " +
-                    std::to_string(bytes_written) + " bytes.").c_str());
+    THROW_WITH_LOG(("Failed to write file: '" + path +
+                    "' completely. Expected " + std::to_string(data.size()) +
+                    " bytes, but wrote " + std::to_string(bytes_written) +
+                    " bytes.")
+                       .c_str());
   }
   std::fclose(file);
 }

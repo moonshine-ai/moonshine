@@ -2,7 +2,12 @@ cmake_minimum_required(VERSION 3.22.1)
 
 project("onnxruntime")
 
-add_library(onnxruntime SHARED IMPORTED)
+if (IOS)
+    add_library(onnxruntime STATIC IMPORTED)
+else()
+    add_library(onnxruntime SHARED IMPORTED)
+endif()
+
 if (ANDROID)
     # Detect Android ABI and map to library directory name
     if(ANDROID_ABI STREQUAL "armeabi-v7a")
@@ -22,6 +27,22 @@ if (ANDROID)
     set_target_properties(onnxruntime PROPERTIES
         IMPORTED_LOCATION "${ONNXRUNTIME_LIB_PATH_LOCAL}"
         INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/include/"
+    )
+elseif(IOS)
+    if (CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+        set(ONNXRUNTIME_LIB_PATH_LOCAL "${CMAKE_CURRENT_LIST_DIR}/lib/ios/arm64/libonnxruntime.a")
+    else()
+        set(ONNXRUNTIME_LIB_PATH_LOCAL "${CMAKE_CURRENT_LIST_DIR}/lib/ios/simulator/libonnxruntime.a")
+    endif()
+    set(ONNXRUNTIME_LIB_PATH "${ONNXRUNTIME_LIB_PATH_LOCAL}" PARENT_SCOPE)
+    set_target_properties(onnxruntime PROPERTIES
+        IMPORTED_LOCATION "${ONNXRUNTIME_LIB_PATH_LOCAL}"
+        INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/include/"
+    )
+    # Link iOS frameworks required by onnxruntime
+    target_link_libraries(onnxruntime INTERFACE
+        "-framework CoreFoundation"
+        "-framework Foundation"
     )
 elseif(APPLE)
     set(ONNXRUNTIME_LIB_PATH_LOCAL "${CMAKE_CURRENT_LIST_DIR}/lib/macos/arm64/libonnxruntime.1.23.2.dylib")
@@ -51,6 +72,20 @@ target_include_directories(onnxruntime-test PRIVATE
     ${ONNXRUNTIME_INCLUDE_DIR}
 )
 
-target_link_libraries(onnxruntime-test
-    onnxruntime
-)
+if (IOS)
+    set_target_properties(onnxruntime-test PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.onnxruntime-test"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+    )
+    target_link_libraries(onnxruntime-test PRIVATE
+        onnxruntime
+        "-framework CoreFoundation"
+        "-framework Foundation"
+    )
+else()
+    target_link_libraries(onnxruntime-test
+        onnxruntime
+    )
+endif()

@@ -48,7 +48,7 @@ public:
   void start();
   void stop();
   bool is_active() const { return _is_active; }
-  void process_audio(const float *audio_data, int32_t audio_data_size,
+  void process_audio(const float *audio_data, size_t audio_data_size,
                      int32_t sample_rate);
   const std::vector<VoiceActivitySegment> *get_segments() const {
     return &segments;
@@ -60,7 +60,7 @@ private:
   void on_voice_start();
   void on_voice_end();
   void on_voice_continuing();
-  void process_audio_chunk(const float *audio_data, int32_t audio_data_size);
+  void process_audio_chunk(const float *audio_data, size_t audio_data_size);
 };
 
 #endif

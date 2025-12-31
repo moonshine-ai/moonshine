@@ -47,19 +47,21 @@ int ten_vad_process(ten_vad_handle_t handle, const int16_t *audio_data,
       out_probability == nullptr || out_flag == nullptr) {
     LOGF("Invalid parameters, handle: %p, audio_data: %p, out_probability: %p, "
          "out_flag: %p",
-         (void*)handle, (void*)audio_data, (void*)out_probability, (void*)out_flag);
+         (void *)handle, (void *)audio_data, (void *)out_probability,
+         (void *)out_flag);
     return -1;
   }
   Aed_St *ptr = (Aed_St *)handle;
   if (audio_data_length != ptr->stCfg.hopSz) {
-    LOGF("Audio data length mismatch, expected: %zu, got: %zu", ptr->stCfg.hopSz, audio_data_length);
+    LOGF("Audio data length mismatch, expected: %zu, got: %zu",
+         ptr->stCfg.hopSz, audio_data_length);
     return -1;
   }
-  int16_to_float(audio_data, audio_data_length, ptr->inputFloatBuff);
+  int16_to_float(audio_data, (int)(audio_data_length), ptr->inputFloatBuff);
   Aed_InputData aedInputData;
   Aed_OutputData aedOutputData;
   aedInputData.binPower = NULL;
-  aedInputData.hopSz = ptr->stCfg.hopSz;
+  aedInputData.hopSz = (int)(ptr->stCfg.hopSz);
   aedInputData.nBins = -1;
   aedInputData.timeSignal = ptr->inputFloatBuff;
   int ret = AUP_Aed_proc(handle, &aedInputData, &aedOutputData);

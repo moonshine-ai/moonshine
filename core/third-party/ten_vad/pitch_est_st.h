@@ -11,16 +11,16 @@
 
 #include "pitch_est.h"
 
-#define AUP_PE_ALIGN8(o) (((o) + 7) & (~7))
+#define AUP_PE_ALIGN8(o) (((o) + 7UL) & (~7UL))
 #define AUP_PE_MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define AUP_PE_MIN(x, y) (((x) > (y)) ? (y) : (x))
 
-#define AUP_PE_NB_BANDS (18)  // number of mel bands
+#define AUP_PE_NB_BANDS (18) // number of mel bands
 #define AUP_PE_LPC_ORDER (16)
 
-#define AUP_PE_XCORR_TRAINING_OFFSET (80)  // = 80
-#define AUP_PE_MIN_PERIOD_16KHZ (32)   // stands for 1.333kHz, PITCH_MIN_PERIOD
-#define AUP_PE_MAX_PERIOD_16KHZ (256)  // stands for ~62Hz, PITCH_MAX_PERIOD
+#define AUP_PE_XCORR_TRAINING_OFFSET (80) // = 80
+#define AUP_PE_MIN_PERIOD_16KHZ (32)  // stands for 1.333kHz, PITCH_MIN_PERIOD
+#define AUP_PE_MAX_PERIOD_16KHZ (256) // stands for ~62Hz, PITCH_MAX_PERIOD
 
 #define AUP_PE_LOWPSS_NSEC (5)
 const float AUP_PE_B_2KHZ[AUP_PE_LOWPSS_NSEC][3] = {
@@ -70,7 +70,7 @@ const float AUP_PE_G_8KHZ[AUP_PE_LOWPSS_NSEC] = {
 
 #define AUP_PE_PI (3.1415926f)
 
-#define AUP_PE_FEAT_TIME_WINDOW (40)  // in ms
+#define AUP_PE_FEAT_TIME_WINDOW (40) // in ms
 // how much time data to use for cross-correlation calculation
 #define AUP_PE_FEAT_MAX_NFRM (12)
 #define AUP_PE_TOTAL_NFEAT (55)
@@ -87,10 +87,10 @@ const float AUP_PE_BAND_LPC_COMP[AUP_PE_NB_BANDS] = {
 #define AUP_PE_PITCHMAXPATH_W (0.02f)
 
 typedef struct PE_St_ {
-  void* dynamMemPtr;    // memory pointer holding the dynamic memory
-  size_t dynamMemSize;  // size of the buffer *dynamMemPtr
+  void *dynamMemPtr;   // memory pointer holding the dynamic memory
+  size_t dynamMemSize; // size of the buffer *dynamMemPtr
   // void* ifftStHdl;  // AgoraFft*
-  void* biquadIIRPtr;
+  void *biquadIIRPtr;
 
   // ---------------------------------------------------------------
   // Static Configuration
@@ -99,17 +99,17 @@ typedef struct PE_St_ {
   // ---------------------------------------------------------------
   // Internal Static Config Registers, which are generated from stCfg
   int nBins;
-  int procResampleRate;     // AUP_PE_FS / stCfg.procFs
-  int minPeriod;            // min. pitch period in procFs
-  int maxPeriod;            // max. pitch period in procFs
-  int difPeriod;            // maxPeriod - minPeriod
-  int inputResampleBufLen;  // length of the resampling output buffer
-  int inputQLen;            // MAX(TRAINING_OFFSET_XXXX, hopSz) + hopSz
-  int excBufLen;            // PITCH_MAX_PERIOD + hopSz + 1
-  int nFeat;                // number of feature frames to use/store
-  int estDelay;             // pitch estimate delay in terms of frames
+  int procResampleRate;    // AUP_PE_FS / stCfg.procFs
+  int minPeriod;           // min. pitch period in procFs
+  int maxPeriod;           // max. pitch period in procFs
+  int difPeriod;           // maxPeriod - minPeriod
+  int inputResampleBufLen; // length of the resampling output buffer
+  int inputQLen;           // MAX(TRAINING_OFFSET_XXXX, hopSz) + hopSz
+  int excBufLen;           // PITCH_MAX_PERIOD + hopSz + 1
+  int nFeat;               // number of feature frames to use/store
+  int estDelay;            // pitch estimate delay in terms of frames
   float dct_table[AUP_PE_NB_BANDS *
-                  AUP_PE_NB_BANDS];  // coeff. table of DCT transformation
+                  AUP_PE_NB_BANDS]; // coeff. table of DCT transformation
 
   // ---------------------------------------------------------------
   // Dynamic Configuration
@@ -121,16 +121,16 @@ typedef struct PE_St_ {
   // ---------------------------------------------------------------
   // Variables
   /////////////////////////////////////////////////////////////////////////
-  float* inputResampleBuf;  // [inputResampleBufLen]
+  float *inputResampleBuf; // [inputResampleBufLen]
   int inputResampleBufIdx;
 
-  float* inputQ;           // [inputQLen]
-  float* alignedIn;        // [hopSz]
-  float* lpcFilterOutBuf;  // [hopSz]
+  float *inputQ;          // [inputQLen]
+  float *alignedIn;       // [hopSz]
+  float *lpcFilterOutBuf; // [hopSz]
 
-  float* excBuf;  // [excBufLen]
+  float *excBuf; // [excBufLen]
   // excBuf stores the smoothed LPC prediction result
-  float* excBufSq;  // [excBufLen]
+  float *excBufSq; // [excBufLen]
   // = excBuf.^2
 
   float lpc[AUP_PE_LPC_ORDER];
@@ -139,12 +139,12 @@ typedef struct PE_St_ {
 
   float tmpFeat[AUP_PE_TOTAL_NFEAT];
 
-  int xCorrOffsetIdx;  // the oldest frame's index in xCorr Buffer
-  float* xCorrInst;    // [maxPeriod]
-  float* xCorr[AUP_PE_FEAT_MAX_NFRM * 2];  // [stHdl->nFeat * 2][maxPeriod + 1]
+  int xCorrOffsetIdx; // the oldest frame's index in xCorr Buffer
+  float *xCorrInst;   // [maxPeriod]
+  float *xCorr[AUP_PE_FEAT_MAX_NFRM * 2]; // [stHdl->nFeat * 2][maxPeriod + 1]
   // circ-buffer [<--->][...]
-  float*
-      xCorrTmp[AUP_PE_FEAT_MAX_NFRM * 2];  // [stHdl->nFeat * 2][maxPeriod + 1]
+  float
+      *xCorrTmp[AUP_PE_FEAT_MAX_NFRM * 2]; // [stHdl->nFeat * 2][maxPeriod + 1]
   // temporarily modified version of xCorr
 
   float frmWeight[AUP_PE_FEAT_MAX_NFRM * 2];
@@ -153,14 +153,14 @@ typedef struct PE_St_ {
 
   // variables for best pitch estimation ....
   /////////////////////////////////////////////////////////////////////////
-  float* pitchMaxPathReg[2];  // [2][maxPeriod]
+  float *pitchMaxPathReg[2]; // [2][maxPeriod]
 
-  int* pitchPrev[AUP_PE_FEAT_MAX_NFRM * 2];  // [stHdl->nFeat * 2][maxPeriod]
+  int *pitchPrev[AUP_PE_FEAT_MAX_NFRM * 2]; // [stHdl->nFeat * 2][maxPeriod]
   float pitchMaxPathAll;
   int bestPeriodEst;
 
-  int voiced;            // whether this frame has voice
-  float pitchEstResult;  // the final result storing the estimated pitch freq.
+  int voiced;           // whether this frame has voice
+  float pitchEstResult; // the final result storing the estimated pitch freq.
 } PE_St;
 
-#endif  // __PITCH_EST_ST_H__
+#endif // __PITCH_EST_ST_H__

@@ -35,6 +35,11 @@ target_link_libraries(ort-utils PUBLIC
     android
     log
 )
+elseif(IOS)
+target_link_libraries(ort-utils PUBLIC
+    moonshine-utils
+    ${ONNXRUNTIME_LIB_PATH}
+)
 else()
 target_link_libraries(ort-utils PUBLIC
     moonshine-utils
