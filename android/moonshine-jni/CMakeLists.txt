@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.22.1)
 
 project("moonshine-jni")
 
-add_library(moonshine-jni SHARED
+add_library(moonshine-jni STATIC
     moonshine-jni.cpp
 )
 

@@ -12,7 +12,7 @@ add_subdirectory(
     ${CMAKE_CURRENT_LIST_DIR}/../moonshine-utils/build
 )
 
-add_library(ort-utils SHARED
+add_library(ort-utils STATIC
     ort-utils.cpp
     moonshine-ort-allocator.cpp
     moonshine-tensor-view.cpp
