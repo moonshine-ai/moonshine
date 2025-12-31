@@ -6,6 +6,10 @@ add_library(bin-tokenizer STATIC
     bin-tokenizer.cpp
 )
 
+target_compile_options(bin-tokenizer PRIVATE
+    -fPIC
+)
+
 target_include_directories(bin-tokenizer PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/../moonshine-utils
 )

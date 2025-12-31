@@ -19,6 +19,10 @@ add_library(ort-utils STATIC
     moonshine-tensor.cpp
 )
 
+target_compile_options(ort-utils PRIVATE
+    -fPIC
+)
+
 target_include_directories(ort-utils PRIVATE
     ${MOONSHINE_UTILS_INCLUDE_DIR}
     ${ONNXRUNTIME_INCLUDE_DIR}
