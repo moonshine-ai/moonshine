@@ -80,6 +80,15 @@ if (IOS)
         "-framework CoreFoundation"
         "-framework Foundation"
     )
+    set_target_properties(moonshine PROPERTIES
+        FRAMEWORK TRUE
+        FRAMEWORK_VERSION A
+        MACOSX_FRAMEWORK_IDENTIFIER ai.moonshine.voice
+        PUBLIC_HEADER ${CMAKE_CURRENT_LIST_DIR}/moonshine.h
+        RESOURCE ${CMAKE_CURRENT_LIST_DIR}/../test-assets
+        VERSION 0.0.6
+        COMPATIBILITY ANYNEWER
+    )
 else()
     target_link_libraries(moonshine PUBLIC
         bin-tokenizer
@@ -198,6 +207,8 @@ if (IOS)
         MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
     )
+    if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+endif()
     target_link_libraries(transcriber-test PRIVATE
         moonshine
         "-framework CoreFoundation"
