@@ -20,3 +20,4 @@ libmoonshine*.dll
 /python/src/moonshine_voice/*.dylib
 /python/src/moonshine_voice/*.dll
 /python/dist/
+.pypirc
