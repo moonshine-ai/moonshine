@@ -17,7 +17,7 @@ cp ${CORE_BUILD_DIR}/libmoonshine.* ${PYTHON_DIR}/src/moonshine_voice/
 if [[ "$OSTYPE" == "darwin"* ]]; then
 	cp ${CORE_DIR}/third-party/onnxruntime/lib/macos/arm64/libonnxruntime*.dylib ${PYTHON_DIR}/src/moonshine_voice/
 elif grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null || grep -q "BCM2" /proc/cpuinfo 2>/dev/null; then
-	cp ${CORE_DIR}/third-party/onnxruntime/lib/linux/raspberrypi/libonnxruntime*.so ${PYTHON_DIR}/src/moonshine_voice/
+	cp ${CORE_DIR}/third-party/onnxruntime/lib/linux/aarch64/libonnxruntime*.so* ${PYTHON_DIR}/src/moonshine_voice/
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
 	cp ${CORE_DIR}/third-party/onnxruntime/lib/linux/x86_64/libonnxruntime*.so* ${PYTHON_DIR}/src/moonshine_voice/
 elif [[ "$OSTYPE" == "msys"* ]]; then

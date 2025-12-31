@@ -31,7 +31,11 @@ elseif(APPLE)
         INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/include/"
     )
 elseif(LINUX)
-    set(ONNXRUNTIME_LIB_PATH_LOCAL "${CMAKE_CURRENT_LIST_DIR}/lib/linux/x86_64/libonnxruntime.so.1")
+    if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+        set(ONNXRUNTIME_LIB_PATH_LOCAL "${CMAKE_CURRENT_LIST_DIR}/lib/linux/aarch64/libonnxruntime.so.1")
+    else()
+        set(ONNXRUNTIME_LIB_PATH_LOCAL "${CMAKE_CURRENT_LIST_DIR}/lib/linux/x86_64/libonnxruntime.so.1")
+    endif()
     set(ONNXRUNTIME_LIB_PATH "${ONNXRUNTIME_LIB_PATH_LOCAL}" PARENT_SCOPE)
     set_target_properties(onnxruntime PROPERTIES
         IMPORTED_LOCATION "${ONNXRUNTIME_LIB_PATH_LOCAL}"
