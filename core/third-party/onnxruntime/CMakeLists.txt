@@ -29,10 +29,10 @@ if (ANDROID)
         INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/include/"
     )
 elseif(IOS)
-    if (CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-        set(ONNXRUNTIME_LIB_PATH_LOCAL "${CMAKE_CURRENT_LIST_DIR}/lib/ios/arm64/libonnxruntime.a")
-    else()
+    if (CMAKE_OSX_SYSROOT STREQUAL "iphonesimulator")
         set(ONNXRUNTIME_LIB_PATH_LOCAL "${CMAKE_CURRENT_LIST_DIR}/lib/ios/simulator/libonnxruntime.a")
+    else()
+        set(ONNXRUNTIME_LIB_PATH_LOCAL "${CMAKE_CURRENT_LIST_DIR}/lib/ios/arm64/libonnxruntime.a")
     endif()
     set(ONNXRUNTIME_LIB_PATH "${ONNXRUNTIME_LIB_PATH_LOCAL}" PARENT_SCOPE)
     set_target_properties(onnxruntime PROPERTIES
