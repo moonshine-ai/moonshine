@@ -13,17 +13,20 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "moonshine",
-            path: "Moonshine.xcframework"
+            // path: "swift/Moonshine.xcframework",
+            url:
+                "https://github.com/moonshine-ai/moonshine-v2/releases/download/v0.0.7/Moonshine.xcframework.zip",
+            checksum: "40e0891feb4cdd2993f0f4e6d2001c331e3ef1d551b3b01f57a79fccff1b3632"
         ),
         .target(
             name: "MoonshineVoice",
             dependencies: ["moonshine"],
-            path: "Sources/MoonshineVoice"
+            path: "swift/Sources/MoonshineVoice"
         ),
         .testTarget(
             name: "MoonshineVoiceTests",
             dependencies: ["MoonshineVoice"],
-            path: "Tests/MoonshineVoiceTests"
-        )
+            path: "swift/Tests/MoonshineVoiceTests"
+        ),
     ]
 )
