@@ -20,5 +20,10 @@ let package = Package(
             dependencies: ["moonshine"],
             path: "Sources/MoonshineVoice"
         ),
+        .testTarget(
+            name: "MoonshineVoiceTests",
+            dependencies: ["MoonshineVoice"],
+            path: "Tests/MoonshineVoiceTests"
+        )
     ]
 )
