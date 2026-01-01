@@ -72,7 +72,7 @@ target_include_directories(moonshine PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/third-party/utf-8/
 )
 
-if (IOS)
+if (IOS OR MOONSHINE_BUILD_SWIFT)
     target_link_libraries(moonshine PUBLIC
         bin-tokenizer
         ort-utils
@@ -88,6 +88,16 @@ if (IOS)
         RESOURCE ${CMAKE_CURRENT_LIST_DIR}/../test-assets
         VERSION 0.0.6
         COMPATIBILITY ANYNEWER
+    )
+    # Copy the public header into the framework's Headers directory after build
+    # This is needed because Xcode generator doesn't automatically copy PUBLIC_HEADER during build
+    add_custom_command(TARGET moonshine POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:moonshine>/Headers"
+        COMMAND ${CMAKE_COMMAND} -E copy
+            ${CMAKE_CURRENT_LIST_DIR}/moonshine.h
+            "$<TARGET_FILE_DIR:moonshine>/Headers/moonshine.h"
+        COMMENT "Copying public header to framework"
     )
 else()
     target_link_libraries(moonshine PUBLIC
@@ -109,7 +119,7 @@ target_include_directories(moonshine-c-api-test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
 )
 
-if (IOS)
+if (IOS OR MOONSHINE_BUILD_SWIFT)
     set_target_properties(moonshine-c-api-test PROPERTIES
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.moonshine-c-api-test"
@@ -135,7 +145,7 @@ target_include_directories(voice-activity-detector-test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/third-party/ten_vad/
 )
 
-if (IOS)
+if (IOS OR MOONSHINE_BUILD_SWIFT)
     set_target_properties(voice-activity-detector-test PROPERTIES
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.voice-activity-detector-test"
@@ -165,7 +175,7 @@ target_include_directories(resampler-test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
 )
 
-if (IOS)
+if (IOS OR MOONSHINE_BUILD_SWIFT)
     set_target_properties(resampler-test PROPERTIES
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.resampler-test"
@@ -200,15 +210,13 @@ target_include_directories(transcriber-test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
 )
 
-if (IOS)
+if (IOS OR MOONSHINE_BUILD_SWIFT)
     set_target_properties(transcriber-test PROPERTIES
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.transcriber-test"
         MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
     )
-    if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
-endif()
     target_link_libraries(transcriber-test PRIVATE
         moonshine
         "-framework CoreFoundation"

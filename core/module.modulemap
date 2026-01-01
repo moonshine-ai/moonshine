@@ -1,0 +1,5 @@
+framework module Moonshine {
+    umbrella header "moonshine.h"
+    export *
+    module * { export * }
+}

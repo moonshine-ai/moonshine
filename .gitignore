@@ -21,3 +21,5 @@ libmoonshine*.dll
 /python/src/moonshine_voice/*.dll
 /python/dist/
 .pypirc
+/ios/Moonshine.xcframework
+.build/
