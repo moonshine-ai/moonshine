@@ -5,13 +5,13 @@ let package = Package(
     name: "BasicTranscription",
     platforms: [.macOS(.v13)],
     dependencies: [
-        .package(path: "../../../ios")
+        .package(path: "../../../swift")
     ],
     targets: [
         .executableTarget(
             name: "BasicTranscription",
             dependencies: [
-                .product(name: "Moonshine", package: "ios")
+                .product(name: "Moonshine", package: "swift")
             ]
         )
     ]
