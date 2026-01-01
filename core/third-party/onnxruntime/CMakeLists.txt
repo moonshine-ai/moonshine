@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.22.1)
 
 project("onnxruntime")
 
-if (IOS)
+if (IOS OR MOONSHINE_BUILD_SWIFT)
     add_library(onnxruntime STATIC IMPORTED)
 else()
     add_library(onnxruntime SHARED IMPORTED)
@@ -28,8 +28,10 @@ if (ANDROID)
         IMPORTED_LOCATION "${ONNXRUNTIME_LIB_PATH_LOCAL}"
         INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/include/"
     )
-elseif(IOS)
-    if (CMAKE_OSX_SYSROOT STREQUAL "iphonesimulator")
+elseif(IOS OR MOONSHINE_BUILD_SWIFT)
+    if (MOONSHINE_BUILD_SWIFT)
+        set(ONNXRUNTIME_LIB_PATH_LOCAL "${CMAKE_CURRENT_LIST_DIR}/lib/macos/arm64/libonnxruntime.a")
+    elseif (CMAKE_OSX_SYSROOT STREQUAL "iphonesimulator")
         set(ONNXRUNTIME_LIB_PATH_LOCAL "${CMAKE_CURRENT_LIST_DIR}/lib/ios/simulator/libonnxruntime.a")
     else()
         set(ONNXRUNTIME_LIB_PATH_LOCAL "${CMAKE_CURRENT_LIST_DIR}/lib/ios/arm64/libonnxruntime.a")
@@ -72,7 +74,7 @@ target_include_directories(onnxruntime-test PRIVATE
     ${ONNXRUNTIME_INCLUDE_DIR}
 )
 
-if (IOS)
+if (IOS OR MOONSHINE_BUILD_SWIFT)
     set_target_properties(onnxruntime-test PROPERTIES
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.onnxruntime-test"
