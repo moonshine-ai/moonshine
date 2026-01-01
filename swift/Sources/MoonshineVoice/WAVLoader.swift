@@ -1,7 +1,7 @@
 import Foundation
 
 /// Error types for WAV file loading
-enum WAVError: Error {
+public enum WAVError: Error {
     case fileNotFound(String)
     case invalidRIFF
     case invalidWAVE
@@ -12,14 +12,19 @@ enum WAVError: Error {
 }
 
 /// Result of loading a WAV file
-struct WAVData {
-    let audioData: [Float]
-    let sampleRate: Int
+public struct WAVData {
+    public let audioData: [Float]
+    public let sampleRate: Int
+    
+    public init(audioData: [Float], sampleRate: Int) {
+        self.audioData = audioData
+        self.sampleRate = sampleRate
+    }
 }
 
 /// Load a WAV file and return audio data as float array and sample rate.
 /// Supports 16-bit, 24-bit, and 32-bit PCM WAV files. Audio samples are normalized to [-1.0, 1.0].
-func loadWAVFile(_ filePath: String) throws -> WAVData {
+public func loadWAVFile(_ filePath: String) throws -> WAVData {
     let url = URL(fileURLWithPath: filePath)
     
     guard FileManager.default.fileExists(atPath: filePath) else {
@@ -182,11 +187,11 @@ func loadWAVFile(_ filePath: String) throws -> WAVData {
             } else if bitsPerSample == 24 {
                 let sampleData = audioDataBytes.subdata(in: byteOffset..<byteOffset+3)
                 let bytes = [UInt8](sampleData)
-                    var sampleInt32 = Int32(bytes[0]) | (Int32(bytes[1]) << 8) | (Int32(bytes[2]) << 16)
-                    // Sign extend
-                    if sampleInt32 & 0x800000 != 0 {
-                        sampleInt32 |= Int32(bitPattern: 0xFF000000)
-                    }
+                var sampleInt32 = Int32(bytes[0]) | (Int32(bytes[1]) << 8) | (Int32(bytes[2]) << 16)
+                // Sign extend
+                if sampleInt32 & 0x800000 != 0 {
+                    sampleInt32 |= Int32(bitPattern: 0xFF000000)
+                }
                 sample = Float(sampleInt32) / 8388608.0
                 byteOffset += 3
             } else { // 32-bit

@@ -9,11 +9,9 @@
 /* Begin PBXBuildFile section */
 		28EB9A0E6DF2DF6D789AFAB1 /* Moonshine in Frameworks */ = {isa = PBXBuildFile; productRef = 7F7B03E1028EB5161964044D /* Moonshine */; };
 		45505035DE2510C526A310D4 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8A5E552E56AC2B8EDE068B3 /* main.swift */; };
-		F0B8384892A6F4C92D1FC374 /* WAVLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16FA051F035EF61E0A772B65 /* WAVLoader.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		16FA051F035EF61E0A772B65 /* WAVLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WAVLoader.swift; sourceTree = "<group>"; };
 		5BB2C0F05E65996AD61BB563 /* BasicTranscription */ = {isa = PBXFileReference; includeInIndex = 0; path = BasicTranscription; sourceTree = BUILT_PRODUCTS_DIR; };
 		84E4AC350242897DB63D58D9 /* swift */ = {isa = PBXFileReference; lastKnownFileType = folder; name = swift; path = ../../../swift; sourceTree = SOURCE_ROOT; };
 		F8A5E552E56AC2B8EDE068B3 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
@@ -51,7 +49,6 @@
 			isa = PBXGroup;
 			children = (
 				F8A5E552E56AC2B8EDE068B3 /* main.swift */,
-				16FA051F035EF61E0A772B65 /* WAVLoader.swift */,
 			);
 			name = BasicTranscription;
 			path = Sources/BasicTranscription;
@@ -124,7 +121,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F0B8384892A6F4C92D1FC374 /* WAVLoader.swift in Sources */,
 				45505035DE2510C526A310D4 /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
