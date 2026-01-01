@@ -86,7 +86,7 @@ if (IOS OR MOONSHINE_BUILD_SWIFT)
         MACOSX_FRAMEWORK_IDENTIFIER ai.moonshine.voice
         PUBLIC_HEADER ${CMAKE_CURRENT_LIST_DIR}/moonshine.h
         RESOURCE ${CMAKE_CURRENT_LIST_DIR}/../test-assets
-        VERSION 0.0.6
+        VERSION 0.0.7
         COMPATIBILITY ANYNEWER
     )
     # Copy the public header into the framework's Headers directory after build
