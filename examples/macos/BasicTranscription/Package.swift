@@ -5,14 +5,14 @@ let package = Package(
     name: "BasicTranscription",
     platforms: [.macOS(.v13)],
     dependencies: [
-        // .package(path: "../../../swift")
-        .package(url: "https://github.com/moonshine-ai/moonshine-v2.git", from: "0.0.8")
+        // .package(path: "../../..")
+        .package(url: "https://github.com/moonshine-ai/moonshine-swift.git", from: "0.0.15")
     ],
     targets: [
         .executableTarget(
             name: "BasicTranscription",
             dependencies: [
-                .product(name: "Moonshine", package: "moonshine-v2")
+                .product(name: "Moonshine", package: "moonshine-swift")
             ]
         )
     ]
