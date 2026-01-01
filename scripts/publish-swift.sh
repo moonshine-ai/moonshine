@@ -1,7 +1,7 @@
 #!/bin/bash -ex
 
 FRAMEWORK_NAME="Moonshine"
-VERSION="0.0.7"
+VERSION="0.0.8"
 REPO="moonshine-ai/moonshine-v2"
 
 XCFRAMEWORK_PATH="swift/$FRAMEWORK_NAME.xcframework"
@@ -21,18 +21,12 @@ ZIP_NAME="$FRAMEWORK_NAME.xcframework.zip"
 
 zip -r $ZIP_NAME $FRAMEWORK_NAME.xcframework
 
-echo "Creating GitHub release v$VERSION..."
-gh release create "v$VERSION" \
-	"$ZIP_NAME" \
-	--repo "$REPO" \
-	--title "v$VERSION" \
-	--notes "Release v$VERSION of the Moonshine Voice Swift package."
-
 echo "Computing checksum..."
 CHECKSUM=$(swift package compute-checksum "$ZIP_NAME")
 echo "Checksum: $CHECKSUM"
 
 echo "Done! Next steps:"
 echo "  1. Update swift/package.swift with the new checksum '${CHECKSUM}' and url 'https://github.com/$REPO/releases/download/v$VERSION/$ZIP_NAME'"
-echo "  2. Commit and push: git add package.swift && git commit -m 'Release v$VERSION' && git push"
+echo "  2. Commit and push: git add * && git commit -m 'Release v$VERSION' && git push"
 echo "  3. Tag the repo: git tag v$VERSION && git push --tags"
+echo "  4. Publish the release: gh release create v$VERSION $ZIP_NAME --repo $REPO --title 'v$VERSION' --notes 'Release v$VERSION of the Moonshine Voice Swift package.'"
