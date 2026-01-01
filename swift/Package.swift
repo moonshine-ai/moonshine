@@ -21,12 +21,12 @@ let package = Package(
         .target(
             name: "MoonshineVoice",
             dependencies: ["moonshine"],
-            path: "swift/Sources/MoonshineVoice"
+            path: "Sources/MoonshineVoice"
         ),
         .testTarget(
             name: "MoonshineVoiceTests",
             dependencies: ["MoonshineVoice"],
-            path: "swift/Tests/MoonshineVoiceTests"
+            path: "Tests/MoonshineVoiceTests"
         ),
     ]
 )

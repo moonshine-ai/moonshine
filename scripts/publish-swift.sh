@@ -1,21 +1,23 @@
 #!/bin/bash -ex
 
 FRAMEWORK_NAME="Moonshine"
-VERSION="0.0.8"
-REPO="moonshine-ai/moonshine-v2"
-
-XCFRAMEWORK_PATH="swift/$FRAMEWORK_NAME.xcframework"
+VERSION="0.0.15"
+REPO="moonshine-ai/moonshine-swift"
 
 # Check that the XCFramework exists
-if [ ! -d "$XCFRAMEWORK_PATH" ]; then
-	echo "Error: $XCFRAMEWORK_PATH not found"
+if [ ! -d "swift/$FRAMEWORK_NAME.xcframework" ]; then
+	echo "Error: swift/$FRAMEWORK_NAME.xcframework not found"
 	echo "Run scripts/build-swift.sh first, then run this script."
 	exit 1
 fi
 
 TMP_DIR=$(mktemp -d)
-cp -R -P $XCFRAMEWORK_PATH $TMP_DIR/
+gh repo clone $REPO $TMP_DIR
+cp -R -P swift/* $TMP_DIR/
+cp swift/.gitignore $TMP_DIR/
 cd $TMP_DIR
+
+XCFRAMEWORK_PATH="$FRAMEWORK_NAME.xcframework"
 
 ZIP_NAME="$FRAMEWORK_NAME.xcframework.zip"
 
@@ -25,8 +27,16 @@ echo "Computing checksum..."
 CHECKSUM=$(swift package compute-checksum "$ZIP_NAME")
 echo "Checksum: $CHECKSUM"
 
-echo "Done! Next steps:"
-echo "  1. Update swift/package.swift with the new checksum '${CHECKSUM}' and url 'https://github.com/$REPO/releases/download/v$VERSION/$ZIP_NAME'"
-echo "  2. Commit and push: git add * && git commit -m 'Release v$VERSION' && git push"
-echo "  3. Tag the repo: git tag v$VERSION && git push --tags"
-echo "  4. Publish the release: gh release create v$VERSION $ZIP_NAME --repo $REPO --title 'v$VERSION' --notes 'Release v$VERSION of the Moonshine Voice Swift package.'"
+sed -i '' "s/checksum: \".*\"/checksum: \"$CHECKSUM\"/" Package.swift
+sed -i '' "s|\"https://github.com/.*\"|\"https://github.com/$REPO/releases/download/v$VERSION/Moonshine.xcframework.zip\"|" Package.swift
+
+git add Package.swift Sources Tests .gitignore
+git commit -a -m "Release v$VERSION"
+git push origin main
+
+git tag v$VERSION && git push --tags
+
+gh release create v$VERSION $ZIP_NAME \
+	--repo $REPO \
+	--title v$VERSION \
+	--notes "'Release v$VERSION of the Moonshine Voice Swift package.'"

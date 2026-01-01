@@ -1,0 +1,15 @@
+{
+  "originHash" : "4eb0c9d30a2834ab01e6beb2c550fd4bfcd08a25e26c2bbb2c113d18f0a0a025",
+  "pins" : [
+    {
+      "identity" : "moonshine-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/moonshine-ai/moonshine-swift.git",
+      "state" : {
+        "revision" : "42c8b3946a3e681d97874a1ea1a4d657c2a66b9c",
+        "version" : "0.0.15"
+      }
+    }
+  ],
+  "version" : 3
+}
