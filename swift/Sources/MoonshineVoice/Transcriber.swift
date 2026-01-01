@@ -10,6 +10,22 @@ public class Transcriber {
     /// Moonshine header version constant.
     public static let moonshineHeaderVersion: Int32 = 20000
     
+    /// Get the bundle for the moonshine framework (where resources are located).
+    /// - Returns: The framework bundle, or nil if not found
+    public static var frameworkBundle: Bundle? {
+        // Try bundle identifier first
+        if let bundle = Bundle(identifier: "ai.moonshine.voice") {
+            return bundle
+        }
+        // Fallback: try to find the framework bundle by searching
+        if let frameworkPath = Bundle(for: Transcriber.self).path(forResource: "moonshine", ofType: "framework"),
+           let bundle = Bundle(path: frameworkPath) {
+            return bundle
+        }
+        // Last resort: return the module bundle
+        return Bundle(for: Transcriber.self)
+    }
+    
     /// Initialize a transcriber from model files on disk.
     /// - Parameters:
     ///   - modelPath: Path to the directory containing model files

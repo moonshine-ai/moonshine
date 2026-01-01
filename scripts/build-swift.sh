@@ -53,6 +53,13 @@ for ARCH in ${ARCHS[@]}; do
 	HEADERS_PATH=${CORE_BUILD_DIR}/Moonshine.xcframework/${ARCH}/moonshine.framework/Headers/
 	mkdir -p ${HEADERS_PATH}
 	cp ${CORE_DIR}/moonshine.h ${HEADERS_PATH}/moonshine.h
+	RESOURCES_PATH=${CORE_BUILD_DIR}/Moonshine.xcframework/${ARCH}/moonshine.framework/Resources/
+	mkdir -p ${RESOURCES_PATH}
+	cp -r ${REPO_ROOT_DIR}/test-assets ${RESOURCES_PATH}/test-assets
+	rm -rf ${RESOURCES_PATH}/test-assets/.git
+	rm -rf ${RESOURCES_PATH}/test-assets/.DS_Store
+	rm -rf ${RESOURCES_PATH}/test-assets/output
 done
 
-cp -r ${CORE_BUILD_DIR}/Moonshine.xcframework ${REPO_ROOT_DIR}/swift/
+rm -rf ${REPO_ROOT_DIR}/swift/Moonshine.xcframework
+cp -R -P ${CORE_BUILD_DIR}/Moonshine.xcframework ${REPO_ROOT_DIR}/swift/

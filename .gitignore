@@ -23,3 +23,7 @@ libmoonshine*.dll
 .pypirc
 /swift/Moonshine.xcframework
 .build/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+.swiftpm/

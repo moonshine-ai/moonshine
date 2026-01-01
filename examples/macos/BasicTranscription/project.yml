@@ -1,0 +1,34 @@
+name: BasicTranscription
+options:
+  bundleIdPrefix: com.moonshine
+  deploymentTarget:
+    macOS: "13.0"
+  developmentLanguage: en
+  xcodeVersion: "15.0"
+
+packages:
+  Moonshine:
+    path: ../../../swift
+
+targets:
+  BasicTranscription:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Sources/BasicTranscription
+    dependencies:
+      - package: Moonshine
+        product: Moonshine
+    settings:
+      SWIFT_VERSION: "6.0"
+      PRODUCT_NAME: BasicTranscription
+
+schemes:
+  BasicTranscription:
+    build:
+      targets:
+        BasicTranscription: all
+    run:
+      config: Debug
+      executable: BasicTranscription
+
