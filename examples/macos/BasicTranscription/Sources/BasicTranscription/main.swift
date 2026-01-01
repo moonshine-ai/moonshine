@@ -121,14 +121,12 @@ func parseArguments() -> Arguments {
                 """
                 Basic transcription example for Moonshine Voice
 
-                Usage: BasicTranscription [options] [input_files...]
+                Usage: BasicTranscription [options] [input .wavfiles...]
 
                 Options:
                   --language, -l LANGUAGE    Language to use for transcription (default: en)
                   --model-arch, -m ARCH       Model architecture: tiny, base, tiny-streaming, base-streaming
                   --help, -h                  Show this help message
-
-                If no input files are provided, uses test-assets/two_cities.wav
                 """)
             exit(0)
         } else {
@@ -143,7 +141,22 @@ func parseArguments() -> Arguments {
 // MARK: - Main
 
 func main() {
-    let args = parseArguments()
+    var args = parseArguments()
+
+    if args.inputFiles.isEmpty {
+        // Get the bundle for the moonshine framework (where resources are located)
+        guard let bundle = Transcriber.frameworkBundle else {
+            fputs("Error: Could not find moonshine framework bundle\n", stderr)
+            exit(1)
+        }
+
+        guard let resourcePath = bundle.resourcePath else {
+            fputs("Error: Could not find resource path in bundle\n", stderr)
+            exit(1)
+        }
+        let testAssetsPath = resourcePath.appending("/test-assets")
+        args.inputFiles = [testAssetsPath.appending("/two_cities.wav")]
+    }
 
     // Get model path and architecture
     let (modelPath, modelArch) = (

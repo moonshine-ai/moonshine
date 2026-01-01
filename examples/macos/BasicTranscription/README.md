@@ -11,9 +11,26 @@ A Swift command-line application that demonstrates how to use Moonshine Voice fo
 
 ## Building
 
+### Using Swift Package Manager
+
 ```bash
 cd examples/macos/BasicTranscription
 swift build
+```
+
+### Using Xcode
+
+An Xcode project is available for building and running from the Xcode IDE:
+
+1. Open `BasicTranscription.xcodeproj` in Xcode
+2. Select the `BasicTranscription` scheme
+3. Build and run (⌘R) or use the Product menu
+
+The Xcode project is generated from `project.yml` using [xcodegen](https://github.com/yonaskolb/XcodeGen). To regenerate it:
+
+```bash
+cd examples/macos/BasicTranscription
+xcodegen generate
 ```
 
 ## Running
