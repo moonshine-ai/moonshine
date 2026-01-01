@@ -55,4 +55,4 @@ for ARCH in ${ARCHS[@]}; do
 	cp ${CORE_DIR}/moonshine.h ${HEADERS_PATH}/moonshine.h
 done
 
-cp -r ${CORE_BUILD_DIR}/Moonshine.xcframework ${REPO_ROOT_DIR}/ios/
+cp -r ${CORE_BUILD_DIR}/Moonshine.xcframework ${REPO_ROOT_DIR}/swift/
