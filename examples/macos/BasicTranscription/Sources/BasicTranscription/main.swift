@@ -28,8 +28,6 @@ func transcribeWithStreaming(
     audioData: [Float],
     sampleRate: Int32
 ) throws {
-    let stream = try transcriber.createStream(updateInterval: 0.5)
-    try stream.start()
 
     class TestListener: TranscriptEventListener {
         func onLineStarted(_ event: LineStarted) {
@@ -55,7 +53,10 @@ func transcribeWithStreaming(
     }
 
     let listener = TestListener()
-    stream.addListener(listener)
+    try transcriber.removeAllListeners()
+    try transcriber.addListener(listener)
+
+    try transcriber.start()
 
     let chunkDuration: Double = 0.1
     let chunkSize = Int(chunkDuration * Double(sampleRate))
@@ -64,12 +65,11 @@ func transcribeWithStreaming(
     while offset < audioData.count {
         let endOffset = min(offset + chunkSize, audioData.count)
         let chunk = Array(audioData[offset..<endOffset])
-        try stream.addAudio(chunk, sampleRate: sampleRate)
+        try transcriber.addAudio(chunk, sampleRate: sampleRate)
         offset = endOffset
     }
 
-    try stream.stop()
-    stream.close()
+    try transcriber.stop()
 }
 
 // MARK: - Command Line Argument Parsing
