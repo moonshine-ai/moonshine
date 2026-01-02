@@ -29,8 +29,8 @@ def transcribe_with_streaming(
     transcriber: Transcriber, audio_data: List[float], sample_rate: int
 ):
     """Example of streaming transcription."""
-    stream = transcriber.create_stream(update_interval=0.5)
-    stream.start()
+
+    transcriber.start()
 
     class TestListener(TranscriptEventListener):
         def on_line_started(self, event):
@@ -44,16 +44,16 @@ def transcribe_with_streaming(
             print(f"{event.line.start_time:.2f}s: Line completed: {event.line.text}")
 
     listener = TestListener()
-    stream.add_listener(listener)
+    transcriber.remove_all_listeners()
+    transcriber.add_listener(listener)
 
     chunk_duration = 0.1
     chunk_size = int(chunk_duration * sample_rate)
     for i in range(0, len(audio_data), chunk_size):
         chunk = audio_data[i: i + chunk_size]
-        stream.add_audio(chunk, sample_rate)
+        transcriber.add_audio(chunk, sample_rate)
 
-    stream.stop()
-    stream.close()
+    transcriber.stop()
 
 
 if __name__ == "__main__":

@@ -69,7 +69,7 @@ class Transcriber:
     MOONSHINE_HEADER_VERSION = 20000
     MOONSHINE_FLAG_FORCE_UPDATE = 1 << 0
 
-    def __init__(self, model_path: str, model_arch: ModelArch = ModelArch.BASE):
+    def __init__(self, model_path: str, model_arch: ModelArch = ModelArch.BASE, update_interval: float = 0.5):
         """
         Initialize a transcriber.
 
@@ -82,6 +82,8 @@ class Transcriber:
         self._handle = None
         self._model_path = model_path
         self._model_arch = model_arch
+        self._update_interval = update_interval if update_interval is not None else 0.5
+        self._default_stream = None
 
         # Load the transcriber
         model_path_bytes = model_path.encode("utf-8")
@@ -209,7 +211,7 @@ class Transcriber:
         """Get the version of the loaded Moonshine library."""
         return self._lib.moonshine_get_version()
 
-    def create_stream(self, update_interval: float = 0.5, flags: int = 0) -> "Stream":
+    def create_stream(self, update_interval: float = None, flags: int = 0) -> "Stream":
         """
         Create a new stream for real-time transcription.
 
@@ -220,7 +222,43 @@ class Transcriber:
         Returns:
             Stream object for real-time transcription
         """
+        if update_interval is None:
+            update_interval = self._update_interval
         return Stream(self, update_interval, flags)
+
+    def get_default_stream(self) -> "Stream":
+        """Get the default stream."""
+        if self._default_stream is None:
+            self._default_stream = self.create_stream()
+        return self._default_stream
+
+    def start(self):
+        """Start the default stream."""
+        self.get_default_stream().start()
+
+    def stop(self):
+        """Stop the default stream."""
+        self.get_default_stream().stop()
+
+    def add_audio(self, audio_data: List[float], sample_rate: int = 16000):
+        """Add audio data to the default stream."""
+        self.get_default_stream().add_audio(audio_data, sample_rate)
+
+    def update_transcription(self, flags: int = 0) -> Transcript:
+        """Update the transcription from the default stream."""
+        return self.get_default_stream().update_transcription(flags)
+
+    def add_listener(self, listener: Callable[[TranscriptEvent], None]) -> None:
+        """Add a listener to the default stream."""
+        self.get_default_stream().add_listener(listener)
+
+    def remove_listener(self, listener: Callable[[TranscriptEvent], None]) -> None:
+        """Remove a listener from the default stream."""
+        self.get_default_stream().remove_listener(listener)
+
+    def remove_all_listeners(self) -> None:
+        """Remove all listeners from the default stream."""
+        self.get_default_stream().remove_all_listeners()
 
 
 # Event listener interface
@@ -426,9 +464,7 @@ if __name__ == "__main__":
     two_cities_wav_path = os.path.join(get_assets_path(), "two_cities.wav")
     transcriber = Transcriber(model_path=model_path, model_arch=model_arch)
 
-    # Create a stream. The update interval is the interval in seconds between full transcriptions being generated.
-    stream = transcriber.create_stream(update_interval=0.5)
-    stream.start()
+    transcriber.start()
 
     class TestListener(TranscriptEventListener):
         def on_line_started(self, event):
@@ -441,7 +477,7 @@ if __name__ == "__main__":
             print(f"Line completed: {event.line.text}")
 
     listener = TestListener()
-    stream.add_listener(listener)
+    transcriber.add_listener(listener)
 
     audio_data, sample_rate = load_wav_file(two_cities_wav_path)
 
@@ -451,9 +487,7 @@ if __name__ == "__main__":
     chunk_size = int(chunk_duration * sample_rate)
     for i in range(0, len(audio_data), chunk_size):
         chunk = audio_data[i: i + chunk_size]
-        stream.add_audio(chunk, sample_rate)
+        transcriber.add_audio(chunk, sample_rate)
 
-    stream.stop()
-    stream.close()
-
+    transcriber.stop()
     transcriber.close()

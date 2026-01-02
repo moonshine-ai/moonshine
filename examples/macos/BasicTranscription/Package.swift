@@ -5,13 +5,16 @@ let package = Package(
     name: "BasicTranscription",
     platforms: [.macOS(.v13)],
     dependencies: [
-        // .package(path: "../../..")
-        .package(url: "https://github.com/moonshine-ai/moonshine-swift.git", from: "0.0.15")
+        // Uncomment this back in when you want to use the locally-built Swift package.
+        // .package(path: "../../../swift")
+        .package(url: "https://github.com/moonshine-ai/moonshine-swift.git", from: "0.0.16")
     ],
     targets: [
         .executableTarget(
             name: "BasicTranscription",
             dependencies: [
+                // Uncomment this back in when you want to use the locally-built Swift package.
+                // .product(name: "Moonshine", package: "swift")
                 .product(name: "Moonshine", package: "moonshine-swift")
             ]
         )
