@@ -13,7 +13,6 @@
 
 /* Begin PBXFileReference section */
 		5BB2C0F05E65996AD61BB563 /* BasicTranscription */ = {isa = PBXFileReference; includeInIndex = 0; path = BasicTranscription; sourceTree = BUILT_PRODUCTS_DIR; };
-		84E4AC350242897DB63D58D9 /* swift */ = {isa = PBXFileReference; lastKnownFileType = folder; name = swift; path = ../../../swift; sourceTree = SOURCE_ROOT; };
 		F8A5E552E56AC2B8EDE068B3 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -32,7 +31,6 @@
 		0B110F2F5E40F3928EEFDC69 /* Packages */ = {
 			isa = PBXGroup;
 			children = (
-				84E4AC350242897DB63D58D9 /* swift */,
 			);
 			name = Packages;
 			sourceTree = "<group>";
@@ -105,7 +103,7 @@
 			mainGroup = B8B49A6A12013730B0F6054E;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				E68EFCE52E5CBD663A132D80 /* XCLocalSwiftPackageReference "../../../swift" */,
+				E68EFCE52E5CBD663A132D80 /* XCRemoteSwiftPackageReference "moonshine-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
@@ -300,16 +298,21 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		E68EFCE52E5CBD663A132D80 /* XCLocalSwiftPackageReference "../../../swift" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = ../../../swift;
+/* Begin XCRemoteSwiftPackageReference section */
+		E68EFCE52E5CBD663A132D80 /* XCRemoteSwiftPackageReference "moonshine-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/moonshine-ai/moonshine-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.0.16;
+			};
 		};
-/* End XCLocalSwiftPackageReference section */
+/* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		7F7B03E1028EB5161964044D /* Moonshine */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = E68EFCE52E5CBD663A132D80 /* XCRemoteSwiftPackageReference "moonshine-swift" */;
 			productName = Moonshine;
 		};
 /* End XCSwiftPackageProductDependency section */
