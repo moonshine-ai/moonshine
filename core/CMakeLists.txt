@@ -43,6 +43,7 @@ endif()
 add_library(moonshine SHARED
     moonshine.cpp
     moonshine-model.cpp
+    moonshine-streaming-model.cpp
     voice-activity-detector.cpp
     resampler.cpp
     transcriber.cpp

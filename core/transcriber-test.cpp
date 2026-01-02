@@ -173,12 +173,12 @@ TEST_CASE("transcriber-test") {
                           &wav_sample_rate));
     REQUIRE(wav_data != nullptr);
     REQUIRE(wav_data_size > 0);
-    std::string root_model_path = "tiny-en";
+    std::string root_model_path = "slinkier-en";
     REQUIRE(std::filesystem::exists(root_model_path));
     TranscriberOptions options;
     options.model_source = TranscriberOptions::ModelSource::FILES;
     options.model_path = root_model_path.c_str();
-    options.model_arch = MOONSHINE_MODEL_ARCH_TINY;
+    options.model_arch = MOONSHINE_MODEL_ARCH_TINY_STREAMING;
     Transcriber transcriber(options);
     int32_t stream_id = transcriber.create_stream();
     transcriber.start_stream(stream_id);

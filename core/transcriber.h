@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "moonshine-model.h"
+#include "moonshine-streaming-model.h"
 #include "moonshine.h"
 #include "voice-activity-detector.h"
 
@@ -43,6 +44,7 @@ struct TranscriberStream {
   std::mutex vad_mutex;
   TranscriptStreamOutput *transcript_output;
   std::vector<float> new_audio_buffer;
+  
   void add_to_new_audio_buffer(const float *audio_data, uint64_t audio_length,
                                int32_t sample_rate);
   void clear_new_audio_buffer();
@@ -79,9 +81,14 @@ class Transcriber {
 private:
   TranscriberOptions options;
 
+  // Non-streaming model (used for TINY and BASE architectures)
   MoonshineModel *stt_model;
   std::mutex stt_model_mutex;
-
+  
+  // Streaming model (used for TINY_STREAMING and BASE_STREAMING architectures)
+  MoonshineStreamingModel *streaming_model;
+  std::mutex streaming_model_mutex;
+  
   TranscriberStreamMap streams;
   int32_t next_stream_id;
   std::mutex streams_mutex;
@@ -126,6 +133,10 @@ private:
                         size_t decoder_model_data_size,
                         const uint8_t *tokenizer_data,
                         size_t tokenizer_data_size, uint32_t model_arch);
+  
+  // Transcribe a single segment using the streaming model
+  std::string* transcribe_segment_with_streaming_model(
+      const float* audio_data, size_t audio_length);
 };
 
 #endif
