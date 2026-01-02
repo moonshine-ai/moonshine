@@ -159,9 +159,8 @@ func main() {
     }
 
     // Get model path and architecture
-    let (modelPath, modelArch) = (
-        "/Users/petewarden/projects/moonshine-v2/test-assets/tiny-en", ModelArch.tiny
-    )
+    let modelPath = try getTinyEnModelPath()
+    let modelArch = ModelArch.tiny
 
     // Create transcriber
     let transcriber: Transcriber

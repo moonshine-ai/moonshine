@@ -1,13 +1,13 @@
 {
-  "originHash" : "42af31927b7e13b3b133eeac227b86f9a9be89d4cdf35dddb6be618a23813d05",
+  "originHash" : "436116a3848388f9665b36a863403448b9204d92a844cd33b180e09fd857f1a4",
   "pins" : [
     {
       "identity" : "moonshine-swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/moonshine-ai/moonshine-swift.git",
       "state" : {
-        "revision" : "70c1eddb4786850eb165b13fc1b3d1e31dedab8c",
-        "version" : "0.0.16"
+        "revision" : "f406a9b23e29d5902698b900a36640a94c145b74",
+        "version" : "0.0.17"
       }
     }
   ],
