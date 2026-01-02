@@ -143,24 +143,24 @@ func parseArguments() -> Arguments {
 func main() {
     var args = parseArguments()
 
-    if args.inputFiles.isEmpty {
-        // Get the bundle for the moonshine framework (where resources are located)
-        guard let bundle = Transcriber.frameworkBundle else {
-            fputs("Error: Could not find moonshine framework bundle\n", stderr)
-            exit(1)
-        }
+    guard let bundle = Transcriber.frameworkBundle else {
+        fputs("Error: Could not find moonshine framework bundle\n", stderr)
+        exit(1)
+    }
 
-        guard let resourcePath = bundle.resourcePath else {
-            fputs("Error: Could not find resource path in bundle\n", stderr)
-            exit(1)
-        }
+    guard let resourcePath = bundle.resourcePath else {
+        fputs("Error: Could not find resource path in bundle\n", stderr)
+        exit(1)
+    }
+
+    let testAssetsPath = resourcePath.appending("/test-assets")
+    let modelPath = testAssetsPath.appending("/tiny-en")
+    let modelArch: ModelArch = .tiny
+
+    if args.inputFiles.isEmpty {
         let testAssetsPath = resourcePath.appending("/test-assets")
         args.inputFiles = [testAssetsPath.appending("/two_cities.wav")]
     }
-
-    // Get model path and architecture
-    let modelPath = try getTinyEnModelPath()
-    let modelArch = ModelArch.tiny
 
     // Create transcriber
     let transcriber: Transcriber
