@@ -1,0 +1,34 @@
+name: MicTranscription
+options:
+  bundleIdPrefix: com.moonshine
+  deploymentTarget:
+    macOS: "13.0"
+  developmentLanguage: en
+  xcodeVersion: "15.0"
+
+packages:
+  Moonshine:
+    path: ../../../swift
+
+targets:
+  MicTranscription:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Sources/MicTranscription
+    dependencies:
+      - package: Moonshine
+        product: Moonshine
+    settings:
+      SWIFT_VERSION: "6.0"
+      PRODUCT_NAME: MicTranscription
+
+schemes:
+  MicTranscription:
+    build:
+      targets:
+        MicTranscription: all
+    run:
+      config: Debug
+      executable: MicTranscription
+
