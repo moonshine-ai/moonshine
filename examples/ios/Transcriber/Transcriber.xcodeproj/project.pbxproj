@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		597E018B2F0762A200CE654B /* Moonshine in Frameworks */ = {isa = PBXBuildFile; productRef = 597E018C2F0762A200CE654C /* Moonshine */; };
+		59A5FE2E2F09C4D70066D587 /* models in Resources */ = {isa = PBXBuildFile; fileRef = 59A5FE2D2F09C4D70066D587 /* models */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		597E016F2F0762A200CE654A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -23,14 +28,11 @@
 		};
 /* End PBXContainerItemProxy section */
 
-/* Begin PBXBuildFile section */
-		597E018B2F0762A200CE654B /* Moonshine in Frameworks */ = {isa = PBXBuildFile; productRef = 597E018C2F0762A200CE654C /* Moonshine */; };
-/* End PBXBuildFile section */
-
 /* Begin PBXFileReference section */
 		597E01612F0762A100CE654A /* Transcriber.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Transcriber.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		597E016E2F0762A200CE654A /* TranscriberTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TranscriberTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		597E01782F0762A200CE654A /* TranscriberUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TranscriberUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		59A5FE2D2F09C4D70066D587 /* models */ = {isa = PBXFileReference; lastKnownFileType = folder; path = models; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -80,6 +82,7 @@
 		597E01582F0762A100CE654A = {
 			isa = PBXGroup;
 			children = (
+				59A5FE2D2F09C4D70066D587 /* models */,
 				597E01632F0762A100CE654A /* Transcriber */,
 				597E01712F0762A200CE654A /* TranscriberTests */,
 				597E017B2F0762A200CE654A /* TranscriberUITests */,
@@ -201,13 +204,13 @@
 			);
 			mainGroup = 597E01582F0762A100CE654A;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				597E018D2F0762A200CE654D /* XCRemoteSwiftPackageReference "moonshine-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 597E01622F0762A100CE654A /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			packageReferences = (
-				597E018D2F0762A200CE654D /* XCRemoteSwiftPackageReference "moonshine-swift" */,
-			);
 			targets = (
 				597E01602F0762A100CE654A /* Transcriber */,
 				597E016D2F0762A200CE654A /* TranscriberTests */,
@@ -221,6 +224,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				59A5FE2E2F09C4D70066D587 /* models in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -414,6 +418,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app uses the microphone to transcribe your speech in real-time.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -442,6 +447,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app uses the microphone to transcribe your speech in real-time.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
