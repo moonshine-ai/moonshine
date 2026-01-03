@@ -1,4 +1,5 @@
 {
-    "java.configuration.updateBuildConfiguration": "disabled",
-    "cmake.sourceDirectory": "/home/petewarden/moonshine-v2/core"
+  "java.configuration.updateBuildConfiguration": "disabled",
+  "cmake.sourceDirectory": "/home/petewarden/moonshine-v2/core",
+  "editor.defaultFormatter": "esbenp.prettier-vscode"
 }

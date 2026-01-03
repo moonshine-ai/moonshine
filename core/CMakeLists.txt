@@ -18,6 +18,8 @@ add_compile_options(-Wall -Wextra -pedantic -Werror)
 #     add_link_options(-fsanitize=address -fno-omit-frame-pointer)
 # endif()
 
+include(${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/find-ort-library-path.cmake)
+
 add_subdirectory(
     ${CMAKE_CURRENT_LIST_DIR}/ort-utils
     ${CMAKE_CURRENT_LIST_DIR}/ort-utils/build
@@ -40,7 +42,7 @@ if (ANDROID)
     )
 endif()
 
-add_library(moonshine SHARED
+set(MOONSHINE_SRC_FILES
     moonshine.cpp
     moonshine-model.cpp
     voice-activity-detector.cpp
@@ -48,15 +50,28 @@ add_library(moonshine SHARED
     transcriber.cpp
 )
 
+# Build as STATIC framework for iOS/Swift (static frameworks cannot be embedded)
+# Build as SHARED library for other platforms
+if (IOS OR MOONSHINE_BUILD_SWIFT)
+    add_library(moonshine STATIC
+        ${MOONSHINE_SRC_FILES}
+    )
+else()
+    add_library(moonshine SHARED
+        ${MOONSHINE_SRC_FILES}
+    )
+endif()
+
 set_target_properties(moonshine PROPERTIES
     CXX_STANDARD 20
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO
 )
 
-# On macOS, set rpath to @loader_path so the library looks for dependencies
+# On macOS (non-framework builds), set rpath to @loader_path so the library looks for dependencies
 # (like libonnxruntime) in the same directory as libmoonshine.dylib
-if(APPLE)
+# Note: Static frameworks don't need rpath since they're linked statically
+if(APPLE AND NOT IOS AND NOT MOONSHINE_BUILD_SWIFT)
     set_target_properties(moonshine PROPERTIES
         INSTALL_RPATH "@loader_path"
         BUILD_WITH_INSTALL_RPATH TRUE
@@ -86,8 +101,12 @@ if (IOS OR MOONSHINE_BUILD_SWIFT)
         MACOSX_FRAMEWORK_IDENTIFIER ai.moonshine.voice
         PUBLIC_HEADER ${CMAKE_CURRENT_LIST_DIR}/moonshine.h
         RESOURCE ${CMAKE_CURRENT_LIST_DIR}/../test-assets
-        VERSION 0.0.8
+        VERSION 0.0.20
         COMPATIBILITY ANYNEWER
+        XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "ai.moonshine.voice"
+        XCODE_ATTRIBUTE_PRODUCT_NAME "moonshine"
+        XCODE_ATTRIBUTE_MARKETING_VERSION "0.0.20"
+        XCODE_ATTRIBUTE_CURRENT_PROJECT_VERSION "0.0.20"
     )
     # Copy the public header into the framework's Headers directory after build
     # This is needed because Xcode generator doesn't automatically copy PUBLIC_HEADER during build
@@ -98,6 +117,37 @@ if (IOS OR MOONSHINE_BUILD_SWIFT)
             ${CMAKE_CURRENT_LIST_DIR}/moonshine.h
             "$<TARGET_FILE_DIR:moonshine>/Headers/moonshine.h"
         COMMENT "Copying public header to framework"
+    )
+    # For static frameworks, merge all static dependencies into a single library
+    # This is required because static libraries don't automatically include their dependencies
+    # We need to merge: moonshine-utils, onnxruntime, ort-utils, bin-tokenizer, ten_vad, and moonshine
+    # Note: Order matters - dependencies first, then the main library
+    add_custom_command(TARGET moonshine POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E echo "Merging static libraries into framework..."
+        COMMAND libtool -static -o "$<TARGET_FILE:moonshine>.merged"
+            "$<TARGET_FILE:moonshine-utils>"
+            "${ONNXRUNTIME_LIB_PATH}"
+            "$<TARGET_FILE:ort-utils>"
+            "$<TARGET_FILE:bin-tokenizer>"
+            "$<TARGET_FILE:ten_vad>"
+            "$<TARGET_FILE:moonshine>"
+        COMMAND ${CMAKE_COMMAND} -E remove "$<TARGET_FILE:moonshine>"
+        COMMAND ${CMAKE_COMMAND} -E rename "$<TARGET_FILE:moonshine>.merged" "$<TARGET_FILE:moonshine>"
+        COMMENT "Merging static dependencies into framework binary"
+    )
+    # Fix Info.plist by adding required iOS framework keys
+    # iOS frameworks require CFBundleName, CFBundleVersion, and CFBundleShortVersionString
+    # Remove legacy CFBundleSignature key (not required and can cause installation issues)
+    # Convert to binary format after modification (iOS requires binary plist format)
+    # Re-sign the framework after modifying Info.plist to ensure it's properly bound
+    add_custom_command(TARGET moonshine POST_BUILD
+        COMMAND /usr/libexec/PlistBuddy -c "Set :CFBundleName moonshine" "$<TARGET_FILE_DIR:moonshine>/Info.plist" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleName string moonshine" "$<TARGET_FILE_DIR:moonshine>/Info.plist"
+        COMMAND /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 0.0.20" "$<TARGET_FILE_DIR:moonshine>/Info.plist" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string 0.0.20" "$<TARGET_FILE_DIR:moonshine>/Info.plist"
+        COMMAND /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 0.0.20" "$<TARGET_FILE_DIR:moonshine>/Info.plist" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 0.0.20" "$<TARGET_FILE_DIR:moonshine>/Info.plist"
+        COMMAND /usr/libexec/PlistBuddy -c "Delete :CFBundleSignature" "$<TARGET_FILE_DIR:moonshine>/Info.plist" 2>/dev/null || true
+        COMMAND /usr/bin/plutil -convert binary1 "$<TARGET_FILE_DIR:moonshine>/Info.plist"
+        COMMAND codesign --force --sign - "$<TARGET_FILE_DIR:moonshine>" || true
+        COMMENT "Adding required Info.plist keys for iOS framework, removing legacy keys, converting to binary format, and re-signing"
     )
 else()
     target_link_libraries(moonshine PUBLIC
