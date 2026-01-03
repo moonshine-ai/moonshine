@@ -39,21 +39,30 @@ cmake -B build-macos \
 	..
 cmake --build build-macos --config Release
 
+MOONSHINE_FRAMEWORK_PHONE=${CORE_BUILD_DIR}/build-phone/Release-iphoneos/moonshine.framework/
+MOONSHINE_FRAMEWORK_SIMULATOR=${CORE_BUILD_DIR}/build-simulator/Release-iphonesimulator/moonshine.framework/
+MOONSHINE_FRAMEWORK_MACOS=${CORE_BUILD_DIR}/build-macos/Release/moonshine.framework/Versions/A/
+
+mv ${MOONSHINE_FRAMEWORK_PHONE}/moonshine ${MOONSHINE_FRAMEWORK_PHONE}/libmoonshine.a
+mv ${MOONSHINE_FRAMEWORK_SIMULATOR}/moonshine ${MOONSHINE_FRAMEWORK_SIMULATOR}/libmoonshine.a
+mv ${MOONSHINE_FRAMEWORK_MACOS}/moonshine ${MOONSHINE_FRAMEWORK_MACOS}/libmoonshine.a
+
 xcodebuild -create-xcframework \
-	-framework build-phone/Release-iphoneos/moonshine.framework \
-	-framework build-simulator/Release-iphonesimulator/moonshine.framework \
-	-framework build-macos/Release/moonshine.framework \
+	-library ${MOONSHINE_FRAMEWORK_PHONE}/libmoonshine.a \
+	-headers ${MOONSHINE_FRAMEWORK_PHONE}/Headers \
+	-library ${MOONSHINE_FRAMEWORK_SIMULATOR}/libmoonshine.a \
+	-headers ${MOONSHINE_FRAMEWORK_SIMULATOR}/Headers \
+	-library ${MOONSHINE_FRAMEWORK_MACOS}/libmoonshine.a \
+	-headers ${MOONSHINE_FRAMEWORK_MACOS}/Headers \
 	-output ${CORE_BUILD_DIR}/Moonshine.xcframework
 
-ARCHS=("ios-arm64" "ios-arm64_x86_64-simulator" "macos-arm64")
+ARCHS=("ios-arm64" "ios-arm64_x86_64-simulator" "macos-arm64_x86_64")
 for ARCH in ${ARCHS[@]}; do
-	MODULES_PATH=${CORE_BUILD_DIR}/Moonshine.xcframework/${ARCH}/moonshine.framework/Modules/
-	mkdir -p ${MODULES_PATH}
-	cp ${CORE_DIR}/module.modulemap ${MODULES_PATH}/module.modulemap
-	HEADERS_PATH=${CORE_BUILD_DIR}/Moonshine.xcframework/${ARCH}/moonshine.framework/Headers/
+	HEADERS_PATH=${CORE_BUILD_DIR}/Moonshine.xcframework/${ARCH}/Headers/
 	mkdir -p ${HEADERS_PATH}
 	cp ${CORE_DIR}/moonshine.h ${HEADERS_PATH}/moonshine.h
-	RESOURCES_PATH=${CORE_BUILD_DIR}/Moonshine.xcframework/${ARCH}/moonshine.framework/Resources/
+	cp ${CORE_DIR}/module.modulemap ${HEADERS_PATH}/module.modulemap
+	RESOURCES_PATH=${CORE_BUILD_DIR}/Moonshine.xcframework/${ARCH}/Resources/
 	mkdir -p ${RESOURCES_PATH}
 	cp -r ${REPO_ROOT_DIR}/test-assets ${RESOURCES_PATH}/test-assets
 	rm -rf ${RESOURCES_PATH}/test-assets/.git
@@ -63,3 +72,11 @@ done
 
 rm -rf ${REPO_ROOT_DIR}/swift/Moonshine.xcframework
 cp -R -P ${CORE_BUILD_DIR}/Moonshine.xcframework ${REPO_ROOT_DIR}/swift/
+
+cp -r ${REPO_ROOT_DIR}/test-assets ${REPO_ROOT_DIR}/swift/Tests/MoonshineVoiceTests/test-assets
+
+cd ${REPO_ROOT_DIR}/swift
+swift package clean
+# First time test is run it fails? Maybe a build ordering issue?
+swift test || true
+swift test

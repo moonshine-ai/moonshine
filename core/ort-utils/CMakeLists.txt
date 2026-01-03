@@ -35,11 +35,22 @@ target_link_libraries(ort-utils PUBLIC
     android
     log
 )
-elseif(IOS)
+elseif(IOS OR MOONSHINE_BUILD_SWIFT)
 target_link_libraries(ort-utils PUBLIC
     moonshine-utils
     ${ONNXRUNTIME_LIB_PATH}
 )
+add_custom_command(TARGET ort-utils POST_BUILD
+COMMAND ${CMAKE_COMMAND} -E echo "Merging static libraries into framework..."
+COMMAND libtool -static -o "$<TARGET_FILE:ort-utils>.merged"
+    "$<TARGET_FILE:moonshine-utils>"
+    "$ONNXRUNTIME_LIB_PATH"
+    "$<TARGET_FILE:ort-utils>"
+COMMAND ${CMAKE_COMMAND} -E remove "$<TARGET_FILE:ort-utils>"
+COMMAND ${CMAKE_COMMAND} -E rename "$<TARGET_FILE:ort-utils>.merged" "$<TARGET_FILE:ort-utils>"
+COMMENT "Merging static dependencies into framework binary"
+)
+
 else()
 target_link_libraries(ort-utils PUBLIC
     moonshine-utils

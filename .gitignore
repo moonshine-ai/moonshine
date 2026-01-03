@@ -25,5 +25,9 @@ libmoonshine*.dll
 .build/
 *.xcodeproj/xcuserdata/
 *.xcworkspace/xcuserdata/
-
+*.xcworkspace/
 .swiftpm/
+/swift/Tests/MoonshineVoiceTests/test-assets/
+project.xcworkspace/
+xcuserdata/
+/swift/test-assets/

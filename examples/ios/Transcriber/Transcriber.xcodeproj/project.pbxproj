@@ -23,6 +23,10 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXBuildFile section */
+		597E018B2F0762A200CE654B /* Moonshine in Frameworks */ = {isa = PBXBuildFile; productRef = 597E018C2F0762A200CE654C /* Moonshine */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		597E01612F0762A100CE654A /* Transcriber.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Transcriber.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		597E016E2F0762A200CE654A /* TranscriberTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TranscriberTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				597E018B2F0762A200CE654B /* Moonshine in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +117,7 @@
 			);
 			name = Transcriber;
 			packageProductDependencies = (
+				597E018C2F0762A200CE654C /* Moonshine */,
 			);
 			productName = Transcriber;
 			productReference = 597E01612F0762A100CE654A /* Transcriber.app */;
@@ -199,6 +205,9 @@
 			productRefGroup = 597E01622F0762A100CE654A /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
+			packageReferences = (
+				597E018D2F0762A200CE654D /* XCRemoteSwiftPackageReference "moonshine-swift" */,
+			);
 			targets = (
 				597E01602F0762A100CE654A /* Transcriber */,
 				597E016D2F0762A200CE654A /* TranscriberTests */,
@@ -558,6 +567,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		597E018D2F0762A200CE654D /* XCRemoteSwiftPackageReference "moonshine-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/moonshine-ai/moonshine-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.0.24;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		597E018C2F0762A200CE654C /* Moonshine */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 597E018D2F0762A200CE654D /* XCRemoteSwiftPackageReference "moonshine-swift" */;
+			productName = Moonshine;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 597E01592F0762A100CE654A /* Project object */;
 }

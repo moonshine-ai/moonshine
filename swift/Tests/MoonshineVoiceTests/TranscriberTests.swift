@@ -7,28 +7,14 @@ final class TranscriberTests: XCTestCase {
 
     /// Get the path to test assets from the framework bundle
     static func getTestAssetsPath() throws -> String {
-        // Try to get the framework bundle
-        guard let bundle = Transcriber.frameworkBundle else {
-            throw NSError(
-                domain: "TranscriberTests", code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "Could not find moonshine framework bundle"])
+        guard let testAssetsURL = Bundle.module.url(forResource: "test-assets", withExtension: nil) else {
+            throw NSError(domain: "TranscriberTests", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not find test assets"])
         }
 
-        guard let resourcePath = bundle.resourcePath else {
-            throw NSError(
-                domain: "TranscriberTests", code: 2,
-                userInfo: [NSLocalizedDescriptionKey: "Could not find resource path in bundle"])
-        }
-
-        let testAssetsPath = (resourcePath as NSString).appendingPathComponent("test-assets")
+        let testAssetsPath = testAssetsURL.path
 
         guard FileManager.default.fileExists(atPath: testAssetsPath) else {
-            throw NSError(
-                domain: "TranscriberTests", code: 3,
-                userInfo: [
-                    NSLocalizedDescriptionKey:
-                        "Test assets directory not found at \(testAssetsPath)"
-                ])
+            throw NSError(domain: "TranscriberTests", code: 2, userInfo: [NSLocalizedDescriptionKey: "Test assets directory not found at \(testAssetsPath)"])
         }
 
         return testAssetsPath

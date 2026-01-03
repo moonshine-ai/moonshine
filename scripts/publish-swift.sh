@@ -1,7 +1,7 @@
 #!/bin/bash -ex
 
 FRAMEWORK_NAME="Moonshine"
-VERSION="0.0.17"
+VERSION="0.0.28"
 REPO="moonshine-ai/moonshine-swift"
 
 # Check that the XCFramework exists
@@ -27,8 +27,11 @@ echo "Computing checksum..."
 CHECKSUM=$(swift package compute-checksum "$ZIP_NAME")
 echo "Checksum: $CHECKSUM"
 
+cp Package.swift.remote Package.swift
 sed -i '' "s/checksum: \".*\"/checksum: \"$CHECKSUM\"/" Package.swift
 sed -i '' "s|\"https://github.com/.*\"|\"https://github.com/$REPO/releases/download/v$VERSION/Moonshine.xcframework.zip\"|" Package.swift
+
+rm -rf Tests/MoonshineVoiceTests/test-assets
 
 git add Package.swift Sources Tests .gitignore
 git commit -a -m "Release v$VERSION"
@@ -39,4 +42,4 @@ git tag v$VERSION && git push --tags
 gh release create v$VERSION $ZIP_NAME \
 	--repo $REPO \
 	--title v$VERSION \
-	--notes "'Release v$VERSION of the Moonshine Voice Swift package.'"
+	--notes v$VERSION
