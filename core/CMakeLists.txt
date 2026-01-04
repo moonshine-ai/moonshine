@@ -101,12 +101,12 @@ if (IOS OR MOONSHINE_BUILD_SWIFT)
         MACOSX_FRAMEWORK_IDENTIFIER ai.moonshine.voice
         PUBLIC_HEADER ${CMAKE_CURRENT_LIST_DIR}/moonshine.h
         RESOURCE ${CMAKE_CURRENT_LIST_DIR}/../test-assets
-        VERSION 0.0.20
+        VERSION 0.0.28
         COMPATIBILITY ANYNEWER
         XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "ai.moonshine.voice"
         XCODE_ATTRIBUTE_PRODUCT_NAME "moonshine"
-        XCODE_ATTRIBUTE_MARKETING_VERSION "0.0.20"
-        XCODE_ATTRIBUTE_CURRENT_PROJECT_VERSION "0.0.20"
+        XCODE_ATTRIBUTE_MARKETING_VERSION "0.0.28"
+        XCODE_ATTRIBUTE_CURRENT_PROJECT_VERSION "0.0.28"
     )
     # Copy the public header into the framework's Headers directory after build
     # This is needed because Xcode generator doesn't automatically copy PUBLIC_HEADER during build
@@ -142,8 +142,8 @@ if (IOS OR MOONSHINE_BUILD_SWIFT)
     # Re-sign the framework after modifying Info.plist to ensure it's properly bound
     add_custom_command(TARGET moonshine POST_BUILD
         COMMAND /usr/libexec/PlistBuddy -c "Set :CFBundleName moonshine" "$<TARGET_FILE_DIR:moonshine>/Info.plist" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleName string moonshine" "$<TARGET_FILE_DIR:moonshine>/Info.plist"
-        COMMAND /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 0.0.20" "$<TARGET_FILE_DIR:moonshine>/Info.plist" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string 0.0.20" "$<TARGET_FILE_DIR:moonshine>/Info.plist"
-        COMMAND /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 0.0.20" "$<TARGET_FILE_DIR:moonshine>/Info.plist" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 0.0.20" "$<TARGET_FILE_DIR:moonshine>/Info.plist"
+        COMMAND /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 0.0.28" "$<TARGET_FILE_DIR:moonshine>/Info.plist" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string 0.0.28" "$<TARGET_FILE_DIR:moonshine>/Info.plist"
+        COMMAND /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 0.0.28" "$<TARGET_FILE_DIR:moonshine>/Info.plist" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 0.0.28" "$<TARGET_FILE_DIR:moonshine>/Info.plist"
         COMMAND /usr/libexec/PlistBuddy -c "Delete :CFBundleSignature" "$<TARGET_FILE_DIR:moonshine>/Info.plist" 2>/dev/null || true
         COMMAND /usr/bin/plutil -convert binary1 "$<TARGET_FILE_DIR:moonshine>/Info.plist"
         COMMAND codesign --force --sign - "$<TARGET_FILE_DIR:moonshine>" || true

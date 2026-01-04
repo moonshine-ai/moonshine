@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.22.1)
 
 project("ort-utils")
 
+include(${CMAKE_CURRENT_LIST_DIR}/../third-party/onnxruntime/find-ort-library-path.cmake)
+
 add_subdirectory(
     ${CMAKE_CURRENT_LIST_DIR}/../third-party/onnxruntime/
     ${CMAKE_CURRENT_LIST_DIR}/../third-party/onnxruntime/build
@@ -25,7 +27,7 @@ target_compile_options(ort-utils PRIVATE
 
 target_include_directories(ort-utils PRIVATE
     ${MOONSHINE_UTILS_INCLUDE_DIR}
-    ${ONNXRUNTIME_INCLUDE_DIR}
+    ${CMAKE_CURRENT_LIST_DIR}/../third-party/onnxruntime/include
 )
 
 if (ANDROID)
