@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.22.1)
 
 project("ort-utils")
 
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 include(${CMAKE_CURRENT_LIST_DIR}/../third-party/onnxruntime/find-ort-library-path.cmake)
 
 add_subdirectory(
@@ -59,3 +63,16 @@ target_link_libraries(ort-utils PUBLIC
     ${ONNXRUNTIME_LIB_PATH}
 )
 endif()
+
+add_executable(ort-utils-test ort-utils-test.cpp)
+
+target_include_directories(ort-utils-test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}
+    ${CMAKE_CURRENT_LIST_DIR}/../moonshine-utils
+    ${CMAKE_CURRENT_LIST_DIR}/../third-party/doctest
+    ${CMAKE_CURRENT_LIST_DIR}/../third-party/onnxruntime/include
+)
+
+target_link_libraries(ort-utils-test PRIVATE
+    ort-utils
+)

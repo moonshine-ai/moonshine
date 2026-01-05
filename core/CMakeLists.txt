@@ -10,7 +10,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Disable compiler-specific extensions (optional, but recommended)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-add_compile_options(-Wall -Wextra -pedantic -Werror)
+if (NOT WIN32)
+  add_compile_options(-Wall -Wextra -pedantic -Werror)
+endif()
 # Enable this to catch memory leaks and access violations.
 # This is only supported on Linux.
 # if(LINUX)
@@ -52,7 +54,7 @@ set(MOONSHINE_SRC_FILES
 
 # Build as STATIC framework for iOS/Swift (static frameworks cannot be embedded)
 # Build as SHARED library for other platforms
-if (IOS OR MOONSHINE_BUILD_SWIFT)
+if (IOS OR MOONSHINE_BUILD_SWIFT OR WIN32)
     add_library(moonshine STATIC
         ${MOONSHINE_SRC_FILES}
     )
@@ -194,6 +196,8 @@ target_include_directories(voice-activity-detector-test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
     ${CMAKE_CURRENT_LIST_DIR}/third-party/ten_vad/
 )
+
+copy_onnxruntime_dll(voice-activity-detector-test)
 
 if (IOS OR MOONSHINE_BUILD_SWIFT)
     set_target_properties(voice-activity-detector-test PROPERTIES

@@ -7,9 +7,6 @@
 #include <numeric>
 
 #include <fcntl.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 bool load_wav_data(const char *path, float **out_float_data,
                    size_t *out_num_samples, int32_t *out_sample_rate) {
