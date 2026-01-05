@@ -1,5 +1,5 @@
-#ifndef MOONSHINE_H
-#define MOONSHINE_H
+#ifndef MOONSHINE_C_API_H
+#define MOONSHINE_C_API_H
 
 /* Moonshine is a library for building interactive voice applications. It
    provides a high-level API for building voice interfaces, including
@@ -33,7 +33,7 @@
 
    Here's an example of how to use the transcriber:
    ```c
-   #include "moonshine.h"
+   #include "moonshine-c-api.h"
 
    int main(int argc, char *argv[]) {
      int32_t transcriber_handle = moonshine_load_transcriber_from_files(

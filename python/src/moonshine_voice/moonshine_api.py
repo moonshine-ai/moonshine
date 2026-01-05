@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from moonshine_voice.errors import MoonshineError
 
-# C structure definitions matching moonshine.h
+# C structure definitions matching moonshine-c-api.h
 
 
 class TranscriptLineC(ctypes.Structure):
