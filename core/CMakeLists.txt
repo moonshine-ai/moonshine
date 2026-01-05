@@ -56,7 +56,7 @@ set(MOONSHINE_SRC_FILES
 
 # Build as STATIC framework for iOS/Swift (static frameworks cannot be embedded)
 # Build as SHARED library for other platforms
-if (IOS OR MOONSHINE_BUILD_SWIFT OR WIN32)
+if (NOT MOONSHINE_BUILD_SHARED AND (IOS OR MOONSHINE_BUILD_SWIFT OR WIN32))
     add_library(moonshine STATIC
         ${MOONSHINE_SRC_FILES}
     )
@@ -186,100 +186,104 @@ target_link_libraries(moonshine-c-api-test PRIVATE
     moonshine
 )
 
-add_executable(voice-activity-detector-test voice-activity-detector-test.cpp voice-activity-detector.cpp resampler.cpp)
-set_target_properties(voice-activity-detector-test PROPERTIES
-    CXX_STANDARD 20
-    CXX_STANDARD_REQUIRED YES
-    CXX_EXTENSIONS NO
-)
-target_include_directories(voice-activity-detector-test PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}
-    ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
-    ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
-    ${CMAKE_CURRENT_LIST_DIR}/third-party/ten_vad/
-)
-
-copy_onnxruntime_dll(voice-activity-detector-test)
-
-if (IOS OR MOONSHINE_BUILD_SWIFT)
+# Windows DLLs don't export all symbols by default and so tests that rely on them
+# are skipped for shared builds.
+if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
+    add_executable(voice-activity-detector-test voice-activity-detector-test.cpp voice-activity-detector.cpp resampler.cpp)
     set_target_properties(voice-activity-detector-test PROPERTIES
-        MACOSX_BUNDLE TRUE
-        MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.voice-activity-detector-test"
-        MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
     )
-    target_link_libraries(voice-activity-detector-test PRIVATE
-        ten_vad
-        "-framework CoreFoundation"
-        "-framework Foundation"
+    target_include_directories(voice-activity-detector-test PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/ten_vad/
     )
-else()
-    target_link_libraries(voice-activity-detector-test PRIVATE
-        ten_vad
-    )
-endif()
 
-add_executable(resampler-test resampler-test.cpp resampler.cpp)
-set_target_properties(resampler-test PROPERTIES
-    CXX_STANDARD 20
-    CXX_STANDARD_REQUIRED YES
-    CXX_EXTENSIONS NO
-)
-target_include_directories(resampler-test PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}
-    ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
-    ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
-)
+    copy_onnxruntime_dll(voice-activity-detector-test)
 
-if (IOS OR MOONSHINE_BUILD_SWIFT)
+    if (IOS OR MOONSHINE_BUILD_SWIFT)
+        set_target_properties(voice-activity-detector-test PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.voice-activity-detector-test"
+            MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        )
+        target_link_libraries(voice-activity-detector-test PRIVATE
+            ten_vad
+            "-framework CoreFoundation"
+            "-framework Foundation"
+        )
+    else()
+        target_link_libraries(voice-activity-detector-test PRIVATE
+            ten_vad
+        )
+    endif()
+
+    add_executable(resampler-test resampler-test.cpp resampler.cpp)
     set_target_properties(resampler-test PROPERTIES
-        MACOSX_BUNDLE TRUE
-        MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.resampler-test"
-        MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
     )
-    target_link_libraries(resampler-test PRIVATE
-        moonshine-utils
-        "-framework CoreFoundation"
-        "-framework Foundation"
+    target_include_directories(resampler-test PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
     )
-else()
-    target_link_libraries(resampler-test PRIVATE
-        moonshine-utils
-    )
-endif()
 
-add_executable(transcriber-test transcriber-test.cpp transcriber.cpp voice-activity-detector.cpp resampler.cpp)
-set_target_properties(transcriber-test PROPERTIES
-    CXX_STANDARD 20
-    CXX_STANDARD_REQUIRED YES
-    CXX_EXTENSIONS NO
-)
-target_include_directories(transcriber-test PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}
-    ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
-    ${CMAKE_CURRENT_LIST_DIR}/ort-utils
-    ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
-    ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
-    ${CMAKE_CURRENT_LIST_DIR}/third-party/ten_vad/
-    ${CMAKE_CURRENT_LIST_DIR}/third-party/utf-8/
-    ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
-)
+    if (IOS OR MOONSHINE_BUILD_SWIFT)
+        set_target_properties(resampler-test PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.resampler-test"
+            MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        )
+        target_link_libraries(resampler-test PRIVATE
+            moonshine-utils
+            "-framework CoreFoundation"
+            "-framework Foundation"
+        )
+    else()
+        target_link_libraries(resampler-test PRIVATE
+            moonshine-utils
+        )
+    endif()
 
-if (IOS OR MOONSHINE_BUILD_SWIFT)
+    add_executable(transcriber-test transcriber-test.cpp transcriber.cpp voice-activity-detector.cpp resampler.cpp)
     set_target_properties(transcriber-test PROPERTIES
-        MACOSX_BUNDLE TRUE
-        MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.transcriber-test"
-        MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
     )
-    target_link_libraries(transcriber-test PRIVATE
-        moonshine
-        "-framework CoreFoundation"
-        "-framework Foundation"
+    target_include_directories(transcriber-test PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+        ${CMAKE_CURRENT_LIST_DIR}/ort-utils
+        ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/ten_vad/
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/utf-8/
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
     )
-else()
-    target_link_libraries(transcriber-test PRIVATE
-        moonshine
-    )
+
+    if (IOS OR MOONSHINE_BUILD_SWIFT)
+        set_target_properties(transcriber-test PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.transcriber-test"
+            MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        )
+        target_link_libraries(transcriber-test PRIVATE
+            moonshine
+            "-framework CoreFoundation"
+            "-framework Foundation"
+        )
+    else()
+        target_link_libraries(transcriber-test PRIVATE
+            moonshine
+        )
+    endif()
 endif()
