@@ -35,6 +35,12 @@ elseif(LINUX)
         IMPORTED_LOCATION "${ONNXRUNTIME_LIB_PATH}"
         INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/include/"
     )
+elseif(WIN32)
+    set_target_properties(onnxruntime PROPERTIES
+        IMPORTED_LOCATION "${ONNXRUNTIME_LIB_PATH}"
+        IMPORTED_IMPLIB "${ONNXRUNTIME_LIB_PATH}"
+        INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/include/"
+    )
 endif()
 
 set(ONNXRUNTIME_INCLUDE_DIR "${CMAKE_CURRENT_LIST_DIR}/include" CACHE INTERNAL "")
@@ -57,6 +63,12 @@ if (IOS OR MOONSHINE_BUILD_SWIFT)
         "-framework CoreFoundation"
         "-framework Foundation"
     )
+elseif(WIN32)
+    target_link_libraries(onnxruntime-test PRIVATE
+        onnxruntime
+        psapi
+    )
+    copy_onnxruntime_dll(onnxruntime-test)
 else()
     target_link_libraries(onnxruntime-test
         onnxruntime
