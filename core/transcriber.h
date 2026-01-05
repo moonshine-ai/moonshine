@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "moonshine-model.h"
-#include "moonshine.h"
 #include "voice-activity-detector.h"
 
 struct TranscriberLine {

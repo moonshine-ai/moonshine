@@ -60,7 +60,7 @@ ARCHS=("ios-arm64" "ios-arm64_x86_64-simulator" "macos-arm64_x86_64")
 for ARCH in ${ARCHS[@]}; do
 	HEADERS_PATH=${CORE_BUILD_DIR}/Moonshine.xcframework/${ARCH}/Headers/
 	mkdir -p ${HEADERS_PATH}
-	cp ${CORE_DIR}/moonshine.h ${HEADERS_PATH}/moonshine.h
+	cp ${CORE_DIR}/moonshine-c-api.h ${HEADERS_PATH}/moonshine-c-api.h
 	cp ${CORE_DIR}/module.modulemap ${HEADERS_PATH}/module.modulemap
 	RESOURCES_PATH=${CORE_BUILD_DIR}/Moonshine.xcframework/${ARCH}/Resources/
 	mkdir -p ${RESOURCES_PATH}

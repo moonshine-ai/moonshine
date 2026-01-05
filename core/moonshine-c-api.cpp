@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "moonshine.h"
+#include "moonshine-c-api.h"
 
 #include <cassert>
 #include <cctype>
