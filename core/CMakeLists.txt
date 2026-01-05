@@ -186,6 +186,24 @@ target_link_libraries(moonshine-c-api-test PRIVATE
     moonshine
 )
 
+# Make this test C++11 to ensure our API is backwards compatible, even
+# though the internal implementation is C++20.
+add_executable(moonshine-cpp-test moonshine-cpp-test.cpp)
+set_target_properties(moonshine-cpp-test PROPERTIES
+    CXX_STANDARD 11
+    CXX_STANDARD_REQUIRED YES
+    CXX_EXTENSIONS NO
+)
+target_include_directories(moonshine-cpp-test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}
+    ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+    ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+)
+target_link_libraries(moonshine-cpp-test PRIVATE
+    moonshine
+    moonshine-utils
+)
+
 # Windows DLLs don't export all symbols by default and so tests that rely on them
 # are skipped for shared builds.
 if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
