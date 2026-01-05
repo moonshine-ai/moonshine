@@ -14,9 +14,6 @@
 #include <cstring> // For strerror
 
 #include <fcntl.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 #include <algorithm>
 #include <array>
@@ -119,12 +116,14 @@ MoonshineModel::~MoonshineModel() {
   delete ort_session_allocator;
   delete ort_string_allocator;
   delete tokenizer;
+#ifndef _WIN32
   if (encoder_mmapped_data) {
     munmap(const_cast<char *>(encoder_mmapped_data), encoder_mmapped_data_size);
   }
   if (decoder_mmapped_data) {
     munmap(const_cast<char *>(decoder_mmapped_data), decoder_mmapped_data_size);
   }
+#endif
 }
 
 int MoonshineModel::load(const char *encoder_model_path,

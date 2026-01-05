@@ -13,9 +13,15 @@ add_library(ten_vad STATIC
     ten-vad-model-data.c
 )
 
-target_compile_options(ten_vad PRIVATE
-    -fPIC
-)
+if (WIN32)
+    target_compile_definitions(ten_vad PRIVATE
+        TENVAD_EXPORTS
+    )
+else()
+    target_compile_options(ten_vad PRIVATE
+        -fPIC
+    )
+endif()
 
 target_include_directories(ten_vad PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
