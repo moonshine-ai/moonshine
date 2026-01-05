@@ -29,4 +29,18 @@ elseif(LINUX)
     else()
         set(ONNXRUNTIME_LIB_PATH "${CMAKE_CURRENT_LIST_DIR}/lib/linux/x86_64/libonnxruntime.so.1" CACHE INTERNAL "")
     endif()
+elseif(WIN32)
+    set(ONNXRUNTIME_LIB_PATH "${CMAKE_CURRENT_LIST_DIR}/lib/windows/x86_64/onnxruntime.lib" CACHE INTERNAL "")
 endif()
+
+function(copy_onnxruntime_dll target_name)
+if(WIN32)
+    string(REPLACE ".lib" ".dll" ONNXRUNTIME_DLL_PATH "${ONNXRUNTIME_LIB_PATH}")
+    add_custom_command(TARGET ${target_name} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${ONNXRUNTIME_DLL_PATH}"
+        $<TARGET_FILE_DIR:${target_name}>
+        COMMENT "Copying onnxruntime DLL to executable directory to prevent loading from system libraries"
+    )
+endif()
+endfunction()
