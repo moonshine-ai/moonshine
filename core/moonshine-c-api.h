@@ -74,6 +74,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef _WIN32
+#define MOONSHINE_EXPORT __declspec(dllexport)
+#else
+#define MOONSHINE_EXPORT __attribute__((visibility("default")))
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -190,16 +196,16 @@ struct transcript_t {
 /* Returns the loaded moonshine library version. This may be different from
    the header version if a newer shared library is loaded.
 */
-int32_t moonshine_get_version(void);
+MOONSHINE_EXPORT int32_t moonshine_get_version(void);
 
 /* Converts an error code number returned from an API call into a
    human-readable string. */
-const char *moonshine_error_to_string(int32_t error);
+MOONSHINE_EXPORT const char *moonshine_error_to_string(int32_t error);
 
 /* Converts a transcript_t struct into a human-readable string for debugging
  * purposes. The string is owned by the library, and is valid until the next
  * call to moonshine_transcript_to_string. */
-const char *
+MOONSHINE_EXPORT const char *
 moonshine_transcript_to_string(const struct transcript_t *transcript);
 
 /* Loads models from the file system, using `path` as the root directory. The
@@ -237,7 +243,7 @@ moonshine_transcript_to_string(const struct transcript_t *transcript);
    is returned. This code can be converted to a human-readable string using
    moonshine_error_to_string.
 */
-int32_t moonshine_load_transcriber_from_files(
+MOONSHINE_EXPORT int32_t moonshine_load_transcriber_from_files(
     const char *path, uint32_t model_arch,
     const struct transcriber_option_t *options, uint64_t options_count,
     int32_t moonshine_version);
@@ -247,7 +253,7 @@ int32_t moonshine_load_transcriber_from_files(
    format, and are expected to be in the same format as the files disk.
    All of the other parameters are the same as for
    moonshine_load_transcriber_from_files.                                    */
-int32_t moonshine_load_transcriber_from_memory(
+MOONSHINE_EXPORT int32_t moonshine_load_transcriber_from_memory(
     const uint8_t *encoder_model_data, size_t encoder_model_data_size,
     const uint8_t *decoder_model_data, size_t decoder_model_data_size,
     const uint8_t *tokenizer_data, size_t tokenizer_data_size,
@@ -257,7 +263,7 @@ int32_t moonshine_load_transcriber_from_memory(
 /* Releases all resources used by the transcriber. Subsequent transcriber
    creation calls may reuse this transcriber's ID, so ensure you remove
    all references to it in your client code after freeing it.*/
-void moonshine_free_transcriber(int32_t transcriber_handle);
+MOONSHINE_EXPORT void moonshine_free_transcriber(int32_t transcriber_handle);
 
 /* Given an array of PCM audio data, identifies sections of speech and
    transcribes them into text. This is the call to use if you're analyzing audio
@@ -292,7 +298,7 @@ void moonshine_free_transcriber(int32_t transcriber_handle);
    The error code can be converted to a human-readable string using
    moonshine_error_to_string.
 */
-int32_t moonshine_transcribe_without_streaming(
+MOONSHINE_EXPORT int32_t moonshine_transcribe_without_streaming(
     int32_t transcriber_handle, float *audio_data, uint64_t audio_length,
     int32_t sample_rate, uint32_t flags, struct transcript_t **out_transcript);
 
@@ -368,12 +374,12 @@ int32_t moonshine_transcribe_without_streaming(
    negative value is returned. The error code can be converted to a
    human-readable string using moonshine_error_to_string.
 */
-int32_t moonshine_create_stream(int32_t transcriber_handle, uint32_t flags);
+MOONSHINE_EXPORT int32_t moonshine_create_stream(int32_t transcriber_handle, uint32_t flags);
 
 /* Releases the resources used by a stream.
    Subsequent stream creation calls may reuse this stream's ID, so ensure you
    remove all references to it in your client code after freeing it.*/
-int32_t moonshine_free_stream(int32_t transcriber_handle,
+MOONSHINE_EXPORT int32_t moonshine_free_stream(int32_t transcriber_handle,
                               int32_t stream_handle);
 
 /* Starts a stream. This should be called before any calls to
@@ -384,14 +390,14 @@ int32_t moonshine_free_stream(int32_t transcriber_handle,
    The error code can be converted to a human-readable string using
    moonshine_error_to_string.
  */
-int32_t moonshine_start_stream(int32_t transcriber_handle,
+MOONSHINE_EXPORT int32_t moonshine_start_stream(int32_t transcriber_handle,
                                int32_t stream_handle);
 
 /* Stops a stream. This function returns zero on success, or a non-zero error
    code on failure. The error code can be converted to a human-readable string
    using moonshine_error_to_string.
  */
-int32_t moonshine_stop_stream(int32_t transcriber_handle,
+MOONSHINE_EXPORT int32_t moonshine_stop_stream(int32_t transcriber_handle,
                               int32_t stream_handle);
 
 /* Call this when new audio data becomes available from your microphone or other
@@ -424,7 +430,7 @@ int32_t moonshine_stop_stream(int32_t transcriber_handle,
    The error code can be converted to a human-readable string using
    moonshine_error_to_string.
 */
-int32_t moonshine_transcribe_add_audio_to_stream(int32_t transcriber_handle,
+MOONSHINE_EXPORT int32_t moonshine_transcribe_add_audio_to_stream(int32_t transcriber_handle,
                                                  int32_t stream_handle,
                                                  const float *new_audio_data,
                                                  uint64_t audio_length,
@@ -459,7 +465,7 @@ int32_t moonshine_transcribe_add_audio_to_stream(int32_t transcriber_handle,
    The error code can be converted to a human-readable string using
    moonshine_error_to_string.
 */
-int32_t moonshine_transcribe_stream(int32_t transcriber_handle,
+MOONSHINE_EXPORT int32_t moonshine_transcribe_stream(int32_t transcriber_handle,
                                     int32_t stream_handle, uint32_t flags,
                                     struct transcript_t **out_transcript);
 
