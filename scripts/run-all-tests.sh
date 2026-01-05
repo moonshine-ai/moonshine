@@ -24,5 +24,6 @@ ${REPO_ROOT_DIR}/core/build/resampler-test
 ${REPO_ROOT_DIR}/core/build/voice-activity-detector-test
 ${REPO_ROOT_DIR}/core/build/transcriber-test
 ${REPO_ROOT_DIR}/core/build/moonshine-c-api-test
+${REPO_ROOT_DIR}/core/build/moonshine-cpp-test
 
 echo "All tests passed"
