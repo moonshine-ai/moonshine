@@ -31,6 +31,8 @@ elseif(LINUX)
     endif()
 elseif(WIN32)
     set(ONNXRUNTIME_LIB_PATH "${CMAKE_CURRENT_LIST_DIR}/lib/windows/x86_64/onnxruntime.lib" CACHE INTERNAL "")
+else()
+    message(FATAL_ERROR "Unsupported platform: ${CMAKE_SYSTEM_PROCESSOR}")
 endif()
 
 function(copy_onnxruntime_dll target_name)
