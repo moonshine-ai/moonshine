@@ -31,3 +31,6 @@ libmoonshine*.dll
 project.xcworkspace
 xcuserdata/
 /swift/test-assets/
+/.config/
+*.tar.gz
+/examples/c++/moonshine-voice-*/
