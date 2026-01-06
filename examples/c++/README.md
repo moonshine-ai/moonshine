@@ -35,5 +35,8 @@ g++ transcriber.cpp \
   -o transcriber \
   -framework CoreFoundation \
   -framework Foundation
-./transcriber
 ```
+
+## Run
+
+You should now have an executable called `transcriber` in this folder. To test it, run `./transcriber` and you should see some transcription results. You can try different models and inputs using `--model-path`, `--model-arch`, and `--wav-path`.
