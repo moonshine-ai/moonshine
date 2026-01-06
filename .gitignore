@@ -34,3 +34,4 @@ xcuserdata/
 /.config/
 *.tar.gz
 /examples/c++/moonshine-voice-*/
+/examples/c++/transcriber
