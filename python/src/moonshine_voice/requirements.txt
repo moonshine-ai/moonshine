@@ -1,0 +1,6 @@
+numpy
+sounddevice
+requests
+tqdm
+filelock
+platformdirs

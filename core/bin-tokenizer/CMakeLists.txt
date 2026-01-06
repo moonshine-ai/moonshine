@@ -2,8 +2,12 @@ cmake_minimum_required(VERSION 3.22.1)
 
 project("bin-tokenizer")
 
-add_library(bin-tokenizer SHARED
+add_library(bin-tokenizer STATIC
     bin-tokenizer.cpp
+)
+
+target_compile_options(bin-tokenizer PRIVATE
+    -fPIC
 )
 
 target_include_directories(bin-tokenizer PRIVATE

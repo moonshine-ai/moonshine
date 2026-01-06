@@ -1,0 +1,5 @@
+module Moonshine {
+    umbrella header "moonshine-c-api.h"
+    export *
+    module * { export * }
+}

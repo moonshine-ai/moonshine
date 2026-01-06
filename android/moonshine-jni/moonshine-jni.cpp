@@ -1,4 +1,4 @@
-#include "moonshine.h"
+#include "moonshine-c-api.h"
 
 #include <memory>
 #include <string>

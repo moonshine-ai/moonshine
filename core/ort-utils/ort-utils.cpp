@@ -1,12 +1,36 @@
 #include "ort-utils.h"
 
+#include <filesystem>
+
+#ifndef _WIN32
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 #include "onnxruntime_c_api.h"
 
+#ifdef _WIN32
+// No memory mapping on Windows and wchar for the file path.
+int ort_session_from_path(const OrtApi *ort_api, OrtEnv *env,
+  OrtSessionOptions *session_options, const char *path,
+  OrtSession **session, const char **mmapped_data,
+  size_t *mmapped_data_size) {
+  if (!std::filesystem::exists(path)) {
+    fprintf(stderr, "Model directory '%s' does not exist at %s:%d\n", path, __FILE__, __LINE__);
+    return -1;
+  }
+  fprintf(stderr, "Creating session from path '%s' at %s:%d\n", path, __FILE__, __LINE__);
+  std::filesystem::path fs_path(path);
+  std::wstring wpath = fs_path.wstring();
+  RETURN_ON_ORT_ERROR(
+      ort_api, ort_api->CreateSession(env, wpath.c_str(), session_options, session));
+  *mmapped_data = nullptr;
+  *mmapped_data_size = 0;
+  return 0;
+}
+#else
 int ort_session_from_path(const OrtApi *ort_api, OrtEnv *env,
                           OrtSessionOptions *session_options, const char *path,
                           OrtSession **session, const char **mmapped_data,
@@ -38,10 +62,9 @@ int ort_session_from_path(const OrtApi *ort_api, OrtEnv *env,
                                      env, *mmapped_data, *mmapped_data_size,
                                      session_options, session));
   } else {
-    if (access(path, F_OK) != 0) {
-      fprintf(stderr, "File '%s' does not exist at %s:%d\n", path, __FILE__,
-              __LINE__);
-      return -1;
+    if (!std::filesystem::exists(path)) {
+        fprintf(stderr, "Model directory '%s' does not exist at %s:%d\n", path, __FILE__, __LINE__);
+        return -1;
     }
     fprintf(stderr, "Creating session from path '%s' at %s:%d\n", path,
             __FILE__, __LINE__);
@@ -52,11 +75,14 @@ int ort_session_from_path(const OrtApi *ort_api, OrtEnv *env,
   }
   return 0;
 }
+#endif
 
 int ort_session_from_memory(const OrtApi *ort_api, OrtEnv *env,
                             OrtSessionOptions *session_options,
                             const uint8_t *data, size_t data_size,
                             OrtSession **session) {
+  RETURN_ON_NULL(ort_api);
+  RETURN_ON_NULL(data);
   RETURN_ON_ORT_ERROR(
       ort_api, ort_api->CreateSessionFromArray(env, data, data_size,
                                                session_options, session));

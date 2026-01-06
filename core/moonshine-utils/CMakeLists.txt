@@ -4,9 +4,13 @@ project("moonshine-utils")
 
 include_directories(${CMAKE_CURRENT_LIST_DIR}/../third-party/doctest)
 
-add_library(moonshine-utils SHARED
+add_library(moonshine-utils STATIC
     string-utils.cpp
     debug-utils.cpp
+)
+
+target_compile_options(moonshine-utils PRIVATE
+    -fPIC
 )
 
 set_target_properties(moonshine-utils PROPERTIES
@@ -30,6 +34,16 @@ target_include_directories(string-utils-test PRIVATE
     ${MOONSHINE_UTILS_INCLUDE_DIR}
     ${DOCTEST_INCLUDE_DIR}
 )
+
+if (IOS)
+    set_target_properties(string-utils-test PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.string-utils-test"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+    )
+endif()
+
 target_link_libraries(string-utils-test
     moonshine-utils
 )
@@ -39,6 +53,16 @@ target_include_directories(debug-utils-test PRIVATE
     ${MOONSHINE_UTILS_INCLUDE_DIR}
     ${DOCTEST_INCLUDE_DIR}
 )
+
+if (IOS)
+    set_target_properties(debug-utils-test PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.debug-utils-test"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+    )
+endif()
+
 set_target_properties(debug-utils-test PROPERTIES
     CXX_STANDARD 20
     CXX_STANDARD_REQUIRED YES

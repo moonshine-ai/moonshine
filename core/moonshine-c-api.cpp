@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "moonshine.h"
+#include "moonshine-c-api.h"
 
 #include <cassert>
 #include <cctype>
@@ -38,9 +38,6 @@ SOFTWARE.
 #include <cstring> // For strerror
 
 #include <fcntl.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 #include <algorithm>
 #include <array>

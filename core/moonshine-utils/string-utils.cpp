@@ -2,6 +2,9 @@
 
 #include <cstdio>
 
+#include <algorithm>
+#include <stdexcept>
+
 // See
 // https://stackoverflow.com/questions/2896600/how-to-replace-all-occurrences-of-a-character-in-string
 std::string replace_all(std::string str, const std::string &from,
