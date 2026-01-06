@@ -14,7 +14,8 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 elif grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null || grep -q "BCM2" /proc/cpuinfo 2>/dev/null; then
 	PLATFORM=rpi-arm64
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    if grep -q "x86_64" /proc/cpuinfo 2>/dev/null; then
+    ARCH=$(uname -m)
+    if [[ "$ARCH" == "x86_64" ]]; then
         PLATFORM=linux-x86_64
     else
         PLATFORM=linux-arm64
@@ -51,7 +52,7 @@ LIB_DIR=${BINARY_DIR}/lib
 mkdir -p ${LIB_DIR}
 if [[ "$PLATFORM" == "macos" ]]; then
     cp ${BUILD_DIR}/moonshine.framework/Versions/A/moonshine ${LIB_DIR}/libmoonshine.a
-elif [[ "$PLATFORM" == "linux-x86_64" ]]; then
+elif [[ "$PLATFORM" == "linux-x86_64" || "$PLATFORM" == "linux-arm64" || "$PLATFORM" == "rpi-arm64" ]]; then
     cp ${BUILD_DIR}/libmoonshine.so ${LIB_DIR}/libmoonshine.so
 fi
 

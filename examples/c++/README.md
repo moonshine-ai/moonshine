@@ -16,6 +16,15 @@ Since this is a generic C++ example, I'll show the simplest possible build comma
 
 ### Linux
 
+```bash
+g++ transcriber.cpp \
+  -Imoonshine-voice-linux-x86_64/include \
+  -Lmoonshine-voice-linux-x86_64/lib \
+  -lmoonshine \
+  -o transcriber
+export LD_LIBRARY_PATH=`pwd`/moonshine-voice-linux-x86_64/lib
+```
+
 ### MacOS
 
 ```bash
