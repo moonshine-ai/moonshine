@@ -10,7 +10,6 @@
 
 #include "onnxruntime_c_api.h"
 
-#include "moonshine.h"
 #include "moonshine-ort-allocator.h"
 #include "bin-tokenizer.h"
 

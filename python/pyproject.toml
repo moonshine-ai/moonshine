@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "moonshine-voice"
+version = "0.0.29"
+description = "Fast, accurate, on-device AI library for building interactive voice applications"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "Moonshine AI" }]
+keywords = ["speech", "transcription", "voice", "ai", "on-device", "stt"]
+dependencies = [
+    "numpy",
+    "sounddevice",
+    "requests",
+    "tqdm",
+    "filelock",
+    "platformdirs",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
+
+[project.urls]
+Homepage = "https://github.com/usefulsensors/moonshine-v2"
+Documentation = "https://github.com/usefulsensors/moonshine-v2"
+Repository = "https://github.com/usefulsensors/moonshine-v2"
+Issues = "https://github.com/usefulsensors/moonshine-v2/issues"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"moonshine_voice" = ["*.dylib", "*.so", "*.dll", "assets/**/*"]

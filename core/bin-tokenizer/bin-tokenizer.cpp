@@ -168,7 +168,7 @@ std::vector<T> BinTokenizer::text_to_tokens(const std::string &text) {
                      remaining_bytes.begin() + bytes.size(), bytes.begin())) {
         if (bytes.size() > longest_match.size()) {
           longest_match = bytes;
-          longest_match_token = i;
+          longest_match_token = (T)i;
         }
       }
     }

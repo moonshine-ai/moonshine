@@ -1,0 +1,3 @@
+*.xcframework
+.build/
+*.zip

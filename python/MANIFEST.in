@@ -1,0 +1,6 @@
+include README.md
+include LICENSE
+recursive-include src *.py
+recursive-include src *.dylib *.so *.dll
+recursive-include src/moonshine_voice/assets **/*
+

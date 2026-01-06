@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.22.1)
 
 project("ten_vad")
 
-add_library(ten_vad SHARED
+add_library(ten_vad STATIC
     aed.cc
     biquad.cc
     fftw.c
@@ -12,6 +12,16 @@ add_library(ten_vad SHARED
     ten_vad.cc
     ten-vad-model-data.c
 )
+
+if (WIN32)
+    target_compile_definitions(ten_vad PRIVATE
+        TENVAD_EXPORTS
+    )
+else()
+    target_compile_options(ten_vad PRIVATE
+        -fPIC
+    )
+endif()
 
 target_include_directories(ten_vad PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
@@ -24,6 +34,12 @@ if (ANDROID)
         ort-utils
         android
         log
+    )
+elseif(IOS)
+    target_link_libraries(ten_vad PUBLIC
+        ort-utils
+        "-framework CoreFoundation"
+        "-framework Foundation"
     )
 else()
     target_link_libraries(ten_vad PUBLIC
@@ -38,6 +54,21 @@ target_include_directories(ten_vad-test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/../doctest
 )
 
-target_link_libraries(ten_vad-test PUBLIC
-    ten_vad
-)
+if (IOS OR MOONSHINE_BUILD_SWIFT)
+    set_target_properties(ten_vad-test PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.ten_vad-test"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+    )
+    target_link_libraries(ten_vad-test PRIVATE
+        ten_vad
+        "-framework CoreFoundation"
+        "-framework Foundation"
+    )
+else()
+    target_link_libraries(ten_vad-test PUBLIC
+        ten_vad
+    )
+endif()
+

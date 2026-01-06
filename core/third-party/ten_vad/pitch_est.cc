@@ -4,18 +4,20 @@
 // Licensed under the Apache License, Version 2.0, with certain conditions.
 // Refer to the "LICENSE" file in the root directory for more information.
 //
-// This file contains modified code derived from LPCNet (https://github.com/mozilla/LPCNet),
-// specifically from the following functions:
+// This file contains modified code derived from LPCNet
+// (https://github.com/mozilla/LPCNet), specifically from the following
+// functions:
 //   - compute_frame_features() in lpcnet_enc.c
 //   - process_superframe() in lpcnet_enc.c
 //
-// Original lpcnet_enc.c code LICENSE Text, licensed under the BSD-2-Clause License:
+// Original lpcnet_enc.c code LICENSE Text, licensed under the BSD-2-Clause
+// License:
 //   Copyright (c) 2017-2019 Mozilla
 //
-//   Redistribution and use in source and binary forms, with or without modification,
-//   are permitted provided that the following conditions are met:
+//   Redistribution and use in source and binary forms, with or without
+//   modification, are permitted provided that the following conditions are met:
 //
-//   - Redistributions of source code must retain the above copyright notice, 
+//   - Redistributions of source code must retain the above copyright notice,
 //     this list of conditions and the following disclaimer.
 //
 //   - Redistributions in binary form must reproduce the above copyright notice,
@@ -51,7 +53,7 @@
 //   - Redistributions in binary form must reproduce the above copyright
 //     notice, this list of conditions and the following disclaimer in the
 //     documentation and/or other materials provided with the distribution.
-//  
+//
 //   - Neither the name of the Xiph.Org Foundation nor the names of its
 //     contributors may be used to endorse or promote products derived from
 //     this software without specific prior written permission.
@@ -67,7 +69,7 @@
 //  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 //  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 //  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//   
+//
 
 #include <assert.h>
 #include <math.h>
@@ -76,15 +78,15 @@
 #include <string.h>
 
 #include "biquad.h"
+#include "fftw.h"
 #include "pitch_est.h"
 #include "pitch_est_st.h"
-#include "fftw.h"
 
 // ==========================================================================================
 // internal tools
 // ==========================================================================================
 
-static int AUP_PE_checkStatCfg(PE_StaticCfg* pCfg) {
+static int AUP_PE_checkStatCfg(PE_StaticCfg *pCfg) {
   if (pCfg == NULL) {
     return -1;
   }
@@ -115,7 +117,7 @@ static int AUP_PE_checkStatCfg(PE_StaticCfg* pCfg) {
   return 0;
 }
 
-static int AUP_PE_checkDynamCfg(PE_DynamCfg* pCfg) {
+static int AUP_PE_checkDynamCfg(PE_DynamCfg *pCfg) {
   if (pCfg == NULL) {
     return -1;
   }
@@ -125,8 +127,8 @@ static int AUP_PE_checkDynamCfg(PE_DynamCfg* pCfg) {
   return 0;
 }
 
-static int AUP_PE_publishStaticCfg(PE_St* stHdl) {
-  const PE_StaticCfg* pStatCfg;
+static int AUP_PE_publishStaticCfg(PE_St *stHdl) {
+  const PE_StaticCfg *pStatCfg;
   int idx, jdx;
   int hopSz;
   int excBufShiftLen;
@@ -134,7 +136,7 @@ static int AUP_PE_publishStaticCfg(PE_St* stHdl) {
   if (stHdl == NULL) {
     return -1;
   }
-  pStatCfg = (const PE_StaticCfg*)(&(stHdl->stCfg));
+  pStatCfg = (const PE_StaticCfg *)(&(stHdl->stCfg));
   hopSz = (int)pStatCfg->hopSz;
 
   stHdl->nBins = ((int)(pStatCfg->fftSz >> 1)) + 1;
@@ -142,7 +144,7 @@ static int AUP_PE_publishStaticCfg(PE_St* stHdl) {
   stHdl->minPeriod = AUP_PE_MIN_PERIOD_16KHZ / stHdl->procResampleRate;
   stHdl->maxPeriod = AUP_PE_MAX_PERIOD_16KHZ / stHdl->procResampleRate;
   stHdl->difPeriod = stHdl->maxPeriod - stHdl->minPeriod;
-  stHdl->inputResampleBufLen = hopSz * 2;  // give it a max. value
+  stHdl->inputResampleBufLen = hopSz * 2; // give it a max. value
   stHdl->inputQLen = AUP_PE_MAX(AUP_PE_XCORR_TRAINING_OFFSET, hopSz) + hopSz;
 
   excBufShiftLen = (int)ceilf(hopSz / (float)stHdl->procResampleRate);
@@ -158,14 +160,15 @@ static int AUP_PE_publishStaticCfg(PE_St* stHdl) {
     for (jdx = 0; jdx < AUP_PE_NB_BANDS; jdx++) {
       stHdl->dct_table[idx * AUP_PE_NB_BANDS + jdx] =
           cosf((idx + .5f) * jdx * AUP_PE_PI / AUP_PE_NB_BANDS);
-      if (jdx == 0) stHdl->dct_table[idx * AUP_PE_NB_BANDS + jdx] *= sqrtf(.5f);
+      if (jdx == 0)
+        stHdl->dct_table[idx * AUP_PE_NB_BANDS + jdx] *= sqrtf(.5f);
     }
   }
 
   return 0;
 }
 
-static int AUP_PE_resetVariables(PE_St* stHdl) {
+static int AUP_PE_resetVariables(PE_St *stHdl) {
   // int nBins;
   int idx;
 
@@ -191,7 +194,7 @@ static int AUP_PE_resetVariables(PE_St* stHdl) {
   stHdl->bestPeriodEst = 0;
 
   stHdl->voiced = 0;
-  stHdl->pitchEstResult = 0;  // label as no speech
+  stHdl->pitchEstResult = 0; // label as no speech
 
   if (stHdl->procResampleRate != 1) {
     if (AUP_Biquad_init(stHdl->biquadIIRPtr) < 0) {
@@ -202,7 +205,7 @@ static int AUP_PE_resetVariables(PE_St* stHdl) {
   return 0;
 }
 
-static int AUP_PE_dynamMemPrepare(PE_St* stHdl, void* memPtrExt,
+static int AUP_PE_dynamMemPrepare(PE_St *stHdl, void *memPtrExt,
                                   size_t memSize) {
   int idx;
 
@@ -218,7 +221,7 @@ static int AUP_PE_dynamMemPrepare(PE_St* stHdl, void* memPtrExt,
   int pitchMaxPathRegPerRegMemSize = 0;
   int pitchPrevPerFeatMemSize = 0;
   int totalMemSize = 0;
-  char* memPtr = NULL;
+  char *memPtr = NULL;
 
   inputResampleBufMemSize =
       AUP_PE_ALIGN8(sizeof(float) * stHdl->inputResampleBufLen);
@@ -227,10 +230,11 @@ static int AUP_PE_dynamMemPrepare(PE_St* stHdl, void* memPtrExt,
   inputQMemSize = AUP_PE_ALIGN8(sizeof(float) * stHdl->inputQLen);
   totalMemSize += inputQMemSize;
 
-  alignedInMemSize = AUP_PE_ALIGN8(sizeof(float) * stHdl->stCfg.hopSz);
+  alignedInMemSize = (int)AUP_PE_ALIGN8(sizeof(float) * stHdl->stCfg.hopSz);
   totalMemSize += alignedInMemSize;
 
-  lpcFilterOutBufMemSize = AUP_PE_ALIGN8(sizeof(float) * stHdl->stCfg.hopSz);
+  lpcFilterOutBufMemSize =
+      (int)AUP_PE_ALIGN8(sizeof(float) * stHdl->stCfg.hopSz);
   totalMemSize += lpcFilterOutBufMemSize;
 
   excBufMemSize = AUP_PE_ALIGN8(sizeof(float) * stHdl->excBufLen);
@@ -264,27 +268,27 @@ static int AUP_PE_dynamMemPrepare(PE_St* stHdl, void* memPtrExt,
     return -1;
   }
 
-  memPtr = (char*)memPtrExt;
+  memPtr = (char *)memPtrExt;
 
-  stHdl->inputResampleBuf = (float*)memPtr;
+  stHdl->inputResampleBuf = (float *)memPtr;
   memPtr += inputResampleBufMemSize;
 
-  stHdl->inputQ = (float*)memPtr;
+  stHdl->inputQ = (float *)memPtr;
   memPtr += inputQMemSize;
 
-  stHdl->alignedIn = (float*)memPtr;
+  stHdl->alignedIn = (float *)memPtr;
   memPtr += alignedInMemSize;
 
-  stHdl->lpcFilterOutBuf = (float*)memPtr;
+  stHdl->lpcFilterOutBuf = (float *)memPtr;
   memPtr += lpcFilterOutBufMemSize;
 
-  stHdl->excBuf = (float*)memPtr;
+  stHdl->excBuf = (float *)memPtr;
   memPtr += excBufMemSize;
 
-  stHdl->excBufSq = (float*)memPtr;
+  stHdl->excBufSq = (float *)memPtr;
   memPtr += excBufSqMemSize;
 
-  stHdl->xCorrInst = (float*)memPtr;
+  stHdl->xCorrInst = (float *)memPtr;
   memPtr += xCorrInstMemSize;
 
   for (idx = 0; idx < AUP_PE_FEAT_MAX_NFRM * 2; idx++) {
@@ -293,29 +297,29 @@ static int AUP_PE_dynamMemPrepare(PE_St* stHdl, void* memPtrExt,
     stHdl->pitchPrev[idx] = NULL;
   }
   for (idx = 0; idx < (stHdl->nFeat * 2); idx++) {
-    stHdl->xCorr[idx] = (float*)memPtr;
+    stHdl->xCorr[idx] = (float *)memPtr;
     memPtr += xCorrPerFeatMemSize;
 
-    stHdl->xCorrTmp[idx] = (float*)memPtr;
+    stHdl->xCorrTmp[idx] = (float *)memPtr;
     memPtr += xCorrPerFeatTmpMemSize;
 
-    stHdl->pitchPrev[idx] = (int*)memPtr;
+    stHdl->pitchPrev[idx] = (int *)memPtr;
     memPtr += pitchPrevPerFeatMemSize;
   }
 
-  stHdl->pitchMaxPathReg[0] = (float*)memPtr;
+  stHdl->pitchMaxPathReg[0] = (float *)memPtr;
   memPtr += pitchMaxPathRegPerRegMemSize;
-  stHdl->pitchMaxPathReg[1] = (float*)memPtr;
+  stHdl->pitchMaxPathReg[1] = (float *)memPtr;
   memPtr += pitchMaxPathRegPerRegMemSize;
 
-  if (((int)(memPtr - (char*)memPtrExt)) > totalMemSize) {
+  if (((int)(memPtr - (char *)memPtrExt)) > totalMemSize) {
     return -1;
   }
 
   return (totalMemSize);
 }
 
-static void AUP_PE_computeBandEnergy(const float* inBinPower,
+static void AUP_PE_computeBandEnergy(const float *inBinPower,
                                      const int binPowNFFT,
                                      float bandE[AUP_PE_NB_BANDS]) {
   int i, j, bandSz;
@@ -333,9 +337,9 @@ static void AUP_PE_computeBandEnergy(const float* inBinPower,
   for (i = 0; i < AUP_PE_NB_BANDS - 1; i++) {
     bandSz = (int)roundf(
         (AUP_PE_BAND_START_INDEX[i + 1] - AUP_PE_BAND_START_INDEX[i]) *
-        indexConvRate);  // WINDOW_SIZE_5MS;
+        indexConvRate); // WINDOW_SIZE_5MS;
     indexOffset = (int)roundf(AUP_PE_BAND_START_INDEX[i] *
-                              indexConvRate);  // WINDOW_SIZE_5MS;
+                              indexConvRate); // WINDOW_SIZE_5MS;
 
     for (j = 0; j < bandSz; j++) {
       frac = (float)j / bandSz;
@@ -352,7 +356,7 @@ static void AUP_PE_computeBandEnergy(const float* inBinPower,
 }
 
 static void AUP_PE_dct(const float DctTable[AUP_PE_NB_BANDS * AUP_PE_NB_BANDS],
-                       const float* in, float* out) {
+                       const float *in, float *out) {
   int idx, j;
   float sum;
   float ratio = sqrtf(2.0f / AUP_PE_NB_BANDS);
@@ -366,7 +370,7 @@ static void AUP_PE_dct(const float DctTable[AUP_PE_NB_BANDS * AUP_PE_NB_BANDS],
   return;
 }
 
-static void AUP_PE_xcorr_kernel(const float* x, const float* y, float sum[4],
+static void AUP_PE_xcorr_kernel(const float *x, const float *y, float sum[4],
                                 int len) {
   int j;
   float y_0, y_1, y_2, y_3;
@@ -428,7 +432,7 @@ static void AUP_PE_xcorr_kernel(const float* x, const float* y, float sum[4],
   return;
 }
 
-static float AUP_PE_celt_inner_prod(const float* x, const float* y, int N) {
+static float AUP_PE_celt_inner_prod(const float *x, const float *y, int N) {
   int i;
   float xy = 0;
   for (i = 0; i < N; i++) {
@@ -439,8 +443,8 @@ static float AUP_PE_celt_inner_prod(const float* x, const float* y, int N) {
 }
 
 static void AUP_PE_MvingXCorr(int corrWindowLen, int corrShiftTimes,
-                              const float* refIn, const float* yInToShift,
-                              float* xcorr) {
+                              const float *refIn, const float *yInToShift,
+                              float *xcorr) {
   /* Unrolled version of the pitch correlation -- runs faster on x86 and ARM */
   int i;
   float tmp;
@@ -465,20 +469,20 @@ static void AUP_PE_MvingXCorr(int corrWindowLen, int corrShiftTimes,
 // public APIs
 // ==========================================================================================
 
-int AUP_PE_create(void** stPtr) {
-  PE_St* tmpPtr;
+int AUP_PE_create(void **stPtr) {
+  PE_St *tmpPtr;
 
   if (stPtr == NULL) {
     return -1;
   }
 
-  *stPtr = (void*)malloc(sizeof(PE_St));
+  *stPtr = (void *)malloc(sizeof(PE_St));
   if (*stPtr == NULL) {
     return -1;
   }
   memset(*stPtr, 0, sizeof(PE_St));
 
-  tmpPtr = (PE_St*)(*stPtr);
+  tmpPtr = (PE_St *)(*stPtr);
 
   tmpPtr->dynamMemPtr = NULL;
   tmpPtr->dynamMemSize = 0;
@@ -492,21 +496,21 @@ int AUP_PE_create(void** stPtr) {
   tmpPtr->stCfg.anaWindowSz = 768;
   tmpPtr->stCfg.hopSz = 256;
   tmpPtr->stCfg.useLPCPreFiltering = 1;
-  tmpPtr->stCfg.procFs = 4000;  // 4KHz resampling rate
+  tmpPtr->stCfg.procFs = 4000; // 4KHz resampling rate
 
   tmpPtr->dynamCfg.voicedThr = 0.4f;
 
   return 0;
 }
 
-int AUP_PE_destroy(void** stPtr) {
-  PE_St* stHdl;
+int AUP_PE_destroy(void **stPtr) {
+  PE_St *stHdl;
 
   if (stPtr == NULL) {
     return 0;
   }
 
-  stHdl = (PE_St*)(*stPtr);
+  stHdl = (PE_St *)(*stPtr);
   if (stHdl == NULL) {
     return 0;
   }
@@ -526,8 +530,8 @@ int AUP_PE_destroy(void** stPtr) {
   return 0;
 }
 
-int AUP_PE_memAllocate(void* stPtr, const PE_StaticCfg* pCfg) {
-  PE_St* stHdl = NULL;
+int AUP_PE_memAllocate(void *stPtr, const PE_StaticCfg *pCfg) {
+  PE_St *stHdl = NULL;
   PE_StaticCfg localStCfg;
   Biquad_StaticCfg biquadStCfg = {};
   int idx;
@@ -536,7 +540,7 @@ int AUP_PE_memAllocate(void* stPtr, const PE_StaticCfg* pCfg) {
   if (stPtr == NULL || pCfg == NULL) {
     return -1;
   }
-  stHdl = (PE_St*)(stPtr);
+  stHdl = (PE_St *)(stPtr);
 
   memcpy(&localStCfg, pCfg, sizeof(PE_StaticCfg));
   if (AUP_PE_checkStatCfg(&localStCfg) < 0) {
@@ -611,13 +615,13 @@ int AUP_PE_memAllocate(void* stPtr, const PE_StaticCfg* pCfg) {
   return 0;
 }
 
-int AUP_PE_init(void* stPtr) {
-  PE_St* stHdl;
+int AUP_PE_init(void *stPtr) {
+  PE_St *stHdl;
 
   if (stPtr == NULL) {
     return -1;
   }
-  stHdl = (PE_St*)(stPtr);
+  stHdl = (PE_St *)(stPtr);
 
   if (AUP_PE_resetVariables(stHdl) < 0) {
     return -1;
@@ -626,8 +630,8 @@ int AUP_PE_init(void* stPtr) {
   return 0;
 }
 
-int AUP_PE_setDynamCfg(void* stPtr, const PE_DynamCfg* pCfg) {
-  PE_St* stHdl;
+int AUP_PE_setDynamCfg(void *stPtr, const PE_DynamCfg *pCfg) {
+  PE_St *stHdl;
   PE_DynamCfg localCfg;
 
   if (stPtr == NULL || pCfg == NULL) {
@@ -639,65 +643,65 @@ int AUP_PE_setDynamCfg(void* stPtr, const PE_DynamCfg* pCfg) {
     return -1;
   }
 
-  stHdl = (PE_St*)(stPtr);
+  stHdl = (PE_St *)(stPtr);
 
   memcpy(&(stHdl->dynamCfg), &localCfg, sizeof(PE_DynamCfg));
 
   return 0;
 }
 
-int AUP_PE_getStaticCfg(const void* stPtr, PE_StaticCfg* pCfg) {
-  const PE_St* stHdl;
+int AUP_PE_getStaticCfg(const void *stPtr, PE_StaticCfg *pCfg) {
+  const PE_St *stHdl;
 
   if (stPtr == NULL || pCfg == NULL) {
     return -1;
   }
-  stHdl = (const PE_St*)(stPtr);
+  stHdl = (const PE_St *)(stPtr);
 
   memcpy(pCfg, &(stHdl->stCfg), sizeof(PE_StaticCfg));
 
   return 0;
 }
 
-int AUP_PE_getDynamCfg(const void* stPtr, PE_DynamCfg* pCfg) {
-  const PE_St* stHdl;
+int AUP_PE_getDynamCfg(const void *stPtr, PE_DynamCfg *pCfg) {
+  const PE_St *stHdl;
 
   if (stPtr == NULL || pCfg == NULL) {
     return -1;
   }
-  stHdl = (const PE_St*)(stPtr);
+  stHdl = (const PE_St *)(stPtr);
 
   memcpy(pCfg, &(stHdl->dynamCfg), sizeof(PE_DynamCfg));
 
   return 0;
 }
 
-int AUP_PE_getAlgDelay(const void* stPtr, int* delayInFrms) {
-  const PE_St* stHdl;
+int AUP_PE_getAlgDelay(const void *stPtr, int *delayInFrms) {
+  const PE_St *stHdl;
 
   if (stPtr == NULL || delayInFrms == NULL) {
     return -1;
   }
-  stHdl = (const PE_St*)(stPtr);
+  stHdl = (const PE_St *)(stPtr);
 
   *delayInFrms = stHdl->estDelay;
 
   return 0;
 }
 
-int AUP_PE_proc(void* stPtr, const PE_InputData* pIn, PE_OutputData* pOut) {
-  PE_St* stHdl = NULL;
+int AUP_PE_proc(void *stPtr, const PE_InputData *pIn, PE_OutputData *pOut) {
+  PE_St *stHdl = NULL;
   Biquad_InputData bqInData = {0, 0, 0};
   Biquad_OutputData bqOutData = {0};
   int fftSz, hopSz, idx, jdx, sub, offset, tmpInt, xcorrAccIdx;
-  float bandPow[AUP_PE_NB_BANDS] = {0};  // Ex
+  float bandPow[AUP_PE_NB_BANDS] = {0}; // Ex
   float Ly[AUP_PE_NB_BANDS] = {0};
   float follow, logMax;
   float energy0, slidWinSum, tmpDenom = 0, maxTrackReg = 0, maxPathReg = 0;
-  float frmCorr = 0;  // frmCorrCorrection = 0;
-  const float* startPtr = NULL;
-  const float* refSeqPtr = NULL;
-  const float* mvSeqPtr = NULL;
+  float frmCorr = 0; // frmCorrCorrection = 0;
+  const float *startPtr = NULL;
+  const float *refSeqPtr = NULL;
+  const float *mvSeqPtr = NULL;
   int CORR_HALF_HOPSZ, SIDXT, XCIdx;
   int bestPeriodEstLocal[AUP_PE_TOTAL_NFEAT * 2] = {0};
   float w, sx = 0, sxx = 0, sxy = 0, sy = 0, sw = 0;
@@ -707,7 +711,7 @@ int AUP_PE_proc(void* stPtr, const PE_InputData* pIn, PE_OutputData* pOut) {
   if (stPtr == NULL || pIn == NULL || pIn->timeSignal == NULL) {
     return -1;
   }
-  stHdl = (PE_St*)(stPtr);
+  stHdl = (PE_St *)(stPtr);
 
   fftSz = (int)(stHdl->stCfg.fftSz);
   hopSz = (int)(stHdl->stCfg.hopSz);
@@ -733,7 +737,7 @@ int AUP_PE_proc(void* stPtr, const PE_InputData* pIn, PE_OutputData* pOut) {
     logMax = -2.0f;
     follow = -2.0f;
     for (idx = 0; idx < AUP_PE_NB_BANDS; idx++) {
-      Ly[idx] = log10f(1e-2f + bandPow[idx]);  // Ex
+      Ly[idx] = log10f(1e-2f + bandPow[idx]); // Ex
       Ly[idx] = AUP_PE_MAX(logMax - 8.0f, AUP_PE_MAX(follow - 2.5f, Ly[idx]));
       logMax = AUP_PE_MAX(logMax, Ly[idx]);
 
@@ -761,8 +765,8 @@ int AUP_PE_proc(void* stPtr, const PE_InputData* pIn, PE_OutputData* pOut) {
       memmove(stHdl->pitch_mem + 1, stHdl->pitch_mem,
               sizeof(float) * (AUP_PE_LPC_ORDER - 1));
       stHdl->pitch_mem[0] =
-          stHdl->alignedIn[idx];  // push the latest base-sample into the tail
-                                  // of FIFO
+          stHdl->alignedIn[idx]; // push the latest base-sample into the tail
+                                 // of FIFO
 
       stHdl->lpcFilterOutBuf[idx] = slidWinSum + 0.7f * stHdl->pitch_filt;
       stHdl->pitch_filt = slidWinSum;
@@ -771,10 +775,10 @@ int AUP_PE_proc(void* stPtr, const PE_InputData* pIn, PE_OutputData* pOut) {
     if (stHdl->procResampleRate != 1) {
       // resample of lpcFilterOutBuf
       bqInData.nsamples = (size_t)hopSz;
-      bqInData.samplesPtr = (const void*)(stHdl->lpcFilterOutBuf);
+      bqInData.samplesPtr = (const void *)(stHdl->lpcFilterOutBuf);
       bqInData.sampleType = 1;
       bqOutData.outputBuff =
-          (void*)(stHdl->inputResampleBuf + stHdl->inputResampleBufIdx);
+          (void *)(stHdl->inputResampleBuf + stHdl->inputResampleBufIdx);
       if (AUP_Biquad_proc(stHdl->biquadIIRPtr, &bqInData, &bqOutData) < 0) {
         return -1;
       }
@@ -804,10 +808,10 @@ int AUP_PE_proc(void* stPtr, const PE_InputData* pIn, PE_OutputData* pOut) {
     if (stHdl->procResampleRate != 1) {
       // resample of lpcFilterOutBuf
       bqInData.nsamples = (size_t)hopSz;
-      bqInData.samplesPtr = (const void*)(pIn->timeSignal);
+      bqInData.samplesPtr = (const void *)(pIn->timeSignal);
       bqInData.sampleType = 1;
       bqOutData.outputBuff =
-          (void*)(stHdl->inputResampleBuf + stHdl->inputResampleBufIdx);
+          (void *)(stHdl->inputResampleBuf + stHdl->inputResampleBufIdx);
       if (AUP_Biquad_proc(stHdl->biquadIIRPtr, &bqInData, &bqOutData) < 0) {
         return -1;
       }
@@ -1007,7 +1011,7 @@ int AUP_PE_proc(void* stPtr, const PE_InputData* pIn, PE_OutputData* pOut) {
   if (stHdl->voiced == 1) {
     tmpDenom = (sy / sw) / (4 * 2 * stHdl->nFeat);
     bestA = AUP_PE_MIN(tmpDenom, AUP_PE_MAX(-tmpDenom, bestA));
-  } else {  // if there is no voice inside this frame
+  } else { // if there is no voice inside this frame
     bestA = 0;
   }
   bestB = (sy - bestA * sx) / sw;
