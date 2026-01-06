@@ -7,9 +7,11 @@
 #include <cstring>
 
 #include <fcntl.h>
+#ifndef _WIN32
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 #include <algorithm>
 #include <fstream>
@@ -153,7 +155,7 @@ MoonshineStreamingModel::~MoonshineStreamingModel() {
     if (decoder_session) ort_api->ReleaseSession(decoder_session);
     delete ort_allocator;
     delete tokenizer;
-    
+#ifndef _WIN32
     if (frontend_mmapped_data) {
         munmap(const_cast<char *>(frontend_mmapped_data), frontend_mmapped_data_size);
     }
@@ -166,6 +168,7 @@ MoonshineStreamingModel::~MoonshineStreamingModel() {
     if (decoder_mmapped_data) {
         munmap(const_cast<char *>(decoder_mmapped_data), decoder_mmapped_data_size);
     }
+#endif
 }
 
 int MoonshineStreamingModel::load_config(const char *config_path) {
