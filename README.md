@@ -34,7 +34,7 @@ Listens to the microphone and prints updates to the transcript as they come in.
 
 ### Linux
 
-[Download](https://github.com/moonshine-ai/moonshine-v2/archive/refs/heads/main.zip).
+[Download](https://github.com/moonshine-ai/moonshine-v2/archive/refs/heads/main.zip) (or checkout this repository) and then run:
 
 ```bash
 cd core
