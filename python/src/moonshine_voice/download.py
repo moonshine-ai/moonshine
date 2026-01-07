@@ -1,181 +1,154 @@
-import hashlib
 import os
-from pathlib import Path
-from typing import Optional
+import sys
 
-import requests
-from tqdm import tqdm
-from filelock import FileLock
-from platformdirs import user_cache_dir
+from moonshine_voice.moonshine_api import ModelArch
+from moonshine_voice.transcriber import Transcriber
+from moonshine_voice.download_file import download_model, get_cache_dir
+from moonshine_voice.utils import get_assets_path, load_wav_file
 
-
-def get_cache_dir(app_name: str = "moonshine-voice") -> Path:
-    """Get the cache directory, respecting environment override."""
-    env_var = f"{app_name.upper()}_CACHE"
-    return Path(os.environ.get(env_var, user_cache_dir(app_name)))
-
-
-def hash_file(path: Path, algorithm: str = "sha256") -> str:
-    """Compute hash of a file."""
-    h = hashlib.new(algorithm)
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(8192), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def download_file(
-    url: str,
-    dest: Path,
-    expected_sha256: Optional[str] = None,
-    resume: bool = True,
-    show_progress: bool = True,
-    timeout: int = 30,
-) -> Path:
-    """
-    Download a file with progress bar, resume support, and integrity checking.
-
-    Args:
-        url: URL to download from
-        dest: Destination path for the file
-        expected_sha256: Optional SHA256 hash to verify after download
-        resume: Whether to attempt resuming partial downloads
-        show_progress: Whether to show a progress bar
-        timeout: Connection timeout in seconds
-
-    Returns:
-        Path to the downloaded file
-
-    Raises:
-        requests.HTTPError: If download fails
-        ValueError: If SHA256 verification fails
-    """
-    dest = Path(dest)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-
-    temp_file = dest.with_suffix(dest.suffix + ".partial")
-    lock_file = dest.with_suffix(dest.suffix + ".lock")
-
-    with FileLock(lock_file):
-        # Check if already downloaded and valid
-        if dest.exists():
-            if expected_sha256 is None:
-                return dest
-            if hash_file(dest) == expected_sha256:
-                return dest
-            # Hash mismatch, re-download
-            dest.unlink()
-
-        # Check for partial download
-        initial_size = 0
-        headers = {}
-        if resume and temp_file.exists():
-            initial_size = temp_file.stat().st_size
-            headers["Range"] = f"bytes={initial_size}-"
-
-        # Start download
-        response = requests.get(url, headers=headers,
-                                stream=True, timeout=timeout)
-
-        # Handle resume response
-        if response.status_code == 416:  # Range not satisfiable
-            # File might be complete or server doesn't support range
-            temp_file.unlink(missing_ok=True)
-            initial_size = 0
-            response = requests.get(url, stream=True, timeout=timeout)
-
-        response.raise_for_status()
-
-        # Get total size
-        if response.status_code == 206:  # Partial content
-            # Content-Range: bytes 1000-9999/10000
-            content_range = response.headers.get("Content-Range", "")
-            if "/" in content_range:
-                total_size = int(content_range.split("/")[-1])
-            else:
-                total_size = initial_size + \
-                    int(response.headers.get("Content-Length", 0))
-        else:
-            # Full download (server ignored range request or fresh download)
-            total_size = int(response.headers.get("Content-Length", 0))
-            initial_size = 0  # Reset if server didn't honor range
-            temp_file.unlink(missing_ok=True)
-
-        # Download with progress bar
-        mode = "ab" if initial_size > 0 else "wb"
-
-        progress_bar = None
-        if show_progress:
-            progress_bar = tqdm(
-                total=total_size,
-                initial=initial_size,
-                unit="B",
-                unit_scale=True,
-                unit_divisor=1024,
-                desc=dest.name,
-            )
-
-        try:
-            with open(temp_file, mode) as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-                        if progress_bar:
-                            progress_bar.update(len(chunk))
-        finally:
-            if progress_bar:
-                progress_bar.close()
-
-        # Verify integrity
-        if expected_sha256:
-            actual_hash = hash_file(temp_file)
-            if actual_hash != expected_sha256:
-                temp_file.unlink()
-                raise ValueError(
-                    f"SHA256 mismatch for {dest.name}: "
-                    f"expected {expected_sha256}, got {actual_hash}"
-                )
-
-        # Atomic rename
-        temp_file.rename(dest)
-
-        # Clean up lock file
-        lock_file.unlink(missing_ok=True)
-
-    return dest
+MODEL_INFO = {
+    "ar": {
+        "english_name": "Arabic",
+        "models": [
+            {"model_name": "base-ar", "model_arch": ModelArch.BASE,
+                "download_url": "https://download.moonshine.ai/model/base-ar/quantized/base-ar"}
+        ]
+    },
+    "es": {
+        "english_name": "Spanish",
+        "models": [
+            {"model_name": "base-es", "model_arch": ModelArch.BASE,
+                "download_url": "https://download.moonshine.ai/model/base-es/quantized/base-es"}
+        ]
+    },
+    "en": {
+        "english_name": "English",
+        "models": [
+            {"model_name": "base-en", "model_arch": ModelArch.BASE,
+                "download_url": "https://download.moonshine.ai/model/base-en/quantized/base-en"},
+            {"model_name": "tiny-en", "model_arch": ModelArch.TINY,
+                "download_url": "https://download.moonshine.ai/model/tiny-en/quantized/tiny-en"}
+        ]
+    },
+    "ja": {
+        "english_name": "Japanese",
+        "models": [
+            {"model_name": "base-ja", "model_arch": ModelArch.BASE,
+                "download_url": "https://download.moonshine.ai/model/base-ja/quantized/base-ja"},
+            {"model_name": "tiny-ja", "model_arch": ModelArch.TINY,
+                "download_url": "https://download.moonshine.ai/model/tiny-ja/quantized/tiny-ja"}
+        ]
+    },
+    "ko": {
+        "english_name": "Korean",
+        "models": [
+            {"model_name": "base-ko", "model_arch": ModelArch.TINY,
+                "download_url": "https://download.moonshine.ai/model/tiny-ko/quantized/tiny-ko"}
+        ]
+    },
+    "vi": {
+        "english_name": "Vietnamese",
+        "models": [
+            {"model_name": "base-vi", "model_arch": ModelArch.BASE,
+                "download_url": "https://download.moonshine.ai/model/base-vi/quantized/base-vi"}
+        ]
+    },
+    "uk": {
+        "english_name": "Ukrainian",
+        "models": [
+            {"model_name": "base-uk", "model_arch": ModelArch.BASE,
+                "download_url": "https://download.moonshine.ai/model/base-uk/quantized/base-uk"}
+        ]
+    },
+    "zh": {
+        "english_name": "Chinese",
+        "models": [
+            {"model_name": "base-zh", "model_arch": ModelArch.BASE,
+                "download_url": "https://download.moonshine.ai/model/base-zh/quantized/base-zh"}
+        ]
+    },
+}
 
 
-def download_model(
-    url: str,
-    filename: str,
-    expected_sha256: Optional[str] = None,
-    app_name: str = "moonshine-voice",
-    **kwargs,
-) -> Path:
-    """
-    Download a model file to the cache directory.
+def find_model_info(language: str = "en", model_arch: ModelArch = None) -> dict:
+    if language in MODEL_INFO.keys():
+        language_key = language
+    else:
+        language_key = None
+        for key, info in MODEL_INFO.items():
+            if language.lower() == info["english_name"].lower():
+                language_key = key
+                break
+        if language_key is None:
+            raise ValueError(
+                f"Language not found: {language}. Supported languages: {supported_languages_friendly()}")
 
-    Args:
-        url: URL to download from
-        filename: Name for the cached file
-        expected_sha256: Optional SHA256 hash to verify
-        app_name: Application name for cache directory
-        **kwargs: Additional arguments passed to download_file
-
-    Returns:
-        Path to the cached model file
-    """
-    cache_dir = get_cache_dir(app_name)
-    dest = cache_dir / filename
-    return download_file(url, dest, expected_sha256=expected_sha256, **kwargs)
+    model_info = MODEL_INFO[language_key]
+    available_models = model_info["models"]
+    if model_arch is None:
+        return available_models[0]
+    for model in available_models:
+        if model["model_arch"] == model_arch:
+            return model
+    raise ValueError(
+        f"Model not found for language: {language} and model arch: {model_arch}. Available models: {available_models}")
 
 
-# Example usage
+def supported_languages_friendly() -> str:
+    return ", ".join([f"{key} ({info['english_name']})" for key, info in MODEL_INFO.items()])
+
+
+def supported_languages() -> list[str]:
+    return list(MODEL_INFO.keys())
+
+
+def get_components_for_model_info(model_info: dict) -> list[str]:
+    return [
+        "encoder_model.ort",
+        "decoder_model_merged.ort",
+        "tokenizer.bin"
+    ]
+
+
+def download_model_from_info(model_info: dict) -> tuple[str, ModelArch]:
+    cache_dir = get_cache_dir()
+    model_download_url = model_info["download_url"]
+    model_folder_name = model_download_url.replace("https://", "")
+    root_model_path = os.path.join(cache_dir, model_folder_name)
+    components = get_components_for_model_info(model_info)
+    for component in components:
+        component_download_url = f"{model_download_url}/{component}"
+        component_path = os.path.join(root_model_path, component)
+        download_model(component_download_url, component_path)
+    return str(root_model_path), model_info["model_arch"]
+
+
+def get_model_for_language(wanted_language: str = "en", wanted_model_arch: ModelArch = None) -> tuple[str, ModelArch]:
+    model_info = find_model_info(wanted_language, wanted_model_arch)
+    if wanted_language != "en":
+        print("Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.", file=sys.stderr)
+    return download_model_from_info(model_info)
+
+
+def log_model_info(wanted_language: str = "en", wanted_model_arch: ModelArch = None) -> None:
+    model_info = find_model_info(wanted_language, wanted_model_arch)
+    model_root_path, model_arch = download_model_from_info(model_info)
+    print(f"Model download url: {model_info['download_url']}")
+    print(f"Model components: {get_components_for_model_info(model_info)}")
+    print(f"Model arch: {model_arch}")
+    print(f"Downloaded model path: {model_root_path}")
+
+
 if __name__ == "__main__":
-    # Example: download a test file
-    model_path = download_model(
-        url="https://huggingface.co/openai/whisper-tiny/resolve/main/config.json",
-        filename="foo/bar/whisper-tiny-config.json",
-        app_name="moonshine-voice",
-    )
-    print(f"Downloaded to: {model_path}")
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Model info example")
+    parser.add_argument("--language", type=str, default="en",
+                        help="Language to use for transcription")
+    parser.add_argument("--model-arch", type=int, default=ModelArch.BASE,
+                        help="Model architecture to use for transcription")
+    args = parser.parse_args()
+
+    model_path, model_arch = get_model_for_language(args.language, args.model_arch)
+
+    log_model_info(args.language, args.model_arch)

@@ -136,6 +136,20 @@ struct Transcript {
       lines.push_back(TranscriptLine(transcript_c->lines[i]));
     }
   }
+
+  std::string toString() const {
+    std::string result;
+    for (const auto &line : lines) {
+      const int32_t line_start_units = static_cast<int32_t>(line.startTime);
+      const int32_t line_start_hundredths =
+          static_cast<int32_t>(line.startTime * 100.0f) -
+          (line_start_units * 100);
+      result += "[" + std::to_string(line_start_units) + "." +
+                std::to_string(line_start_hundredths) + "s] " + line.text +
+                "\n";
+    }
+    return result;
+  }
 };
 
 /* ------------------------------ EVENTS -------------------------------- */
