@@ -205,6 +205,14 @@ target_link_libraries(moonshine-cpp-test PRIVATE
     moonshine-utils
 )
 
+add_executable(benchmark benchmark.cpp)
+target_include_directories(benchmark PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}
+)
+target_link_libraries(benchmark PRIVATE
+    moonshine
+)
+
 # Windows DLLs don't export all symbols by default and so tests that rely on them
 # are skipped for shared builds.
 if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)

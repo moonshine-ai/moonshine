@@ -18,7 +18,7 @@ from moonshine_voice.moonshine_api import (
     TranscriptLine,
 )
 
-from moonshine_voice.model_info import (
+from moonshine_voice.download import (
     get_model_for_language,
     log_model_info,
     supported_languages,
