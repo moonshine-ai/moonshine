@@ -4,7 +4,7 @@
 
 ## Voice Interfaces for Everyone
 
-[Moonshine](https://moonshine.ai) Voice is an open source AI toolkit for developers building voice applications. [Join our community on Discord](https://discord.gg/27qp9zSRXF). 
+[Moonshine](https://moonshine.ai) Voice is an open source AI toolkit for developers building voice applications. 
 
  - Everything runs on-device, so it's fast, private, and there are never any server API charges. 
  - Our models are based on our [cutting](https://arxiv.org/abs/2410.15608) [edge](https://arxiv.org/abs/2509.02523) research and trained from scratch, so we can offer higher accuracy than Whisper Large V3 at the top end, down to tiny 26MB models for constrained deployments.
@@ -14,6 +14,8 @@
  - The framework and models are optimized for streaming applications, offering low latency responses by doing most of the work while the user is still talking.
 
  ## Quickstart
+
+[Join our community on Discord to get live support](https://discord.gg/27qp9zSRXF). 
 
  ### Python
 
