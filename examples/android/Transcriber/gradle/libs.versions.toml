@@ -8,7 +8,7 @@ material = "1.13.0"
 constraintlayout = "2.2.1"
 navigationFragment = "2.9.4"
 navigationUi = "2.9.4"
-moonshineVoice = "0.0.31"
+moonshineVoice = "0.0.32"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }

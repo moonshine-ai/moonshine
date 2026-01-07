@@ -80,7 +80,7 @@ TK
 
 ## Downloading Models
 
-The easiest way to obtain model files is using the Python module. After [installing it](#python) run the downloader like this:
+The easiest way to get the model files is using the Python module. After [installing it](#python) run the downloader like this:
 
 ```bash
 python -m moonshine_voice.download --language en
