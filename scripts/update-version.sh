@@ -29,6 +29,7 @@ done < <(grep -rlI \
   --exclude-dir=.venv \
   --exclude-dir=build \
   --exclude-dir=.build \
+  --exclude-dir=.cxx \
   --exclude=Package.resolved \
   --exclude=uv.lock \
   --exclude=PKG-INFO \
