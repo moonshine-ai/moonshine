@@ -26,15 +26,15 @@ Listens to the microphone and prints updates to the transcript as they come in.
 
 ### iOS
 
-[Download](https://github.com/moonshine-ai/moonshine-v2/archive/refs/heads/main.zip) (or checkout this repository) and open `examples/ios/Transcriber/Transcriber.xcodeproj` in Xcode.
+[Download](https://github.com/moonshine-ai/moonshine-v2/archive/refs/heads/main.zip) or `git clone` this repository and open `examples/ios/Transcriber/Transcriber.xcodeproj` in Xcode.
 
 ### Android
 
-[Download](https://github.com/moonshine-ai/moonshine-v2/archive/refs/heads/main.zip) (or checkout this repository) and open `examples/android/Transcriber/` in Android Studio.
+[Download](https://github.com/moonshine-ai/moonshine-v2/archive/refs/heads/main.zip) or `git clone` this repository and open `examples/android/Transcriber/` in Android Studio.
 
 ### Linux
 
-[Download](https://github.com/moonshine-ai/moonshine-v2/archive/refs/heads/main.zip) (or checkout this repository) and then run:
+[Download](https://github.com/moonshine-ai/moonshine-v2/archive/refs/heads/main.zip) or `git clone` this repository and then run:
 
 ```bash
 cd core
@@ -46,7 +46,7 @@ cmake --build .
 
 ### MacOS
 
-[Download](https://github.com/moonshine-ai/moonshine-v2/archive/refs/heads/main.zip) (or checkout this repository) and open `examples/macos/MicTranscription/MicTranscription.xcodeproj` in Xcode.
+[Download](https://github.com/moonshine-ai/moonshine-v2/archive/refs/heads/main.zip) or `git clone` this repository and open `examples/macos/MicTranscription/MicTranscription.xcodeproj` in Xcode.
 
 ### Windows
 
