@@ -342,7 +342,7 @@ std::string MoonshineStreamingModel::tokens_to_text(const std::vector<int64_t>& 
 
 int MoonshineStreamingModel::process_audio_chunk(MoonshineStreamingState *state,
                                                   const float *audio_chunk,
-                                                  int chunk_len,
+                                                  size_t chunk_len,
                                                   int *features_out) {
     if (state == nullptr) {
         LOG("State is null\n");
@@ -362,7 +362,7 @@ int MoonshineStreamingModel::process_audio_chunk(MoonshineStreamingState *state,
 
     // Prepare input tensors
     std::vector<float> audio_vec(audio_chunk, audio_chunk + chunk_len);
-    std::vector<int64_t> audio_shape = {1, chunk_len};
+    std::vector<int64_t> audio_shape = {1, static_cast<int64_t>(chunk_len)};
     std::vector<int64_t> sample_buffer_shape = {1, 79};
     std::vector<int64_t> sample_len_shape = {1};
     std::vector<int64_t> conv1_shape = {1, config.d_model_frontend, 4};
@@ -777,7 +777,7 @@ int MoonshineStreamingModel::transcribe(const float *input_audio_data,
     // Process audio in chunks (80ms = 1280 samples at 16kHz)
     const int chunk_size = 1280;
     for (size_t offset = 0; offset < input_audio_data_size; offset += chunk_size) {
-        int len = std::min(static_cast<size_t>(chunk_size), input_audio_data_size - offset);
+        size_t len = std::min(static_cast<size_t>(chunk_size), input_audio_data_size - offset);
         int err = process_audio_chunk(state, input_audio_data + offset, len, nullptr);
         if (err != 0) {
             delete state;

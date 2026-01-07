@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "moonshine-voice"
-version = "0.0.29"
+version = "0.0.30"
 description = "Fast, accurate, on-device AI library for building interactive voice applications"
 readme = "README.md"
 requires-python = ">=3.8"

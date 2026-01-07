@@ -113,7 +113,7 @@ struct MoonshineStreamingModel {
 
     /* Streaming inference methods */
     int process_audio_chunk(MoonshineStreamingState *state,
-                            const float *audio_chunk, int chunk_len,
+                            const float *audio_chunk, size_t chunk_len,
                             int *features_out);
     
     int encode(MoonshineStreamingState *state, bool is_final, int *new_frames_out);
