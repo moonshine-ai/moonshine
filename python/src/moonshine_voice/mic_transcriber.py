@@ -81,8 +81,21 @@ class MicTranscriber:
 
 
 if __name__ == "__main__":
-    model_path = str(get_model_path("tiny-en"))
-    model_arch = ModelArch.TINY
+    import argparse
+    import sys
+    from moonshine_voice import get_model_for_language
+    parser = argparse.ArgumentParser(description="MicTranscriber example")
+    parser.add_argument("--language", type=str, default=None,
+                        help="Language to use for transcription")
+    parser.add_argument("--model-arch", type=str, default=None,
+                        help="Model architecture to use for transcription")
+    args = parser.parse_args()
+    if args.language is None:
+        model_path = str(get_model_path("tiny-en"))
+        model_arch = ModelArch.TINY
+    else:
+        model_path, model_arch = get_model_for_language(
+            wanted_language=args.language, wanted_model_arch=args.model_arch)
 
     mic_transcriber = MicTranscriber(
         model_path=model_path, model_arch=model_arch)
@@ -99,6 +112,8 @@ if __name__ == "__main__":
 
     listener = TestListener()
     mic_transcriber.add_listener(listener)
+
+    print(f"Listening to the microphone, press Ctrl+C to stop...", file=sys.stderr)
     mic_transcriber.start()
     try:
         while True:

@@ -1,54 +1,79 @@
+![Moonshine Voice Logo](images/logo.png)
+
 # Moonshine Voice
 
-The fast, accurate, on-device AI library for building interactive voice applications.
+## Voice Interfaces for Everyone
 
-## About
+Moonshine Voice is an open source AI toolkit for developers building voice applications. 
 
-If you've ever tried to build your own voice interface, or even just capture transcriptions in real time, you'll know how hard and frustrating it can be. Moonshine Voice is the batteries-included framework that makes it easy.
+ - Everything runs on-device, so it's fast, private, and there are no server API charges. 
+ - Our models are trained from scratch, and offer higher accuracy than Whisper Large V3 at the top end, down to 26MB models for constrained deployments.
+ - It's cross-platform, running on [Python](#python), [iOS](#ios), [Android](#android), [MacOS](#macos), [Linux](#linux) and [Windows](#windows).
+ - Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, so you don't need to be an ML expert to use them.
+ - It supports multiple languages, including English, Spanish, Mandarin, Japanese, Korean, Vietnamese, Ukrainian, and Arabic.
+ - The framework and models are optimized for streaming applications, offering low latency responses by doing most of the work while the user is still talking.
 
- - Cross-platform: Runs on Android, iOS, Linux, MacOS, Windows, and Raspberry Pis.
- - Full Stack: Includes voice-activity detection, diarization, transcription, speech understanding, and text-to-speech in one package.
- - Easy API: Your app will be notified whenever someone talks, using an event-based interface that mirrors how button presses and other GUI interactions are traditionally handled.
- - High Level: You don't have to worry about the intricacies of sound drivers and sample rates, the library takes care of the details.
- - Open Source: The code is released under an MIT license, so you can rely on it long term.
- - On Device: Everything happens locally, so there are no cloud usage fees, and you can guarantee availability.
- - Cutting Edge Technology: We train our own models from scratch, so we can offer you the world's fastest and most accurate speech to text models.
+ ## Quickstart
 
+ ### Python
 
- ## Android
+ ```bash
+ pip install moonshine-voice
+ python -m moonshine_voice.mic_transcriber --language en
+ ```
 
- The easiest way to get started is to download this repo and open the project in `examples/android/Transcriber` in Android Studio. This shows how you can build a simple transcription app using the library.
+Listens to the microphone and prints updates to the transcript as they come in.
 
- The key code is in MainActivity.java, here is a breakdown of what it's doing:
+### iOS
 
-```java
-    transcriber = new MicTranscriber(this);
-    transcriber.loadFromAssets(this, "base-en", JNI.MOONSHINE_MODEL_ARCH_BASE);
-    transcriber.addListener(
-        event -> event.accept(new TranscriptEventListener() {
-          @Override
-          public void onLineStarted(TranscriptEvent.LineStarted e) {
-            runOnUiThread(() -> {
-              adapter.addLine("...");
-              messagesRecyclerView.smoothScrollToPosition(
-                  adapter.getItemCount() - 1);
-            });
-          }
-          @Override
-          public void onLineTextChanged(TranscriptEvent.LineTextChanged e) {
-            runOnUiThread(() -> {
-              adapter.updateLastLine(e.line.text);
-              messagesRecyclerView.smoothScrollToPosition(
-                  adapter.getItemCount() - 1);
-            });
-          }
-          @Override
-          public void onLineCompleted(TranscriptEvent.LineCompleted e) {
-            runOnUiThread(() -> {
-              adapter.updateLastLine(e.line.text);
-              messagesRecyclerView.smoothScrollToPosition(
-                  adapter.getItemCount() - 1);
-            });
-          }
-        }));
+[Download](https://github.com/moonshine-ai/moonshine-v2/archive/refs/heads/main.zip) (or checkout this repository) and open `examples/ios/Transcriber/Transcriber.xcodeproj` in Xcode.
+
+### Android
+
+[Download](https://github.com/moonshine-ai/moonshine-v2/archive/refs/heads/main.zip) (or checkout this repository) and open `examples/android/Transcriber/` in Android Studio.
+
+### Linux
+
+[Download](https://github.com/moonshine-ai/moonshine-v2/archive/refs/heads/main.zip).
+
+```bash
+cd core
+mkdir build
+cmake ..
+cmake --build .
+./moonshine-cpp-test
 ```
+
+### MacOS
+
+[Download](https://github.com/moonshine-ai/moonshine-v2/archive/refs/heads/main.zip) (or checkout this repository) and open `examples/macos/MicTranscription/MicTranscription.xcodeproj` in Xcode.
+
+### Windows
+
+TK
+
+## Using the Library
+
+TK
+
+## Adding the Library to your own App
+
+### iOS
+
+TK
+
+### Android
+
+TK
+
+### Linux
+
+TK
+
+### MacOS
+
+TK
+
+### Windows
+
+TK
