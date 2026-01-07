@@ -17,6 +17,7 @@ KNOWN_FILES=(
 	./examples/android/Transcriber/gradle/libs.versions.toml
 	./scripts/publish-swift.sh
 	./scripts/publish-binary.sh
+	./scripts/publish-binary.bat
 )
 
 ACTUAL_FILES=()
