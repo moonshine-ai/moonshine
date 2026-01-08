@@ -40,7 +40,14 @@ copy /Y !CORE_DIR!\moonshine-cpp.h !INCLUDE_DIR!\
 
 set LIB_DIR=!BINARY_DIR!\lib
 md !LIB_DIR!
-copy /Y !BUILD_DIR!\Release\*.dll !LIB_DIR!\
+
+copy /Y !BUILD_DIR!\Release\moonshine.lib !LIB_DIR!\
+copy /Y !BUILD_DIR!\..\bin-tokenizer\build\Release\bin-tokenizer.lib !LIB_DIR!\
+copy /Y !BUILD_DIR!\..\ort-utils\build\Release\ort-utils.lib !LIB_DIR!\
+copy /Y !BUILD_DIR!\..\third-party\ten_vad\build\Release\ten_vad.lib !LIB_DIR!\
+copy /Y !BUILD_DIR!\..\moonshine-utils\build\Release\moonshine-utils.lib !LIB_DIR!\
+copy /Y !CORE_DIR!\third-party\onnxruntime\lib\windows\x86_64\onnxruntime.lib !LIB_DIR!\
+copy /Y !CORE_DIR!\third-party\onnxruntime\lib\windows\x86_64\onnxruntime.dll !LIB_DIR!\
 
 cd /d !TMP_DIR!
 set TAR_NAME=!FOLDER_NAME!.tar.gz

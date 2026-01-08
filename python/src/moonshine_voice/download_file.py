@@ -7,6 +7,7 @@ import requests
 from tqdm import tqdm
 from filelock import FileLock
 from platformdirs import user_cache_dir
+import platform
 
 
 def get_cache_dir(app_name: str = "moonshine_voice") -> Path:
@@ -139,9 +140,9 @@ def download_file(
         # Atomic rename
         temp_file.rename(dest)
 
-        # Clean up lock file
-        lock_file.unlink(missing_ok=True)
-
+        if platform.system() != "Windows":
+            # Clean up lock file
+            lock_file.unlink(missing_ok=True)
     return dest
 
 
