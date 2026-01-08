@@ -52,7 +52,20 @@ cmake --build .
 
 ### Windows
 
-TK
+[Download](https://github.com/moonshine-ai/moonshine-v2/archive/refs/heads/main.zip) or `git clone` this repository. 
+
+[Install Moonshine in Python](#python) for model downloading.
+
+In the terminal:
+
+```batch
+pip install moonshine-voice
+cd examples\windows\cli-transcriber
+.\download-lib.bat
+msbuild cli-transcriber.sln /p:Configuration=Release /p:Platform=x64
+python -m moonshine_voice.download --language en
+x64\Release\cli-transcriber.exe --model-path <path from the download command> --model-arch <number from the download command>
+```
 
 ## Using the Library
 
