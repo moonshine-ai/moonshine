@@ -1,30 +1,12 @@
 # CLI Transcriber
 
-A command-line application for Windows that listens to the microphone and transcribes speech in real-time using the Moonshine C++ API.
+A command-line application for Windows that listens to the microphone and transcribes speech in real-time using the Moonshine C++ API. You'll need **Visual Studio 2022** (or later) with C++ development tools installed, and Python 3.8+ with the `moonshine-voice` pip package is recommended for downloading models.
 
-## Prerequisites
+## Setup
 
-1. **Build the Moonshine library and all dependencies**: Before building this project, you need to build the core Moonshine library and all its dependencies (bin-tokenizer, ort-utils, ten_vad, moonshine-utils):
-   ```batch
-   cd ..\..\..\core
-   if not exist build mkdir build
-   cd build
-   cmake ..
-   cmake --build . --config Release
-   ```
-   
-   This will build all the required static libraries:
-   - `moonshine.lib` (in `core/build/Release/`)
-   - `bin-tokenizer.lib` (in `core/bin-tokenizer/build/Release/`)
-   - `ort-utils.lib` (in `core/ort-utils/build/Release/`)
-   - `ten_vad.lib` (in `core/third-party/ten_vad/build/Release/`)
-   - `moonshine-utils.lib` (in `core/moonshine-utils/build/Release/`)
-   
-   The ONNX Runtime library (`onnxruntime.lib` and `onnxruntime.dll`) should already be present in `core/third-party/onnxruntime/lib/windows/x86_64/`.
+1. **Download the Moonshine Voice Library**. Download [github.com/moonshine-ai/moonshine-v2/releases/latest/download/moonshine-voice-windows-x86_64.tar.gz](https://github.com/moonshine-ai/moonshine-v2/releases/latest/download/moonshine-voice-windows-x86_64.tar.gz) and extract it into this folder, or you can run `download-lib.bat`.
 
-2. **Visual Studio 2022** (or later) with C++ development tools installed
-
-3. **Windows SDK** (included with Visual Studio)
+2. **Download the Models**. Run `pip install moonshine-voice` if you haven't already, and then run `python -m moonshine_voice.download --language en` to download the Moonshine English-language speech to text models. Make a note of the log output from that command, you'll use it to provide a model path when you run the transcriber.
 
 ## Building
 
@@ -42,26 +24,24 @@ msbuild cli-transcriber.sln /p:Configuration=Release /p:Platform=x64
 After building, run the executable from the command line:
 
 ```batch
-x64\Release\cli-transcriber.exe [options]
+x64\Release\cli-transcriber.exe --model-path <path from the download command> --model-arch <number from the download command>
 ```
 
-### Options
+If you don't have the path and architecture handy, rerun the `python -m moonshine_voice.download --language en` command. It shouldn't download again, but will print out the information you need.
 
-- `-m, --model-path PATH`: Path to the model directory (default: `../../../test-assets/tiny-en`)
-- `-a, --model-arch ARCH`: Model architecture: 0=TINY, 1=BASE, 2=TINY_STREAMING, 3=BASE_STREAMING (default: 0)
-- `-h, --help`: Show help message
-
-### Example
+Here's what the command should look like, using the downloaded location on my machine:
 
 ```batch
-cli-transcriber.exe -m ..\..\..\test-assets\tiny-en -a 0
+ .\x64\Release\cli-transcriber.exe --model-path "C:\Users\windo\AppData\Local\moonshine_voice\moonshine_voice\Cache\download.moonshine.ai/model/base-en/quantized/base-en" --model-arch 1
 ```
 
-The application will:
-1. Load the Moonshine transcriber with the specified model
+This example:
+
+1. Loads the Moonshine transcriber with the specified model
 2. Start listening to the default microphone
 3. Display transcriptions in real-time as you speak
-4. Press Ctrl+C to stop
+
+Press Ctrl+C to stop
 
 ## Notes
 
@@ -70,3 +50,12 @@ The application will:
 - The transcriber uses streaming mode for real-time transcription
 - Make sure you have microphone permissions enabled in Windows settings
 
+## Adding Moonshine to your own Project
+
+To use Moonshine Voice in an application:
+
+ - Make sure the `moonshine-voice-x86_64` is downloaded and accessible.
+ - Add `moonshine-voice-x86_64\include` to the include paths.
+ - Add `moonshine-voice-x86_64\lib` to the linker paths.
+ - Add all of the libraries in `moonshine-voice-x86_64\lib` (bin-tokenizer.lib, moonshine-utils.lib, moonshine.lib, onnxruntime.lib, ort-utils.lib, and ten_vad.lib) to be linked.
+ - Ensure that `onnxruntime.dll` from `moonshine-voice-x86_64\lib` is copied to the same folder as your executable. This example project does that using a custom build step.
