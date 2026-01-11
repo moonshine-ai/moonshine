@@ -3,6 +3,7 @@
 
 #include <cinttypes>
 
+#include <atomic>
 #include <map>
 #include <mutex>
 #include <random>
