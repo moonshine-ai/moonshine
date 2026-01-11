@@ -139,6 +139,10 @@ public class Stream {
         }
         removeAllListeners()
     }
+
+    public func getHandle() -> Int32 {
+        return handle;
+    }
     
     // MARK: - Private Methods
     

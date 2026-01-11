@@ -66,7 +66,7 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
     throw std::runtime_error("Model directory does not exist at path '" +
                              std::string(model_path) + "'");
   }
-  
+
   std::string tokenizer_path =
       append_path_component(model_path, "tokenizer.bin");
   if (!std::filesystem::exists(tokenizer_path)) {
@@ -74,18 +74,23 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
         "Required tokenizer file does not exist at path '" + tokenizer_path +
         "'");
   }
-  
+
   if (is_streaming_model_arch(model_arch)) {
-    // Streaming model: expects frontend.onnx, encoder.onnx, adapter.onnx, 
+    // Streaming model: expects frontend.onnx, encoder.onnx, adapter.onnx,
     // decoder.onnx, and streaming_config.json
     this->streaming_model = new MoonshineStreamingModel();
-    
-    std::string frontend_path = append_path_component(model_path, "frontend.onnx");
-    std::string encoder_path = append_path_component(model_path, "encoder.onnx");
-    std::string adapter_path = append_path_component(model_path, "adapter.onnx");
-    std::string decoder_path = append_path_component(model_path, "decoder.onnx");
-    std::string config_path = append_path_component(model_path, "streaming_config.json");
-    
+
+    std::string frontend_path =
+        append_path_component(model_path, "frontend.onnx");
+    std::string encoder_path =
+        append_path_component(model_path, "encoder.onnx");
+    std::string adapter_path =
+        append_path_component(model_path, "adapter.onnx");
+    std::string decoder_path =
+        append_path_component(model_path, "decoder.onnx");
+    std::string config_path =
+        append_path_component(model_path, "streaming_config.json");
+
     if (!std::filesystem::exists(frontend_path)) {
       throw std::runtime_error(
           "Required frontend model file does not exist at path '" +
@@ -111,23 +116,25 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
           "Required streaming config file does not exist at path '" +
           config_path + "'");
     }
-    
+
     int32_t load_error = this->streaming_model->load(
         model_path, tokenizer_path.c_str(), model_arch);
     if (load_error != 0) {
-      throw std::runtime_error("Failed to load Moonshine streaming models from " +
-                               std::string(model_path) +
-                               ". Error code: " + std::to_string(load_error));
+      throw std::runtime_error(
+          "Failed to load Moonshine streaming models from " +
+          std::string(model_path) +
+          ". Error code: " + std::to_string(load_error));
     }
   } else {
-    // Non-streaming model: expects encoder_model.ort and decoder_model_merged.ort
+    // Non-streaming model: expects encoder_model.ort and
+    // decoder_model_merged.ort
     this->stt_model = new MoonshineModel();
-    
+
     std::string encoder_model_path =
         append_path_component(model_path, "encoder_model.ort");
     std::string decoder_model_path =
         append_path_component(model_path, "decoder_model_merged.ort");
-    
+
     if (!std::filesystem::exists(encoder_model_path)) {
       throw std::runtime_error(
           "Required encoder model file does not exist at path '" +
@@ -138,7 +145,7 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
           "Required decoder model file does not exist at path '" +
           decoder_model_path + "'");
     }
-    
+
     int32_t load_error = this->stt_model->load(
         encoder_model_path.c_str(), decoder_model_path.c_str(),
         tokenizer_path.c_str(), model_arch);
@@ -159,13 +166,14 @@ void Transcriber::load_from_memory(const uint8_t *encoder_model_data,
                                    size_t tokenizer_data_size,
                                    uint32_t model_arch) {
   // Note: load_from_memory currently only supports non-streaming models.
-  // Streaming models require additional ONNX files (frontend, adapter) and config.
+  // Streaming models require additional ONNX files (frontend, adapter) and
+  // config.
   if (is_streaming_model_arch(model_arch)) {
     throw std::runtime_error(
         "Streaming models cannot be loaded from memory with the current API. "
         "Use load_from_files instead.");
   }
-  
+
   this->stt_model = new MoonshineModel();
   int32_t load_error = this->stt_model->load_from_memory(
       encoder_model_data, encoder_model_data_size, decoder_model_data,
@@ -194,7 +202,12 @@ void Transcriber::transcribe_without_streaming(
   std::lock_guard<std::mutex> lock(this->batch_stream_mutex);
   if (this->batch_stream == nullptr) {
     this->batch_stream = new TranscriberStream(
-        new VoiceActivityDetector(this->options.vad_threshold));
+        new VoiceActivityDetector(this->options.vad_threshold), -1,
+        this->options.save_input_wav_path);
+  }
+  if (!this->batch_stream->save_input_wav_path.empty()) {
+    this->batch_stream->save_audio_data_to_wav(audio_data, audio_length,
+                                               sample_rate);
   }
   TranscriberStream *stream = this->batch_stream;
   std::vector<VoiceActivitySegment> segments;
@@ -213,8 +226,9 @@ int32_t Transcriber::create_stream() {
   std::lock_guard<std::mutex> lock(this->streams_mutex);
   int32_t stream_id = this->next_stream_id++;
   TranscriberStream *stream = new TranscriberStream(
-      new VoiceActivityDetector(this->options.vad_threshold));
-  
+      new VoiceActivityDetector(this->options.vad_threshold), stream_id,
+      this->options.save_input_wav_path);
+
   this->streams.insert({stream_id, stream});
   return stream_id;
 }
@@ -239,6 +253,7 @@ void Transcriber::stop_stream(int32_t stream_id) {
   std::lock_guard<std::mutex> lock(this->streams_mutex);
   TranscriberStream *stream = this->streams[stream_id];
   stream->vad->stop();
+  stream->save_audio_data_to_wav(nullptr, 0, 0);
 }
 
 void Transcriber::add_audio_to_stream(int32_t stream_id,
@@ -366,9 +381,10 @@ void Transcriber::update_transcript_from_segments(
     line.is_complete = segment.is_complete;
     line.just_updated = segment.just_updated;
     line.id = (uint64_t)(segment_index);
-    
+
     // Transcribe the segment using the appropriate model
-    if (is_streaming_model_arch(this->options.model_arch) && this->streaming_model != nullptr) {
+    if (is_streaming_model_arch(this->options.model_arch) &&
+        this->streaming_model != nullptr) {
       // Use streaming model for transcription
       line.text = transcribe_segment_with_streaming_model(
           segment.audio_data.data(), segment.audio_data.size());
@@ -389,7 +405,7 @@ void Transcriber::update_transcript_from_segments(
       // No model available - return audio data and segment info only
       line.text = nullptr;
     }
-    
+
     line.audio_data = segment.audio_data;
     stream->transcript_output->add_or_update_line(line);
   }
@@ -397,34 +413,36 @@ void Transcriber::update_transcript_from_segments(
   *out_transcript = &(stream->transcript_output->transcript);
 }
 
-std::string* Transcriber::transcribe_segment_with_streaming_model(
-    const float* audio_data, size_t audio_length) {
+std::string *
+Transcriber::transcribe_segment_with_streaming_model(const float *audio_data,
+                                                     size_t audio_length) {
   if (audio_length == 0 || this->streaming_model == nullptr) {
     return new std::string();
   }
-  
-  const MoonshineStreamingConfig& config = this->streaming_model->config;
-  
+
+  const MoonshineStreamingConfig &config = this->streaming_model->config;
+
   // Create a temporary state for this segment transcription
   MoonshineStreamingState state;
   state.reset(config);
-  
+
   // Process audio in chunks through the streaming model's frontend
-  const int chunk_size = 1280;  // 80ms at 16kHz
+  const int chunk_size = 1280; // 80ms at 16kHz
   {
     std::lock_guard<std::mutex> lock(this->streaming_model_mutex);
-    
+
     for (size_t offset = 0; offset < audio_length; offset += chunk_size) {
-      int len = static_cast<int>(std::min(static_cast<size_t>(chunk_size), audio_length - offset));
+      int len = static_cast<int>(
+          std::min(static_cast<size_t>(chunk_size), audio_length - offset));
       int err = this->streaming_model->process_audio_chunk(
           &state, audio_data + offset, len, nullptr);
       if (err != 0) {
         LOGF("Failed to process audio chunk: %d", err);
-        throw std::runtime_error(
-            "Failed to process audio chunk: " + std::to_string(err));
+        throw std::runtime_error("Failed to process audio chunk: " +
+                                 std::to_string(err));
       }
     }
-    
+
     // Run encoder (final - this is the complete segment)
     int new_frames = 0;
     int err = this->streaming_model->encode(&state, true, &new_frames);
@@ -433,29 +451,30 @@ std::string* Transcriber::transcribe_segment_with_streaming_model(
       throw std::runtime_error("Failed to encode: " + std::to_string(err));
     }
   }
-  
+
   // If no memory accumulated, return empty string
   if (state.memory_len == 0) {
     return new std::string();
   }
-  
+
   // Decode to get transcription
   const int max_tokens = 256;
   std::vector<int64_t> tokens;
   tokens.push_back(config.bos_id);
-  
+
   std::vector<float> logits(config.vocab_size);
   int current_token = config.bos_id;
-  
+
   {
     std::lock_guard<std::mutex> lock(this->streaming_model_mutex);
-    
+
     for (int step = 0; step < max_tokens; ++step) {
-      int err = this->streaming_model->decode_step(&state, current_token, logits.data());
+      int err = this->streaming_model->decode_step(&state, current_token,
+                                                   logits.data());
       if (err != 0) {
         break;
       }
-      
+
       // Argmax
       int next_token = 0;
       float max_logit = logits[0];
@@ -465,14 +484,15 @@ std::string* Transcriber::transcribe_segment_with_streaming_model(
           next_token = i;
         }
       }
-      
+
       tokens.push_back(next_token);
       current_token = next_token;
-      
-      if (next_token == config.eos_id) break;
+
+      if (next_token == config.eos_id)
+        break;
     }
   }
-  
+
   // Convert tokens to text
   std::string text = this->streaming_model->tokens_to_text(tokens);
   return sanitize_text(text.c_str());
@@ -629,9 +649,54 @@ void TranscriptStreamOutput::clear_update_flags() {
   }
 }
 
+TranscriberStream::TranscriberStream(VoiceActivityDetector *vad,
+                                     int32_t stream_id,
+                                     const std::string &save_input_wav_path)
+    : vad(vad), transcript_output(new TranscriptStreamOutput()),
+      save_input_wav_path(save_input_wav_path), stream_id(stream_id) {
+  if (!this->save_input_wav_path.empty()) {
+    std::filesystem::create_directory(this->save_input_wav_path);
+    std::string wav_path = append_path_component(this->save_input_wav_path,
+                                                 this->get_wav_filename());
+    std::filesystem::remove(wav_path);
+  }
+}
+
+std::string TranscriberStream::get_wav_filename() {
+  if (this->stream_id == -1) {
+    return "input_batch.wav";
+  } else {
+    return std::string("input_") + std::to_string(this->stream_id) +
+           std::string(".wav");
+  }
+}
+
+void TranscriberStream::save_audio_data_to_wav(const float *audio_data,
+                                               uint64_t audio_length,
+                                               int32_t sample_rate) {
+  if (this->save_input_wav_path.empty()) {
+    return;
+  }
+  const size_t previous_second = save_input_data.size() / INTERNAL_SAMPLE_RATE;
+  if (audio_data != nullptr) {
+    save_input_data.insert(save_input_data.end(), audio_data,
+                           audio_data + audio_length);
+    last_save_sample_rate = sample_rate;
+  }
+  const size_t current_second = save_input_data.size() / INTERNAL_SAMPLE_RATE;
+  // Only save every second to avoid too much latency overhead.
+  if (current_second != previous_second || audio_data == nullptr) {
+    std::string wav_path = append_path_component(this->save_input_wav_path,
+                                                 this->get_wav_filename());
+    save_wav_data(wav_path.c_str(), save_input_data.data(),
+                  save_input_data.size(), last_save_sample_rate);
+  }
+}
+
 void TranscriberStream::add_to_new_audio_buffer(const float *audio_data,
                                                 uint64_t audio_length,
                                                 int32_t sample_rate) {
+  this->save_audio_data_to_wav(audio_data, audio_length, sample_rate);
   std::vector<float> audio_vector(audio_data, audio_data + audio_length);
   std::vector<float> resampled_audio =
       resample_audio(audio_vector, sample_rate, INTERNAL_SAMPLE_RATE);

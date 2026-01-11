@@ -8,7 +8,7 @@
 
  - Everything runs on-device, so it's fast, private, and there are never any server API charges. 
  - Our models are based on our [cutting](https://arxiv.org/abs/2410.15608) [edge](https://arxiv.org/abs/2509.02523) research and trained from scratch, so we can offer higher accuracy than Whisper Large V3 at the top end, down to tiny 26MB models for constrained deployments.
- - It's cross-platform, running on [Python](#python), [iOS](#ios), [Android](#android), [MacOS](#macos), [Linux](#linux) and [Windows](#windows).
+ - It's cross-platform, running on [Python](#python), [iOS](#ios), [Android](#android), [MacOS](#macos), [Linux](#linux), [Windows](#windows), Raspberry Pis, and wearables.
  - Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, so you don't need to be an ML expert to use them.
  - It supports multiple languages, including English, Spanish, Mandarin, Japanese, Korean, Vietnamese, Ukrainian, and Arabic.
  - The framework and models are optimized for streaming applications, offering low latency responses by doing most of the work while the user is still talking.

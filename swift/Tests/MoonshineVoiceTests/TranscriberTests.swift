@@ -273,4 +273,29 @@ final class TranscriberTests: XCTestCase {
             print("Framework resource path: \(resourcePath)")
         }
     }
+
+    func testTranscribeWithDebugWAV_twoCities() throws {
+        let modelPath = try Self.getTinyEnModelPath()
+        let options: [TranscriberOption] = [TranscriberOption(name: "save_input_wav_path", value: "output")]
+        let transcriber = try Transcriber(modelPath: modelPath, modelArch: .tiny, options: options)
+        defer { transcriber.close() }
+
+        let wavPath = try Self.getWAVFilePath("two_cities.wav")
+        let wavData = try loadWAVFile(wavPath)
+
+        let transcript = try transcriber.transcribeWithoutStreaming(
+            audioData: wavData.audioData,
+            sampleRate: Int32(wavData.sampleRate)
+        )
+
+        // Verify we got a transcript
+        XCTAssertFalse(transcript.lines.isEmpty, "Transcript should contain at least one line")
+
+        let outputPath = "output/input_0.wav"
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputPath), "Input WAV file should exist at \(outputPath)")
+
+        let debugWAVData = try loadWAVFile(outputPath)
+        XCTAssertGreaterThan(debugWAVData.audioData.count, 0, "Debug WAV data should contain audio data")
+    }
+
 }
