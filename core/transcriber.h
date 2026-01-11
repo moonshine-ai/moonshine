@@ -5,6 +5,7 @@
 
 #include <map>
 #include <mutex>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -27,11 +28,14 @@ struct TranscriberLine {
   TranscriberLine(const TranscriberLine &other);
   TranscriberLine &operator=(const TranscriberLine &other);
   ~TranscriberLine();
+  std::string to_string() const;
 };
 
 struct TranscriptStreamOutput {
-  std::vector<TranscriberLine> internal_lines;
+  std::map<uint64_t, TranscriberLine> internal_lines_map;
+  std::vector<uint64_t> ordered_internal_line_ids;
   std::vector<transcript_line_t> output_lines;
+
   struct transcript_t transcript = {.lines = nullptr, .line_count = 0};
   void clear_update_flags();
   void add_or_update_line(TranscriberLine &line);
@@ -49,8 +53,7 @@ public:
   int32_t last_save_sample_rate = 0;
   int32_t stream_id = -1;
 
-  TranscriberStream(VoiceActivityDetector *vad,
-                    int32_t stream_id,
+  TranscriberStream(VoiceActivityDetector *vad, int32_t stream_id,
                     const std::string &save_input_wav_path = "");
   ~TranscriberStream() {
     delete this->vad;
@@ -59,6 +62,10 @@ public:
   void add_to_new_audio_buffer(const float *audio_data, uint64_t audio_length,
                                int32_t sample_rate);
   void clear_new_audio_buffer();
+
+  void start();
+  void stop();
+
   void save_audio_data_to_wav(const float *audio_data, uint64_t audio_length,
                               int32_t sample_rate);
   std::string get_wav_filename();
@@ -101,6 +108,7 @@ private:
   TranscriberStreamMap streams;
   int32_t next_stream_id;
   std::mutex streams_mutex;
+  std::atomic<uint64_t> next_line_id = 0;
 
   TranscriberStream *batch_stream = nullptr;
   std::mutex batch_stream_mutex;

@@ -291,7 +291,7 @@ final class TranscriberTests: XCTestCase {
         // Verify we got a transcript
         XCTAssertFalse(transcript.lines.isEmpty, "Transcript should contain at least one line")
 
-        let outputPath = "output/input_0.wav"
+        let outputPath = "output/input_batch.wav"
         XCTAssertTrue(FileManager.default.fileExists(atPath: outputPath), "Input WAV file should exist at \(outputPath)")
 
         let debugWAVData = try loadWAVFile(outputPath)

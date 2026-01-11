@@ -189,6 +189,7 @@ static inline size_t debug_alloc_get_size(void *voidMemPtr) {
 
 #define LOG_INT(x) LOGF(#x " = %d", (x));
 #define LOG_INT64(x) LOGF(#x " = %" PRId64, (x));
+#define LOG_UINT64(x) LOGF(#x " = %" PRIu64, (x));
 #define LOG_LONG(x) LOGF(#x " = %ld", (x));
 #define LOG_SIZET(x) LOGF(#x " = %zu", (x));
 #define LOG_PTR(x) LOGF(#x " = %p", (void *)(x));
