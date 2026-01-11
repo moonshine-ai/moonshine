@@ -79,6 +79,8 @@ void parse_transcriber_options(const transcriber_option_t *in_options,
       out_options.transcription_interval = float_from_string(in_option.value);
     } else if (option_name == "vad_threshold") {
       out_options.vad_threshold = float_from_string(in_option.value);
+    } else if (option_name == "save_input_wav_path") {
+      out_options.save_input_wav_path = std::string(in_option.value);
     } else {
       throw std::runtime_error("Unknown transcriber option: '" +
                                std::string(in_option.name) + "'");

@@ -104,4 +104,60 @@ TEST_CASE("debug-utils") {
         CHECK(read_data == data);
         std::remove("test.bin");
     }
+    SUBCASE("load_wav_data_beckett") {
+        std::string wav_path = "beckett.wav";
+        REQUIRE(std::filesystem::exists(wav_path));
+        float *audio_data = nullptr;
+        size_t num_samples = 0;
+        int32_t sample_rate = 0;
+        bool success = load_wav_data(wav_path.c_str(), &audio_data, &num_samples, &sample_rate);
+        CHECK(success);
+        CHECK(audio_data != nullptr);
+        CHECK(num_samples == 159414);
+        CHECK(sample_rate == 16000);
+        free(audio_data);
+    }
+    SUBCASE("load_wav_data_two_cities") {
+        std::string wav_path = "two_cities.wav";
+        REQUIRE(std::filesystem::exists(wav_path));
+        float *audio_data = nullptr;
+        size_t num_samples = 0;
+        int32_t sample_rate = 0;
+        bool success = load_wav_data(wav_path.c_str(), &audio_data, &num_samples, &sample_rate);
+        CHECK(success);
+        CHECK(audio_data != nullptr);
+        CHECK(num_samples == 2129958);
+        CHECK(sample_rate == 48000);
+        free(audio_data);
+    }
+    SUBCASE("save_wav_data") {
+        std::string wav_path = "output/test.wav";
+        std::filesystem::create_directory("output");
+        std::filesystem::remove(wav_path);
+        REQUIRE(!std::filesystem::exists(wav_path));
+        std::vector<float> audio_data = {-0.1f, 0.0f, 0.3f, 0.4f, 0.5f};
+        size_t num_samples = audio_data.size();
+        int32_t sample_rate = 16000;
+        bool success = save_wav_data(wav_path.c_str(), audio_data.data(), num_samples, sample_rate);
+        CHECK(success);
+        REQUIRE(std::filesystem::exists(wav_path));
+        float* read_audio_data = nullptr;
+        size_t read_num_samples = 0;
+        int32_t read_sample_rate = 0;
+        bool read_success = load_wav_data(wav_path.c_str(), &read_audio_data, &read_num_samples, &read_sample_rate);
+        CHECK(read_success);
+        CHECK(read_audio_data != nullptr);
+        CHECK(read_num_samples == num_samples);
+        CHECK(read_sample_rate == sample_rate);
+        for (size_t i = 0; i < num_samples; i++) {
+            const float delta = std::abs(audio_data[i] - read_audio_data[i]);
+            const float epsilon = 0.0001f;
+            if (delta > epsilon) {
+                LOGF("audio_data[%zu] = %f, read_audio_data[%zu] = %f", i, audio_data[i], i, read_audio_data[i]);
+                CHECK(false);
+            }
+        }
+        free(read_audio_data);
+        std::filesystem::remove(wav_path);
+    }
 }

@@ -111,17 +111,16 @@ bool load_wav_data(const char *path, float **out_float_data,
   for (size_t i = 0; i < num_samples; ++i) {
     int16_t sample = 0;
     if (std::fread(&sample, sizeof(int16_t), 1, file) != 1) {
-      num_samples = i;
-      break;
+      std::fclose(file);
+      std::fprintf(stderr, "Failed to read sample %zu\n", i);
+      return false;
     }
     result_data[i] = static_cast<float>(sample) / 32768.0f;
   }
-  std::fclose(file);
+  std::fclose(file);  
   *out_float_data = result_data;
   *out_num_samples = num_samples;
-  if (out_sample_rate != nullptr) {
-    *out_sample_rate = sample_rate;
-  }
+  *out_sample_rate = sample_rate;
   return true;
 }
 
@@ -135,7 +134,8 @@ bool save_wav_data(const char *path, const float *audio_data,
 
   std::vector<int16_t> audio_int16(num_samples);
   for (size_t i = 0; i < num_samples; i++) {
-    audio_int16[i] = static_cast<int16_t>(audio_data[i] * 32768.0f);
+    const float float_value = gate(audio_data[i], -1.0f, 1.0f);
+    audio_int16[i] = static_cast<int16_t>(float_value * 32768.0f);
   }
 
   // Write the RIFF header

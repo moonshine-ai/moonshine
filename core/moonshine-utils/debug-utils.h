@@ -236,4 +236,9 @@ std::vector<uint8_t> load_file_into_memory(const std::string &path);
 void save_memory_to_file(const std::string &path,
                          const std::vector<uint8_t> &data);
 
+template <typename T>
+T gate(T value, T min, T max) {
+  return std::max<T>(min, std::min<T>(value, max));
+}
+
 #endif

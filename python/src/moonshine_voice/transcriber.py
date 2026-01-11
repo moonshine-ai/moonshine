@@ -458,10 +458,33 @@ class Stream:
         self.close()
 
 
+#/Users/petewarden/Library/Containers/ai.moonshine.opennotetaker/Data/Documents/system_audio_2026-01-08_16-53-55.wav
+
 if __name__ == "__main__":
-    model_path = str(get_model_path("tiny-en"))
-    model_arch = ModelArch.TINY
-    two_cities_wav_path = os.path.join(get_assets_path(), "two_cities.wav")
+    import argparse
+    from moonshine_voice import get_model_for_language
+    
+    parser = argparse.ArgumentParser(description="Model info example")
+    parser.add_argument("--language", type=str, default=None,
+                        help="Language to use for transcription")
+    parser.add_argument("--model-arch", type=int, default=None,
+                        help="Model architecture to use for transcription")
+    parser.add_argument("--wav-path", type=str, default=None,
+                        help="Path to the WAV file to transcribe")
+    args = parser.parse_args()
+
+    if args.language is None:
+        model_path = str(get_model_path("tiny-en"))
+        model_arch = ModelArch.TINY
+    else:
+        model_path, model_arch = get_model_for_language(
+            wanted_language=args.language, wanted_model_arch=args.model_arch)
+
+    if args.wav_path is None:
+        wav_path = os.path.join(get_assets_path(), "two_cities.wav")
+    else:
+        wav_path = args.wav_path
+
     transcriber = Transcriber(model_path=model_path, model_arch=model_arch)
 
     transcriber.start()
@@ -479,7 +502,7 @@ if __name__ == "__main__":
     listener = TestListener()
     transcriber.add_listener(listener)
 
-    audio_data, sample_rate = load_wav_file(two_cities_wav_path)
+    audio_data, sample_rate = load_wav_file(wav_path)
 
     # Loop through the audio data in chunks to simulate live streaming
     # from a microphone or other source.
