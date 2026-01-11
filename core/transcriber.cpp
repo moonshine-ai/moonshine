@@ -40,6 +40,8 @@ void validate_model_arch(uint32_t model_arch) {
 Transcriber::Transcriber(const TranscriberOptions &options)
     : stt_model(nullptr), streaming_model(nullptr), next_stream_id(1) {
   this->options = options;
+  std::random_device rd;
+  this->next_line_id = rd();
   const TranscriberOptions::ModelSource model_source = options.model_source;
   if (model_source == TranscriberOptions::ModelSource::FILES) {
     load_from_files(options.model_path, options.model_arch);
@@ -208,14 +210,15 @@ void Transcriber::transcribe_without_streaming(
   if (!this->batch_stream->save_input_wav_path.empty()) {
     this->batch_stream->save_audio_data_to_wav(audio_data, audio_length,
                                                sample_rate);
+    this->batch_stream->save_audio_data_to_wav(nullptr, 0, 0);
   }
   TranscriberStream *stream = this->batch_stream;
   std::vector<VoiceActivitySegment> segments;
   {
     std::lock_guard<std::mutex> lock(stream->vad_mutex);
-    stream->vad->start();
+    stream->start();
     stream->vad->process_audio(audio_data, (int32_t)audio_length, sample_rate);
-    stream->vad->stop();
+    stream->stop();
     segments = *(stream->vad->get_segments());
   }
 
@@ -245,14 +248,15 @@ void Transcriber::start_stream(int32_t stream_id) {
   TranscriberStream *stream = this->streams[stream_id];
   // Starting a stream invalidates any pointers to stream data (audio, strings)
   // that have been returned to the client during prior sessions.
-  stream->transcript_output->internal_lines.clear();
-  stream->vad->start();
+  stream->transcript_output->internal_lines_map.clear();
+  stream->transcript_output->ordered_internal_line_ids.clear();
+  stream->start();
 }
 
 void Transcriber::stop_stream(int32_t stream_id) {
   std::lock_guard<std::mutex> lock(this->streams_mutex);
   TranscriberStream *stream = this->streams[stream_id];
-  stream->vad->stop();
+  stream->stop();
   stream->save_audio_data_to_wav(nullptr, 0, 0);
 }
 
@@ -380,7 +384,11 @@ void Transcriber::update_transcript_from_segments(
     line.duration = segment.end_time - segment.start_time;
     line.is_complete = segment.is_complete;
     line.just_updated = segment.just_updated;
-    line.id = (uint64_t)(segment_index);
+    if (segment_index >= stream->transcript_output->ordered_internal_line_ids.size()) {
+      uint64_t new_segment_id = this->next_line_id.fetch_add(1);
+      stream->transcript_output->ordered_internal_line_ids.push_back(new_segment_id);
+    }
+    line.id = stream->transcript_output->ordered_internal_line_ids.at(segment_index);
 
     // Transcribe the segment using the appropriate model
     if (is_streaming_model_arch(this->options.model_arch) &&
@@ -593,32 +601,38 @@ TranscriberLine &TranscriberLine::operator=(const TranscriberLine &other) {
 
 TranscriberLine::~TranscriberLine() { delete this->text; }
 
-void TranscriptStreamOutput::add_or_update_line(TranscriberLine &line) {
-  size_t line_index = line.id;
-  if (line_index < this->internal_lines.size()) {
+std::string TranscriberLine::to_string() const {
+  return "TranscriberLine(start_time=" + std::to_string(start_time) +
+         ", text='" + (text == nullptr ? "<null>" : *text) + "'" +
+         ", duration=" + std::to_string(duration) +
+         ", is_complete=" + std::to_string(is_complete) +
+         ", just_updated=" + std::to_string(just_updated) +
+         ", is_new=" + std::to_string(is_new) +
+         ", has_text_changed=" + std::to_string(has_text_changed) +
+         ", id=" + std::to_string(id) + ")";
+}
+
+void TranscriptStreamOutput::add_or_update_line(
+    TranscriberLine &line) {
+  if (internal_lines_map.find(line.id) != internal_lines_map.end()) {
     line.is_new = false;
-    TranscriberLine *existing_line = &this->internal_lines[line_index];
+    TranscriberLine *existing_line = &this->internal_lines_map[line.id];
     line.has_text_changed =
         (existing_line->text == nullptr && line.text != nullptr) ||
         (existing_line->text != nullptr && line.text == nullptr) ||
         (existing_line->text != nullptr && line.text != nullptr &&
          *existing_line->text != *line.text);
-    this->internal_lines[line_index] = line;
   } else {
-    if (line_index > this->internal_lines.size()) {
-      throw std::runtime_error(
-          "Line added out of order: " + std::to_string(line_index) +
-          ", for length " + std::to_string(this->internal_lines.size()));
-    }
     line.is_new = true;
     line.has_text_changed = line.text != nullptr;
-    this->internal_lines.push_back(line);
   }
+  this->internal_lines_map[line.id] = line;
 }
 
 void TranscriptStreamOutput::update_transcript_from_lines() {
   this->output_lines.clear();
-  for (const TranscriberLine &line : this->internal_lines) {
+  for (const uint64_t &line_id : this->ordered_internal_line_ids) {
+    const TranscriberLine &line = this->internal_lines_map[line_id];
     this->output_lines.push_back({
         .text = line.text == nullptr ? nullptr : line.text->c_str(),
         .audio_data = line.audio_data.data(),
@@ -637,7 +651,8 @@ void TranscriptStreamOutput::update_transcript_from_lines() {
 }
 
 void TranscriptStreamOutput::clear_update_flags() {
-  for (TranscriberLine &line : this->internal_lines) {
+  for (const uint64_t &line_id : this->ordered_internal_line_ids) {
+    TranscriberLine &line = this->internal_lines_map.at(line_id);
     line.just_updated = false;
     line.is_new = false;
     line.has_text_changed = false;
@@ -660,6 +675,16 @@ TranscriberStream::TranscriberStream(VoiceActivityDetector *vad,
                                                  this->get_wav_filename());
     std::filesystem::remove(wav_path);
   }
+}
+
+void TranscriberStream::start() {
+  this->vad->start();
+  this->transcript_output->internal_lines_map.clear();
+  this->transcript_output->ordered_internal_line_ids.clear();
+}
+
+void TranscriberStream::stop() {
+  this->vad->stop();
 }
 
 std::string TranscriberStream::get_wav_filename() {

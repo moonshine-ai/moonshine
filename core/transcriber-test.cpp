@@ -8,6 +8,7 @@
 
 #include "debug-utils.h"
 #include "string-utils.h"
+#include "test-utils.h"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest.h>
@@ -52,6 +53,7 @@ TEST_CASE("transcriber-test") {
                                              wav_sample_rate, 0, &transcript);
     REQUIRE(transcript != nullptr);
     REQUIRE(transcript->line_count > 0);
+    std::set<uint64_t> found_ids;
     for (size_t i = 0; i < transcript->line_count; i++) {
       const struct transcript_line_t &line = transcript->lines[i];
       REQUIRE(line.text != nullptr);
@@ -61,8 +63,9 @@ TEST_CASE("transcriber-test") {
       REQUIRE(line.duration > 0.0f);
       REQUIRE(line.is_complete == 1);
       REQUIRE(line.is_updated == 1);
-      REQUIRE(line.id >= 0);
-      REQUIRE(line.id < transcript->line_count);
+      LOG_UINT64(line.id);
+      REQUIRE(found_ids.find(line.id) == found_ids.end());
+      found_ids.insert(line.id);
     }
     for (size_t i = 0; i < transcript->line_count; i++) {
       const struct transcript_line_t &line = transcript->lines[i];
@@ -140,6 +143,7 @@ TEST_CASE("transcriber-test") {
                                              wav_sample_rate, 0, &transcript);
     REQUIRE(transcript != nullptr);
     REQUIRE(transcript->line_count > 0);
+    std::set<uint64_t> found_ids;
     for (size_t i = 0; i < transcript->line_count; i++) {
       const struct transcript_line_t &line = transcript->lines[i];
       REQUIRE(line.text != nullptr);
@@ -149,8 +153,8 @@ TEST_CASE("transcriber-test") {
       REQUIRE(line.duration > 0.0f);
       REQUIRE(line.is_complete == 1);
       REQUIRE(line.is_updated == 1);
-      REQUIRE(line.id >= 0);
-      REQUIRE(line.id < transcript->line_count);
+      REQUIRE(found_ids.find(line.id) == found_ids.end());
+      found_ids.insert(line.id);
     }
     for (size_t i = 0; i < transcript->line_count; i++) {
       const struct transcript_line_t &line = transcript->lines[i];
@@ -213,7 +217,6 @@ TEST_CASE("transcriber-test") {
         REQUIRE(line.audio_data_count > 0);
         REQUIRE(line.start_time >= 0.0f);
         REQUIRE(line.duration > 0.0f);
-        REQUIRE(line.id == (uint64_t)(j));
         // There should be at most one incomplete line at the end of the
         // transcript.
         if (line.is_complete == 0) {
@@ -252,8 +255,6 @@ TEST_CASE("transcriber-test") {
           REQUIRE(j < previous_line_texts.size());
           REQUIRE(previous_line_texts.at(j) == line.text);
         }
-        REQUIRE(line.id >= 0);
-        REQUIRE(line.id < transcript->line_count);
         if (!line.is_updated) {
           continue;
         }
@@ -337,7 +338,6 @@ TEST_CASE("transcriber-test") {
         REQUIRE(line.audio_data_count > 0);
         REQUIRE(line.start_time >= 0.0f);
         REQUIRE(line.duration > 0.0f);
-        REQUIRE(line.id == (uint64_t)(j));
         // There should be at most one incomplete line at the end of the
         // transcript.
         if (line.is_complete == 0) {
@@ -365,8 +365,6 @@ TEST_CASE("transcriber-test") {
           REQUIRE(!any_new_lines);
         }
         REQUIRE(line.has_text_changed == false);
-        REQUIRE(line.id >= 0);
-        REQUIRE(line.id < transcript->line_count);
         if (!line.is_updated) {
           continue;
         }
@@ -425,7 +423,7 @@ TEST_CASE("transcriber-test") {
     REQUIRE(*sanitized_utf8_string == valid_utf8_string);
     delete sanitized_utf8_string;
   }
-  SUBCASE("test-save-input-wav") {
+  SUBCASE("test-save-input-wav-streaming") {
     std::string wav_path = "two_cities.wav";
     REQUIRE(std::filesystem::exists(wav_path));
     float *wav_data = nullptr;
@@ -476,6 +474,56 @@ TEST_CASE("transcriber-test") {
     std::string debug_wav_path = append_path_component(
         options.save_input_wav_path, expected_debug_filename);
     REQUIRE(std::filesystem::exists(debug_wav_path));
+    float *debug_wav_data = nullptr;
+    size_t debug_wav_data_size = 0;
+    int32_t debug_wav_sample_rate = 0;
+    REQUIRE(load_wav_data(debug_wav_path.c_str(), &debug_wav_data,
+                          &debug_wav_data_size, &debug_wav_sample_rate));
+    REQUIRE(debug_wav_data != nullptr);
+    REQUIRE(wav_data_size == debug_wav_data_size);
+    LOG_SIZET(wav_data_size);
+    LOG_SIZET(debug_wav_data_size);
+    REQUIRE(wav_sample_rate == debug_wav_sample_rate);
+    for (size_t i = 0; i < wav_data_size; i++) {
+      const float delta = std::abs(wav_data[i] - debug_wav_data[i]);
+      const float epsilon = 0.0001f;
+      if (delta > epsilon) {
+        LOGF("wav_data[%zu] = %f, debug_wav_data[%zu] = %f", i, wav_data[i], i,
+             debug_wav_data[i]);
+        CHECK(false);
+      }
+    }
+    free(debug_wav_data);
+    free(wav_data);
+  }
+  SUBCASE("test-save-input-wav-without-streaming") {
+    std::string wav_path = "two_cities.wav";
+    REQUIRE(std::filesystem::exists(wav_path));
+    float *wav_data = nullptr;
+    size_t wav_data_size = 0;
+    int32_t wav_sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
+                          &wav_sample_rate));
+    REQUIRE(wav_data != nullptr);
+    REQUIRE(wav_data_size > 0);
+    std::string root_model_path = "tiny-en";
+    REQUIRE(std::filesystem::exists(root_model_path));
+    TranscriberOptions options;
+    options.model_source = TranscriberOptions::ModelSource::FILES;
+    options.model_path = root_model_path.c_str();
+    options.model_arch = MOONSHINE_MODEL_ARCH_TINY;
+    options.save_input_wav_path = "output";
+    Transcriber transcriber(options);
+    transcript_t *transcript = nullptr;
+    transcriber.transcribe_without_streaming(wav_data, wav_data_size,
+                                             wav_sample_rate, 0, &transcript);
+    REQUIRE(transcript != nullptr);
+    REQUIRE(transcript->line_count > 0);
+    REQUIRE(std::filesystem::is_directory(options.save_input_wav_path));
+    std::string expected_debug_filename = std::string("input_batch.wav");
+    std::string debug_wav_path = append_path_component(
+        options.save_input_wav_path, expected_debug_filename);
+    REQUIRE_FILE_EXISTS(debug_wav_path);
     float *debug_wav_data = nullptr;
     size_t debug_wav_data_size = 0;
     int32_t debug_wav_sample_rate = 0;
