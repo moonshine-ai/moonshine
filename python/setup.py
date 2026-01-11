@@ -47,7 +47,7 @@ def read_requirements():
 
 setup(
     name="moonshine-voice",
-    version="0.0.33",
+    version="0.0.34",
     description="Fast, accurate, on-device AI library for building interactive voice applications",
     long_description=read_readme(),
     long_description_content_type="text/markdown",
