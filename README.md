@@ -6,9 +6,9 @@
 
 [Moonshine](https://moonshine.ai) Voice is an open source AI toolkit for developers building voice applications. 
 
- - Everything runs on-device, so it's fast, private, and there are never any server API charges. 
+ - Everything runs on-device, so it's fast, private, and you don't need an account, credit card, or API keys. 
  - Our models are based on our [cutting](https://arxiv.org/abs/2410.15608) [edge](https://arxiv.org/abs/2509.02523) research and trained from scratch, so we can offer higher accuracy than Whisper Large V3 at the top end, down to tiny 26MB models for constrained deployments.
- - It's cross-platform, running on [Python](#python), [iOS](#ios), [Android](#android), [MacOS](#macos), [Linux](#linux), [Windows](#windows), Raspberry Pis, and wearables.
+ - It's cross-platform, running on [Python](#python), [iOS](#ios), [Android](#android), [MacOS](#macos), [Linux](#linux), [Windows](#windows), Raspberry Pis, [IoT devices](https://www.linkedin.com/posts/petewarden_most-of-the-recent-news-about-ai-seems-to-activity-7384664255242932224-v6Mr/), and wearables.
  - Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, so you don't need to be an ML expert to use them.
  - It supports multiple languages, including English, Spanish, Mandarin, Japanese, Korean, Vietnamese, Ukrainian, and Arabic.
  - The framework and models are optimized for streaming applications, offering low latency responses by doing most of the work while the user is still talking.
@@ -146,6 +146,7 @@ You can also choose how often the transcript should be updated using the `--tran
 
 We're grateful to:
 
+ - Lambda Labs and Stephen Balaban for supporting our model training through [their foundational model grants](https://lambda.ai/research).
  - The TEN team for open sourcing [their voice-activity detection model](https://github.com/TEN-framework/ten-vad).
  - The ONNX Runtime community for building [a fast, cross-platform inference engine](https://github.com/microsoft/onnxruntime).
  - [Viktor Kirilov](https://github.com/onqtam) for [his fantastic DocTest C++ testing framework](https://github.com/doctest/doctest).
