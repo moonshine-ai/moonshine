@@ -481,8 +481,6 @@ TEST_CASE("transcriber-test") {
                           &debug_wav_data_size, &debug_wav_sample_rate));
     REQUIRE(debug_wav_data != nullptr);
     REQUIRE(wav_data_size == debug_wav_data_size);
-    LOG_SIZET(wav_data_size);
-    LOG_SIZET(debug_wav_data_size);
     REQUIRE(wav_sample_rate == debug_wav_sample_rate);
     for (size_t i = 0; i < wav_data_size; i++) {
       const float delta = std::abs(wav_data[i] - debug_wav_data[i]);
@@ -531,8 +529,6 @@ TEST_CASE("transcriber-test") {
                           &debug_wav_data_size, &debug_wav_sample_rate));
     REQUIRE(debug_wav_data != nullptr);
     REQUIRE(wav_data_size == debug_wav_data_size);
-    LOG_SIZET(wav_data_size);
-    LOG_SIZET(debug_wav_data_size);
     REQUIRE(wav_sample_rate == debug_wav_sample_rate);
     for (size_t i = 0; i < wav_data_size; i++) {
       const float delta = std::abs(wav_data[i] - debug_wav_data[i]);

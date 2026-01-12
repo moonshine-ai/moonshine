@@ -150,11 +150,17 @@ void VoiceActivityDetector::process_audio_chunk(const float *audio_data,
     // max_segment_sample_count
     smoothed_probability = 1.0f;
   }
-  // If the voice audio buffer is too long, set the smoothed probability to 0 to
-  // force a voice end event.
-  if (max_segment_sample_count && (current_segment_audio_buffer.size() >
-                                   (size_t)(max_segment_sample_count))) {
-    smoothed_probability = 0;
+  // If the voice audio buffer is too long, linearly decrease the effective
+  // score so that it reaches 0 at the max_segment_sample_count, and so ensures
+  // that the voice end event is triggered.
+  const size_t fade_sample_count = (max_segment_sample_count * 2) / 3;
+  if (max_segment_sample_count &&
+      (current_segment_audio_buffer.size() > fade_sample_count)) {
+    const float fade_factor =
+        static_cast<float>(current_segment_audio_buffer.size() -
+                           fade_sample_count) /
+        fade_sample_count;
+    smoothed_probability = smoothed_probability * fade_factor;
   }
   bool current_is_voice = smoothed_probability > threshold;
   if (current_is_voice && !previous_is_voice) {
