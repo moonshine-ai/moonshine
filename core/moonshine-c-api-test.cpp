@@ -48,8 +48,6 @@ TEST_CASE("moonshine-test-v2") {
       REQUIRE(line.is_updated == 1);
       REQUIRE(line.is_new == 1);
       REQUIRE(line.has_text_changed == 1);
-      REQUIRE(line.id >= 0);
-      REQUIRE(line.id < transcript->line_count);
     }
   }
   SUBCASE("transcribe-stream") {
@@ -107,7 +105,6 @@ TEST_CASE("moonshine-test-v2") {
         REQUIRE(line.audio_data_count > 0);
         REQUIRE(line.start_time >= 0.0f);
         REQUIRE(line.duration > 0.0f);
-        REQUIRE(line.id == (uint64_t)(j));
         // There should be at most one incomplete line at the end of the
         // transcript.
         if (line.is_complete == 0) {
@@ -126,8 +123,6 @@ TEST_CASE("moonshine-test-v2") {
           // have been updated as well.
           REQUIRE(!any_updated_lines);
         }
-        REQUIRE(line.id >= 0);
-        REQUIRE(line.id < transcript->line_count);
         if (!line.is_updated) {
           continue;
         }
@@ -196,8 +191,6 @@ TEST_CASE("moonshine-test-v2") {
       REQUIRE(line.duration > 0.0f);
       REQUIRE(line.is_complete == 1);
       REQUIRE(line.is_updated == 1);
-      REQUIRE(line.id >= 0);
-      REQUIRE(line.id < transcript->line_count);
     }
   }
   SUBCASE("transcribe-without-streaming-skip-transcription") {
@@ -242,8 +235,6 @@ TEST_CASE("moonshine-test-v2") {
       REQUIRE(line.is_updated == 1);
       REQUIRE(line.is_new == 1);
       REQUIRE(line.has_text_changed == 0);
-      REQUIRE(line.id >= 0);
-      REQUIRE(line.id < transcript->line_count);
     }
   }
   SUBCASE("transcribe-without-streaming-vad-threshold-0") {

@@ -41,6 +41,7 @@
 
 #include "moonshine-c-api.h"
 #include <algorithm>
+#include <cinttypes>
 #include <cstring>
 #include <functional>
 #include <memory>
@@ -116,6 +117,15 @@ struct TranscriptLine {
                        line_c.audio_data + line_c.audio_data_count);
     }
   }
+
+  std::string toString() const {
+    return "[" + std::to_string(startTime) + "s] '" + text + "' (" +
+           std::to_string(duration) + "s) [" + std::to_string(lineId) + "] " +
+           (isComplete ? " complete, " : " incomplete, ") +
+           (isUpdated ? " updated, " : " not updated, ") +
+           (isNew ? " new" : " not new, ") +
+           (hasTextChanged ? " text changed" : " text not changed");
+  }
 };
 
 /// A complete transcript containing multiple lines
@@ -133,20 +143,18 @@ struct Transcript {
     }
     lines.reserve(transcript_c->line_count);
     for (uint64_t i = 0; i < transcript_c->line_count; ++i) {
-      lines.push_back(TranscriptLine(transcript_c->lines[i]));
+      TranscriptLine line(transcript_c->lines[i]);
+      fprintf(stderr, "New line %" PRIu64 ": %s\n", line.lineId,
+              line.toString().c_str());
+      lines.push_back(line);
     }
   }
 
   std::string toString() const {
     std::string result;
+    result += "Transcript with " + std::to_string(lines.size()) + " lines:\n";
     for (const auto &line : lines) {
-      const int32_t line_start_units = static_cast<int32_t>(line.startTime);
-      const int32_t line_start_hundredths =
-          static_cast<int32_t>(line.startTime * 100.0f) -
-          (line_start_units * 100);
-      result += "[" + std::to_string(line_start_units) + "." +
-                std::to_string(line_start_hundredths) + "s] " + line.text +
-                "\n";
+      result += line.toString() + "\n";
     }
     return result;
   }
@@ -537,6 +545,7 @@ inline void Stream::addAudio(const std::vector<float> &audioData,
 
 inline Transcript Stream::updateTranscription(uint32_t flags) {
   transcript_t *out_transcript = nullptr;
+  fprintf(stderr, "Stream::updateTranscription\n");
   checkError(moonshine_transcribe_stream(transcriber_->handle_, handle_, flags,
                                          &out_transcript));
   Transcript transcript = transcriber_->parseTranscript(out_transcript);
@@ -790,6 +799,7 @@ inline void Transcriber::addAudio(const std::vector<float> &audioData,
 }
 
 inline Transcript Transcriber::updateTranscription(uint32_t flags) {
+  fprintf(stderr, "Transcriber::updateTranscription\n");
   return getDefaultStream().updateTranscription(flags);
 }
 

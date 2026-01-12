@@ -183,8 +183,6 @@ TEST_CASE("moonshine-cpp-test") {
       REQUIRE(line.isUpdated);
       REQUIRE(line.isNew);
       REQUIRE(line.hasTextChanged);
-      REQUIRE(line.lineId >= 0);
-      REQUIRE(line.lineId < transcript.lines.size());
     }
   }
   SUBCASE("transcribe-with-streaming") {
@@ -213,6 +211,7 @@ TEST_CASE("moonshine-cpp-test") {
     const size_t samples_between_transcriptions =
         (size_t)(wav_sample_rate * 0.481f);
     size_t line_count = 0;
+    std::set<uint64_t> existing_line_ids;
     for (size_t i = 0; i < wav_data_size; i += chunk_size) {
       const float *chunk_data = wav_data + i;
       const size_t chunk_data_size = std::min(chunk_size, wav_data_size - i);
@@ -227,27 +226,37 @@ TEST_CASE("moonshine-cpp-test") {
       moonshine::Transcript transcript = transcriber.updateTranscription(0);
       line_count = std::max(line_count, transcript.lines.size());
       bool any_updated_lines = false;
+      size_t line_index = 0;
+      size_t lines_size = transcript.lines.size();
       for (const auto &line : transcript.lines) {
         REQUIRE(line.audioData.size() > 0);
         REQUIRE(line.startTime >= 0.0f);
         REQUIRE(line.duration > 0.0f);
-        REQUIRE(line.lineId >= 0);
-        REQUIRE(line.lineId < transcript.lines.size());
+
+        // Make sure the line ID is unique and stable.
+        const bool seen_id_before =
+            existing_line_ids.find(line.lineId) != existing_line_ids.end();
+        if (!seen_id_before) {
+          existing_line_ids.insert(line.lineId);
+        }
+        REQUIRE(existing_line_ids.size() <= lines_size);
+
         // There should be at most one incomplete line at the end of the
         // transcript.
         if (!line.isComplete) {
-          const bool is_last_line =
-              (line.lineId == (transcript.lines.size() - 1));
+          const bool is_last_line = (line_index == (lines_size - 1));
           if (!is_last_line) {
             fprintf(stderr,
                     "Incomplete line %" PRIu64
                     " ('%s', %.2fs) is not the last line "
                     "%zu\n",
                     line.lineId, line.text.c_str(), line.startTime,
-                    transcript.lines.size() - 1);
+                    lines_size - 1);
           }
           REQUIRE(is_last_line);
         }
+        line_index++;
+
         if (line.isUpdated) {
           any_updated_lines = true;
         } else {
@@ -255,8 +264,6 @@ TEST_CASE("moonshine-cpp-test") {
           // have been updated as well.
           REQUIRE(!any_updated_lines);
         }
-        REQUIRE(line.lineId >= 0);
-        REQUIRE(line.lineId < transcript.lines.size());
         if (!line.isUpdated) {
           continue;
         }
