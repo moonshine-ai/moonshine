@@ -144,8 +144,6 @@ struct Transcript {
     lines.reserve(transcript_c->line_count);
     for (uint64_t i = 0; i < transcript_c->line_count; ++i) {
       TranscriptLine line(transcript_c->lines[i]);
-      fprintf(stderr, "New line %" PRIu64 ": %s\n", line.lineId,
-              line.toString().c_str());
       lines.push_back(line);
     }
   }
@@ -545,7 +543,6 @@ inline void Stream::addAudio(const std::vector<float> &audioData,
 
 inline Transcript Stream::updateTranscription(uint32_t flags) {
   transcript_t *out_transcript = nullptr;
-  fprintf(stderr, "Stream::updateTranscription\n");
   checkError(moonshine_transcribe_stream(transcriber_->handle_, handle_, flags,
                                          &out_transcript));
   Transcript transcript = transcriber_->parseTranscript(out_transcript);
@@ -799,7 +796,6 @@ inline void Transcriber::addAudio(const std::vector<float> &audioData,
 }
 
 inline Transcript Transcriber::updateTranscription(uint32_t flags) {
-  fprintf(stderr, "Transcriber::updateTranscription\n");
   return getDefaultStream().updateTranscription(flags);
 }
 
