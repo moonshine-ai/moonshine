@@ -40,8 +40,12 @@ void validate_model_arch(uint32_t model_arch) {
 Transcriber::Transcriber(const TranscriberOptions &options)
     : stt_model(nullptr), streaming_model(nullptr), next_stream_id(1) {
   this->options = options;
+  // Start with a random 64-bit value as a unique identifier. We increment
+  // this value to generate each new line ID. These should be safe to use as a
+  // persistent identifier for every line, since duplicates are so unlikely as
+  // to be impossible, assuming std::random_device is sufficiently random.
   std::random_device rd;
-  this->next_line_id = rd();
+  this->next_line_id = (uint64_t)(rd()) << 32 | (uint64_t)(rd());
   const TranscriberOptions::ModelSource model_source = options.model_source;
   if (model_source == TranscriberOptions::ModelSource::FILES) {
     load_from_files(options.model_path, options.model_arch);
