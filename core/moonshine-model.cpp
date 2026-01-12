@@ -483,7 +483,7 @@ int MoonshineModel::transcribe(const float *input_audio_data,
   *out_text = (char *)(last_result.c_str());
 
   // TIMER_END(moonshine_transcribe);
-  log_leaked_tensor_views();
+  // log_leaked_tensor_views();
   return 0;
 }
 
