@@ -85,6 +85,10 @@ static bool parse_config_json(const std::string& json, MoonshineStreamingConfig*
     config->d_model_frontend = get_int("d_model_frontend");
     config->c1 = get_int("c1");
     config->c2 = get_int("c2");
+    
+    // max_seq_len defaults to 448 if not in config
+    int max_seq = get_int("max_seq_len");
+    config->max_seq_len = (max_seq > 0) ? max_seq : 448;
 
     // Validate essential fields
     return config->depth > 0 && config->decoder_dim > 0 && config->vocab_size > 0;
@@ -120,6 +124,12 @@ void MoonshineStreamingState::reset(const MoonshineStreamingConfig& cfg) {
     k_self.clear();
     v_self.clear();
     cache_seq_len = 0;
+    
+    // Cross-attention KV cache
+    k_cross.clear();
+    v_cross.clear();
+    cross_len = 0;
+    cross_kv_valid = false;
 }
 
 /* ============================================================================
@@ -128,7 +138,9 @@ void MoonshineStreamingState::reset(const MoonshineStreamingConfig& cfg) {
 
 MoonshineStreamingModel::MoonshineStreamingModel()
     : frontend_session(nullptr), encoder_session(nullptr),
-      adapter_session(nullptr), decoder_session(nullptr), tokenizer(nullptr) {
+      adapter_session(nullptr), decoder_session(nullptr),
+      cross_kv_session(nullptr), decoder_kv_session(nullptr),
+      tokenizer(nullptr) {
     ort_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
     LOG_ORT_ERROR(ort_api, ort_api->CreateEnv(ORT_LOGGING_LEVEL_WARNING,
                                               "MoonshineStreamingModel", &ort_env));
@@ -153,6 +165,8 @@ MoonshineStreamingModel::~MoonshineStreamingModel() {
     if (encoder_session) ort_api->ReleaseSession(encoder_session);
     if (adapter_session) ort_api->ReleaseSession(adapter_session);
     if (decoder_session) ort_api->ReleaseSession(decoder_session);
+    if (cross_kv_session) ort_api->ReleaseSession(cross_kv_session);
+    if (decoder_kv_session) ort_api->ReleaseSession(decoder_kv_session);
     delete ort_allocator;
     delete tokenizer;
 #ifndef _WIN32
@@ -225,6 +239,57 @@ int MoonshineStreamingModel::load(const char *model_dir, const char *tokenizer_p
         ort_api, ort_env, ort_session_options, decoder_path.c_str(),
         &decoder_session, &decoder_mmapped_data, &decoder_mmapped_data_size));
     RETURN_ON_NULL(decoder_session);
+
+    // Optionally load cross_kv and decoder_kv sessions (for more efficient decoding)
+    // These are optional - if not present, we use the standard decoder path
+    std::string cross_kv_path = append_path_component(model_dir, "cross_kv.onnx");
+    std::string decoder_kv_path = append_path_component(model_dir, "decoder_kv.onnx");
+    
+    // Check if .ort versions exist (prefer them over .onnx)
+    std::string cross_kv_ort = append_path_component(model_dir, "cross_kv.ort");
+    std::string decoder_kv_ort = append_path_component(model_dir, "decoder_kv.ort");
+    if (std::ifstream(cross_kv_ort).good()) cross_kv_path = cross_kv_ort;
+    if (std::ifstream(decoder_kv_ort).good()) decoder_kv_path = decoder_kv_ort;
+    
+    // Load cross_kv if available
+    if (std::ifstream(cross_kv_path).good()) {
+        const char* cross_kv_mmap = nullptr;
+        size_t cross_kv_mmap_size = 0;
+        int err = ort_session_from_path(
+            ort_api, ort_env, ort_session_options, cross_kv_path.c_str(),
+            &cross_kv_session, &cross_kv_mmap, &cross_kv_mmap_size);
+        if (err != 0 || cross_kv_session == nullptr) {
+            LOG("Warning: Failed to load cross_kv session, will use standard decoder path\n");
+            cross_kv_session = nullptr;
+        } else {
+            LOGF("Loaded cross_kv session from %s\n", cross_kv_path.c_str());
+        }
+    }
+    
+    // Load decoder_kv if available (only useful if cross_kv is also loaded)
+    if (cross_kv_session && std::ifstream(decoder_kv_path).good()) {
+        const char* decoder_kv_mmap = nullptr;
+        size_t decoder_kv_mmap_size = 0;
+        int err = ort_session_from_path(
+            ort_api, ort_env, ort_session_options, decoder_kv_path.c_str(),
+            &decoder_kv_session, &decoder_kv_mmap, &decoder_kv_mmap_size);
+        if (err != 0 || decoder_kv_session == nullptr) {
+            LOG("Warning: Failed to load decoder_kv session, will use standard decoder path\n");
+            decoder_kv_session = nullptr;
+            // Also clear cross_kv since we need both
+            if (cross_kv_session) {
+                ort_api->ReleaseSession(cross_kv_session);
+                cross_kv_session = nullptr;
+            }
+        } else {
+            LOGF("Loaded decoder_kv session from %s\n", decoder_kv_path.c_str());
+        }
+    } else if (cross_kv_session && !std::ifstream(decoder_kv_path).good()) {
+        // Have cross_kv but no decoder_kv - can't use optimized path
+        LOG("Warning: cross_kv.onnx found but decoder_kv.onnx missing, using standard decoder path\n");
+        ort_api->ReleaseSession(cross_kv_session);
+        cross_kv_session = nullptr;
+    }
 
     // Load tokenizer
     tokenizer = new BinTokenizer(tokenizer_path);
@@ -617,6 +682,9 @@ int MoonshineStreamingModel::encode(MoonshineStreamingState *state,
     size_t mem_size = new_frames * config.decoder_dim;
     state->memory.insert(state->memory.end(), mem_data, mem_data + mem_size);
     state->memory_len += new_frames;
+    
+    // Invalidate cross K/V cache since memory changed
+    state->cross_kv_valid = false;
 
     ort_api->ReleaseValue(adapter_outputs[0]);
 
@@ -628,31 +696,25 @@ int MoonshineStreamingModel::encode(MoonshineStreamingState *state,
     return 0;
 }
 
-int MoonshineStreamingModel::decode_step(MoonshineStreamingState *state,
-                                          int token,
-                                          float *logits_out) {
-    if (state == nullptr) {
-        LOG("State is null\n");
-        return 1;
-    }
-    if (logits_out == nullptr) {
-        LOG("Logits output is null\n");
-        return 1;
-    }
-    if (state->memory_len == 0) {
-        LOG("Memory is empty\n");
-        return 1;
-    }
+/* ============================================================================
+ * Internal decoder helper - runs decoder with multiple tokens
+ * ============================================================================ */
 
-    std::lock_guard<std::mutex> lock(processing_mutex);
-
+int MoonshineStreamingModel::run_decoder_internal(MoonshineStreamingState *state,
+                                                   const std::vector<int64_t>& tokens,
+                                                   std::vector<float>& logits_out) {
+    int token_len = static_cast<int>(tokens.size());
+    if (token_len == 0) {
+        return 1;
+    }
+    
     // Token input
-    std::vector<int64_t> token_data = {static_cast<int64_t>(token)};
-    std::vector<int64_t> token_shape = {1, 1};
+    std::vector<int64_t> token_shape = {1, static_cast<int64_t>(token_len)};
+    std::vector<int64_t> token_data(tokens.begin(), tokens.end());
 
     OrtValue* token_tensor = nullptr;
     RETURN_ON_ORT_ERROR(ort_api, ort_api->CreateTensorWithDataAsOrtValue(
-        ort_memory_info, token_data.data(), sizeof(int64_t),
+        ort_memory_info, token_data.data(), token_data.size() * sizeof(int64_t),
         token_shape.data(), token_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64,
         &token_tensor));
 
@@ -668,11 +730,12 @@ int MoonshineStreamingModel::decode_step(MoonshineStreamingState *state,
     // KV cache
     int cache_len = state->cache_seq_len;
     std::vector<int64_t> cache_shape = {config.depth, 1, config.nheads, cache_len, config.head_dim};
+    size_t kv_size = static_cast<size_t>(config.depth) * config.nheads * cache_len * config.head_dim;
 
     // Initialize empty cache if needed
-    if (state->k_self.empty()) {
-        state->k_self.resize(config.depth * config.nheads * cache_len * config.head_dim, 0.0f);
-        state->v_self.resize(config.depth * config.nheads * cache_len * config.head_dim, 0.0f);
+    if (state->k_self.size() != kv_size) {
+        state->k_self.resize(kv_size, 0.0f);
+        state->v_self.resize(kv_size, 0.0f);
     }
 
     OrtValue* k_self_tensor = nullptr;
@@ -710,10 +773,13 @@ int MoonshineStreamingModel::decode_step(MoonshineStreamingState *state,
         return 1;
     }
 
-    // Copy logits
+    // Copy logits for all positions [1, token_len, vocab_size]
     float* logits_data = nullptr;
     RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(outputs[0], (void**)&logits_data));
-    memcpy(logits_out, logits_data, config.vocab_size * sizeof(float));
+    
+    size_t total_logits = token_len * config.vocab_size;
+    logits_out.resize(total_logits);
+    memcpy(logits_out.data(), logits_data, total_logits * sizeof(float));
 
     // Update KV cache
     OrtTensorTypeAndShapeInfo* k_info = nullptr;
@@ -725,7 +791,7 @@ int MoonshineStreamingModel::decode_step(MoonshineStreamingState *state,
     ort_api->ReleaseTensorTypeAndShapeInfo(k_info);
 
     int new_cache_len = static_cast<int>(k_shape[3]);
-    size_t new_cache_size = config.depth * config.nheads * new_cache_len * config.head_dim;
+    size_t new_cache_size = static_cast<size_t>(config.depth) * config.nheads * new_cache_len * config.head_dim;
 
     state->k_self.resize(new_cache_size);
     state->v_self.resize(new_cache_size);
@@ -747,11 +813,515 @@ int MoonshineStreamingModel::decode_step(MoonshineStreamingState *state,
     return 0;
 }
 
+/* ============================================================================
+ * Compute cross-attention K/V from memory (for optimized decoding)
+ * ============================================================================ */
+
+int MoonshineStreamingModel::compute_cross_kv(MoonshineStreamingState *state) {
+    if (state == nullptr || cross_kv_session == nullptr) {
+        return 1;
+    }
+    if (state->memory_len == 0) {
+        LOG("Memory is empty, cannot compute cross K/V\n");
+        return 1;
+    }
+    
+    // Input: memory [1, mem_len, decoder_dim]
+    std::vector<int64_t> memory_shape = {1, state->memory_len, config.decoder_dim};
+    
+    OrtValue* memory_tensor = nullptr;
+    RETURN_ON_ORT_ERROR(ort_api, ort_api->CreateTensorWithDataAsOrtValue(
+        ort_memory_info, state->memory.data(), state->memory.size() * sizeof(float),
+        memory_shape.data(), memory_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT,
+        &memory_tensor));
+    
+    // Run cross_kv session
+    const char* input_names[] = {"memory"};
+    const char* output_names[] = {"k_cross", "v_cross"};
+    
+    OrtValue* inputs[] = {memory_tensor};
+    OrtValue* outputs[2] = {nullptr, nullptr};
+    
+    OrtStatus* status = ort_api->Run(
+        cross_kv_session, nullptr,
+        input_names, inputs, 1,
+        output_names, 2, outputs
+    );
+    
+    ort_api->ReleaseValue(memory_tensor);
+    
+    if (status != nullptr) {
+        LOG_ORT_ERROR(ort_api, status);
+        return 1;
+    }
+    
+    // Extract k_cross shape: [depth, 1, nheads, cross_len, head_dim]
+    OrtTensorTypeAndShapeInfo* k_info = nullptr;
+    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorTypeAndShape(outputs[0], &k_info));
+    size_t num_dims = 0;
+    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetDimensionsCount(k_info, &num_dims));
+    std::vector<int64_t> k_shape(num_dims);
+    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetDimensions(k_info, k_shape.data(), num_dims));
+    ort_api->ReleaseTensorTypeAndShapeInfo(k_info);
+    
+    if (num_dims != 5) {
+        LOG("Expected 5D cross KV tensor\n");
+        for (int i = 0; i < 2; i++) ort_api->ReleaseValue(outputs[i]);
+        return 1;
+    }
+    
+    int cross_len = static_cast<int>(k_shape[3]);
+    size_t kv_size = static_cast<size_t>(config.depth) * config.nheads * cross_len * config.head_dim;
+    
+    // Copy to state
+    state->k_cross.resize(kv_size);
+    state->v_cross.resize(kv_size);
+    state->cross_len = cross_len;
+    
+    float* k_data = nullptr;
+    float* v_data = nullptr;
+    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(outputs[0], (void**)&k_data));
+    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(outputs[1], (void**)&v_data));
+    
+    memcpy(state->k_cross.data(), k_data, kv_size * sizeof(float));
+    memcpy(state->v_cross.data(), v_data, kv_size * sizeof(float));
+    state->cross_kv_valid = true;
+    
+    // Release outputs
+    for (int i = 0; i < 2; i++) {
+        ort_api->ReleaseValue(outputs[i]);
+    }
+    
+    return 0;
+}
+
+/* ============================================================================
+ * Run decoder with precomputed cross K/V (more efficient path)
+ * ============================================================================ */
+
+int MoonshineStreamingModel::run_decoder_with_cross_kv(MoonshineStreamingState *state,
+                                                        const std::vector<int64_t>& tokens,
+                                                        std::vector<float>& logits_out) {
+    if (state == nullptr || decoder_kv_session == nullptr) {
+        return 1;
+    }
+    if (!state->cross_kv_valid || state->cross_len == 0) {
+        LOG("Cross K/V not valid, call compute_cross_kv first\n");
+        return 1;
+    }
+    
+    int token_len = static_cast<int>(tokens.size());
+    if (token_len == 0) {
+        return 1;
+    }
+    
+    // Token input [1, token_len]
+    std::vector<int64_t> token_shape = {1, static_cast<int64_t>(token_len)};
+    std::vector<int64_t> token_data(tokens.begin(), tokens.end());
+    
+    OrtValue* token_tensor = nullptr;
+    RETURN_ON_ORT_ERROR(ort_api, ort_api->CreateTensorWithDataAsOrtValue(
+        ort_memory_info, token_data.data(), token_data.size() * sizeof(int64_t),
+        token_shape.data(), token_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64,
+        &token_tensor));
+    
+    // Self-attention KV cache [depth, 1, nheads, cache_len, head_dim]
+    int cache_len = state->cache_seq_len;
+    std::vector<int64_t> kv_self_shape = {config.depth, 1, config.nheads, cache_len, config.head_dim};
+    size_t kv_self_size = static_cast<size_t>(config.depth) * config.nheads * cache_len * config.head_dim;
+    
+    if (state->k_self.size() != kv_self_size) {
+        state->k_self.resize(kv_self_size, 0.0f);
+        state->v_self.resize(kv_self_size, 0.0f);
+    }
+    
+    OrtValue* k_self_tensor = nullptr;
+    RETURN_ON_ORT_ERROR(ort_api, ort_api->CreateTensorWithDataAsOrtValue(
+        ort_memory_info, state->k_self.data(), state->k_self.size() * sizeof(float),
+        kv_self_shape.data(), kv_self_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT,
+        &k_self_tensor));
+    
+    OrtValue* v_self_tensor = nullptr;
+    RETURN_ON_ORT_ERROR(ort_api, ort_api->CreateTensorWithDataAsOrtValue(
+        ort_memory_info, state->v_self.data(), state->v_self.size() * sizeof(float),
+        kv_self_shape.data(), kv_self_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT,
+        &v_self_tensor));
+    
+    // Cross-attention KV cache [depth, 1, nheads, cross_len, head_dim]
+    std::vector<int64_t> kv_cross_shape = {config.depth, 1, config.nheads, state->cross_len, config.head_dim};
+    size_t kv_cross_size = static_cast<size_t>(config.depth) * config.nheads * state->cross_len * config.head_dim;
+    
+    OrtValue* k_cross_tensor = nullptr;
+    RETURN_ON_ORT_ERROR(ort_api, ort_api->CreateTensorWithDataAsOrtValue(
+        ort_memory_info, state->k_cross.data(), kv_cross_size * sizeof(float),
+        kv_cross_shape.data(), kv_cross_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT,
+        &k_cross_tensor));
+    
+    OrtValue* v_cross_tensor = nullptr;
+    RETURN_ON_ORT_ERROR(ort_api, ort_api->CreateTensorWithDataAsOrtValue(
+        ort_memory_info, state->v_cross.data(), kv_cross_size * sizeof(float),
+        kv_cross_shape.data(), kv_cross_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT,
+        &v_cross_tensor));
+    
+    // Run decoder_kv session
+    // Note: decoder_kv expects cross K/V as "out_k_cross" and "out_v_cross" inputs
+    const char* input_names[] = {"token", "k_self", "v_self", "out_k_cross", "out_v_cross"};
+    const char* output_names[] = {"logits", "out_k_self", "out_v_self"};
+    
+    OrtValue* inputs[] = {token_tensor, k_self_tensor, v_self_tensor, k_cross_tensor, v_cross_tensor};
+    OrtValue* outputs[3] = {nullptr, nullptr, nullptr};
+    
+    OrtStatus* status = ort_api->Run(
+        decoder_kv_session, nullptr,
+        input_names, inputs, 5,
+        output_names, 3, outputs
+    );
+    
+    // Release inputs
+    for (int i = 0; i < 5; i++) {
+        ort_api->ReleaseValue(inputs[i]);
+    }
+    
+    if (status != nullptr) {
+        LOG_ORT_ERROR(ort_api, status);
+        return 1;
+    }
+    
+    // Copy logits [1, token_len, vocab_size]
+    float* logits_data = nullptr;
+    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(outputs[0], (void**)&logits_data));
+    
+    size_t total_logits = token_len * config.vocab_size;
+    logits_out.resize(total_logits);
+    memcpy(logits_out.data(), logits_data, total_logits * sizeof(float));
+    
+    // Update self-attention KV cache
+    OrtTensorTypeAndShapeInfo* k_info = nullptr;
+    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorTypeAndShape(outputs[1], &k_info));
+    size_t num_dims = 0;
+    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetDimensionsCount(k_info, &num_dims));
+    std::vector<int64_t> k_shape(num_dims);
+    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetDimensions(k_info, k_shape.data(), num_dims));
+    ort_api->ReleaseTensorTypeAndShapeInfo(k_info);
+    
+    int new_cache_len = static_cast<int>(k_shape[3]);
+    size_t new_cache_size = static_cast<size_t>(config.depth) * config.nheads * new_cache_len * config.head_dim;
+    
+    state->k_self.resize(new_cache_size);
+    state->v_self.resize(new_cache_size);
+    
+    float* k_out_data = nullptr;
+    float* v_out_data = nullptr;
+    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(outputs[1], (void**)&k_out_data));
+    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(outputs[2], (void**)&v_out_data));
+    
+    memcpy(state->k_self.data(), k_out_data, new_cache_size * sizeof(float));
+    memcpy(state->v_self.data(), v_out_data, new_cache_size * sizeof(float));
+    state->cache_seq_len = new_cache_len;
+    
+    // Release outputs
+    for (int i = 0; i < 3; i++) {
+        ort_api->ReleaseValue(outputs[i]);
+    }
+    
+    return 0;
+}
+
+/* ============================================================================
+ * Single-token decode step (for backward compatibility with transcriber)
+ * ============================================================================ */
+
+int MoonshineStreamingModel::decode_step(MoonshineStreamingState *state,
+                                          int token,
+                                          float *logits_out) {
+    if (state == nullptr) {
+        LOG("State is null\n");
+        return 1;
+    }
+    if (logits_out == nullptr) {
+        LOG("Logits output is null\n");
+        return 1;
+    }
+    if (state->memory_len == 0) {
+        LOG("Memory is empty\n");
+        return 1;
+    }
+
+    std::lock_guard<std::mutex> lock(processing_mutex);
+    
+    std::vector<int64_t> tokens = {static_cast<int64_t>(token)};
+    std::vector<float> logits;
+    
+    int err;
+    
+    // Use optimized cross K/V path if available
+    if (has_cross_kv_path()) {
+        // Compute cross K/V if not valid
+        if (!state->cross_kv_valid) {
+            err = compute_cross_kv(state);
+            if (err != 0) {
+                LOG("Failed to compute cross K/V, falling back to standard path\n");
+                err = run_decoder_internal(state, tokens, logits);
+            } else {
+                err = run_decoder_with_cross_kv(state, tokens, logits);
+            }
+        } else {
+            err = run_decoder_with_cross_kv(state, tokens, logits);
+        }
+    } else {
+        err = run_decoder_internal(state, tokens, logits);
+    }
+    
+    if (err != 0) {
+        return err;
+    }
+    
+    // Copy logits to output
+    memcpy(logits_out, logits.data(), config.vocab_size * sizeof(float));
+    return 0;
+}
+
+/* ============================================================================
+ * Multi-token decode step (new decoder feature)
+ * ============================================================================ */
+
+int MoonshineStreamingModel::decode_tokens(MoonshineStreamingState *state,
+                                            const int *tokens, int tokens_len,
+                                            float *logits_out) {
+    if (state == nullptr) {
+        LOG("State is null\n");
+        return 1;
+    }
+    if (tokens == nullptr || tokens_len <= 0) {
+        LOG("Tokens is null or empty\n");
+        return 1;
+    }
+    if (logits_out == nullptr) {
+        LOG("Logits output is null\n");
+        return 1;
+    }
+    if (state->memory_len == 0) {
+        LOG("Memory is empty\n");
+        return 1;
+    }
+
+    std::lock_guard<std::mutex> lock(processing_mutex);
+    
+    std::vector<int64_t> token_vec(tokens_len);
+    for (int i = 0; i < tokens_len; ++i) {
+        token_vec[i] = static_cast<int64_t>(tokens[i]);
+    }
+    
+    std::vector<float> logits;
+    int err;
+    
+    // Use optimized cross K/V path if available
+    if (has_cross_kv_path()) {
+        if (!state->cross_kv_valid) {
+            err = compute_cross_kv(state);
+            if (err != 0) {
+                LOG("Failed to compute cross K/V, falling back to standard path\n");
+                err = run_decoder_internal(state, token_vec, logits);
+            } else {
+                err = run_decoder_with_cross_kv(state, token_vec, logits);
+            }
+        } else {
+            err = run_decoder_with_cross_kv(state, token_vec, logits);
+        }
+    } else {
+        err = run_decoder_internal(state, token_vec, logits);
+    }
+    
+    if (err != 0) {
+        return err;
+    }
+    
+    // Copy all logits to output
+    memcpy(logits_out, logits.data(), tokens_len * config.vocab_size * sizeof(float));
+    return 0;
+}
+
+/* ============================================================================
+ * Full decode with speculative decoding support
+ * ============================================================================ */
+
+int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
+                                          const int *speculative_tokens,
+                                          int speculative_len,
+                                          int **tokens_out,
+                                          int *tokens_len_out) {
+    if (state == nullptr) {
+        LOG("State is null\n");
+        return 1;
+    }
+    if (tokens_out == nullptr || tokens_len_out == nullptr) {
+        LOG("Output pointers are null\n");
+        return 1;
+    }
+    if (state->memory_len == 0) {
+        LOG("Memory is empty\n");
+        *tokens_out = nullptr;
+        *tokens_len_out = 0;
+        return 0;
+    }
+
+    std::lock_guard<std::mutex> lock(processing_mutex);
+    
+    std::vector<int> result_tokens;
+    
+    // Compute max tokens based on memory length (similar to new decoder)
+    float duration_sec = state->memory_len * 0.020f;
+    int max_tokens = std::min(static_cast<int>(std::ceil(duration_sec * 6.5)), config.max_seq_len);
+    
+    // Helper lambda for argmax
+    auto argmax = [this](const float* logits) -> int {
+        int best = 0;
+        float best_score = logits[0];
+        for (int i = 1; i < config.vocab_size; ++i) {
+            if (logits[i] > best_score) {
+                best_score = logits[i];
+                best = i;
+            }
+        }
+        return best;
+    };
+    
+    // Helper to run decoder with automatic path selection
+    auto run_decoder = [this, state](const std::vector<int64_t>& tokens, std::vector<float>& logits) -> int {
+        if (has_cross_kv_path()) {
+            if (!state->cross_kv_valid) {
+                int err = compute_cross_kv(state);
+                if (err != 0) {
+                    return run_decoder_internal(state, tokens, logits);
+                }
+            }
+            return run_decoder_with_cross_kv(state, tokens, logits);
+        }
+        return run_decoder_internal(state, tokens, logits);
+    };
+    
+    // Compute cross K/V upfront if using optimized path
+    if (has_cross_kv_path() && !state->cross_kv_valid) {
+        int err = compute_cross_kv(state);
+        if (err != 0) {
+            LOG("Warning: Failed to compute cross K/V, using standard decoder path\n");
+        }
+    }
+    
+    // Helper lambda for auto-regressive decoding
+    auto continue_ar_decoding = [&](int start_token) {
+        int current_token = start_token;
+        std::vector<float> logits;
+        
+        while (current_token != config.eos_id &&
+               result_tokens.size() < static_cast<size_t>(max_tokens)) {
+            result_tokens.push_back(current_token);
+            
+            std::vector<int64_t> next_input = {static_cast<int64_t>(current_token)};
+            int err = run_decoder(next_input, logits);
+            if (err != 0) break;
+            
+            current_token = argmax(logits.data());
+        }
+    };
+    
+    if (speculative_tokens != nullptr && speculative_len > 0) {
+        // Speculative decoding: verify previous tokens
+        std::vector<int64_t> tokens_with_bos;
+        tokens_with_bos.push_back(config.bos_id);
+        for (int i = 0; i < speculative_len; ++i) {
+            tokens_with_bos.push_back(static_cast<int64_t>(speculative_tokens[i]));
+        }
+        
+        std::vector<float> logits;
+        int err = run_decoder(tokens_with_bos, logits);
+        if (err != 0) {
+            return err;
+        }
+        
+        // Get predictions from logits
+        std::vector<int> predictions;
+        for (int t = 0; t < static_cast<int>(tokens_with_bos.size()); ++t) {
+            predictions.push_back(argmax(logits.data() + t * config.vocab_size));
+        }
+        
+        // Find divergence point
+        int diverge_point = 0;
+        for (int i = 0; i < speculative_len; ++i) {
+            if (predictions[i] == speculative_tokens[i]) {
+                diverge_point = i + 1;
+            } else {
+                break;
+            }
+        }
+        
+        // Accept verified tokens
+        for (int i = 0; i < diverge_point; ++i) {
+            result_tokens.push_back(speculative_tokens[i]);
+        }
+        
+        if (diverge_point == speculative_len) {
+            // All speculative tokens verified, continue from final prediction
+            int final_pred = predictions[speculative_len];
+            continue_ar_decoding(final_pred);
+        } else {
+            // Diverged: reset cache and re-run with only accepted tokens
+            state->cache_seq_len = 0;
+            state->k_self.clear();
+            state->v_self.clear();
+            
+            std::vector<int64_t> accepted_tokens;
+            accepted_tokens.push_back(config.bos_id);
+            for (int i = 0; i < diverge_point; ++i) {
+                accepted_tokens.push_back(static_cast<int64_t>(speculative_tokens[i]));
+            }
+            
+            std::vector<float> logits2;
+            err = run_decoder(accepted_tokens, logits2);
+            if (err != 0) {
+                return err;
+            }
+            
+            int new_pred = argmax(logits2.data() + diverge_point * config.vocab_size);
+            continue_ar_decoding(new_pred);
+        }
+    } else {
+        // Regular decoding: start from BOS
+        std::vector<int64_t> tokens = {static_cast<int64_t>(config.bos_id)};
+        std::vector<float> logits;
+        
+        int err = run_decoder(tokens, logits);
+        if (err != 0) {
+            return err;
+        }
+        
+        int first_pred = argmax(logits.data());
+        continue_ar_decoding(first_pred);
+    }
+    
+    // Allocate and copy output
+    *tokens_len_out = static_cast<int>(result_tokens.size());
+    
+    if (result_tokens.empty()) {
+        *tokens_out = nullptr;
+    } else {
+        *tokens_out = static_cast<int*>(malloc(result_tokens.size() * sizeof(int)));
+        if (*tokens_out == nullptr) {
+            return 1;
+        }
+        memcpy(*tokens_out, result_tokens.data(), result_tokens.size() * sizeof(int));
+    }
+    
+    return 0;
+}
+
 void MoonshineStreamingModel::decoder_reset(MoonshineStreamingState *state) {
     if (state == nullptr) return;
     state->k_self.clear();
     state->v_self.clear();
     state->cache_seq_len = 0;
+    // Note: We keep cross K/V valid since memory hasn't changed
+    // It will be invalidated automatically when memory changes via encode()
 }
 
 /* ============================================================================
@@ -799,74 +1369,29 @@ int MoonshineStreamingModel::transcribe(const float *input_audio_data,
         return 0;
     }
 
-    // Decode
-    const int max_tokens = 256;
-    std::vector<int64_t> tokens;
-    tokens.push_back(config.bos_id);
-
-    std::vector<float> logits(config.vocab_size);
-    int current_token = config.bos_id;
-
-    const int ngram_size = 3;
-    const int max_repeats = 2;
-
-    for (int step = 0; step < max_tokens; ++step) {
-        err = decode_step(state, current_token, logits.data());
-        if (err != 0) {
-            delete state;
-            return err;
-        }
-
-        // Argmax
-        int next_token = 0;
-        float max_logit = logits[0];
-        for (int i = 1; i < config.vocab_size; ++i) {
-            if (logits[i] > max_logit) {
-                max_logit = logits[i];
-                next_token = i;
-            }
-        }
-
-        tokens.push_back(next_token);
-        current_token = next_token;
-
-        // EOS check
-        if (next_token == config.eos_id) break;
-
-        // Repetition detection
-        if (tokens.size() >= static_cast<size_t>(ngram_size * (max_repeats + 1))) {
-            int repeat_count = 0;
-            size_t end_pos = tokens.size();
-
-            for (int r = 1; r <= max_repeats; ++r) {
-                bool match = true;
-                for (int j = 0; j < ngram_size; ++j) {
-                    size_t cur_idx = end_pos - ngram_size + j;
-                    size_t prev_idx = end_pos - ngram_size * (r + 1) + j;
-                    if (tokens[cur_idx] != tokens[prev_idx]) {
-                        match = false;
-                        break;
-                    }
-                }
-                if (match) ++repeat_count;
-                else break;
-            }
-
-            if (repeat_count >= max_repeats) {
-                for (int j = 0; j < ngram_size * max_repeats; ++j) {
-                    tokens.pop_back();
-                }
-                tokens.push_back(config.eos_id);
-                break;
-            }
-        }
+    // Decode using the new decode_full method (no speculative tokens)
+    int *tokens = nullptr;
+    int tokens_len = 0;
+    err = decode_full(state, nullptr, 0, &tokens, &tokens_len);
+    
+    delete state;
+    
+    if (err != 0) {
+        return err;
     }
 
-    delete state;
-
     // Convert tokens to text
-    last_result = tokenizer->tokens_to_text(tokens);
+    if (tokens != nullptr && tokens_len > 0) {
+        std::vector<int64_t> token_vec(tokens_len);
+        for (int i = 0; i < tokens_len; ++i) {
+            token_vec[i] = static_cast<int64_t>(tokens[i]);
+        }
+        last_result = tokenizer->tokens_to_text(token_vec);
+        free(tokens);
+    } else {
+        last_result = "";
+    }
+    
     *out_text = (char*)(last_result.c_str());
-
     return 0;
 }

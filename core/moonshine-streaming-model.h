@@ -28,6 +28,7 @@ struct MoonshineStreamingConfig {
     int d_model_frontend;   /* Frontend linear output dim (320) */
     int c1;                 /* Conv1 output channels (640) */
     int c2;                 /* Conv2 output channels (320) */
+    int max_seq_len;        /* Maximum sequence length for decoder (448) */
 };
 
 /* Internal state for streaming inference */
@@ -53,10 +54,17 @@ struct MoonshineStreamingState {
     std::vector<float> memory;  // [T, decoder_dim]
     int memory_len;
 
-    // Decoder KV cache
+    // Decoder self-attention KV cache
     std::vector<float> k_self;
     std::vector<float> v_self;
     int cache_seq_len;
+    
+    // Cross-attention KV cache (precomputed from memory)
+    // Used with decoder_kv.onnx for more efficient decoding
+    std::vector<float> k_cross;
+    std::vector<float> v_cross;
+    int cross_len;
+    bool cross_kv_valid;  // True if k_cross/v_cross are valid for current memory
 
     void reset(const MoonshineStreamingConfig& cfg);
 };
@@ -72,6 +80,10 @@ struct MoonshineStreamingModel {
     OrtSession *encoder_session;
     OrtSession *adapter_session;
     OrtSession *decoder_session;
+    
+    // Optional sessions for optimized decoding (if cross_kv.onnx/decoder_kv.onnx exist)
+    OrtSession *cross_kv_session;    // Computes cross-attention K/V from memory
+    OrtSession *decoder_kv_session;  // Decoder that takes precomputed cross K/V
     
     BinTokenizer *tokenizer;
     std::mutex processing_mutex;
@@ -118,7 +130,24 @@ struct MoonshineStreamingModel {
     
     int encode(MoonshineStreamingState *state, bool is_final, int *new_frames_out);
     
+    /* Single-token decode step (auto-regressive) */
     int decode_step(MoonshineStreamingState *state, int token, float *logits_out);
+    
+    /* Multi-token decode step - processes multiple tokens at once, returns logits for each position.
+     * Useful for speculative decoding verification.
+     * logits_out must have space for (tokens_len * config.vocab_size) floats.
+     * Returns logits for ALL token positions, not just the last one. */
+    int decode_tokens(MoonshineStreamingState *state, const int *tokens, int tokens_len, 
+                      float *logits_out);
+    
+    /* Full decode with optional speculative tokens.
+     * If speculative_tokens is provided, verifies them against new predictions
+     * and continues from divergence point.
+     * tokens_out is allocated by this function - caller must free with free().
+     * Returns 0 on success. */
+    int decode_full(MoonshineStreamingState *state,
+                    const int *speculative_tokens, int speculative_len,
+                    int **tokens_out, int *tokens_len_out);
     
     void decoder_reset(MoonshineStreamingState *state);
     
@@ -131,6 +160,24 @@ struct MoonshineStreamingModel {
 private:
     int load_config(const char *config_path);
     int load_config_from_string(const std::string& json);
+    
+    /* Internal helper for running decoder with multiple tokens (uses memory) */
+    int run_decoder_internal(MoonshineStreamingState *state, 
+                             const std::vector<int64_t>& tokens,
+                             std::vector<float>& logits_out);
+    
+    /* Internal helper that uses precomputed cross K/V (more efficient if available) */
+    int run_decoder_with_cross_kv(MoonshineStreamingState *state,
+                                  const std::vector<int64_t>& tokens,
+                                  std::vector<float>& logits_out);
+    
+    /* Compute cross-attention K/V from current memory state */
+    int compute_cross_kv(MoonshineStreamingState *state);
+    
+    /* Check if optimized cross K/V path is available */
+    bool has_cross_kv_path() const { 
+        return cross_kv_session != nullptr && decoder_kv_session != nullptr; 
+    }
 };
 
 #endif
