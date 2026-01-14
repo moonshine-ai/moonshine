@@ -9,26 +9,6 @@
 #include "debug-utils.h"
 
 namespace {
-typedef struct {
-  std::string name;
-  MoonshineTensorView *view;
-} AllocationInfo;
-std::list<AllocationInfo> g_allocated_views;
-
-void register_allocated_view(std::string name, MoonshineTensorView *view) {
-  AllocationInfo info = {name, view};
-  g_allocated_views.push_back(info);
-}
-
-void unregister_allocated_view(MoonshineTensorView *view) {
-  for (auto it = g_allocated_views.begin(); it != g_allocated_views.end();
-       ++it) {
-    if (it->view == view) {
-      g_allocated_views.erase(it);
-      break;
-    }
-  }
-}
 
 moonshine_tensor_t *
 moonshine_tensor_from_shape_and_dtype(const std::vector<int64_t> &shape,
@@ -76,24 +56,14 @@ moonshine_tensor_t *moonshine_tensor_from_ort_tensor(const OrtApi *ort_api,
 }
 } // namespace
 
-void log_leaked_tensor_views() {
-  for (auto it = g_allocated_views.begin(); it != g_allocated_views.end();
-       ++it) {
-    fprintf(stderr, "Leaked view: %s - %zu bytes\n", it->name.c_str(),
-            it->view->bytes_count());
-  }
-  g_allocated_views.clear();
-}
-
 MoonshineTensorView::MoonshineTensorView()
     : _tensor(nullptr), name("anonymous") {
-  register_allocated_view(name, this);
 }
 
 MoonshineTensorView::MoonshineTensorView(moonshine_tensor_t *tensor,
                                          std::string name)
     : _tensor(tensor), name(name) {
-  register_allocated_view(name, this);
+  // register_allocated_view(name, this);
   if (tensor == nullptr) {
     fprintf(stderr, "Tensor is nullptr\n");
     assert(false);
@@ -107,7 +77,6 @@ MoonshineTensorView::MoonshineTensorView(const std::vector<int64_t> &shape,
                                          const std::string &name)
     : _tensor(nullptr), _shape(shape), name(name) {
   _tensor = moonshine_tensor_from_shape_and_dtype(shape, dtype, data);
-  register_allocated_view(name, this);
 }
 
 MoonshineTensorView::MoonshineTensorView(const MoonshineTensorView &other)
@@ -115,7 +84,6 @@ MoonshineTensorView::MoonshineTensorView(const MoonshineTensorView &other)
   _shape = other._shape;
   _tensor = moonshine_tensor_from_shape_and_dtype(_shape, other._tensor->dtype,
                                                   other._tensor->data);
-  register_allocated_view(name, this);
 }
 
 MoonshineTensorView::MoonshineTensorView(const OrtApi* ort_api, OrtValue *ort_tensor,
@@ -127,24 +95,20 @@ MoonshineTensorView::MoonshineTensorView(const OrtApi* ort_api, OrtValue *ort_te
   }
   _shape = std::vector<int64_t>(_tensor->shape,
                                 _tensor->shape + _tensor->shape_count);
-  register_allocated_view(name, this);
 }
 
 MoonshineTensorView::~MoonshineTensorView() {
   moonshine_free_tensor(_tensor);
-  unregister_allocated_view(this);
 }
 
 MoonshineTensorView &
 MoonshineTensorView::operator=(const MoonshineTensorView &other) {
   moonshine_free_tensor(_tensor);
 
-  unregister_allocated_view(this);
   _shape = other._shape;
   _tensor = moonshine_tensor_from_shape_and_dtype(_shape, other._tensor->dtype,
                                                   other._tensor->data);
   name = "assignment copy of " + other.name;
-  register_allocated_view(name, this);
   return *this;
 }
 
