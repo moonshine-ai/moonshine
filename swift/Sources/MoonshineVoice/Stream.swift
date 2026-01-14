@@ -10,10 +10,7 @@ public class Stream {
     private var listeners: [ListenerWrapper] = []
     private var streamTime: TimeInterval = 0.0
     private var lastUpdateTime: TimeInterval = 0.0
-    
-    /// Flags for transcription operations.
-    public static let flagForceUpdate: UInt32 = 1 << 0
-    
+        
     internal init(
         transcriber: Transcriber,
         handle: Int32,
@@ -38,11 +35,12 @@ public class Stream {
     /// Stop the stream.
     /// This will process any remaining audio and emit final events.
     public func stop() throws {
+        print("Stream.stop")
         try api.stopStream(transcriberHandle: transcriber.handle, streamHandle: handle)
         // There may be some audio left in the stream, so we need to transcribe it
         // to get the final transcript and emit events.
         do {
-            try updateTranscription(flags: 0)
+            try updateTranscription(flags: TranscribeStreamFlags.flagForceUpdate)
         } catch {
             emitError(error)
         }
@@ -71,7 +69,7 @@ public class Stream {
     }
     
     /// Manually update the transcription from the stream.
-    /// - Parameter flags: Flags for transcription (e.g., `Stream.flagForceUpdate`)
+    /// - Parameter flags: Flags for transcription (e.g., `TranscribeStreamFlags.flagForceUpdate`)
     /// - Returns: The current transcript
     @discardableResult
     public func updateTranscription(flags: UInt32 = 0) throws -> Transcript {
@@ -80,6 +78,7 @@ public class Stream {
             streamHandle: handle,
             flags: flags
         )
+        print("Stream.updateTranscription: \(transcript)")
         notifyFromTranscript(transcript)
         return transcript
     }

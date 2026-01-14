@@ -317,6 +317,17 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
   // last transcription.
   if (!should_update || is_stopped) {
     stream->transcript_output->clear_update_flags();
+    // Ensure that all lines are marked as complete if the stream is stopped.
+    if (is_stopped) {
+      for (const uint64_t &line_id : stream->transcript_output->ordered_internal_line_ids) {
+        TranscriberLine &line = stream->transcript_output->internal_lines_map[line_id];
+        if (!line.is_complete) {
+          line.is_complete = 1;
+          line.just_updated = 1;
+        }
+      }
+      stream->transcript_output->update_transcript_from_lines();
+    }
     *out_transcript = &(stream->transcript_output->transcript);
     return;
   }
