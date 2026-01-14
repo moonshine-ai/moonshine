@@ -1,6 +1,10 @@
 import Foundation
 import Moonshine
 
+public struct TranscribeStreamFlags {
+    public static let flagForceUpdate: UInt32 = 1 << 0
+}
+
 /// Internal wrapper for the Moonshine C API.
 internal final class MoonshineAPI: @unchecked Sendable {
     static nonisolated let shared = MoonshineAPI()

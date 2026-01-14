@@ -50,6 +50,10 @@ public struct TranscriptLine {
         self.hasTextChanged = hasTextChanged
         self.audioData = audioData
     }
+
+    public var description: String {
+        return "TranscriptLine(text: \(text), startTime: \(startTime), duration: \(duration), lineId: \(lineId), isComplete: \(isComplete), isUpdated: \(isUpdated), isNew: \(isNew), hasTextChanged: \(hasTextChanged))"
+    }
 }
 
 /// A complete transcript containing multiple lines.
@@ -64,9 +68,7 @@ public struct Transcript {
 
 extension Transcript: CustomStringConvertible {
     public var description: String {
-        return lines.map { line in
-            String(format: "[%.2fs] %@", line.startTime, line.text)
-        }.joined(separator: "\n")
+        return "Transcript(lines: \(lines.map { $0.description }.joined(separator: "\n")))"
     }
 }
 
