@@ -78,7 +78,6 @@ public class Stream {
             streamHandle: handle,
             flags: flags
         )
-        print("Stream.updateTranscription: \(transcript)")
         notifyFromTranscript(transcript)
         return transcript
     }
