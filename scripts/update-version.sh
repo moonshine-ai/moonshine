@@ -30,6 +30,7 @@ done < <(grep -rlI \
   --exclude-dir=build \
   --exclude-dir=.build \
   --exclude-dir=.cxx \
+  --exclude-dir=third-party \
   --exclude=Package.resolved \
   --exclude=uv.lock \
   --exclude=PKG-INFO \
