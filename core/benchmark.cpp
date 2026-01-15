@@ -97,7 +97,7 @@ int main(int argc, char *argv[]) {
   for (const moonshine::TranscriptLine &line : transcript.lines) {
     total_latency_ms += line.lastTranscriptionLatencyMs;
   }
-  fprintf(stderr, "Transcript: \n%s\n", transcript.toString().c_str());
+  fprintf(stderr, "%s\n", transcript.toString().c_str());
   fprintf(stderr, "Average Latency: %.0fms\n",
           total_latency_ms / (float)(transcript.lines.size()));
   fprintf(stderr,
