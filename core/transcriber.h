@@ -39,6 +39,7 @@ struct TranscriptStreamOutput {
 
   struct transcript_t transcript = {.lines = nullptr, .line_count = 0};
   void clear_update_flags();
+  void mark_all_lines_as_complete();
   void add_or_update_line(TranscriberLine &line);
   void update_transcript_from_lines();
 };

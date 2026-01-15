@@ -306,27 +306,21 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
   }
 
   const float *audio_data = stream->new_audio_buffer.data();
-  uint64_t audio_length = stream->new_audio_buffer.size();
+  const uint64_t audio_length = stream->new_audio_buffer.size();
+  const bool has_new_audio = (audio_length > 0);
   const float new_audio_duration = audio_length / (float)(INTERNAL_SAMPLE_RATE);
   const bool long_enough_to_analyze =
       new_audio_duration >= this->options.transcription_interval;
   const bool force_update = flags & MOONSHINE_FLAG_FORCE_UPDATE;
-  const bool should_update = long_enough_to_analyze || force_update;
+  const bool should_update = (long_enough_to_analyze || force_update) && has_new_audio;
   const bool is_stopped = !stream->vad->is_active();
   // Return the cached transcript if it's only been a short time since the
   // last transcription.
-  if (!should_update || is_stopped) {
+  if (!should_update) {
     stream->transcript_output->clear_update_flags();
     // Ensure that all lines are marked as complete if the stream is stopped.
     if (is_stopped) {
-      for (const uint64_t &line_id : stream->transcript_output->ordered_internal_line_ids) {
-        TranscriberLine &line = stream->transcript_output->internal_lines_map[line_id];
-        if (!line.is_complete) {
-          line.is_complete = 1;
-          line.just_updated = 1;
-        }
-      }
-      stream->transcript_output->update_transcript_from_lines();
+      stream->transcript_output->mark_all_lines_as_complete();
     }
     *out_transcript = &(stream->transcript_output->transcript);
     return;
@@ -431,6 +425,10 @@ void Transcriber::update_transcript_from_segments(
 
     line.audio_data = segment.audio_data;
     stream->transcript_output->add_or_update_line(line);
+  }
+  const bool is_stopped = !stream->vad->is_active();
+  if (is_stopped) {
+    stream->transcript_output->mark_all_lines_as_complete();
   }
   stream->transcript_output->update_transcript_from_lines();
   *out_transcript = &(stream->transcript_output->transcript);
@@ -677,6 +675,17 @@ void TranscriptStreamOutput::clear_update_flags() {
     line.has_text_changed = 0;
     line.is_new = 0;
   }
+}
+
+void TranscriptStreamOutput::mark_all_lines_as_complete() {
+  for (const uint64_t &line_id : this->ordered_internal_line_ids) {
+    TranscriberLine &line = this->internal_lines_map[line_id];
+    if (!line.is_complete) {
+      line.is_complete = 1;
+      line.just_updated = 1;
+    }
+  }
+  this->update_transcript_from_lines();
 }
 
 TranscriberStream::TranscriberStream(VoiceActivityDetector *vad,

@@ -542,4 +542,59 @@ TEST_CASE("transcriber-test") {
     free(debug_wav_data);
     free(wav_data);
   }
+  SUBCASE("test-mark-all-lines-as-complete-when-stream-is-stopped") {
+    std::string wav_path = "two_cities.wav";
+    REQUIRE(std::filesystem::exists(wav_path));
+    float *wav_data = nullptr;
+    size_t wav_data_size = 0;
+    int32_t wav_sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
+                          &wav_sample_rate));
+    REQUIRE(wav_data != nullptr);
+    REQUIRE(wav_data_size > 0);
+    // Truncate the audio data so we're in the middle of a sentence.
+    REQUIRE(wav_data_size >= (wav_sample_rate * 35));
+    wav_data_size = (wav_sample_rate * 35);
+    std::string root_model_path = "tiny-en";
+    REQUIRE(std::filesystem::exists(root_model_path));
+    TranscriberOptions options;
+    options.model_source = TranscriberOptions::ModelSource::FILES;
+    options.model_path = root_model_path.c_str();
+    options.model_arch = MOONSHINE_MODEL_ARCH_TINY;
+    options.save_input_wav_path = "output";
+    Transcriber transcriber(options);
+    int32_t stream_id = transcriber.create_stream();
+    transcriber.start_stream(stream_id);
+    REQUIRE(stream_id >= 0);
+    struct transcript_t *transcript = nullptr;
+    const float chunk_duration_seconds = 0.0143f;
+    const size_t chunk_size =
+        (size_t)(chunk_duration_seconds * wav_sample_rate);
+    size_t samples_since_last_transcription = 0;
+    const size_t samples_between_transcriptions =
+        (size_t)(wav_sample_rate * 0.45f);
+    std::vector<std::string> previous_line_texts;
+    for (size_t i = 0; i < wav_data_size; i += chunk_size) {
+      const float *chunk_data = wav_data + i;
+      const size_t chunk_data_size = std::min(chunk_size, wav_data_size - i);
+      transcriber.add_audio_to_stream(stream_id, chunk_data, chunk_data_size,
+                                      wav_sample_rate);
+      samples_since_last_transcription += chunk_data_size;
+      if (samples_since_last_transcription < samples_between_transcriptions) {
+        continue;
+      }
+      samples_since_last_transcription = 0;
+      transcriber.transcribe_stream(stream_id, 0, &transcript);
+    }
+    transcriber.stop_stream(stream_id);
+    transcriber.transcribe_stream(stream_id, 0, &transcript);
+    REQUIRE(transcript != nullptr);
+    REQUIRE(transcript->line_count > 0);
+    for (size_t i = 0; i < transcript->line_count; i++) {
+      const struct transcript_line_t &line = transcript->lines[i];
+      REQUIRE(line.is_complete == 1);
+    }
+    transcriber.free_stream(stream_id);
+    free(wav_data);
+  }
 }
