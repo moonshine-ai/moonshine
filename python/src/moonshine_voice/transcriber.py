@@ -202,6 +202,7 @@ class Transcriber:
                 is_new=bool(line_c.is_new),
                 has_text_changed=bool(line_c.has_text_changed),
                 audio_data=audio_data,
+                last_transcription_latency_ms=line_c.last_transcription_latency_ms,
             )
             lines.append(line)
 
@@ -238,7 +239,7 @@ class Transcriber:
 
     def stop(self):
         """Stop the default stream."""
-        self.get_default_stream().stop()
+        return self.get_default_stream().stop()
 
     def add_audio(self, audio_data: List[float], sample_rate: int = 16000):
         """Add audio data to the default stream."""
@@ -327,7 +328,8 @@ class Stream:
         # get the final transcript and emit events.
         try:
             # transcribe() already calls _notify_from_transcript(), so we just call it
-            self.update_transcription(0)
+            result = self.update_transcription(0)
+            return result
         except Exception as e:
             self._emit_error(e)
 
