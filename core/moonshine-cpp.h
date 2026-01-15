@@ -95,20 +95,24 @@ struct TranscriptLine {
   /// (streaming only)
   bool hasTextChanged;
 
+  int32_t lastTranscriptionLatencyMs;
+
   /// Audio data for this line, if available (16KHz float PCM, -1.0 to 1.0)
   std::vector<float> audioData;
 
   /// Default constructor
   TranscriptLine()
       : startTime(0.0f), duration(0.0f), lineId(0), isComplete(false),
-        isUpdated(false), isNew(false), hasTextChanged(false) {}
+        isUpdated(false), isNew(false), hasTextChanged(false),
+        lastTranscriptionLatencyMs(0) {}
 
   /// Construct from C API structure
   TranscriptLine(const transcript_line_t &line_c)
       : startTime(line_c.start_time), duration(line_c.duration),
         lineId(line_c.id), isComplete(line_c.is_complete != 0),
         isUpdated(line_c.is_updated != 0), isNew(line_c.is_new != 0),
-        hasTextChanged(line_c.has_text_changed != 0) {
+        hasTextChanged(line_c.has_text_changed != 0),
+        lastTranscriptionLatencyMs(line_c.last_transcription_latency_ms) {
     if (line_c.text) {
       text = std::string(line_c.text);
     }
@@ -124,7 +128,9 @@ struct TranscriptLine {
            (isComplete ? " complete, " : " incomplete, ") +
            (isUpdated ? " updated, " : " not updated, ") +
            (isNew ? " new" : " not new, ") +
-           (hasTextChanged ? " text changed" : " text not changed");
+           (hasTextChanged ? " text changed" : " text not changed") +
+           ", last transcription latency ms=" +
+           std::to_string(lastTranscriptionLatencyMs);
   }
 };
 

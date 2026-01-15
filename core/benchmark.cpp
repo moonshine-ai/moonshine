@@ -93,7 +93,13 @@ int main(int argc, char *argv[]) {
       static_cast<float>(audio_producer.sample_rate());
   const float transcription_percentage =
       (duration_seconds / wav_duration_seconds) * 100.0f;
+  int32_t total_latency_ms = 0;
+  for (const moonshine::TranscriptLine &line : transcript.lines) {
+    total_latency_ms += line.lastTranscriptionLatencyMs;
+  }
   fprintf(stderr, "Transcript: \n%s\n", transcript.toString().c_str());
+  fprintf(stderr, "Average Latency: %.0fms\n",
+          total_latency_ms / (float)(transcript.lines.size()));
   fprintf(stderr,
           "Transcription took %.2f seconds (%.2f%% of audio duration)\n",
           duration_seconds, transcription_percentage);

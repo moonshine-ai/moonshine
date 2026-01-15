@@ -399,6 +399,7 @@ void Transcriber::update_transcript_from_segments(
     }
     line.id = stream->transcript_output->ordered_internal_line_ids.at(segment_index);
 
+    std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
     // Transcribe the segment using the appropriate model
     if (is_streaming_model_arch(this->options.model_arch) &&
         this->streaming_model != nullptr) {
@@ -422,7 +423,8 @@ void Transcriber::update_transcript_from_segments(
       // No model available - return audio data and segment info only
       line.text = nullptr;
     }
-
+    std::chrono::steady_clock::time_point end_time = std::chrono::steady_clock::now();
+    line.last_transcription_latency_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
     line.audio_data = segment.audio_data;
     stream->transcript_output->add_or_update_line(line);
   }
@@ -585,6 +587,7 @@ TranscriberLine::TranscriberLine() {
   this->is_new = false;
   this->has_text_changed = false;
   this->id = 0;
+  this->last_transcription_latency_ms = 0;
 }
 
 TranscriberLine::TranscriberLine(const TranscriberLine &other) {
@@ -597,6 +600,7 @@ TranscriberLine::TranscriberLine(const TranscriberLine &other) {
   this->is_new = other.is_new;
   this->has_text_changed = other.has_text_changed;
   this->id = other.id;
+  this->last_transcription_latency_ms = other.last_transcription_latency_ms;
 }
 
 TranscriberLine &TranscriberLine::operator=(const TranscriberLine &other) {
@@ -609,6 +613,7 @@ TranscriberLine &TranscriberLine::operator=(const TranscriberLine &other) {
   this->is_new = other.is_new;
   this->has_text_changed = other.has_text_changed;
   this->id = other.id;
+  this->last_transcription_latency_ms = other.last_transcription_latency_ms;
   return *this;
 }
 
@@ -622,7 +627,8 @@ std::string TranscriberLine::to_string() const {
          ", just_updated=" + std::to_string(just_updated) +
          ", is_new=" + std::to_string(is_new) +
          ", has_text_changed=" + std::to_string(has_text_changed) +
-         ", id=" + std::to_string(id) + ")";
+         ", id=" + std::to_string(id) +
+         ", last_transcription_latency_ms=" + std::to_string(last_transcription_latency_ms) + ")";
 }
 
 void TranscriptStreamOutput::add_or_update_line(
@@ -657,6 +663,7 @@ void TranscriptStreamOutput::update_transcript_from_lines() {
         .is_updated = line.just_updated,
         .is_new = line.is_new,
         .has_text_changed = line.has_text_changed,
+        .last_transcription_latency_ms = line.last_transcription_latency_ms,
     });
   }
   this->transcript.lines = this->output_lines.data();

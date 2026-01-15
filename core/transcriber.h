@@ -4,6 +4,7 @@
 #include <cinttypes>
 
 #include <atomic>
+#include <chrono>
 #include <map>
 #include <mutex>
 #include <random>
@@ -24,6 +25,7 @@ struct TranscriberLine {
   bool is_new;
   bool has_text_changed;
   uint64_t id;
+  uint32_t last_transcription_latency_ms;
 
   TranscriberLine();
   TranscriberLine(const TranscriberLine &other);

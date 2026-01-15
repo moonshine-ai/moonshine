@@ -183,6 +183,8 @@ struct transcript_line_t {
   /* Streaming-only: Whether the text of the line has changed since the previous
    * call to transcribe_stream_chunk. */
   int8_t has_text_changed;
+  /* Streaming-only: The latency of the last transcription in milliseconds. */
+  uint32_t last_transcription_latency_ms;
 };
 
 /* An entire transcription of an audio data array or stream.                 */
