@@ -24,6 +24,7 @@ class TranscriptLineC(ctypes.Structure):
         ("is_updated", ctypes.c_int8),
         ("is_new", ctypes.c_int8),
         ("has_text_changed", ctypes.c_int8),
+        ("last_transcription_latency_ms", ctypes.c_uint32),
     ]
 
 
@@ -58,6 +59,7 @@ class TranscriptLine:
     is_new: bool = False
     has_text_changed: bool = False
     audio_data: Optional[List[float]] = None
+    last_transcription_latency_ms: int = 0
 
 
 @dataclass
