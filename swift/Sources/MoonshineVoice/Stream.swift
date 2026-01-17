@@ -10,6 +10,7 @@ public class Stream {
     private var listeners: [ListenerWrapper] = []
     private var streamTime: TimeInterval = 0.0
     private var lastUpdateTime: TimeInterval = 0.0
+    private var isActive_: Bool = false
         
     internal init(
         transcriber: Transcriber,
@@ -21,6 +22,7 @@ public class Stream {
         self.api = MoonshineAPI.shared
         self.handle = handle
         self.updateInterval = updateInterval
+        self.isActive_ = false
     }
     
     deinit {
@@ -30,12 +32,13 @@ public class Stream {
     /// Start the stream.
     public func start() throws {
         try api.startStream(transcriberHandle: transcriber.handle, streamHandle: handle)
+        isActive_ = true
     }
     
     /// Stop the stream.
     /// This will process any remaining audio and emit final events.
     public func stop() throws {
-        print("Stream.stop")
+        isActive_ = false
         try api.stopStream(transcriberHandle: transcriber.handle, streamHandle: handle)
         // There may be some audio left in the stream, so we need to transcribe it
         // to get the final transcript and emit events.
@@ -46,11 +49,18 @@ public class Stream {
         }
     }
     
+    public func isActive() -> Bool {
+        return isActive_
+    }
+
     /// Add audio data to the stream.
     /// - Parameters:
     ///   - audioData: Array of PCM audio samples (float, -1.0 to 1.0)
     ///   - sampleRate: Sample rate in Hz (default: 16000)
     public func addAudio(_ audioData: [Float], sampleRate: Int32 = 16000) throws {
+        if !isActive_ {
+            return
+        }
         try api.addAudioToStream(
             transcriberHandle: transcriber.handle,
             streamHandle: handle,

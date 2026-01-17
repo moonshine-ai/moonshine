@@ -312,7 +312,8 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
   const bool long_enough_to_analyze =
       new_audio_duration >= this->options.transcription_interval;
   const bool force_update = flags & MOONSHINE_FLAG_FORCE_UPDATE;
-  const bool should_update = (long_enough_to_analyze || force_update) && has_new_audio;
+  const bool should_update =
+      (long_enough_to_analyze || force_update) && has_new_audio;
   const bool is_stopped = !stream->vad->is_active();
   // Return the cached transcript if it's only been a short time since the
   // last transcription.
@@ -393,13 +394,17 @@ void Transcriber::update_transcript_from_segments(
     line.duration = segment.end_time - segment.start_time;
     line.is_complete = segment.is_complete;
     line.just_updated = segment.just_updated;
-    if (segment_index >= stream->transcript_output->ordered_internal_line_ids.size()) {
+    if (segment_index >=
+        stream->transcript_output->ordered_internal_line_ids.size()) {
       uint64_t new_segment_id = this->next_line_id.fetch_add(1);
-      stream->transcript_output->ordered_internal_line_ids.push_back(new_segment_id);
+      stream->transcript_output->ordered_internal_line_ids.push_back(
+          new_segment_id);
     }
-    line.id = stream->transcript_output->ordered_internal_line_ids.at(segment_index);
+    line.id =
+        stream->transcript_output->ordered_internal_line_ids.at(segment_index);
 
-    std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::time_point start_time =
+        std::chrono::steady_clock::now();
     // Transcribe the segment using the appropriate model
     if (is_streaming_model_arch(this->options.model_arch) &&
         this->streaming_model != nullptr) {
@@ -423,8 +428,12 @@ void Transcriber::update_transcript_from_segments(
       // No model available - return audio data and segment info only
       line.text = nullptr;
     }
-    std::chrono::steady_clock::time_point end_time = std::chrono::steady_clock::now();
-    line.last_transcription_latency_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+    std::chrono::steady_clock::time_point end_time =
+        std::chrono::steady_clock::now();
+    line.last_transcription_latency_ms =
+        (uint32_t)(std::chrono::duration_cast<std::chrono::milliseconds>(
+                       end_time - start_time)
+                       .count());
     line.audio_data = segment.audio_data;
     stream->transcript_output->add_or_update_line(line);
   }
@@ -627,12 +636,11 @@ std::string TranscriberLine::to_string() const {
          ", just_updated=" + std::to_string(just_updated) +
          ", is_new=" + std::to_string(is_new) +
          ", has_text_changed=" + std::to_string(has_text_changed) +
-         ", id=" + std::to_string(id) +
-         ", last_transcription_latency_ms=" + std::to_string(last_transcription_latency_ms) + ")";
+         ", id=" + std::to_string(id) + ", last_transcription_latency_ms=" +
+         std::to_string(last_transcription_latency_ms) + ")";
 }
 
-void TranscriptStreamOutput::add_or_update_line(
-    TranscriberLine &line) {
+void TranscriptStreamOutput::add_or_update_line(TranscriberLine &line) {
   if (internal_lines_map.find(line.id) != internal_lines_map.end()) {
     line.is_new = false;
     TranscriberLine *existing_line = &this->internal_lines_map[line.id];
@@ -714,9 +722,7 @@ void TranscriberStream::start() {
   this->transcript_output->ordered_internal_line_ids.clear();
 }
 
-void TranscriberStream::stop() {
-  this->vad->stop();
-}
+void TranscriberStream::stop() { this->vad->stop(); }
 
 std::string TranscriberStream::get_wav_filename() {
   if (this->stream_id == -1) {
