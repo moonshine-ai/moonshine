@@ -67,6 +67,9 @@ SOFTWARE.
   } while (0)
 
 namespace {
+
+bool log_api_calls = false;
+
 void parse_transcriber_options(const transcriber_option_t *in_options,
                                uint64_t in_options_count,
                                TranscriberOptions &out_options) {
@@ -81,6 +84,8 @@ void parse_transcriber_options(const transcriber_option_t *in_options,
       out_options.vad_threshold = float_from_string(in_option.value);
     } else if (option_name == "save_input_wav_path") {
       out_options.save_input_wav_path = std::string(in_option.value);
+    } else if (option_name == "log_api_calls") {
+      log_api_calls = bool_from_string(in_option.value);
     } else {
       throw std::runtime_error("Unknown transcriber option: '" +
                                std::string(in_option.name) + "'");
@@ -109,6 +114,9 @@ void free_transcriber_handle(int32_t handle) {
 } // namespace
 
 extern "C" int32_t moonshine_get_version(void) {
+  if (log_api_calls) {
+    LOG("moonshine_get_version");
+  }
   return MOONSHINE_HEADER_VERSION;
 }
 
@@ -129,7 +137,16 @@ extern "C" const char *moonshine_error_to_string(int32_t error) {
 
 extern "C" int32_t moonshine_load_transcriber_from_files(
     const char *path, uint32_t model_arch, const transcriber_option_t *options,
-    uint64_t options_count, int32_t /* moonshine_version */) {
+    uint64_t options_count, int32_t moonshine_version) {
+  if (log_api_calls) {
+    LOGF("moonshine_load_transcriber_from_files(path=%s, model_arch=%d, "
+         "options=%p, options_count=%" PRIu64 ", moonshine_version=%d)",
+         path, model_arch, (void*)(options), options_count, moonshine_version);
+    for (uint64_t i = 0; i < options_count; i++) {
+      const transcriber_option_t &option = options[i];
+      LOGF("  option[%" PRIu64 "] = %s=%s", i, option.name, option.value);
+    }
+  }
   Transcriber *transcriber = nullptr;
   try {
     TranscriberOptions transcriber_options;
@@ -151,7 +168,23 @@ int32_t moonshine_load_transcriber_from_memory(
     const uint8_t *decoder_model_data, size_t decoder_model_data_size,
     const uint8_t *tokenizer_data, size_t tokenizer_data_size,
     uint32_t model_arch, const transcriber_option_t *options,
-    uint64_t options_count, int32_t /* moonshine_version */) {
+    uint64_t options_count, int32_t moonshine_version) {
+
+  if (log_api_calls) {
+    LOGF("moonshine_load_transcriber_from_memory(encoder_model_data=%p, "
+         "encoder_model_data_size=%zu, decoder_model_data=%p, "
+         "decoder_model_data_size=%zu, tokenizer_data=%p, "
+         "tokenizer_data_size=%zu, model_arch=%d, options=%p, "
+         "options_count=%" PRIu64 ", moonshine_version=%d)",
+         (void*)(encoder_model_data), encoder_model_data_size, (void*)(decoder_model_data),
+         decoder_model_data_size, (void*)(tokenizer_data), tokenizer_data_size,
+         model_arch, (void*)(options), options_count, moonshine_version);
+    for (uint64_t i = 0; i < options_count; i++) {
+      const transcriber_option_t &option = options[i];
+      LOGF("  option[%" PRIu64 "] = %s=%s", i, option.name, option.value);
+    }
+  }
+
   Transcriber *transcriber = nullptr;
   try {
     TranscriberOptions transcriber_options;
@@ -174,12 +207,23 @@ int32_t moonshine_load_transcriber_from_memory(
 }
 
 void moonshine_free_transcriber(int32_t transcriber_handle) {
+  if (log_api_calls) {
+    LOGF("moonshine_free_transcriber(transcriber_handle=%d)",
+         transcriber_handle);
+  }
   free_transcriber_handle(transcriber_handle);
 }
 
 int32_t moonshine_transcribe_without_streaming(
     int32_t transcriber_handle, float *audio_data, uint64_t audio_length,
     int32_t sample_rate, uint32_t flags, struct transcript_t **out_transcript) {
+  if (log_api_calls) {
+    LOGF("moonshine_transcribe_without_streaming(transcriber_handle=%d, "
+         "audio_data=%p, audio_length=%" PRIu64 ", sample_rate=%d, flags=%d, "
+         "out_transcript=%p)",
+         transcriber_handle, (void *)(audio_data), audio_length, sample_rate,
+         flags, (void *)(out_transcript));
+  }
   CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
   try {
     transcriber_map[transcriber_handle]->transcribe_without_streaming(
@@ -191,7 +235,11 @@ int32_t moonshine_transcribe_without_streaming(
   return MOONSHINE_ERROR_NONE;
 }
 
-int32_t moonshine_create_stream(int32_t transcriber_handle, uint32_t) {
+int32_t moonshine_create_stream(int32_t transcriber_handle, uint32_t flags) {
+  if (log_api_calls) {
+    LOGF("moonshine_create_stream(transcriber_handle=%d, flags=%d)",
+         transcriber_handle, flags);
+  }
   CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
   try {
     return transcriber_map[transcriber_handle]->create_stream();
@@ -202,6 +250,10 @@ int32_t moonshine_create_stream(int32_t transcriber_handle, uint32_t) {
 }
 
 int moonshine_free_stream(int32_t transcriber_handle, int32_t stream_handle) {
+  if (log_api_calls) {
+    LOGF("moonshine_free_stream(transcriber_handle=%d, stream_handle=%d)",
+         transcriber_handle, stream_handle);
+  }
   CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
   try {
     transcriber_map[transcriber_handle]->free_stream(stream_handle);
@@ -214,6 +266,10 @@ int moonshine_free_stream(int32_t transcriber_handle, int32_t stream_handle) {
 
 int32_t moonshine_start_stream(int32_t transcriber_handle,
                                int32_t stream_handle) {
+  if (log_api_calls) {
+    LOGF("moonshine_start_stream(transcriber_handle=%d, stream_handle=%d)",
+         transcriber_handle, stream_handle);
+  }
   CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
   try {
     transcriber_map[transcriber_handle]->start_stream(stream_handle);
@@ -226,6 +282,10 @@ int32_t moonshine_start_stream(int32_t transcriber_handle,
 
 int32_t moonshine_stop_stream(int32_t transcriber_handle,
                               int32_t stream_handle) {
+  if (log_api_calls) {
+    LOGF("moonshine_stop_stream(transcriber_handle=%d, stream_handle=%d)",
+         transcriber_handle, stream_handle);
+  }
   CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
   try {
     transcriber_map[transcriber_handle]->stop_stream(stream_handle);
@@ -238,6 +298,9 @@ int32_t moonshine_stop_stream(int32_t transcriber_handle,
 
 const char *
 moonshine_transcript_to_string(const struct transcript_t *transcript) {
+  if (log_api_calls) {
+    LOGF("moonshine_transcript_to_string(transcript=%p)", (void *)(transcript));
+  }
   static std::string description;
   description = Transcriber::transcript_to_string(transcript);
   return description.c_str();
@@ -248,7 +311,14 @@ int32_t moonshine_transcribe_add_audio_to_stream(int32_t transcriber_handle,
                                                  const float *new_audio_data,
                                                  uint64_t audio_length,
                                                  int32_t sample_rate,
-                                                 uint32_t /*flags*/) {
+                                                 uint32_t flags) {
+  if (log_api_calls) {
+    LOGF("moonshine_transcribe_add_audio_to_stream(transcriber_handle=%d, "
+         "stream_handle=%d, new_audio_data=%p, audio_length=%" PRIu64 ", "
+         "sample_rate=%d, flags=%d)",
+         transcriber_handle, stream_handle, (void*)(new_audio_data), audio_length,
+         sample_rate, flags);
+  }
   CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
   try {
     transcriber_map[transcriber_handle]->add_audio_to_stream(
@@ -263,6 +333,11 @@ int32_t moonshine_transcribe_add_audio_to_stream(int32_t transcriber_handle,
 int32_t moonshine_transcribe_stream(int32_t transcriber_handle,
                                     int32_t stream_handle, uint32_t flags,
                                     struct transcript_t **out_transcript) {
+  if (log_api_calls) {
+    LOGF("moonshine_transcribe_stream(transcriber_handle=%d, stream_handle=%d, "
+         "flags=%d, out_transcript=%p)",
+         transcriber_handle, stream_handle, flags, (void *)(out_transcript));
+  }
   CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
   try {
     transcriber_map[transcriber_handle]->transcribe_stream(stream_handle, flags,
