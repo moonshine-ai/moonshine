@@ -11,6 +11,8 @@ public class JNI {
     public static final int MOONSHINE_MODEL_ARCH_TINY_STREAMING = 2;
     public static final int MOONSHINE_MODEL_ARCH_BASE_STREAMING = 3;
 
+    public static final int MOONSHINE_FLAG_FORCE_UPDATE = 1 << 0;
+
     public static native int moonshineGetVersion();
 
     public static native String moonshineErrorToString(int error);
