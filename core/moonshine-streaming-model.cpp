@@ -337,7 +337,7 @@ int MoonshineStreamingModel::load_from_memory(
 #if defined(ANDROID)
 int MoonshineStreamingModel::load_from_assets(const char *model_dir,
                                                const char *tokenizer_path,
-                                               int32_t model_type,
+                                               int32_t /* model_type */,
                                                AAssetManager *assetManager) {
     if (model_dir == nullptr) {
         LOG("Model directory is null\n");
