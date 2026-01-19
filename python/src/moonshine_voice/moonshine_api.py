@@ -36,6 +36,13 @@ class TranscriptC(ctypes.Structure):
         ("line_count", ctypes.c_uint64),
     ]
 
+class TranscriberOptionC(ctypes.Structure):
+    """C structure for transcriber_option_t."""
+
+    _fields_ = [
+        ("name", ctypes.c_char_p),
+        ("value", ctypes.c_char_p),
+    ]
 
 class ModelArch(IntEnum):
     """Model architecture types."""
@@ -150,7 +157,7 @@ class _MoonshineLib:
         lib.moonshine_load_transcriber_from_files.argtypes = [
             ctypes.c_char_p,  # path
             ctypes.c_uint32,  # model_arch
-            ctypes.POINTER(ctypes.c_void_p),  # options (can be None)
+            ctypes.POINTER(TranscriberOptionC),  # options (can be None)
             ctypes.c_uint64,  # options_count
             ctypes.c_int32,  # moonshine_version
         ]
