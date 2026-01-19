@@ -24,8 +24,9 @@ MODEL_INFO = {
     "en": {
         "english_name": "English",
         "models": [
-            {"model_name": "medium-streaming-en", "model_arch": ModelArch.MEDIUM_STREAMING,
-                "download_url": "https://download.moonshine.ai/model/medium-streaming-en/float"},
+            # FIXME: Missing some files for medium-streaming-en, so disabled for now.
+            # {"model_name": "medium-streaming-en", "model_arch": ModelArch.MEDIUM_STREAMING,
+            #     "download_url": "https://download.moonshine.ai/model/medium-streaming-en/float"},
             {"model_name": "base-streaming-en", "model_arch": ModelArch.BASE_STREAMING,
                 "download_url": "https://download.moonshine.ai/model/base-streaming-en/float"},
             {"model_name": "base-en", "model_arch": ModelArch.BASE,
@@ -114,7 +115,9 @@ def get_components_for_model_info(model_info: dict) -> list[str]:
         return [
             "adapter.onnx",
             "cross_kv.onnx",
+            "decoder_kv.onnx",
             "decoder.onnx",
+            "encoder.onnx",
             "frontend.onnx",
             "streaming_config.json",
             "tokenizer.bin"
