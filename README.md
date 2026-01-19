@@ -93,7 +93,16 @@ You'll need a USB microphone plugged in to get audio input, but the Python pip p
 
 TL;DR - When you're working with live speech.
 
-(Moonshine vs Whisper metrics table)
+| Model | WER | MacBook Pro Latency | Linux x86 Latency | iPad | Pixel 9 | Raspberry Pi 5 | Parameters |
+| ----- | --- | ------------------- | ----------------- | ---- | ------- | -------------- | ---------- |
+| Moonshine Medium Streaming | % | 0ms | 0ms | 0ms | 0ms | 0ms | 200m |
+| Whisper Large v3 | % | 0ms | 0ms | 0ms | 0ms | 0ms | 1500m |
+| Moonshine Small Streaming | % | 0ms | 0ms | 0ms | 0ms | 0ms | ? |
+| Whisper Small | % | 0ms | 0ms | 0ms | 0ms | 0ms | 244m |
+| Moonshine Tiny Streaming | % | 0ms | 0ms | 0ms | 0ms | 0ms | 26m |
+| Whisper Tiny | % | 0ms | 0ms | 0ms | 0ms | 0ms | 39m |
+
+*See [benchmarks](#benchmarks) for how these were measured.*
 
 [OpenAI's release of their Whisper family of models]() was a massive step forward for open-source speech to text. They offered a range of sizes, allowing developers to trade off compute and storage space against accuracy to fit their applications. Their biggest models, like Large v3, also gave accuracy scores that were higher than anything available outside of large tech companies like Google or Apple. At Moonshine we were early and enthusiastic adopters of Whisper, and we still remain big fans of the models and the great frameworks like [FasterWhisper](https://github.com/SYSTRAN/faster-whisper) and others that have been built around them.
 
@@ -118,7 +127,7 @@ However we kept encountering applications that needed even lower latencies on ev
  - **Cross-platform library support**. We're building applications ourselves, and needed to be able to deploy these models across Linux, MacOS, Windows, iOS, and Android, as well as use them from languages like Python, Swift, Java, and C++. To support this we architected a portable C++ core library that handles all of the processing, uses OnnxRuntime for good performance across systems, and then built native interfaces for all the required high-level languages. This allows developers to learn one API, and then deploy it almost anywhere they want to run.
  - **Better accuracy than Whisper V3 Large**. On [HuggingFace's OpenASR leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard), our newest streaming model for English, Medium Streaming, achieves a lower word-error rate than the most-accurate Whisper model from OpenAI. This is despite Moonshine's version using 200 million parameters, versus Large v3's 1.5 billion, making it much easier to deploy on the edge.
 
-Hopefully this gives you a good idea of how Moonshine compares to Whisper. We've built the framework and models we wished we'd had when we first started building applications with voice interfaces, and if you're working with live voice inputs, we think you might want to [give Moonshine a try](#quickstart).
+Hopefully this gives you a good idea of how Moonshine compares to Whisper. If you're working with GPUs in the cloud on data in bulk where throughput is most important then Whisper (or Nvidia alternatives like Parakeet) offer advantages like batch processing, but we believe we can't be beat for live speech. We've built the framework and models we wished we'd had when we first started building applications with voice interfaces, so if you're working with live voice inputs, you might want to [give Moonshine a try](#quickstart).
 
 ## Examples
 
