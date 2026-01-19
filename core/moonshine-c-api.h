@@ -99,6 +99,7 @@ extern "C" {
 #define MOONSHINE_MODEL_ARCH_BASE (1)
 #define MOONSHINE_MODEL_ARCH_TINY_STREAMING (2)
 #define MOONSHINE_MODEL_ARCH_BASE_STREAMING (3)
+#define MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING (4)
 
 /* Error codes.                                                            */
 #define MOONSHINE_ERROR_NONE (0)
