@@ -116,7 +116,7 @@ However we kept encountering applications that needed even lower latencies on ev
  - **Cross-platform library support**. We're building applications ourselves, and needed to be able to deploy these models across Linux, MacOS, Windows, iOS, and Android, as well as use them from languages like Python, Swift, Java, and C++. To support this we architected a portable C++ core library that handles all of the processing, uses OnnxRuntime for good performance across systems, and then built native interfaces for all the required high-level languages. This allows developers to learn one API, and then deploy it almost anywhere they want to run.
  - **Better accuracy than Whisper V3 Large**. On [HuggingFace's OpenASR leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard), our newest streaming model for English, Medium Streaming, achieves a lower word-error rate than the most-accurate Whisper model from OpenAI. This is despite Moonshine's version using 200 million parameters, versus Large v3's 1.5 billion, making it much easier to deploy on the edge.
 
-Hopefully this gives you a good idea of how Moonshine compares to Whisper. We've built the framework and models we wished we'd had when we first started building applications with voice interfaces, and if you're working with live voice inputs, we think you might want to give Moonshine a try.
+Hopefully this gives you a good idea of how Moonshine compares to Whisper. We've built the framework and models we wished we'd had when we first started building applications with voice interfaces, and if you're working with live voice inputs, we think you might want to [give Moonshine a try](#quickstart).
 
 ## Examples
 
