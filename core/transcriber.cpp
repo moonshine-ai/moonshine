@@ -19,11 +19,13 @@ const int32_t VALID_MODEL_ARCHS[] = {
     MOONSHINE_MODEL_ARCH_BASE,
     MOONSHINE_MODEL_ARCH_TINY_STREAMING,
     MOONSHINE_MODEL_ARCH_BASE_STREAMING,
+    MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING,
 };
 
 bool is_streaming_model_arch(uint32_t model_arch) {
   return model_arch == MOONSHINE_MODEL_ARCH_TINY_STREAMING ||
-         model_arch == MOONSHINE_MODEL_ARCH_BASE_STREAMING;
+         model_arch == MOONSHINE_MODEL_ARCH_BASE_STREAMING ||
+         model_arch == MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING;
 }
 
 void validate_model_arch(uint32_t model_arch) {

@@ -44,6 +44,7 @@ class ModelArch(IntEnum):
     BASE = 1
     TINY_STREAMING = 2
     BASE_STREAMING = 3
+    MEDIUM_STREAMING = 4
 
 
 @dataclass

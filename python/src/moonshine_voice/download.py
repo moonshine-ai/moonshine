@@ -24,8 +24,14 @@ MODEL_INFO = {
     "en": {
         "english_name": "English",
         "models": [
+            {"model_name": "medium-streaming-en", "model_arch": ModelArch.MEDIUM_STREAMING,
+                "download_url": "https://download.moonshine.ai/model/medium-streaming-en/float"},
+            {"model_name": "base-streaming-en", "model_arch": ModelArch.BASE_STREAMING,
+                "download_url": "https://download.moonshine.ai/model/base-streaming-en/float"},
             {"model_name": "base-en", "model_arch": ModelArch.BASE,
                 "download_url": "https://download.moonshine.ai/model/base-en/quantized/base-en"},
+            {"model_name": "tiny-streaming-en", "model_arch": ModelArch.TINY_STREAMING,
+                "download_url": "https://download.moonshine.ai/model/tiny-streaming-en/float"},
             {"model_name": "tiny-en", "model_arch": ModelArch.TINY,
                 "download_url": "https://download.moonshine.ai/model/tiny-en/quantized/tiny-en"}
         ]
@@ -103,11 +109,22 @@ def supported_languages() -> list[str]:
 
 
 def get_components_for_model_info(model_info: dict) -> list[str]:
-    return [
-        "encoder_model.ort",
-        "decoder_model_merged.ort",
-        "tokenizer.bin"
-    ]
+    model_arch = model_info["model_arch"]
+    if model_arch in [ModelArch.TINY_STREAMING, ModelArch.BASE_STREAMING, ModelArch.MEDIUM_STREAMING]:
+        return [
+            "adapter.onnx",
+            "cross_kv.onnx",
+            "decoder.onnx",
+            "frontend.onnx",
+            "streaming_config.json",
+            "tokenizer.bin"
+        ]
+    else:
+        return [
+            "encoder_model.ort",
+            "decoder_model_merged.ort",
+            "tokenizer.bin"
+        ]
 
 
 def download_model_from_info(model_info: dict) -> tuple[str, ModelArch]:
@@ -145,7 +162,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Model info example")
     parser.add_argument("--language", type=str, default="en",
                         help="Language to use for transcription")
-    parser.add_argument("--model-arch", type=int, default=ModelArch.BASE,
+    parser.add_argument("--model-arch", type=int, default=None,
                         help="Model architecture to use for transcription")
     args = parser.parse_args()
 
