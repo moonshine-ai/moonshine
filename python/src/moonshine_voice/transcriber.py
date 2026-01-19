@@ -12,6 +12,7 @@ from moonshine_voice.moonshine_api import (
     Transcript,
     TranscriptLine,
     TranscriptC,
+    TranscriberOptionC,
 )
 from moonshine_voice.errors import MoonshineError, check_error
 from moonshine_voice.utils import get_model_path, get_assets_path, load_wav_file
@@ -69,7 +70,13 @@ class Transcriber:
     MOONSHINE_HEADER_VERSION = 20000
     MOONSHINE_FLAG_FORCE_UPDATE = 1 << 0
 
-    def __init__(self, model_path: str, model_arch: ModelArch = ModelArch.BASE, update_interval: float = 0.5):
+    def __init__(
+        self,
+        model_path: str,
+        model_arch: ModelArch = ModelArch.BASE,
+        update_interval: float = 0.5,
+        options: dict = None,
+    ):
         """
         Initialize a transcriber.
 
@@ -87,11 +94,25 @@ class Transcriber:
 
         # Load the transcriber
         model_path_bytes = model_path.encode("utf-8")
+        if options is not None:
+            options_count = len(options)
+            # Create a ctypes array from the options list
+            options_array = (TranscriberOptionC * options_count)(
+                *[
+                    TranscriberOptionC(
+                        name=name.encode("utf-8"), value=value.encode("utf-8")
+                    )
+                    for name, value in options.items()
+                ]
+            )
+        else:
+            options_array = None
+            options_count = 0
         handle = self._lib.moonshine_load_transcriber_from_files(
             model_path_bytes,
             model_arch.value,
-            None,  # options
-            0,  # options_count
+            options_array,
+            options_count,
             self.MOONSHINE_HEADER_VERSION,
         )
 
@@ -180,8 +201,7 @@ class Transcriber:
             # Extract text
             text = ""
             if line_c.text:
-                text = ctypes.string_at(line_c.text).decode(
-                    "utf-8", errors="ignore")
+                text = ctypes.string_at(line_c.text).decode("utf-8", errors="ignore")
 
             # Extract audio data if available
             audio_data = None
@@ -321,8 +341,7 @@ class Stream:
 
     def stop(self):
         """Stop the stream."""
-        error = self._lib.moonshine_stop_stream(
-            self._transcriber._handle, self._handle)
+        error = self._lib.moonshine_stop_stream(self._transcriber._handle, self._handle)
         check_error(error)
         # There may be some audio left in the stream, so we need to transcribe it to
         # get the final transcript and emit events.
@@ -354,8 +373,7 @@ class Stream:
         """Update the transcription from the stream."""
         out_transcript = ctypes.POINTER(TranscriptC)()
         error = self._lib.moonshine_transcribe_stream(
-            self._transcriber._handle, self._handle, flags, ctypes.byref(
-                out_transcript)
+            self._transcriber._handle, self._handle, flags, ctypes.byref(out_transcript)
         )
         check_error(error)
         transcript = self._transcriber._parse_transcript(out_transcript)
@@ -394,11 +412,9 @@ class Stream:
             if line.is_updated and not line.is_new and not line.is_complete:
                 self._emit(LineUpdated(line=line, stream_handle=self._handle))
             if line.has_text_changed:
-                self._emit(LineTextChanged(
-                    line=line, stream_handle=self._handle))
+                self._emit(LineTextChanged(line=line, stream_handle=self._handle))
             if line.is_complete and line.is_updated:
-                self._emit(LineCompleted(
-                    line=line, stream_handle=self._handle))
+                self._emit(LineCompleted(line=line, stream_handle=self._handle))
 
     def _emit(self, event: TranscriptEvent) -> None:
         """Emit an event to all registered listeners."""
@@ -423,8 +439,7 @@ class Stream:
                 # Don't let listener errors break the stream
                 # Emit an error event if possible, but don't recurse
                 try:
-                    error_event = Error(
-                        line=None, stream_handle=self._handle, error=e)
+                    error_event = Error(line=None, stream_handle=self._handle, error=e)
                     # Only emit to other listeners to avoid recursion
                     for other_listener in self._listeners:
                         if other_listener != listener:
@@ -446,8 +461,7 @@ class Stream:
     def close(self):
         """Free the stream resources."""
         if self._handle is not None:
-            self._lib.moonshine_free_stream(
-                self._transcriber._handle, self._handle)
+            self._lib.moonshine_free_stream(self._transcriber._handle, self._handle)
             self._handle = None
         self.remove_all_listeners()
 
@@ -460,19 +474,29 @@ class Stream:
         self.close()
 
 
-#/Users/petewarden/Library/Containers/ai.moonshine.opennotetaker/Data/Documents/system_audio_2026-01-08_16-53-55.wav
-
 if __name__ == "__main__":
     import argparse
     from moonshine_voice import get_model_for_language
-    
+
     parser = argparse.ArgumentParser(description="Model info example")
-    parser.add_argument("--language", type=str, default=None,
-                        help="Language to use for transcription")
-    parser.add_argument("--model-arch", type=int, default=None,
-                        help="Model architecture to use for transcription")
-    parser.add_argument("--wav-path", type=str, default=None,
-                        help="Path to the WAV file to transcribe")
+    parser.add_argument(
+        "--language", type=str, default=None, help="Language to use for transcription"
+    )
+    parser.add_argument(
+        "--model-arch",
+        type=int,
+        default=None,
+        help="Model architecture to use for transcription",
+    )
+    parser.add_argument(
+        "--wav-path", type=str, default=None, help="Path to the WAV file to transcribe"
+    )
+    parser.add_argument(
+        "--options",
+        type=str,
+        default=None,
+        help="Options to pass to the transcriber. Should be in the format of key=value,key2=value2,...",
+    )
     args = parser.parse_args()
 
     if args.language is None:
@@ -480,14 +504,23 @@ if __name__ == "__main__":
         model_arch = ModelArch.TINY
     else:
         model_path, model_arch = get_model_for_language(
-            wanted_language=args.language, wanted_model_arch=args.model_arch)
+            wanted_language=args.language, wanted_model_arch=args.model_arch
+        )
 
     if args.wav_path is None:
         wav_path = os.path.join(get_assets_path(), "two_cities.wav")
     else:
         wav_path = args.wav_path
 
-    transcriber = Transcriber(model_path=model_path, model_arch=model_arch)
+    options = {}
+    if args.options is not None:
+        for option in args.options.split(","):
+            key, value = option.split("=")
+            options[key] = value
+
+    transcriber = Transcriber(
+        model_path=model_path, model_arch=model_arch, options=options
+    )
 
     transcriber.start()
 
@@ -511,7 +544,7 @@ if __name__ == "__main__":
     chunk_duration = 0.1
     chunk_size = int(chunk_duration * sample_rate)
     for i in range(0, len(audio_data), chunk_size):
-        chunk = audio_data[i: i + chunk_size]
+        chunk = audio_data[i : i + chunk_size]
         transcriber.add_audio(chunk, sample_rate)
 
     transcriber.stop()
