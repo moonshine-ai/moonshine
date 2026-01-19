@@ -79,9 +79,8 @@ struct MoonshineStreamingModel {
     OrtSession *frontend_session;
     OrtSession *encoder_session;
     OrtSession *adapter_session;
-    OrtSession *decoder_session;
     
-    // Optional sessions for optimized decoding (if cross_kv.onnx/decoder_kv.onnx exist)
+    // Optimized decoding sessions (cross_kv.onnx/decoder_kv.onnx)
     OrtSession *cross_kv_session;    // Computes cross-attention K/V from memory
     OrtSession *decoder_kv_session;  // Decoder that takes precomputed cross K/V
     
@@ -97,8 +96,6 @@ struct MoonshineStreamingModel {
     size_t encoder_mmapped_data_size = 0;
     const char *adapter_mmapped_data = nullptr;
     size_t adapter_mmapped_data_size = 0;
-    const char *decoder_mmapped_data = nullptr;
-    size_t decoder_mmapped_data_size = 0;
     
     std::string last_result;
     
@@ -110,7 +107,8 @@ struct MoonshineStreamingModel {
     int load_from_memory(const uint8_t *frontend_model_data, size_t frontend_model_data_size,
                          const uint8_t *encoder_model_data, size_t encoder_model_data_size,
                          const uint8_t *adapter_model_data, size_t adapter_model_data_size,
-                         const uint8_t *decoder_model_data, size_t decoder_model_data_size,
+                         const uint8_t *cross_kv_model_data, size_t cross_kv_model_data_size,
+                         const uint8_t *decoder_kv_model_data, size_t decoder_kv_model_data_size,
                          const uint8_t *tokenizer_data, size_t tokenizer_data_size,
                          const MoonshineStreamingConfig& config, int32_t model_type);
 
@@ -161,23 +159,13 @@ private:
     int load_config(const char *config_path);
     int load_config_from_string(const std::string& json);
     
-    /* Internal helper for running decoder with multiple tokens (uses memory) */
-    int run_decoder_internal(MoonshineStreamingState *state, 
-                             const std::vector<int64_t>& tokens,
-                             std::vector<float>& logits_out);
-    
-    /* Internal helper that uses precomputed cross K/V (more efficient if available) */
+    /* Internal helper that uses precomputed cross K/V */
     int run_decoder_with_cross_kv(MoonshineStreamingState *state,
                                   const std::vector<int64_t>& tokens,
                                   std::vector<float>& logits_out);
     
     /* Compute cross-attention K/V from current memory state */
     int compute_cross_kv(MoonshineStreamingState *state);
-    
-    /* Check if optimized cross K/V path is available */
-    bool has_cross_kv_path() const { 
-        return cross_kv_session != nullptr && decoder_kv_session != nullptr; 
-    }
 };
 
 #endif
