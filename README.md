@@ -93,6 +93,8 @@ You'll need a USB microphone plugged in to get audio input, but the Python pip p
 
 TL;DR - When you're working with live speech.
 
+(Moonshine vs Whisper metrics table)
+
 [OpenAI's release of their Whisper family of models]() was a massive step forward for open-source speech to text. They offered a range of sizes, allowing developers to trade off compute and storage space against accuracy to fit their applications. Their biggest models, like Large v3, also gave accuracy scores that were higher than anything available outside of large tech companies like Google or Apple. At Moonshine we were early and enthusiastic adopters of Whisper, and we still remain big fans of the models and the great frameworks like [FasterWhisper](https://github.com/SYSTRAN/faster-whisper) and others that have been built around them.
 
 However, as we built applications that needed a live voice interface we found we needed features that weren't available through Whisper:
