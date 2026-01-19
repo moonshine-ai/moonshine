@@ -10,6 +10,14 @@ pip install moonshine-voice
 
 ## Quick Start
 
+```
+# Listens to the microphone, logging to the console when there are 
+# speech updates.
+python -m moonshine_voice.mic_transcriber
+```
+
+## Example
+
 ```python
 """Transcribes live audio from the default microphone"""
 import time

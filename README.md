@@ -6,9 +6,7 @@
 
 - [Quickstart](#quickstart)
 - [When should you choose Moonshine over Whisper?](#when-should-you-choose-moonshine-over-whisper)
-- [Examples](#examples)
 - [Using the Library](#using-the-library)
-- [Adding the Library to your own App](#adding-the-library-to-your-own-app)
 - [Downloading Models](#downloading-models)
 - [Benchmarking](#benchmarking)
 - [Roadmap](#roadmap)
@@ -127,13 +125,26 @@ However we kept encountering applications that needed even lower latencies on ev
 
 Hopefully this gives you a good idea of how Moonshine compares to Whisper. If you're working with GPUs in the cloud on data in bulk where throughput is most important then Whisper (or Nvidia alternatives like Parakeet) offer advantages like batch processing, but we believe we can't be beat for live speech. We've built the framework and models we wished we'd had when we first started building applications with voice interfaces, so if you're working with live voice inputs, you might want to [give Moonshine a try](#quickstart).
 
-## Examples
-
-TK
-
 ## Using the Library
 
 The Moonshine API is designed to take care of the details around capturing and transcribing live speech, giving application developers a high-level API focused on actionable events. I'll use Python to illustrate how it works, but the API is consistent across all the supported languages.
+
+- [Concepts](#concepts)
+- [Getting Started](#getting-started)
+- [Examples](#examples)
+- [Adding the Library to your own App](#adding-the-library-to-your-own-app)
+- [Python](#python-1)
+- [iOS or MacOS](#ios-or-macos)
+- [Android](#android-1)
+- [Windows](#windows-1)
+- [Debugging](#debugging)
+  - [Console Logs](#console-logs)
+  - [Input Saving](#input-saving)
+  - [API Call Logging](#api-call-logging)
+- [Building from Source](#building-from-source)
+  - [Cmake](#cmake)
+  - [Language Bindings](#language-bindings)
+  - [Porting](#porting)
 
 ### Concepts
 
@@ -218,6 +229,38 @@ By calling `start()` and `stop()` on a transcriber (or stream) we're beginning a
 
 The transcriber class also offers a simpler `transcribe_without_streaming()` method, for when you have an array of data from the past that you just want to analyse, such as a file or recording.
 
+### Examples
+
+The [`examples`](examples/) folder has code samples organized by platform. We offer these for [Android](examples/android/), [portable C++](examples/c++/), [iOS](examples/ios/), [MacOS](examples/macos/), [Python](examples/python), and [Windows](examples/windows/). We have tried to use the most common build system for each platform, so Android uses Android Studio and Maven, iOS and MacOS use Xcode and Swift, while Windows uses Visual Studio.
+
+The examples usually include one minimal project that just creates a transcriber and then feeds it data from a WAV file, and another that's pulling audio from a microphone using the platform's default framework for accessing audio devices.
+
+### Adding the Library to your own App
+
+We distribute the library through the most widely-used package managers for each platform. Here's how you can use these to add the framework to an existing project on different systems.
+
+### Python
+
+The Python package is [hosted on PyPi](https://pypi.org/project/moonshine-voice/), so all you should need to do to install it is `pip install moonshine-voice`, and then `import moonshine_voice` in your project.
+
+### iOS or MacOS
+
+For iOS we use the Swift Package Manager, with [an auto-updated GitHub repository](https://github.com/moonshine-ai/moonshine-swift/) holding each version. To use this right-click on the file view sidebar in Xcode and choose "Add Package Dependencies..." from the menu. A dialog should open up, paste `https://github.com/moonshine-ai/moonshine-swift/` into the top search box and you should see `moonshine-swift`. Select it and choose "Add Package", and it should be added to your project. You should now be able to `import MoonshineVoice` and use the library. You will need to add any model files you use to your app bundle and ensure they're copied during the deployment phase, so they can be accessed on-device.
+
+For reference purposes you can find Xcode projects with these changes applied in [`examples/ios/Transcriber`](examples/ios/Transcriber) and [`examples/macos/BasicTranscription`](examples/macos/BasicTranscription/).
+
+### Android
+
+On Android we publish [the package to Maven](https://mvnrepository.com/artifact/ai.moonshine/moonshine-voice). To include it in your project using Android Studio and Gradle, first add the version number you want to the `gradle/libs.versions.toml` file by inserting a line in the `[versions]` section, for example `moonshineVoice = "0.0.35"`. Then in the `[libraries]` part, add a reference to the package: `moonshine-voice = { group = "ai.moonshine", name = "moonshine-voice", version.ref = "moonshineVoice" }`.
+
+Finally, in your `app/build.gradle.kts` add the library to the `dependencies` list: `implementation(libs.moonshine.voice)`. You can find a working example of all these changes in [`examples/android/Transcriber`].
+
+### Windows
+
+We couldn't find a single package manager that is used by most Windows developers, so instead we've made the raw library and headers available as a download. The script in [`examples/windows/cli-transcriber/download-lib.bat`](examples/windows/cli-transcriber/download-lib.bat) will fetch these for you. You'll see an `include` folder that you should add to the include search paths in your project settings, and a `lib` directory that you should add to the include search paths. Then add all of the library files in the `lib` folder to your project's linker dependencies.
+
+The recommended interface to use on Windows is the C++ language binding. This is a header-only library that offers a higher-level API than the underlying C version. You can `#include "moonshine-cpp.h"` to access Moonshine from your C++ code. If you want to see an example of all these changes together, take a look at [`examples/windows/cli-transcriber`](examples/windows/cli-transcriber).
+
 ### Debugging
 
 #### Console Logs
@@ -264,30 +307,13 @@ After that completes you should have a set of binary executables you can run on 
 
 There are various scripts for building for different platforms and languages, but to see examples of how to build for all of the supported systems you should look at [`scripts/build-all-platforms.sh`](scripts/build-all-platforms.sh). This is the script we call for every release, and it builds all of the artifacts we upload to the various package manager systems.
 
+The different platforms and languages have a layer on top of the C interfaces to enable idiomatic use of the library within the different environments. The major systems have their own top-level folders in this repo, for example: [`python`](python/), [`android`](android/), and [`swift`](swift/) for iOS and MacOS. This is where you'll find the code that calls the underlying core library routines, and handles the event system for each platform.
+
 #### Porting
 
+If you have a device that isn't supported, you can try [building using cmake](#cmake) on your system. The only major dependency that the C++ core library has is [the Onnx Runtime](https://github.com/microsoft/onnxruntime). We include [pre-built binary library files](core/third-party/onnxruntime/lib/) for all our supported systems, but you'll need to find or build your own version if the libraries we offer don't cover your use case.
 
-## Adding the Library to your own App
-
-### iOS
-
-TK
-
-### Android
-
-TK
-
-### Linux
-
-TK
-
-### MacOS
-
-TK
-
-### Windows
-
-TK
+If you want to call this library from a language we don't support, then you should take a look at [the C interface bindings](core/moonshine-c-api.h). Most languages have some way to call into C functions, so you can use these and the binding examples for other languages to guide your implementation.
 
 ## Downloading Models
 
@@ -332,13 +358,26 @@ cmake --build . --config Release
 ./benchmark
 ```
 
-This will report the absolute time taken to process the audio, and what percentage of the audio file's duration that is. This percentage is helpful because it approximates how much of a compute load the model will be on your hardware. For example if it shows 20% then that means the speech processing will take a fifth of the compute time when running in your application, leaving 80% for the rest of your code.
+This will report the absolute time taken to process the audio, what percentage of the audio file's duration that is, and the average latency for a response. 
 
-By default it uses the Tiny English model that's embedded in the framework, but you can pass in the `--model-path` and `--model-arch` parameters to choose [one that you've downloaded](#downloading-models).
+The percentage is helpful because it approximates how much of a compute load the model will be on your hardware. For example, if it shows 20% then that means the speech processing will take a fifth of the compute time when running in your application, leaving 80% for the rest of your code.
+
+The latency metric needs a bit of explanation. What most applications care about is how soon they are notified about a phrase after the user has finished talking, since this determines how fast the product can respond. As with any user interface, the time between speech ending and the app doing something determines how responsive the voice interface feels, with a goal of keeping it below 200ms. The latency figure logged here is the average time between when the library determines the user has stopped talking and the delivery of the final transcript of that phrase to the client. This is where streaming models have the most impact, since they do a lot of their work upfront, while speech is still happening, so they can usually finish very quickly. 
+
+By default the benchmark binary uses the Tiny English model that's embedded in the framework, but you can pass in the `--model-path` and `--model-arch` parameters to choose [one that you've downloaded](#downloading-models).
 
 You can also choose how often the transcript should be updated using the `--transcription-interval` argument. This defaults to 0.5 seconds, but the right value will depend on how fast your application needs updates. Longer intervals reduce the compute required a bit, at the cost of slower updates.
 
+For platforms that support Python, you can run the [`scripts/run-benchmarks.py`](scripts/run-benchmarks.py) script which will evaluate similar metrics, with the advantage that it can also download the models so you don't need to worry about path handling.
+
 ## Roadmap
+
+This library is in active development, and we aim to implement:
+
+ - More languages.
+ - More streaming models.
+ - Speech understanding for command recognition and other voice interface triggers.
+ - Speaker identification (aka diarization).
 
 ## Acknowledgements
 
