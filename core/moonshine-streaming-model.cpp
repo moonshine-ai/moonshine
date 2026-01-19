@@ -138,7 +138,7 @@ void MoonshineStreamingState::reset(const MoonshineStreamingConfig& cfg) {
 
 MoonshineStreamingModel::MoonshineStreamingModel()
     : frontend_session(nullptr), encoder_session(nullptr),
-      adapter_session(nullptr), decoder_session(nullptr),
+      adapter_session(nullptr),
       cross_kv_session(nullptr), decoder_kv_session(nullptr),
       tokenizer(nullptr) {
     ort_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
@@ -164,7 +164,6 @@ MoonshineStreamingModel::~MoonshineStreamingModel() {
     if (frontend_session) ort_api->ReleaseSession(frontend_session);
     if (encoder_session) ort_api->ReleaseSession(encoder_session);
     if (adapter_session) ort_api->ReleaseSession(adapter_session);
-    if (decoder_session) ort_api->ReleaseSession(decoder_session);
     if (cross_kv_session) ort_api->ReleaseSession(cross_kv_session);
     if (decoder_kv_session) ort_api->ReleaseSession(decoder_kv_session);
     delete ort_allocator;
@@ -178,9 +177,6 @@ MoonshineStreamingModel::~MoonshineStreamingModel() {
     }
     if (adapter_mmapped_data) {
         munmap(const_cast<char *>(adapter_mmapped_data), adapter_mmapped_data_size);
-    }
-    if (decoder_mmapped_data) {
-        munmap(const_cast<char *>(decoder_mmapped_data), decoder_mmapped_data_size);
     }
 #endif
 }
@@ -213,7 +209,6 @@ int MoonshineStreamingModel::load(const char *model_dir, const char *tokenizer_p
     std::string frontend_path = append_path_component(model_dir, "frontend.onnx");
     std::string encoder_path = append_path_component(model_dir, "encoder.onnx");
     std::string adapter_path = append_path_component(model_dir, "adapter.onnx");
-    std::string decoder_path = append_path_component(model_dir, "decoder.onnx");
     std::string config_path = append_path_component(model_dir, "streaming_config.json");
 
     // Load config
@@ -235,13 +230,7 @@ int MoonshineStreamingModel::load(const char *model_dir, const char *tokenizer_p
         &adapter_session, &adapter_mmapped_data, &adapter_mmapped_data_size));
     RETURN_ON_NULL(adapter_session);
 
-    RETURN_ON_ERROR(ort_session_from_path(
-        ort_api, ort_env, ort_session_options, decoder_path.c_str(),
-        &decoder_session, &decoder_mmapped_data, &decoder_mmapped_data_size));
-    RETURN_ON_NULL(decoder_session);
-
-    // Optionally load cross_kv and decoder_kv sessions (for more efficient decoding)
-    // These are optional - if not present, we use the standard decoder path
+    // Load cross_kv and decoder_kv sessions (required for decoding)
     std::string cross_kv_path = append_path_component(model_dir, "cross_kv.onnx");
     std::string decoder_kv_path = append_path_component(model_dir, "decoder_kv.onnx");
     
@@ -251,44 +240,26 @@ int MoonshineStreamingModel::load(const char *model_dir, const char *tokenizer_p
     if (std::ifstream(cross_kv_ort).good()) cross_kv_path = cross_kv_ort;
     if (std::ifstream(decoder_kv_ort).good()) decoder_kv_path = decoder_kv_ort;
     
-    // Load cross_kv if available
-    if (std::ifstream(cross_kv_path).good()) {
+    // Load cross_kv (required)
+    {
         const char* cross_kv_mmap = nullptr;
         size_t cross_kv_mmap_size = 0;
-        int err = ort_session_from_path(
+        RETURN_ON_ERROR(ort_session_from_path(
             ort_api, ort_env, ort_session_options, cross_kv_path.c_str(),
-            &cross_kv_session, &cross_kv_mmap, &cross_kv_mmap_size);
-        if (err != 0 || cross_kv_session == nullptr) {
-            LOG("Warning: Failed to load cross_kv session, will use standard decoder path\n");
-            cross_kv_session = nullptr;
-        } else {
-            LOGF("Loaded cross_kv session from %s\n", cross_kv_path.c_str());
-        }
+            &cross_kv_session, &cross_kv_mmap, &cross_kv_mmap_size));
+        RETURN_ON_NULL(cross_kv_session);
+        LOGF("Loaded cross_kv session from %s\n", cross_kv_path.c_str());
     }
     
-    // Load decoder_kv if available (only useful if cross_kv is also loaded)
-    if (cross_kv_session && std::ifstream(decoder_kv_path).good()) {
+    // Load decoder_kv (required)
+    {
         const char* decoder_kv_mmap = nullptr;
         size_t decoder_kv_mmap_size = 0;
-        int err = ort_session_from_path(
+        RETURN_ON_ERROR(ort_session_from_path(
             ort_api, ort_env, ort_session_options, decoder_kv_path.c_str(),
-            &decoder_kv_session, &decoder_kv_mmap, &decoder_kv_mmap_size);
-        if (err != 0 || decoder_kv_session == nullptr) {
-            LOG("Warning: Failed to load decoder_kv session, will use standard decoder path\n");
-            decoder_kv_session = nullptr;
-            // Also clear cross_kv since we need both
-            if (cross_kv_session) {
-                ort_api->ReleaseSession(cross_kv_session);
-                cross_kv_session = nullptr;
-            }
-        } else {
-            LOGF("Loaded decoder_kv session from %s\n", decoder_kv_path.c_str());
-        }
-    } else if (cross_kv_session && !std::ifstream(decoder_kv_path).good()) {
-        // Have cross_kv but no decoder_kv - can't use optimized path
-        LOG("Warning: cross_kv.onnx found but decoder_kv.onnx missing, using standard decoder path\n");
-        ort_api->ReleaseSession(cross_kv_session);
-        cross_kv_session = nullptr;
+            &decoder_kv_session, &decoder_kv_mmap, &decoder_kv_mmap_size));
+        RETURN_ON_NULL(decoder_kv_session);
+        LOGF("Loaded decoder_kv session from %s\n", decoder_kv_path.c_str());
     }
 
     // Load tokenizer
@@ -302,7 +273,8 @@ int MoonshineStreamingModel::load_from_memory(
     const uint8_t *frontend_model_data, size_t frontend_model_data_size,
     const uint8_t *encoder_model_data, size_t encoder_model_data_size,
     const uint8_t *adapter_model_data, size_t adapter_model_data_size,
-    const uint8_t *decoder_model_data, size_t decoder_model_data_size,
+    const uint8_t *cross_kv_model_data, size_t cross_kv_model_data_size,
+    const uint8_t *decoder_kv_model_data, size_t decoder_kv_model_data_size,
     const uint8_t *tokenizer_data, size_t tokenizer_data_size,
     const MoonshineStreamingConfig& in_config, int32_t /* model_type */) {
     
@@ -324,9 +296,14 @@ int MoonshineStreamingModel::load_from_memory(
     RETURN_ON_NULL(adapter_session);
 
     RETURN_ON_ERROR(ort_session_from_memory(
-        ort_api, ort_env, ort_session_options, decoder_model_data, decoder_model_data_size,
-        &decoder_session));
-    RETURN_ON_NULL(decoder_session);
+        ort_api, ort_env, ort_session_options, cross_kv_model_data, cross_kv_model_data_size,
+        &cross_kv_session));
+    RETURN_ON_NULL(cross_kv_session);
+
+    RETURN_ON_ERROR(ort_session_from_memory(
+        ort_api, ort_env, ort_session_options, decoder_kv_model_data, decoder_kv_model_data_size,
+        &decoder_kv_session));
+    RETURN_ON_NULL(decoder_kv_session);
 
     tokenizer = new BinTokenizer(tokenizer_data, tokenizer_data_size);
     RETURN_ON_NULL(tokenizer);
@@ -348,7 +325,8 @@ int MoonshineStreamingModel::load_from_assets(const char *model_dir,
     std::string frontend_path = append_path_component(model_dir, "frontend.onnx");
     std::string encoder_path = append_path_component(model_dir, "encoder.onnx");
     std::string adapter_path = append_path_component(model_dir, "adapter.onnx");
-    std::string decoder_path = append_path_component(model_dir, "decoder.onnx");
+    std::string cross_kv_path = append_path_component(model_dir, "cross_kv.onnx");
+    std::string decoder_kv_path = append_path_component(model_dir, "decoder_kv.onnx");
     std::string config_path = append_path_component(model_dir, "streaming_config.json");
 
     // Load config from asset
@@ -379,10 +357,20 @@ int MoonshineStreamingModel::load_from_assets(const char *model_dir,
         &adapter_session, &adapter_mmapped_data, &adapter_mmapped_data_size));
     RETURN_ON_NULL(adapter_session);
 
+    // Load cross_kv and decoder_kv sessions (required for decoding)
+    const char* cross_kv_mmap = nullptr;
+    size_t cross_kv_mmap_size = 0;
     RETURN_ON_ERROR(ort_session_from_asset(
-        ort_api, ort_env, ort_session_options, assetManager, decoder_path.c_str(),
-        &decoder_session, &decoder_mmapped_data, &decoder_mmapped_data_size));
-    RETURN_ON_NULL(decoder_session);
+        ort_api, ort_env, ort_session_options, assetManager, cross_kv_path.c_str(),
+        &cross_kv_session, &cross_kv_mmap, &cross_kv_mmap_size));
+    RETURN_ON_NULL(cross_kv_session);
+
+    const char* decoder_kv_mmap = nullptr;
+    size_t decoder_kv_mmap_size = 0;
+    RETURN_ON_ERROR(ort_session_from_asset(
+        ort_api, ort_env, ort_session_options, assetManager, decoder_kv_path.c_str(),
+        &decoder_kv_session, &decoder_kv_mmap, &decoder_kv_mmap_size));
+    RETURN_ON_NULL(decoder_kv_session);
 
     tokenizer = new BinTokenizer(tokenizer_path, assetManager);
     RETURN_ON_NULL(tokenizer);
@@ -697,123 +685,6 @@ int MoonshineStreamingModel::encode(MoonshineStreamingState *state,
 }
 
 /* ============================================================================
- * Internal decoder helper - runs decoder with multiple tokens
- * ============================================================================ */
-
-int MoonshineStreamingModel::run_decoder_internal(MoonshineStreamingState *state,
-                                                   const std::vector<int64_t>& tokens,
-                                                   std::vector<float>& logits_out) {
-    int token_len = static_cast<int>(tokens.size());
-    if (token_len == 0) {
-        return 1;
-    }
-    
-    // Token input
-    std::vector<int64_t> token_shape = {1, static_cast<int64_t>(token_len)};
-    std::vector<int64_t> token_data(tokens.begin(), tokens.end());
-
-    OrtValue* token_tensor = nullptr;
-    RETURN_ON_ORT_ERROR(ort_api, ort_api->CreateTensorWithDataAsOrtValue(
-        ort_memory_info, token_data.data(), token_data.size() * sizeof(int64_t),
-        token_shape.data(), token_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64,
-        &token_tensor));
-
-    // Memory input
-    std::vector<int64_t> memory_shape = {1, state->memory_len, config.decoder_dim};
-
-    OrtValue* memory_tensor = nullptr;
-    RETURN_ON_ORT_ERROR(ort_api, ort_api->CreateTensorWithDataAsOrtValue(
-        ort_memory_info, state->memory.data(), state->memory.size() * sizeof(float),
-        memory_shape.data(), memory_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT,
-        &memory_tensor));
-
-    // KV cache
-    int cache_len = state->cache_seq_len;
-    std::vector<int64_t> cache_shape = {config.depth, 1, config.nheads, cache_len, config.head_dim};
-    size_t kv_size = static_cast<size_t>(config.depth) * config.nheads * cache_len * config.head_dim;
-
-    // Initialize empty cache if needed
-    if (state->k_self.size() != kv_size) {
-        state->k_self.resize(kv_size, 0.0f);
-        state->v_self.resize(kv_size, 0.0f);
-    }
-
-    OrtValue* k_self_tensor = nullptr;
-    RETURN_ON_ORT_ERROR(ort_api, ort_api->CreateTensorWithDataAsOrtValue(
-        ort_memory_info, state->k_self.data(), state->k_self.size() * sizeof(float),
-        cache_shape.data(), cache_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT,
-        &k_self_tensor));
-
-    OrtValue* v_self_tensor = nullptr;
-    RETURN_ON_ORT_ERROR(ort_api, ort_api->CreateTensorWithDataAsOrtValue(
-        ort_memory_info, state->v_self.data(), state->v_self.size() * sizeof(float),
-        cache_shape.data(), cache_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT,
-        &v_self_tensor));
-
-    // Run decoder
-    const char* input_names[] = {"token", "memory", "k_self", "v_self"};
-    const char* output_names[] = {"logits", "out_k_self", "out_v_self", "out_k_cross", "out_v_cross"};
-
-    OrtValue* inputs[] = {token_tensor, memory_tensor, k_self_tensor, v_self_tensor};
-    OrtValue* outputs[5] = {nullptr};
-
-    OrtStatus* status = ort_api->Run(
-        decoder_session, nullptr,
-        input_names, inputs, 4,
-        output_names, 5, outputs
-    );
-
-    // Release inputs
-    for (int i = 0; i < 4; i++) {
-        ort_api->ReleaseValue(inputs[i]);
-    }
-
-    if (status != nullptr) {
-        LOG_ORT_ERROR(ort_api, status);
-        return 1;
-    }
-
-    // Copy logits for all positions [1, token_len, vocab_size]
-    float* logits_data = nullptr;
-    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(outputs[0], (void**)&logits_data));
-    
-    size_t total_logits = token_len * config.vocab_size;
-    logits_out.resize(total_logits);
-    memcpy(logits_out.data(), logits_data, total_logits * sizeof(float));
-
-    // Update KV cache
-    OrtTensorTypeAndShapeInfo* k_info = nullptr;
-    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorTypeAndShape(outputs[1], &k_info));
-    size_t num_dims = 0;
-    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetDimensionsCount(k_info, &num_dims));
-    std::vector<int64_t> k_shape(num_dims);
-    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetDimensions(k_info, k_shape.data(), num_dims));
-    ort_api->ReleaseTensorTypeAndShapeInfo(k_info);
-
-    int new_cache_len = static_cast<int>(k_shape[3]);
-    size_t new_cache_size = static_cast<size_t>(config.depth) * config.nheads * new_cache_len * config.head_dim;
-
-    state->k_self.resize(new_cache_size);
-    state->v_self.resize(new_cache_size);
-
-    float* k_out_data = nullptr;
-    float* v_out_data = nullptr;
-    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(outputs[1], (void**)&k_out_data));
-    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(outputs[2], (void**)&v_out_data));
-
-    memcpy(state->k_self.data(), k_out_data, new_cache_size * sizeof(float));
-    memcpy(state->v_self.data(), v_out_data, new_cache_size * sizeof(float));
-    state->cache_seq_len = new_cache_len;
-
-    // Release outputs
-    for (int i = 0; i < 5; i++) {
-        ort_api->ReleaseValue(outputs[i]);
-    }
-
-    return 0;
-}
-
-/* ============================================================================
  * Compute cross-attention K/V from memory (for optimized decoding)
  * ============================================================================ */
 
@@ -1028,7 +899,7 @@ int MoonshineStreamingModel::run_decoder_with_cross_kv(MoonshineStreamingState *
 }
 
 /* ============================================================================
- * Single-token decode step (for backward compatibility with transcriber)
+ * Single-token decode step
  * ============================================================================ */
 
 int MoonshineStreamingModel::decode_step(MoonshineStreamingState *state,
@@ -1054,23 +925,16 @@ int MoonshineStreamingModel::decode_step(MoonshineStreamingState *state,
     
     int err;
     
-    // Use optimized cross K/V path if available
-    if (has_cross_kv_path()) {
-        // Compute cross K/V if not valid
-        if (!state->cross_kv_valid) {
-            err = compute_cross_kv(state);
-            if (err != 0) {
-                LOG("Failed to compute cross K/V, falling back to standard path\n");
-                err = run_decoder_internal(state, tokens, logits);
-            } else {
-                err = run_decoder_with_cross_kv(state, tokens, logits);
-            }
-        } else {
-            err = run_decoder_with_cross_kv(state, tokens, logits);
+    // Compute cross K/V if not valid
+    if (!state->cross_kv_valid) {
+        err = compute_cross_kv(state);
+        if (err != 0) {
+            LOG("Failed to compute cross K/V\n");
+            return err;
         }
-    } else {
-        err = run_decoder_internal(state, tokens, logits);
     }
+    
+    err = run_decoder_with_cross_kv(state, tokens, logits);
     
     if (err != 0) {
         return err;
@@ -1082,7 +946,7 @@ int MoonshineStreamingModel::decode_step(MoonshineStreamingState *state,
 }
 
 /* ============================================================================
- * Multi-token decode step (new decoder feature)
+ * Multi-token decode step
  * ============================================================================ */
 
 int MoonshineStreamingModel::decode_tokens(MoonshineStreamingState *state,
@@ -1115,22 +979,16 @@ int MoonshineStreamingModel::decode_tokens(MoonshineStreamingState *state,
     std::vector<float> logits;
     int err;
     
-    // Use optimized cross K/V path if available
-    if (has_cross_kv_path()) {
-        if (!state->cross_kv_valid) {
-            err = compute_cross_kv(state);
-            if (err != 0) {
-                LOG("Failed to compute cross K/V, falling back to standard path\n");
-                err = run_decoder_internal(state, token_vec, logits);
-            } else {
-                err = run_decoder_with_cross_kv(state, token_vec, logits);
-            }
-        } else {
-            err = run_decoder_with_cross_kv(state, token_vec, logits);
+    // Compute cross K/V if not valid
+    if (!state->cross_kv_valid) {
+        err = compute_cross_kv(state);
+        if (err != 0) {
+            LOG("Failed to compute cross K/V\n");
+            return err;
         }
-    } else {
-        err = run_decoder_internal(state, token_vec, logits);
     }
+    
+    err = run_decoder_with_cross_kv(state, token_vec, logits);
     
     if (err != 0) {
         return err;
@@ -1186,25 +1044,24 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
         return best;
     };
     
-    // Helper to run decoder with automatic path selection
+    // Helper to run decoder (requires cross_kv path)
     auto run_decoder = [this, state](const std::vector<int64_t>& tokens, std::vector<float>& logits) -> int {
-        if (has_cross_kv_path()) {
-            if (!state->cross_kv_valid) {
-                int err = compute_cross_kv(state);
-                if (err != 0) {
-                    return run_decoder_internal(state, tokens, logits);
-                }
+        if (!state->cross_kv_valid) {
+            int err = compute_cross_kv(state);
+            if (err != 0) {
+                LOG("Failed to compute cross K/V\n");
+                return err;
             }
-            return run_decoder_with_cross_kv(state, tokens, logits);
         }
-        return run_decoder_internal(state, tokens, logits);
+        return run_decoder_with_cross_kv(state, tokens, logits);
     };
     
-    // Compute cross K/V upfront if using optimized path
-    if (has_cross_kv_path() && !state->cross_kv_valid) {
+    // Compute cross K/V upfront
+    if (!state->cross_kv_valid) {
         int err = compute_cross_kv(state);
         if (err != 0) {
-            LOG("Warning: Failed to compute cross K/V, using standard decoder path\n");
+            LOG("Failed to compute cross K/V\n");
+            return err;
         }
     }
     
@@ -1322,76 +1179,4 @@ void MoonshineStreamingModel::decoder_reset(MoonshineStreamingState *state) {
     state->cache_seq_len = 0;
     // Note: We keep cross K/V valid since memory hasn't changed
     // It will be invalidated automatically when memory changes via encode()
-}
-
-/* ============================================================================
- * Batch Transcription (convenience method)
- * ============================================================================ */
-
-int MoonshineStreamingModel::transcribe(const float *input_audio_data,
-                                         size_t input_audio_data_size,
-                                         char **out_text) {
-    *out_text = nullptr;
-    if (input_audio_data == nullptr || input_audio_data_size == 0) {
-        LOG("Audio data is nullptr or empty\n");
-        return 1;
-    }
-
-    // Create state
-    MoonshineStreamingState* state = create_state();
-    if (state == nullptr) {
-        LOG("Failed to create streaming state\n");
-        return 1;
-    }
-
-    // Process audio in chunks (80ms = 1280 samples at 16kHz)
-    const int chunk_size = 1280;
-    for (size_t offset = 0; offset < input_audio_data_size; offset += chunk_size) {
-        size_t len = std::min(static_cast<size_t>(chunk_size), input_audio_data_size - offset);
-        int err = process_audio_chunk(state, input_audio_data + offset, len, nullptr);
-        if (err != 0) {
-            delete state;
-            return err;
-        }
-    }
-
-    // Final encode (emit all frames)
-    int err = encode(state, true, nullptr);
-    if (err != 0) {
-        delete state;
-        return err;
-    }
-
-    if (state->memory_len == 0) {
-        delete state;
-        last_result = "";
-        *out_text = (char*)(last_result.c_str());
-        return 0;
-    }
-
-    // Decode using the new decode_full method (no speculative tokens)
-    int *tokens = nullptr;
-    int tokens_len = 0;
-    err = decode_full(state, nullptr, 0, &tokens, &tokens_len);
-    
-    delete state;
-    
-    if (err != 0) {
-        return err;
-    }
-
-    // Convert tokens to text
-    if (tokens != nullptr && tokens_len > 0) {
-        std::vector<int64_t> token_vec(tokens_len);
-        for (int i = 0; i < tokens_len; ++i) {
-            token_vec[i] = static_cast<int64_t>(tokens[i]);
-        }
-        last_result = tokenizer->tokens_to_text(token_vec);
-        free(tokens);
-    } else {
-        last_result = "";
-    }
-    
-    *out_text = (char*)(last_result.c_str());
-    return 0;
 }
