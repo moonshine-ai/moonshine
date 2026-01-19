@@ -2,6 +2,8 @@
 
 # Moonshine Voice
 
+**Voice Interfaces for Everyone**
+
 - [Quickstart](#quickstart)
 - [When should you choose Moonshine over Whisper?](#when-should-you-choose-moonshine-over-whisper)
 - [Examples](#examples)
@@ -9,10 +11,9 @@
 - [Adding the Library to your own App](#adding-the-library-to-your-own-app)
 - [Downloading Models](#downloading-models)
 - [Benchmarking](#benchmarking)
+- [Roadmap](#roadmap)
 - [Acknowledgements](#acknowledgements)
 - [License](#license)
-
-**Voice Interfaces for Everyone**
 
 [Moonshine](https://moonshine.ai) Voice is an open source AI toolkit for developers building voice applications. 
 
@@ -289,6 +290,8 @@ This will report the absolute time taken to process the audio, and what percenta
 By default it uses the Tiny English model that's embedded in the framework, but you can pass in the `--model-path` and `--model-arch` parameters to choose [one that you've downloaded](#downloading-models).
 
 You can also choose how often the transcript should be updated using the `--transcription-interval` argument. This defaults to 0.5 seconds, but the right value will depend on how fast your application needs updates. Longer intervals reduce the compute required a bit, at the cost of slower updates.
+
+## Roadmap
 
 ## Acknowledgements
 
