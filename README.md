@@ -1,15 +1,12 @@
 ![Moonshine Voice Logo](images/logo.png)
 
+# Moonshine Voice
+
 - [Quickstart](#quickstart)
 - [When should you choose Moonshine over Whisper?](#when-should-you-choose-moonshine-over-whisper)
 - [Examples](#examples)
 - [Using the Library](#using-the-library)
 - [Adding the Library to your own App](#adding-the-library-to-your-own-app)
-  - [iOS](#ios)
-  - [Android](#android)
-  - [Linux](#linux)
-  - [MacOS](#macos)
-  - [Windows](#windows)
 - [Downloading Models](#downloading-models)
 - [Benchmarking](#benchmarking)
 - [Acknowledgements](#acknowledgements)
@@ -30,7 +27,7 @@
 
 [Join our community on Discord to get live support](https://discord.gg/27qp9zSRXF). 
 
- **Python**
+ ### Python
 
  ```bash
  pip install moonshine-voice
@@ -39,15 +36,15 @@
 
 Listens to the microphone and prints updates to the transcript as they come in.
 
-**iOS**
+### iOS
 
 [Download](https://github.com/moonshine-ai/moonshine-v2/archive/refs/heads/main.zip) or `git clone` this repository and open `examples/ios/Transcriber/Transcriber.xcodeproj` in Xcode.
 
-**Android**
+### Android
 
 [Download](https://github.com/moonshine-ai/moonshine-v2/archive/refs/heads/main.zip) or `git clone` this repository and open `examples/android/Transcriber/` in Android Studio.
 
-**Linux**
+### Linux
 
 [Download](https://github.com/moonshine-ai/moonshine-v2/archive/refs/heads/main.zip) or `git clone` this repository and then run:
 
@@ -59,11 +56,11 @@ cmake --build .
 ./moonshine-cpp-test
 ```
 
-**MacOS**
+### MacOS
 
 [Download](https://github.com/moonshine-ai/moonshine-v2/archive/refs/heads/main.zip) or `git clone` this repository and open `examples/macos/MicTranscription/MicTranscription.xcodeproj` in Xcode.
 
-**Windows**
+### Windows
 
 [Download](https://github.com/moonshine-ai/moonshine-v2/archive/refs/heads/main.zip) or `git clone` this repository. 
 
@@ -80,7 +77,7 @@ python -m moonshine_voice.download --language en
 x64\Release\cli-transcriber.exe --model-path <path from the download command> --model-arch <number from the download command>
 ```
 
-**Raspberry Pi**
+### Raspberry Pi
 
 You'll need a USB microphone plugged in to get audio input, but the Python pip package has been optimized for the Pi, so you can run:
 
@@ -131,13 +128,96 @@ Hopefully this gives you a good idea of how Moonshine compares to Whisper. If yo
 
 ## Examples
 
-
+TK
 
 ## Using the Library
 
-The Moonshine API is designed to take care of the details around capturing and transcribing live speech, giving application developers a high-level API focused on actionable events. This API is consistent across all the high-level languages the 
+The Moonshine API is designed to take care of the details around capturing and transcribing live speech, giving application developers a high-level API focused on actionable events. I'll use Python to illustrate how it works, but the API is consistent across all the supported languages.
 
-TK
+### Concepts
+
+A [**Transcriber**](python/src/moonshine_voice/transcriber.py) takes in audio input and turns any speech into text. This is the first object you'll need to create to use Moonshine, and you'll give it a path to [the models you've downloaded](#downloading-models).
+
+A **MicTranscriber** is a helper class based on the general transcriber that takes care of connecting to a microphone using your platform's built-in support (for example sounddevice in Python) and then feeding the audio in as it's captured.
+
+A **Stream** is a handler for audio input. The reason streams exist is because you may want to process multiple audio inputs at once, and a transcriber can support those through multiple streams, without duplicating the model resources. If you only have one input, the transcriber class includes the same methods (start/stop/add_audio) as a stream, and you can use that interface instead and forget about streams.
+
+A **TranscriptLine** is a data structure holding information about one line in the transcript. When someone is speaking, the library waits for short pauses (where punctuation might go in written language) and starts a new line. These aren't exactly sentences, since a speech pause isn't a sure sign of the end of a sentence, but this does break the spoken audio into segments that can be considered phrases. A line includes state such as whether the line has just started, is still being spoken, or is complete, along with its start time and duration.
+
+A **Transcript** is a list of lines in time order holding information about what text has already been recognized, along with other state like when it was captured.
+
+A **TranscriptLineEvent** contains information about changes to the transcript. Events include a new line being started, the text in a line being updated, and a line being completed. The event object includes the transcript line it's referring to as a member, holding the latest state of that line.
+
+A **TranscriptListener** is a protocol that allows app-defined functions to be called when transcript events happen. This is the main way that most applications interact with the results of the transcription. When live speech is happening, applications usually need to respond or display results as new speech is recognized, and this approach allows you to handle those changes in a similar way to events from traditional user interfaces like touch screen gestures or mouse clicks on buttons.
+
+### Getting Started
+
+We have [examples](#examples) for most platforms so as a first step I recommend checking out what we have for the systems you're targeting.
+
+Next, you'll need to [add the library to your project](#adding-the-library-to-your-own-app). We aim to provide pre-built binaries for all major platforms using their native package managers. On Python this means a pip install, for Android it's a Maven package, and for MacOS and iOS we provide a Swift package through SPM.
+
+The transcriber needs access to the files for the model you're using, so after [downloading them](#downloading-models) you'll need to place them somewhere the application can find them, and make a note of the path. This usually means adding them as resources in your IDE if you're planning to distribute the app, or you can use hard-wired paths if you're just experimenting. The download script gives you the location of the models and their architecture type on your drive after it completes.
+
+Now you can try creating a transcriber. Here's what that looks like in Python:
+
+```python
+transcriber = Transcriber(model_path=model_path, model_arch=model_arch)
+```
+
+If the model isn't found, or if there's any other error, this will throw an exception with information about the problem. You can also check the console for logs from the core library, these are printed to `stderr` or your system's equivalent.
+
+Now we'll create a listener that contains the app logic that you want triggered when the transcript updates, and attach it to your transcriber:
+
+```python
+class TestListener(TranscriptEventListener):
+    def on_line_started(self, event):
+        print(f"Line started: {event.line.text}")
+
+    def on_line_text_changed(self, event):
+        print(f"Line text changed: {event.line.text}")
+
+    def on_line_completed(self, event):
+        print(f"Line completed: {event.line.text}")
+
+transcriber.add_listener(listener)
+```
+
+The transcriber needs some audio data to work with. If you want to try it with the microphone you can update your transcriber creation line to use a MicTranscriber instead, but if you want to start with a .wav file for testing purposes here's how you feed that in:
+
+```python
+    audio_data, sample_rate = load_wav_file(wav_path)
+
+    transcriber.start()
+
+    # Loop through the audio data in chunks to simulate live streaming
+    # from a microphone or other source.
+    chunk_duration = 0.1
+    chunk_size = int(chunk_duration * sample_rate)
+    for i in range(0, len(audio_data), chunk_size):
+        chunk = audio_data[i: i + chunk_size]
+        transcriber.add_audio(chunk, sample_rate)
+
+    transcriber.stop()
+```
+
+The important things to notice here are:
+
+ - We create an array of mono audio data from a wav file, using the convenience `load_wav_file()` function that's part of the Moonshine library.
+ - We start the transcriber to activate its processing code.
+ - The loop adds audio in chunks. These chunks can be any length and any sample rate, the library takes care of all the housekeeping.
+ - As audio is added, the event listener you added will be called, giving information about the latest speech.
+
+In a real application you'd be calling `add_audio()` from an audio handler that's receiving it from your source. Since the library can handle arbitrary durations and sample rates, just make sure it's mono and otherwise feed it in as-is.
+
+The transcriber analyses the speech at a default interval of every 500ms of input. You can change this with the `update_interval` argument to the transcriber constructor. For streaming models most of the work is done as the audio is being added, and it's automatically done at the end of a phrase, so changing this won't usually affect the workload or latency massively.
+
+The key takeaway is that you usually don't need to worry about the transcript data structure itself, the event system tells you when something important happens. You can manually trigger a transcript update by calling `update_transcription()` which returns a transcript object with all of the information about the current session if you do need to examine the state.
+
+By calling `start()` and `stop()` on a transcriber (or stream) we're beginning and ending a session. Each session has one transcript document associated with it, and it is started fresh on every `start()` call, so you should make copies of any data you need from the transcript object before that.
+
+The transcriber class also offers a simpler `transcribe_without_streaming()` method, for when you have an array of data from the past that you just want to analyse, such as a file or recording.
+
+### Debugging
 
 ## Adding the Library to your own App
 
