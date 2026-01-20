@@ -96,6 +96,8 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
           std::string(model_path) +
           ". Error code: " + std::to_string(load_error));
     }
+    const MoonshineStreamingConfig &config = this->streaming_model->config;
+    this->streaming_state.reset(config);
   } else {
     // Non-streaming model: expects encoder_model.ort and
     // decoder_model_merged.ort
@@ -373,9 +375,10 @@ void Transcriber::update_transcript_from_segments(
     // Transcribe the segment using the appropriate model
     if (is_streaming_model_arch(this->options.model_arch) &&
         this->streaming_model != nullptr) {
-      // Use streaming model for transcription
+      // Use streaming model for transcription (incremental processing)
       line.text = transcribe_segment_with_streaming_model(
-          segment.audio_data.data(), segment.audio_data.size());
+          segment.audio_data.data(), segment.audio_data.size(), line.id,
+          segment.is_complete);
     } else if (this->stt_model != nullptr) {
       // Use non-streaming model for transcription
       std::lock_guard<std::mutex> lock(this->stt_model_mutex);
@@ -412,47 +415,71 @@ void Transcriber::update_transcript_from_segments(
 
 std::string *
 Transcriber::transcribe_segment_with_streaming_model(const float *audio_data,
-                                                     size_t audio_length) {
+                                                     size_t audio_length,
+                                                     uint64_t segment_id,
+                                                     bool is_final) {
   if (audio_length == 0 || this->streaming_model == nullptr) {
     return new std::string();
   }
 
   const MoonshineStreamingConfig &config = this->streaming_model->config;
 
-  // Create a temporary state for this segment transcription
-  MoonshineStreamingState state;
-  state.reset(config);
+  // Check if this is a new segment - if so, reset state
+  bool is_new_segment = (segment_id != this->current_streaming_segment_id);
+  if (is_new_segment) {
+    this->streaming_state.reset(config);
+    this->current_streaming_segment_id = segment_id;
+    this->streaming_samples_processed = 0;
+  }
 
-  // Process audio in chunks through the streaming model's frontend
-  const int chunk_size = 1280; // 80ms at 16kHz
-  {
-    std::lock_guard<std::mutex> lock(this->streaming_model_mutex);
+  // Calculate how many new samples we need to process
+  size_t new_samples_start = this->streaming_samples_processed;
 
-    for (size_t offset = 0; offset < audio_length; offset += chunk_size) {
-      int len = static_cast<int>(
-          std::min(static_cast<size_t>(chunk_size), audio_length - offset));
-      int err = this->streaming_model->process_audio_chunk(
-          &state, audio_data + offset, len, nullptr);
+  if (new_samples_start >= audio_length) {
+    // No new audio to process, but we may still need to decode
+    // (e.g., if is_final changed from false to true)
+  } else {
+    // Process only the NEW audio samples
+    const float *new_audio_data = audio_data + new_samples_start;
+    size_t new_audio_length = audio_length - new_samples_start;
+
+    const int chunk_size = 1280; // 80ms at 16kHz
+    {
+      std::lock_guard<std::mutex> lock(this->streaming_model_mutex);
+
+      for (size_t offset = 0; offset < new_audio_length; offset += chunk_size) {
+        int len = static_cast<int>(
+            std::min(static_cast<size_t>(chunk_size), new_audio_length - offset));
+        int err = this->streaming_model->process_audio_chunk(
+            &this->streaming_state, new_audio_data + offset, len, nullptr);
+        if (err != 0) {
+          LOGF("Failed to process audio chunk: %d", err);
+          throw std::runtime_error("Failed to process audio chunk: " +
+                                   std::to_string(err));
+        }
+      }
+
+      // Run encoder - is_final determines if we emit all frames or keep lookahead
+      int new_frames = 0;
+      int err = this->streaming_model->encode(&this->streaming_state, is_final, &new_frames);
       if (err != 0) {
-        LOGF("Failed to process audio chunk: %d", err);
-        throw std::runtime_error("Failed to process audio chunk: " +
-                                 std::to_string(err));
+        LOGF("Failed to encode: %d", err);
+        throw std::runtime_error("Failed to encode: " + std::to_string(err));
       }
     }
 
-    // Run encoder (final - this is the complete segment)
-    int new_frames = 0;
-    int err = this->streaming_model->encode(&state, true, &new_frames);
-    if (err != 0) {
-      LOGF("Failed to encode: %d", err);
-      throw std::runtime_error("Failed to encode: " + std::to_string(err));
-    }
+    // Update the count of processed samples
+    this->streaming_samples_processed = audio_length;
   }
 
   // If no memory accumulated, return empty string
-  if (state.memory_len == 0) {
+  if (this->streaming_state.memory_len == 0) {
     return new std::string();
   }
+
+  // Reset decoder state before decoding (we decode from scratch each time
+  // since memory may have changed)
+  this->streaming_model->decoder_reset(&this->streaming_state);
 
   // Decode to get transcription
   const int max_tokens = 256;
@@ -466,7 +493,7 @@ Transcriber::transcribe_segment_with_streaming_model(const float *audio_data,
     std::lock_guard<std::mutex> lock(this->streaming_model_mutex);
 
     for (int step = 0; step < max_tokens; ++step) {
-      int err = this->streaming_model->decode_step(&state, current_token,
+      int err = this->streaming_model->decode_step(&this->streaming_state, current_token,
                                                    logits.data());
       if (err != 0) {
         break;
