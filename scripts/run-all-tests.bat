@@ -45,7 +45,6 @@ set "PATH=!REPO_ROOT_DIR!\core\third-party\onnxruntime\lib\windows\x64;%PATH%"
 
 "!REPO_ROOT_DIR!\core\bin-tokenizer\build\!BUILD_TYPE!\bin-tokenizer-test.exe"
 "!REPO_ROOT_DIR!\core\third-party\onnxruntime\build\!BUILD_TYPE!\onnxruntime-test.exe"
-"!REPO_ROOT_DIR!\core\third-party\ten_vad\build\!BUILD_TYPE!\ten_vad-test.exe"
 "!REPO_ROOT_DIR!\core\moonshine-utils\build\!BUILD_TYPE!\debug-utils-test.exe"
 "!REPO_ROOT_DIR!\core\moonshine-utils\build\!BUILD_TYPE!\string-utils-test.exe"
 "!REPO_ROOT_DIR!\core\build\!BUILD_TYPE!\resampler-test.exe"

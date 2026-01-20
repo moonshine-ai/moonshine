@@ -57,5 +57,5 @@ To use Moonshine Voice in an application:
  - Make sure the `moonshine-voice-x86_64` is downloaded and accessible.
  - Add `moonshine-voice-x86_64\include` to the include paths.
  - Add `moonshine-voice-x86_64\lib` to the linker paths.
- - Add all of the libraries in `moonshine-voice-x86_64\lib` (bin-tokenizer.lib, moonshine-utils.lib, moonshine.lib, onnxruntime.lib, ort-utils.lib, and ten_vad.lib) to be linked.
+ - Add all of the libraries in `moonshine-voice-x86_64\lib` (bin-tokenizer.lib, moonshine-utils.lib, moonshine.lib, onnxruntime.lib, and ort-utils.lib) to be linked.
  - Ensure that `onnxruntime.dll` from `moonshine-voice-x86_64\lib` is copied to the same folder as your executable. This example project does that using a custom build step.

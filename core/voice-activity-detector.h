@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "ten_vad.h"
+#include "silero-vad.h"
 
 struct VoiceActivitySegment {
   std::vector<float> audio_data;
@@ -27,7 +27,9 @@ private:
   const size_t look_behind_sample_count;
   const size_t max_segment_sample_count;
 
-  ten_vad_handle_t *handle;
+  // Raw pointer intentionally not deleted to avoid static destruction order issues
+  static SileroVad* silero_vad;
+
   bool _is_active;
   std::vector<float> probability_window;
   int32_t probability_window_index;
@@ -39,7 +41,7 @@ private:
   bool previous_is_voice;
 
 public:
-  VoiceActivityDetector(float threshold = 0.5f, int32_t hop_size = 256,
+  VoiceActivityDetector(float threshold = 0.5f, int32_t hop_size = 512,
                         int32_t window_size = 32,
                         size_t look_behind_sample_count = 8192,
                         size_t max_segment_sample_count = 15 * 16000);

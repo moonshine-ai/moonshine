@@ -6,35 +6,21 @@
 
 #include "debug-utils.h"
 #include "resampler.h"
-#include "ten_vad.h"
 
 #include <mutex>
 
 namespace {
 constexpr int32_t vad_sample_rate = 16000;
 
-// Only allow one instance of the VAD model to be created. This is to avoid
-// memory bloat and latency issues, but it also means that only one thread at a
-// time can use the VAD model. This is enforced by the mutex.
-std::mutex ten_vad_mutex;
-ten_vad_handle_t ten_vad_handle_singleton = nullptr;
+std::mutex vad_mutex;
 
-int32_t get_or_create_ten_vad_handle(ten_vad_handle_t **out_handle,
-                                     int32_t hop_size, float threshold) {
-  std::lock_guard<std::mutex> lock(ten_vad_mutex);
-  if (ten_vad_handle_singleton == nullptr) {
-    int status = ten_vad_create(&ten_vad_handle_singleton, hop_size, threshold);
-    if (status < 0) {
-      throw std::runtime_error("Failed to create VAD model");
-    }
-  }
-  *out_handle = &ten_vad_handle_singleton;
-  return 0;
-}
 float seconds_from_sample_count(size_t sample_count) {
   return static_cast<float>(sample_count) / vad_sample_rate;
 }
 } // namespace
+
+// Intentionally leaked to avoid static destruction order issues with ONNX Runtime
+SileroVad* VoiceActivityDetector::silero_vad = nullptr;
 
 VoiceActivityDetector::VoiceActivityDetector(float threshold, int32_t hop_size,
                                              int32_t window_size,
@@ -42,11 +28,13 @@ VoiceActivityDetector::VoiceActivityDetector(float threshold, int32_t hop_size,
                                              size_t max_segment_sample_count)
     : threshold(threshold), hop_size(hop_size), window_size(window_size),
       look_behind_sample_count(look_behind_sample_count),
-      max_segment_sample_count(max_segment_sample_count), handle(nullptr) {
-  int status = get_or_create_ten_vad_handle(&handle, hop_size, threshold);
-  if (status < 0) {
-    throw std::runtime_error("Failed to create VAD model");
+      max_segment_sample_count(max_segment_sample_count) {
+
+  // We only want a single, global instance of silero_vad
+  if (VoiceActivityDetector::silero_vad == nullptr) {
+    VoiceActivityDetector::silero_vad = new SileroVad();
   }
+
   probability_window.resize(window_size);
   probability_window_index = 0;
   current_segment_audio_buffer.resize(0);
@@ -83,9 +71,7 @@ void VoiceActivityDetector::process_audio(const float *audio_data,
   if (!_is_active) {
     return;
   }
-  if (handle == nullptr) {
-    throw std::runtime_error("Ten VAD model not loaded");
-  }
+
   for (VoiceActivitySegment &segment : segments) {
     segment.just_updated = false;
   }
@@ -120,23 +106,15 @@ void VoiceActivityDetector::process_audio_chunk(const float *audio_data,
   std::copy(audio_data, audio_data + audio_data_size,
             look_behind_audio_buffer.end() - audio_data_size);
 
-  std::vector<int16_t> audio_int16(audio_data_size);
-  for (size_t i = 0; i < audio_data_size; i++) {
-    audio_int16[i] = static_cast<int16_t>(audio_data[i] * 32767);
-  }
+  std::vector<float> audio_vec(audio_data, audio_data + audio_data_size);
+
   float smoothed_probability = 0.0f;
   if (threshold > 0.0f) {
     float current_probability = 0.0f;
     {
-      std::lock_guard<std::mutex> lock(ten_vad_mutex);
+      std::lock_guard<std::mutex> lock(vad_mutex);
       int current_flag;
-      int32_t status =
-          ten_vad_process(*handle, audio_int16.data(), (int32_t)audio_data_size,
-                          &current_probability, &current_flag);
-      if (status < 0) {
-        throw std::runtime_error("Ten VAD failed to process audio, error: " +
-                                 std::to_string(status));
-      }
+      silero_vad->predict(audio_vec, &current_probability, &current_flag);
     }
     probability_window[probability_window_index] = current_probability;
     probability_window_index =

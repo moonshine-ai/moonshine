@@ -390,7 +390,6 @@ This library is in active development, and we aim to implement:
 We're grateful to:
 
  - Lambda Labs and Stephen Balaban for supporting our model training through [their foundational model grants](https://lambda.ai/research).
- - The TEN team for open sourcing [their voice-activity detection model](https://github.com/TEN-framework/ten-vad).
  - The ONNX Runtime community for building [a fast, cross-platform inference engine](https://github.com/microsoft/onnxruntime).
  - [Viktor Kirilov](https://github.com/onqtam) for [his fantastic DocTest C++ testing framework](https://github.com/doctest/doctest).
  - [Nemanja Trifunovic](https://github.com/nemtrif) for [his very helpful UTF8 CPP library](https://github.com/nemtrif/utfcpp).

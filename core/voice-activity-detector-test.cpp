@@ -67,6 +67,7 @@ TEST_CASE("voice-activity-detector-test") {
         (size_t)(chunk_duration_seconds * wav_sample_rate);
 
     VoiceActivityDetector vad;
+
     vad.start();
     for (size_t i = 0; i < wav_data_size; i += chunk_size) {
       const float *chunk_data = wav_data + i;

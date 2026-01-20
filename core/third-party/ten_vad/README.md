@@ -1,1 +1,0 @@
-See https://github.com/TEN-framework/ten-vad
