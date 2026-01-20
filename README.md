@@ -7,8 +7,7 @@
 - [Quickstart](#quickstart)
 - [When should you choose Moonshine over Whisper?](#when-should-you-choose-moonshine-over-whisper)
 - [Using the Library](#using-the-library)
-- [Downloading Models](#downloading-models)
-- [Benchmarking](#benchmarking)
+- [Support](#support)
 - [Roadmap](#roadmap)
 - [Acknowledgements](#acknowledgements)
 - [License](#license)
@@ -145,6 +144,8 @@ The Moonshine API is designed to take care of the details around capturing and t
   - [Cmake](#cmake)
   - [Language Bindings](#language-bindings)
   - [Porting](#porting)
+- [Downloading Models](#downloading-models)
+- [Benchmarking](#benchmarking)
 
 ### Concepts
 
@@ -315,7 +316,7 @@ If you have a device that isn't supported, you can try [building using cmake](#c
 
 If you want to call this library from a language we don't support, then you should take a look at [the C interface bindings](core/moonshine-c-api.h). Most languages have some way to call into C functions, so you can use these and the binding examples for other languages to guide your implementation.
 
-## Downloading Models
+### Downloading Models
 
 The easiest way to get the model files is using the Python module. After [installing it](#python) run the downloader like this:
 
@@ -345,7 +346,7 @@ Downloaded model path: /Users/petewarden/Library/Caches/moonshine_voice/download
 
 The last two lines tell you which model architecture is being used, and where the model files are on disk. By default it uses your user cache directory, which is `~/Library/Caches/moonshine_voice` on MacOS, but you can use a different location by setting the `MOONSHINE_VOICE_CACHE` environment variable before running the script.
 
-## Benchmarking
+### Benchmarking
 
 The core library includes a benchmarking tool that simulates processing live audio by loading a .wav audio file and feeding it in chunks to the model. To run it:
 
@@ -369,6 +370,10 @@ By default the benchmark binary uses the Tiny English model that's embedded in t
 You can also choose how often the transcript should be updated using the `--transcription-interval` argument. This defaults to 0.5 seconds, but the right value will depend on how fast your application needs updates. Longer intervals reduce the compute required a bit, at the cost of slower updates.
 
 For platforms that support Python, you can run the [`scripts/run-benchmarks.py`](scripts/run-benchmarks.py) script which will evaluate similar metrics, with the advantage that it can also download the models so you don't need to worry about path handling.
+
+## Support
+
+Our primary support channel is [the Moonshine Discord](https://discord.gg/27qp9zSRXF). We make our best efforts to respond to questions there, and other channels like [GitHub issues](https://github.com/moonshine-ai/moonshine-v2/issues). We also offer paid support for commercial customers who need porting or acceleration on other platforms, model customization, more languages, or any other services, please [get in touch](mailto:contact@moonshine.ai).
 
 ## Roadmap
 
