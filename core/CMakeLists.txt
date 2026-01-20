@@ -34,11 +34,6 @@ add_subdirectory(
     ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer/build
 )
 
-add_subdirectory(
-    ${CMAKE_CURRENT_LIST_DIR}/third-party/ten_vad/
-    ${CMAKE_CURRENT_LIST_DIR}/third-party/ten_vad/build
-)
-
 if (ANDROID)
     add_subdirectory(
         ${CMAKE_CURRENT_LIST_DIR}/../android/moonshine-jni
@@ -51,6 +46,7 @@ set(MOONSHINE_SRC_FILES
     moonshine-model.cpp
     moonshine-streaming-model.cpp
     voice-activity-detector.cpp
+    silero-vad.cpp
     resampler.cpp
     transcriber.cpp
 )
@@ -88,7 +84,6 @@ target_include_directories(moonshine PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/ort-utils
     ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
     ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
-    ${CMAKE_CURRENT_LIST_DIR}/third-party/ten_vad/
     ${CMAKE_CURRENT_LIST_DIR}/third-party/utf-8/
 )
 
@@ -96,7 +91,6 @@ if (IOS OR MOONSHINE_BUILD_SWIFT)
     target_link_libraries(moonshine PUBLIC
         bin-tokenizer
         ort-utils
-        ten_vad
         "-framework CoreFoundation"
         "-framework Foundation"
     )
@@ -125,7 +119,7 @@ if (IOS OR MOONSHINE_BUILD_SWIFT)
     )
     # For static frameworks, merge all static dependencies into a single library
     # This is required because static libraries don't automatically include their dependencies
-    # We need to merge: moonshine-utils, onnxruntime, ort-utils, bin-tokenizer, ten_vad, and moonshine
+    # We need to merge: moonshine-utils, onnxruntime, ort-utils, bin-tokenizer, and moonshine
     # Note: Order matters - dependencies first, then the main library
     add_custom_command(TARGET moonshine POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "Merging static libraries into framework..."
@@ -134,7 +128,6 @@ if (IOS OR MOONSHINE_BUILD_SWIFT)
             "${ONNXRUNTIME_LIB_PATH}"
             "$<TARGET_FILE:ort-utils>"
             "$<TARGET_FILE:bin-tokenizer>"
-            "$<TARGET_FILE:ten_vad>"
             "$<TARGET_FILE:moonshine>"
         COMMAND ${CMAKE_COMMAND} -E remove "$<TARGET_FILE:moonshine>"
         COMMAND ${CMAKE_COMMAND} -E rename "$<TARGET_FILE:moonshine>.merged" "$<TARGET_FILE:moonshine>"
@@ -158,7 +151,6 @@ else()
     target_link_libraries(moonshine PUBLIC
         bin-tokenizer
         ort-utils
-        ten_vad
     )
 endif()
 
@@ -216,7 +208,7 @@ target_link_libraries(benchmark PRIVATE
 # Windows DLLs don't export all symbols by default and so tests that rely on them
 # are skipped for shared builds.
 if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
-    add_executable(voice-activity-detector-test voice-activity-detector-test.cpp voice-activity-detector.cpp resampler.cpp)
+    add_executable(voice-activity-detector-test voice-activity-detector-test.cpp voice-activity-detector.cpp resampler.cpp silero-vad.cpp)
     set_target_properties(voice-activity-detector-test PROPERTIES
         CXX_STANDARD 20
         CXX_STANDARD_REQUIRED YES
@@ -225,8 +217,9 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
     target_include_directories(voice-activity-detector-test PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
         ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+        ${CMAKE_CURRENT_LIST_DIR}/ort-utils
         ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
-        ${CMAKE_CURRENT_LIST_DIR}/third-party/ten_vad/
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
     )
 
     copy_onnxruntime_dll(voice-activity-detector-test)
@@ -239,13 +232,15 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
             MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
         )
         target_link_libraries(voice-activity-detector-test PRIVATE
-            ten_vad
+            ort-utils
+            ${ONNXRUNTIME_LIB_PATH}
             "-framework CoreFoundation"
             "-framework Foundation"
         )
     else()
         target_link_libraries(voice-activity-detector-test PRIVATE
-            ten_vad
+            ort-utils
+            ${ONNXRUNTIME_LIB_PATH}
         )
     endif()
 
@@ -291,7 +286,6 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
         ${CMAKE_CURRENT_LIST_DIR}/ort-utils
         ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
         ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
-        ${CMAKE_CURRENT_LIST_DIR}/third-party/ten_vad/
         ${CMAKE_CURRENT_LIST_DIR}/third-party/utf-8/
         ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
     )
