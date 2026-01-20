@@ -107,7 +107,11 @@ private:
 
   // Streaming model (used for TINY_STREAMING and BASE_STREAMING architectures)
   MoonshineStreamingModel *streaming_model;
+  MoonshineStreamingState streaming_state;
   std::mutex streaming_model_mutex;
+  // Track current segment for incremental processing
+  uint64_t current_streaming_segment_id = UINT64_MAX;
+  size_t streaming_samples_processed = 0;
 
   TranscriberStreamMap streams;
   int32_t next_stream_id;
@@ -155,9 +159,10 @@ private:
                         const uint8_t *tokenizer_data,
                         size_t tokenizer_data_size, uint32_t model_arch);
 
-  // Transcribe a single segment using the streaming model
   std::string *transcribe_segment_with_streaming_model(const float *audio_data,
-                                                       size_t audio_length);
+                                                       size_t audio_length,
+                                                       uint64_t segment_id,
+                                                       bool is_final);
 };
 
 #endif
