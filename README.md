@@ -15,11 +15,11 @@
 [Moonshine](https://moonshine.ai) Voice is an open source AI toolkit for developers building voice applications. 
 
  - Everything runs on-device, so it's fast, private, and you don't need an account, credit card, or API keys. 
+ - The framework and models are optimized for streaming applications, offering low latency responses by doing most of the work while the user is still talking.
  - All models are based on our [cutting](https://arxiv.org/abs/2410.15608) [edge](https://arxiv.org/abs/2509.02523) research and trained from scratch, so we can offer [higher accuracy than Whisper Large V3 at the top end](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard), down to tiny 26MB models for constrained deployments.
  - It's cross-platform, running on [Python](#python), [iOS](#ios), [Android](#android), [MacOS](#macos), [Linux](#linux), [Windows](#windows), [Raspberry Pis](#raspberry-pi), [IoT devices](https://www.linkedin.com/posts/petewarden_most-of-the-recent-news-about-ai-seems-to-activity-7384664255242932224-v6Mr/), and wearables.
  - Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, so you don't need to be an ML expert to use them.
  - It supports multiple languages, including English, Spanish, Mandarin, Japanese, Korean, Vietnamese, Ukrainian, and Arabic.
- - The framework and models are optimized for streaming applications, offering low latency responses by doing most of the work while the user is still talking.
 
  ## Quickstart
 
