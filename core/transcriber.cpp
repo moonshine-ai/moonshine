@@ -88,43 +88,6 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
     // decoder.onnx, and streaming_config.json
     this->streaming_model = new MoonshineStreamingModel();
 
-    std::string frontend_path =
-        append_path_component(model_path, "frontend.onnx");
-    std::string encoder_path =
-        append_path_component(model_path, "encoder.onnx");
-    std::string adapter_path =
-        append_path_component(model_path, "adapter.onnx");
-    std::string decoder_path =
-        append_path_component(model_path, "decoder.onnx");
-    std::string config_path =
-        append_path_component(model_path, "streaming_config.json");
-
-    if (!std::filesystem::exists(frontend_path)) {
-      throw std::runtime_error(
-          "Required frontend model file does not exist at path '" +
-          frontend_path + "'");
-    }
-    if (!std::filesystem::exists(encoder_path)) {
-      throw std::runtime_error(
-          "Required encoder model file does not exist at path '" +
-          encoder_path + "'");
-    }
-    if (!std::filesystem::exists(adapter_path)) {
-      throw std::runtime_error(
-          "Required adapter model file does not exist at path '" +
-          adapter_path + "'");
-    }
-    if (!std::filesystem::exists(decoder_path)) {
-      throw std::runtime_error(
-          "Required decoder model file does not exist at path '" +
-          decoder_path + "'");
-    }
-    if (!std::filesystem::exists(config_path)) {
-      throw std::runtime_error(
-          "Required streaming config file does not exist at path '" +
-          config_path + "'");
-    }
-
     int32_t load_error = this->streaming_model->load(
         model_path, tokenizer_path.c_str(), model_arch);
     if (load_error != 0) {
