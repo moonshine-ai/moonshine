@@ -5,6 +5,7 @@ NEW_VERSION=$2
 
 # Add text files that contain a version string and need to be updated to this list.
 KNOWN_FILES=(
+	./README.md
 	./core/CMakeLists.txt
 	./python/pyproject.toml
 	./python/setup.py
