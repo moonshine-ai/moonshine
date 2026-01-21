@@ -36,6 +36,7 @@ class TranscriptC(ctypes.Structure):
         ("line_count", ctypes.c_uint64),
     ]
 
+
 class TranscriberOptionC(ctypes.Structure):
     """C structure for transcriber_option_t."""
 
@@ -43,6 +44,7 @@ class TranscriberOptionC(ctypes.Structure):
         ("name", ctypes.c_char_p),
         ("value", ctypes.c_char_p),
     ]
+
 
 class ModelArch(IntEnum):
     """Model architecture types."""
@@ -114,8 +116,7 @@ class _MoonshineLib:
             Path(__file__).parent / lib_name,
             Path(__file__).parent.parent.parent / lib_name,
             # In the build directory (for development)
-            Path(__file__).parent.parent.parent.parent /
-            "core" / "build" / lib_name,
+            Path(__file__).parent.parent.parent.parent / "core" / "build" / lib_name,
             # System library paths
             Path("/usr/local/lib") / lib_name,
             Path("/usr/lib") / lib_name,

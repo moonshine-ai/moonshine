@@ -5,9 +5,11 @@ import os
 from setuptools import setup, find_packages, Distribution
 from wheel.bdist_wheel import bdist_wheel
 
+
 class BinaryDistribution(Distribution):
     def has_ext_modules(self):
         return True
+
 
 class PlatformWheel(bdist_wheel):
     def finalize_options(self):
@@ -19,6 +21,7 @@ class PlatformWheel(bdist_wheel):
         python, abi, plat = super().get_tag()
         # Use generic Python tag but platform-specific
         return "py3", "none", plat
+
 
 def read_readme():
     readme_path = os.path.join(os.path.dirname(__file__), "README.md")
@@ -38,11 +41,7 @@ def read_requirements():
         os.path.dirname(__file__), "src", "moonshine_voice", "requirements.txt"
     )
     with open(requirements_path, "r", encoding="utf-8") as f:
-        return [
-            line.strip()
-            for line in f
-            if line.strip() and not line.startswith("#")
-        ]
+        return [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
 
 setup(

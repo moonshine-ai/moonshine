@@ -1,4 +1,9 @@
-from moonshine_voice.download import get_model_for_language, load_wav_file, Transcriber, ModelArch
+from moonshine_voice.download import (
+    get_model_for_language,
+    load_wav_file,
+    Transcriber,
+    ModelArch,
+)
 import time
 import argparse
 
@@ -18,7 +23,9 @@ if args.options is not None:
 # tiny_path, tiny_arch = get_model_for_language("en", ModelArch.TINY)
 # base_path, base_arch = get_model_for_language("en", ModelArch.BASE)
 # FIXME: Missing some files for tiny and medium streaming-en, so disabled for now.
-tiny_streaming_path, tiny_streaming_arch = get_model_for_language("en", ModelArch.TINY_STREAMING)
+tiny_streaming_path, tiny_streaming_arch = get_model_for_language(
+    "en", ModelArch.TINY_STREAMING
+)
 # base_streaming_path, base_streaming_arch = get_model_for_language("en", ModelArch.BASE_STREAMING)
 # medium_streaming_path, medium_streaming_arch = get_model_for_language("en", ModelArch.MEDIUM_STREAMING)
 
@@ -42,7 +49,7 @@ for model in models:
     chunk_duration = args.chunk_duration
     chunk_size = int(chunk_duration * sample_rate)
     for i in range(0, len(audio_data), chunk_size):
-        chunk = audio_data[i: i + chunk_size]
+        chunk = audio_data[i : i + chunk_size]
         transcriber.add_audio(chunk, sample_rate)
     end_time = time.time()
     duration = end_time - start_time
@@ -54,9 +61,13 @@ for model in models:
     for line in transcript.lines:
         total_latency_ms += line.last_transcription_latency_ms
         if args.verbose:
-            print(f"Line: {line.text}, Latency: {line.last_transcription_latency_ms:.0f}ms")
+            print(
+                f"Line: {line.text}, Latency: {line.last_transcription_latency_ms:.0f}ms"
+            )
 
-    print(f"Transcription took {duration} seconds ({(duration / audio_duration) * 100:.2f}% of audio duration)")
+    print(
+        f"Transcription took {duration} seconds ({(duration / audio_duration) * 100:.2f}% of audio duration)"
+    )
     print(f"Average latency: {total_latency_ms / len(transcript.lines):.0f}ms")
 
     transcriber.close()

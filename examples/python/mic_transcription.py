@@ -37,6 +37,7 @@ class TerminalListener(TranscriptEventListener):
         self.update_last_terminal_line(event.line.text)
         print("\n", end="", flush=True)
 
+
 # If we're not on an interactive terminal, print each line as it's completed.
 
 
@@ -47,16 +48,19 @@ class FileListener(TranscriptEventListener):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Basic transcription example")
-    parser.add_argument("--language", type=str, default="en",
-                        help="Language to use for transcription")
-    parser.add_argument("--model-arch", type=str, default=None,
-                        help="Model architecture to use for transcription")
+    parser.add_argument(
+        "--language", type=str, default="en", help="Language to use for transcription"
+    )
+    parser.add_argument(
+        "--model-arch",
+        type=str,
+        default=None,
+        help="Model architecture to use for transcription",
+    )
     args = parser.parse_args()
-    model_path, model_arch = get_model_for_language(
-        args.language, args.model_arch)
+    model_path, model_arch = get_model_for_language(args.language, args.model_arch)
 
-    mic_transcriber = MicTranscriber(
-        model_path=model_path, model_arch=model_arch)
+    mic_transcriber = MicTranscriber(model_path=model_path, model_arch=model_arch)
 
     if sys.stdout.isatty():
         listener = TerminalListener()

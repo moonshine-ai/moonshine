@@ -75,8 +75,7 @@ def download_file(
             headers["Range"] = f"bytes={initial_size}-"
 
         # Start download
-        response = requests.get(url, headers=headers,
-                                stream=True, timeout=timeout)
+        response = requests.get(url, headers=headers, stream=True, timeout=timeout)
 
         # Handle resume response
         if response.status_code == 416:  # Range not satisfiable
@@ -94,8 +93,9 @@ def download_file(
             if "/" in content_range:
                 total_size = int(content_range.split("/")[-1])
             else:
-                total_size = initial_size + \
-                    int(response.headers.get("Content-Length", 0))
+                total_size = initial_size + int(
+                    response.headers.get("Content-Length", 0)
+                )
         else:
             # Full download (server ignored range request or fresh download)
             total_size = int(response.headers.get("Content-Length", 0))
