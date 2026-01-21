@@ -136,11 +136,11 @@ void MoonshineStreamingState::reset(const MoonshineStreamingConfig& cfg) {
  * MoonshineStreamingModel Implementation
  * ============================================================================ */
 
-MoonshineStreamingModel::MoonshineStreamingModel()
+MoonshineStreamingModel::MoonshineStreamingModel(bool log_ort_run)
     : frontend_session(nullptr), encoder_session(nullptr),
       adapter_session(nullptr),
       cross_kv_session(nullptr), decoder_kv_session(nullptr),
-      tokenizer(nullptr) {
+      tokenizer(nullptr), log_ort_run(log_ort_run) {
     ort_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
     LOG_ORT_ERROR(ort_api, ort_api->CreateEnv(ORT_LOGGING_LEVEL_WARNING,
                                               "MoonshineStreamingModel", &ort_env));
@@ -475,8 +475,9 @@ int MoonshineStreamingModel::process_audio_chunk(MoonshineStreamingState *state,
     };
     OrtValue* outputs[6] = {nullptr};
 
-    OrtStatus* status = ort_api->Run(
-        frontend_session, nullptr,
+    OrtStatus* status = ORT_RUN(
+        ort_api,
+        frontend_session,
         input_names, inputs, 6,
         output_names, 6, outputs
     );
@@ -575,8 +576,9 @@ int MoonshineStreamingModel::encode(MoonshineStreamingState *state,
     const char* enc_output_names[] = {"encoded"};
     OrtValue* enc_outputs[1] = {nullptr};
 
-    OrtStatus* status = ort_api->Run(
-        encoder_session, nullptr,
+    OrtStatus* status = ORT_RUN(
+        ort_api,
+        encoder_session,
         enc_input_names, &features_tensor, 1,
         enc_output_names, 1, enc_outputs
     );
@@ -650,8 +652,9 @@ int MoonshineStreamingModel::encode(MoonshineStreamingState *state,
     OrtValue* adapter_inputs[] = {encoded_slice_tensor, pos_tensor};
     OrtValue* adapter_outputs[1] = {nullptr};
 
-    status = ort_api->Run(
-        adapter_session, nullptr,
+    status = ORT_RUN(
+        ort_api,
+        adapter_session,
         adapter_input_names, adapter_inputs, 2,
         adapter_output_names, 1, adapter_outputs
     );
@@ -713,8 +716,9 @@ int MoonshineStreamingModel::compute_cross_kv(MoonshineStreamingState *state) {
     OrtValue* inputs[] = {memory_tensor};
     OrtValue* outputs[2] = {nullptr, nullptr};
     
-    OrtStatus* status = ort_api->Run(
-        cross_kv_session, nullptr,
+    OrtStatus* status = ORT_RUN(
+        ort_api,
+        cross_kv_session,
         input_names, inputs, 1,
         output_names, 2, outputs
     );
@@ -842,8 +846,9 @@ int MoonshineStreamingModel::run_decoder_with_cross_kv(MoonshineStreamingState *
     OrtValue* inputs[] = {token_tensor, k_self_tensor, v_self_tensor, k_cross_tensor, v_cross_tensor};
     OrtValue* outputs[3] = {nullptr, nullptr, nullptr};
     
-    OrtStatus* status = ort_api->Run(
-        decoder_kv_session, nullptr,
+    OrtStatus* status = ORT_RUN(
+        ort_api,
+        decoder_kv_session,
         input_names, inputs, 5,
         output_names, 3, outputs
     );

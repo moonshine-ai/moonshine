@@ -79,8 +79,9 @@ int set_model_options_from_arch(MoonshineModel *model, int32_t model_arch) {
 }
 } // namespace
 
-MoonshineModel::MoonshineModel()
-    : encoder_session(nullptr), decoder_session(nullptr), tokenizer(nullptr) {
+MoonshineModel::MoonshineModel(bool log_ort_run)
+    : encoder_session(nullptr), decoder_session(nullptr), tokenizer(nullptr),
+      log_ort_run(log_ort_run) {
   ort_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
   LOG_ORT_ERROR(ort_api, ort_api->CreateEnv(ORT_LOGGING_LEVEL_WARNING,
                                             "MoonshineModel", &ort_env));
@@ -160,12 +161,12 @@ int MoonshineModel::load_from_memory(const uint8_t *encoder_model_data,
   RETURN_ON_ERROR(set_model_options_from_arch(this, model_type));
 
   RETURN_ON_ERROR(ort_session_from_memory(
-      ort_api, ort_env, ort_session_options, encoder_model_data, encoder_model_data_size,
-      &encoder_session));
+      ort_api, ort_env, ort_session_options, encoder_model_data,
+      encoder_model_data_size, &encoder_session));
   RETURN_ON_NULL(encoder_session);
   RETURN_ON_ERROR(ort_session_from_memory(
-      ort_api, ort_env, ort_session_options, decoder_model_data, decoder_model_data_size,
-      &decoder_session));
+      ort_api, ort_env, ort_session_options, decoder_model_data,
+      decoder_model_data_size, &decoder_session));
   RETURN_ON_NULL(decoder_session);
   tokenizer = new BinTokenizer(tokenizer_data, tokenizer_data_size);
   RETURN_ON_NULL(tokenizer);
@@ -258,10 +259,11 @@ int MoonshineModel::transcribe(const float *input_audio_data,
   std::vector<OrtValue *> encoder_outputs(encoder_output_count);
   // TIMER_START(moonshine_encoder_run);
   RETURN_ON_ORT_ERROR(
-      ort_api, ort_api->Run(encoder_session, nullptr,
-                            encoder_input_names.data(), encoder_inputs.data(),
-                            encoder_input_count, encoder_output_names.data(),
-                            encoder_output_count, encoder_outputs.data()));
+      ort_api, ORT_RUN(ort_api, encoder_session,
+                       encoder_input_names.data(),
+                       encoder_inputs.data(), encoder_input_count,
+                       encoder_output_names.data(), encoder_output_count,
+                       encoder_outputs.data()));
   // TIMER_END(moonshine_encoder_run);
   for (size_t i = 0; i < encoder_inputs.size(); i++) {
     ort_api->ReleaseValue(encoder_inputs[i]);
@@ -290,8 +292,10 @@ int MoonshineModel::transcribe(const float *input_audio_data,
   const size_t expected_decoder_input_count_v2 = (num_layers * 4) + 4;
   if ((decoder_input_count != expected_decoder_input_count_v1) &&
       (decoder_input_count != expected_decoder_input_count_v2)) {
-    LOGF("Expected decoder input count to be %zu or %zu, but got %zu. This "
-         "often indicates you're specifying the wrong model architecture "
+    LOGF("Expected decoder input count to be %zu or "
+         "%zu, but got %zu. This "
+         "often indicates you're specifying the "
+         "wrong model architecture "
          "(for example tiny instead of base).\n",
          expected_decoder_input_count_v1, expected_decoder_input_count_v2,
          decoder_input_count);
@@ -300,7 +304,7 @@ int MoonshineModel::transcribe(const float *input_audio_data,
 
   std::vector<const char *> decoder_input_names(decoder_input_count);
   for (size_t i = 0; i < decoder_input_count; i++) {
-    char* decoder_input_name = nullptr;
+    char *decoder_input_name = nullptr;
     RETURN_ON_ORT_ERROR(
         ort_api, ort_api->SessionGetInputName(decoder_session, i,
                                               &ort_string_allocator->base,
@@ -312,7 +316,7 @@ int MoonshineModel::transcribe(const float *input_audio_data,
                                    decoder_session, &decoder_output_count));
   std::vector<const char *> decoder_output_names(decoder_output_count);
   for (size_t i = 0; i < decoder_output_count; i++) {
-    char* decoder_output_name = nullptr;
+    char *decoder_output_name = nullptr;
     RETURN_ON_ORT_ERROR(
         ort_api, ort_api->SessionGetOutputName(decoder_session, i,
                                                &ort_string_allocator->base,
@@ -365,8 +369,10 @@ int MoonshineModel::transcribe(const float *input_audio_data,
     if (encoder_attention_mask_tensor != nullptr) {
       if (decoder_input_name_to_index.find("encoder_attention_mask") ==
           decoder_input_name_to_index.end()) {
-        LOG("Encoder attention mask index not found in decoder input names, "
-            "but it is in the encoder input names, indicating an ONNX "
+        LOG("Encoder attention mask index not found "
+            "in decoder input names, "
+            "but it is in the encoder input names, "
+            "indicating an ONNX "
             "conversion problem.\n");
         return 1;
       }
@@ -389,7 +395,9 @@ int MoonshineModel::transcribe(const float *input_audio_data,
                       decoder_input_name_to_index.end());
       const int64_t key_index = decoder_input_name_to_index[key];
       if (decoder_inputs_data[key_index] != nullptr) {
-        LOGF("Decoder input data for key %s is not nullptr\n", key.c_str());
+        LOGF("Decoder input data for key %s is not "
+             "nullptr\n",
+             key.c_str());
         return 1;
       }
       decoder_inputs_data[key_index] = new MoonshineTensorView(*value);
@@ -408,11 +416,10 @@ int MoonshineModel::transcribe(const float *input_audio_data,
     // TIMER_START(moonshine_decoder_run);
     std::vector<OrtValue *> decoder_outputs(decoder_output_count);
     RETURN_ON_ORT_ERROR(
-        ort_api,
-        ort_api->Run(decoder_session, nullptr, decoder_input_names.data(),
-                     decoder_inputs.data(), decoder_inputs.size(),
-                     decoder_output_names.data(), decoder_output_names.size(),
-                     decoder_outputs.data()));
+        ort_api, ORT_RUN(ort_api, decoder_session, decoder_input_names.data(),
+                         decoder_inputs.data(), decoder_inputs.size(),
+                         decoder_output_names.data(),
+                         decoder_output_names.size(), decoder_outputs.data()));
     // TIMER_END(moonshine_decoder_run);
     for (size_t i = 0; i < decoder_inputs_data.size(); i++) {
       delete decoder_inputs_data[i];
@@ -424,8 +431,9 @@ int MoonshineModel::transcribe(const float *input_audio_data,
     MoonshineTensorView logits_tensor_view =
         MoonshineTensorView(ort_api, logits_tensor, "logits_tensor");
 
-    // Copy over the values output from the last run into the corresponding
-    // inputs for the next decoding run.
+    // Copy over the values output from the last run
+    // into the corresponding inputs for the next
+    // decoding run.
     for (const auto &layer_suffix : layer_suffixes) {
       if (!use_cache_branch ||
           layer_suffix.find("decoder") != std::string::npos) {
@@ -456,13 +464,13 @@ int MoonshineModel::transcribe(const float *input_audio_data,
 
   for (const char *decoder_input_name : decoder_input_names) {
     ort_string_allocator->base.Free(&ort_string_allocator->base,
-                                    (char*)decoder_input_name);
+                                    (char *)decoder_input_name);
   }
   decoder_input_names.clear();
 
   for (const char *decoder_output_name : decoder_output_names) {
     ort_string_allocator->base.Free(&ort_string_allocator->base,
-                                    (char*)decoder_output_name);
+                                    (char *)decoder_output_name);
   }
   decoder_output_names.clear();
 

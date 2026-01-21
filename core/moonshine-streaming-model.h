@@ -98,8 +98,10 @@ struct MoonshineStreamingModel {
     size_t adapter_mmapped_data_size = 0;
     
     std::string last_result;
+
+    bool log_ort_run = false;
     
-    MoonshineStreamingModel();
+    MoonshineStreamingModel(bool log_ort_run = false);
     ~MoonshineStreamingModel();
     
     int load(const char *model_dir, const char *tokenizer_path, int32_t model_type);

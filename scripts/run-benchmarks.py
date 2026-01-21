@@ -6,20 +6,27 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--wav_path", type=str, default="test-assets/two_cities.wav")
 parser.add_argument("--chunk_duration", type=float, default=0.5)
 parser.add_argument("--verbose", "-v", action="store_true")
+parser.add_argument("--options", type=str, default=None)
 args = parser.parse_args()
 
-tiny_path, tiny_arch = get_model_for_language("en", ModelArch.TINY)
-base_path, base_arch = get_model_for_language("en", ModelArch.BASE)
+options = {}
+if args.options is not None:
+    for option in args.options.split(","):
+        key, value = option.split("=")
+        options[key] = value
+
+# tiny_path, tiny_arch = get_model_for_language("en", ModelArch.TINY)
+# base_path, base_arch = get_model_for_language("en", ModelArch.BASE)
 # FIXME: Missing some files for tiny and medium streaming-en, so disabled for now.
-# tiny_streaming_path, tiny_streaming_arch = get_model_for_language("en", ModelArch.TINY_STREAMING)
-base_streaming_path, base_streaming_arch = get_model_for_language("en", ModelArch.BASE_STREAMING)
+tiny_streaming_path, tiny_streaming_arch = get_model_for_language("en", ModelArch.TINY_STREAMING)
+# base_streaming_path, base_streaming_arch = get_model_for_language("en", ModelArch.BASE_STREAMING)
 # medium_streaming_path, medium_streaming_arch = get_model_for_language("en", ModelArch.MEDIUM_STREAMING)
 
 models = [
-    (tiny_path, tiny_arch),
-    (base_path, base_arch),
-    # (tiny_streaming_path, tiny_streaming_arch),
-    (base_streaming_path, base_streaming_arch),
+    # (tiny_path, tiny_arch),
+    # (base_path, base_arch),
+    (tiny_streaming_path, tiny_streaming_arch),
+    # (base_streaming_path, base_streaming_arch),
     # (medium_streaming_path, medium_streaming_arch),
 ]
 
@@ -28,7 +35,7 @@ audio_duration = len(audio_data) / sample_rate
 
 for model in models:
     path, arch = model
-    transcriber = Transcriber(path, arch)
+    transcriber = Transcriber(path, arch, options=options)
     transcriber.start()
 
     start_time = time.time()

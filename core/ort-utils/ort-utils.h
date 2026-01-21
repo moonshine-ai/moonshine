@@ -71,9 +71,20 @@ ONNXTensorElementDataType ort_get_output_type(const OrtApi *ort_api,
                                               OrtSession *session, int index);
 
 std::vector<int64_t> ort_get_value_shape(const OrtApi *ort_api,
-                                         OrtValue *value);
+                                         const OrtValue *value);
 
 ONNXTensorElementDataType ort_get_value_type(const OrtApi *ort_api,
-                                             OrtValue *value);
+                                             const OrtValue *value);
+
+#define ORT_RUN(ort_api, session, input_names, inputs, input_count,            \
+                output_names, output_count, outputs)                           \
+  ort_run(ort_api, session, input_names, inputs, input_count, output_names,    \
+          output_count, outputs, #session, this->log_ort_run)
+
+OrtStatus *ort_run(const OrtApi *ort_api, OrtSession *session,
+                   const char *const *input_names,
+                   const OrtValue *const *inputs, size_t input_len,
+                   const char *const *output_names, size_t output_names_len,
+                   OrtValue **outputs, const char *session_name, bool log_ort_run);
 
 #endif
