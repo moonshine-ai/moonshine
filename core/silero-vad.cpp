@@ -128,11 +128,11 @@ void SileroVad::predict(const std::vector<float>& data_chunk, float* out_probabi
     }
 
     float* speech_prob_ptr = nullptr;
-    (void)ort_api->GetTensorMutableData(output_ort[0], (void**)&speech_prob_ptr);
+    LOG_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(output_ort[0], (void**)&speech_prob_ptr));
     float speech_prob = speech_prob_ptr[0];
 
     float* stateN = nullptr;
-    (void)ort_api->GetTensorMutableData(output_ort[1], (void**)&stateN);
+    LOG_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(output_ort[1], (void**)&stateN));
     std::memcpy(_state.data(), stateN, size_state * sizeof(float));
 
     // Update context with last context_samples samples of the full input
