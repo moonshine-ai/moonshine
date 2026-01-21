@@ -86,6 +86,8 @@ void parse_transcriber_options(const transcriber_option_t *in_options,
       out_options.save_input_wav_path = std::string(in_option.value);
     } else if (option_name == "log_api_calls") {
       log_api_calls = bool_from_string(in_option.value);
+    } else if (option_name == "log_ort_run") {
+      out_options.log_ort_run = bool_from_string(in_option.value);
     } else {
       throw std::runtime_error("Unknown transcriber option: '" +
                                std::string(in_option.name) + "'");

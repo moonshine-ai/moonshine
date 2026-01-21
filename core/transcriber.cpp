@@ -86,7 +86,8 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
   if (is_streaming_model_arch(model_arch)) {
     // Streaming model: expects frontend.onnx, encoder.onnx, adapter.onnx,
     // decoder.onnx, and streaming_config.json
-    this->streaming_model = new MoonshineStreamingModel();
+    this->streaming_model =
+        new MoonshineStreamingModel(this->options.log_ort_run);
 
     int32_t load_error = this->streaming_model->load(
         model_path, tokenizer_path.c_str(), model_arch);
@@ -101,7 +102,7 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
   } else {
     // Non-streaming model: expects encoder_model.ort and
     // decoder_model_merged.ort
-    this->stt_model = new MoonshineModel();
+    this->stt_model = new MoonshineModel(this->options.log_ort_run);
 
     std::string encoder_model_path =
         append_path_component(model_path, "encoder_model.ort");
@@ -147,7 +148,7 @@ void Transcriber::load_from_memory(const uint8_t *encoder_model_data,
         "Use load_from_files instead.");
   }
 
-  this->stt_model = new MoonshineModel();
+  this->stt_model = new MoonshineModel(this->options.log_ort_run);
   int32_t load_error = this->stt_model->load_from_memory(
       encoder_model_data, encoder_model_data_size, decoder_model_data,
       decoder_model_data_size, tokenizer_data, tokenizer_data_size, model_arch);
@@ -413,11 +414,9 @@ void Transcriber::update_transcript_from_segments(
   *out_transcript = &(stream->transcript_output->transcript);
 }
 
-std::string *
-Transcriber::transcribe_segment_with_streaming_model(const float *audio_data,
-                                                     size_t audio_length,
-                                                     uint64_t segment_id,
-                                                     bool is_final) {
+std::string *Transcriber::transcribe_segment_with_streaming_model(
+    const float *audio_data, size_t audio_length, uint64_t segment_id,
+    bool is_final) {
   if (audio_length == 0 || this->streaming_model == nullptr) {
     return new std::string();
   }
@@ -448,8 +447,8 @@ Transcriber::transcribe_segment_with_streaming_model(const float *audio_data,
       std::lock_guard<std::mutex> lock(this->streaming_model_mutex);
 
       for (size_t offset = 0; offset < new_audio_length; offset += chunk_size) {
-        int len = static_cast<int>(
-            std::min(static_cast<size_t>(chunk_size), new_audio_length - offset));
+        int len = static_cast<int>(std::min(static_cast<size_t>(chunk_size),
+                                            new_audio_length - offset));
         int err = this->streaming_model->process_audio_chunk(
             &this->streaming_state, new_audio_data + offset, len, nullptr);
         if (err != 0) {
@@ -459,9 +458,11 @@ Transcriber::transcribe_segment_with_streaming_model(const float *audio_data,
         }
       }
 
-      // Run encoder - is_final determines if we emit all frames or keep lookahead
+      // Run encoder - is_final determines if we emit all frames or keep
+      // lookahead
       int new_frames = 0;
-      int err = this->streaming_model->encode(&this->streaming_state, is_final, &new_frames);
+      int err = this->streaming_model->encode(&this->streaming_state, is_final,
+                                              &new_frames);
       if (err != 0) {
         LOGF("Failed to encode: %d", err);
         throw std::runtime_error("Failed to encode: " + std::to_string(err));
@@ -493,8 +494,8 @@ Transcriber::transcribe_segment_with_streaming_model(const float *audio_data,
     std::lock_guard<std::mutex> lock(this->streaming_model_mutex);
 
     for (int step = 0; step < max_tokens; ++step) {
-      int err = this->streaming_model->decode_step(&this->streaming_state, current_token,
-                                                   logits.data());
+      int err = this->streaming_model->decode_step(
+          &this->streaming_state, current_token, logits.data());
       if (err != 0) {
         break;
       }

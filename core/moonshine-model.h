@@ -44,7 +44,9 @@ struct MoonshineModel {
 
     std::string last_result;
 
-    MoonshineModel();  
+    bool log_ort_run = false;
+
+    MoonshineModel(bool log_ort_run = false);  
     ~MoonshineModel();
 
     int load(const char *encoder_model_path, const char *decoder_model_path,

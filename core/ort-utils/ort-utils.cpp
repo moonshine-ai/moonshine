@@ -14,18 +14,21 @@
 #ifdef _WIN32
 // No memory mapping on Windows and wchar for the file path.
 int ort_session_from_path(const OrtApi *ort_api, OrtEnv *env,
-  OrtSessionOptions *session_options, const char *path,
-  OrtSession **session, const char **mmapped_data,
-  size_t *mmapped_data_size) {
+                          OrtSessionOptions *session_options, const char *path,
+                          OrtSession **session, const char **mmapped_data,
+                          size_t *mmapped_data_size) {
   if (!std::filesystem::exists(path)) {
-    fprintf(stderr, "Model directory '%s' does not exist at %s:%d\n", path, __FILE__, __LINE__);
+    fprintf(stderr, "Model directory '%s' does not exist at %s:%d\n", path,
+            __FILE__, __LINE__);
     return -1;
   }
-  fprintf(stderr, "Creating session from path '%s' at %s:%d\n", path, __FILE__, __LINE__);
+  fprintf(stderr, "Creating session from path '%s' at %s:%d\n", path, __FILE__,
+          __LINE__);
   std::filesystem::path fs_path(path);
   std::wstring wpath = fs_path.wstring();
   RETURN_ON_ORT_ERROR(
-      ort_api, ort_api->CreateSession(env, wpath.c_str(), session_options, session));
+      ort_api,
+      ort_api->CreateSession(env, wpath.c_str(), session_options, session));
   *mmapped_data = nullptr;
   *mmapped_data_size = 0;
   return 0;
@@ -63,8 +66,9 @@ int ort_session_from_path(const OrtApi *ort_api, OrtEnv *env,
                                      session_options, session));
   } else {
     if (!std::filesystem::exists(path)) {
-        fprintf(stderr, "Model directory '%s' does not exist at %s:%d\n", path, __FILE__, __LINE__);
-        return -1;
+      fprintf(stderr, "Model directory '%s' does not exist at %s:%d\n", path,
+              __FILE__, __LINE__);
+      return -1;
     }
     fprintf(stderr, "Creating session from path '%s' at %s:%d\n", path,
             __FILE__, __LINE__);
@@ -195,15 +199,50 @@ ONNXTensorElementDataType ort_get_output_type(const OrtApi *ort_api,
 }
 
 std::vector<int64_t> ort_get_value_shape(const OrtApi *ort_api,
-                                         OrtValue *value) {
+                                         const OrtValue *value) {
   OrtTypeInfo *type_info;
   LOG_ORT_ERROR(ort_api, ort_api->GetTypeInfo(value, &type_info));
   return ort_get_shape(ort_api, type_info);
 }
 
 ONNXTensorElementDataType ort_get_value_type(const OrtApi *ort_api,
-                                             OrtValue *value) {
+                                             const OrtValue *value) {
   OrtTypeInfo *type_info;
   LOG_ORT_ERROR(ort_api, ort_api->GetTypeInfo(value, &type_info));
   return ort_get_type(ort_api, type_info);
+}
+
+OrtStatus *ort_run(const OrtApi *ort_api, OrtSession *session,
+                   const char *const *input_names,
+                   const OrtValue *const *inputs, size_t input_len,
+                   const char *const *output_names, size_t output_names_len,
+                   OrtValue **outputs, const char *session_name, bool log_ort_run) {
+  if (!log_ort_run) {
+    return ort_api->Run(session, nullptr, input_names, inputs, input_len,
+                        output_names, output_names_len, outputs);
+  }
+  std::chrono::steady_clock::time_point start_time =
+      std::chrono::steady_clock::now();
+  OrtStatus *status =
+      ort_api->Run(session, nullptr, input_names, inputs, input_len,
+                   output_names, output_names_len, outputs);
+  std::chrono::steady_clock::time_point end_time =
+      std::chrono::steady_clock::now();
+  std::chrono::duration<double, std::milli> duration = end_time - start_time;
+  LOGF("ORT Run %s took %.2f ms for inputs:", session_name,
+       duration.count());
+  for (size_t i = 0; i < input_len; i++) {
+    std::vector<int64_t> shape = ort_get_value_shape(ort_api, inputs[i]);
+    std::stringstream ss;
+    ss << input_names[i] << " = [";
+    for (size_t j = 0; j < shape.size(); j++) {
+      ss << shape[j];
+      if (j < shape.size() - 1) {
+        ss << ", ";
+      }
+    }
+    ss << "]";
+    LOGF("%s", ss.str().c_str());
+  }
+  return status;
 }
