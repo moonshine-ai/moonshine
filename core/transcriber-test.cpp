@@ -4,11 +4,10 @@
 #include <filesystem>
 #include <string>
 
-#include "utf8.h"
-
 #include "debug-utils.h"
 #include "string-utils.h"
 #include "test-utils.h"
+#include "utf8.h"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest.h>
@@ -222,9 +221,10 @@ TEST_CASE("transcriber-test") {
         if (line.is_complete == 0) {
           const bool is_last_line = (j == (transcript->line_count - 1));
           if (!is_last_line) {
-            LOGF("Incomplete line %zu ('%s', %.2fs) is not the last line "
-                 "%" PRId64,
-                 j, line.text, line.start_time, transcript->line_count - 1);
+            LOGF(
+                "Incomplete line %zu ('%s', %.2fs) is not the last line "
+                "%" PRId64,
+                j, line.text, line.start_time, transcript->line_count - 1);
           }
           REQUIRE(is_last_line);
         }
@@ -343,9 +343,10 @@ TEST_CASE("transcriber-test") {
         if (line.is_complete == 0) {
           const bool is_last_line = (j == (transcript->line_count - 1));
           if (!is_last_line) {
-            LOGF("Incomplete line %zu ('%s', %.2fs) is not the last line "
-                 "%" PRId64,
-                 j, line.text, line.start_time, transcript->line_count - 1);
+            LOGF(
+                "Incomplete line %zu ('%s', %.2fs) is not the last line "
+                "%" PRId64,
+                j, line.text, line.start_time, transcript->line_count - 1);
           }
           REQUIRE(is_last_line);
         }

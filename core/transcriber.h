@@ -1,10 +1,9 @@
 #ifndef TRANSCRIBER_H
 #define TRANSCRIBER_H
 
-#include <cinttypes>
-
 #include <atomic>
 #include <chrono>
+#include <cinttypes>
 #include <map>
 #include <mutex>
 #include <random>
@@ -47,7 +46,7 @@ struct TranscriptStreamOutput {
 };
 
 class TranscriberStream {
-public:
+ public:
   VoiceActivityDetector *vad = nullptr;
   std::mutex vad_mutex;
   TranscriptStreamOutput *transcript_output;
@@ -99,7 +98,7 @@ struct TranscriberOptions {
 };
 
 class Transcriber {
-private:
+ private:
   TranscriberOptions options;
 
   // Non-streaming model (used for TINY and BASE architectures)
@@ -122,7 +121,7 @@ private:
   TranscriberStream *batch_stream = nullptr;
   std::mutex batch_stream_mutex;
 
-public:
+ public:
   Transcriber(const TranscriberOptions &options = TranscriberOptions());
   ~Transcriber();
 
@@ -139,15 +138,15 @@ public:
                            uint64_t audio_length, int32_t sample_rate);
   void transcribe_stream(int32_t stream_id, uint32_t flags,
                          struct transcript_t **out_transcript);
-  static std::string
-  transcript_to_string(const struct transcript_t *transcript);
+  static std::string transcript_to_string(
+      const struct transcript_t *transcript);
 
-  static std::string
-  transcript_line_to_string(const struct transcript_line_t *line);
+  static std::string transcript_line_to_string(
+      const struct transcript_line_t *line);
 
   static std::string *sanitize_text(const char *text);
 
-private:
+ private:
   void update_transcript_from_segments(
       const std::vector<VoiceActivitySegment> &segments,
       TranscriberStream *stream, struct transcript_t **out_transcript);

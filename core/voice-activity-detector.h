@@ -20,15 +20,16 @@ struct VoiceActivitySegment {
 };
 
 class VoiceActivityDetector {
-private:
+ private:
   const float threshold;
   const int32_t hop_size;
   const int32_t window_size;
   const size_t look_behind_sample_count;
   const size_t max_segment_sample_count;
 
-  // Raw pointer intentionally not deleted to avoid static destruction order issues
-  static SileroVad* silero_vad;
+  // Raw pointer intentionally not deleted to avoid static destruction order
+  // issues
+  static SileroVad *silero_vad;
 
   bool _is_active;
   std::vector<float> probability_window;
@@ -40,7 +41,7 @@ private:
   std::vector<float> processing_remainder_audio_buffer;
   bool previous_is_voice;
 
-public:
+ public:
   VoiceActivityDetector(float threshold = 0.5f, int32_t hop_size = 512,
                         int32_t window_size = 32,
                         size_t look_behind_sample_count = 8192,
@@ -57,7 +58,7 @@ public:
   }
   std::string to_string() const;
 
-private:
+ private:
   void clear();
   void on_voice_start();
   void on_voice_end();

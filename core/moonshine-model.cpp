@@ -1,9 +1,11 @@
 #include "moonshine-model.h"
 
+#include <fcntl.h>
+
 #include <cassert>
 #include <cctype>
 #include <cerrno>
-#include <cerrno> // For errno
+#include <cerrno>  // For errno
 #include <cmath>
 #include <cstdarg>
 #include <cstddef>
@@ -11,9 +13,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <cstring> // For strerror
-
-#include <fcntl.h>
+#include <cstring>  // For strerror
 
 #ifndef _WIN32
 #include <sys/mman.h>
@@ -42,7 +42,7 @@
 #define MOONSHINE_TINY_NUM_KV_HEADS 8
 #define MOONSHINE_TINY_HEAD_DIM 36
 
-#define MOONSHINE_TINY_PAST_ELEMENT_COUNT                                      \
+#define MOONSHINE_TINY_PAST_ELEMENT_COUNT \
   (MOONSHINE_TINY_NUM_KV_HEADS * MOONSHINE_TINY_HEAD_DIM)
 
 // Base settings.
@@ -50,7 +50,7 @@
 #define MOONSHINE_BASE_NUM_KV_HEADS 8
 #define MOONSHINE_BASE_HEAD_DIM 52
 
-#define MOONSHINE_BASE_PAST_ELEMENT_COUNT                                      \
+#define MOONSHINE_BASE_PAST_ELEMENT_COUNT \
   (MOONSHINE_BASE_NUM_KV_HEADS * MOONSHINE_BASE_HEAD_DIM)
 
 #define MOONSHINE_DECODER_START_TOKEN_ID 1
@@ -77,17 +77,19 @@ int set_model_options_from_arch(MoonshineModel *model, int32_t model_arch) {
   }
   return 0;
 }
-} // namespace
+}  // namespace
 
 MoonshineModel::MoonshineModel(bool log_ort_run)
-    : encoder_session(nullptr), decoder_session(nullptr), tokenizer(nullptr),
+    : encoder_session(nullptr),
+      decoder_session(nullptr),
+      tokenizer(nullptr),
       log_ort_run(log_ort_run) {
   ort_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
   LOG_ORT_ERROR(ort_api, ort_api->CreateEnv(ORT_LOGGING_LEVEL_WARNING,
                                             "MoonshineModel", &ort_env));
-  LOG_ORT_ERROR(ort_api, ort_api->CreateCpuMemoryInfo(OrtDeviceAllocator,
-                                                      OrtMemTypeDefault,
-                                                      &ort_memory_info));
+  LOG_ORT_ERROR(ort_api,
+                ort_api->CreateCpuMemoryInfo(
+                    OrtDeviceAllocator, OrtMemTypeDefault, &ort_memory_info));
   // Use a custom allocator that tracks memory usage.
   ort_session_allocator = new MoonshineOrtAllocator(ort_memory_info);
   // LOG_ORT_ERROR(ort_api, ort_api->RegisterAllocator(
@@ -259,8 +261,7 @@ int MoonshineModel::transcribe(const float *input_audio_data,
   std::vector<OrtValue *> encoder_outputs(encoder_output_count);
   // TIMER_START(moonshine_encoder_run);
   RETURN_ON_ORT_ERROR(
-      ort_api, ORT_RUN(ort_api, encoder_session,
-                       encoder_input_names.data(),
+      ort_api, ORT_RUN(ort_api, encoder_session, encoder_input_names.data(),
                        encoder_inputs.data(), encoder_input_count,
                        encoder_output_names.data(), encoder_output_count,
                        encoder_outputs.data()));
@@ -292,13 +293,14 @@ int MoonshineModel::transcribe(const float *input_audio_data,
   const size_t expected_decoder_input_count_v2 = (num_layers * 4) + 4;
   if ((decoder_input_count != expected_decoder_input_count_v1) &&
       (decoder_input_count != expected_decoder_input_count_v2)) {
-    LOGF("Expected decoder input count to be %zu or "
-         "%zu, but got %zu. This "
-         "often indicates you're specifying the "
-         "wrong model architecture "
-         "(for example tiny instead of base).\n",
-         expected_decoder_input_count_v1, expected_decoder_input_count_v2,
-         decoder_input_count);
+    LOGF(
+        "Expected decoder input count to be %zu or "
+        "%zu, but got %zu. This "
+        "often indicates you're specifying the "
+        "wrong model architecture "
+        "(for example tiny instead of base).\n",
+        expected_decoder_input_count_v1, expected_decoder_input_count_v2,
+        decoder_input_count);
     return 1;
   }
 
@@ -395,9 +397,10 @@ int MoonshineModel::transcribe(const float *input_audio_data,
                       decoder_input_name_to_index.end());
       const int64_t key_index = decoder_input_name_to_index[key];
       if (decoder_inputs_data[key_index] != nullptr) {
-        LOGF("Decoder input data for key %s is not "
-             "nullptr\n",
-             key.c_str());
+        LOGF(
+            "Decoder input data for key %s is not "
+            "nullptr\n",
+            key.c_str());
         return 1;
       }
       decoder_inputs_data[key_index] = new MoonshineTensorView(*value);

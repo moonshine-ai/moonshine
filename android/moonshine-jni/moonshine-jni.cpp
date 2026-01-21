@@ -1,11 +1,10 @@
-#include "moonshine-c-api.h"
+#include <jni.h>
 
 #include <memory>
 #include <string>
 #include <vector>
 
-#include <jni.h>
-
+#include "moonshine-c-api.h"
 #include "utf8.h"
 
 namespace {
@@ -36,8 +35,8 @@ jmethodID get_method(JNIEnv *env, jclass clazz, const char *methodName,
   return method;
 }
 
-std::unique_ptr<transcript_t>
-c_transcript_from_jobject(JNIEnv *env, jobject javaTranscript) {
+std::unique_ptr<transcript_t> c_transcript_from_jobject(
+    JNIEnv *env, jobject javaTranscript) {
   jclass transcriptClass = env->GetObjectClass(javaTranscript);
   jfieldID linesField =
       get_field(env, transcriptClass, "lines", "Ljava/util/List;");
@@ -51,8 +50,7 @@ c_transcript_from_jobject(JNIEnv *env, jobject javaTranscript) {
   jmethodID getMethod =
       get_method(env, listClass, "get", "(I)Ljava/lang/Object;");
 
-  jclass lineClass =
-      get_class(env, "ai/moonshine/voice/TranscriptLine");
+  jclass lineClass = get_class(env, "ai/moonshine/voice/TranscriptLine");
 
   jfieldID textField = get_field(env, lineClass, "text", "Ljava/lang/String;");
   jfieldID audioDataField = get_field(env, lineClass, "audioData", "[F");
@@ -97,8 +95,7 @@ jobject c_transcript_to_jobject(JNIEnv *env, struct transcript_t *transcript) {
   jmethodID addMethod =
       get_method(env, listClass, "add", "(Ljava/lang/Object;)Z");
 
-  jclass lineClass =
-      get_class(env, "ai/moonshine/voice/TranscriptLine");
+  jclass lineClass = get_class(env, "ai/moonshine/voice/TranscriptLine");
   jfieldID textField = get_field(env, lineClass, "text", "Ljava/lang/String;");
   jfieldID audioDataField = get_field(env, lineClass, "audioData", "[F");
   jfieldID startTimeField = get_field(env, lineClass, "startTime", "F");
@@ -118,7 +115,8 @@ jobject c_transcript_to_jobject(JNIEnv *env, struct transcript_t *transcript) {
     jobject jline = env->NewObject(lineClass, lineConstructor);
     std::string raw_text(line->text);
     std::string sanitized_text = utf8::replace_invalid(raw_text);
-    env->SetObjectField(jline, textField, env->NewStringUTF(sanitized_text.c_str()));
+    env->SetObjectField(jline, textField,
+                        env->NewStringUTF(sanitized_text.c_str()));
     jfloatArray audioDataArray = env->NewFloatArray(line->audio_data_count);
     env->SetFloatArrayRegion(audioDataArray, 0, line->audio_data_count,
                              line->audio_data);
@@ -133,8 +131,7 @@ jobject c_transcript_to_jobject(JNIEnv *env, struct transcript_t *transcript) {
     env->CallBooleanMethod(linesList, addMethod, jline);
     env->DeleteLocalRef(jline);
   }
-  jclass transcriptClass =
-      get_class(env, "ai/moonshine/voice/Transcript");
+  jclass transcriptClass = get_class(env, "ai/moonshine/voice/Transcript");
   jmethodID transcriptConstructor =
       get_method(env, transcriptClass, "<init>", "()V");
   jfieldID linesField =
@@ -149,17 +146,18 @@ jobject c_transcript_to_jobject(JNIEnv *env, struct transcript_t *transcript) {
   return jtranscript;
 }
 
-} // namespace
+}  // namespace
 
 extern "C" JNIEXPORT jint JNICALL
-Java_ai_moonshine_voice_JNI_moonshineGetVersion(
-    JNIEnv * /* env */, jobject /* this */) {
+Java_ai_moonshine_voice_JNI_moonshineGetVersion(JNIEnv * /* env */,
+                                                jobject /* this */) {
   return moonshine_get_version();
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_ai_moonshine_voice_JNI_moonshineErrorToString(
-    JNIEnv *env, jobject /* this */, jint error) {
+Java_ai_moonshine_voice_JNI_moonshineErrorToString(JNIEnv *env,
+                                                   jobject /* this */,
+                                                   jint error) {
   return env->NewStringUTF(moonshine_error_to_string(error));
 }
 
@@ -181,10 +179,11 @@ extern "C" JNIEXPORT int JNICALL
 Java_ai_moonshine_voice_JNI_moonshineLoadTranscriberFromFiles(
     JNIEnv *env, jobject /* this */, jstring path, jint model_arch,
     jobjectArray joptions) {
-  jclass optionClass =
-      get_class(env, "ai/moonshine/voice/TranscriberOption");
-  jfieldID nameField = get_field(env, optionClass, "name", "Ljava/lang/String;");
-  jfieldID valueField = get_field(env, optionClass, "value", "Ljava/lang/String;");
+  jclass optionClass = get_class(env, "ai/moonshine/voice/TranscriberOption");
+  jfieldID nameField =
+      get_field(env, optionClass, "name", "Ljava/lang/String;");
+  jfieldID valueField =
+      get_field(env, optionClass, "value", "Ljava/lang/String;");
 
   std::vector<transcriber_option_t> coptions;
   if (joptions != nullptr) {
@@ -212,10 +211,11 @@ Java_ai_moonshine_voice_JNI_moonshineLoadTranscriberFromMemory(
     JNIEnv *env, jobject /* this */, jbyteArray encoder_model_data,
     jbyteArray decoder_model_data, jbyteArray tokenizer_data, jint model_arch,
     jobjectArray joptions) {
-  jclass optionClass =
-      get_class(env, "ai/moonshine/voice/TranscriberOption");
-  jfieldID nameField = get_field(env, optionClass, "name", "Ljava/lang/String;");
-  jfieldID valueField = get_field(env, optionClass, "value", "Ljava/lang/String;");
+  jclass optionClass = get_class(env, "ai/moonshine/voice/TranscriberOption");
+  jfieldID nameField =
+      get_field(env, optionClass, "name", "Ljava/lang/String;");
+  jfieldID valueField =
+      get_field(env, optionClass, "value", "Ljava/lang/String;");
   std::vector<transcriber_option_t> coptions;
   if (joptions != nullptr) {
     for (int i = 0; i < env->GetArrayLength(joptions); i++) {
@@ -242,8 +242,9 @@ Java_ai_moonshine_voice_JNI_moonshineLoadTranscriberFromMemory(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_ai_moonshine_voice_JNI_moonshineFreeTranscriber(
-    JNIEnv * /* env */, jobject /* this */, jint transcriber_handle) {
+Java_ai_moonshine_voice_JNI_moonshineFreeTranscriber(JNIEnv * /* env */,
+                                                     jobject /* this */,
+                                                     jint transcriber_handle) {
   moonshine_free_transcriber(transcriber_handle);
 }
 
@@ -264,29 +265,33 @@ Java_ai_moonshine_voice_JNI_moonshineTranscribeWithoutStreaming(
 }
 
 extern "C" JNIEXPORT int JNICALL
-Java_ai_moonshine_voice_JNI_moonshineCreateStream(
-    JNIEnv * /* env */, jobject /* this */, jint transcriber_handle) {
+Java_ai_moonshine_voice_JNI_moonshineCreateStream(JNIEnv * /* env */,
+                                                  jobject /* this */,
+                                                  jint transcriber_handle) {
   return moonshine_create_stream(transcriber_handle, 0);
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_ai_moonshine_voice_JNI_moonshineFreeStream(
-    JNIEnv * /* env */, jobject /* this */, jint transcriber_handle,
-    jint stream_handle) {
+Java_ai_moonshine_voice_JNI_moonshineFreeStream(JNIEnv * /* env */,
+                                                jobject /* this */,
+                                                jint transcriber_handle,
+                                                jint stream_handle) {
   moonshine_free_stream(transcriber_handle, stream_handle);
 }
 
 extern "C" JNIEXPORT int JNICALL
-Java_ai_moonshine_voice_JNI_moonshineStartStream(
-    JNIEnv * /* env */, jobject /* this */, jint transcriber_handle,
-    jint stream_handle) {
+Java_ai_moonshine_voice_JNI_moonshineStartStream(JNIEnv * /* env */,
+                                                 jobject /* this */,
+                                                 jint transcriber_handle,
+                                                 jint stream_handle) {
   return moonshine_start_stream(transcriber_handle, stream_handle);
 }
 
 extern "C" JNIEXPORT int JNICALL
-Java_ai_moonshine_voice_JNI_moonshineStopStream(
-    JNIEnv * /* env */, jobject /* this */, jint transcriber_handle,
-    jint stream_handle) {
+Java_ai_moonshine_voice_JNI_moonshineStopStream(JNIEnv * /* env */,
+                                                jobject /* this */,
+                                                jint transcriber_handle,
+                                                jint stream_handle) {
   return moonshine_stop_stream(transcriber_handle, stream_handle);
 }
 
@@ -305,9 +310,11 @@ Java_ai_moonshine_voice_JNI_moonshineAddAudioToStream(
 }
 
 extern "C" JNIEXPORT jobject JNICALL
-Java_ai_moonshine_voice_JNI_moonshineTranscribeStream(
-    JNIEnv *env, jobject /* this */, jint transcriber_handle,
-    jint stream_handle, jint flags) {
+Java_ai_moonshine_voice_JNI_moonshineTranscribeStream(JNIEnv *env,
+                                                      jobject /* this */,
+                                                      jint transcriber_handle,
+                                                      jint stream_handle,
+                                                      jint flags) {
   struct transcript_t *transcript = nullptr;
   int transcription_error = moonshine_transcribe_stream(
       transcriber_handle, stream_handle, flags, &transcript);

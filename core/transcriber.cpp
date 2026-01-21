@@ -2,14 +2,13 @@
 
 #include <cstdio>
 #include <filesystem>
+#include <iostream>
 #include <string>
 
 #include "debug-utils.h"
 #include "resampler.h"
 #include "string-utils.h"
 #include "utf8.h"
-
-#include <iostream>
 
 namespace {
 constexpr int32_t INTERNAL_SAMPLE_RATE = 16000;
@@ -37,7 +36,7 @@ void validate_model_arch(uint32_t model_arch) {
   throw std::runtime_error("Invalid model architecture: " +
                            std::to_string(model_arch));
 }
-} // namespace
+}  // namespace
 
 Transcriber::Transcriber(const TranscriberOptions &options)
     : stt_model(nullptr), streaming_model(nullptr), next_stream_id(1) {
@@ -307,8 +306,8 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
   this->update_transcript_from_segments(segments, stream, out_transcript);
 }
 
-std::string
-Transcriber::transcript_to_string(const struct transcript_t *transcript) {
+std::string Transcriber::transcript_to_string(
+    const struct transcript_t *transcript) {
   std::string result;
   result += std::to_string(transcript->line_count) + " lines\n";
   for (size_t i = 0; i < transcript->line_count; i++) {
@@ -326,8 +325,8 @@ Transcriber::transcript_to_string(const struct transcript_t *transcript) {
   return result;
 }
 
-std::string
-Transcriber::transcript_line_to_string(const struct transcript_line_t *line) {
+std::string Transcriber::transcript_line_to_string(
+    const struct transcript_line_t *line) {
   std::string result;
   result += "text: '" +
             (line->text == nullptr ? std::string("<null>")
@@ -442,7 +441,7 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
     const float *new_audio_data = audio_data + new_samples_start;
     size_t new_audio_length = audio_length - new_samples_start;
 
-    const int chunk_size = 1280; // 80ms at 16kHz
+    const int chunk_size = 1280;  // 80ms at 16kHz
     {
       std::lock_guard<std::mutex> lock(this->streaming_model_mutex);
 
@@ -513,8 +512,7 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
       tokens.push_back(next_token);
       current_token = next_token;
 
-      if (next_token == config.eos_id)
-        break;
+      if (next_token == config.eos_id) break;
     }
   }
 
@@ -699,8 +697,10 @@ void TranscriptStreamOutput::mark_all_lines_as_complete() {
 TranscriberStream::TranscriberStream(VoiceActivityDetector *vad,
                                      int32_t stream_id,
                                      const std::string &save_input_wav_path)
-    : vad(vad), transcript_output(new TranscriptStreamOutput()),
-      save_input_wav_path(save_input_wav_path), stream_id(stream_id) {
+    : vad(vad),
+      transcript_output(new TranscriptStreamOutput()),
+      save_input_wav_path(save_input_wav_path),
+      stream_id(stream_id) {
   if (!this->save_input_wav_path.empty()) {
     std::filesystem::create_directory(this->save_input_wav_path);
     std::string wav_path = append_path_component(this->save_input_wav_path,

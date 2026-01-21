@@ -1,7 +1,7 @@
 #include "moonshine-tensor.h"
 
-#include "ort-utils.h"
 #include "debug-utils.h"
+#include "ort-utils.h"
 
 extern "C" void moonshine_free_tensor(moonshine_tensor_t *tensor) {
   if (tensor == NULL) {
@@ -12,8 +12,8 @@ extern "C" void moonshine_free_tensor(moonshine_tensor_t *tensor) {
   DEBUG_FREE(tensor);
 }
 
-extern "C" void
-moonshine_free_tensor_list(moonshine_tensor_list_t *tensor_list) {
+extern "C" void moonshine_free_tensor_list(
+    moonshine_tensor_list_t *tensor_list) {
   if (tensor_list == nullptr) {
     return;
   }

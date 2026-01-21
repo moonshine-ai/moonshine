@@ -1,12 +1,12 @@
 #include "debug-utils.h"
 
+#include <fcntl.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <numeric>
-
-#include <fcntl.h>
 
 bool load_wav_data(const char *path, float **out_float_data,
                    size_t *out_num_samples, int32_t *out_sample_rate) {
@@ -44,8 +44,7 @@ bool load_wav_data(const char *path, float **out_float_data,
   uint32_t chunk_size = 0;
   bool found_fmt = false;
   while (std::fread(chunk_id, 1, 4, file) == 4) {
-    if (std::fread(&chunk_size, 4, 1, file) != 1)
-      break;
+    if (std::fread(&chunk_size, 4, 1, file) != 1) break;
     if (std::strncmp(chunk_id, "fmt ", 4) == 0) {
       found_fmt = true;
       break;
@@ -74,8 +73,7 @@ bool load_wav_data(const char *path, float **out_float_data,
   std::fread(&block_align, sizeof(uint16_t), 1, file);
   std::fread(&bits_per_sample, sizeof(uint16_t), 1, file);
   // Skip any extra fmt bytes
-  if (chunk_size > 16)
-    std::fseek(file, chunk_size - 16, SEEK_CUR);
+  if (chunk_size > 16) std::fseek(file, chunk_size - 16, SEEK_CUR);
 
   if (audio_format != 1 || bits_per_sample != 16) {
     std::fclose(file);
@@ -86,8 +84,7 @@ bool load_wav_data(const char *path, float **out_float_data,
   // Find the "data" chunk
   bool found_data = false;
   while (std::fread(chunk_id, 1, 4, file) == 4) {
-    if (std::fread(&chunk_size, 4, 1, file) != 1)
-      break;
+    if (std::fread(&chunk_size, 4, 1, file) != 1) break;
     if (std::strncmp(chunk_id, "data", 4) == 0) {
       found_data = true;
       break;
@@ -117,7 +114,7 @@ bool load_wav_data(const char *path, float **out_float_data,
     }
     result_data[i] = static_cast<float>(sample) / 32768.0f;
   }
-  std::fclose(file);  
+  std::fclose(file);
   *out_float_data = result_data;
   *out_num_samples = num_samples;
   *out_sample_rate = sample_rate;

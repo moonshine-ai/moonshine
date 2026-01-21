@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <cstdlib>
-
 #include <stdexcept>
 
 #include "debug-utils.h"
@@ -140,10 +139,10 @@ T BinTokenizer::text_to_special_token(const std::string &text) {
   return tokens[0];
 }
 
-template int32_t
-BinTokenizer::text_to_special_token<int32_t>(const std::string &text);
-template int64_t
-BinTokenizer::text_to_special_token<int64_t>(const std::string &text);
+template int32_t BinTokenizer::text_to_special_token<int32_t>(
+    const std::string &text);
+template int64_t BinTokenizer::text_to_special_token<int64_t>(
+    const std::string &text);
 
 // Uses a naive algorithm to encode text into tokens.
 // This is not the most efficient way to do it, but it's functional and
@@ -193,10 +192,10 @@ std::vector<T> BinTokenizer::text_to_tokens(const std::string &text) {
   return result;
 }
 
-template std::vector<int64_t>
-BinTokenizer::text_to_tokens<int64_t>(const std::string &text);
-template std::vector<int32_t>
-BinTokenizer::text_to_tokens<int32_t>(const std::string &text);
+template std::vector<int64_t> BinTokenizer::text_to_tokens<int64_t>(
+    const std::string &text);
+template std::vector<int32_t> BinTokenizer::text_to_tokens<int32_t>(
+    const std::string &text);
 
 template <typename T>
 std::string BinTokenizer::tokens_to_text(const std::vector<T> &tokens,
@@ -220,7 +219,7 @@ std::string BinTokenizer::tokens_to_text(const std::vector<T> &tokens,
   return result;
 }
 
-template std::string
-BinTokenizer::tokens_to_text<int32_t>(const std::vector<int32_t> &, bool);
-template std::string
-BinTokenizer::tokens_to_text<int64_t>(const std::vector<int64_t> &, bool);
+template std::string BinTokenizer::tokens_to_text<int32_t>(
+    const std::vector<int32_t> &, bool);
+template std::string BinTokenizer::tokens_to_text<int64_t>(
+    const std::vector<int64_t> &, bool);

@@ -39,7 +39,7 @@ void test_resample_audio(const std::vector<float> &input_audio,
   LOGF("Original mean: %f, Resampled mean: %f", original_mean, resampled_mean);
   REQUIRE(original_mean == doctest::Approx(resampled_mean).epsilon(0.001f));
 }
-} // namespace
+}  // namespace
 
 TEST_CASE("resampler-test") {
   SUBCASE("resample-audio") {

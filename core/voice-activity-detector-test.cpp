@@ -141,7 +141,8 @@ TEST_CASE("voice-activity-detector-test") {
     // audio, even with the threshold set to 0.0f.
     const int32_t hop_size = 256;
     const size_t expected_audio_data_size = wav_data_size;
-    const size_t expected_audio_data_size_min = expected_audio_data_size - hop_size;
+    const size_t expected_audio_data_size_min =
+        expected_audio_data_size - hop_size;
     REQUIRE(segment.audio_data.size() >= expected_audio_data_size_min);
     REQUIRE(segment.audio_data.size() <= expected_audio_data_size);
     REQUIRE(segment.start_time >= 0);

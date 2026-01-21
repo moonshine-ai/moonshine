@@ -7,7 +7,7 @@
 
 struct MoonshineOrtAllocator {
   OrtAllocator base;
-  const OrtMemoryInfo* memory_info;
+  const OrtMemoryInfo *memory_info;
   size_t total_allocated;
   size_t total_freed;
   size_t total_reserved;
@@ -15,9 +15,9 @@ struct MoonshineOrtAllocator {
   size_t total_stats_released;
   size_t total_alloc_on_stream;
 
-  std::map<void*, size_t> allocated_blocks;
-  
-  MoonshineOrtAllocator(const OrtMemoryInfo* memory_info);
+  std::map<void *, size_t> allocated_blocks;
+
+  MoonshineOrtAllocator(const OrtMemoryInfo *memory_info);
 
   ~MoonshineOrtAllocator();
 

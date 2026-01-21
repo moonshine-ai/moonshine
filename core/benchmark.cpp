@@ -1,15 +1,14 @@
-#include "moonshine-cpp.h"
-
-#include <cstdio>
-
 #include <chrono>
+#include <cstdio>
 #include <iostream>
 #include <string>
 #include <vector>
 
+#include "moonshine-cpp.h"
+
 namespace {
 class AudioProducer {
-public:
+ public:
   AudioProducer(std::string wav_path, float chunk_duration_seconds = 0.0214f)
       : current_index_(0) {
     loadWavData(wav_path);
@@ -31,14 +30,14 @@ public:
   size_t audio_data_size() const { return audio_data_.size(); }
   void loadWavData(std::string wav_path);
 
-private:
+ private:
   size_t chunk_size_;
   int32_t sample_rate_;
   size_t current_index_;
   std::vector<float> audio_data_;
 };
 
-} // namespace
+}  // namespace
 
 int main(int argc, char *argv[]) {
   std::string model_path = "../../test-assets/tiny-en";
@@ -139,8 +138,7 @@ void AudioProducer::loadWavData(std::string wav_path) {
   uint32_t chunk_size = 0;
   bool found_fmt = false;
   while (std::fread(chunk_id, 1, 4, file) == 4) {
-    if (std::fread(&chunk_size, 4, 1, file) != 1)
-      break;
+    if (std::fread(&chunk_size, 4, 1, file) != 1) break;
     if (std::strncmp(chunk_id, "fmt ", 4) == 0) {
       found_fmt = true;
       break;
@@ -167,8 +165,7 @@ void AudioProducer::loadWavData(std::string wav_path) {
   std::fread(&block_align, sizeof(uint16_t), 1, file);
   std::fread(&bits_per_sample, sizeof(uint16_t), 1, file);
   // Skip any extra fmt bytes
-  if (chunk_size > 16)
-    std::fseek(file, chunk_size - 16, SEEK_CUR);
+  if (chunk_size > 16) std::fseek(file, chunk_size - 16, SEEK_CUR);
 
   if (audio_format != 1 || bits_per_sample != 16) {
     std::fclose(file);
@@ -178,8 +175,7 @@ void AudioProducer::loadWavData(std::string wav_path) {
   // Find the "data" chunk
   bool found_data = false;
   while (std::fread(chunk_id, 1, 4, file) == 4) {
-    if (std::fread(&chunk_size, 4, 1, file) != 1)
-      break;
+    if (std::fread(&chunk_size, 4, 1, file) != 1) break;
     if (std::strncmp(chunk_id, "data", 4) == 0) {
       found_data = true;
       break;

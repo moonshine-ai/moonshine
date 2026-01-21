@@ -110,9 +110,10 @@ TEST_CASE("moonshine-test-v2") {
         if (line.is_complete == 0) {
           const bool is_last_line = (j == (transcript->line_count - 1));
           if (!is_last_line) {
-            LOGF("Incomplete line %zu ('%s', %.2fs) is not the last line "
-                 "%" PRId64,
-                 j, line.text, line.start_time, transcript->line_count - 1);
+            LOGF(
+                "Incomplete line %zu ('%s', %.2fs) is not the last line "
+                "%" PRId64,
+                j, line.text, line.start_time, transcript->line_count - 1);
           }
           REQUIRE(is_last_line);
         }
@@ -272,9 +273,12 @@ TEST_CASE("moonshine-test-v2") {
     REQUIRE(line.text != nullptr);
     REQUIRE(line.audio_data != nullptr);
     const int32_t hop_size = 256;
-    const size_t expected_audio_data_size = (size_t)(wav_data_size * wav_sample_rate / 16000.0f);
-    const size_t expected_audio_data_size_min = expected_audio_data_size - hop_size;
-    const size_t expected_audio_data_size_max = expected_audio_data_size + hop_size;
+    const size_t expected_audio_data_size =
+        (size_t)(wav_data_size * wav_sample_rate / 16000.0f);
+    const size_t expected_audio_data_size_min =
+        expected_audio_data_size - hop_size;
+    const size_t expected_audio_data_size_max =
+        expected_audio_data_size + hop_size;
     REQUIRE(line.audio_data_count >= expected_audio_data_size_min);
     REQUIRE(line.audio_data_count <= expected_audio_data_size_max);
     REQUIRE(line.start_time < 0.001f);
