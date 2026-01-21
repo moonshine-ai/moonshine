@@ -44,8 +44,17 @@ def __getattr__(name):
     global _transcriber_imported, _mic_transcriber_imported
 
     # Lazy import transcriber module
-    if name in ("Transcriber", "Stream", "TranscriptEventListener", "TranscriptEvent",
-                "LineStarted", "LineUpdated", "LineTextChanged", "LineCompleted", "Error"):
+    if name in (
+        "Transcriber",
+        "Stream",
+        "TranscriptEventListener",
+        "TranscriptEvent",
+        "LineStarted",
+        "LineUpdated",
+        "LineTextChanged",
+        "LineCompleted",
+        "Error",
+    ):
         if not _transcriber_imported:
             from moonshine_voice.transcriber import (
                 Transcriber,
@@ -58,6 +67,7 @@ def __getattr__(name):
                 LineCompleted,
                 Error,
             )
+
             # Store in globals for this module
             globals()["Transcriber"] = Transcriber
             globals()["Stream"] = Stream
@@ -75,6 +85,7 @@ def __getattr__(name):
     if name == "MicTranscriber":
         if not _mic_transcriber_imported:
             from moonshine_voice.mic_transcriber import MicTranscriber
+
             globals()["MicTranscriber"] = MicTranscriber
             _mic_transcriber_imported = True
         return globals()[name]

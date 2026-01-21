@@ -42,4 +42,3 @@ def check_error(error_code: int) -> None:
         raise MoonshineInvalidArgumentError()
     else:
         raise MoonshineError(f"Unknown error code: {error_code}", error_code)
-

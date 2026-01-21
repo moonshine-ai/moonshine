@@ -69,7 +69,7 @@ def load_wav_file(file_path: str | Path) -> Tuple[list[float], int]:
         >>> print(f"Loaded {len(audio_data)} samples at {sample_rate} Hz")
     """
     file_path = Path(file_path)
-    
+
     if not file_path.exists():
         raise IOError(f"File not found: {file_path}")
 
@@ -165,10 +165,12 @@ def load_wav_file(file_path: str | Path) -> Tuple[list[float], int]:
                         # 24-bit samples are stored as 3 bytes, little-endian
                         b1, b2, b3 = struct.unpack("<BBB", f.read(3))
                         # Sign extend to 32-bit
-                        sample = (b1 | (b2 << 8) | (b3 << 16))
+                        sample = b1 | (b2 << 8) | (b3 << 16)
                         if sample & 0x800000:  # Sign bit
                             sample |= 0xFF000000  # Sign extend
-                        sample = struct.unpack("<i", struct.pack("<I", sample & 0xFFFFFFFF))[0]
+                        sample = struct.unpack(
+                            "<i", struct.pack("<I", sample & 0xFFFFFFFF)
+                        )[0]
                         channel_sum += sample / 8388608.0  # 2^23
                     elif bits_per_sample == 32:
                         sample = struct.unpack("<i", f.read(4))[0]
@@ -186,14 +188,15 @@ def load_wav_file(file_path: str | Path) -> Tuple[list[float], int]:
                     # 24-bit samples are stored as 3 bytes, little-endian
                     b1, b2, b3 = struct.unpack("<BBB", f.read(3))
                     # Sign extend to 32-bit
-                    sample = (b1 | (b2 << 8) | (b3 << 16))
+                    sample = b1 | (b2 << 8) | (b3 << 16)
                     if sample & 0x800000:  # Sign bit
                         sample |= 0xFF000000  # Sign extend
-                    sample = struct.unpack("<i", struct.pack("<I", sample & 0xFFFFFFFF))[0]
+                    sample = struct.unpack(
+                        "<i", struct.pack("<I", sample & 0xFFFFFFFF)
+                    )[0]
                     audio_data.append(sample / 8388608.0)  # 2^23
                 elif bits_per_sample == 32:
                     sample = struct.unpack("<i", f.read(4))[0]
                     audio_data.append(sample / 2147483648.0)  # 2^31
 
     return audio_data, sample_rate
-
