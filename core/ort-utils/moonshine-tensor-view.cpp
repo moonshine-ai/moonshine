@@ -1,19 +1,17 @@
 #include "moonshine-tensor-view.h"
 
-#include <list>
-
 #include <cstdlib>
 #include <cstring>
+#include <list>
 
-#include "ort-utils.h"
 #include "debug-utils.h"
+#include "ort-utils.h"
 
 namespace {
 
-moonshine_tensor_t *
-moonshine_tensor_from_shape_and_dtype(const std::vector<int64_t> &shape,
-                                      uint32_t dtype,
-                                      const void *data_to_copy) {
+moonshine_tensor_t *moonshine_tensor_from_shape_and_dtype(
+    const std::vector<int64_t> &shape, uint32_t dtype,
+    const void *data_to_copy) {
   if (shape.size() == 0) {
     fprintf(stderr, "Shape is empty\n");
     return nullptr;
@@ -48,17 +46,15 @@ moonshine_tensor_t *moonshine_tensor_from_ort_tensor(const OrtApi *ort_api,
   ONNXTensorElementDataType ort_dtype = ort_get_value_type(ort_api, ort_tensor);
   moonshine_dtype_t moonshine_dtype = ort_dtype_to_moonshine_dtype(ort_dtype);
   void *ort_data = nullptr;
-  LOG_ORT_ERROR(ort_api,
-                  ort_api->GetTensorMutableData(ort_tensor, &ort_data));
-  moonshine_tensor_t *moonshine_tensor = moonshine_tensor_from_shape_and_dtype(shape, moonshine_dtype,
-                                               ort_data);
+  LOG_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(ort_tensor, &ort_data));
+  moonshine_tensor_t *moonshine_tensor =
+      moonshine_tensor_from_shape_and_dtype(shape, moonshine_dtype, ort_data);
   return moonshine_tensor;
 }
-} // namespace
+}  // namespace
 
 MoonshineTensorView::MoonshineTensorView()
-    : _tensor(nullptr), name("anonymous") {
-}
+    : _tensor(nullptr), name("anonymous") {}
 
 MoonshineTensorView::MoonshineTensorView(moonshine_tensor_t *tensor,
                                          std::string name)
@@ -86,23 +82,23 @@ MoonshineTensorView::MoonshineTensorView(const MoonshineTensorView &other)
                                                   other._tensor->data);
 }
 
-MoonshineTensorView::MoonshineTensorView(const OrtApi* ort_api, OrtValue *ort_tensor,
+MoonshineTensorView::MoonshineTensorView(const OrtApi *ort_api,
+                                         OrtValue *ort_tensor,
                                          const std::string &name)
     : _tensor(moonshine_tensor_from_ort_tensor(ort_api, ort_tensor)),
       name(name) {
   if (_tensor == nullptr) {
-    throw std::runtime_error("Failed to create moonshine tensor '" + name + "' from ort tensor");
+    throw std::runtime_error("Failed to create moonshine tensor '" + name +
+                             "' from ort tensor");
   }
   _shape = std::vector<int64_t>(_tensor->shape,
                                 _tensor->shape + _tensor->shape_count);
 }
 
-MoonshineTensorView::~MoonshineTensorView() {
-  moonshine_free_tensor(_tensor);
-}
+MoonshineTensorView::~MoonshineTensorView() { moonshine_free_tensor(_tensor); }
 
-MoonshineTensorView &
-MoonshineTensorView::operator=(const MoonshineTensorView &other) {
+MoonshineTensorView &MoonshineTensorView::operator=(
+    const MoonshineTensorView &other) {
   moonshine_free_tensor(_tensor);
 
   _shape = other._shape;
@@ -129,7 +125,7 @@ uint32_t MoonshineTensorView::dtype() { return _tensor->dtype; }
 
 void MoonshineTensorView::reshape(const std::vector<int64_t> &shape) {
   size_t new_element_count = std::accumulate(shape.begin(), shape.end(), 1,
-                         std::multiplies<int64_t>());
+                                             std::multiplies<int64_t>());
   if (new_element_count != element_count()) {
     throw std::runtime_error("New shape has a different number of elements");
   }
@@ -164,83 +160,83 @@ int64_t MoonshineTensorView::argmax() {
   return static_cast<int64_t>(max_index);
 }
 
-moonshine_dtype_t
-ort_dtype_to_moonshine_dtype(ONNXTensorElementDataType ort_dtype) {
+moonshine_dtype_t ort_dtype_to_moonshine_dtype(
+    ONNXTensorElementDataType ort_dtype) {
   switch (ort_dtype) {
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT:
-    return MOONSHINE_DTYPE_FLOAT32;
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16:
-    return MOONSHINE_DTYPE_FLOAT16;
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE:
-    return MOONSHINE_DTYPE_FLOAT64;
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32:
-    return MOONSHINE_DTYPE_INT32;
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64:
-    return MOONSHINE_DTYPE_INT64;
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_BOOL:
-    return MOONSHINE_DTYPE_BOOL;
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT8:
-    return MOONSHINE_DTYPE_UINT8;
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT16:
-    return MOONSHINE_DTYPE_UINT16;
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT32:
-    return MOONSHINE_DTYPE_UINT32;
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT64:
-    return MOONSHINE_DTYPE_UINT64;
-  default:
-    throw std::runtime_error("Unsupported tensor type");
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT:
+      return MOONSHINE_DTYPE_FLOAT32;
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16:
+      return MOONSHINE_DTYPE_FLOAT16;
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE:
+      return MOONSHINE_DTYPE_FLOAT64;
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32:
+      return MOONSHINE_DTYPE_INT32;
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64:
+      return MOONSHINE_DTYPE_INT64;
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_BOOL:
+      return MOONSHINE_DTYPE_BOOL;
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT8:
+      return MOONSHINE_DTYPE_UINT8;
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT16:
+      return MOONSHINE_DTYPE_UINT16;
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT32:
+      return MOONSHINE_DTYPE_UINT32;
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT64:
+      return MOONSHINE_DTYPE_UINT64;
+    default:
+      throw std::runtime_error("Unsupported tensor type");
   }
 }
 
-ONNXTensorElementDataType
-moonshine_dtype_to_ort_dtype(uint32_t moonshine_dtype) {
+ONNXTensorElementDataType moonshine_dtype_to_ort_dtype(
+    uint32_t moonshine_dtype) {
   switch (moonshine_dtype) {
-  case MOONSHINE_DTYPE_FLOAT16:
-    return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16;
-  case MOONSHINE_DTYPE_FLOAT32:
-    return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
-  case MOONSHINE_DTYPE_FLOAT64:
-    return ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE;
-  case MOONSHINE_DTYPE_INT32:
-    return ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32;
-  case MOONSHINE_DTYPE_INT64:
-    return ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64;
-  case MOONSHINE_DTYPE_UINT32:
-    return ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT32;
-  case MOONSHINE_DTYPE_UINT64:
-    return ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT64;
-  case MOONSHINE_DTYPE_BOOL:
-    return ONNX_TENSOR_ELEMENT_DATA_TYPE_BOOL;
-  default:
-    throw std::runtime_error("Unsupported tensor type");
+    case MOONSHINE_DTYPE_FLOAT16:
+      return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16;
+    case MOONSHINE_DTYPE_FLOAT32:
+      return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
+    case MOONSHINE_DTYPE_FLOAT64:
+      return ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE;
+    case MOONSHINE_DTYPE_INT32:
+      return ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32;
+    case MOONSHINE_DTYPE_INT64:
+      return ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64;
+    case MOONSHINE_DTYPE_UINT32:
+      return ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT32;
+    case MOONSHINE_DTYPE_UINT64:
+      return ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT64;
+    case MOONSHINE_DTYPE_BOOL:
+      return ONNX_TENSOR_ELEMENT_DATA_TYPE_BOOL;
+    default:
+      throw std::runtime_error("Unsupported tensor type");
   }
   return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
 }
 
 size_t ort_dtype_to_bytes_per_element(ONNXTensorElementDataType ort_dtype) {
   switch (ort_dtype) {
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT:
-    return sizeof(float);
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16:
-    return sizeof(uint16_t);
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE:
-    return sizeof(double);
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32:
-    return sizeof(int32_t);
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64:
-    return sizeof(int64_t);
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_BOOL:
-    return sizeof(uint8_t);
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT8:
-    return sizeof(uint8_t);
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT16:
-    return sizeof(uint16_t);
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT32:
-    return sizeof(uint32_t);
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT64:
-    return sizeof(uint64_t);
-  default:
-    throw std::runtime_error("Unsupported tensor type");
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT:
+      return sizeof(float);
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16:
+      return sizeof(uint16_t);
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE:
+      return sizeof(double);
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32:
+      return sizeof(int32_t);
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64:
+      return sizeof(int64_t);
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_BOOL:
+      return sizeof(uint8_t);
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT8:
+      return sizeof(uint8_t);
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT16:
+      return sizeof(uint16_t);
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT32:
+      return sizeof(uint32_t);
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT64:
+      return sizeof(uint64_t);
+    default:
+      throw std::runtime_error("Unsupported tensor type");
   }
   return 0;
 }
@@ -251,10 +247,9 @@ size_t moonshine_dtype_to_bytes_per_element(uint32_t moonshine_dtype) {
   return ort_dtype_to_bytes_per_element(ort_dtype);
 }
 
-moonshine_tensor_t *
-moonshine_tensor_from_shape_and_dtype(const std::vector<int64_t> &shape,
-                                      uint32_t dtype,
-                                      const void *data_to_copy) {
+moonshine_tensor_t *moonshine_tensor_from_shape_and_dtype(
+    const std::vector<int64_t> &shape, uint32_t dtype,
+    const void *data_to_copy) {
   moonshine_tensor_t *moonshine_tensor = static_cast<moonshine_tensor_t *>(
       DEBUG_CALLOC(1, sizeof(moonshine_tensor_t)));
   moonshine_tensor->dtype = dtype;
@@ -275,28 +270,30 @@ moonshine_tensor_from_shape_and_dtype(const std::vector<int64_t> &shape,
   return moonshine_tensor;
 }
 
-MoonshineTensorView *
-moonshine_tensor_from_token_vector(std::vector<int32_t> &vector) {
+MoonshineTensorView *moonshine_tensor_from_token_vector(
+    std::vector<int32_t> &vector) {
   MoonshineTensorView *moonshine_tensor = new MoonshineTensorView(
       {static_cast<int64_t>(vector.size())}, MOONSHINE_DTYPE_INT32,
       vector.data(), TENSOR_NAME("tokens"));
   return moonshine_tensor;
 }
 
-std::vector<int32_t>
-token_vector_from_moonshine_tensor(MoonshineTensorView *moonshine_tensor) {
-  return std::vector<int32_t>(moonshine_tensor->data<int32_t>(),
-                              moonshine_tensor->data<int32_t>() +
-                                  moonshine_tensor->shape()[0]);
+std::vector<int32_t> token_vector_from_moonshine_tensor(
+    MoonshineTensorView *moonshine_tensor) {
+  return std::vector<int32_t>(
+      moonshine_tensor->data<int32_t>(),
+      moonshine_tensor->data<int32_t>() + moonshine_tensor->shape()[0]);
 }
 
 OrtValue *MoonshineTensorView::create_ort_value(const OrtApi *ort_api,
                                                 OrtMemoryInfo *memory_info) {
   OrtValue *output_ort_tensor = nullptr;
-  LOG_ORT_ERROR(ort_api, ort_api->CreateTensorWithDataAsOrtValue(
-      memory_info, this->data<void>(), this->bytes_count(), this->shape().data(),
-      this->shape().size(), moonshine_dtype_to_ort_dtype(this->dtype()),
-      &output_ort_tensor));
+  LOG_ORT_ERROR(
+      ort_api,
+      ort_api->CreateTensorWithDataAsOrtValue(
+          memory_info, this->data<void>(), this->bytes_count(),
+          this->shape().data(), this->shape().size(),
+          moonshine_dtype_to_ort_dtype(this->dtype()), &output_ort_tensor));
   return output_ort_tensor;
 }
 

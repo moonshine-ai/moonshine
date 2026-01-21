@@ -1,13 +1,11 @@
 #include "voice-activity-detector.h"
 
 #include <cassert>
-
+#include <mutex>
 #include <numeric>
 
 #include "debug-utils.h"
 #include "resampler.h"
-
-#include <mutex>
 
 namespace {
 constexpr int32_t vad_sample_rate = 16000;
@@ -17,19 +15,21 @@ std::mutex vad_mutex;
 float seconds_from_sample_count(size_t sample_count) {
   return static_cast<float>(sample_count) / vad_sample_rate;
 }
-} // namespace
+}  // namespace
 
-// Intentionally leaked to avoid static destruction order issues with ONNX Runtime
-SileroVad* VoiceActivityDetector::silero_vad = nullptr;
+// Intentionally leaked to avoid static destruction order issues with ONNX
+// Runtime
+SileroVad *VoiceActivityDetector::silero_vad = nullptr;
 
 VoiceActivityDetector::VoiceActivityDetector(float threshold, int32_t hop_size,
                                              int32_t window_size,
                                              size_t look_behind_sample_count,
                                              size_t max_segment_sample_count)
-    : threshold(threshold), hop_size(hop_size), window_size(window_size),
+    : threshold(threshold),
+      hop_size(hop_size),
+      window_size(window_size),
       look_behind_sample_count(look_behind_sample_count),
       max_segment_sample_count(max_segment_sample_count) {
-
   // We only want a single, global instance of silero_vad
   if (VoiceActivityDetector::silero_vad == nullptr) {
     VoiceActivityDetector::silero_vad = new SileroVad();

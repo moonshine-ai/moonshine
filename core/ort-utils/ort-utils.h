@@ -9,29 +9,28 @@
 #include <android/asset_manager.h>
 #endif
 
+#include "debug-utils.h"
 #include "onnxruntime_c_api.h"
 
-#include "debug-utils.h"
-
-#define RETURN_ON_ORT_ERROR(ort_api, expr)                                     \
-  do {                                                                         \
-    OrtStatus *onnx_status = (expr);                                           \
-    if (onnx_status != NULL) {                                                 \
-      const char *msg = ort_api->GetErrorMessage(onnx_status);                 \
-      LOGF("ORT Error: %s", msg);                                              \
-      ort_api->ReleaseStatus(onnx_status);                                     \
-      return -1;                                                               \
-    }                                                                          \
+#define RETURN_ON_ORT_ERROR(ort_api, expr)                     \
+  do {                                                         \
+    OrtStatus *onnx_status = (expr);                           \
+    if (onnx_status != NULL) {                                 \
+      const char *msg = ort_api->GetErrorMessage(onnx_status); \
+      LOGF("ORT Error: %s", msg);                              \
+      ort_api->ReleaseStatus(onnx_status);                     \
+      return -1;                                               \
+    }                                                          \
   } while (0);
 
-#define LOG_ORT_ERROR(ort_api, expr)                                           \
-  do {                                                                         \
-    OrtStatus *onnx_status = (expr);                                           \
-    if (onnx_status != NULL) {                                                 \
-      const char *msg = ort_api->GetErrorMessage(onnx_status);                 \
-      LOGF("ORT Error: %s", msg);                                              \
-      ort_api->ReleaseStatus(onnx_status);                                     \
-    }                                                                          \
+#define LOG_ORT_ERROR(ort_api, expr)                           \
+  do {                                                         \
+    OrtStatus *onnx_status = (expr);                           \
+    if (onnx_status != NULL) {                                 \
+      const char *msg = ort_api->GetErrorMessage(onnx_status); \
+      LOGF("ORT Error: %s", msg);                              \
+      ort_api->ReleaseStatus(onnx_status);                     \
+    }                                                          \
   } while (0);
 
 int ort_session_from_path(const OrtApi *ort_api, OrtEnv *env,
@@ -76,15 +75,16 @@ std::vector<int64_t> ort_get_value_shape(const OrtApi *ort_api,
 ONNXTensorElementDataType ort_get_value_type(const OrtApi *ort_api,
                                              const OrtValue *value);
 
-#define ORT_RUN(ort_api, session, input_names, inputs, input_count,            \
-                output_names, output_count, outputs)                           \
-  ort_run(ort_api, session, input_names, inputs, input_count, output_names,    \
+#define ORT_RUN(ort_api, session, input_names, inputs, input_count,         \
+                output_names, output_count, outputs)                        \
+  ort_run(ort_api, session, input_names, inputs, input_count, output_names, \
           output_count, outputs, #session, this->log_ort_run)
 
 OrtStatus *ort_run(const OrtApi *ort_api, OrtSession *session,
                    const char *const *input_names,
                    const OrtValue *const *inputs, size_t input_len,
                    const char *const *output_names, size_t output_names_len,
-                   OrtValue **outputs, const char *session_name, bool log_ort_run);
+                   OrtValue **outputs, const char *session_name,
+                   bool log_ort_run);
 
 #endif

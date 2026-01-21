@@ -126,7 +126,7 @@ int ort_session_from_asset(const OrtApi *ort_api, OrtEnv *env,
             strerror(errno), errno, __FILE__, __LINE__);
     // perror("mmap details"); // You can also use perror
     close(fd);
-    AAsset_close(asset); // Also close the asset itself
+    AAsset_close(asset);  // Also close the asset itself
     return -1;
   }
   *mmapped_data_size = alignedLength;
@@ -216,7 +216,8 @@ OrtStatus *ort_run(const OrtApi *ort_api, OrtSession *session,
                    const char *const *input_names,
                    const OrtValue *const *inputs, size_t input_len,
                    const char *const *output_names, size_t output_names_len,
-                   OrtValue **outputs, const char *session_name, bool log_ort_run) {
+                   OrtValue **outputs, const char *session_name,
+                   bool log_ort_run) {
   if (!log_ort_run) {
     return ort_api->Run(session, nullptr, input_names, inputs, input_len,
                         output_names, output_names_len, outputs);
@@ -229,8 +230,7 @@ OrtStatus *ort_run(const OrtApi *ort_api, OrtSession *session,
   std::chrono::steady_clock::time_point end_time =
       std::chrono::steady_clock::now();
   std::chrono::duration<double, std::milli> duration = end_time - start_time;
-  LOGF("ORT Run %s took %.2f ms for inputs:", session_name,
-       duration.count());
+  LOGF("ORT Run %s took %.2f ms for inputs:", session_name, duration.count());
   for (size_t i = 0; i < input_len; i++) {
     std::vector<int64_t> shape = ort_get_value_shape(ort_api, inputs[i]);
     std::stringstream ss;

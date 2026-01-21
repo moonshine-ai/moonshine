@@ -1,8 +1,8 @@
 #ifndef MOONSHINE_TENSOR_H
 #define MOONSHINE_TENSOR_H
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,7 +25,7 @@ typedef enum moonshine_dtype_t {
 } moonshine_dtype_t;
 
 typedef struct {
-  uint32_t dtype; // Not an enum so we can be more sure of its memory layout.
+  uint32_t dtype;  // Not an enum so we can be more sure of its memory layout.
   int64_t *shape;
   int64_t shape_count;
   void *data;

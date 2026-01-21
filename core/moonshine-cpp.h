@@ -39,7 +39,6 @@
  * ```
  */
 
-#include "moonshine-c-api.h"
 #include <algorithm>
 #include <cinttypes>
 #include <cstring>
@@ -48,6 +47,8 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#include "moonshine-c-api.h"
 
 namespace moonshine {
 
@@ -102,15 +103,23 @@ struct TranscriptLine {
 
   /// Default constructor
   TranscriptLine()
-      : startTime(0.0f), duration(0.0f), lineId(0), isComplete(false),
-        isUpdated(false), isNew(false), hasTextChanged(false),
+      : startTime(0.0f),
+        duration(0.0f),
+        lineId(0),
+        isComplete(false),
+        isUpdated(false),
+        isNew(false),
+        hasTextChanged(false),
         lastTranscriptionLatencyMs(0) {}
 
   /// Construct from C API structure
   TranscriptLine(const transcript_line_t &line_c)
-      : startTime(line_c.start_time), duration(line_c.duration),
-        lineId(line_c.id), isComplete(line_c.is_complete != 0),
-        isUpdated(line_c.is_updated != 0), isNew(line_c.is_new != 0),
+      : startTime(line_c.start_time),
+        duration(line_c.duration),
+        lineId(line_c.id),
+        isComplete(line_c.is_complete != 0),
+        isUpdated(line_c.is_updated != 0),
+        isNew(line_c.is_new != 0),
         hasTextChanged(line_c.has_text_changed != 0),
         lastTranscriptionLatencyMs(line_c.last_transcription_latency_ms) {
     if (line_c.text) {
@@ -168,7 +177,7 @@ struct Transcript {
 
 /// Base class for all transcript events
 class TranscriptEvent {
-public:
+ public:
   /// Event type enumeration
   enum Type {
     LINE_STARTED,
@@ -189,42 +198,42 @@ public:
 
   virtual ~TranscriptEvent() {}
 
-protected:
+ protected:
   TranscriptEvent(const TranscriptLine &line, int32_t streamHandle, Type type)
       : line(line), streamHandle(streamHandle), type(type) {}
 };
 
 /// Event emitted when a new transcription line starts
 class LineStarted : public TranscriptEvent {
-public:
+ public:
   LineStarted(const TranscriptLine &line, int32_t streamHandle)
       : TranscriptEvent(line, streamHandle, LINE_STARTED) {}
 };
 
 /// Event emitted when an existing transcription line is updated
 class LineUpdated : public TranscriptEvent {
-public:
+ public:
   LineUpdated(const TranscriptLine &line, int32_t streamHandle)
       : TranscriptEvent(line, streamHandle, LINE_UPDATED) {}
 };
 
 /// Event emitted when the text of a transcription line changes
 class LineTextChanged : public TranscriptEvent {
-public:
+ public:
   LineTextChanged(const TranscriptLine &line, int32_t streamHandle)
       : TranscriptEvent(line, streamHandle, LINE_TEXT_CHANGED) {}
 };
 
 /// Event emitted when a transcription line is completed
 class LineCompleted : public TranscriptEvent {
-public:
+ public:
   LineCompleted(const TranscriptLine &line, int32_t streamHandle)
       : TranscriptEvent(line, streamHandle, LINE_COMPLETED) {}
 };
 
 /// Event emitted when an error occurs
 class Error : public TranscriptEvent {
-public:
+ public:
   /// The error message
   std::string errorMessage;
 
@@ -234,8 +243,8 @@ public:
 
   Error(const std::string &errorMessage, const TranscriptLine &line,
         int32_t streamHandle)
-      : TranscriptEvent(line, streamHandle, ERROR), errorMessage(errorMessage) {
-  }
+      : TranscriptEvent(line, streamHandle, ERROR),
+        errorMessage(errorMessage) {}
 };
 
 /* ------------------------------ LISTENER -------------------------------- */
@@ -246,7 +255,7 @@ public:
 /// All methods have default no-op implementations, so you only need to
 /// override the ones you care about.
 class TranscriptEventListener {
-public:
+ public:
   virtual ~TranscriptEventListener() {}
 
   /// Called when a new transcription line starts
@@ -269,7 +278,7 @@ public:
 
 /// Exception class for Moonshine errors
 class MoonshineException : public std::runtime_error {
-public:
+ public:
   MoonshineException(const std::string &message)
       : std::runtime_error(message) {}
 };
@@ -278,7 +287,7 @@ public:
 
 /// Stream for real-time transcription with event-based updates
 class Stream {
-public:
+ public:
   /// Flags for transcription operations
   static const uint32_t FLAG_FORCE_UPDATE = MOONSHINE_FLAG_FORCE_UPDATE;
 
@@ -342,7 +351,7 @@ public:
   /// Get the stream handle (for internal use)
   int32_t getHandle() const { return handle_; }
 
-private:
+ private:
   Transcriber *transcriber_;
   int32_t handle_;
   double updateInterval_;
@@ -366,7 +375,7 @@ private:
 
 /// Main transcriber class for Moonshine Voice
 class Transcriber {
-public:
+ public:
   /// Flags for transcription operations
   static const uint32_t FLAG_FORCE_UPDATE = MOONSHINE_FLAG_FORCE_UPDATE;
 
@@ -465,7 +474,7 @@ public:
   /// Get the transcriber handle (for internal use)
   int32_t getHandle() const { return handle_; }
 
-private:
+ private:
   int32_t handle_;
   std::string modelPath_;
   ModelArch modelArch_;
@@ -484,8 +493,11 @@ private:
 // Stream implementation
 inline Stream::Stream(Transcriber *transcriber, double updateInterval,
                       uint32_t flags)
-    : transcriber_(transcriber), handle_(-1), updateInterval_(updateInterval),
-      streamTime_(0.0), lastUpdateTime_(0.0) {
+    : transcriber_(transcriber),
+      handle_(-1),
+      updateInterval_(updateInterval),
+      streamTime_(0.0),
+      lastUpdateTime_(0.0) {
   handle_ = moonshine_create_stream(transcriber_->handle_, flags);
   checkError(handle_);
 }
@@ -493,8 +505,10 @@ inline Stream::Stream(Transcriber *transcriber, double updateInterval,
 inline Stream::~Stream() { close(); }
 
 inline Stream::Stream(Stream &&other)
-    : transcriber_(other.transcriber_), handle_(other.handle_),
-      updateInterval_(other.updateInterval_), streamTime_(other.streamTime_),
+    : transcriber_(other.transcriber_),
+      handle_(other.handle_),
+      updateInterval_(other.updateInterval_),
+      streamTime_(other.streamTime_),
       lastUpdateTime_(other.lastUpdateTime_),
       objectListeners_(std::move(other.objectListeners_)),
       functionListeners_(std::move(other.functionListeners_)) {
@@ -562,8 +576,8 @@ inline void Stream::addListener(TranscriptEventListener *listener) {
   }
 }
 
-inline void
-Stream::addListener(std::function<void(const TranscriptEvent &)> listener) {
+inline void Stream::addListener(
+    std::function<void(const TranscriptEvent &)> listener) {
   functionListeners_.push_back(listener);
 }
 
@@ -573,8 +587,8 @@ inline void Stream::removeListener(TranscriptEventListener *listener) {
       objectListeners_.end());
 }
 
-inline void
-Stream::removeListener(std::function<void(const TranscriptEvent &)> listener) {
+inline void Stream::removeListener(
+    std::function<void(const TranscriptEvent &)> listener) {
   // Note: We can't reliably compare std::function objects, so this is a
   // best-effort removal Users should prefer TranscriptEventListener objects if
   // they need to remove listeners
@@ -588,7 +602,7 @@ Stream::removeListener(std::function<void(const TranscriptEvent &)> listener) {
             auto listener_target =
                 listener.target<void(const TranscriptEvent &)>();
             if (f_target == nullptr || listener_target == nullptr) {
-              return false; // Can't compare if either is null
+              return false;  // Can't compare if either is null
             }
             return f_target == listener_target;
           }),
@@ -630,22 +644,22 @@ inline void Stream::emit(const TranscriptEvent &event) {
   for (auto *listener : objectListeners_) {
     try {
       switch (event.type) {
-      case TranscriptEvent::LINE_STARTED:
-        listener->onLineStarted(static_cast<const LineStarted &>(event));
-        break;
-      case TranscriptEvent::LINE_UPDATED:
-        listener->onLineUpdated(static_cast<const LineUpdated &>(event));
-        break;
-      case TranscriptEvent::LINE_TEXT_CHANGED:
-        listener->onLineTextChanged(
-            static_cast<const LineTextChanged &>(event));
-        break;
-      case TranscriptEvent::LINE_COMPLETED:
-        listener->onLineCompleted(static_cast<const LineCompleted &>(event));
-        break;
-      case TranscriptEvent::ERROR:
-        listener->onError(static_cast<const Error &>(event));
-        break;
+        case TranscriptEvent::LINE_STARTED:
+          listener->onLineStarted(static_cast<const LineStarted &>(event));
+          break;
+        case TranscriptEvent::LINE_UPDATED:
+          listener->onLineUpdated(static_cast<const LineUpdated &>(event));
+          break;
+        case TranscriptEvent::LINE_TEXT_CHANGED:
+          listener->onLineTextChanged(
+              static_cast<const LineTextChanged &>(event));
+          break;
+        case TranscriptEvent::LINE_COMPLETED:
+          listener->onLineCompleted(static_cast<const LineCompleted &>(event));
+          break;
+        case TranscriptEvent::ERROR:
+          listener->onError(static_cast<const Error &>(event));
+          break;
       }
     } catch (const std::exception &e) {
       // Don't let listener errors break the stream
@@ -713,7 +727,9 @@ inline void Stream::emitError(const std::string &errorMessage) {
 // Transcriber implementation
 inline Transcriber::Transcriber(const std::string &modelPath,
                                 ModelArch modelArch, double updateInterval)
-    : handle_(-1), modelPath_(modelPath), modelArch_(modelArch),
+    : handle_(-1),
+      modelPath_(modelPath),
+      modelArch_(modelArch),
       updateInterval_(updateInterval) {
   handle_ = moonshine_load_transcriber_from_files(
       modelPath.c_str(), static_cast<uint32_t>(modelArch), nullptr, 0,
@@ -724,8 +740,10 @@ inline Transcriber::Transcriber(const std::string &modelPath,
 inline Transcriber::~Transcriber() { close(); }
 
 inline Transcriber::Transcriber(Transcriber &&other)
-    : handle_(other.handle_), modelPath_(std::move(other.modelPath_)),
-      modelArch_(other.modelArch_), updateInterval_(other.updateInterval_),
+    : handle_(other.handle_),
+      modelPath_(std::move(other.modelPath_)),
+      modelArch_(other.modelArch_),
+      updateInterval_(other.updateInterval_),
       defaultStream_(std::move(other.defaultStream_)) {
   other.handle_ = -1;
   if (defaultStream_) {
@@ -757,9 +775,8 @@ inline void Transcriber::close() {
   }
 }
 
-inline Transcript
-Transcriber::transcribeWithoutStreaming(const std::vector<float> &audioData,
-                                        int32_t sampleRate, uint32_t flags) {
+inline Transcript Transcriber::transcribeWithoutStreaming(
+    const std::vector<float> &audioData, int32_t sampleRate, uint32_t flags) {
   if (handle_ < 0) {
     throw MoonshineException("Transcriber is not initialized");
   }
@@ -833,8 +850,8 @@ inline void Transcriber::removeAllListeners() {
   }
 }
 
-inline Transcript
-Transcriber::parseTranscript(const transcript_t *transcript_c) {
+inline Transcript Transcriber::parseTranscript(
+    const transcript_t *transcript_c) {
   return Transcript(transcript_c);
 }
 
@@ -854,6 +871,6 @@ inline void Stream::checkError(int32_t error) const {
   }
 }
 
-} // namespace moonshine
+}  // namespace moonshine
 
-#endif // MOONSHINE_CPP_H
+#endif  // MOONSHINE_CPP_H

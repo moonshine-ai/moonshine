@@ -24,10 +24,15 @@ SOFTWARE.
 
 #include "moonshine-c-api.h"
 
+#include <fcntl.h>
+
+#include <algorithm>
+#include <array>
 #include <cassert>
 #include <cctype>
 #include <cerrno>
-#include <cerrno> // For errno
+#include <cerrno>  // For errno
+#include <chrono>
 #include <cmath>
 #include <cstdarg>
 #include <cstddef>
@@ -35,13 +40,7 @@ SOFTWARE.
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <cstring> // For strerror
-
-#include <fcntl.h>
-
-#include <algorithm>
-#include <array>
-#include <chrono>
+#include <cstring>  // For strerror
 #include <map>
 #include <mutex>
 #include <numeric>
@@ -58,12 +57,12 @@ SOFTWARE.
 
 // Defined as a macro to ensure we get meaningful line numbers in the error
 // message.
-#define CHECK_TRANSCRIBER_HANDLE(handle)                                       \
-  do {                                                                         \
-    if (handle < 0 || !transcriber_map.contains(handle)) {                     \
-      LOGF("Moonshine transcriber handle is invalid: handle %d", handle);      \
-      return MOONSHINE_ERROR_INVALID_HANDLE;                                   \
-    }                                                                          \
+#define CHECK_TRANSCRIBER_HANDLE(handle)                                  \
+  do {                                                                    \
+    if (handle < 0 || !transcriber_map.contains(handle)) {                \
+      LOGF("Moonshine transcriber handle is invalid: handle %d", handle); \
+      return MOONSHINE_ERROR_INVALID_HANDLE;                              \
+    }                                                                     \
   } while (0)
 
 namespace {
@@ -113,7 +112,7 @@ void free_transcriber_handle(int32_t handle) {
   transcriber_map.erase(handle);
 }
 
-} // namespace
+}  // namespace
 
 extern "C" int32_t moonshine_get_version(void) {
   if (log_api_calls) {
@@ -141,9 +140,10 @@ extern "C" int32_t moonshine_load_transcriber_from_files(
     const char *path, uint32_t model_arch, const transcriber_option_t *options,
     uint64_t options_count, int32_t moonshine_version) {
   if (log_api_calls) {
-    LOGF("moonshine_load_transcriber_from_files(path=%s, model_arch=%d, "
-         "options=%p, options_count=%" PRIu64 ", moonshine_version=%d)",
-         path, model_arch, (void*)(options), options_count, moonshine_version);
+    LOGF(
+        "moonshine_load_transcriber_from_files(path=%s, model_arch=%d, "
+        "options=%p, options_count=%" PRIu64 ", moonshine_version=%d)",
+        path, model_arch, (void *)(options), options_count, moonshine_version);
     for (uint64_t i = 0; i < options_count; i++) {
       const transcriber_option_t &option = options[i];
       LOGF("  option[%" PRIu64 "] = %s=%s", i, option.name, option.value);
@@ -171,16 +171,17 @@ int32_t moonshine_load_transcriber_from_memory(
     const uint8_t *tokenizer_data, size_t tokenizer_data_size,
     uint32_t model_arch, const transcriber_option_t *options,
     uint64_t options_count, int32_t moonshine_version) {
-
   if (log_api_calls) {
-    LOGF("moonshine_load_transcriber_from_memory(encoder_model_data=%p, "
-         "encoder_model_data_size=%zu, decoder_model_data=%p, "
-         "decoder_model_data_size=%zu, tokenizer_data=%p, "
-         "tokenizer_data_size=%zu, model_arch=%d, options=%p, "
-         "options_count=%" PRIu64 ", moonshine_version=%d)",
-         (void*)(encoder_model_data), encoder_model_data_size, (void*)(decoder_model_data),
-         decoder_model_data_size, (void*)(tokenizer_data), tokenizer_data_size,
-         model_arch, (void*)(options), options_count, moonshine_version);
+    LOGF(
+        "moonshine_load_transcriber_from_memory(encoder_model_data=%p, "
+        "encoder_model_data_size=%zu, decoder_model_data=%p, "
+        "decoder_model_data_size=%zu, tokenizer_data=%p, "
+        "tokenizer_data_size=%zu, model_arch=%d, options=%p, "
+        "options_count=%" PRIu64 ", moonshine_version=%d)",
+        (void *)(encoder_model_data), encoder_model_data_size,
+        (void *)(decoder_model_data), decoder_model_data_size,
+        (void *)(tokenizer_data), tokenizer_data_size, model_arch,
+        (void *)(options), options_count, moonshine_version);
     for (uint64_t i = 0; i < options_count; i++) {
       const transcriber_option_t &option = options[i];
       LOGF("  option[%" PRIu64 "] = %s=%s", i, option.name, option.value);
@@ -220,11 +221,13 @@ int32_t moonshine_transcribe_without_streaming(
     int32_t transcriber_handle, float *audio_data, uint64_t audio_length,
     int32_t sample_rate, uint32_t flags, struct transcript_t **out_transcript) {
   if (log_api_calls) {
-    LOGF("moonshine_transcribe_without_streaming(transcriber_handle=%d, "
-         "audio_data=%p, audio_length=%" PRIu64 ", sample_rate=%d, flags=%d, "
-         "out_transcript=%p)",
-         transcriber_handle, (void *)(audio_data), audio_length, sample_rate,
-         flags, (void *)(out_transcript));
+    LOGF(
+        "moonshine_transcribe_without_streaming(transcriber_handle=%d, "
+        "audio_data=%p, audio_length=%" PRIu64
+        ", sample_rate=%d, flags=%d, "
+        "out_transcript=%p)",
+        transcriber_handle, (void *)(audio_data), audio_length, sample_rate,
+        flags, (void *)(out_transcript));
   }
   CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
   try {
@@ -298,8 +301,8 @@ int32_t moonshine_stop_stream(int32_t transcriber_handle,
   return MOONSHINE_ERROR_NONE;
 }
 
-const char *
-moonshine_transcript_to_string(const struct transcript_t *transcript) {
+const char *moonshine_transcript_to_string(
+    const struct transcript_t *transcript) {
   if (log_api_calls) {
     LOGF("moonshine_transcript_to_string(transcript=%p)", (void *)(transcript));
   }
@@ -315,11 +318,13 @@ int32_t moonshine_transcribe_add_audio_to_stream(int32_t transcriber_handle,
                                                  int32_t sample_rate,
                                                  uint32_t flags) {
   if (log_api_calls) {
-    LOGF("moonshine_transcribe_add_audio_to_stream(transcriber_handle=%d, "
-         "stream_handle=%d, new_audio_data=%p, audio_length=%" PRIu64 ", "
-         "sample_rate=%d, flags=%d)",
-         transcriber_handle, stream_handle, (void*)(new_audio_data), audio_length,
-         sample_rate, flags);
+    LOGF(
+        "moonshine_transcribe_add_audio_to_stream(transcriber_handle=%d, "
+        "stream_handle=%d, new_audio_data=%p, audio_length=%" PRIu64
+        ", "
+        "sample_rate=%d, flags=%d)",
+        transcriber_handle, stream_handle, (void *)(new_audio_data),
+        audio_length, sample_rate, flags);
   }
   CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
   try {
@@ -336,9 +341,10 @@ int32_t moonshine_transcribe_stream(int32_t transcriber_handle,
                                     int32_t stream_handle, uint32_t flags,
                                     struct transcript_t **out_transcript) {
   if (log_api_calls) {
-    LOGF("moonshine_transcribe_stream(transcriber_handle=%d, stream_handle=%d, "
-         "flags=%d, out_transcript=%p)",
-         transcriber_handle, stream_handle, flags, (void *)(out_transcript));
+    LOGF(
+        "moonshine_transcribe_stream(transcriber_handle=%d, stream_handle=%d, "
+        "flags=%d, out_transcript=%p)",
+        transcriber_handle, stream_handle, flags, (void *)(out_transcript));
   }
   CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
   try {

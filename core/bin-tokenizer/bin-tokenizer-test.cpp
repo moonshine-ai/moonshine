@@ -1,14 +1,12 @@
 #include "bin-tokenizer.h"
 
 #include <cstdio>
-
 #include <filesystem>
 
 #include "debug-utils.h"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest.h>
-
 
 TEST_CASE("bin-tokenizer") {
   SUBCASE("constructor-from-path") {

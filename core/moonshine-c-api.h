@@ -208,8 +208,8 @@ MOONSHINE_EXPORT const char *moonshine_error_to_string(int32_t error);
 /* Converts a transcript_t struct into a human-readable string for debugging
  * purposes. The string is owned by the library, and is valid until the next
  * call to moonshine_transcript_to_string. */
-MOONSHINE_EXPORT const char *
-moonshine_transcript_to_string(const struct transcript_t *transcript);
+MOONSHINE_EXPORT const char *moonshine_transcript_to_string(
+    const struct transcript_t *transcript);
 
 /* Loads models from the file system, using `path` as the root directory. The
    implementation expects the following files to be present in the directory:
@@ -377,13 +377,14 @@ MOONSHINE_EXPORT int32_t moonshine_transcribe_without_streaming(
    negative value is returned. The error code can be converted to a
    human-readable string using moonshine_error_to_string.
 */
-MOONSHINE_EXPORT int32_t moonshine_create_stream(int32_t transcriber_handle, uint32_t flags);
+MOONSHINE_EXPORT int32_t moonshine_create_stream(int32_t transcriber_handle,
+                                                 uint32_t flags);
 
 /* Releases the resources used by a stream.
    Subsequent stream creation calls may reuse this stream's ID, so ensure you
    remove all references to it in your client code after freeing it.*/
 MOONSHINE_EXPORT int32_t moonshine_free_stream(int32_t transcriber_handle,
-                              int32_t stream_handle);
+                                               int32_t stream_handle);
 
 /* Starts a stream. This should be called before any calls to
    moonshine_transcribe_stream_chunk. Start/stop are supported because there may
@@ -394,14 +395,14 @@ MOONSHINE_EXPORT int32_t moonshine_free_stream(int32_t transcriber_handle,
    moonshine_error_to_string.
  */
 MOONSHINE_EXPORT int32_t moonshine_start_stream(int32_t transcriber_handle,
-                               int32_t stream_handle);
+                                                int32_t stream_handle);
 
 /* Stops a stream. This function returns zero on success, or a non-zero error
    code on failure. The error code can be converted to a human-readable string
    using moonshine_error_to_string.
  */
 MOONSHINE_EXPORT int32_t moonshine_stop_stream(int32_t transcriber_handle,
-                              int32_t stream_handle);
+                                               int32_t stream_handle);
 
 /* Call this when new audio data becomes available from your microphone or other
    audio source. This function will add the audio data to the stream's buffer,
@@ -433,12 +434,10 @@ MOONSHINE_EXPORT int32_t moonshine_stop_stream(int32_t transcriber_handle,
    The error code can be converted to a human-readable string using
    moonshine_error_to_string.
 */
-MOONSHINE_EXPORT int32_t moonshine_transcribe_add_audio_to_stream(int32_t transcriber_handle,
-                                                 int32_t stream_handle,
-                                                 const float *new_audio_data,
-                                                 uint64_t audio_length,
-                                                 int32_t sample_rate,
-                                                 uint32_t flags);
+MOONSHINE_EXPORT int32_t moonshine_transcribe_add_audio_to_stream(
+    int32_t transcriber_handle, int32_t stream_handle,
+    const float *new_audio_data, uint64_t audio_length, int32_t sample_rate,
+    uint32_t flags);
 
 /* Analyzes all the audio data in the stream and returns an updated transcript
    of all the speech segments found. By default this function will only perform
@@ -468,9 +467,9 @@ MOONSHINE_EXPORT int32_t moonshine_transcribe_add_audio_to_stream(int32_t transc
    The error code can be converted to a human-readable string using
    moonshine_error_to_string.
 */
-MOONSHINE_EXPORT int32_t moonshine_transcribe_stream(int32_t transcriber_handle,
-                                    int32_t stream_handle, uint32_t flags,
-                                    struct transcript_t **out_transcript);
+MOONSHINE_EXPORT int32_t moonshine_transcribe_stream(
+    int32_t transcriber_handle, int32_t stream_handle, uint32_t flags,
+    struct transcript_t **out_transcript);
 
 #ifdef __cplusplus
 }

@@ -15,9 +15,13 @@ TEST_CASE("string-utils") {
           std::vector<std::string>{"hello", "world"});
   }
   SUBCASE("starts_with") { CHECK(starts_with("hello world", "hello") == true); }
-  SUBCASE("starts_with_invalid") { CHECK(starts_with("hello world", "world") == false); }
+  SUBCASE("starts_with_invalid") {
+    CHECK(starts_with("hello world", "world") == false);
+  }
   SUBCASE("ends_with") { CHECK(ends_with("hello world", "world") == true); }
-  SUBCASE("ends_with_invalid") { CHECK(ends_with("hello world", "hello") == false); }
+  SUBCASE("ends_with_invalid") {
+    CHECK(ends_with("hello world", "hello") == false);
+  }
   SUBCASE("name_to_index") {
     CHECK(name_to_index({"hello", "world"}) ==
           std::map<std::string, int64_t>{{"hello", 0}, {"world", 1}});

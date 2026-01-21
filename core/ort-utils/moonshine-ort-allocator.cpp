@@ -67,7 +67,7 @@ void printFriendlySize(const char *prefix, size_t number) {
   friendlySizeString(number, output, sizeof(output));
   fprintf(stderr, "%s %s\n", prefix, output);
 }
-} // namespace
+}  // namespace
 
 MoonshineOrtAllocator::MoonshineOrtAllocator(const OrtMemoryInfo *memory_info) {
   base.version = ORT_API_VERSION;
