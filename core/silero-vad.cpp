@@ -4,20 +4,20 @@
 
 void SileroVad::init_onnx_env() {
     ort_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
-    (void)ort_api->CreateEnv(ORT_LOGGING_LEVEL_WARNING, "SileroVAD", &env);
-    (void)ort_api->CreateSessionOptions(&session_options);
-    (void)ort_api->SetIntraOpNumThreads(session_options, 1);
-    (void)ort_api->SetInterOpNumThreads(session_options, 1);
-    (void)ort_api->SetSessionGraphOptimizationLevel(session_options, ORT_ENABLE_ALL);
-    (void)ort_api->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeCPU, &memory_info);
-    (void)ort_api->GetAllocatorWithDefaultOptions(&allocator);
+    LOG_ORT_ERROR(ort_api, ort_api->CreateEnv(ORT_LOGGING_LEVEL_WARNING, "SileroVAD", &env));
+    LOG_ORT_ERROR(ort_api, ort_api->CreateSessionOptions(&session_options));
+    LOG_ORT_ERROR(ort_api, ort_api->SetIntraOpNumThreads(session_options, 1));
+    LOG_ORT_ERROR(ort_api, ort_api->SetInterOpNumThreads(session_options, 1));
+    LOG_ORT_ERROR(ort_api, ort_api->SetSessionGraphOptimizationLevel(session_options, ORT_ENABLE_ALL));
+    LOG_ORT_ERROR(ort_api, ort_api->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeCPU, &memory_info));
+    LOG_ORT_ERROR(ort_api, ort_api->GetAllocatorWithDefaultOptions(&allocator));
 }
 
 // Initializes threading settings.
 void SileroVad::init_engine_threads(int inter_threads, int intra_threads) {
-    (void)ort_api->SetIntraOpNumThreads(session_options, intra_threads);
-    (void)ort_api->SetInterOpNumThreads(session_options, inter_threads);
-    (void)ort_api->SetSessionGraphOptimizationLevel(session_options, ORT_ENABLE_ALL);
+    LOG_ORT_ERROR(ort_api, ort_api->SetIntraOpNumThreads(session_options, intra_threads));
+    LOG_ORT_ERROR(ort_api, ort_api->SetInterOpNumThreads(session_options, inter_threads));
+    LOG_ORT_ERROR(ort_api, ort_api->SetSessionGraphOptimizationLevel(session_options, ORT_ENABLE_ALL));
 }
 
 SileroVad::SileroVad(
