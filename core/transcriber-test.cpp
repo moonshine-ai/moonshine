@@ -168,7 +168,7 @@ TEST_CASE("transcriber-test") {
          Transcriber::transcript_to_string(transcript).c_str());
   }
   SUBCASE("transcribe-with-streaming") {
-    std::string wav_path = "two_cities.wav";
+    std::string wav_path = "two_cities_librivox_48k.wav";
     REQUIRE(std::filesystem::exists(wav_path));
     float *wav_data = nullptr;
     size_t wav_data_size = 0;
@@ -289,6 +289,18 @@ TEST_CASE("transcriber-test") {
     }
     transcriber.stop_stream(stream_id);
     REQUIRE(transcript->line_count > 0);
+    float transcript_duration = 0.0f;
+    for (size_t i = 0; i < transcript->line_count; i++) {
+      const struct transcript_line_t &line = transcript->lines[i];
+      transcript_duration += line.duration;
+    }
+    const float wav_duration = (float)wav_data_size / wav_sample_rate;
+    // We expect that talking will take up at least 80% of the audio
+    // for this audio file.
+    const float expected_duration_min = (wav_duration * 0.8f);
+    const float expected_duration_max = (wav_duration * 1.01f);
+    REQUIRE(transcript_duration >= expected_duration_min);
+    REQUIRE(transcript_duration <= expected_duration_max);
     LOGF("Transcript: %s",
          Transcriber::transcript_to_string(transcript).c_str());
     transcriber.free_stream(stream_id);
