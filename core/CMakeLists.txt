@@ -307,4 +307,83 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
             moonshine
         )
     endif()
+
+    add_executable(intent-recognizer-test intent-recognizer-test.cpp intent-recognizer.cpp gemma-embedding-model.cpp)
+    set_target_properties(intent-recognizer-test PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(intent-recognizer-test PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+        ${CMAKE_CURRENT_LIST_DIR}/ort-utils
+        ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/utf-8/
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+    )
+
+    copy_onnxruntime_dll(intent-recognizer-test)
+
+    if (IOS OR MOONSHINE_BUILD_SWIFT)
+        set_target_properties(intent-recognizer-test PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.intent-recognizer-test"
+            MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        )
+        target_link_libraries(intent-recognizer-test PRIVATE
+            moonshine
+            bin-tokenizer
+            ${ONNXRUNTIME_LIB_PATH}
+            "-framework CoreFoundation"
+            "-framework Foundation"
+        )
+    else()
+        target_link_libraries(intent-recognizer-test PRIVATE
+            moonshine
+            bin-tokenizer
+            ${ONNXRUNTIME_LIB_PATH}
+        )
+    endif()
+
+    add_executable(gemma-embedding-model-test gemma-embedding-model-test.cpp gemma-embedding-model.cpp)
+    set_target_properties(gemma-embedding-model-test PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(gemma-embedding-model-test PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+        ${CMAKE_CURRENT_LIST_DIR}/ort-utils
+        ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+    )
+
+    copy_onnxruntime_dll(gemma-embedding-model-test)
+
+    if (IOS OR MOONSHINE_BUILD_SWIFT)
+        set_target_properties(gemma-embedding-model-test PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.gemma-embedding-model-test"
+            MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        )
+        target_link_libraries(gemma-embedding-model-test PRIVATE
+            bin-tokenizer
+            ort-utils
+            ${ONNXRUNTIME_LIB_PATH}
+            "-framework CoreFoundation"
+            "-framework Foundation"
+        )
+    else()
+        target_link_libraries(gemma-embedding-model-test PRIVATE
+            bin-tokenizer
+            ort-utils
+            ${ONNXRUNTIME_LIB_PATH}
+        )
+    endif()
 endif()
