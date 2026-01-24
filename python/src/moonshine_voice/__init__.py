@@ -39,11 +39,12 @@ __version__ = "0.1.0"
 # These will be imported on first access via __getattr__
 _transcriber_imported = False
 _mic_transcriber_imported = False
+_intent_recognizer_imported = False
 
 
 def __getattr__(name):
-    """Lazy import for transcriber and mic_transcriber modules."""
-    global _transcriber_imported, _mic_transcriber_imported
+    """Lazy import for transcriber, mic_transcriber, and intent_recognizer modules."""
+    global _transcriber_imported, _mic_transcriber_imported, _intent_recognizer_imported
 
     # Lazy import transcriber module
     if name in (
@@ -92,6 +93,21 @@ def __getattr__(name):
             _mic_transcriber_imported = True
         return globals()[name]
 
+    # Lazy import intent_recognizer module
+    if name in ("IntentRecognizer", "EmbeddingModelArch", "IntentMatch"):
+        if not _intent_recognizer_imported:
+            from moonshine_voice.intent_recognizer import (
+                IntentRecognizer,
+                EmbeddingModelArch,
+                IntentMatch,
+            )
+
+            globals()["IntentRecognizer"] = IntentRecognizer
+            globals()["EmbeddingModelArch"] = EmbeddingModelArch
+            globals()["IntentMatch"] = IntentMatch
+            _intent_recognizer_imported = True
+        return globals()[name]
+
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -109,6 +125,9 @@ __all__ = [
     "LineTextChanged",
     "LineCompleted",
     "Error",
+    "IntentRecognizer",
+    "EmbeddingModelArch",
+    "IntentMatch",
     "MoonshineError",
     "MoonshineUnknownError",
     "MoonshineInvalidHandleError",
