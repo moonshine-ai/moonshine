@@ -1,18 +1,38 @@
 #include "intent-recognizer.h"
 
 #include <algorithm>
+#include <stdexcept>
 
-IntentRecognizer::IntentRecognizer(EmbeddingModel *embedding_model,
-                                   float threshold)
-    : embedding_model_(embedding_model),
+#include "gemma-embedding-model.h"
+
+namespace {
+
+std::unique_ptr<EmbeddingModel> create_embedding_model(
+    const IntentRecognizerOptions &options) {
+  switch (options.model_arch) {
+    case EmbeddingModelArch::GEMMA_300M: {
+      auto model = std::make_unique<GemmaEmbeddingModel>();
+      int result =
+          model->load(options.model_path.c_str(), options.model_variant.c_str());
+      if (result != 0) {
+        throw std::runtime_error("Failed to load embedding model from: " +
+                                 options.model_path);
+      }
+      return model;
+    }
+    default:
+      throw std::runtime_error("Unknown embedding model architecture");
+  }
+}
+
+}  // namespace
+
+IntentRecognizer::IntentRecognizer(const IntentRecognizerOptions &options)
+    : embedding_model_(create_embedding_model(options)),
       transcriber_(nullptr),
-      threshold_(threshold) {}
+      threshold_(options.threshold) {}
 
-IntentRecognizer::IntentRecognizer(EmbeddingModel *embedding_model,
-                                   Transcriber *transcriber, float threshold)
-    : embedding_model_(embedding_model),
-      transcriber_(transcriber),
-      threshold_(threshold) {}
+IntentRecognizer::~IntentRecognizer() = default;
 
 void IntentRecognizer::register_intent(const std::string &trigger_phrase,
                                        IntentCallback callback) {
@@ -122,6 +142,10 @@ void IntentRecognizer::clear_intents() {
 }
 
 Transcriber *IntentRecognizer::get_transcriber() const { return transcriber_; }
+
+void IntentRecognizer::set_transcriber(Transcriber *transcriber) {
+  transcriber_ = transcriber;
+}
 
 const Intent *IntentRecognizer::find_best_intent(const std::string &utterance,
                                                  float &out_similarity) {

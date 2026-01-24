@@ -49,6 +49,8 @@ set(MOONSHINE_SRC_FILES
     silero-vad.cpp
     resampler.cpp
     transcriber.cpp
+    gemma-embedding-model.cpp
+    intent-recognizer.cpp
 )
 
 # Build as STATIC framework for iOS/Swift (static frameworks cannot be embedded)

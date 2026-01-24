@@ -2,12 +2,37 @@
 #define INTENT_RECOGNIZER_H
 
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
 
 #include "embedding-model.h"
 #include "transcriber.h"
+
+/**
+ * Supported embedding model architectures.
+ */
+enum class EmbeddingModelArch {
+  GEMMA_300M = 0,  // embeddinggemma-300m (768-dim embeddings)
+};
+
+/**
+ * Options for configuring an IntentRecognizer.
+ */
+struct IntentRecognizerOptions {
+  // Path to the embedding model directory
+  std::string model_path;
+
+  // Embedding model architecture
+  EmbeddingModelArch model_arch = EmbeddingModelArch::GEMMA_300M;
+
+  // Model variant: "fp32", "fp16", "q8", "q4", or "q4f16"
+  std::string model_variant = "q4";
+
+  // Minimum similarity threshold to trigger an intent (0.0-1.0)
+  float threshold = 0.7f;
+};
 
 /**
  * Callback function type for intent handlers.
@@ -35,28 +60,16 @@ struct Intent {
 class IntentRecognizer {
  public:
   /**
-   * Construct an IntentRecognizer with an embedding model.
-   * @param embedding_model The embedding model to use for computing
-   * similarities.
-   * @param threshold The minimum similarity threshold to trigger a callback
-   * (default 0.7).
+   * Construct an IntentRecognizer from options.
+   * The embedding model will be loaded from the path specified in options.
+   * @param options The configuration options for the recognizer.
    */
-  explicit IntentRecognizer(EmbeddingModel *embedding_model,
-                            float threshold = 0.7f);
+  explicit IntentRecognizer(const IntentRecognizerOptions &options);
 
   /**
-   * Construct an IntentRecognizer with an embedding model and a transcriber.
-   * The recognizer will automatically process transcripts from the transcriber.
-   * @param embedding_model The embedding model to use for computing
-   * similarities.
-   * @param transcriber The transcriber to get utterances from.
-   * @param threshold The minimum similarity threshold to trigger a callback
-   * (default 0.7).
+   * Destructor - cleans up owned embedding model.
    */
-  IntentRecognizer(EmbeddingModel *embedding_model, Transcriber *transcriber,
-                   float threshold = 0.7f);
-
-  ~IntentRecognizer() = default;
+  ~IntentRecognizer();
 
   /**
    * Register an intent with a trigger phrase and callback.
@@ -118,8 +131,14 @@ class IntentRecognizer {
    */
   Transcriber *get_transcriber() const;
 
+  /**
+   * Set the associated transcriber.
+   * @param transcriber The transcriber to use for processing transcripts.
+   */
+  void set_transcriber(Transcriber *transcriber);
+
  private:
-  EmbeddingModel *embedding_model_;
+  std::unique_ptr<EmbeddingModel> embedding_model_;
   Transcriber *transcriber_;
   float threshold_;
   std::vector<Intent> intents_;
