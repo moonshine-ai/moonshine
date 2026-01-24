@@ -6,73 +6,41 @@
 #include <map>
 #include <set>
 
-#include "embedding-model.h"
 #include "gemma-embedding-model.h"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest.h>
 
+// Path to the Gemma embedding model
+static const std::string EMBEDDING_MODEL_DIR = "embeddinggemma-300m-ONNX";
+
 /**
- * A simple mock embedding model for unit testing.
- * This creates embeddings by hashing words and normalizing.
+ * Helper function to create IntentRecognizerOptions with default model path.
  */
-class MockEmbeddingModel : public EmbeddingModel {
- public:
-  static constexpr int EMBEDDING_DIM = 128;
+IntentRecognizerOptions make_options(float threshold = 0.7f) {
+  IntentRecognizerOptions options;
+  options.model_path = EMBEDDING_MODEL_DIR;
+  options.model_arch = EmbeddingModelArch::GEMMA_300M;
+  options.model_variant = "q4";
+  options.threshold = threshold;
+  return options;
+}
 
-  std::vector<float> get_embeddings(const std::string &text) override {
-    std::vector<float> embedding(EMBEDDING_DIM, 0.0f);
-
-    // Simple hash-based embedding for testing
-    std::string word;
-    for (char c : text) {
-      if (c == ' ' || c == '\t' || c == '\n') {
-        if (!word.empty()) {
-          add_word_to_embedding(word, embedding);
-          word.clear();
-        }
-      } else {
-        word += std::tolower(c);
-      }
-    }
-    if (!word.empty()) {
-      add_word_to_embedding(word, embedding);
-    }
-
-    // Normalize the embedding
-    float norm = 0.0f;
-    for (float v : embedding) {
-      norm += v * v;
-    }
-    norm = std::sqrt(norm);
-    if (norm > 0.0f) {
-      for (float &v : embedding) {
-        v /= norm;
-      }
-    }
-
-    return embedding;
-  }
-
- private:
-  void add_word_to_embedding(const std::string &word,
-                             std::vector<float> &embedding) {
-    size_t hash = 5381;
-    for (char c : word) {
-      hash = ((hash << 5) + hash) + c;
-    }
-
-    for (int i = 0; i < 8; ++i) {
-      int dim = (hash + i * 17) % EMBEDDING_DIM;
-      float sign = ((hash >> i) & 1) ? 1.0f : -1.0f;
-      embedding[dim] += sign * 1.0f;
-    }
-  }
-};
+/**
+ * Helper function to check if the embedding model is available.
+ */
+bool embedding_model_available() {
+  return std::filesystem::exists(EMBEDDING_MODEL_DIR);
+}
 
 TEST_CASE("intent-recognizer unit tests") {
-  MockEmbeddingModel model;
-  IntentRecognizer recognizer(&model, 0.7f);
+  if (!embedding_model_available()) {
+    MESSAGE("Skipping tests - embedding model not found at: ",
+            EMBEDDING_MODEL_DIR);
+    return;
+  }
+
+  IntentRecognizer recognizer(make_options(0.7f));
 
   SUBCASE("register and count intents") {
     CHECK(recognizer.get_intent_count() == 0);
@@ -135,8 +103,13 @@ TEST_CASE("intent-recognizer unit tests") {
 }
 
 TEST_CASE("intent-recognizer with transcript") {
-  MockEmbeddingModel model;
-  IntentRecognizer recognizer(&model, 0.7f);
+  if (!embedding_model_available()) {
+    MESSAGE("Skipping tests - embedding model not found at: ",
+            EMBEDDING_MODEL_DIR);
+    return;
+  }
+
+  IntentRecognizer recognizer(make_options(0.7f));
 
   SUBCASE("process_transcript handles null transcript") {
     recognizer.process_transcript(nullptr);
@@ -234,22 +207,15 @@ struct PrecisionRecallResult {
 
 TEST_CASE("intent-recognizer precision/recall with GemmaEmbeddingModel") {
   // Check if Gemma model is available
-  std::string model_dir = "embeddinggemma-300m-ONNX";
-  if (!std::filesystem::exists(model_dir)) {
-    MESSAGE("Skipping Gemma intent tests - model not found at: ", model_dir);
-    return;
-  }
-
-  GemmaEmbeddingModel gemma_model;
-  int load_result = gemma_model.load(model_dir.c_str(), "q4");
-  if (load_result != 0) {
-    MESSAGE("Failed to load Gemma model, skipping tests");
+  if (!embedding_model_available()) {
+    MESSAGE("Skipping Gemma intent tests - model not found at: ",
+            EMBEDDING_MODEL_DIR);
     return;
   }
 
   // Use a threshold of 0.6 for intent matching
   float threshold = 0.6f;
-  IntentRecognizer recognizer(&gemma_model, threshold);
+  IntentRecognizer recognizer(make_options(threshold));
 
   // Define intents with canonical phrases
   std::map<std::string, std::string> intents = {
@@ -479,15 +445,8 @@ TEST_CASE("intent-recognizer precision/recall with GemmaEmbeddingModel") {
 }
 
 TEST_CASE("intent-recognizer threshold tuning") {
-  std::string model_dir = "embeddinggemma-300m-ONNX";
-  if (!std::filesystem::exists(model_dir)) {
+  if (!embedding_model_available()) {
     MESSAGE("Skipping threshold tuning tests - model not found");
-    return;
-  }
-
-  GemmaEmbeddingModel gemma_model;
-  if (gemma_model.load(model_dir.c_str(), "q4") != 0) {
-    MESSAGE("Failed to load Gemma model");
     return;
   }
 
@@ -506,7 +465,7 @@ TEST_CASE("intent-recognizer threshold tuning") {
     MESSAGE("=== Threshold Evaluation ===");
 
     for (float threshold : thresholds) {
-      IntentRecognizer recognizer(&gemma_model, threshold);
+      IntentRecognizer recognizer(make_options(threshold));
 
       std::string triggered;
       recognizer.register_intent("turn on the lights",

@@ -471,6 +471,91 @@ MOONSHINE_EXPORT int32_t moonshine_transcribe_stream(
     int32_t transcriber_handle, int32_t stream_handle, uint32_t flags,
     struct transcript_t **out_transcript);
 
+/* ------------------------------ INTENT RECOGNIZER ------------------------- */
+
+/* Supported embedding model architectures for intent recognition.           */
+#define MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M (0)
+
+/* Callback function type for intent handlers. The callback receives:
+   - user_data: The user data pointer passed to moonshine_register_intent.
+   - trigger_phrase: The trigger phrase that matched.
+   - utterance: The utterance that was recognized.
+   - similarity: The similarity score between 0 and 1.
+*/
+typedef void (*moonshine_intent_callback)(void *user_data,
+                                          const char *trigger_phrase,
+                                          const char *utterance,
+                                          float similarity);
+
+/* Creates an intent recognizer from files on disk.
+
+   `model_path` should be the path to the directory containing the embedding
+   model files (ONNX model and tokenizer.bin).
+
+   `model_arch` should be one of the MOONSHINE_EMBEDDING_MODEL_ARCH_* constants.
+   Currently only MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M is supported.
+
+   `model_variant` specifies which model variant to load: "fp32", "fp16", "q8",
+   "q4", or "q4f16". Pass NULL to use the default "q4" variant.
+
+   `threshold` is the minimum similarity score required to trigger an intent
+   (default 0.7, range 0.0-1.0).
+
+   Returns a non-negative handle on success, or a negative error code on
+   failure. The error code can be converted to a human-readable string using
+   moonshine_error_to_string.
+*/
+MOONSHINE_EXPORT int32_t moonshine_create_intent_recognizer(
+    const char *model_path, uint32_t model_arch, const char *model_variant,
+    float threshold);
+
+/* Frees an intent recognizer and all its resources. */
+MOONSHINE_EXPORT void moonshine_free_intent_recognizer(int32_t intent_recognizer_handle);
+
+/* Registers an intent with a trigger phrase and callback. When an utterance
+   is processed that is similar enough to the trigger phrase (above the
+   threshold), the callback will be invoked.
+
+   Returns zero on success, or a non-zero error code on failure.
+*/
+MOONSHINE_EXPORT int32_t moonshine_register_intent(
+    int32_t intent_recognizer_handle, const char *trigger_phrase,
+    moonshine_intent_callback callback, void *user_data);
+
+/* Unregisters an intent by its trigger phrase.
+   Returns zero on success, or a non-zero error code on failure.
+*/
+MOONSHINE_EXPORT int32_t moonshine_unregister_intent(
+    int32_t intent_recognizer_handle, const char *trigger_phrase);
+
+/* Processes an utterance and invokes the callback of the most similar intent
+   if the similarity exceeds the threshold.
+   Returns 1 if an intent was recognized, 0 if not, or a negative error code.
+*/
+MOONSHINE_EXPORT int32_t moonshine_process_utterance(
+    int32_t intent_recognizer_handle, const char *utterance);
+
+/* Sets the similarity threshold for the intent recognizer.
+   Returns zero on success, or a non-zero error code on failure.
+*/
+MOONSHINE_EXPORT int32_t moonshine_set_intent_threshold(
+    int32_t intent_recognizer_handle, float threshold);
+
+/* Gets the current similarity threshold for the intent recognizer.
+   Returns the threshold on success (>= 0), or a negative error code on failure.
+*/
+MOONSHINE_EXPORT float moonshine_get_intent_threshold(int32_t intent_recognizer_handle);
+
+/* Gets the number of registered intents.
+   Returns the count on success (>= 0), or a negative error code on failure.
+*/
+MOONSHINE_EXPORT int32_t moonshine_get_intent_count(int32_t intent_recognizer_handle);
+
+/* Clears all registered intents.
+   Returns zero on success, or a non-zero error code on failure.
+*/
+MOONSHINE_EXPORT int32_t moonshine_clear_intents(int32_t intent_recognizer_handle);
+
 #ifdef __cplusplus
 }
 #endif
