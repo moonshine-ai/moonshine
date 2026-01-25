@@ -219,11 +219,24 @@ internal final class MoonshineAPI: @unchecked Sendable {
             // Extract audio data if available
             var audioData: [Float]? = nil
             if let audioPtr = lineC.audio_data, lineC.audio_data_count > 0 {
-                audioData = Array(
-                    UnsafeBufferPointer(
-                        start: audioPtr,
-                        count: Int(lineC.audio_data_count)
-                    ))
+                // Validate audio_data_count is reasonable (max ~10 minutes at 16kHz = 9,600,000 samples)
+                let maxReasonableCount: UInt64 = 10_000_000
+                let audioCountUInt64 = UInt64(lineC.audio_data_count)
+                let audioCount = min(audioCountUInt64, maxReasonableCount)
+                
+                // Check that the count can be safely converted to Int
+                if audioCount <= UInt64(Int.max) {
+                    let intCount = Int(audioCount)
+                    if intCount > 0 {
+                        // Safely create the buffer and array
+                        audioData = Array(
+                            UnsafeBufferPointer(
+                                start: audioPtr,
+                                count: intCount
+                            ))
+                    }
+                }
+                // If validation fails, audioData remains nil and we continue without audio data
             }
 
             let line = TranscriptLine(
