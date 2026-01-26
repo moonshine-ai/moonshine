@@ -587,23 +587,58 @@ int MoonshineStreamingModel::encode(MoonshineStreamingState *state,
   }
 
   int total_features = state->accumulated_feature_count;
+  if (log_ort_run) {
+    LOGF(
+        "streaming encode: total_features=%d, encoder_frames_emitted=%d, "
+        "memory_len=%d, is_final=%d",
+        total_features, state->encoder_frames_emitted, state->memory_len,
+        is_final ? 1 : 0);
+  }
   if (total_features == 0) {
     if (new_frames_out) *new_frames_out = 0;
     return 0;
   }
 
+  const int stable_count =
+      is_final ? total_features
+               : std::max(0, total_features - config.total_lookahead);
+  const int new_frames = stable_count - state->encoder_frames_emitted;
+  if (log_ort_run) {
+    LOGF("streaming encode: stable_count=%d, new_frames=%d", stable_count,
+         new_frames);
+  }
+  if (new_frames <= 0) {
+    if (new_frames_out) *new_frames_out = 0;
+    return 0;
+  }
+
+  // Encoder uses a sliding window with fixed per-layer left context.
+  const int left_context_frames = 16 * config.depth;
+  int window_start = state->encoder_frames_emitted - left_context_frames;
+  if (window_start < 0) {
+    window_start = 0;
+  }
+  const int window_size = total_features - window_start;
+  if (log_ort_run) {
+    LOGF("streaming encode: window_start=%d, window_size=%d", window_start,
+         window_size);
+  }
+
   std::lock_guard<std::mutex> lock(processing_mutex);
 
-  // Run encoder on all accumulated features
-  std::vector<int64_t> feat_shape = {1, total_features, config.encoder_dim};
+  // Run encoder on windowed accumulated features.
+  std::vector<int64_t> feat_shape = {1, window_size, config.encoder_dim};
 
   OrtValue *features_tensor = nullptr;
+  const float *features_ptr =
+      state->accumulated_features.data() + window_start * config.encoder_dim;
   RETURN_ON_ORT_ERROR(
-      ort_api, ort_api->CreateTensorWithDataAsOrtValue(
-                   ort_memory_info, state->accumulated_features.data(),
-                   state->accumulated_features.size() * sizeof(float),
-                   feat_shape.data(), feat_shape.size(),
-                   ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &features_tensor));
+      ort_api,
+      ort_api->CreateTensorWithDataAsOrtValue(
+          ort_memory_info, const_cast<float *>(features_ptr),
+          static_cast<size_t>(window_size) * config.encoder_dim * sizeof(float),
+          feat_shape.data(), feat_shape.size(),
+          ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &features_tensor));
 
   const char *enc_input_names[] = {"features"};
   const char *enc_output_names[] = {"encoded"};
@@ -634,27 +669,17 @@ int MoonshineStreamingModel::encode(MoonshineStreamingState *state,
 
   int total_encoded = static_cast<int>(enc_shape[1]);
 
-  // Compute stable frame count
-  int stable_count;
-  if (is_final) {
-    stable_count = total_encoded;
-  } else {
-    stable_count = std::max(0, total_encoded - config.total_lookahead);
-  }
-
-  // Slice new stable frames
-  int new_frames = stable_count - state->encoder_frames_emitted;
-  if (new_frames <= 0) {
-    ort_api->ReleaseValue(enc_outputs[0]);
-    if (new_frames_out) *new_frames_out = 0;
-    return 0;
-  }
-
   // Run adapter on new frames
   float *encoded_data = nullptr;
   RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(
                                    enc_outputs[0], (void **)&encoded_data));
-  int start_idx = state->encoder_frames_emitted;
+  int start_idx = state->encoder_frames_emitted - window_start;
+  if (start_idx < 0 || start_idx + new_frames > total_encoded) {
+    ort_api->ReleaseValue(enc_outputs[0]);
+    LOGF("Encoder window misaligned: start_idx=%d, new_frames=%d, total=%d",
+         start_idx, new_frames, total_encoded);
+    return 1;
+  }
 
   std::vector<float> new_encoded(new_frames * config.encoder_dim);
   for (int i = 0; i < new_frames; ++i) {
@@ -707,6 +732,9 @@ int MoonshineStreamingModel::encode(MoonshineStreamingState *state,
   size_t mem_size = new_frames * config.decoder_dim;
   state->memory.insert(state->memory.end(), mem_data, mem_data + mem_size);
   state->memory_len += new_frames;
+  if (log_ort_run) {
+    LOGF("streaming encode: memory_len_after=%d", state->memory_len);
+  }
 
   // Invalidate cross K/V cache since memory changed
   state->cross_kv_valid = false;
