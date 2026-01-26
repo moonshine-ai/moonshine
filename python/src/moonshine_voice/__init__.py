@@ -16,6 +16,8 @@ from moonshine_voice.moonshine_api import (
     ModelArch,
     Transcript,
     TranscriptLine,
+    model_arch_to_string,
+    string_to_model_arch,
 )
 
 from moonshine_voice.download import (
@@ -118,4 +120,6 @@ __all__ = [
     "log_model_info",
     "supported_languages",
     "supported_languages_friendly",
+    "model_arch_to_string",
+    "string_to_model_arch",
 ]

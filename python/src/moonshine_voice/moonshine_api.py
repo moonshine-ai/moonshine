@@ -55,6 +55,35 @@ class ModelArch(IntEnum):
     BASE_STREAMING = 3
     MEDIUM_STREAMING = 4
 
+def model_arch_to_string(model_arch: ModelArch) -> str:
+    """Convert a model architecture to a string."""
+    if model_arch == ModelArch.TINY:
+        return "tiny"
+    elif model_arch == ModelArch.BASE:
+        return "base"
+    elif model_arch == ModelArch.TINY_STREAMING:
+        return "tiny-streaming"
+    elif model_arch == ModelArch.BASE_STREAMING:
+        return "base-streaming"
+    elif model_arch == ModelArch.MEDIUM_STREAMING:
+        return "medium-streaming"
+    else:
+        raise ValueError(f"Invalid model architecture: {model_arch}")
+
+def string_to_model_arch(model_arch_string: str) -> ModelArch:
+    """Convert a string to a model architecture."""
+    if model_arch_string == "tiny":
+        return ModelArch.TINY
+    elif model_arch_string == "base":
+        return ModelArch.BASE
+    elif model_arch_string == "tiny-streaming":
+        return ModelArch.TINY_STREAMING
+    elif model_arch_string == "base-streaming":
+        return ModelArch.BASE_STREAMING
+    elif model_arch_string == "medium-streaming":
+        return ModelArch.MEDIUM_STREAMING
+    else:
+        raise ValueError(f"Invalid model architecture string: {model_arch_string}")
 
 @dataclass
 class TranscriptLine:

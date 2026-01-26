@@ -100,7 +100,7 @@ class Transcriber:
             options_array = (TranscriberOptionC * options_count)(
                 *[
                     TranscriberOptionC(
-                        name=name.encode("utf-8"), value=value.encode("utf-8")
+                        name=name.encode("utf-8"), value=str(value).encode("utf-8")
                     )
                     for name, value in options.items()
                 ]
