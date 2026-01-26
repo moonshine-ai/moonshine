@@ -1,0 +1,150 @@
+#
+# On a Mac you'll need to set up ffmpeg using:
+# brew install ffmpeg@8
+# export DYLD_LIBRARY_PATH="/opt/homebrew/opt/ffmpeg@8/lib:$DYLD_LIBRARY_PATH"
+#
+
+from moonshine_voice import (
+    get_model_for_language,
+    Transcriber,
+    string_to_model_arch,
+    model_arch_to_string,
+)
+
+import argparse
+import os
+import numpy as np
+from datasets import load_dataset
+from jiwer import wer, cer
+from tqdm import tqdm
+from transformers import pipeline
+from transformers.pipelines.base import KeyDataset
+import pandas as pd
+import json
+from whisper.normalizers import EnglishTextNormalizer
+
+english_text_normalizer = EnglishTextNormalizer()
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--audio", type=str, default=None)
+parser.add_argument("--model-archs", type=str, default="tiny,base")
+parser.add_argument("--model-paths", type=str, default=None)
+parser.add_argument("--verbose", action="store_true")
+
+args = parser.parse_args()
+
+model_arch_strings = args.model_archs.split(",")
+model_archs = [
+    string_to_model_arch(model_arch_string) for model_arch_string in model_arch_strings
+]
+
+if args.model_paths is not None:
+    model_paths = args.model_paths.split(":")
+    if len(model_paths) != len(model_archs):
+        raise ValueError("Number of model paths must match number of model architectures")
+    model_paths = [model_path.strip() for model_path in model_paths]
+else:
+    model_paths = None
+
+results = {}
+for model_arch in model_archs:
+    results[f"{model_arch_to_string(model_arch).capitalize()} WER"] = []
+    results[f"{model_arch_to_string(model_arch).capitalize()} CER"] = []
+
+detailed_results = {
+    "ground_truth": [],
+    "transcription": [],
+    "wer": [],
+    "cer": [],
+    "model_arch": [],
+}
+
+language_code = "en"
+country_code = "us"
+fleurs_language = f"{language_code}_{country_code}"
+
+for model_arch in model_archs:
+    print(
+        f"Evaluating {model_arch_to_string(model_arch)} model for {language_code} language on FLEURS dataset"
+    )
+
+    if model_paths is not None:
+        path = model_paths[model_archs.index(model_arch)]
+        arch = model_arch
+    else:
+        path, arch = get_model_for_language(language_code, model_arch)
+    transcriber = Transcriber(path, arch, options={"vad_threshold": 0.0})
+
+    fleurs_dataset = load_dataset(
+        "google/fleurs", fleurs_language, trust_remote_code=True
+    )
+
+    test_dataset = fleurs_dataset["test"]
+
+    wer_total = 0
+    cer_total = 0
+    character_count = 0
+
+    for sample in tqdm(test_dataset):
+        audio = sample["audio"]["array"].astype(np.float32)
+        ground_truth = sample["transcription"]
+        current_character_count = len(ground_truth)
+        character_count += current_character_count
+        audio_duration = audio.shape[0] / 16000.0
+        transcript = transcriber.transcribe_without_streaming(audio, sample_rate=16000)
+        first_line = transcript.lines[0]
+        transcription = first_line.text
+        normalized_ground_truth = english_text_normalizer(ground_truth)
+        normalized_transcription = english_text_normalizer(transcription)
+        current_wer = wer(normalized_ground_truth, normalized_transcription)
+        current_cer = cer(normalized_ground_truth, normalized_transcription)
+        wer_total += current_wer * current_character_count
+        cer_total += current_cer * current_character_count
+
+        if args.verbose:
+            print(f"Ground truth: {normalized_ground_truth}")
+            print(f"Transcription: {normalized_transcription}")
+            print(f"WER: {current_wer:.2%}, CER: {current_cer:.2%}")
+            print("--------------------------------")
+
+        detailed_results["ground_truth"].append(normalized_ground_truth)
+        detailed_results["transcription"].append(normalized_transcription)
+        detailed_results["wer"].append(current_wer)
+        detailed_results["cer"].append(current_cer)
+        detailed_results["model_arch"].append(model_arch_to_string(model_arch))
+
+    wer_result = wer_total / character_count
+    cer_result = cer_total / character_count
+
+    print(f"WER: {wer_result:.2%}, CER: {cer_result:.2%}")
+
+    results[f"{model_arch_to_string(model_arch).capitalize()} WER"].append(
+        f"{wer_result:.2%}"
+    )
+    results[f"{model_arch_to_string(model_arch).capitalize()} CER"].append(
+        f"{cer_result:.2%}"
+    )
+
+dataframe = pd.DataFrame(results)
+print(dataframe)
+dataframe.to_excel("moonshine-eval-results.xlsx", index=False)
+print("Results saved to moonshine-eval-results.xlsx")
+
+detailed_df = pd.DataFrame(detailed_results)
+
+detailed_writer = pd.ExcelWriter(
+    "moonshine-eval-detailed-results.xlsx", engine="xlsxwriter"
+)
+detailed_df.to_excel(detailed_writer, sheet_name="Moonshine Eval")
+detailed_workbook = detailed_writer.book
+detailed_worksheet = detailed_writer.sheets["Moonshine Eval"]
+
+wrap_text_format = detailed_workbook.add_format({"text_wrap": True})
+percent_format = detailed_workbook.add_format({"num_format": "0%"})
+
+detailed_worksheet.set_column(1, 2, 40, wrap_text_format)
+detailed_worksheet.set_column(3, 4, None, percent_format)
+
+detailed_writer.close()
+
+print("Detailed results saved to moonshine-eval-detailed-results.xlsx")

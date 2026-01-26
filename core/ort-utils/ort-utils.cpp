@@ -22,8 +22,6 @@ int ort_session_from_path(const OrtApi *ort_api, OrtEnv *env,
             __FILE__, __LINE__);
     return -1;
   }
-  fprintf(stderr, "Creating session from path '%s' at %s:%d\n", path, __FILE__,
-          __LINE__);
   std::filesystem::path fs_path(path);
   std::wstring wpath = fs_path.wstring();
   RETURN_ON_ORT_ERROR(
@@ -70,8 +68,6 @@ int ort_session_from_path(const OrtApi *ort_api, OrtEnv *env,
               __FILE__, __LINE__);
       return -1;
     }
-    fprintf(stderr, "Creating session from path '%s' at %s:%d\n", path,
-            __FILE__, __LINE__);
     RETURN_ON_ORT_ERROR(
         ort_api, ort_api->CreateSession(env, path, session_options, session));
     *mmapped_data = nullptr;
