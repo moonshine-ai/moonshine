@@ -9,7 +9,7 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--wav_path", type=str, default="test-assets/two_cities.wav")
-parser.add_argument("--chunk_duration", type=float, default=0.5)
+parser.add_argument("--chunk_duration", type=float, default=0.48)
 parser.add_argument("--verbose", "-v", action="store_true")
 parser.add_argument("--options", type=str, default=None)
 args = parser.parse_args()
@@ -20,7 +20,7 @@ if args.options is not None:
         key, value = option.split("=")
         options[key] = value
 
-# tiny_path, tiny_arch = get_model_for_language("en", ModelArch.TINY)
+tiny_path, tiny_arch = get_model_for_language("en", ModelArch.TINY)
 # base_path, base_arch = get_model_for_language("en", ModelArch.BASE)
 # FIXME: Missing some files for tiny and medium streaming-en, so disabled for now.
 tiny_streaming_path, tiny_streaming_arch = get_model_for_language(
@@ -30,7 +30,7 @@ tiny_streaming_path, tiny_streaming_arch = get_model_for_language(
 # medium_streaming_path, medium_streaming_arch = get_model_for_language("en", ModelArch.MEDIUM_STREAMING)
 
 models = [
-    # (tiny_path, tiny_arch),
+    (tiny_path, tiny_arch),
     # (base_path, base_arch),
     (tiny_streaming_path, tiny_streaming_arch),
     # (base_streaming_path, base_streaming_arch),
@@ -48,8 +48,13 @@ for model in models:
     start_time = time.time()
     chunk_duration = args.chunk_duration
     chunk_size = int(chunk_duration * sample_rate)
+    alignment_samples = (sample_rate * 80) // 1000
     for i in range(0, len(audio_data), chunk_size):
         chunk = audio_data[i : i + chunk_size]
+        if i + chunk_size >= len(audio_data) and alignment_samples > 0:
+            remainder = len(chunk) % alignment_samples
+            if remainder:
+                chunk = chunk + [0.0] * (alignment_samples - remainder)
         transcriber.add_audio(chunk, sample_rate)
     end_time = time.time()
     duration = end_time - start_time
@@ -68,6 +73,10 @@ for model in models:
     print(
         f"Transcription took {duration} seconds ({(duration / audio_duration) * 100:.2f}% of audio duration)"
     )
-    print(f"Average latency: {total_latency_ms / len(transcript.lines):.0f}ms")
+    if transcript.lines:
+        average_latency_ms = total_latency_ms / len(transcript.lines)
+        print(f"Average latency: {average_latency_ms:.0f}ms")
+    else:
+        print("Average latency: n/a (no transcript lines)")
 
     transcriber.close()
