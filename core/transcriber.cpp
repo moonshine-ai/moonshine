@@ -13,7 +13,6 @@
 
 namespace {
 constexpr int32_t INTERNAL_SAMPLE_RATE = 16000;
-constexpr uint64_t STREAMING_CHUNK_DURATION_MS = 80;
 
 const int32_t VALID_MODEL_ARCHS[] = {
     MOONSHINE_MODEL_ARCH_TINY,
@@ -245,21 +244,6 @@ void Transcriber::add_audio_to_stream(int32_t stream_id,
         " but VAD is not active. Did you call start_stream()?";
     throw std::runtime_error(error_message);
   }
-  if (is_streaming_model_arch(this->options.model_arch)) {
-    if (sample_rate <= 0) {
-      throw std::runtime_error("Sample rate must be greater than zero");
-    }
-    const uint64_t denom =
-        static_cast<uint64_t>(sample_rate) * STREAMING_CHUNK_DURATION_MS;
-    const uint64_t numer = audio_length * 1000;
-    const bool chunk_aligned = (numer % denom) == 0;
-    assert(chunk_aligned &&
-           "Streaming chunks must be a multiple of 80ms in duration");
-    if (!chunk_aligned) {
-      throw std::runtime_error(
-          "Streaming chunks must be a multiple of 80ms in duration");
-    }
-  }
   stream->add_to_new_audio_buffer(audio_data, audio_length, sample_rate);
 }
 
@@ -485,8 +469,8 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
       }
     }
 
-    // Update the count of processed samples
-    this->streaming_samples_processed = audio_length;
+    // Update the count of processed samples with the chunks we've actually processed.
+    this->streaming_samples_processed = (audio_length / chunk_size) * chunk_size;
   }
 
   // If no memory accumulated, return empty string
