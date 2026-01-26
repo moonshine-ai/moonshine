@@ -1,6 +1,7 @@
 #include "transcriber.h"
 
 #include <cassert>
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <iostream>
@@ -36,6 +37,15 @@ void validate_model_arch(uint32_t model_arch) {
   }
   throw std::runtime_error("Invalid model architecture: " +
                            std::to_string(model_arch));
+}
+
+int32_t vad_window_size_from_duration(float duration, int32_t hop_size) {
+  return static_cast<int32_t>(
+      std::ceilf((duration * INTERNAL_SAMPLE_RATE) / hop_size));
+}
+
+size_t vad_sample_count_from_duration(float duration) {
+  return static_cast<size_t>(std::roundf(duration * INTERNAL_SAMPLE_RATE));
 }
 }  // namespace
 
@@ -175,9 +185,16 @@ void Transcriber::transcribe_without_streaming(
     uint32_t /*flags*/, struct transcript_t **out_transcript) {
   std::lock_guard<std::mutex> lock(this->batch_stream_mutex);
   if (this->batch_stream == nullptr) {
+    const int32_t vad_window_size = vad_window_size_from_duration(
+        this->options.vad_window_duration, this->options.vad_hop_size);
+    const size_t vad_max_segment_sample_count =
+        vad_sample_count_from_duration(this->options.vad_max_segment_duration);
     this->batch_stream = new TranscriberStream(
-        new VoiceActivityDetector(this->options.vad_threshold), -1,
-        this->options.save_input_wav_path);
+        new VoiceActivityDetector(this->options.vad_threshold, vad_window_size,
+                                  this->options.vad_hop_size,
+                                  this->options.vad_look_behind_sample_count,
+                                  vad_max_segment_sample_count),
+        -1, this->options.save_input_wav_path);
   }
   if (!this->batch_stream->save_input_wav_path.empty()) {
     this->batch_stream->save_audio_data_to_wav(audio_data, audio_length,
@@ -200,9 +217,16 @@ void Transcriber::transcribe_without_streaming(
 int32_t Transcriber::create_stream() {
   std::lock_guard<std::mutex> lock(this->streams_mutex);
   int32_t stream_id = this->next_stream_id++;
+  const int32_t vad_window_size = vad_window_size_from_duration(
+      this->options.vad_window_duration, this->options.vad_hop_size);
+  const size_t vad_max_segment_sample_count =
+      vad_sample_count_from_duration(this->options.vad_max_segment_duration);
   TranscriberStream *stream = new TranscriberStream(
-      new VoiceActivityDetector(this->options.vad_threshold), stream_id,
-      this->options.save_input_wav_path);
+      new VoiceActivityDetector(this->options.vad_threshold, vad_window_size,
+                                this->options.vad_hop_size,
+                                this->options.vad_look_behind_sample_count,
+                                vad_max_segment_sample_count),
+      stream_id, this->options.save_input_wav_path);
 
   this->streams.insert({stream_id, stream});
   return stream_id;

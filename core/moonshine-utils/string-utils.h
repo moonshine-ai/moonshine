@@ -29,4 +29,8 @@ bool bool_from_string(const char *input);
 
 float float_from_string(const char *input);
 
+int32_t int32_from_string(const char *input);
+
+size_t size_t_from_string(const char *input);
+
 #endif
