@@ -58,4 +58,24 @@ TEST_CASE("string-utils") {
     CHECK_THROWS(float_from_string(""));
     CHECK_THROWS(float_from_string(nullptr));
   }
+  SUBCASE("int32_from_string") {
+    CHECK(int32_from_string("1") == 1);
+    CHECK(int32_from_string("2027") == 2027);
+    CHECK(int32_from_string("0") == 0);
+  }
+  SUBCASE("int32_from_string_invalid") {
+    CHECK_THROWS(int32_from_string("invalid"));
+    CHECK_THROWS(int32_from_string(""));
+    CHECK_THROWS(int32_from_string(nullptr));
+  }
+  SUBCASE("size_t_from_string") {
+    CHECK(size_t_from_string("1") == 1);
+    CHECK(size_t_from_string("2027") == 2027);
+    CHECK(size_t_from_string("0") == 0);
+  }
+  SUBCASE("size_t_from_string_invalid") {
+    CHECK_THROWS(size_t_from_string("invalid"));
+    CHECK_THROWS(size_t_from_string(""));
+    CHECK_THROWS(size_t_from_string(nullptr));
+  }
 }

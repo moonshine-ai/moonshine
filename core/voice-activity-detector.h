@@ -22,8 +22,8 @@ struct VoiceActivitySegment {
 class VoiceActivityDetector {
  private:
   const float threshold;
-  const int32_t hop_size;
   const int32_t window_size;
+  const int32_t hop_size;
   const size_t look_behind_sample_count;
   const size_t max_segment_sample_count;
 
@@ -42,8 +42,8 @@ class VoiceActivityDetector {
   bool previous_is_voice;
 
  public:
-  VoiceActivityDetector(float threshold = 0.5f, int32_t hop_size = 512,
-                        int32_t window_size = 32,
+  VoiceActivityDetector(float threshold = 0.5f, int32_t window_size = 32,
+                        int32_t hop_size = 512,
                         size_t look_behind_sample_count = 8192,
                         size_t max_segment_sample_count = 15 * 16000);
   ~VoiceActivityDetector();

@@ -118,3 +118,31 @@ float float_from_string(const char *input) {
   }
   return result;
 }
+
+int32_t int32_from_string(const char *input) {
+  if (input == nullptr) {
+    throw std::runtime_error("Input is null");
+  }
+  int32_t result = 0;
+  try {
+    result = std::stoi(input, nullptr, 10);
+  } catch (const std::exception &e) {
+    throw std::runtime_error("Invalid int32_t string: '" + std::string(input) +
+                             "': " + e.what());
+  }
+  return result;
+}
+
+size_t size_t_from_string(const char *input) {
+  if (input == nullptr) {
+    throw std::runtime_error("Input is null");
+  }
+  size_t result = 0;
+  try {
+    result = std::stoul(input, nullptr, 10);
+  } catch (const std::exception &e) {
+    throw std::runtime_error("Invalid size_t string: '" + std::string(input) +
+                             "': " + e.what());
+  }
+  return result;
+}

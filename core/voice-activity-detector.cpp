@@ -21,13 +21,14 @@ float seconds_from_sample_count(size_t sample_count) {
 // Runtime
 SileroVad *VoiceActivityDetector::silero_vad = nullptr;
 
-VoiceActivityDetector::VoiceActivityDetector(float threshold, int32_t hop_size,
+VoiceActivityDetector::VoiceActivityDetector(float threshold,
                                              int32_t window_size,
+                                             int32_t hop_size,
                                              size_t look_behind_sample_count,
                                              size_t max_segment_sample_count)
     : threshold(threshold),
-      hop_size(hop_size),
       window_size(window_size),
+      hop_size(hop_size),
       look_behind_sample_count(look_behind_sample_count),
       max_segment_sample_count(max_segment_sample_count) {
   // We only want a single, global instance of silero_vad

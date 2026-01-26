@@ -92,7 +92,11 @@ struct TranscriberOptions {
   const uint8_t *tokenizer_data = nullptr;
   size_t tokenizer_data_size = 0;
   float transcription_interval = 0.5f;
-  float vad_threshold = 0.5f;
+  float vad_threshold = 0.5f;  
+  float vad_window_duration = 0.5f;
+  int32_t vad_hop_size = 512;
+  size_t vad_look_behind_sample_count = 8192;
+  float vad_max_segment_duration = 15.0f;
   std::string save_input_wav_path = "";
   bool log_ort_run = false;
 };

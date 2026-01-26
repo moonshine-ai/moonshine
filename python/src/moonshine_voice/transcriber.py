@@ -483,6 +483,12 @@ if __name__ == "__main__":
         "--language", type=str, default=None, help="Language to use for transcription"
     )
     parser.add_argument(
+        "--model-path",
+        type=str,
+        default=None,
+        help="Path to the model directory (overrides language if set)",
+    )
+    parser.add_argument(
         "--model-arch",
         type=int,
         default=None,
@@ -499,7 +505,10 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    if args.language is None:
+    if args.model_path is not None:
+        model_path = args.model_path
+        model_arch = ModelArch(args.model_arch)
+    elif args.language is None:
         model_path = str(get_model_path("tiny-en"))
         model_arch = ModelArch.TINY
     else:
