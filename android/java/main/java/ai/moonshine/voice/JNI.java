@@ -10,6 +10,8 @@ public class JNI {
     public static final int MOONSHINE_MODEL_ARCH_BASE = 1;
     public static final int MOONSHINE_MODEL_ARCH_TINY_STREAMING = 2;
     public static final int MOONSHINE_MODEL_ARCH_BASE_STREAMING = 3;
+    public static final int MOONSHINE_MODEL_ARCH_SMALL_STREAMING = 4;
+    public static final int MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING = 5;
 
     public static final int MOONSHINE_FLAG_FORCE_UPDATE = 1 << 0;
 

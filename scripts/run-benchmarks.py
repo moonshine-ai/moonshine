@@ -21,20 +21,19 @@ if args.options is not None:
         options[key] = value
 
 tiny_path, tiny_arch = get_model_for_language("en", ModelArch.TINY)
-# base_path, base_arch = get_model_for_language("en", ModelArch.BASE)
-# FIXME: Missing some files for tiny and medium streaming-en, so disabled for now.
+base_path, base_arch = get_model_for_language("en", ModelArch.BASE)
 tiny_streaming_path, tiny_streaming_arch = get_model_for_language(
     "en", ModelArch.TINY_STREAMING
 )
-# base_streaming_path, base_streaming_arch = get_model_for_language("en", ModelArch.BASE_STREAMING)
-# medium_streaming_path, medium_streaming_arch = get_model_for_language("en", ModelArch.MEDIUM_STREAMING)
+small_streaming_path, small_streaming_arch = get_model_for_language("en", ModelArch.SMALL_STREAMING)
+medium_streaming_path, medium_streaming_arch = get_model_for_language("en", ModelArch.MEDIUM_STREAMING)
 
 models = [
     (tiny_path, tiny_arch),
-    # (base_path, base_arch),
+    (base_path, base_arch),
     (tiny_streaming_path, tiny_streaming_arch),
-    # (base_streaming_path, base_streaming_arch),
-    # (medium_streaming_path, medium_streaming_arch),
+    (small_streaming_path, small_streaming_arch),
+    (medium_streaming_path, medium_streaming_arch),
 ]
 
 audio_data, sample_rate = load_wav_file(args.wav_path)

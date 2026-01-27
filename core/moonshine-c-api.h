@@ -99,7 +99,8 @@ extern "C" {
 #define MOONSHINE_MODEL_ARCH_BASE (1)
 #define MOONSHINE_MODEL_ARCH_TINY_STREAMING (2)
 #define MOONSHINE_MODEL_ARCH_BASE_STREAMING (3)
-#define MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING (4)
+#define MOONSHINE_MODEL_ARCH_SMALL_STREAMING (4)
+#define MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING (5)
 
 /* Error codes.                                                            */
 #define MOONSHINE_ERROR_NONE (0)
@@ -331,7 +332,7 @@ MOONSHINE_EXPORT int32_t moonshine_transcribe_without_streaming(
 
    ```c
     int32_t transcriber_handle = moonshine_load_transcriber_from_files(
-        "path/to/models", MOONSHINE_MODEL_ARCH_BASE_STREAMING, NULL, 0,
+        "path/to/models", MOONSHINE_MODEL_ARCH_BASE, NULL, 0,
         MOONSHINE_HEADER_VERSION);
     int32_t stream_handle = moonshine_create_stream(transcriber_handle, 0);
     moonshine_start_stream(transcriber_handle, stream_handle);

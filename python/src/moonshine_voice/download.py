@@ -30,13 +30,15 @@ MODEL_INFO = {
     "en": {
         "english_name": "English",
         "models": [
-            # FIXME: Missing some files for medium-streaming-en, so disabled for now.
-            # {"model_name": "medium-streaming-en", "model_arch": ModelArch.MEDIUM_STREAMING,
-            #     "download_url": "https://download.moonshine.ai/model/medium-streaming-en/float"},
             {
-                "model_name": "base-streaming-en",
-                "model_arch": ModelArch.BASE_STREAMING,
-                "download_url": "https://download.moonshine.ai/model/base-streaming-en/float",
+                "model_name": "medium-streaming-en",
+                "model_arch": ModelArch.MEDIUM_STREAMING,
+                "download_url": "https://download.moonshine.ai/model/medium-streaming-en/quantized",
+            },
+            {
+                "model_name": "small-streaming-en",
+                "model_arch": ModelArch.SMALL_STREAMING,
+                "download_url": "https://download.moonshine.ai/model/small-streaming-en/quantized",
             },
             {
                 "model_name": "base-en",
@@ -46,7 +48,7 @@ MODEL_INFO = {
             {
                 "model_name": "tiny-streaming-en",
                 "model_arch": ModelArch.TINY_STREAMING,
-                "download_url": "https://download.moonshine.ai/model/tiny-streaming-en/float",
+                "download_url": "https://download.moonshine.ai/model/tiny-streaming-en/quantized",
             },
             {
                 "model_name": "tiny-en",
@@ -154,15 +156,15 @@ def get_components_for_model_info(model_info: dict) -> list[str]:
     if model_arch in [
         ModelArch.TINY_STREAMING,
         ModelArch.BASE_STREAMING,
+        ModelArch.SMALL_STREAMING,
         ModelArch.MEDIUM_STREAMING,
     ]:
         return [
-            "adapter.onnx",
-            "cross_kv.onnx",
-            "decoder_kv.onnx",
-            "decoder.onnx",
-            "encoder.onnx",
-            "frontend.onnx",
+            "adapter.ort",
+            "cross_kv.ort",
+            "decoder_kv.ort",
+            "encoder.ort",
+            "frontend.ort",
             "streaming_config.json",
             "tokenizer.bin",
         ]
