@@ -43,11 +43,11 @@ void validate_model_arch(uint32_t model_arch) {
 
 int32_t vad_window_size_from_duration(float duration, int32_t hop_size) {
   return static_cast<int32_t>(
-      std::ceilf((duration * INTERNAL_SAMPLE_RATE) / hop_size));
+      std::ceil((duration * INTERNAL_SAMPLE_RATE) / hop_size));
 }
 
 size_t vad_sample_count_from_duration(float duration) {
-  return static_cast<size_t>(std::roundf(duration * INTERNAL_SAMPLE_RATE));
+  return static_cast<size_t>(std::round(duration * INTERNAL_SAMPLE_RATE));
 }
 }  // namespace
 
