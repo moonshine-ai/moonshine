@@ -1,10 +1,18 @@
 import os
 import sys
+from enum import IntEnum
 
 from moonshine_voice.moonshine_api import ModelArch
 from moonshine_voice.transcriber import Transcriber
 from moonshine_voice.download_file import download_model, get_cache_dir
 from moonshine_voice.utils import get_assets_path, load_wav_file
+
+
+# Define EmbeddingModelArch here to avoid circular import with intent_recognizer
+class EmbeddingModelArch(IntEnum):
+    """Supported embedding model architectures."""
+    GEMMA_300M = 0  # embeddinggemma-300m (768-dim embeddings)
+
 
 MODEL_INFO = {
     "ar": {
@@ -112,6 +120,18 @@ MODEL_INFO = {
     },
 }
 
+# Embedding models are stored separately since they use a different arch enum
+# and have a different component structure (variants like q4, fp32, etc.)
+EMBEDDING_MODEL_INFO = {
+    "embeddinggemma-300m": {
+        "english_name": "Embedding Gemma 300M",
+        "model_arch": EmbeddingModelArch.GEMMA_300M,
+        "download_url": "https://download.moonshine.ai/model/embeddinggemma-300m",
+        "variants": ["q4", "q8", "fp16", "fp32", "q4f16"],
+        "default_variant": "q4",
+    },
+}
+
 
 def find_model_info(language: str = "en", model_arch: ModelArch = None) -> dict:
     if language in MODEL_INFO.keys():
@@ -181,6 +201,94 @@ def download_model_from_info(model_info: dict) -> tuple[str, ModelArch]:
         component_path = os.path.join(root_model_path, component)
         download_model(component_download_url, component_path)
     return str(root_model_path), model_info["model_arch"]
+
+
+# ============================================================================
+# Embedding Model Functions
+# ============================================================================
+
+
+def supported_embedding_models() -> list[str]:
+    """Return list of supported embedding model names."""
+    return list(EMBEDDING_MODEL_INFO.keys())
+
+
+def supported_embedding_models_friendly() -> str:
+    """Return a friendly string listing supported embedding models."""
+    return ", ".join(
+        [f"{key} ({info['english_name']})" for key, info in EMBEDDING_MODEL_INFO.items()]
+    )
+
+
+def get_embedding_model_variants(model_name: str = "embeddinggemma-300m") -> list[str]:
+    """Return list of available variants for an embedding model."""
+    if model_name not in EMBEDDING_MODEL_INFO:
+        raise ValueError(
+            f"Embedding model not found: {model_name}. "
+            f"Supported models: {supported_embedding_models_friendly()}"
+        )
+    return EMBEDDING_MODEL_INFO[model_name]["variants"]
+
+
+def get_embedding_model(
+    model_name: str = "embeddinggemma-300m",
+    variant: str = None,
+) -> tuple[str, EmbeddingModelArch]:
+    """
+    Download an embedding model and return (path, arch).
+
+    Args:
+        model_name: Name of the embedding model (e.g., "gemma-300m")
+        variant: Model variant - one of "q4", "q8", "fp16", "fp32", "q4f16".
+                 If None, uses the default variant (q4).
+
+    Returns:
+        Tuple of (model_path, model_arch) for use with IntentRecognizer.
+
+    Example:
+        >>> model_path, model_arch = get_embedding_model("gemma-300m", "q4")
+        >>> recognizer = IntentRecognizer(model_path=model_path, model_arch=model_arch)
+    """
+    if model_name not in EMBEDDING_MODEL_INFO:
+        raise ValueError(
+            f"Embedding model not found: {model_name}. "
+            f"Supported models: {supported_embedding_models_friendly()}"
+        )
+
+    model_info = EMBEDDING_MODEL_INFO[model_name]
+
+    if variant is None:
+        variant = model_info["default_variant"]
+
+    if variant not in model_info["variants"]:
+        raise ValueError(
+            f"Variant '{variant}' not available for {model_name}. "
+            f"Available variants: {model_info['variants']}"
+        )
+
+    # Determine components based on variant
+    if variant == "fp32":
+        components = ["model.onnx", "tokenizer.bin", "model.onnx_data"]
+    else:
+        components = [f"model_{variant}.onnx", "tokenizer.bin", f"model_{variant}.onnx_data"]
+
+    # Download the model
+    cache_dir = get_cache_dir()
+    download_url = model_info["download_url"]
+    model_folder_name = download_url.replace("https://", "")
+    root_model_path = os.path.join(cache_dir, model_folder_name)
+
+    for component in components:
+        component_download_url = f"{download_url}/{component}"
+        component_path = os.path.join(root_model_path, component)
+        download_model(component_download_url, component_path)
+
+    return str(root_model_path), model_info["model_arch"]
+
+
+# ============================================================================
+# Transcription Model Functions
+# ============================================================================
 
 
 def get_model_for_language(

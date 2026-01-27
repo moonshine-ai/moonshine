@@ -25,6 +25,12 @@ from moonshine_voice.download import (
     log_model_info,
     supported_languages,
     supported_languages_friendly,
+    # Embedding model functions
+    EmbeddingModelArch,
+    get_embedding_model,
+    supported_embedding_models,
+    supported_embedding_models_friendly,
+    get_embedding_model_variants,
 )
 
 from moonshine_voice.utils import (
@@ -94,16 +100,15 @@ def __getattr__(name):
         return globals()[name]
 
     # Lazy import intent_recognizer module
-    if name in ("IntentRecognizer", "EmbeddingModelArch", "IntentMatch"):
+    # Note: EmbeddingModelArch is now imported directly from download module above
+    if name in ("IntentRecognizer", "IntentMatch"):
         if not _intent_recognizer_imported:
             from moonshine_voice.intent_recognizer import (
                 IntentRecognizer,
-                EmbeddingModelArch,
                 IntentMatch,
             )
 
             globals()["IntentRecognizer"] = IntentRecognizer
-            globals()["EmbeddingModelArch"] = EmbeddingModelArch
             globals()["IntentMatch"] = IntentMatch
             _intent_recognizer_imported = True
         return globals()[name]
@@ -141,4 +146,9 @@ __all__ = [
     "supported_languages_friendly",
     "model_arch_to_string",
     "string_to_model_arch",
+    # Embedding model functions
+    "get_embedding_model",
+    "supported_embedding_models",
+    "supported_embedding_models_friendly",
+    "get_embedding_model_variants",
 ]
