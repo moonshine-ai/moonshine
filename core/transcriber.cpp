@@ -469,14 +469,15 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
     size_t new_audio_length = audio_length - new_samples_start;
 
     const int chunk_size = 1280;  // 80ms at 16kHz
+    const size_t chunk_count = new_audio_length / chunk_size;
     {
       std::lock_guard<std::mutex> lock(this->streaming_model_mutex);
 
-      for (size_t offset = 0; offset < new_audio_length; offset += chunk_size) {
-        int len = static_cast<int>(std::min(static_cast<size_t>(chunk_size),
-                                            new_audio_length - offset));
+      for (size_t chunk_index = 0; chunk_index < chunk_count; chunk_index++) {
+        size_t offset = chunk_index * chunk_size;
         int err = this->streaming_model->process_audio_chunk(
-            &this->streaming_state, new_audio_data + offset, len, nullptr);
+            &this->streaming_state, new_audio_data + offset, chunk_size,
+            nullptr);
         if (err != 0) {
           LOGF("Failed to process audio chunk: %d", err);
           throw std::runtime_error("Failed to process audio chunk: " +
@@ -495,8 +496,9 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
       }
     }
 
-    // Update the count of processed samples with the chunks we've actually processed.
-    this->streaming_samples_processed = (audio_length / chunk_size) * chunk_size;
+    // Update the count of processed samples with the chunks we've actually
+    // processed.
+    this->streaming_samples_processed += chunk_count * chunk_size;
   }
 
   // If no memory accumulated, return empty string
