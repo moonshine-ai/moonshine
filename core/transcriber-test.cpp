@@ -177,7 +177,7 @@ TEST_CASE("transcriber-test") {
                           &wav_sample_rate));
     REQUIRE(wav_data != nullptr);
     REQUIRE(wav_data_size > 0);
-    std::string root_model_path = "slinkier-en";
+    std::string root_model_path = "tiny-streaming-en";
     REQUIRE(std::filesystem::exists(root_model_path));
     TranscriberOptions options;
     options.model_source = TranscriberOptions::ModelSource::FILES;
