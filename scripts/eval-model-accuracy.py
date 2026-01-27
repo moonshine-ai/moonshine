@@ -91,7 +91,15 @@ for model_arch in model_archs:
         current_character_count = len(ground_truth)
         character_count += current_character_count
         audio_duration = audio.shape[0] / 16000.0
-        transcript = transcriber.transcribe_without_streaming(audio, sample_rate=16000)
+        # Loop through the audio data in chunks to simulate live streaming
+        # from a microphone or other source.
+        transcriber.start()
+        chunk_duration = 0.1
+        chunk_size = int(chunk_duration * 16000)
+        for i in range(0, len(audio), chunk_size):
+            chunk = audio[i : i + chunk_size]
+            transcriber.add_audio(chunk, 16000)
+        transcript =transcriber.stop()
         first_line = transcript.lines[0]
         transcription = first_line.text
         normalized_ground_truth = english_text_normalizer(ground_truth)
