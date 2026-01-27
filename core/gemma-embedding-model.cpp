@@ -90,9 +90,8 @@ int GemmaEmbeddingModel::load(const char *model_dir,
     return 1;
   }
 
-  std::string model_path = append_path_component(model_dir, "onnx");
-  model_path =
-      append_path_component(model_path.c_str(), model_filename.c_str());
+  std::string model_path =
+      append_path_component(model_dir, model_filename.c_str());
 
   std::string tokenizer_path =
       append_path_component(model_dir, "tokenizer.bin");

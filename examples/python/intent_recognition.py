@@ -5,10 +5,7 @@ intents from transcribed speech. The IntentRecognizer acts as a
 TranscriptEventListener, automatically processing completed transcript
 lines to detect registered intents.
 
-Requirements:
-    - Moonshine Voice library built with intent recognition support
-    - Gemma embedding model downloaded to embeddinggemma-300m-ONNX/
-    - A microphone for live transcription (or use with audio files)
+The embedding model will be automatically downloaded on first run.
 """
 
 import argparse
@@ -21,6 +18,7 @@ from moonshine_voice import (
     EmbeddingModelArch,
     TranscriptEventListener,
     get_model_for_language,
+    get_embedding_model,
 )
 
 
@@ -98,8 +96,14 @@ def main():
     parser.add_argument(
         "--embedding-model",
         type=str,
-        default="embeddinggemma-300m-ONNX",
-        help="Path to the embedding model directory (default: embeddinggemma-300m-ONNX)",
+        default="embeddinggemma-300m",
+        help="Embedding model name (default: embeddinggemma-300m)",
+    )
+    parser.add_argument(
+        "--quantization",
+        type=str,
+        default="q4",
+        help="Model quantization, e.g., q4, q8, fp16, fp32, q4f16 (default: q4)",
     )
     parser.add_argument(
         "--threshold",
@@ -113,14 +117,17 @@ def main():
     print("Loading transcription model...", file=sys.stderr)
     model_path, model_arch = get_model_for_language(args.language, args.model_arch)
 
+    # Download and load the embedding model for intent recognition
+    print(f"Loading embedding model ({args.embedding_model}, variant={args.quantization})...", file=sys.stderr)
+    embedding_model_path, embedding_model_arch = get_embedding_model(
+        args.embedding_model, args.quantization
+    )
+
     # Create the intent recognizer (implements TranscriptEventListener)
-    # The embedding model is loaded internally based on the path and architecture
-    print(f"Loading embedding model and creating intent recognizer...", file=sys.stderr)
-    print(f"  Embedding model: {args.embedding_model}", file=sys.stderr)
-    print(f"  Threshold: {args.threshold}", file=sys.stderr)
+    print(f"Creating intent recognizer (threshold={args.threshold})...", file=sys.stderr)
     intent_recognizer = IntentRecognizer(
-        model_path=args.embedding_model,
-        model_arch=EmbeddingModelArch.GEMMA_300M,
+        model_path=embedding_model_path,
+        model_arch=embedding_model_arch,
         threshold=args.threshold,
     )
 
@@ -135,7 +142,7 @@ def main():
     print(f"Registered {intent_recognizer.intent_count} intents", file=sys.stderr)
 
     # Create the microphone transcriber
-    mic_transcriber = MicTranscriber(model_path=model_path, model_arch=model_arch, device=3)
+    mic_transcriber = MicTranscriber(model_path=model_path, model_arch=model_arch)
 
     # Add both the transcript printer and intent recognizer as listeners
     # The intent recognizer will process completed lines and trigger handlers

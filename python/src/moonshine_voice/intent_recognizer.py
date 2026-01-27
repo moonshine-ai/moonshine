@@ -7,7 +7,6 @@ recognize intents from transcribed speech.
 
 import ctypes
 from dataclasses import dataclass
-from enum import IntEnum
 from typing import Callable, Dict, Optional
 
 from moonshine_voice.moonshine_api import _MoonshineLib
@@ -17,6 +16,7 @@ from moonshine_voice.transcriber import (
     LineCompleted,
     Error,
 )
+from moonshine_voice.download import EmbeddingModelArch
 
 
 # Callback type for intent handlers
@@ -31,12 +31,6 @@ _INTENT_CALLBACK = ctypes.CFUNCTYPE(
     ctypes.c_char_p,  # utterance
     ctypes.c_float,   # similarity
 )
-
-
-class EmbeddingModelArch(IntEnum):
-    """Supported embedding model architectures."""
-
-    GEMMA_300M = 0  # embeddinggemma-300m (768-dim embeddings)
 
 
 @dataclass
