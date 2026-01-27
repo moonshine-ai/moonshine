@@ -219,9 +219,9 @@ int MoonshineStreamingModel::load(const char *model_dir,
   }
 
   // Build paths
-  std::string frontend_path = append_path_component(model_dir, "frontend.onnx");
-  std::string encoder_path = append_path_component(model_dir, "encoder.onnx");
-  std::string adapter_path = append_path_component(model_dir, "adapter.onnx");
+  std::string frontend_path = append_path_component(model_dir, "frontend.ort");
+  std::string encoder_path = append_path_component(model_dir, "encoder.ort");
+  std::string adapter_path = append_path_component(model_dir, "adapter.ort");
   std::string config_path =
       append_path_component(model_dir, "streaming_config.json");
 
@@ -245,9 +245,9 @@ int MoonshineStreamingModel::load(const char *model_dir,
   RETURN_ON_NULL(adapter_session);
 
   // Load cross_kv and decoder_kv sessions (required for decoding)
-  std::string cross_kv_path = append_path_component(model_dir, "cross_kv.onnx");
+  std::string cross_kv_path = append_path_component(model_dir, "cross_kv.ort");
   std::string decoder_kv_path =
-      append_path_component(model_dir, "decoder_kv.onnx");
+      append_path_component(model_dir, "decoder_kv.ort");
 
   // Check if .ort versions exist (prefer them over .onnx)
   std::string cross_kv_ort = append_path_component(model_dir, "cross_kv.ort");
@@ -264,7 +264,6 @@ int MoonshineStreamingModel::load(const char *model_dir,
         ort_api, ort_env, ort_session_options, cross_kv_path.c_str(),
         &cross_kv_session, &cross_kv_mmap, &cross_kv_mmap_size));
     RETURN_ON_NULL(cross_kv_session);
-    LOGF("Loaded cross_kv session from %s\n", cross_kv_path.c_str());
   }
 
   // Load decoder_kv (required)
@@ -275,7 +274,6 @@ int MoonshineStreamingModel::load(const char *model_dir,
         ort_api, ort_env, ort_session_options, decoder_kv_path.c_str(),
         &decoder_kv_session, &decoder_kv_mmap, &decoder_kv_mmap_size));
     RETURN_ON_NULL(decoder_kv_session);
-    LOGF("Loaded decoder_kv session from %s\n", decoder_kv_path.c_str());
   }
 
   // Load tokenizer
@@ -337,10 +335,10 @@ int MoonshineStreamingModel::load_from_assets(const char *model_dir,
   }
 
   // Build paths
-  std::string frontend_path = append_path_component(model_dir, "frontend.onnx");
-  std::string encoder_path = append_path_component(model_dir, "encoder.onnx");
-  std::string adapter_path = append_path_component(model_dir, "adapter.onnx");
-  std::string cross_kv_path = append_path_component(model_dir, "cross_kv.onnx");
+  std::string frontend_path = append_path_component(model_dir, "frontend.ort");
+  std::string encoder_path = append_path_component(model_dir, "encoder.ort");
+  std::string adapter_path = append_path_component(model_dir, "adapter.ort");
+  std::string cross_kv_path = append_path_component(model_dir, "cross_kv.ort");
   std::string decoder_kv_path =
       append_path_component(model_dir, "decoder_kv.onnx");
   std::string config_path =

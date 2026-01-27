@@ -55,7 +55,7 @@ swift run BasicTranscription --help
 ## Command-Line Options
 
 - `--language, -l LANGUAGE`: Language to use for transcription (default: `en`)
-- `--model-arch, -m ARCH`: Model architecture: `tiny`, `base`, `tiny-streaming`, `base-streaming`
+- `--model-arch, -m ARCH`: Model architecture: `tiny`, `base`, `tiny-streaming`, `small-streaming`, `medium-streaming`
 - `--help, -h`: Show help message
 
 ## Supported Languages

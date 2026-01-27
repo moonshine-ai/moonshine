@@ -109,9 +109,13 @@ func parseArguments() -> Arguments {
                 args.modelArch = .tinyStreaming
             case "base-streaming", "base_streaming":
                 args.modelArch = .baseStreaming
+            case "small-streaming", "small_streaming":
+                args.modelArch = .smallStreaming
+            case "medium-streaming", "medium_streaming":
+                args.modelArch = .mediumStreaming
             default:
                 fputs(
-                    "Error: Invalid model architecture '\(value)'. Must be one of: tiny, base, tiny-streaming, base-streaming\n",
+                    "Error: Invalid model architecture '\(value)'. Must be one of: tiny, base, tiny-streaming, base-streaming, small-streaming, medium-streaming\n",
                     stderr)
                 exit(1)
             }
@@ -125,7 +129,7 @@ func parseArguments() -> Arguments {
 
                 Options:
                   --language, -l LANGUAGE    Language to use for transcription (default: en)
-                  --model-arch, -m ARCH       Model architecture: tiny, base, tiny-streaming, base-streaming
+                  --model-arch, -m ARCH       Model architecture: tiny, base, tiny-streaming, base-streaming, small-streaming, medium-streaming
                   --help, -h                  Show this help message
                 """)
             exit(0)

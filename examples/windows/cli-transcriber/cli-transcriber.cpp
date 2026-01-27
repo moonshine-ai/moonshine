@@ -334,7 +334,7 @@ int main(int argc, char *argv[]) {
                 << "  -m, --model-path PATH    Path to model directory "
                    "(default: ../../../test-assets/tiny-en)\n"
                 << "  -a, --model-arch ARCH    Model architecture: 0=TINY, "
-                   "1=BASE, 2=TINY_STREAMING, 3=BASE_STREAMING (default: 0)\n"
+                   "1=BASE, 2=TINY_STREAMING, 3=BASE_STREAMING, 4=SMALL_STREAMING, 5=MEDIUM_STREAMING (default: 0)\n"
                 << "  -h, --help               Show this help message\n";
       return 0;
     } else {

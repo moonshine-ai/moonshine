@@ -54,6 +54,7 @@ class ModelArch(IntEnum):
     TINY_STREAMING = 2
     BASE_STREAMING = 3
     MEDIUM_STREAMING = 4
+    SMALL_STREAMING = 5
 
 def model_arch_to_string(model_arch: ModelArch) -> str:
     """Convert a model architecture to a string."""
@@ -67,6 +68,8 @@ def model_arch_to_string(model_arch: ModelArch) -> str:
         return "base-streaming"
     elif model_arch == ModelArch.MEDIUM_STREAMING:
         return "medium-streaming"
+    elif model_arch == ModelArch.SMALL_STREAMING:
+        return "small-streaming"
     else:
         raise ValueError(f"Invalid model architecture: {model_arch}")
 
@@ -80,6 +83,8 @@ def string_to_model_arch(model_arch_string: str) -> ModelArch:
         return ModelArch.TINY_STREAMING
     elif model_arch_string == "base-streaming":
         return ModelArch.BASE_STREAMING
+    elif model_arch_string == "small-streaming":
+        return ModelArch.SMALL_STREAMING
     elif model_arch_string == "medium-streaming":
         return ModelArch.MEDIUM_STREAMING
     else:
