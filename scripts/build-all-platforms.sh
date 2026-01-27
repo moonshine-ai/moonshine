@@ -10,11 +10,11 @@ if [ -f "${REPO_ROOT_DIR}/.env" ]; then
 fi
 
 cd ${REPO_ROOT_DIR}
-# scripts/build-swift.sh
-# scripts/publish-swift.sh
-# scripts/build-pip.sh upload
-# scripts/build-pip-docker.sh
-# scripts/publish-binary.sh upload
+scripts/build-swift.sh
+scripts/publish-swift.sh
+scripts/build-pip.sh upload
+scripts/build-pip-docker.sh
+scripts/publish-binary.sh upload
 
 ssh ${LINUX_CLOUD_HOST} 'cd moonshine-v2 \
   && git pull origin main \
