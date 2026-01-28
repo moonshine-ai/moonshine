@@ -44,7 +44,7 @@ class VoiceActivityDetector {
  public:
   VoiceActivityDetector(float threshold = 0.5f, int32_t window_size = 32,
                         int32_t hop_size = 512,
-                        size_t look_behind_sample_count = 8192,
+                        size_t look_behind_sample_count = 4096,
                         size_t max_segment_sample_count = 15 * 16000);
   ~VoiceActivityDetector();
 
