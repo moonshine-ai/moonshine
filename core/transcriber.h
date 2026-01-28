@@ -97,6 +97,7 @@ struct TranscriberOptions {
   int32_t vad_hop_size = 512;
   size_t vad_look_behind_sample_count = 8192;
   float vad_max_segment_duration = 15.0f;
+  float max_tokens_per_second = 6.5f;
   std::string save_input_wav_path = "";
   bool log_ort_run = false;
 };
