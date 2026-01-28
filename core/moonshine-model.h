@@ -39,13 +39,15 @@ struct MoonshineModel {
   std::vector<float> stream_audio_data;
   bool stream_active = false;
 
+  float max_tokens_per_second = 6.5f;
+
   std::vector<transcript_line_t> lines;
 
   std::string last_result;
 
   bool log_ort_run = false;
 
-  MoonshineModel(bool log_ort_run = false);
+  MoonshineModel(bool log_ort_run = false, float max_tokens_per_second = 6.5f);
   ~MoonshineModel();
 
   int load(const char *encoder_model_path, const char *decoder_model_path,

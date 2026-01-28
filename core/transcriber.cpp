@@ -114,7 +114,8 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
   } else {
     // Non-streaming model: expects encoder_model.ort and
     // decoder_model_merged.ort
-    this->stt_model = new MoonshineModel(this->options.log_ort_run);
+    this->stt_model = new MoonshineModel(this->options.log_ort_run,
+                                         this->options.max_tokens_per_second);
 
     std::string encoder_model_path =
         append_path_component(model_path, "encoder_model.ort");
@@ -160,7 +161,8 @@ void Transcriber::load_from_memory(const uint8_t *encoder_model_data,
         "Use load_from_files instead.");
   }
 
-  this->stt_model = new MoonshineModel(this->options.log_ort_run);
+  this->stt_model = new MoonshineModel(this->options.log_ort_run,
+                                       this->options.max_tokens_per_second);
   int32_t load_error = this->stt_model->load_from_memory(
       encoder_model_data, encoder_model_data_size, decoder_model_data,
       decoder_model_data_size, tokenizer_data, tokenizer_data_size, model_arch);
@@ -511,7 +513,11 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
   this->streaming_model->decoder_reset(&this->streaming_state);
 
   // Decode to get transcription
-  const int max_tokens = 256;
+  const float duration_sec = audio_length / (float)INTERNAL_SAMPLE_RATE;
+  const int max_tokens =
+      std::min(static_cast<int>(std::ceil(duration_sec *
+                                          this->options.max_tokens_per_second)),
+               256);
   std::vector<int64_t> tokens;
   tokens.push_back(config.bos_id);
 

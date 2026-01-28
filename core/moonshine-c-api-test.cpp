@@ -288,4 +288,40 @@ TEST_CASE("moonshine-test-v2") {
     REQUIRE(line.is_new == 1);
     REQUIRE(line.has_text_changed == 1);
   }
+  SUBCASE("transcribe-valid-options") {
+    int32_t model_arch = MOONSHINE_MODEL_ARCH_TINY;
+    const transcriber_option_t options[] = {
+        {"skip_transcription", "true"},
+        {"transcription_interval", "0.5"},
+        {"vad_threshold", "0.5"},
+        {"save_input_wav_path", "test.wav"},
+        {"log_api_calls", "true"},
+        {"log_ort_run", "true"},
+        {"vad_window_duration", "0.5"},
+        {"vad_hop_size", "512"},
+        {"vad_look_behind_sample_count", "8192"},
+        {"vad_max_segment_duration", "15.0"},
+        {"max_tokens_per_second", "6.5"},
+    };
+    const uint64_t options_count = sizeof(options) / sizeof(options[0]);
+    std::string root_model_path = "tiny-en";
+    REQUIRE(std::filesystem::exists(root_model_path));
+    int32_t transcriber_handle = moonshine_load_transcriber_from_files(
+        root_model_path.c_str(), model_arch, options, options_count,
+        MOONSHINE_HEADER_VERSION);
+    REQUIRE(transcriber_handle >= 0);
+  }
+  SUBCASE("transcribe-invalid-option") {
+    const transcriber_option_t options[] = {
+        {"invalid_option", "true"},
+    };
+    const uint64_t options_count = sizeof(options) / sizeof(options[0]);
+    int32_t model_arch = MOONSHINE_MODEL_ARCH_TINY;
+    std::string root_model_path = "tiny-en";
+    REQUIRE(std::filesystem::exists(root_model_path));
+    int32_t transcriber_handle = moonshine_load_transcriber_from_files(
+        root_model_path.c_str(), model_arch, options, options_count,
+        MOONSHINE_HEADER_VERSION);
+    REQUIRE(transcriber_handle < 0);
+  }
 }

@@ -79,10 +79,11 @@ int set_model_options_from_arch(MoonshineModel *model, int32_t model_arch) {
 }
 }  // namespace
 
-MoonshineModel::MoonshineModel(bool log_ort_run)
+MoonshineModel::MoonshineModel(bool log_ort_run, float max_tokens_per_second)
     : encoder_session(nullptr),
       decoder_session(nullptr),
       tokenizer(nullptr),
+      max_tokens_per_second(max_tokens_per_second),
       log_ort_run(log_ort_run) {
   ort_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
   LOG_ORT_ERROR(ort_api, ort_api->CreateEnv(ORT_LOGGING_LEVEL_WARNING,
@@ -326,9 +327,8 @@ int MoonshineModel::transcribe(const float *input_audio_data,
     decoder_output_names[i] = decoder_output_name;
   }
   const float audio_duration = input_audio_data_size / 16000.0f;
-  const int max_tokens_per_second = 13;
   const int max_len =
-      static_cast<int>(std::ceil(audio_duration * max_tokens_per_second));
+      static_cast<int>(std::ceil(audio_duration * this->max_tokens_per_second));
   auto decoder_input_name_to_index = name_to_index(decoder_input_names);
   auto decoder_output_name_to_index = name_to_index(decoder_output_names);
   std::vector<std::string> layer_suffixes;
