@@ -135,6 +135,66 @@ stream.stop()
 stream.close()
 ```
 
+## Voice Commands
+
+We also provide voice command recognition using the `IntentRecognizer` module. It captures transcribed audio from a `MicTranscriber` and invokes callback functions that match your programmed intents. Since it relies on an embedding model, you can use a helper function to get started:
+
+```python
+from moonshine_voice import (
+    MicTranscriber,
+    IntentRecognizer,
+    ModelArch,
+    EmbeddingModelArch,
+    get_embedding_model,
+    get_model_for_language
+)
+
+# Download and load the embedding model for intent recognition
+embedding_model_path, embedding_model_arch = get_embedding_model()
+```
+
+Next, create a recognizer and register your intent callbacks:
+
+```python
+intent_recognizer = IntentRecognizer(
+    model_path=embedding_model_path,
+    model_arch=embedding_model_arch
+)
+
+def on_lights_on(trigger: str, utterance: str, similarity: float):
+    """Handler for turning lights on."""
+    print(f"\n💡 LIGHTS ON! (matched '{trigger}' with {similarity:.0%} confidence)")
+
+def on_lights_off(trigger: str, utterance: str, similarity: float):
+    """Handler for turning lights off."""
+    print(f"\n🌑 LIGHTS OFF! (matched '{trigger}' with {similarity:.0%} confidence)")
+
+intent_recognizer.register_intent("turn on the lights", on_lights_on)
+intent_recognizer.register_intent("turn off the lights", on_lights_off)
+```
+
+Finally, create a `MicTranscriber`, connect it to your `IntentRecognizer`, and start the audio stream:
+
+```python
+# Get the transcription model and initialize a MicTranscriber
+model_path, model_arch = get_model_for_language("en")
+mic_transcriber = MicTranscriber(model_path=model_path, model_arch=model_arch)
+
+# The intent recognizer will process completed transcript lines and invoke trigger handlers
+mic_transcriber.add_listener(intent_recognizer)
+
+mic_transcriber.start()
+try:
+    while True:
+        time.sleep(0.1)
+except KeyboardInterrupt:
+    print("\n\nStopping...", file=sys.stderr)
+finally:
+    intent_recognizer.close()
+    mic_transcriber.stop()
+    mic_transcriber.close()
+```
+
 ## Multiple Languages
 
 The framework currently supports English, Spanish, Mandarin, Japanese, Korean, Vietnamese, Arabic, and Ukrainian. We are working on wider language support, and you can see which are supported in your version by calling `supported_languages()`. To use a language, request it using `get_model_for_language()` passing in the two-letter language code. For example `get_model_for_language("es")` will download the Spanish models and pass the information you need to create `Transcriber` objects using them.

@@ -164,6 +164,8 @@ A [**TranscriptEvent**](python/src/moonshine_voice/transcriber.py#L22) contains 
 
 A [**TranscriptEventListener**](python/src/moonshine_voice/transcriber.py#L266) is a protocol that allows app-defined functions to be called when transcript events happen. This is the main way that most applications interact with the results of the transcription. When live speech is happening, applications usually need to respond or display results as new speech is recognized, and this approach allows you to handle those changes in a similar way to events from traditional user interfaces like touch screen gestures or mouse clicks on buttons.
 
+An [**IntentRecognizer**](python/src/moonshine_voice/intent_recognizer.py#L44) is a type of TranscriptEventListener that allows you to invoke different callback functions when preprogrammed intents are detected. This is useful for building voice command recognition features.
+
 ### Getting Started
 
 We have [examples](#examples) for most platforms so as a first step I recommend checking out what we have for the systems you're targeting.
@@ -382,7 +384,6 @@ This library is in active development, and we aim to implement:
 
  - More languages.
  - More streaming models.
- - Speech understanding for command recognition and other voice interface triggers.
  - Speaker identification (aka diarization).
 
 ## Acknowledgements
