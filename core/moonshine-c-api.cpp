@@ -48,6 +48,8 @@ SOFTWARE.
 
 #include "bin-tokenizer.h"
 #include "debug-utils.h"
+#include "gemma-embedding-model.h"
+#include "intent-recognizer.h"
 #include "moonshine-model.h"
 #include "moonshine-ort-allocator.h"
 #include "moonshine-tensor-view.h"
@@ -362,6 +364,237 @@ int32_t moonshine_transcribe_stream(int32_t transcriber_handle,
                                                            out_transcript);
   } catch (const std::exception &e) {
     LOGF("Failed to transcribe stream: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+  return MOONSHINE_ERROR_NONE;
+}
+
+/* ------------------------------ INTENT RECOGNIZER ------------------------- */
+
+namespace {
+
+// Structure to hold callback info for C API
+struct IntentCallbackInfo {
+  moonshine_intent_callback callback;
+  void *user_data;
+  std::string trigger_phrase;
+};
+
+std::mutex intent_recognizer_map_mutex;
+std::map<int32_t, IntentRecognizer *> intent_recognizer_map;
+std::map<int32_t, std::vector<IntentCallbackInfo>> intent_callback_map;
+int32_t next_intent_recognizer_handle = 0;
+
+int32_t allocate_intent_recognizer_handle(IntentRecognizer *recognizer) {
+  std::lock_guard<std::mutex> lock(intent_recognizer_map_mutex);
+  int32_t handle = next_intent_recognizer_handle++;
+  intent_recognizer_map[handle] = recognizer;
+  intent_callback_map[handle] = std::vector<IntentCallbackInfo>();
+  return handle;
+}
+
+void free_intent_recognizer_handle(int32_t handle) {
+  // Note: Caller must hold intent_recognizer_map_mutex
+  delete intent_recognizer_map[handle];
+  intent_recognizer_map[handle] = nullptr;
+  intent_recognizer_map.erase(handle);
+  intent_callback_map.erase(handle);
+}
+
+#define CHECK_INTENT_RECOGNIZER_HANDLE(handle)                                  \
+  do {                                                                          \
+    if (handle < 0 || !intent_recognizer_map.contains(handle)) {                \
+      LOGF("Moonshine intent recognizer handle is invalid: handle %d", handle); \
+      return MOONSHINE_ERROR_INVALID_HANDLE;                                    \
+    }                                                                           \
+  } while (0)
+
+}  // namespace
+
+int32_t moonshine_create_intent_recognizer(const char *model_path,
+                                           uint32_t model_arch,
+                                           const char *model_variant,
+                                           float threshold) {
+  if (log_api_calls) {
+    LOGF("moonshine_create_intent_recognizer(model_path=%s, model_arch=%d, "
+         "model_variant=%s, threshold=%f)",
+         model_path, model_arch, model_variant ? model_variant : "q4",
+         threshold);
+  }
+
+  if (model_path == nullptr) {
+    LOGF("%s", "Invalid model_path: nullptr");
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+
+  IntentRecognizer *recognizer = nullptr;
+  try {
+    IntentRecognizerOptions options;
+    options.model_path = model_path;
+    options.model_arch = static_cast<EmbeddingModelArch>(model_arch);
+    options.model_variant = model_variant ? model_variant : "q4";
+    options.threshold = threshold;
+
+    recognizer = new IntentRecognizer(options);
+  } catch (const std::exception &e) {
+    delete recognizer;
+    LOGF("Failed to create intent recognizer: %s", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+  return allocate_intent_recognizer_handle(recognizer);
+}
+
+void moonshine_free_intent_recognizer(int32_t intent_recognizer_handle) {
+  if (log_api_calls) {
+    LOGF("moonshine_free_intent_recognizer(handle=%d)", intent_recognizer_handle);
+  }
+  std::lock_guard<std::mutex> lock(intent_recognizer_map_mutex);
+  if (intent_recognizer_map.contains(intent_recognizer_handle)) {
+    free_intent_recognizer_handle(intent_recognizer_handle);
+  }
+}
+
+int32_t moonshine_register_intent(int32_t intent_recognizer_handle,
+                                  const char *trigger_phrase,
+                                  moonshine_intent_callback callback,
+                                  void *user_data) {
+  if (log_api_calls) {
+    LOGF("moonshine_register_intent(handle=%d, trigger_phrase=%s)",
+         intent_recognizer_handle, trigger_phrase);
+  }
+  CHECK_INTENT_RECOGNIZER_HANDLE(intent_recognizer_handle);
+  try {
+    // Store callback info
+    IntentCallbackInfo info;
+    info.callback = callback;
+    info.user_data = user_data;
+    info.trigger_phrase = trigger_phrase;
+
+    {
+      std::lock_guard<std::mutex> lock(intent_recognizer_map_mutex);
+      intent_callback_map[intent_recognizer_handle].push_back(info);
+    }
+
+    // Register with the C++ IntentRecognizer using a lambda that invokes the C
+    // callback. We capture a std::string copy of trigger_phrase since the
+    // original pointer may become invalid after this function returns.
+    std::string trigger_copy = trigger_phrase;
+    intent_recognizer_map[intent_recognizer_handle]->register_intent(
+        trigger_phrase,
+        [callback, user_data, trigger_copy](const std::string &utterance,
+                                            float similarity) {
+          if (callback) {
+            callback(user_data, trigger_copy.c_str(), utterance.c_str(),
+                     similarity);
+          }
+        });
+  } catch (const std::exception &e) {
+    LOGF("Failed to register intent: %s", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+  return MOONSHINE_ERROR_NONE;
+}
+
+int32_t moonshine_unregister_intent(int32_t intent_recognizer_handle,
+                                    const char *trigger_phrase) {
+  if (log_api_calls) {
+    LOGF("moonshine_unregister_intent(handle=%d, trigger_phrase=%s)",
+         intent_recognizer_handle, trigger_phrase);
+  }
+  CHECK_INTENT_RECOGNIZER_HANDLE(intent_recognizer_handle);
+  try {
+    bool result = intent_recognizer_map[intent_recognizer_handle]
+                      ->unregister_intent(trigger_phrase);
+    if (!result) {
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
+    }
+    // Remove from callback map
+    {
+      std::lock_guard<std::mutex> lock(intent_recognizer_map_mutex);
+      auto &callbacks = intent_callback_map[intent_recognizer_handle];
+      callbacks.erase(
+          std::remove_if(callbacks.begin(), callbacks.end(),
+                         [trigger_phrase](const IntentCallbackInfo &info) {
+                           return info.trigger_phrase == trigger_phrase;
+                         }),
+          callbacks.end());
+    }
+  } catch (const std::exception &e) {
+    LOGF("Failed to unregister intent: %s", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+  return MOONSHINE_ERROR_NONE;
+}
+
+int32_t moonshine_process_utterance(int32_t intent_recognizer_handle,
+                                    const char *utterance) {
+  if (log_api_calls) {
+    LOGF("moonshine_process_utterance(handle=%d, utterance=%s)",
+         intent_recognizer_handle, utterance);
+  }
+  CHECK_INTENT_RECOGNIZER_HANDLE(intent_recognizer_handle);
+  try {
+    bool result = intent_recognizer_map[intent_recognizer_handle]
+                      ->process_utterance(utterance);
+    return result ? 1 : 0;
+  } catch (const std::exception &e) {
+    LOGF("Failed to process utterance: %s", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+int32_t moonshine_set_intent_threshold(int32_t intent_recognizer_handle,
+                                       float threshold) {
+  if (log_api_calls) {
+    LOGF("moonshine_set_intent_threshold(handle=%d, threshold=%f)",
+         intent_recognizer_handle, threshold);
+  }
+  CHECK_INTENT_RECOGNIZER_HANDLE(intent_recognizer_handle);
+  try {
+    intent_recognizer_map[intent_recognizer_handle]->set_threshold(threshold);
+  } catch (const std::exception &e) {
+    LOGF("Failed to set intent threshold: %s", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+  return MOONSHINE_ERROR_NONE;
+}
+
+float moonshine_get_intent_threshold(int32_t intent_recognizer_handle) {
+  if (log_api_calls) {
+    LOGF("moonshine_get_intent_threshold(handle=%d)", intent_recognizer_handle);
+  }
+  std::lock_guard<std::mutex> lock(intent_recognizer_map_mutex);
+  if (!intent_recognizer_map.contains(intent_recognizer_handle)) {
+    return -1.0f;
+  }
+  return intent_recognizer_map[intent_recognizer_handle]->get_threshold();
+}
+
+int32_t moonshine_get_intent_count(int32_t intent_recognizer_handle) {
+  if (log_api_calls) {
+    LOGF("moonshine_get_intent_count(handle=%d)", intent_recognizer_handle);
+  }
+  std::lock_guard<std::mutex> lock(intent_recognizer_map_mutex);
+  if (!intent_recognizer_map.contains(intent_recognizer_handle)) {
+    return MOONSHINE_ERROR_INVALID_HANDLE;
+  }
+  return static_cast<int32_t>(
+      intent_recognizer_map[intent_recognizer_handle]->get_intent_count());
+}
+
+int32_t moonshine_clear_intents(int32_t intent_recognizer_handle) {
+  if (log_api_calls) {
+    LOGF("moonshine_clear_intents(handle=%d)", intent_recognizer_handle);
+  }
+  CHECK_INTENT_RECOGNIZER_HANDLE(intent_recognizer_handle);
+  try {
+    intent_recognizer_map[intent_recognizer_handle]->clear_intents();
+    {
+      std::lock_guard<std::mutex> lock(intent_recognizer_map_mutex);
+      intent_callback_map[intent_recognizer_handle].clear();
+    }
+  } catch (const std::exception &e) {
+    LOGF("Failed to clear intents: %s", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
   return MOONSHINE_ERROR_NONE;

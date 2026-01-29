@@ -25,6 +25,12 @@ from moonshine_voice.download import (
     log_model_info,
     supported_languages,
     supported_languages_friendly,
+    # Embedding model functions
+    EmbeddingModelArch,
+    get_embedding_model,
+    supported_embedding_models,
+    supported_embedding_models_friendly,
+    get_embedding_model_variants,
 )
 
 from moonshine_voice.utils import (
@@ -39,11 +45,12 @@ __version__ = "0.1.0"
 # These will be imported on first access via __getattr__
 _transcriber_imported = False
 _mic_transcriber_imported = False
+_intent_recognizer_imported = False
 
 
 def __getattr__(name):
-    """Lazy import for transcriber and mic_transcriber modules."""
-    global _transcriber_imported, _mic_transcriber_imported
+    """Lazy import for transcriber, mic_transcriber, and intent_recognizer modules."""
+    global _transcriber_imported, _mic_transcriber_imported, _intent_recognizer_imported
 
     # Lazy import transcriber module
     if name in (
@@ -92,6 +99,20 @@ def __getattr__(name):
             _mic_transcriber_imported = True
         return globals()[name]
 
+    # Lazy import intent_recognizer module
+    # Note: EmbeddingModelArch is now imported directly from download module above
+    if name in ("IntentRecognizer", "IntentMatch"):
+        if not _intent_recognizer_imported:
+            from moonshine_voice.intent_recognizer import (
+                IntentRecognizer,
+                IntentMatch,
+            )
+
+            globals()["IntentRecognizer"] = IntentRecognizer
+            globals()["IntentMatch"] = IntentMatch
+            _intent_recognizer_imported = True
+        return globals()[name]
+
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -109,6 +130,9 @@ __all__ = [
     "LineTextChanged",
     "LineCompleted",
     "Error",
+    "IntentRecognizer",
+    "EmbeddingModelArch",
+    "IntentMatch",
     "MoonshineError",
     "MoonshineUnknownError",
     "MoonshineInvalidHandleError",
@@ -122,4 +146,9 @@ __all__ = [
     "supported_languages_friendly",
     "model_arch_to_string",
     "string_to_model_arch",
+    # Embedding model functions
+    "get_embedding_model",
+    "supported_embedding_models",
+    "supported_embedding_models_friendly",
+    "get_embedding_model_variants",
 ]
