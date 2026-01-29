@@ -64,7 +64,7 @@ class IntentRecognizer(TranscriptEventListener):
         self,
         model_path: str,
         model_arch: EmbeddingModelArch = EmbeddingModelArch.GEMMA_300M,
-        model_variant: str = "q4",
+        model_variant: str = "fp32",
         threshold: float = 0.7,
     ):
         """

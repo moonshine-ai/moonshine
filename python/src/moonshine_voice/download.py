@@ -232,7 +232,7 @@ def get_embedding_model_variants(model_name: str = "embeddinggemma-300m") -> lis
 
 def get_embedding_model(
     model_name: str = "embeddinggemma-300m",
-    variant: str = None,
+    variant: str = "fp32",
 ) -> tuple[str, EmbeddingModelArch]:
     """
     Download an embedding model and return (path, arch).
