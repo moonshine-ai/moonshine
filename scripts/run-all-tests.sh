@@ -25,5 +25,6 @@ ${REPO_ROOT_DIR}/core/build/transcriber-test
 ${REPO_ROOT_DIR}/core/build/moonshine-c-api-test
 ${REPO_ROOT_DIR}/core/build/moonshine-cpp-test
 ${REPO_ROOT_DIR}/core/build/cosine-distance-test
+${REPO_ROOT_DIR}/core/build/speaker-embedding-model-test
 
 echo "All tests passed"

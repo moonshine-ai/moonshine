@@ -52,6 +52,7 @@ set(MOONSHINE_SRC_FILES
     transcriber.cpp
     gemma-embedding-model.cpp
     intent-recognizer.cpp
+    speaker-embedding-model.cpp
 )
 
 # Build as STATIC framework for iOS/Swift (static frameworks cannot be embedded)
@@ -415,6 +416,42 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
         target_link_libraries(gemma-embedding-model-test PRIVATE
             bin-tokenizer
             ort-utils
+            ${ONNXRUNTIME_LIB_PATH}
+        )
+    endif()
+
+    add_executable(speaker-embedding-model-test speaker-embedding-model-test.cpp speaker-embedding-model.cpp resampler.cpp)
+    set_target_properties(speaker-embedding-model-test PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(speaker-embedding-model-test PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+        ${CMAKE_CURRENT_LIST_DIR}/ort-utils
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+    )
+
+    copy_onnxruntime_dll(speaker-embedding-model-test)
+
+    if (IOS OR MOONSHINE_BUILD_SWIFT)
+        set_target_properties(speaker-embedding-model-test PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.speaker-embedding-model-test"
+            MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        )
+        target_link_libraries(speaker-embedding-model-test PRIVATE
+            moonshine
+            ${ONNXRUNTIME_LIB_PATH}
+            "-framework CoreFoundation"
+            "-framework Foundation"
+        )
+    else()
+        target_link_libraries(speaker-embedding-model-test PRIVATE
+            moonshine
             ${ONNXRUNTIME_LIB_PATH}
         )
     endif()
