@@ -43,6 +43,7 @@ endif()
 
 set(MOONSHINE_SRC_FILES
     moonshine-c-api.cpp
+    cosine-distance.cpp
     moonshine-model.cpp
     moonshine-streaming-model.cpp
     voice-activity-detector.cpp
@@ -273,6 +274,35 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
     else()
         target_link_libraries(resampler-test PRIVATE
             moonshine-utils
+        )
+    endif()
+
+    add_executable(cosine-distance-test cosine-distance-test.cpp)
+    set_target_properties(cosine-distance-test PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(cosine-distance-test PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+    )
+
+    if (IOS OR MOONSHINE_BUILD_SWIFT)
+        set_target_properties(cosine-distance-test PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.cosine-distance-test"
+            MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        )
+        target_link_libraries(cosine-distance-test PRIVATE
+            moonshine
+            "-framework CoreFoundation"
+            "-framework Foundation"
+        )
+    else()
+        target_link_libraries(cosine-distance-test PRIVATE
+            moonshine
         )
     endif()
 
