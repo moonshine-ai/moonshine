@@ -24,6 +24,9 @@ class TranscriptLineC(ctypes.Structure):
         ("is_updated", ctypes.c_int8),
         ("is_new", ctypes.c_int8),
         ("has_text_changed", ctypes.c_int8),
+        ("has_speaker_id", ctypes.c_int8),
+        ("speaker_id", ctypes.c_uint64),
+        ("speaker_index", ctypes.c_uint32),
         ("last_transcription_latency_ms", ctypes.c_uint32),
     ]
 

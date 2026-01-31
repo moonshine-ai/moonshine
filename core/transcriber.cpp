@@ -55,6 +55,7 @@ Transcriber::Transcriber(const TranscriberOptions &options)
     : stt_model(nullptr),
       streaming_model(nullptr),
       speaker_embedding_model(nullptr),
+      next_speaker_index(0),
       next_stream_id(1) {
   this->options = options;
   // Start with a random 64-bit value as a unique identifier. We increment
@@ -466,6 +467,13 @@ void Transcriber::update_transcript_from_segments(
         }
         line.speaker_id = this->online_clusterer->embed_and_cluster(embedding);
         line.has_speaker_id = true;
+        if (this->speaker_index_map.find(line.speaker_id) ==
+            this->speaker_index_map.end()) {
+          line.speaker_index = this->next_speaker_index++;
+          this->speaker_index_map[line.speaker_id] = line.speaker_index;
+        } else {
+          line.speaker_index = this->speaker_index_map[line.speaker_id];
+        }
       }
     }
     stream->transcript_output->add_or_update_line(line);
@@ -676,6 +684,7 @@ TranscriberLine::TranscriberLine(const TranscriberLine &other) {
   this->id = other.id;
   this->last_transcription_latency_ms = other.last_transcription_latency_ms;
   this->speaker_id = other.speaker_id;
+  this->speaker_index = other.speaker_index;
 }
 
 TranscriberLine &TranscriberLine::operator=(const TranscriberLine &other) {
@@ -691,6 +700,7 @@ TranscriberLine &TranscriberLine::operator=(const TranscriberLine &other) {
   this->id = other.id;
   this->last_transcription_latency_ms = other.last_transcription_latency_ms;
   this->speaker_id = other.speaker_id;
+  this->speaker_index = other.speaker_index;
   return *this;
 }
 
@@ -706,8 +716,9 @@ std::string TranscriberLine::to_string() const {
          ", has_text_changed=" + std::to_string(has_text_changed) +
          ", has_speaker_id=" + std::to_string(has_speaker_id) +
          ", id=" + std::to_string(id) + ", last_transcription_latency_ms=" +
-         std::to_string(last_transcription_latency_ms) + ", speaker_id=" +
-         std::to_string(speaker_id) + ")";
+         std::to_string(last_transcription_latency_ms) +
+         ", speaker_id=" + std::to_string(speaker_id) +
+         ", speaker_index=" + std::to_string(speaker_index) + ")";
 }
 
 void TranscriptStreamOutput::add_or_update_line(TranscriberLine &line) {
@@ -743,6 +754,7 @@ void TranscriptStreamOutput::update_transcript_from_lines() {
         .has_text_changed = line.has_text_changed,
         .has_speaker_id = line.has_speaker_id,
         .speaker_id = line.speaker_id,
+        .speaker_index = line.speaker_index,
         .last_transcription_latency_ms = line.last_transcription_latency_ms,
     });
   }

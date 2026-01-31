@@ -195,6 +195,8 @@ struct transcript_line_t {
   int8_t has_speaker_id;
   /* The speaker ID for the line. */
   uint64_t speaker_id;
+  /* What order the speaker appeared in the current transcript. */
+  uint32_t speaker_index;
   /* Streaming-only: The latency of the last transcription in milliseconds. */
   uint32_t last_transcription_latency_ms;
 };

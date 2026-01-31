@@ -30,6 +30,7 @@ struct TranscriberLine {
   uint64_t id;
   uint32_t last_transcription_latency_ms;
   uint64_t speaker_id;
+  uint32_t speaker_index;
 
   TranscriberLine();
   TranscriberLine(const TranscriberLine &other);
@@ -124,6 +125,8 @@ class Transcriber {
   SpeakerEmbeddingModel *speaker_embedding_model;
   std::mutex speaker_embedding_model_mutex;
   OnlineClusterer *online_clusterer;
+  uint32_t next_speaker_index = 0;
+  std::map<uint64_t, uint32_t> speaker_index_map;
 
   // Track current segment for incremental processing
   uint64_t current_streaming_segment_id = UINT64_MAX;
