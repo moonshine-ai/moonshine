@@ -1,7 +1,7 @@
 #include "online-clusterer.h"
 
-#include <stdexcept>
 #include <random>
+#include <stdexcept>
 
 #include "cosine-distance.h"
 #include "debug-utils.h"

@@ -1,6 +1,8 @@
 #ifndef ONLINE_CLUSTERER_H
 #define ONLINE_CLUSTERER_H
 
+#include <cstdint>
+
 #include <map>
 #include <vector>
 

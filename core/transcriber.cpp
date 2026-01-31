@@ -739,11 +739,11 @@ void TranscriptStreamOutput::update_transcript_from_lines() {
         .id = line.id,
         .is_complete = line.is_complete,
         .is_updated = line.just_updated,
-        .has_speaker_id = line.has_speaker_id,
         .is_new = line.is_new,
         .has_text_changed = line.has_text_changed,
-        .last_transcription_latency_ms = line.last_transcription_latency_ms,
+        .has_speaker_id = line.has_speaker_id,
         .speaker_id = line.speaker_id,
+        .last_transcription_latency_ms = line.last_transcription_latency_ms,
     });
   }
   this->transcript.lines = this->output_lines.data();
