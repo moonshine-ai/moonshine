@@ -53,6 +53,7 @@ set(MOONSHINE_SRC_FILES
     gemma-embedding-model.cpp
     intent-recognizer.cpp
     speaker-embedding-model.cpp
+    online-clusterer.cpp
 )
 
 # Build as STATIC framework for iOS/Swift (static frameworks cannot be embedded)
@@ -455,4 +456,19 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
             ${ONNXRUNTIME_LIB_PATH}
         )
     endif()
+
+    add_executable(online-clusterer-test online-clusterer-test.cpp online-clusterer.cpp)
+    set_target_properties(online-clusterer-test PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(online-clusterer-test PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+    )
+    target_link_libraries(online-clusterer-test PRIVATE
+        moonshine
+    )
 endif()
