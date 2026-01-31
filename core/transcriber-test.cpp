@@ -660,6 +660,7 @@ TEST_CASE("transcriber-test") {
     REQUIRE(transcript != nullptr);
     REQUIRE(transcript->line_count > 0);
     REQUIRE(transcript->lines[0].has_speaker_id == true);
+    REQUIRE(transcript->lines[0].speaker_index == 0);
     const uint64_t first_pete_speaker_id = transcript->lines[0].speaker_id;
     const size_t first_pete_line_count = transcript->line_count;
     for (size_t i = 1; i < transcript->line_count; i++) {
@@ -674,6 +675,7 @@ TEST_CASE("transcriber-test") {
     REQUIRE(transcript != nullptr);
     REQUIRE(transcript->line_count > first_pete_line_count);
     REQUIRE(transcript->lines[first_pete_line_count].has_speaker_id == true);
+    REQUIRE(transcript->lines[first_pete_line_count].speaker_index == 1);
     const uint64_t other_speaker_speaker_id =
         transcript->lines[first_pete_line_count].speaker_id;
     REQUIRE(other_speaker_speaker_id != first_pete_speaker_id);
@@ -691,6 +693,7 @@ TEST_CASE("transcriber-test") {
     REQUIRE(transcript != nullptr);
     REQUIRE(transcript->line_count > other_speaker_line_count);
     REQUIRE(transcript->lines[other_speaker_line_count].has_speaker_id == true);
+    REQUIRE(transcript->lines[other_speaker_line_count].speaker_index == 0);
     const uint64_t second_pete_speaker_id =
         transcript->lines[other_speaker_line_count].speaker_id;
     REQUIRE(second_pete_speaker_id == first_pete_speaker_id);
