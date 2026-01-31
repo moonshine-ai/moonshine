@@ -52,7 +52,10 @@ size_t vad_sample_count_from_duration(float duration) {
 }  // namespace
 
 Transcriber::Transcriber(const TranscriberOptions &options)
-    : stt_model(nullptr), streaming_model(nullptr), next_stream_id(1) {
+    : stt_model(nullptr),
+      streaming_model(nullptr),
+      speaker_embedding_model(nullptr),
+      next_stream_id(1) {
   this->options = options;
   // Start with a random 64-bit value as a unique identifier. We increment
   // this value to generate each new line ID. These should be safe to use as a
@@ -74,6 +77,19 @@ Transcriber::Transcriber(const TranscriberOptions &options)
   } else {
     throw std::runtime_error("Invalid model source: " +
                              std::to_string((int)(model_source)));
+  }
+  if (options.identify_speakers) {
+    this->speaker_embedding_model = new SpeakerEmbeddingModel();
+    int load_error = this->speaker_embedding_model->load_from_memory(
+        speaker_embedding_model_ort_bytes,
+        speaker_embedding_model_ort_byte_count);
+    if (load_error != 0) {
+      throw std::runtime_error(
+          "Failed to load speaker embedding model from memory. Error code: " +
+          std::to_string(load_error));
+    }
+    this->online_clusterer = new OnlineClusterer(OnlineClustererOptions(
+        {.embedding_size = SpeakerEmbeddingModel::embedding_size}));
   }
 }
 
@@ -176,6 +192,8 @@ void Transcriber::load_from_memory(const uint8_t *encoder_model_data,
 Transcriber::~Transcriber() {
   delete this->stt_model;
   delete this->streaming_model;
+  delete this->speaker_embedding_model;
+  delete this->online_clusterer;
   for (auto &stream : this->streams) {
     delete stream.second;
   }
@@ -432,6 +450,24 @@ void Transcriber::update_transcript_from_segments(
                        end_time - start_time)
                        .count());
     line.audio_data = segment.audio_data;
+    if (this->options.identify_speakers && !line.has_speaker_id) {
+      const bool long_enough_to_analyze =
+          segment.audio_data.size() >= SpeakerEmbeddingModel::ideal_input_size;
+      if (long_enough_to_analyze || line.is_complete) {
+        std::vector<float> embedding;
+        int calculate_error =
+            this->speaker_embedding_model->calculate_embedding(
+                segment.audio_data.data(), segment.audio_data.size(),
+                &embedding);
+        if (calculate_error != 0) {
+          LOGF("Failed to calculate embedding: %d", calculate_error);
+          throw std::runtime_error("Failed to calculate embedding: " +
+                                   std::to_string(calculate_error));
+        }
+        line.speaker_id = this->online_clusterer->embed_and_cluster(embedding);
+        line.has_speaker_id = true;
+      }
+    }
     stream->transcript_output->add_or_update_line(line);
   }
   const bool is_stopped = !stream->vad->is_active();
@@ -621,8 +657,10 @@ TranscriberLine::TranscriberLine() {
   this->just_updated = false;
   this->is_new = false;
   this->has_text_changed = false;
+  this->has_speaker_id = false;
   this->id = 0;
   this->last_transcription_latency_ms = 0;
+  this->speaker_id = 0;
 }
 
 TranscriberLine::TranscriberLine(const TranscriberLine &other) {
@@ -634,8 +672,10 @@ TranscriberLine::TranscriberLine(const TranscriberLine &other) {
   this->just_updated = other.just_updated;
   this->is_new = other.is_new;
   this->has_text_changed = other.has_text_changed;
+  this->has_speaker_id = other.has_speaker_id;
   this->id = other.id;
   this->last_transcription_latency_ms = other.last_transcription_latency_ms;
+  this->speaker_id = other.speaker_id;
 }
 
 TranscriberLine &TranscriberLine::operator=(const TranscriberLine &other) {
@@ -647,8 +687,10 @@ TranscriberLine &TranscriberLine::operator=(const TranscriberLine &other) {
   this->just_updated = other.just_updated;
   this->is_new = other.is_new;
   this->has_text_changed = other.has_text_changed;
+  this->has_speaker_id = other.has_speaker_id;
   this->id = other.id;
   this->last_transcription_latency_ms = other.last_transcription_latency_ms;
+  this->speaker_id = other.speaker_id;
   return *this;
 }
 
@@ -662,8 +704,10 @@ std::string TranscriberLine::to_string() const {
          ", just_updated=" + std::to_string(just_updated) +
          ", is_new=" + std::to_string(is_new) +
          ", has_text_changed=" + std::to_string(has_text_changed) +
+         ", has_speaker_id=" + std::to_string(has_speaker_id) +
          ", id=" + std::to_string(id) + ", last_transcription_latency_ms=" +
-         std::to_string(last_transcription_latency_ms) + ")";
+         std::to_string(last_transcription_latency_ms) + ", speaker_id=" +
+         std::to_string(speaker_id) + ")";
 }
 
 void TranscriptStreamOutput::add_or_update_line(TranscriberLine &line) {
@@ -695,9 +739,11 @@ void TranscriptStreamOutput::update_transcript_from_lines() {
         .id = line.id,
         .is_complete = line.is_complete,
         .is_updated = line.just_updated,
+        .has_speaker_id = line.has_speaker_id,
         .is_new = line.is_new,
         .has_text_changed = line.has_text_changed,
         .last_transcription_latency_ms = line.last_transcription_latency_ms,
+        .speaker_id = line.speaker_id,
     });
   }
   this->transcript.lines = this->output_lines.data();

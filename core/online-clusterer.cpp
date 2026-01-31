@@ -86,7 +86,6 @@ uint64_t OnlineClusterer::embed_and_cluster(
       found_cluster = true;
     }
   }
-  LOG_FLOAT(min_distance);
   if (found_cluster && min_distance < options.threshold) {
     // If a cluster is found, update the centroid and sample count.
     Cluster &cluster = clusters[closest_cluster_id];

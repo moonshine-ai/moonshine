@@ -53,10 +53,11 @@ set(MOONSHINE_SRC_FILES
     gemma-embedding-model.cpp
     intent-recognizer.cpp
     speaker-embedding-model.cpp
+    speaker-embedding-model-data.cpp
     online-clusterer.cpp
 )
 
-# Build as STATIC framework for iOS/Swift (static frameworks cannot be embedded)
+# Build as STATIC framework for iOS/Swift (shared frameworks cannot be embedded)
 # Build as SHARED library for other platforms
 if (NOT MOONSHINE_BUILD_SHARED AND (IOS OR MOONSHINE_BUILD_SWIFT OR WIN32))
     add_library(moonshine STATIC
