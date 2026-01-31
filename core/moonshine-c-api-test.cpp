@@ -48,6 +48,7 @@ TEST_CASE("moonshine-test-v2") {
       REQUIRE(line.is_updated == 1);
       REQUIRE(line.is_new == 1);
       REQUIRE(line.has_text_changed == 1);
+      REQUIRE(line.has_speaker_id == 1);
     }
   }
   SUBCASE("transcribe-stream") {
@@ -65,8 +66,13 @@ TEST_CASE("moonshine-test-v2") {
 
     std::string root_model_path = "tiny-en";
     REQUIRE(std::filesystem::exists(root_model_path));
+    const transcriber_option_t options[] = {
+        {"identify_speakers", "false"},
+    };
+    const uint64_t options_count = sizeof(options) / sizeof(options[0]);
+
     int32_t transcriber_handle = moonshine_load_transcriber_from_files(
-        root_model_path.c_str(), model_arch, nullptr, 0,
+        root_model_path.c_str(), model_arch, options, options_count,
         MOONSHINE_HEADER_VERSION);
     REQUIRE(transcriber_handle >= 0);
 
@@ -105,6 +111,7 @@ TEST_CASE("moonshine-test-v2") {
         REQUIRE(line.audio_data_count > 0);
         REQUIRE(line.start_time >= 0.0f);
         REQUIRE(line.duration > 0.0f);
+        REQUIRE(line.has_speaker_id == 0);
         // There should be at most one incomplete line at the end of the
         // transcript.
         if (line.is_complete == 0) {
@@ -192,6 +199,7 @@ TEST_CASE("moonshine-test-v2") {
       REQUIRE(line.duration > 0.0f);
       REQUIRE(line.is_complete == 1);
       REQUIRE(line.is_updated == 1);
+      REQUIRE(line.has_speaker_id == 1);
     }
   }
   SUBCASE("transcribe-without-streaming-skip-transcription") {
@@ -302,6 +310,7 @@ TEST_CASE("moonshine-test-v2") {
         {"vad_look_behind_sample_count", "8192"},
         {"vad_max_segment_duration", "15.0"},
         {"max_tokens_per_second", "6.5"},
+        {"identify_speakers", "true"},
     };
     const uint64_t options_count = sizeof(options) / sizeof(options[0]);
     std::string root_model_path = "tiny-en";

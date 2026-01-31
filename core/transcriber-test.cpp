@@ -610,4 +610,100 @@ TEST_CASE("transcriber-test") {
     transcriber.free_stream(stream_id);
     free(wav_data);
   }
+  SUBCASE("test-identify-speakers") {
+    std::string first_pete_wav_path = "two_cities.wav";
+    std::string second_pete_wav_path = "beckett.wav";
+    std::string other_speaker_wav_path = "two_cities_librivox_48k.wav";
+    REQUIRE(std::filesystem::exists(first_pete_wav_path));
+    REQUIRE(std::filesystem::exists(second_pete_wav_path));
+    REQUIRE(std::filesystem::exists(other_speaker_wav_path));
+    float *first_pete_wav_data = nullptr;
+    size_t first_pete_wav_data_size = 0;
+    int32_t first_pete_wav_sample_rate = 0;
+    REQUIRE(load_wav_data(first_pete_wav_path.c_str(), &first_pete_wav_data,
+                          &first_pete_wav_data_size,
+                          &first_pete_wav_sample_rate));
+    REQUIRE(first_pete_wav_data != nullptr);
+    REQUIRE(first_pete_wav_data_size > 0);
+    float *second_pete_wav_data = nullptr;
+    size_t second_pete_wav_data_size = 0;
+    int32_t second_pete_wav_sample_rate = 0;
+    REQUIRE(load_wav_data(second_pete_wav_path.c_str(), &second_pete_wav_data,
+                          &second_pete_wav_data_size,
+                          &second_pete_wav_sample_rate));
+    REQUIRE(second_pete_wav_data != nullptr);
+    REQUIRE(second_pete_wav_data_size > 0);
+    float *other_speaker_wav_data = nullptr;
+    size_t other_speaker_wav_data_size = 0;
+    int32_t other_speaker_wav_sample_rate = 0;
+    REQUIRE(load_wav_data(other_speaker_wav_path.c_str(),
+                          &other_speaker_wav_data, &other_speaker_wav_data_size,
+                          &other_speaker_wav_sample_rate));
+    REQUIRE(other_speaker_wav_data != nullptr);
+    REQUIRE(other_speaker_wav_data_size > 0);
+    std::string root_model_path = "tiny-en";
+    REQUIRE(std::filesystem::exists(root_model_path));
+    TranscriberOptions options;
+    options.model_source = TranscriberOptions::ModelSource::FILES;
+    options.model_path = root_model_path.c_str();
+    options.model_arch = MOONSHINE_MODEL_ARCH_TINY;
+    options.identify_speakers = true;
+    Transcriber transcriber(options);
+    int32_t stream_id = transcriber.create_stream();
+    transcriber.start_stream(stream_id);
+    REQUIRE(stream_id >= 0);
+    struct transcript_t *transcript = nullptr;
+    transcriber.add_audio_to_stream(stream_id, first_pete_wav_data,
+                                    first_pete_wav_data_size,
+                                    first_pete_wav_sample_rate);
+    transcriber.transcribe_stream(stream_id, 0, &transcript);
+    REQUIRE(transcript != nullptr);
+    REQUIRE(transcript->line_count > 0);
+    REQUIRE(transcript->lines[0].has_speaker_id == true);
+    const uint64_t first_pete_speaker_id = transcript->lines[0].speaker_id;
+    const size_t first_pete_line_count = transcript->line_count;
+    for (size_t i = 1; i < transcript->line_count; i++) {
+      const struct transcript_line_t &line = transcript->lines[i];
+      REQUIRE(line.has_speaker_id == true);
+      REQUIRE(line.speaker_id == first_pete_speaker_id);
+    }
+    transcriber.add_audio_to_stream(stream_id, other_speaker_wav_data,
+                                    other_speaker_wav_data_size,
+                                    other_speaker_wav_sample_rate);
+    transcriber.transcribe_stream(stream_id, 0, &transcript);
+    REQUIRE(transcript != nullptr);
+    REQUIRE(transcript->line_count > first_pete_line_count);
+    REQUIRE(transcript->lines[first_pete_line_count].has_speaker_id == true);
+    const uint64_t other_speaker_speaker_id =
+        transcript->lines[first_pete_line_count].speaker_id;
+    REQUIRE(other_speaker_speaker_id != first_pete_speaker_id);
+    const size_t other_speaker_line_count = transcript->line_count;
+    for (size_t i = first_pete_line_count + 1; i < transcript->line_count;
+         i++) {
+      const struct transcript_line_t &line = transcript->lines[i];
+      REQUIRE(line.has_speaker_id == true);
+      REQUIRE(line.speaker_id == other_speaker_speaker_id);
+    }
+    transcriber.add_audio_to_stream(stream_id, second_pete_wav_data,
+                                    second_pete_wav_data_size,
+                                    second_pete_wav_sample_rate);
+    transcriber.transcribe_stream(stream_id, 0, &transcript);
+    REQUIRE(transcript != nullptr);
+    REQUIRE(transcript->line_count > other_speaker_line_count);
+    REQUIRE(transcript->lines[other_speaker_line_count].has_speaker_id == true);
+    const uint64_t second_pete_speaker_id =
+        transcript->lines[other_speaker_line_count].speaker_id;
+    REQUIRE(second_pete_speaker_id == first_pete_speaker_id);
+    REQUIRE(second_pete_speaker_id != other_speaker_speaker_id);
+    for (size_t i = other_speaker_line_count + 1; i < transcript->line_count;
+         i++) {
+      const struct transcript_line_t &line = transcript->lines[i];
+      REQUIRE(line.has_speaker_id == true);
+      REQUIRE(line.speaker_id == first_pete_speaker_id);
+    }
+    transcriber.free_stream(stream_id);
+    free(first_pete_wav_data);
+    free(second_pete_wav_data);
+    free(other_speaker_wav_data);
+  }
 }

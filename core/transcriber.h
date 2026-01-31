@@ -13,6 +13,9 @@
 #include "moonshine-model.h"
 #include "moonshine-streaming-model.h"
 #include "voice-activity-detector.h"
+#include "speaker-embedding-model.h"
+#include "speaker-embedding-model-data.h"
+#include "online-clusterer.h"
 
 struct TranscriberLine {
   std::string *text = nullptr;
@@ -23,8 +26,10 @@ struct TranscriberLine {
   bool just_updated;
   bool is_new;
   bool has_text_changed;
+  bool has_speaker_id;
   uint64_t id;
   uint32_t last_transcription_latency_ms;
+  uint64_t speaker_id;
 
   TranscriberLine();
   TranscriberLine(const TranscriberLine &other);
@@ -91,6 +96,7 @@ struct TranscriberOptions {
   size_t decoder_model_data_size = 0;
   const uint8_t *tokenizer_data = nullptr;
   size_t tokenizer_data_size = 0;
+  bool identify_speakers = true;
   float transcription_interval = 0.5f;
   float vad_threshold = 0.5f;  
   float vad_window_duration = 0.5f;
@@ -114,6 +120,11 @@ class Transcriber {
   MoonshineStreamingModel *streaming_model;
   MoonshineStreamingState streaming_state;
   std::mutex streaming_model_mutex;
+
+  SpeakerEmbeddingModel *speaker_embedding_model;
+  std::mutex speaker_embedding_model_mutex;
+  OnlineClusterer *online_clusterer;
+
   // Track current segment for incremental processing
   uint64_t current_streaming_segment_id = UINT64_MAX;
   size_t streaming_samples_processed = 0;

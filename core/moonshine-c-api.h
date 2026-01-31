@@ -151,9 +151,15 @@ To make the streaming results easier to work with we offer some guarantees:
    last results returned, and when it calls again it can figure out the updates
    by iterating the results starting at that line index.
 
- - The line id is a stable identifier for the line. Currently it is set to the
-   index of that line in the full transcript list, but this may change in the
-   future. What won't change is that the id is unique and stable for the line.
+ - The line id is a stable identifier for the line. This is set to a 64-bit
+   randomly-generated number, with the goal of minimizing the chances of a
+   collision. Currently these IDs are in ascending order in any one transcript,
+   but this is not guaranteed and should not be relied on.
+
+ - The speaker ID is another 64-bit randomly-generated number, used to identify
+   the calculated speaker of the line, for diarization purposes. This is not
+   available until the line has accumulated enough audio data to be confident
+   in the speaker identification, or if the line is complete.
 
 See the stream transcription examples below for more details on what this
 means in practice.
@@ -185,6 +191,10 @@ struct transcript_line_t {
   /* Streaming-only: Whether the text of the line has changed since the previous
    * call to transcribe_stream_chunk. */
   int8_t has_text_changed;
+  /* Whether a speaker ID has been calculated for the line. */
+  int8_t has_speaker_id;
+  /* The speaker ID for the line. */
+  uint64_t speaker_id;
   /* Streaming-only: The latency of the last transcription in milliseconds. */
   uint32_t last_transcription_latency_ms;
 };
@@ -506,12 +516,13 @@ typedef void (*moonshine_intent_callback)(void *user_data,
    failure. The error code can be converted to a human-readable string using
    moonshine_error_to_string.
 */
-MOONSHINE_EXPORT int32_t moonshine_create_intent_recognizer(
-    const char *model_path, uint32_t model_arch, const char *model_variant,
-    float threshold);
+MOONSHINE_EXPORT int32_t
+moonshine_create_intent_recognizer(const char *model_path, uint32_t model_arch,
+                                   const char *model_variant, float threshold);
 
 /* Frees an intent recognizer and all its resources. */
-MOONSHINE_EXPORT void moonshine_free_intent_recognizer(int32_t intent_recognizer_handle);
+MOONSHINE_EXPORT void moonshine_free_intent_recognizer(
+    int32_t intent_recognizer_handle);
 
 /* Registers an intent with a trigger phrase and callback. When an utterance
    is processed that is similar enough to the trigger phrase (above the
@@ -545,17 +556,20 @@ MOONSHINE_EXPORT int32_t moonshine_set_intent_threshold(
 /* Gets the current similarity threshold for the intent recognizer.
    Returns the threshold on success (>= 0), or a negative error code on failure.
 */
-MOONSHINE_EXPORT float moonshine_get_intent_threshold(int32_t intent_recognizer_handle);
+MOONSHINE_EXPORT float moonshine_get_intent_threshold(
+    int32_t intent_recognizer_handle);
 
 /* Gets the number of registered intents.
    Returns the count on success (>= 0), or a negative error code on failure.
 */
-MOONSHINE_EXPORT int32_t moonshine_get_intent_count(int32_t intent_recognizer_handle);
+MOONSHINE_EXPORT int32_t
+moonshine_get_intent_count(int32_t intent_recognizer_handle);
 
 /* Clears all registered intents.
    Returns zero on success, or a non-zero error code on failure.
 */
-MOONSHINE_EXPORT int32_t moonshine_clear_intents(int32_t intent_recognizer_handle);
+MOONSHINE_EXPORT int32_t
+moonshine_clear_intents(int32_t intent_recognizer_handle);
 
 #ifdef __cplusplus
 }

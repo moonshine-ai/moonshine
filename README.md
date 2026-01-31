@@ -382,9 +382,9 @@ Our primary support channel is [the Moonshine Discord](https://discord.gg/27qp9z
 
 This library is in active development, and we aim to implement:
 
+ - Binary size reduction for mobile deployment.
  - More languages.
  - More streaming models.
- - Speaker identification (aka diarization).
 
 ## Acknowledgements
 
@@ -394,10 +394,11 @@ We're grateful to:
  - The ONNX Runtime community for building [a fast, cross-platform inference engine](https://github.com/microsoft/onnxruntime).
  - [Viktor Kirilov](https://github.com/onqtam) for [his fantastic DocTest C++ testing framework](https://github.com/doctest/doctest).
  - [Nemanja Trifunovic](https://github.com/nemtrif) for [his very helpful UTF8 CPP library](https://github.com/nemtrif/utfcpp).
+ - The [Pyannote team](https://www.pyannote.ai/) for making available their speaker embedding model.
 
  ## License
 
- This code, apart from the contributions in `core/third-party` is copyright [Moonshine AI](https://moonsh), and licensed under the MIT License, see LICENSE in this repository.
+ This code, apart from the contributions in `core/third-party` is licensed under the MIT License, see LICENSE in this repository.
 
  The English-language models are also released under the MIT License. Models for other languages are released under the [Moonshine Community License](https://moonshine.ai), which is a non-commercial license.
 
