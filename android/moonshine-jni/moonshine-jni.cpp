@@ -62,6 +62,9 @@ std::unique_ptr<transcript_t> c_transcript_from_jobject(
   jfieldID isNewField = get_field(env, lineClass, "isNew", "Z");
   jfieldID hasTextChangedField =
       get_field(env, lineClass, "hasTextChanged", "Z");
+  jfieldID hasSpeakerIdField = get_field(env, lineClass, "hasSpeakerId", "Z");
+  jfieldID speakerIdField = get_field(env, lineClass, "speakerId", "J");
+  jfieldID speakerIndexField = get_field(env, lineClass, "speakerIndex", "I");
 
   jsize lineCount = env->CallIntMethod(linesList, sizeMethod);
   std::unique_ptr<transcript_t> transcript(new transcript_t());
@@ -86,6 +89,10 @@ std::unique_ptr<transcript_t> c_transcript_from_jobject(
     transcript->lines[i].is_new = env->GetBooleanField(line, isNewField);
     transcript->lines[i].has_text_changed =
         env->GetBooleanField(line, hasTextChangedField);
+    transcript->lines[i].has_speaker_id =
+        env->GetBooleanField(line, hasSpeakerIdField);
+    transcript->lines[i].speaker_id = env->GetLongField(line, speakerIdField);
+    transcript->lines[i].speaker_index = env->GetIntField(line, speakerIndexField);
   }
   return transcript;
 }
@@ -106,6 +113,9 @@ jobject c_transcript_to_jobject(JNIEnv *env, struct transcript_t *transcript) {
   jfieldID isNewField = get_field(env, lineClass, "isNew", "Z");
   jfieldID hasTextChangedField =
       get_field(env, lineClass, "hasTextChanged", "Z");
+  jfieldID hasSpeakerIdField = get_field(env, lineClass, "hasSpeakerId", "Z");
+  jfieldID speakerIdField = get_field(env, lineClass, "speakerId", "J");
+  jfieldID speakerIndexField = get_field(env, lineClass, "speakerIndex", "I");
   jmethodID listConstructor = get_method(env, listClass, "<init>", "()V");
   jobject linesList = env->NewObject(listClass, listConstructor);
 
@@ -128,6 +138,9 @@ jobject c_transcript_to_jobject(JNIEnv *env, struct transcript_t *transcript) {
     env->SetBooleanField(jline, isUpdatedField, line->is_updated);
     env->SetBooleanField(jline, isNewField, line->is_new);
     env->SetBooleanField(jline, hasTextChangedField, line->has_text_changed);
+    env->SetBooleanField(jline, hasSpeakerIdField, line->has_speaker_id);
+    env->SetLongField(jline, speakerIdField, line->speaker_id);
+    env->SetIntField(jline, speakerIndexField, line->speaker_index);
     env->CallBooleanMethod(linesList, addMethod, jline);
     env->DeleteLocalRef(jline);
   }
