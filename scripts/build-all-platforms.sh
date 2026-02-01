@@ -10,10 +10,10 @@ if [ -f "${REPO_ROOT_DIR}/.env" ]; then
 fi
 
 cd ${REPO_ROOT_DIR}
-# scripts/run-all-tests.sh
-# scripts/build-swift.sh
-# scripts/publish-swift.sh
-# scripts/build-pip.sh upload
+scripts/run-all-tests.sh
+scripts/build-swift.sh
+scripts/publish-swift.sh
+scripts/build-pip.sh upload
 scripts/build-pip-docker.sh
 scripts/publish-binary.sh upload
 
