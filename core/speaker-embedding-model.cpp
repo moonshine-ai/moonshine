@@ -68,6 +68,17 @@ int SpeakerEmbeddingModel::calculate_embedding(
     const float *input_audio_data, size_t input_audio_data_size,
     std::vector<float> *out_embedding) {
   RETURN_ON_NULL(out_embedding);
+  std::vector<float> padded_input_audio_data;
+  // If the input audio is too short, extend it by repeating the audio data.
+  if (input_audio_data_size < ideal_input_size) {
+    padded_input_audio_data.resize(ideal_input_size);
+    for (size_t offset = 0; offset < (ideal_input_size - input_audio_data_size); offset += input_audio_data_size) {
+      std::copy(input_audio_data, input_audio_data + input_audio_data_size,
+                padded_input_audio_data.data() + offset);
+    }
+    input_audio_data = padded_input_audio_data.data();
+    input_audio_data_size = ideal_input_size;
+  }
   const std::vector<int64_t> embedding_input_shape = {
       1, static_cast<int64_t>(input_audio_data_size)};
   MoonshineTensorView *embedding_input_tensor = new MoonshineTensorView(

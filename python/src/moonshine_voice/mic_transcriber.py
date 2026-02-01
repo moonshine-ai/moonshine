@@ -2,6 +2,7 @@ from moonshine_voice.transcriber import (
     Transcriber,
     TranscriptEvent,
     TranscriptEventListener,
+    TranscriptLine,
     ModelArch,
 )
 from moonshine_voice.utils import get_model_path
@@ -92,36 +93,62 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="MicTranscriber example")
     parser.add_argument(
-        "--language", type=str, default=None, help="Language to use for transcription"
+        "--language", type=str, default="en", help="Language to use for transcription"
     )
     parser.add_argument(
         "--model-arch",
         type=str,
-        default=None,
+        default="4",
         help="Model architecture to use for transcription",
     )
     args = parser.parse_args()
-    if args.language is None:
-        model_path = str(get_model_path("tiny-en"))
-        model_arch = ModelArch.TINY
-    else:
-        model_path, model_arch = get_model_for_language(
-            wanted_language=args.language, wanted_model_arch=args.model_arch
-        )
+    model_path, model_arch = get_model_for_language(
+        wanted_language=args.language, wanted_model_arch=int(args.model_arch)
+    )
 
     mic_transcriber = MicTranscriber(model_path=model_path, model_arch=model_arch)
 
-    class TestListener(TranscriptEventListener):
+    class TerminalListener(TranscriptEventListener):
+        def __init__(self):
+            self.last_line_text_length = 0
+
+        # Assume we're on a terminal, and so we can use a carriage return to
+        # overwrite the last line with the latest text.
+        def update_last_terminal_line(self, line: TranscriptLine):
+            if line.has_speaker_id:
+                speaker_prefix = f"Speaker #{line.speaker_index}: "
+            else:
+                speaker_prefix = ""
+            new_text = f"{speaker_prefix}{line.text}"
+            print(f"\r{new_text}", end="", flush=True)
+            if len(new_text) < self.last_line_text_length:
+                # If the new text is shorter than the last line, we need to
+                # overwrite the last line with spaces.
+                diff = self.last_line_text_length - len(new_text)
+                print(f"{' ' * diff}", end="", flush=True)
+            # Update the length of the last line text.
+            self.last_line_text_length = len(new_text)
+
         def on_line_started(self, event):
-            print(f"Line started: {event.line.text}")
+            self.last_line_text_length = 0
 
         def on_line_text_changed(self, event):
-            print(f"Line text changed: {event.line.text}")
+            self.update_last_terminal_line(event.line)
 
         def on_line_completed(self, event):
-            print(f"Line completed: {event.line.text}")
+            self.update_last_terminal_line(event.line)
+            print("\n", end="", flush=True)
 
-    listener = TestListener()
+    # If we're not on an interactive terminal, print each line as it's completed.
+    class FileListener(TranscriptEventListener):
+        def on_line_completed(self, event):
+            print(event.line.text)
+
+    if sys.stdout.isatty():
+        listener = TerminalListener()
+    else:
+        listener = FileListener()
+
     mic_transcriber.add_listener(listener)
 
     print(f"Listening to the microphone, press Ctrl+C to stop...", file=sys.stderr)
