@@ -248,6 +248,9 @@ internal final class MoonshineAPI: @unchecked Sendable {
                 isUpdated: lineC.is_updated != 0,
                 isNew: lineC.is_new != 0,
                 hasTextChanged: lineC.has_text_changed != 0,
+                hasSpeakerId: lineC.has_speaker_id != 0,
+                speakerId: lineC.speaker_id,
+                speakerIndex: lineC.speaker_index,
                 audioData: audioData
             )
             lines.append(line)
