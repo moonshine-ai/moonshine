@@ -25,6 +25,15 @@ public struct TranscriptLine {
     
     /// Whether the text of the line has changed since the previous call (streaming only).
     public let hasTextChanged: Bool
+
+    /// Whether a speaker ID has been calculated for the line.
+    public let hasSpeakerId: Bool
+
+    /// The speaker ID for the line.
+    public let speakerId: UInt64
+
+    /// The order the speaker appeared in the current transcript.
+    public let speakerIndex: UInt32
     
     /// Audio data for this line, if available.
     public let audioData: [Float]?
@@ -38,6 +47,9 @@ public struct TranscriptLine {
         isUpdated: Bool = false,
         isNew: Bool = false,
         hasTextChanged: Bool = false,
+        hasSpeakerId: Bool = false,
+        speakerId: UInt64 = 0,
+        speakerIndex: UInt32 = 0,
         audioData: [Float]? = nil
     ) {
         self.text = text
@@ -48,11 +60,14 @@ public struct TranscriptLine {
         self.isUpdated = isUpdated
         self.isNew = isNew
         self.hasTextChanged = hasTextChanged
+        self.hasSpeakerId = hasSpeakerId
+        self.speakerId = speakerId
+        self.speakerIndex = speakerIndex
         self.audioData = audioData
     }
 
     public var description: String {
-        return "TranscriptLine(text: \(text), startTime: \(startTime), duration: \(duration), lineId: \(lineId), isComplete: \(isComplete), isUpdated: \(isUpdated), isNew: \(isNew), hasTextChanged: \(hasTextChanged))"
+        return "TranscriptLine(text: \(text), startTime: \(startTime), duration: \(duration), lineId: \(lineId), isComplete: \(isComplete), isUpdated: \(isUpdated), isNew: \(isNew), hasTextChanged: \(hasTextChanged), hasSpeakerId: \(hasSpeakerId), speakerId: \(speakerId), speakerIndex: \(speakerIndex))"
     }
 }
 
