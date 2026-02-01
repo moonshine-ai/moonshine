@@ -180,6 +180,7 @@ TEST_CASE("moonshine-cpp-test") {
       REQUIRE(line.isUpdated);
       REQUIRE(line.isNew);
       REQUIRE(line.hasTextChanged);
+      REQUIRE(line.hasSpeakerId);
     }
   }
   SUBCASE("transcribe-with-streaming") {

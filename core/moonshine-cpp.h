@@ -98,6 +98,15 @@ struct TranscriptLine {
   /// (streaming only)
   bool hasTextChanged;
 
+  /// Whether a speaker ID has been calculated for the line.
+  bool hasSpeakerId;
+
+  /// The speaker ID for the line.
+  uint64_t speakerId;
+
+  /// The order the speaker appeared in the current transcript.
+  uint32_t speakerIndex;
+
   int32_t lastTranscriptionLatencyMs;
 
   /// Audio data for this line, if available (16KHz float PCM, -1.0 to 1.0)
@@ -112,6 +121,9 @@ struct TranscriptLine {
         isUpdated(false),
         isNew(false),
         hasTextChanged(false),
+        hasSpeakerId(false),
+        speakerId(0),
+        speakerIndex(0),
         lastTranscriptionLatencyMs(0) {}
 
   /// Construct from C API structure
@@ -123,6 +135,9 @@ struct TranscriptLine {
         isUpdated(line_c.is_updated != 0),
         isNew(line_c.is_new != 0),
         hasTextChanged(line_c.has_text_changed != 0),
+        hasSpeakerId(line_c.has_speaker_id != 0),
+        speakerId(line_c.speaker_id),
+        speakerIndex(line_c.speaker_index),
         lastTranscriptionLatencyMs(line_c.last_transcription_latency_ms) {
     if (line_c.text) {
       text = std::string(line_c.text);
@@ -140,6 +155,8 @@ struct TranscriptLine {
            (isUpdated ? " updated, " : " not updated, ") +
            (isNew ? " new" : " not new, ") +
            (hasTextChanged ? " text changed" : " text not changed") +
+           (hasSpeakerId ? " speaker id=" + std::to_string(speakerId) +
+           ", speaker index=" + std::to_string(speakerIndex) : "") +
            ", last transcription latency ms=" +
            std::to_string(lastTranscriptionLatencyMs);
   }
