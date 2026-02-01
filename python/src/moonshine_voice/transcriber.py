@@ -4,6 +4,7 @@ import ctypes
 from abc import ABC
 from dataclasses import dataclass
 import os
+import sys
 from typing import Callable, List, Optional
 
 from moonshine_voice.moonshine_api import (
@@ -221,6 +222,9 @@ class Transcriber:
                 is_updated=bool(line_c.is_updated),
                 is_new=bool(line_c.is_new),
                 has_text_changed=bool(line_c.has_text_changed),
+                has_speaker_id=bool(line_c.has_speaker_id),
+                speaker_id=line_c.speaker_id,
+                speaker_index=line_c.speaker_index,
                 audio_data=audio_data,
                 last_transcription_latency_ms=line_c.last_transcription_latency_ms,
             )
@@ -436,6 +440,7 @@ class Stream:
                     # Otherwise, treat it as a callable that takes the event
                     listener(event)
             except Exception as e:
+                print(f"Exception in TranscriberEventListener: {e}", file=sys.stderr)
                 # Don't let listener errors break the stream
                 # Emit an error event if possible, but don't recurse
                 try:
@@ -480,7 +485,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Model info example")
     parser.add_argument(
-        "--language", type=str, default=None, help="Language to use for transcription"
+        "--language", type=str, default="en", help="Language to use for transcription"
     )
     parser.add_argument(
         "--model-path",
@@ -491,7 +496,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model-arch",
         type=int,
-        default=None,
+        default=5,
         help="Model architecture to use for transcription",
     )
     parser.add_argument(
@@ -508,9 +513,6 @@ if __name__ == "__main__":
     if args.model_path is not None:
         model_path = args.model_path
         model_arch = ModelArch(args.model_arch)
-    elif args.language is None:
-        model_path = str(get_model_path("tiny-en"))
-        model_arch = ModelArch.TINY
     else:
         model_path, model_arch = get_model_for_language(
             wanted_language=args.language, wanted_model_arch=args.model_arch
@@ -534,14 +536,18 @@ if __name__ == "__main__":
     transcriber.start()
 
     class TestListener(TranscriptEventListener):
-        def on_line_started(self, event):
+        def on_line_started(self, event: LineStarted):
             print(f"Line started: {event.line.text}")
 
-        def on_line_text_changed(self, event):
-            print(f"Line text changed: {event.line.text}")
+        def on_line_text_changed(self, event: LineTextChanged):
+            if event.line.has_speaker_id:
+                speaker_prefix = f". Speaker #{event.line.speaker_index}"
+            else:
+                speaker_prefix = ""
+            print(f"Line text changed{speaker_prefix}: {event.line.text}")
 
-        def on_line_completed(self, event):
-            print(f"Line completed: {event.line.text}")
+        def on_line_completed(self, event: LineCompleted):
+            print(f"Line completed. Speaker #{event.line.speaker_index}: {event.line.text}")
 
     listener = TestListener()
     transcriber.add_listener(listener)

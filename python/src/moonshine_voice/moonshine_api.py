@@ -56,8 +56,8 @@ class ModelArch(IntEnum):
     BASE = 1
     TINY_STREAMING = 2
     BASE_STREAMING = 3
-    MEDIUM_STREAMING = 4
-    SMALL_STREAMING = 5
+    SMALL_STREAMING = 4
+    MEDIUM_STREAMING = 5
 
 def model_arch_to_string(model_arch: ModelArch) -> str:
     """Convert a model architecture to a string."""
@@ -105,6 +105,9 @@ class TranscriptLine:
     is_updated: bool = False
     is_new: bool = False
     has_text_changed: bool = False
+    has_speaker_id: bool = False
+    speaker_id: int = 0
+    speaker_index: int = 0
     audio_data: Optional[List[float]] = None
     last_transcription_latency_ms: int = 0
 
