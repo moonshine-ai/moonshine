@@ -151,9 +151,14 @@ The Moonshine API is designed to take care of the details around capturing and t
 
 ### Architecture
 
-Our goal is to build a framework that any developer can pick up and use, even with no previous experience of speech technologies. We've abstracted away a lot of the unnecessary details and providing a simple interface that lets you focus on building your application, and that's reflected in our system architecture.
+Our goal is to build a framework that any developer can pick up and use, even with no previous experience of speech technologies. We've abstracted away a lot of the unnecessary details and provide a simple interface that lets you focus on building your application, and that's reflected in our system architecture.
 
-Traditionally, adding a voice interface to an application or product required integrating a lot of different libraries to handle all the processing that's required to capture audio and turn it into something actionable. The main steps involved are microphone capture, voice activity detection (to break a continuous stream of audio into sections of speech), speech to text, speaker identification, and intent recognition. Each of these steps typically involved a different framework, which greatly increased the complexity of integrating, optimizing, and maintaining these dependencies.
+The basic flow is:
+
+ - Create a `Transcriber` or `IntentRecognizer` object, depending on whether you want the text that's spoken, or just to know that a user has requested an action.
+ - Attach an `EventListener` that gets called when important things occur, like the end of a phrase or an action being triggered, so your application can respond.
+
+Traditionally, adding a voice interface to an application or product required integrating a lot of different libraries to handle all the processing that's needed to capture audio and turn it into something actionable. The main steps involved are microphone capture, voice activity detection (to break a continuous stream of audio into sections of speech), speech to text, speaker identification, and intent recognition. Each of these steps typically involved a different framework, which greatly increased the complexity of integrating, optimizing, and maintaining these dependencies.
 
 Moonshine Voice includes all of these stages in a single library, and abstracts away everything but the essential information your application needs to respond to user speech, whether you want to transcribe it or trigger actions.
 
