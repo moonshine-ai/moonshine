@@ -29,13 +29,14 @@ _INTENT_CALLBACK = ctypes.CFUNCTYPE(
     ctypes.c_void_p,  # user_data
     ctypes.c_char_p,  # trigger_phrase
     ctypes.c_char_p,  # utterance
-    ctypes.c_float,   # similarity
+    ctypes.c_float,  # similarity
 )
 
 
 @dataclass
 class IntentMatch:
     """Represents a matched intent."""
+
     trigger_phrase: str
     utterance: str
     similarity: float
@@ -100,7 +101,9 @@ class IntentRecognizer(TranscriptEventListener):
         )
 
         if handle < 0:
-            raise MoonshineError(f"Failed to create intent recognizer from {model_path}")
+            raise MoonshineError(
+                f"Failed to create intent recognizer from {model_path}"
+            )
 
         self._handle = handle
 
@@ -114,7 +117,7 @@ class IntentRecognizer(TranscriptEventListener):
             ctypes.c_char_p,  # model_path
             ctypes.c_uint32,  # model_arch
             ctypes.c_char_p,  # model_variant
-            ctypes.c_float,   # threshold
+            ctypes.c_float,  # threshold
         ]
 
         # Free intent recognizer
@@ -124,23 +127,23 @@ class IntentRecognizer(TranscriptEventListener):
         # Register intent
         lib.moonshine_register_intent.restype = ctypes.c_int32
         lib.moonshine_register_intent.argtypes = [
-            ctypes.c_int32,   # intent_recognizer_handle
+            ctypes.c_int32,  # intent_recognizer_handle
             ctypes.c_char_p,  # trigger_phrase
-            _INTENT_CALLBACK, # callback
+            _INTENT_CALLBACK,  # callback
             ctypes.c_void_p,  # user_data
         ]
 
         # Unregister intent
         lib.moonshine_unregister_intent.restype = ctypes.c_int32
         lib.moonshine_unregister_intent.argtypes = [
-            ctypes.c_int32,   # intent_recognizer_handle
+            ctypes.c_int32,  # intent_recognizer_handle
             ctypes.c_char_p,  # trigger_phrase
         ]
 
         # Process utterance
         lib.moonshine_process_utterance.restype = ctypes.c_int32
         lib.moonshine_process_utterance.argtypes = [
-            ctypes.c_int32,   # intent_recognizer_handle
+            ctypes.c_int32,  # intent_recognizer_handle
             ctypes.c_char_p,  # utterance
         ]
 
@@ -181,12 +184,10 @@ class IntentRecognizer(TranscriptEventListener):
 
     def __del__(self):
         """Cleanup on deletion."""
-        if hasattr(self, '_handle'):
+        if hasattr(self, "_handle"):
             self.close()
 
-    def register_intent(
-        self, trigger_phrase: str, handler: IntentHandler
-    ) -> None:
+    def register_intent(self, trigger_phrase: str, handler: IntentHandler) -> None:
         """
         Register an intent with a trigger phrase and handler.
 
@@ -306,9 +307,7 @@ class IntentRecognizer(TranscriptEventListener):
         self._handlers.clear()
         self._c_callbacks.clear()
 
-    def set_on_intent(
-        self, callback: Optional[Callable[[IntentMatch], None]]
-    ) -> None:
+    def set_on_intent(self, callback: Optional[Callable[[IntentMatch], None]]) -> None:
         """
         Set a callback that is invoked for any recognized intent.
 
@@ -348,3 +347,144 @@ class IntentRecognizer(TranscriptEventListener):
         """
         # Log or handle errors as needed
         pass
+
+
+if __name__ == "__main__":
+    import argparse
+    import sys
+    from moonshine_voice import get_model_for_language, get_embedding_model
+    from moonshine_voice.mic_transcriber import MicTranscriber
+    import time
+
+    parser = argparse.ArgumentParser(
+        description="Intent recognition with Moonshine Voice"
+    )
+    parser.add_argument(
+        "--language",
+        type=str,
+        default="en",
+        help="Language to use for transcription (default: en)",
+    )
+    parser.add_argument(
+        "--model-arch",
+        type=str,
+        default=None,
+        help="Model architecture to use for transcription",
+    )
+    parser.add_argument(
+        "--embedding-model",
+        type=str,
+        default="embeddinggemma-300m",
+        help="Embedding model name (default: embeddinggemma-300m)",
+    )
+    parser.add_argument(
+        "--quantization",
+        type=str,
+        default="q4",
+        help="Model quantization, e.g., q4, q8, fp16, fp32, q4f16 (default: q4)",
+    )
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=0.6,
+        help="Similarity threshold for intent matching (default: 0.6)",
+    )
+    parser.add_argument(
+        "--intents",
+        type=str,
+        default="turn on the lights,turn off the lights,what is the weather,set a timer,play some music,stop the music",
+        help="Actions to handle, separated by commas",
+    )
+    args = parser.parse_args()
+
+    def on_intent_triggered_on(trigger: str, utterance: str, similarity: float):
+        """Handler for when an intent is triggered."""
+        print(f"\n'{trigger.upper()}' triggered by '{utterance}' with {similarity:.0%} confidence")
+
+    class TranscriptPrinter(TranscriptEventListener):
+        """Listener that prints transcript updates to the terminal."""
+
+        def __init__(self):
+            self.last_line_text_length = 0
+
+        def update_last_terminal_line(self, new_text: str):
+            print(f"\r{new_text}", end="", flush=True)
+            if len(new_text) < self.last_line_text_length:
+                diff = self.last_line_text_length - len(new_text)
+                print(f"{' ' * diff}", end="", flush=True)
+            self.last_line_text_length = len(new_text)
+
+        def on_line_started(self, event):
+            self.last_line_text_length = 0
+
+        def on_line_text_changed(self, event):
+            self.update_last_terminal_line(f"📝 {event.line.text}")
+
+        def on_line_completed(self, event):
+            self.update_last_terminal_line(f"📝 {event.line.text}")
+            print()  # New line after completion
+
+    # Load the transcription model
+    print("Loading transcription model...", file=sys.stderr)
+    model_path, model_arch = get_model_for_language(args.language, args.model_arch)
+
+    # Download and load the embedding model for intent recognition
+    print(
+        f"Loading embedding model ({args.embedding_model}, variant={args.quantization})...",
+        file=sys.stderr,
+    )
+    embedding_model_path, embedding_model_arch = get_embedding_model(
+        args.embedding_model, args.quantization
+    )
+
+    # Create the intent recognizer (implements TranscriptEventListener)
+    print(
+        f"Creating intent recognizer (threshold={args.threshold})...", file=sys.stderr
+    )
+    intent_recognizer = IntentRecognizer(
+        model_path=embedding_model_path,
+        model_arch=embedding_model_arch,
+        model_variant=args.quantization,
+        threshold=args.threshold,
+    )
+
+    # Register intents with their trigger phrases and handlers
+    intents = args.intents.split(",")
+    intents = [intent.strip() for intent in intents]
+    if len(intents) == 0:
+        raise ValueError("No intents provided")
+    for intent in intents:
+        intent_recognizer.register_intent(intent, on_intent_triggered_on)
+
+    print(f"Registered {intent_recognizer.intent_count} intents", file=sys.stderr)
+
+    # Create the microphone transcriber
+    mic_transcriber = MicTranscriber(model_path=model_path, model_arch=model_arch)
+
+    # Add both the transcript printer and intent recognizer as listeners
+    # The intent recognizer will process completed lines and trigger handlers
+    transcript_printer = TranscriptPrinter()
+    mic_transcriber.add_listener(transcript_printer)
+    mic_transcriber.add_listener(intent_recognizer)
+
+    print("\n" + "=" * 60, file=sys.stderr)
+    print("🎤 Listening for voice commands...", file=sys.stderr)
+    print("Try saying phrases with the same meaning as these actions:", file=sys.stderr)
+    for intent in intents:
+        print(f"  - '{intent}'", file=sys.stderr)
+    print(
+        "We're doing fuzzy matching of natural language, so phrases like 'Switch on the lights' or 'Lights on' or 'Let there be light' will trigger the 'turn on the lights' action, for example."
+    )
+    print("=" * 60, file=sys.stderr)
+    print("Press Ctrl+C to stop.\n", file=sys.stderr)
+
+    mic_transcriber.start()
+    try:
+        while True:
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("\n\nStopping...", file=sys.stderr)
+    finally:
+        intent_recognizer.close()
+        mic_transcriber.stop()
+        mic_transcriber.close()
