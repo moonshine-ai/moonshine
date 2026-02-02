@@ -12,13 +12,13 @@
 - [Acknowledgements](#acknowledgements)
 - [License](#license)
 
-[Moonshine](https://moonshine.ai) Voice is an open source AI toolkit for developers building voice applications. 
+[Moonshine](https://moonshine.ai) Voice is an open source AI toolkit for developers building real-time voice applications. 
 
  - Everything runs on-device, so it's fast, private, and you don't need an account, credit card, or API keys. 
- - The framework and models are optimized for streaming applications, offering low latency responses by doing most of the work while the user is still talking.
+ - The framework and models are optimized for live streaming applications, offering low latency responses by doing a lot of the work while the user is still talking.
  - All models are based on our [cutting](https://arxiv.org/abs/2410.15608) [edge](https://arxiv.org/abs/2509.02523) research and trained from scratch, so we can offer [higher accuracy than Whisper Large V3 at the top end](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard), down to tiny 26MB models for constrained deployments.
- - It's cross-platform, running on [Python](#python), [iOS](#ios), [Android](#android), [MacOS](#macos), [Linux](#linux), [Windows](#windows), [Raspberry Pis](#raspberry-pi), [IoT devices](https://www.linkedin.com/posts/petewarden_most-of-the-recent-news-about-ai-seems-to-activity-7384664255242932224-v6Mr/), and wearables.
- - Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, so you don't need to be an ML expert to use them.
+ - It's easy to integrate across platforms, with the same library running on [Python](#python), [iOS](#ios), [Android](#android), [MacOS](#macos), [Linux](#linux), [Windows](#windows), [Raspberry Pis](#raspberry-pi), [IoT devices](https://www.linkedin.com/posts/petewarden_most-of-the-recent-news-about-ai-seems-to-activity-7384664255242932224-v6Mr/), and wearables.
+ - Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, speaker identification (diarization) and command recognition, so you don't need to be an ML expert to use them.
  - It supports multiple languages, including English, Spanish, Mandarin, Japanese, Korean, Vietnamese, Ukrainian, and Arabic.
 
  ## Quickstart
@@ -130,7 +130,7 @@ Hopefully this gives you a good idea of how Moonshine compares to Whisper. If yo
 The Moonshine API is designed to take care of the details around capturing and transcribing live speech, giving application developers a high-level API focused on actionable events. I'll use Python to illustrate how it works, but the API is consistent across all the supported languages.
 
 - [Concepts](#concepts)
-- [Getting Started](#getting-started)
+- [Getting Started with Transcription](#getting-started-with-transcription)
 - [Examples](#examples)
 - [Adding the Library to your own App](#adding-the-library-to-your-own-app)
 - [Python](#python-1)
@@ -166,7 +166,7 @@ A [**TranscriptEventListener**](python/src/moonshine_voice/transcriber.py#L266) 
 
 An [**IntentRecognizer**](python/src/moonshine_voice/intent_recognizer.py#L44) is a type of TranscriptEventListener that allows you to invoke different callback functions when preprogrammed intents are detected. This is useful for building voice command recognition features.
 
-### Getting Started
+### Getting Started with Transcription
 
 We have [examples](#examples) for most platforms so as a first step I recommend checking out what we have for the systems you're targeting.
 
@@ -385,6 +385,7 @@ This library is in active development, and we aim to implement:
  - Binary size reduction for mobile deployment.
  - More languages.
  - More streaming models.
+ - Improved speaker identification.
 
 ## Acknowledgements
 
