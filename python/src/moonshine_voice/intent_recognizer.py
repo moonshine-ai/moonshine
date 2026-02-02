@@ -208,7 +208,6 @@ class IntentRecognizer(TranscriptEventListener):
         def c_callback(user_data, c_trigger, c_utterance, similarity):
             trigger = c_trigger.decode("utf-8") if c_trigger else ""
             utterance = c_utterance.decode("utf-8") if c_utterance else ""
-            print(trigger)
             if trigger in self._handlers:
                 self._handlers[trigger](trigger, utterance, similarity)
             # Also call the general on_intent callback if set
