@@ -129,6 +129,7 @@ Hopefully this gives you a good idea of how Moonshine compares to Whisper. If yo
 
 The Moonshine API is designed to take care of the details around capturing and transcribing live speech, giving application developers a high-level API focused on actionable events. I'll use Python to illustrate how it works, but the API is consistent across all the supported languages.
 
+- [Architecture](#architecture)
 - [Concepts](#concepts)
 - [Getting Started with Transcription](#getting-started-with-transcription)
 - [Examples](#examples)
@@ -147,6 +148,18 @@ The Moonshine API is designed to take care of the details around capturing and t
   - [Porting](#porting)
 - [Downloading Models](#downloading-models)
 - [Benchmarking](#benchmarking)
+
+### Architecture
+
+Our goal is to build a framework that any developer can pick up and use, even with no previous experience of speech technologies. We've focused on abstracting away a lot of the unnecessary details and providing a simple interface that lets you focus on building your application, and that's reflected in our system architecture.
+
+Traditionally, adding a voice interface to an application or product required integrating a lot of different libraries to handle all the processing that's required to capture audio and turn it into something actionable. The main steps involved are microphone capture, voice activity detection (to break a continuous stream of audio into sections of speech), speech to text, speaker identification, and intent recognition. Each of these steps typically involved a different framework, which greatly increased the complexity of integrating, optimizing, and maintaining these dependencies.
+
+Moonshine Voice includes all of these stages in a single library, and abstracts away everything but the essential information your application needs to respond to user speech, whether you want to transcribe it or trigger actions.
+
+![Moonshine Voice Architecture](images/moonshine-voice-architecture.png)
+
+Most developers should be able to treat the library as a black box that tells them when something interesting has happened, using our event-based classes to implement application logic. Of course the framework is fully open source, so speech experts can dive as deep under the hood as they'd like, but it's not necessary to use it.
 
 ### Concepts
 
