@@ -43,6 +43,7 @@ struct TranscriptStreamOutput {
   std::map<uint64_t, TranscriberLine> internal_lines_map;
   std::vector<uint64_t> ordered_internal_line_ids;
   std::vector<transcript_line_t> output_lines;
+  std::mutex mutex;
 
   struct transcript_t transcript = {.lines = nullptr, .line_count = 0};
   void clear_update_flags();

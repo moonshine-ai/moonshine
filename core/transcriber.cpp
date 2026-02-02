@@ -267,8 +267,11 @@ void Transcriber::start_stream(int32_t stream_id) {
   TranscriberStream *stream = this->streams[stream_id];
   // Starting a stream invalidates any pointers to stream data (audio, strings)
   // that have been returned to the client during prior sessions.
-  stream->transcript_output->internal_lines_map.clear();
-  stream->transcript_output->ordered_internal_line_ids.clear();
+  {
+    std::lock_guard<std::mutex> output_lock(stream->transcript_output->mutex);
+    stream->transcript_output->internal_lines_map.clear();
+    stream->transcript_output->ordered_internal_line_ids.clear();
+  }
   stream->start();
 }
 
@@ -398,8 +401,10 @@ void Transcriber::update_transcript_from_segments(
     const std::vector<VoiceActivitySegment> &segments,
     TranscriberStream *stream, struct transcript_t **out_transcript) {
   stream->transcript_output->clear_update_flags();
+
   for (size_t segment_index = 0; segment_index < segments.size();
        segment_index++) {
+    std::lock_guard<std::mutex> output_lock(stream->transcript_output->mutex);
     const VoiceActivitySegment &segment = segments[segment_index];
     if (!segment.just_updated) {
       continue;
@@ -467,12 +472,11 @@ void Transcriber::update_transcript_from_segments(
         }
         line.speaker_id = this->online_clusterer->embed_and_cluster(embedding);
         line.has_speaker_id = true;
-        if (this->speaker_index_map.find(line.speaker_id) ==
-            this->speaker_index_map.end()) {
+        if (!this->speaker_index_map.contains(line.speaker_id)) {
           line.speaker_index = this->next_speaker_index++;
-          this->speaker_index_map[line.speaker_id] = line.speaker_index;
+          this->speaker_index_map.insert({line.speaker_id, line.speaker_index});
         } else {
-          line.speaker_index = this->speaker_index_map[line.speaker_id];
+          line.speaker_index = this->speaker_index_map.at(line.speaker_id);
         }
       }
     }
@@ -738,6 +742,7 @@ void TranscriptStreamOutput::add_or_update_line(TranscriberLine &line) {
 }
 
 void TranscriptStreamOutput::update_transcript_from_lines() {
+  std::lock_guard<std::mutex> lock(this->mutex);
   this->output_lines.clear();
   for (const uint64_t &line_id : this->ordered_internal_line_ids) {
     const TranscriberLine &line = this->internal_lines_map[line_id];
@@ -763,6 +768,7 @@ void TranscriptStreamOutput::update_transcript_from_lines() {
 }
 
 void TranscriptStreamOutput::clear_update_flags() {
+  std::lock_guard<std::mutex> lock(this->mutex);
   for (const uint64_t &line_id : this->ordered_internal_line_ids) {
     TranscriberLine &line = this->internal_lines_map.at(line_id);
     line.just_updated = false;
@@ -777,11 +783,14 @@ void TranscriptStreamOutput::clear_update_flags() {
 }
 
 void TranscriptStreamOutput::mark_all_lines_as_complete() {
-  for (const uint64_t &line_id : this->ordered_internal_line_ids) {
-    TranscriberLine &line = this->internal_lines_map[line_id];
-    if (!line.is_complete) {
-      line.is_complete = 1;
-      line.just_updated = 1;
+  {
+    std::lock_guard<std::mutex> lock(this->mutex);
+    for (const uint64_t &line_id : this->ordered_internal_line_ids) {
+      TranscriberLine &line = this->internal_lines_map[line_id];
+      if (!line.is_complete) {
+        line.is_complete = 1;
+        line.just_updated = 1;
+      }
     }
   }
   this->update_transcript_from_lines();
@@ -804,6 +813,7 @@ TranscriberStream::TranscriberStream(VoiceActivityDetector *vad,
 
 void TranscriberStream::start() {
   this->vad->start();
+  std::lock_guard<std::mutex> lock(this->transcript_output->mutex);
   this->transcript_output->internal_lines_map.clear();
   this->transcript_output->ordered_internal_line_ids.clear();
 }
