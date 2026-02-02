@@ -128,6 +128,7 @@ def main():
     intent_recognizer = IntentRecognizer(
         model_path=embedding_model_path,
         model_arch=embedding_model_arch,
+        model_variant=args.quantization,
         threshold=args.threshold,
     )
 
