@@ -262,11 +262,11 @@ We also offer a specialization of the base `Transcriber` class called `MicTransc
 
 ### Getting Started with Command Recognition
 
-If you want your application to respond when users talk, you need to understand what they're saying. The previous generation of voice interfaces could only recognize speech that was phrased in exactly the form they expected. For example "Alexa, turn on living-room lights" might work, but not "Alexa, lights on in the living room please". The general problem of figuring out what a user wants from natural speech is known as intent recognition. There have been decades of research into this issue, but the rise of transformer-based LLMs has given us new tools. We have integrated these latest advances into Moonshine Voice's command recognition API.
+If you want your application to respond when users talk, you need to understand what they're saying. The previous generation of voice interfaces could only recognize speech that was phrased in exactly the form they expected. For example "Alexa, turn on living-room lights" might work, but "Alexa, lights on in the living room please" might not. The general problem of figuring out what a user wants from natural speech is known as intent recognition. There have been decades of research into this area, but the rise of transformer-based LLMs has given us new tools. We have integrated some of these advances into Moonshine Voice's command recognition API.
 
 The basic idea is that your application registers some general actions you're interested in, like "Turn the lights on" or "Move left", and then Moonshine sends an event when the user says something that matches the meaning of those phrases. It works a lot like a graphical user interface - you define a button (action) and an event callback that is triggered when the user presses that button.
 
-To give it a try for yourself, run a built-in example:
+To give it a try for yourself, run this built-in example:
 
 ```bash
 python -m moonshine_voice.intent_recognizer
