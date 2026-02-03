@@ -18,7 +18,7 @@
  - The framework and models are optimized for live streaming applications, offering low latency responses by doing a lot of the work while the user is still talking.
  - All models are based on our [cutting](https://arxiv.org/abs/2410.15608) [edge](https://arxiv.org/abs/2509.02523) research and trained from scratch, so we can offer [higher accuracy than Whisper Large V3 at the top end](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard), down to tiny 26MB models for constrained deployments.
  - It's easy to integrate across platforms, with the same library running on [Python](#python), [iOS](#ios), [Android](#android), [MacOS](#macos), [Linux](#linux), [Windows](#windows), [Raspberry Pis](#raspberry-pi), [IoT devices](https://www.linkedin.com/posts/petewarden_most-of-the-recent-news-about-ai-seems-to-activity-7384664255242932224-v6Mr/), and wearables.
- - Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, speaker identification (diarization) and command recognition, so you don't need to be an ML expert to use them.
+ - Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, speaker identification (diarization) and command recognition, so you don't need to be an expert to build a voice application.
  - It supports multiple languages, including English, Spanish, Mandarin, Japanese, Korean, Vietnamese, Ukrainian, and Arabic.
 
  ## Quickstart
@@ -33,6 +33,12 @@
  ```
 
 Listens to the microphone and prints updates to the transcript as they come in.
+
+```bash
+python -m moonshine_voice.intent_recognizer
+```
+
+Listens for user-defined action phrases, like "Turn on the lights", using semantic matching so natural language variations are recognized.
 
 ### iOS
 
@@ -132,6 +138,7 @@ The Moonshine API is designed to take care of the details around capturing and t
 - [Architecture](#architecture)
 - [Concepts](#concepts)
 - [Getting Started with Transcription](#getting-started-with-transcription)
+- [Getting Started with Command Recognition](#getting-started-with-command-recognition)
 - [Examples](#examples)
 - [Adding the Library to your own App](#adding-the-library-to-your-own-app)
 - [Python](#python-1)
@@ -250,6 +257,76 @@ The key takeaway is that you usually don't need to worry about the transcript da
 By calling `start()` and `stop()` on a transcriber (or stream) we're beginning and ending a session. Each session has one transcript document associated with it, and it is started fresh on every `start()` call, so you should make copies of any data you need from the transcript object before that.
 
 The transcriber class also offers a simpler `transcribe_without_streaming()` method, for when you have an array of data from the past that you just want to analyse, such as a file or recording.
+
+We also offer a specialization of the base `Transcriber` class called `MicTranscriber`. How this is implemented will depend on the language and platform, but it should provide a transcriber that's automatically attached to the main microphone on the system. This makes it straightforward to start transcribing speech from that common source, since it supports all of the same listener callbacks as the base class.
+
+### Getting Started with Command Recognition
+
+If you want your application to respond when users talk, you need to understand what they're saying. The previous generation of voice interfaces could only recognize speech that was phrased in exactly the form they expected. For example "Alexa, turn on living-room lights" might work, but not "Alexa, lights on in the living room please". The general problem of figuring out what a user wants from natural speech is known as intent recognition. There have been decades of research into this issue, but the rise of transformer-based LLMs has given us new tools. We have integrated these latest advances into Moonshine Voice's command recognition API.
+
+The basic idea is that your application registers some general actions you're interested in, like "Turn the lights on" or "Move left", and then Moonshine sends an event when the user says something that matches the meaning of those phrases. It works a lot like a graphical user interface - you define a button (action) and an event callback that is triggered when the user presses that button.
+
+To give it a try for yourself, run a built-in example:
+
+```bash
+python -m moonshine_voice.intent_recognizer
+```
+
+This will present you with a menu of command phrases, and then start listening to the microphone. If you say something that's a variant on one of the phrases you'll see a "triggered" log message telling you which action was matched, along with how confident the system is in the match.
+
+```bash
+📝 Let there be light.
+'TURN ON THE LIGHTS' triggered by 'Let there be light.' with 76% confidence
+```
+
+To show that you can modify these at run time, try supplying your own list of phrases as a comma-separated string argument to `--intents`.
+
+```bash
+python -m moonshine_voice.intent_recognizer --intents "Turn left, turn right, go backwards, go forward"
+```
+
+This could be the core command set to control a robot's movement for example. It's worth spending a bit of time experimenting with different wordings of the command phrases, and different variations on the user side, to get a feel for how the system works.
+
+Under the hood this is all accomplished using two main classes. We've met the `MicTranscriber` above, the new addition is `IntentRecognizer`. This listens to the results of the transcriber, fuzzily matches completed lines against any intents that have been registered with it, and calls back the client-supplied code.
+
+The fuzzy matching uses a sentence-embedding model based on Gemma300m, so the first step is downloading it and getting the path:
+
+```python
+embedding_model_path, embedding_model_arch = get_embedding_model(
+    args.embedding_model, args.quantization
+)
+```
+
+Once we have the model's location, we create an `IntentRecognizer` using that path. The only other argument is the `threshold` we use for fuzzy matching. It's between 0 and 1, with low numbers producing more matches but at the cost of less accuracy, and vice versa for high values.
+
+```python
+intent_recognizer = IntentRecognizer(
+    model_path=embedding_model_path,
+    model_arch=embedding_model_arch,
+    model_variant=args.quantization,
+    threshold=args.threshold,
+)
+```
+
+Next we tell the recognizer what kinds of phrases to listen out for, and what to do when there's a match.
+
+```python
+def on_intent_triggered_on(trigger: str, utterance: str, similarity: float):
+    print(f"\n'{trigger.upper()}' triggered by '{utterance}' with {similarity:.0%} confidence")
+
+for intent in intents:
+    intent_recognizer.register_intent(intent, on_intent_triggered_on)
+```
+
+The recognizer supports the transcript event listener interface, so the final stage is adding it as a listener to the `MicTranscriber`.
+
+```python
+mic_transcriber.add_listener(intent_recognizer)
+```
+
+Once you start the transcriber, it will listen out for any variations on the supplied phrases, and call `on_intent_triggered_on()` whenever there's a match.
+
+The current intent recognition is designed for full-sentence matching, which works well for straightforward commands, but we will be expanding into more advanced "slot filling" techniques in the future, to handle extracting the quantity from "I want ten bananas" for example.
 
 ### Examples
 
