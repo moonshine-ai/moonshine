@@ -36,6 +36,7 @@ done < <(grep -rlI \
   --exclude=uv.lock \
   --exclude=PKG-INFO \
   --exclude=cli-transcriber.sln \
+  --exclude=transcriber-test.cpp \
   "$OLD_VERSION" .)
 for FILE in "${ACTUAL_FILES[@]}"; do
 	echo "Checking file '$FILE'"
