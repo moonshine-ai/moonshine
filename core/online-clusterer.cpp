@@ -66,8 +66,8 @@ OnlineClusterer::OnlineClusterer(const OnlineClustererOptions &options)
 
 OnlineClusterer::~OnlineClusterer() {}
 
-uint64_t OnlineClusterer::embed_and_cluster(
-    const std::vector<float> &embedding) {
+uint64_t OnlineClusterer::embed_and_cluster(const std::vector<float> &embedding,
+                                            float audio_duration) {
   if (embedding.size() != options.embedding_size) {
     throw std::invalid_argument("embedding size " +
                                 std::to_string(embedding.size()) +
@@ -86,7 +86,24 @@ uint64_t OnlineClusterer::embed_and_cluster(
       found_cluster = true;
     }
   }
-  if (found_cluster && min_distance < options.threshold) {
+  // Linearly scale the threshold so that segments shorter than 2 seconds
+  // are placed in the nearest cluster instead of creating a new one, and
+  // between 2 and 3 seconds are subject to a proportional threshold.
+  constexpr float scale_min = 2.0f;
+  constexpr float scale_max = 3.0f;
+  constexpr float scale_range = scale_max - scale_min;
+  constexpr float threshold_max = 1.5f;
+  float current_threshold;
+  if (audio_duration > scale_max) {
+    current_threshold = options.threshold;
+  } else if (audio_duration > scale_min) {
+    const float scale_factor = (audio_duration - scale_min) / scale_range;
+    current_threshold = (options.threshold * scale_factor) +
+                        (threshold_max * (1.0f - scale_factor));
+  } else {
+    current_threshold = threshold_max;
+  }
+  if (found_cluster && min_distance < current_threshold) {
     // If a cluster is found, update the centroid and sample count.
     Cluster &cluster = clusters[closest_cluster_id];
     const size_t n = cluster.sample_count;

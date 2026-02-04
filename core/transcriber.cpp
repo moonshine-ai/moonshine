@@ -470,7 +470,10 @@ void Transcriber::update_transcript_from_segments(
           throw std::runtime_error("Failed to calculate embedding: " +
                                    std::to_string(calculate_error));
         }
-        line.speaker_id = this->online_clusterer->embed_and_cluster(embedding);
+        const float audio_duration =
+            segment.audio_data.size() / (float)INTERNAL_SAMPLE_RATE;
+        line.speaker_id = this->online_clusterer->embed_and_cluster(
+            embedding, audio_duration);
         line.has_speaker_id = true;
         if (!this->speaker_index_map.contains(line.speaker_id)) {
           line.speaker_index = this->next_speaker_index++;

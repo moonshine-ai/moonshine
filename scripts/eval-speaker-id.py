@@ -21,6 +21,19 @@ import argparse
 # DER: 49.95%
 # DER: 73.80%
 # Average DER: 52.68%
+#
+# With shorter segments unable to create new clusters:
+# DER: 36.96%
+# DER: 57.26%
+# DER: 42.64%
+# DER: 61.58%
+# DER: 53.12%
+# DER: 36.50%
+# DER: 53.53%
+# DER: 44.93%
+# DER: 46.65%
+# DER: 60.75%
+# Average DER: 49.39%
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--sample-count", type=int, default=10)
@@ -31,25 +44,30 @@ ds = load_dataset("diarizers-community/callhome", "eng")
 
 model_path, model_arch = moonshine_voice.get_model_for_language("en", args.model_arch)
 
-transcriber = moonshine_voice.Transcriber(model_path=model_path, model_arch=model_arch)
+transcriber = moonshine_voice.Transcriber(
+    model_path=model_path, model_arch=model_arch, options={"skip_transcription": True})
 
 total_der = 0.0
 for sample_index in range(args.sample_count):
-    sample = ds['data'][sample_index]
-    audio = sample['audio']['array'].astype(np.float32)
+    sample = ds["data"][sample_index]
+    audio = sample["audio"]["array"].astype(np.float32)
     sample_rate = 16000
     transcriber.start()
     transcriber.add_audio(audio, sample_rate)
     transcript = transcriber.stop()
     reference = Annotation()
-    timestamps_start = sample['timestamps_start']
-    timestamps_end = sample['timestamps_end']
+    timestamps_start = sample["timestamps_start"]
+    timestamps_end = sample["timestamps_end"]
     reference = Annotation()
     for i in range(len(timestamps_start)):
-        reference[Segment(timestamps_start[i], timestamps_end[i])] = f"sample_{sample_index}_{sample['speakers'][i]}"
+        reference[Segment(timestamps_start[i], timestamps_end[i])] = (
+            f"sample_{sample_index}_{sample['speakers'][i]}"
+        )
     hypothesis = Annotation()
     for line in transcript.lines:
-        hypothesis[Segment(line.start_time, line.start_time + line.duration)] = f"sample_{sample_index}_{line.speaker_index}"
+        hypothesis[Segment(line.start_time, line.start_time + line.duration)] = (
+            f"sample_{sample_index}_{line.speaker_index}"
+        )
     metric = DiarizationErrorRate()
     sample_der = metric(reference, hypothesis)
     total_der += sample_der
