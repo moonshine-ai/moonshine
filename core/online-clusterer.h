@@ -2,7 +2,6 @@
 #define ONLINE_CLUSTERER_H
 
 #include <cstdint>
-
 #include <map>
 #include <vector>
 
@@ -24,7 +23,8 @@ class OnlineClusterer {
  public:
   OnlineClusterer(const OnlineClustererOptions &options);
   ~OnlineClusterer();
-  uint64_t embed_and_cluster(const std::vector<float> &embedding);
+  uint64_t embed_and_cluster(const std::vector<float> &embedding,
+                             float audio_duration);
 };
 
 #endif
