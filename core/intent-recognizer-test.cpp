@@ -233,12 +233,14 @@ TEST_CASE("intent-recognizer precision/recall with GemmaEmbeddingModel") {
   std::string triggered_intent;
   float triggered_similarity = 0.0f;
 
-  // Register all intents
+  // Register all intents (copy intent_name so lambda can capture it; structured
+  // bindings cannot be captured)
   for (const auto &[intent_name, phrase] : intents) {
+    std::string captured_intent = intent_name;
     recognizer.register_intent(
-        phrase, [&triggered_intent, &triggered_similarity, intent_name](
-                    const std::string &, float similarity) {
-          triggered_intent = intent_name;
+        phrase, [&triggered_intent, &triggered_similarity,
+                 captured_intent](const std::string &, float similarity) {
+          triggered_intent = captured_intent;
           triggered_similarity = similarity;
         });
   }

@@ -13,6 +13,7 @@ cd ${REPO_ROOT_DIR}
 scripts/run-all-tests.sh
 scripts/build-swift.sh
 scripts/publish-swift.sh
+scripts/publish-android.sh
 scripts/build-pip.sh upload
 scripts/build-pip-docker.sh
 scripts/publish-binary.sh upload
