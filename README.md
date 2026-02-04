@@ -649,8 +649,9 @@ This library is in active development, and we aim to implement:
 
 We're grateful to:
 
- - Lambda Labs and Stephen Balaban for supporting our model training through [their foundational model grants](https://lambda.ai/research).
+ - Lambda and Stephen Balaban for supporting our model training through [their foundational model grants](https://lambda.ai/research).
  - The ONNX Runtime community for building [a fast, cross-platform inference engine](https://github.com/microsoft/onnxruntime).
+ - [Alexander Veysov](https://github.com/snakers4) for the great [Silero Voice Activity Detector](https://github.com/snakers4/silero-vad).
  - [Viktor Kirilov](https://github.com/onqtam) for [his fantastic DocTest C++ testing framework](https://github.com/doctest/doctest).
  - [Nemanja Trifunovic](https://github.com/nemtrif) for [his very helpful UTF8 CPP library](https://github.com/nemtrif/utfcpp).
  - The [Pyannote team](https://www.pyannote.ai/) for making available their speaker embedding model.
