@@ -7,6 +7,7 @@
 - [Quickstart](#quickstart)
 - [When should you choose Moonshine over Whisper?](#when-should-you-choose-moonshine-over-whisper)
 - [Using the Library](#using-the-library)
+- [API Reference](#api-reference)
 - [Support](#support)
 - [Roadmap](#roadmap)
 - [Acknowledgements](#acknowledgements)
@@ -138,13 +139,14 @@ The Moonshine API is designed to take care of the details around capturing and t
 - [Architecture](#architecture)
 - [Concepts](#concepts)
 - [Getting Started with Transcription](#getting-started-with-transcription)
+  - [Transcription Event Flow](#transcription-event-flow)
 - [Getting Started with Command Recognition](#getting-started-with-command-recognition)
 - [Examples](#examples)
 - [Adding the Library to your own App](#adding-the-library-to-your-own-app)
 - [Python](#python-1)
 - [iOS or MacOS](#ios-or-macos)
 - [Android](#android-1)
-- [Windows](#windows-1)
+- [Windows](#windowsc)
 - [Debugging](#debugging)
   - [Console Logs](#console-logs)
   - [Input Saving](#input-saving)
@@ -260,6 +262,27 @@ The transcriber class also offers a simpler `transcribe_without_streaming()` met
 
 We also offer a specialization of the base `Transcriber` class called `MicTranscriber`. How this is implemented will depend on the language and platform, but it should provide a transcriber that's automatically attached to the main microphone on the system. This makes it straightforward to start transcribing speech from that common source, since it supports all of the same listener callbacks as the base class.
 
+#### Transcription Event Flow
+
+The main communication channel between the library and your application is through events that are passed to any listener functions you have registered. There are four major event types:
+
+ - `LineStarted`. This is sent to listeners when the beginning of a new speech segment is detected. It may or may not contain any text, but since it's dispatched near the start of an utterance, that text is likely to change over time.
+ - `LineUpdated`. Called whenever any of the information about a line changes, including the duration, audio data, and text.
+ - `LineTextChanged`. Called only when the text associated with a line is updated. This is a subset of `LineUpdated` that focuses on the common need to refresh the text shown to users as often as possible to keep the experience interactive.
+ - `LineCompleted`. Sent when we detect that someone has paused speaking, and we've ended the current segment. The line data structure has the final values for the text, duration, and speaker ID.
+
+We offer some guarantees about these events:
+
+ - `LineStarted` is always called exactly once for any segment.
+ - `LineCompleted` is always called exactly once after `LineStarted` for any segment.
+ - `LineUpdated` and `LineTextChanged` will only ever be called after the `LineStarted` and before the `LineCompleted` events for a segment.
+ - Those update events are not guaranteed to be called (and in practice can be disabled by setting `update_interval` to a very large value).
+ - There will only be one line active at any one time for any given stream.
+ - Once `LineCompleted` has been called, the library will never alter that line's data again.
+ - If `stop()` is called on a transcriber or stream, any active lines will have `LineCompleted` called. 
+ - Each line has a 64-bit `lineId` that is designed to be unique enough to avoid collisions.
+ - This `lineId` remains the same for the line over time, from the first `LineStarted` event onwards.
+
 ### Getting Started with Command Recognition
 
 If you want your application to respond when users talk, you need to understand what they're saying. The previous generation of voice interfaces could only recognize speech that was phrased in exactly the form they expected. For example "Alexa, turn on living-room lights" might work, but "Alexa, lights on in the living room please" might not. The general problem of figuring out what a user wants from natural speech is known as intent recognition. There have been decades of research into this area, but the rise of transformer-based LLMs has given us new tools. We have integrated some of these advances into Moonshine Voice's command recognition API.
@@ -338,23 +361,23 @@ The examples usually include one minimal project that just creates a transcriber
 
 We distribute the library through the most widely-used package managers for each platform. Here's how you can use these to add the framework to an existing project on different systems.
 
-### Python
+#### Python
 
 The Python package is [hosted on PyPi](https://pypi.org/project/moonshine-voice/), so all you should need to do to install it is `pip install moonshine-voice`, and then `import moonshine_voice` in your project.
 
-### iOS or MacOS
+#### iOS or MacOS
 
 For iOS we use the Swift Package Manager, with [an auto-updated GitHub repository](https://github.com/moonshine-ai/moonshine-swift/) holding each version. To use this right-click on the file view sidebar in Xcode and choose "Add Package Dependencies..." from the menu. A dialog should open up, paste `https://github.com/moonshine-ai/moonshine-swift/` into the top search box and you should see `moonshine-swift`. Select it and choose "Add Package", and it should be added to your project. You should now be able to `import MoonshineVoice` and use the library. You will need to add any model files you use to your app bundle and ensure they're copied during the deployment phase, so they can be accessed on-device.
 
 For reference purposes you can find Xcode projects with these changes applied in [`examples/ios/Transcriber`](examples/ios/Transcriber) and [`examples/macos/BasicTranscription`](examples/macos/BasicTranscription/).
 
-### Android
+#### Android
 
 On Android we publish [the package to Maven](https://mvnrepository.com/artifact/ai.moonshine/moonshine-voice). To include it in your project using Android Studio and Gradle, first add the version number you want to the `gradle/libs.versions.toml` file by inserting a line in the `[versions]` section, for example `moonshineVoice = "0.0.44"`. Then in the `[libraries]` part, add a reference to the package: `moonshine-voice = { group = "ai.moonshine", name = "moonshine-voice", version.ref = "moonshineVoice" }`.
 
 Finally, in your `app/build.gradle.kts` add the library to the `dependencies` list: `implementation(libs.moonshine.voice)`. You can find a working example of all these changes in [`examples/android/Transcriber`].
 
-### Windows
+#### Windows/C++
 
 We couldn't find a single package manager that is used by most Windows developers, so instead we've made the raw library and headers available as a download. The script in [`examples/windows/cli-transcriber/download-lib.bat`](examples/windows/cli-transcriber/download-lib.bat) will fetch these for you. You'll see an `include` folder that you should add to the include search paths in your project settings, and a `lib` directory that you should add to the include search paths. Then add all of the library files in the `lib` folder to your project's linker dependencies.
 
@@ -468,6 +491,146 @@ By default the benchmark binary uses the Tiny English model that's embedded in t
 You can also choose how often the transcript should be updated using the `--transcription-interval` argument. This defaults to 0.5 seconds, but the right value will depend on how fast your application needs updates. Longer intervals reduce the compute required a bit, at the cost of slower updates.
 
 For platforms that support Python, you can run the [`scripts/run-benchmarks.py`](scripts/run-benchmarks.py) script which will evaluate similar metrics, with the advantage that it can also download the models so you don't need to worry about path handling.
+
+## API Reference
+
+This documentation covers the Python API, but the same functions and classes are present in all the other supported languages, just with native adaptations (for example CamelCase). You should be able to use this as a reference for all platforms the library runs on.
+
+  - [Data Structures](#data-structures)
+    - [TranscriberLine](#transcriberline)
+    - [Transcript](#transcript)
+    - [TranscriptEvent](#transcriptevent)
+    - [IntentMatch](#intentmatch)
+  - [Classes](#classes)
+    - [Transcriber](#transcriber)
+    - [MicTranscriber](#mictranscriber)
+    - [Stream](#stream)
+    - [TranscriptEventListener](#transcripteventlistener)
+    - [IntentRecognizer](#intentrecognizer)
+
+### Data Structures
+
+#### TranscriberLine
+
+Represents a single "line" or speech segment in a transcript. It includes information about the timing, speaker, and text content of the utterance, as well as state such as whether the speech is ongoing or done. If you're building an application that involves transcription, this data structure has all of the information available about each line of speech. Be aware that each line can be updated multiple times with new text and other information as the user keeps speaking.
+
+ - `text`: A string containing the UTF-8 encoded text that has been extracted from the audio of this segment.
+    
+ - `start_time`: A float value representing the time in seconds since the start of the current session that the current utterance was first detected.
+    
+ - `duration`: A float that represents the duration in seconds of the current utterance.
+    
+ - `line_id`: An unsigned 64-bit integer that represents a line in a collision-resistant way, for use in storage and ensuring the application can keep track of lines as they change over time. See [Transcription Event Flow](#transcription-event-flow) for more details.
+    
+ - `is_complete`: A boolean that is false until the segment has been completed, and true for the remainder of the line's lifetime.
+
+ - `is_updated`: A boolean that's true if any information about the line has changed since the last time the transcript was updated. Since the transcript will be periodically updated internally by the library as you add audio chunks, you can't rely on polling this to detect changes. You should rely on the event/listener flow to catch modifications instead. This applies to all of the booleans below too.
+    
+ - `is_new`: A boolean indicating whether the line has been added to the transcript by the last update call.
+    
+ - `has_text_changed`: A boolean that's set if the contents of the line's text was modified by the last transcript update. If this is set, `is_updated` will always be set too, but if other properties of the line (for example the duration or the audio data) have changed but the text remains the same, then `is_updated` can be true while `has_text_changed` is false.
+
+ - `has_speaker_id`: Whether a speaker has been identified for this line. Unless the `identify_speakers` option passed to the Transcriber is set to false, this will always be true by the time the line is complete, and potentially it may be set earlier.
+
+ - `speaker_id`: A unique-ish unsigned 64-bit integer that is designed for storage or used to identify the same speaker across multiple sessions.
+
+ - `speaker_index`: An integer that represents the order in which the speaker appeared in the transcript, to make it easy to give speakers default names like "Speaker 1:", etc.
+
+ - `audio_data`: An array of 32-bit floats representing the raw audio data that the line is based on, as 16KHz mono PCM data between 0.0 and 1.0. This can be useful for further processing (for example to drive a visual indicator or to feed into a specialized speech to text model after the line is complete).
+
+#### Transcript
+
+A Transcript contains a list of TranscriberLines, arranged in descending time order. The transcript is reset at every `Transcriber.start()` call, so if you need to retain information from it, you should make explicit copies. Most applications won't work with this structure, since all of the same information is available through event callbacks.
+
+#### TranscriptEvent
+
+Contains information about a change to the transcript. It has four subclasses, which are explained in more detail in [the transcription event flow section](#transcription-event-flow). Most of the information is contained in the `line` member, but there's also a `stream_handle` that your application can use to tell the source of a line if you're running multiple streams.
+
+#### IntentMatch
+
+This event is sent to any listeners you have registered when an `IntentRecognizer` finds a match to a command you've specified.
+
+ - `trigger_phrase`: The string representing the canonical command, exactly as you registered it with the recognizer.
+ - `utterance`: The text of the utterance that triggered the match.
+ - `similarity`: A float value that reflects how confident the recognizer is that the utterance has the same meaning as the command, with zero being the least confident and one the most.
+
+### Classes
+
+#### Transcriber
+
+Handles the speech to text pipeline.
+
+ - `__init__()`: Loads and initializes the transcriber.
+   - `model_path`: The path to the directory holding the component model files needed for the complete flow. Note that this is a path to the **folder**, not an individual **file**. You can download and get a path to a cached version of the standard models using the [download_model()](#downloading-models) function.
+   - `model_arch`: The architecture of the model to load, from the selection defined in `ModelArch`.
+   - `update_interval`: By default the transcriber will periodically run text transcription as new audio data is fed, so that update events can be triggered. This value is how often the speech to text model should be run. You can set this to a large duration to suppress updates between a line starting and ending, but because the streaming models do a lot of their work before the final speech to text stage, this may not reduce overall latency by much.
+   - `options`: These are flags that affect how the transcription process works inside the library, often enabling performance optimizations or debug logging. They are passed as a dictionary mapping strings to strings, even if the values are to be interpreted as numbers - for example `{"max_tokens_per_second", "15"}`.
+     - "skip_transcription": If you only want the voice-activity detection and segmentation, but want to do further processing in your app, you can set this to "true" and then use the `audioData` array in each line.
+     - "max_tokens_per_second": The models occassionally get caught in an infinite decoder loop, where the same words are repeated over and over again. As a heuristic to catch this we compare the number of tokens in the current run to the duration of the audio, and if there seem to be too many tokens we truncate the decoding. By default this is set to 6.5, but for non-English languages where the models produce a lot more raw tokens per second, you may want to bump this to 13.0.
+     - "transcription_interval": How often to run transcription, in seconds.
+     - "vad_threshold": Controls the sensitivity of the initial voice-activity detection stage that decides how to break raw audio into segments. This defaults to 0.5, with lower values creating longer segments, potentially with more background noise sections, and higher values breaking up speech into smaller chunks, at the risk of losing some actual speech by clipping.
+     - "save_input_wav_path": One of the most common causes of poor transcription quality is incorrect conversion or corruption of the audio that's fed into the pipeline. If you set this option to a folder path, the transcriber will save out exactly what it has received as 16KHz mono WAV files, so you can ensure that your input audio is as you expect.
+     - "log_api_calls": Another debugging option, turning this on causes all calls to the C API entry points in the library to write out information on their arguments to stderr or the console each time they're run.
+     - "log_ort_runs": Prints information about the ONNXRuntime inference runs and how long they take.
+     - "vad_window_duration": The VAD runs every 30ms, but to get higher-confidence values we average the results over time. This value is the time in seconds to average over. The default is 0.5s, shorter durations will spot speech faster at the cost of lower accuracy, higher values may increase accuracy, but at the cost of missing shorter utterances.
+     - "vad_look_behind_sample_count": Because we're averaging over time, the mean VAD signal will lag behind the initial speech detection. To compensate for that, when speech is detected we pull in some of the audio immediately before the average passed the threshold. This value is the number of samples to prepend, and defaults to 8192 (all at 16KHz). 
+     - "vad_max_segment_duration": It can be hard to find gaps in rapid-fire speech, but a lot of applications want their text in chunks that aren't endless. This option sets the longest duration a line can be before it's marked as complete and a new segment is started. The default is 15 seconds, and to increase the chance that a natural break is found, the `vad_threshold` is linearly decreased over time from two thirds of the maximum duration until the maximum is reached. 
+     - "identify_speakers": A boolean that controls whether to run the speaker identification stage in the pipeline.
+
+ - `transcribe_without_streaming()`: A convenience function to extract text from a non-live audio source, such as a file. We optimize for streaming use cases, so you're probably better off using libraries that specialize in bulk, batched transcription if you use this a lot and have performance constraints. This will still call any registered event listeners as it processes the lines, so this can be useful to test your application using pre-recorded files, or to easily integrate offline audio sources.
+   - `audio_data`: An array of 32-bit float values, representing mono PCM audio to be analyzed for speech.
+   - `sample_rate`: The number of samples per second. The library uses this to convert to its working rate (16KHz) internally.
+   - `flags`: Integer, currently unused.
+
+ - `start()`: Begins a new transcription session. You need to call this after you've created the `Transcriber` and before you add any audio.
+ - `stop()`: Ends a transcription session. If a speech segment was still active, it's marked as complete and the appropriate event handlers are called.
+ - `add_audio()`: Call this every time you have a new chunk of audio from your input, to begin processing. The size and sample rate of the audio should be whatever's natural for your source, since the library will handle all conversions.
+   - `audio_data`: Array of 32-bit floats representing a mono PCM chunk of audio.
+   - `sample_rate`: How many samples per second are present in the input audio. The library uses this to convert the data to its preferred rate.
+ - `update_transcription`: The transcript is usually updated periodically as audio data is added, but if you need to trigger one yourself, for example when a user presses refresh, or want access to the complete transcript, you can call this manually.
+   - `flags`: Integer holding flags that are combined using bitwise or (`|`).
+     - `MOONSHINE_FLAG_FORCE_UPDATE`: By default the transcriber returns a cached version of the transcript if less than 200ms of new audio has come in since the last transcription, but by setting this you can ensure that a transcription happens regardless.
+
+ - `create_stream()`: If your application is taking audio input from multiple sources, for example a microphone and system audio, then you'll want to create multiple streams on a single transcriber to avoid loading multiple copies of the models. Each stream has its own transcript, and line events are tagged with the stream handle they came from. You don't need to worry about this if you only need to deal with a single input though, just use the `Transcriber` class's `start()`, `stop()`, etc. This function returns `Stream` class object.
+   - `flags`: Integer, reserved for future expansion.
+   - `update_interval`: Period in seconds between transcription updates.
+
+ - `add_listener()`: Registers a callable object with the transcriber. This object will be called back as audio is fed in and text is extracted.
+   - `listener`: This is often a subclass of `TranscriptEventListener`, but can be a plain function. It defines what code is called when a speech event happens. 
+
+ - `remove_listener()`: Deletes a listener so that it no longer receives events.
+   - `listener`: An object you previously passed into `add_listener()`.
+
+ - `remove_all_listeners()`: Deletes all registered listeners so than none of them receive events anymore.
+
+#### MicTranscriber
+
+This class supports the `start()`, `stop()` and listener functions of `Transcriber`, but internally creates and attaches to the system's microphone input, so you don't need to call `add_audio()` yourself. In Python this uses the `sounddevice` library, but in other languages the class uses the native audio API under the hood.
+
+#### Stream
+
+The access point for when you need to feed multiple audio inputs into a single transcriber. Supports `start()`, `stop()`, `add_audio()`, `update_transcription()`, `add_listener()`, `remove_listener()`, and `remove_all_listeners()` as documented in the `Transcriber` class.
+
+#### TranscriptEventListener
+
+A convenience class to derive from to create your own listener code. Override any or all of `on_line_started()`, `on_line_updated()`, `on_line_text_changed()`, and `on_line_completed()`, and they'll be called back when the corresponding event occurs.
+
+#### IntentRecognizer
+
+A specialized kind of event listener that you add as a listener to a `Transcriber`, and it then analyzes the transcription results to determine if any of the specified commands have been spoken, using natural-language fuzzy matching.
+
+ - `__init__()`: Constructs a new recognizer, loading required models.
+   - `model_path`: String holding a path to a folder that contains the required embedding model files. You can download and obtain a path by calling `download_embedding_model()`.
+   - `model_arch`: An `EmbeddingModelArch`, obtained from the `download_embedding_model()` function.
+   - `model_variant`: The precision to run the model at. "q4" is recommended.
+   - `threshold`: How close an utterance has to be to the target sentence to trigger an event.
+ - `register_intent()`: Asks the recognizer to look for utterances that match a given command, and call back into the application when one is found.
+   - `trigger_phrase`: The canonical command sentence to match against.
+   - `handler`: A callable function or object that contains code you want to trigger when the command is recognized.
+ - `unregister_intent()`: Removes an intent handler from the event callback process.
+   - `handler`: A handler that had previously been registered with the recognizer.
+ - `clear_intents()`: Removes all intent listeners from the recognizer.
+ - `set_on_intent()`: Sets a callable that is called when any registered action is triggered, not just a single command as for `register_intent()`.
 
 ## Support
 
