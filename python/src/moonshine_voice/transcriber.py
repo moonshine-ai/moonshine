@@ -508,6 +508,12 @@ if __name__ == "__main__":
         default=None,
         help="Options to pass to the transcriber. Should be in the format of key=value,key2=value2,...",
     )
+    parser.add_argument(
+        "--quiet", action="store_true", help="Quiet output"
+    )
+    parser.add_argument(
+        "--no-speaker-ids", action="store_true", help="Don't show speaker IDs"
+    )
     args = parser.parse_args()
 
     if args.model_path is not None:
@@ -537,17 +543,23 @@ if __name__ == "__main__":
 
     class TestListener(TranscriptEventListener):
         def on_line_started(self, event: LineStarted):
-            print(f"Line started: {event.line.text}")
+            if not args.quiet:
+                print(f"Line started: {event.line.text}", file=sys.stderr)
 
         def on_line_text_changed(self, event: LineTextChanged):
-            if event.line.has_speaker_id:
+            if event.line.has_speaker_id and not args.no_speaker_ids:
                 speaker_prefix = f". Speaker #{event.line.speaker_index}"
             else:
                 speaker_prefix = ""
-            print(f"Line text changed{speaker_prefix}: {event.line.text}")
+            if not args.quiet:
+                print(f"Line text changed{speaker_prefix}: {event.line.text}", file=sys.stderr)
 
         def on_line_completed(self, event: LineCompleted):
-            print(f"Line completed. Speaker #{event.line.speaker_index}: {event.line.text}")
+            if args.no_speaker_ids:
+                speaker_prefix = ""
+            else:
+                speaker_prefix = f"Speaker #{event.line.speaker_index}: "
+            print(f"{speaker_prefix}{event.line.text}", file=sys.stderr)
 
     listener = TestListener()
     transcriber.add_listener(listener)
