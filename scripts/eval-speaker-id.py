@@ -10,44 +10,53 @@ from datasets import load_dataset
 import argparse
 
 # Starting point for v1 of speaker identification:
-# DER: 36.96%
-# DER: 57.26%
-# DER: 43.60%
-# DER: 54.25%
-# DER: 55.97%
-# DER: 35.99%
-# DER: 69.83%
-# DER: 49.20%
-# DER: 49.95%
-# DER: 73.80%
-# Average DER: 52.68%
+# Speaker confusion: 17.37%
+# Speaker confusion: 34.01%
+# Speaker confusion: 20.66%
+# Speaker confusion: 18.13%
+# Speaker confusion: 37.92%
+# Speaker confusion: 15.27%
+# Speaker confusion: 44.41%
+# Speaker confusion: 24.09%
+# Speaker confusion: 25.11%
+# Speaker confusion: 45.82%
+# Average speaker confusion: 30.67%
 #
 # With shorter segments unable to create new clusters:
-# DER: 36.96%
-# DER: 57.26%
-# DER: 42.64%
-# DER: 61.58%
-# DER: 53.12%
-# DER: 36.50%
-# DER: 53.53%
-# DER: 44.93%
-# DER: 46.65%
-# DER: 60.75%
-# Average DER: 49.39%
+# Speaker confusion: 17.37%
+# Speaker confusion: 34.01%
+# Speaker confusion: 19.70%
+# Speaker confusion: 25.45%
+# Speaker confusion: 35.07%
+# Speaker confusion: 15.78%
+# Speaker confusion: 28.11%
+# Speaker confusion: 19.82%
+# Speaker confusion: 21.81%
+# Speaker confusion: 32.78%
+# Average speaker confusion: 26.44%
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--sample-count", type=int, default=10)
 parser.add_argument("--model-arch", type=int, default=0)
+parser.add_argument("--options", type=str, default=None)
 args = parser.parse_args()
+
+options = {"skip_transcription": True}
+if args.options is not None:
+    for option in args.options.split(","):
+        key, value = option.split("=")
+        options[key] = value
 
 ds = load_dataset("diarizers-community/callhome", "eng")
 
 model_path, model_arch = moonshine_voice.get_model_for_language("en", args.model_arch)
 
 transcriber = moonshine_voice.Transcriber(
-    model_path=model_path, model_arch=model_arch, options={"skip_transcription": True})
+    model_path=model_path, model_arch=model_arch, options=options)
 
-total_der = 0.0
+metric = DiarizationErrorRate()
+
+total_confusion = 0.0
 for sample_index in range(args.sample_count):
     sample = ds["data"][sample_index]
     audio = sample["audio"]["array"].astype(np.float32)
@@ -68,8 +77,12 @@ for sample_index in range(args.sample_count):
         hypothesis[Segment(line.start_time, line.start_time + line.duration)] = (
             f"sample_{sample_index}_{line.speaker_index}"
         )
-    metric = DiarizationErrorRate()
-    sample_der = metric(reference, hypothesis)
-    total_der += sample_der
-    print(f"DER: {sample_der:.2%}")
-print(f"Average DER: {total_der / args.sample_count:.2%}")
+    sample_metrics = metric(reference, hypothesis, detailed=True)
+    confusion = sample_metrics["confusion"]
+    total = sample_metrics["total"]
+    print(f"Speaker confusion: {confusion / total:.2%}")
+
+confusion = metric["confusion"]
+total = metric["total"]
+
+print(f"Average speaker confusion: {confusion / total:.2%}")
