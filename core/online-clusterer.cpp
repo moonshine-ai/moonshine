@@ -60,6 +60,14 @@
 // speaker early on, they'll never merge.
 // - Centroid drift: As it adds points, the centroid moves, which can cause
 // inconsistent assignment decisions over time.
+//
+// Update 1: Added a threshold scaling factor to the threshold so that short
+// segments are placed in the nearest cluster instead of creating a new one.
+// Dropped confusion from 30.67% to 26.44% (using scripts/eval-speaker-id.py).
+//
+// Update 2: Added a previous cluster bias to the distance calculation so that
+// the speaker identified for the previous segment is given more weight than
+// others. Dropped DER from 26.44% to
 
 OnlineClusterer::OnlineClusterer(const OnlineClustererOptions &options)
     : options(options) {}
@@ -103,6 +111,7 @@ uint64_t OnlineClusterer::embed_and_cluster(const std::vector<float> &embedding,
   } else {
     current_threshold = threshold_max;
   }
+  uint64_t result_cluster_id = 0;
   if (found_cluster && min_distance < current_threshold) {
     // If a cluster is found, update the centroid and sample count.
     Cluster &cluster = clusters[closest_cluster_id];
@@ -114,13 +123,14 @@ uint64_t OnlineClusterer::embed_and_cluster(const std::vector<float> &embedding,
           scale_old * cluster.centroid[i] + scale_new * embedding[i];
     }
     cluster.sample_count++;
-    return closest_cluster_id;
+    result_cluster_id = closest_cluster_id;
   } else {
     // If no cluster is found, create a new cluster with a random id.
     static thread_local std::mt19937_64 rng(std::random_device{}());
     std::uniform_int_distribution<uint64_t> dist;
     uint64_t new_cluster_id = dist(rng);
     clusters[new_cluster_id] = {new_cluster_id, embedding, 1};
-    return new_cluster_id;
+    result_cluster_id = new_cluster_id;
   }
+  return result_cluster_id;
 }

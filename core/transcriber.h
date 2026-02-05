@@ -106,6 +106,7 @@ struct TranscriberOptions {
   size_t vad_look_behind_sample_count = 8192;
   float vad_max_segment_duration = 15.0f;
   float max_tokens_per_second = 6.5f;
+  float speaker_id_cluster_threshold = 0.8f;
   std::string save_input_wav_path = "";
   bool log_ort_run = false;
 };

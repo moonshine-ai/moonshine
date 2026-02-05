@@ -311,6 +311,7 @@ TEST_CASE("moonshine-test-v2") {
         {"vad_max_segment_duration", "15.0"},
         {"max_tokens_per_second", "6.5"},
         {"identify_speakers", "true"},
+        {"speaker_id_cluster_threshold", "0.9"},
     };
     const uint64_t options_count = sizeof(options) / sizeof(options[0]);
     std::string root_model_path = "tiny-en";

@@ -90,7 +90,8 @@ Transcriber::Transcriber(const TranscriberOptions &options)
           std::to_string(load_error));
     }
     this->online_clusterer = new OnlineClusterer(OnlineClustererOptions(
-        {.embedding_size = SpeakerEmbeddingModel::embedding_size}));
+        {.embedding_size = SpeakerEmbeddingModel::embedding_size,
+         .threshold = this->options.speaker_id_cluster_threshold}));
   }
 }
 
