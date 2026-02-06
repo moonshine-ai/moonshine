@@ -36,6 +36,7 @@ import argparse
 # Average speaker confusion: 26.44%
 
 parser = argparse.ArgumentParser()
+parser.add_argument("--start-index", type=int, default=0)
 parser.add_argument("--sample-count", type=int, default=10)
 parser.add_argument("--model-arch", type=int, default=0)
 parser.add_argument("--options", type=str, default=None)
@@ -51,13 +52,14 @@ ds = load_dataset("diarizers-community/callhome", "eng")
 
 model_path, model_arch = moonshine_voice.get_model_for_language("en", args.model_arch)
 
-transcriber = moonshine_voice.Transcriber(
-    model_path=model_path, model_arch=model_arch, options=options)
-
 metric = DiarizationErrorRate()
 
 total_confusion = 0.0
-for sample_index in range(args.sample_count):
+for sample_index in range(args.start_index, args.start_index + args.sample_count):
+    # Create a new transcriber for each sample to avoid remembering previous speaker IDs.
+    transcriber = moonshine_voice.Transcriber(
+        model_path=model_path, model_arch=model_arch, options=options
+    )
     sample = ds["data"][sample_index]
     audio = sample["audio"]["array"].astype(np.float32)
     sample_rate = 16000
@@ -68,12 +70,17 @@ for sample_index in range(args.sample_count):
     timestamps_start = sample["timestamps_start"]
     timestamps_end = sample["timestamps_end"]
     reference = Annotation()
+    ref_unique_speakers = set()
     for i in range(len(timestamps_start)):
-        reference[Segment(timestamps_start[i], timestamps_end[i])] = (
-            f"sample_{sample_index}_{sample['speakers'][i]}"
-        )
+        speaker_index = sample['speakers'][i]
+        start_time = timestamps_start[i]
+        end_time = timestamps_end[i]
+        ref_unique_speakers.add(speaker_index)
+        reference[Segment(start_time, end_time)] = f"sample_{sample_index}_{speaker_index}"
     hypothesis = Annotation()
+    hyp_unique_speakers = set()
     for line in transcript.lines:
+        hyp_unique_speakers.add(line.speaker_index)
         hypothesis[Segment(line.start_time, line.start_time + line.duration)] = (
             f"sample_{sample_index}_{line.speaker_index}"
         )
@@ -81,6 +88,10 @@ for sample_index in range(args.sample_count):
     confusion = sample_metrics["confusion"]
     total = sample_metrics["total"]
     print(f"Speaker confusion: {confusion / total:.2%}")
+    print(f"Reference unique speakers: {ref_unique_speakers}")
+    print(f"Hypothesis unique speakers: {hyp_unique_speakers}")
+    print(f"Reference line count: {len(reference)}")
+    print(f"Hypothesis line count: {len(hypothesis)}")
 
 confusion = metric["confusion"]
 total = metric["total"]

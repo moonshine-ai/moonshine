@@ -492,6 +492,14 @@ You can also choose how often the transcript should be updated using the `--tran
 
 For platforms that support Python, you can run the [`scripts/run-benchmarks.py`](scripts/run-benchmarks.py) script which will evaluate similar metrics, with the advantage that it can also download the models so you don't need to worry about path handling.
 
+## Models
+
+Moonshine Voice is based on a family of speech to text models created by Manjunath Kudlur and team at Moonshine AI. If you want to download models to use with the framework, you can use [the Python package to access them](#downloading-models). This section contains more information about the history and 
+
+### Papers
+
+These research papers are a good resource for understanding the architectures and performance strategies behind the 
+
 ## API Reference
 
 This documentation covers the Python API, but the same functions and classes are present in all the other supported languages, just with native adaptations (for example CamelCase). You should be able to use this as a reference for all platforms the library runs on.

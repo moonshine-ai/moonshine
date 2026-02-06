@@ -20,6 +20,9 @@ class OnlineClusterer {
   std::map<uint64_t, Cluster> clusters;
   OnlineClustererOptions options;
 
+  uint64_t previous_cluster_id = 0;
+  bool has_previous_cluster = false;
+
  public:
   OnlineClusterer(const OnlineClustererOptions &options);
   ~OnlineClusterer();
