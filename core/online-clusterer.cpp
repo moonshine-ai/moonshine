@@ -99,6 +99,7 @@ uint64_t OnlineClusterer::embed_and_cluster(const std::vector<float> &embedding,
   // between 2 and 3 seconds are subject to a proportional threshold.
   constexpr float scale_min = 2.0f;
   constexpr float scale_max = 3.0f;
+  constexpr float duration_min = 1.0f;
   constexpr float scale_range = scale_max - scale_min;
   constexpr float threshold_max = 1.5f;
   float current_threshold;
@@ -108,6 +109,10 @@ uint64_t OnlineClusterer::embed_and_cluster(const std::vector<float> &embedding,
     const float scale_factor = (audio_duration - scale_min) / scale_range;
     current_threshold = (options.threshold * scale_factor) +
                         (threshold_max * (1.0f - scale_factor));
+  } else if (audio_duration > duration_min) {
+    current_threshold = threshold_max;
+  } else if (has_previous_cluster) {
+    return previous_cluster_id;
   } else {
     current_threshold = threshold_max;
   }
@@ -132,5 +137,7 @@ uint64_t OnlineClusterer::embed_and_cluster(const std::vector<float> &embedding,
     clusters[new_cluster_id] = {new_cluster_id, embedding, 1};
     result_cluster_id = new_cluster_id;
   }
+  previous_cluster_id = result_cluster_id;
+  has_previous_cluster = true;
   return result_cluster_id;
 }
