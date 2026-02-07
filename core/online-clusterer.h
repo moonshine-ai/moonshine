@@ -2,6 +2,8 @@
 #define ONLINE_CLUSTERER_H
 
 #include <cstdint>
+#include <cstddef>
+
 #include <map>
 #include <vector>
 

@@ -59,6 +59,7 @@ class ModelArch(IntEnum):
     SMALL_STREAMING = 4
     MEDIUM_STREAMING = 5
 
+
 def model_arch_to_string(model_arch: ModelArch) -> str:
     """Convert a model architecture to a string."""
     if model_arch == ModelArch.TINY:
@@ -75,6 +76,7 @@ def model_arch_to_string(model_arch: ModelArch) -> str:
         return "small-streaming"
     else:
         raise ValueError(f"Invalid model architecture: {model_arch}")
+
 
 def string_to_model_arch(model_arch_string: str) -> ModelArch:
     """Convert a string to a model architecture."""
@@ -93,6 +95,7 @@ def string_to_model_arch(model_arch_string: str) -> ModelArch:
     else:
         raise ValueError(f"Invalid model architecture string: {model_arch_string}")
 
+
 @dataclass
 class TranscriptLine:
     """A single line of transcription."""
@@ -110,6 +113,9 @@ class TranscriptLine:
     speaker_index: int = 0
     audio_data: Optional[List[float]] = None
     last_transcription_latency_ms: int = 0
+
+    def __str__(self) -> str:
+        return f"[{self.start_time:.2f}s] Speaker {self.speaker_index}: '{self.text}', metadata: [duration={self.duration:.2f}s, line_id={self.line_id}, is_complete={self.is_complete}, is_updated={self.is_updated}, is_new={self.is_new}, has_text_changed={self.has_text_changed}, has_speaker_id={self.has_speaker_id}, speaker_id={self.speaker_id}, audio_data_len={len(self.audio_data) if self.audio_data else 0}, last_transcription_latency_ms={self.last_transcription_latency_ms}]"
 
 
 @dataclass
