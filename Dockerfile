@@ -1,4 +1,4 @@
-FROM python:3.12-slim-trixie
+FROM python:3.12-slim-bookworm
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive

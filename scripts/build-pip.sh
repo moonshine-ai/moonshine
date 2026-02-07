@@ -63,7 +63,8 @@ fi
 rm -rf dist/* wheelhouse/*
 uv run setup.py bdist_wheel
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-	auditwheel repair dist/moonshine_voice-*.whl -w dist/
+	# Target manylinux_2_34 for wider compatibility (default would be 2_39 on newer images)
+	auditwheel repair dist/moonshine_voice-*.whl -w dist/ --plat "manylinux_2_34_${ARCH}"
 	rm -rf dist/moonshine_voice-*-linux_*.whl
 fi
 
