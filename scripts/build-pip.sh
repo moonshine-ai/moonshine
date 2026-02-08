@@ -45,6 +45,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 	fi
 elif grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null || grep -q "BCM2" /proc/cpuinfo 2>/dev/null; then
 	PLAT_NAME="manylinux_2_17_aarch64"
+	ARCH="aarch64"
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
 	ARCH=$(uname -m)
 	if [[ "$ARCH" == "x86_64" ]]; then
