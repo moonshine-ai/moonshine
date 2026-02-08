@@ -7,6 +7,7 @@
 - [Quickstart](#quickstart)
 - [When should you choose Moonshine over Whisper?](#when-should-you-choose-moonshine-over-whisper)
 - [Using the Library](#using-the-library)
+- [Models](#models)
 - [API Reference](#api-reference)
 - [Support](#support)
 - [Roadmap](#roadmap)
@@ -568,11 +569,11 @@ This event is sent to any listeners you have registered when an `IntentRecognize
 
 Handles the speech to text pipeline.
 
- - `__init__()`: Loads and initializes the transcriber.
+ - <a id="transcriber-init"></a>`__init__()`: Loads and initializes the transcriber.
    - `model_path`: The path to the directory holding the component model files needed for the complete flow. Note that this is a path to the **folder**, not an individual **file**. You can download and get a path to a cached version of the standard models using the [download_model()](#downloading-models) function.
    - `model_arch`: The architecture of the model to load, from the selection defined in `ModelArch`.
    - `update_interval`: By default the transcriber will periodically run text transcription as new audio data is fed, so that update events can be triggered. This value is how often the speech to text model should be run. You can set this to a large duration to suppress updates between a line starting and ending, but because the streaming models do a lot of their work before the final speech to text stage, this may not reduce overall latency by much.
-   - `options`: These are flags that affect how the transcription process works inside the library, often enabling performance optimizations or debug logging. They are passed as a dictionary mapping strings to strings, even if the values are to be interpreted as numbers - for example `{"max_tokens_per_second", "15"}`.
+   - <a id="transcriber-options"></a>``options`: These are flags that affect how the transcription process works inside the library, often enabling performance optimizations or debug logging. They are passed as a dictionary mapping strings to strings, even if the values are to be interpreted as numbers - for example `{"max_tokens_per_second", "15"}`.
      - "skip_transcription": If you only want the voice-activity detection and segmentation, but want to do further processing in your app, you can set this to "true" and then use the `audioData` array in each line.
      - "max_tokens_per_second": The models occassionally get caught in an infinite decoder loop, where the same words are repeated over and over again. As a heuristic to catch this we compare the number of tokens in the current run to the duration of the audio, and if there seem to be too many tokens we truncate the decoding. By default this is set to 6.5, but for non-English languages where the models produce a lot more raw tokens per second, you may want to bump this to 13.0.
      - "transcription_interval": How often to run transcription, in seconds.
@@ -585,39 +586,39 @@ Handles the speech to text pipeline.
      - "vad_max_segment_duration": It can be hard to find gaps in rapid-fire speech, but a lot of applications want their text in chunks that aren't endless. This option sets the longest duration a line can be before it's marked as complete and a new segment is started. The default is 15 seconds, and to increase the chance that a natural break is found, the `vad_threshold` is linearly decreased over time from two thirds of the maximum duration until the maximum is reached. 
      - "identify_speakers": A boolean that controls whether to run the speaker identification stage in the pipeline.
 
- - `transcribe_without_streaming()`: A convenience function to extract text from a non-live audio source, such as a file. We optimize for streaming use cases, so you're probably better off using libraries that specialize in bulk, batched transcription if you use this a lot and have performance constraints. This will still call any registered event listeners as it processes the lines, so this can be useful to test your application using pre-recorded files, or to easily integrate offline audio sources.
+ - <a id="transcribe-without-streaming"></a>`transcribe_without_streaming()`: A convenience function to extract text from a non-live audio source, such as a file. We optimize for streaming use cases, so you're probably better off using libraries that specialize in bulk, batched transcription if you use this a lot and have performance constraints. This will still call any registered event listeners as it processes the lines, so this can be useful to test your application using pre-recorded files, or to easily integrate offline audio sources.
    - `audio_data`: An array of 32-bit float values, representing mono PCM audio to be analyzed for speech.
    - `sample_rate`: The number of samples per second. The library uses this to convert to its working rate (16KHz) internally.
    - `flags`: Integer, currently unused.
 
- - `start()`: Begins a new transcription session. You need to call this after you've created the `Transcriber` and before you add any audio.
- - `stop()`: Ends a transcription session. If a speech segment was still active, it's marked as complete and the appropriate event handlers are called.
- - `add_audio()`: Call this every time you have a new chunk of audio from your input, to begin processing. The size and sample rate of the audio should be whatever's natural for your source, since the library will handle all conversions.
+ - <a id="transcriber-start"></a>`start()`: Begins a new transcription session. You need to call this after you've created the `Transcriber` and before you add any audio.
+ - <a id="transcriber-stop"></a>`stop()`: Ends a transcription session. If a speech segment was still active, it's marked as complete and the appropriate event handlers are called.
+ - <a id="transcriber-add-audio"></a>`add_audio()`: Call this every time you have a new chunk of audio from your input, to begin processing. The size and sample rate of the audio should be whatever's natural for your source, since the library will handle all conversions.
    - `audio_data`: Array of 32-bit floats representing a mono PCM chunk of audio.
    - `sample_rate`: How many samples per second are present in the input audio. The library uses this to convert the data to its preferred rate.
- - `update_transcription`: The transcript is usually updated periodically as audio data is added, but if you need to trigger one yourself, for example when a user presses refresh, or want access to the complete transcript, you can call this manually.
+ - <a id="transcriber-update-transcription"></a>`update_transcription`: The transcript is usually updated periodically as audio data is added, but if you need to trigger one yourself, for example when a user presses refresh, or want access to the complete transcript, you can call this manually.
    - `flags`: Integer holding flags that are combined using bitwise or (`|`).
      - `MOONSHINE_FLAG_FORCE_UPDATE`: By default the transcriber returns a cached version of the transcript if less than 200ms of new audio has come in since the last transcription, but by setting this you can ensure that a transcription happens regardless.
 
- - `create_stream()`: If your application is taking audio input from multiple sources, for example a microphone and system audio, then you'll want to create multiple streams on a single transcriber to avoid loading multiple copies of the models. Each stream has its own transcript, and line events are tagged with the stream handle they came from. You don't need to worry about this if you only need to deal with a single input though, just use the `Transcriber` class's `start()`, `stop()`, etc. This function returns `Stream` class object.
+ - <a id="transcriber-create-stream"></a>`create_stream()`: If your application is taking audio input from multiple sources, for example a microphone and system audio, then you'll want to create multiple streams on a single transcriber to avoid loading multiple copies of the models. Each stream has its own transcript, and line events are tagged with the stream handle they came from. You don't need to worry about this if you only need to deal with a single input though, just use the `Transcriber` class's `start()`, `stop()`, etc. This function returns `Stream` class object.
    - `flags`: Integer, reserved for future expansion.
    - `update_interval`: Period in seconds between transcription updates.
 
- - `add_listener()`: Registers a callable object with the transcriber. This object will be called back as audio is fed in and text is extracted.
+ - <a id="transcriber-add-listener"></a>`add_listener()`: Registers a callable object with the transcriber. This object will be called back as audio is fed in and text is extracted.
    - `listener`: This is often a subclass of `TranscriptEventListener`, but can be a plain function. It defines what code is called when a speech event happens. 
 
- - `remove_listener()`: Deletes a listener so that it no longer receives events.
+ - <a id="transcriber-remove-listener"></a>`remove_listener()`: Deletes a listener so that it no longer receives events.
    - `listener`: An object you previously passed into `add_listener()`.
 
- - `remove_all_listeners()`: Deletes all registered listeners so than none of them receive events anymore.
+ - <a id="transcriber-remove-all-listeners"></a>`remove_all_listeners()`: Deletes all registered listeners so than none of them receive events anymore.
 
 #### MicTranscriber
 
-This class supports the `start()`, `stop()` and listener functions of `Transcriber`, but internally creates and attaches to the system's microphone input, so you don't need to call `add_audio()` yourself. In Python this uses the `sounddevice` library, but in other languages the class uses the native audio API under the hood.
+This class supports the []`start()`](#transcriber-start), [`stop()`](#transcriber-stop) and listener functions of [`Transcriber`](#transcriber), but internally creates and attaches to the system's microphone input, so you don't need to call [`add_audio()`](#transcriber-add-audio) yourself. In Python this uses the [`sounddevice` library](), but in other languages the class uses the native audio API under the hood.
 
 #### Stream
 
-The access point for when you need to feed multiple audio inputs into a single transcriber. Supports `start()`, `stop()`, `add_audio()`, `update_transcription()`, `add_listener()`, `remove_listener()`, and `remove_all_listeners()` as documented in the `Transcriber` class.
+The access point for when you need to feed multiple audio inputs into a single transcriber. Supports [`start()`](#transcriber-start), [`stop()`](#transcriber-stop), [`add_audio()`](#transcriber-add-audio), [`update_transcription()`](#transcriber-update-transcription), [`add_listener()`](#transcriber-add-listener), [`remove_listener()`](#transcriber-remove-listener), and [`remove_all_listeners()`](#transcriber-remove-all-listeners) as documented in the [`Transcriber`](#transcriber) class.
 
 #### TranscriptEventListener
 
@@ -627,18 +628,18 @@ A convenience class to derive from to create your own listener code. Override an
 
 A specialized kind of event listener that you add as a listener to a `Transcriber`, and it then analyzes the transcription results to determine if any of the specified commands have been spoken, using natural-language fuzzy matching.
 
- - `__init__()`: Constructs a new recognizer, loading required models.
+ - <a id="intentrecognizer-init"></a>`__init__()`: Constructs a new recognizer, loading required models.
    - `model_path`: String holding a path to a folder that contains the required embedding model files. You can download and obtain a path by calling `download_embedding_model()`.
    - `model_arch`: An `EmbeddingModelArch`, obtained from the `download_embedding_model()` function.
    - `model_variant`: The precision to run the model at. "q4" is recommended.
    - `threshold`: How close an utterance has to be to the target sentence to trigger an event.
- - `register_intent()`: Asks the recognizer to look for utterances that match a given command, and call back into the application when one is found.
+ - <a id="intentrecognizer-register-intent"></a>`register_intent()`: Asks the recognizer to look for utterances that match a given command, and call back into the application when one is found.
    - `trigger_phrase`: The canonical command sentence to match against.
    - `handler`: A callable function or object that contains code you want to trigger when the command is recognized.
- - `unregister_intent()`: Removes an intent handler from the event callback process.
+ - <a id="intentrecognizer-unregister-intent"></a>`unregister_intent()`: Removes an intent handler from the event callback process.
    - `handler`: A handler that had previously been registered with the recognizer.
- - `clear_intents()`: Removes all intent listeners from the recognizer.
- - `set_on_intent()`: Sets a callable that is called when any registered action is triggered, not just a single command as for `register_intent()`.
+ - <a id="intentrecognizer-clear-intents"></a>`clear_intents()`: Removes all intent listeners from the recognizer.
+ - <a id="intentrecognizer-set-on-intent"></a>`set_on_intent()`: Sets a callable that is called when any registered action is triggered, not just a single command as for `register_intent()`.
 
 ## Support
 
