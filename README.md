@@ -587,7 +587,7 @@ Handles the speech to text pipeline.
      - "identify_speakers": A boolean that controls whether to run the speaker identification stage in the pipeline.
 
  - <a id="transcriber-transcribe-without-streaming"></a>`transcribe_without_streaming()`: A convenience function to extract text from a non-live audio source, such as a file. We optimize for streaming use cases, so you're probably better off using libraries that specialize in bulk, batched transcription if you use this a lot and have performance constraints. This will still call any registered event listeners as it processes the lines, so this can be useful to test your application using pre-recorded files, or to easily integrate offline audio sources.
-   - `audio_data`: An array of 32-bit float values, representing mono PCM audio to be analyzed for speech.
+   - `audio_data`: An array of 32-bit float values, representing mono PCM audio between -1.0 and 1.0, to be analyzed for speech.
    - `sample_rate`: The number of samples per second. The library uses this to convert to its working rate (16KHz) internally.
    - `flags`: Integer, currently unused.
 
