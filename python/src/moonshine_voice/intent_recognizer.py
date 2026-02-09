@@ -383,12 +383,6 @@ if __name__ == "__main__":
         help="Embedding model name (default: embeddinggemma-300m)",
     )
     parser.add_argument(
-        "--quantization",
-        type=str,
-        default="q4",
-        help="Model quantization, e.g., q4, q8, fp16, fp32, q4f16 (default: q4)",
-    )
-    parser.add_argument(
         "--threshold",
         type=float,
         default=0.6,
