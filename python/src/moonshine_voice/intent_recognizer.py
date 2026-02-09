@@ -353,7 +353,12 @@ if __name__ == "__main__":
     import argparse
     import sys
     from moonshine_voice import get_model_for_language, get_embedding_model
-    from moonshine_voice.mic_transcriber import MicTranscriber
+    from moonshine_voice import (
+        MicTranscriber,
+        Transcriber,
+        load_wav_file,
+        TranscriptEventListener,
+    )
     import time
 
     parser = argparse.ArgumentParser(
@@ -395,11 +400,19 @@ if __name__ == "__main__":
         default="turn on the lights,turn off the lights,what is the weather,set a timer,play some music,stop the music",
         help="Actions to handle, separated by commas",
     )
+    parser.add_argument(
+        "--wav-file",
+        type=str,
+        default=None,
+        help="WAV file to process instead of using the microphone",
+    )
     args = parser.parse_args()
 
     def on_intent_triggered_on(trigger: str, utterance: str, similarity: float):
         """Handler for when an intent is triggered."""
-        print(f"\n'{trigger.upper()}' triggered by '{utterance}' with {similarity:.0%} confidence")
+        print(
+            f"\n'{trigger.upper()}' triggered by '{utterance}' with {similarity:.0%} confidence"
+        )
 
     class TranscriptPrinter(TranscriptEventListener):
         """Listener that prints transcript updates to the terminal."""
@@ -458,14 +471,18 @@ if __name__ == "__main__":
 
     print(f"Registered {intent_recognizer.intent_count} intents", file=sys.stderr)
 
-    # Create the microphone transcriber
-    mic_transcriber = MicTranscriber(model_path=model_path, model_arch=model_arch)
+    # Create the microphone transcriber or use the WAV file if provided
+    if args.wav_file is None:
+        transcriber = MicTranscriber(model_path=model_path, model_arch=model_arch)
+    else:
+        transcriber = Transcriber(model_path=model_path, model_arch=model_arch)
+        audio_data, sample_rate = load_wav_file(args.wav_file)
 
     # Add both the transcript printer and intent recognizer as listeners
     # The intent recognizer will process completed lines and trigger handlers
     transcript_printer = TranscriptPrinter()
-    mic_transcriber.add_listener(transcript_printer)
-    mic_transcriber.add_listener(intent_recognizer)
+    transcriber.add_listener(transcript_printer)
+    transcriber.add_listener(intent_recognizer)
 
     print("\n" + "=" * 60, file=sys.stderr)
     print("🎤 Listening for voice commands...", file=sys.stderr)
@@ -478,13 +495,22 @@ if __name__ == "__main__":
     print("=" * 60, file=sys.stderr)
     print("Press Ctrl+C to stop.\n", file=sys.stderr)
 
-    mic_transcriber.start()
+    transcriber.start()
     try:
-        while True:
-            time.sleep(0.1)
+        # Use the microphone if no WAV file is provided
+        if args.wav_file is None:
+            while True:
+                time.sleep(0.1)
+        else:
+            # Process the WAV file in chunks
+            chunk_duration = 0.2
+            chunk_size = int(chunk_duration * sample_rate)
+            for i in range(0, len(audio_data), chunk_size):
+                chunk = audio_data[i : i + chunk_size]
+                transcriber.add_audio(chunk, sample_rate)
     except KeyboardInterrupt:
         print("\n\nStopping...", file=sys.stderr)
     finally:
         intent_recognizer.close()
-        mic_transcriber.stop()
-        mic_transcriber.close()
+        transcriber.stop()
+        transcriber.close()
