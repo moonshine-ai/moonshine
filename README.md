@@ -40,7 +40,7 @@ Listens to the microphone and prints updates to the transcript as they come in.
 python -m moonshine_voice.intent_recognizer
 ```
 
-Listens for user-defined action phrases, like "Turn on the lights", using semantic matching so natural language variations are recognized. For more, check out [our "Getting Started" Colab notebook](https://bit.ly/moonshine-colab).
+Listens for user-defined action phrases, like "Turn on the lights", using semantic matching so natural language variations are recognized. For more, check out [our "Getting Started" Colab notebook](https://bit.ly/moonshine-colab) and [video](https://www.youtube.com/watch?v=WH-AGvHmtoM).
 
 ### iOS
 
