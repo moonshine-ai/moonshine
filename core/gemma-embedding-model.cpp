@@ -96,8 +96,6 @@ int GemmaEmbeddingModel::load(const char *model_dir,
   std::string tokenizer_path =
       append_path_component(model_dir, "tokenizer.bin");
 
-  LOGF("Loading Gemma embedding model from: %s\n", model_path.c_str());
-
   // Load ONNX model
   RETURN_ON_ERROR(ort_session_from_path(
       ort_api_, ort_env_, ort_session_options_, model_path.c_str(), &session_,
@@ -107,7 +105,6 @@ int GemmaEmbeddingModel::load(const char *model_dir,
   // Load tokenizer
   RETURN_ON_ERROR(load_tokenizer(tokenizer_path.c_str()));
 
-  LOG("Gemma embedding model loaded successfully\n");
   return 0;
 }
 
@@ -135,8 +132,6 @@ int GemmaEmbeddingModel::load_tokenizer(const char *tokenizer_path) {
   try {
     // Gemma uses ▁ (U+2581) as the space character in SentencePiece
     tokenizer_ = new BinTokenizer(tokenizer_path, "▁");
-    LOGF("Tokenizer loaded with %zu tokens\n",
-         tokenizer_->tokens_to_bytes.size());
     return 0;
   } catch (const std::exception &e) {
     LOGF("Failed to load tokenizer: %s\n", e.what());
