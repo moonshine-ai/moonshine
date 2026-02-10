@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Convert tokenizer files to the BinTokenizer format used by moonshine-v2.
+Convert tokenizer files to the BinTokenizer format used by moonshine.
 
 Supports:
 - SentencePiece .model files (protobuf format)

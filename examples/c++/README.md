@@ -6,7 +6,7 @@ To use this you'll first need to download a prebuilt version of the library, or 
 
 ## Download
 
-The library files are available as part of our [releases on GitHub](https://github.com/moonshine-ai/moonshine-v2/releases). Look for the most recent version, and you should see a file called moonshine-voice-_.tgz, where _ is your platform. Download and extract that archive, placing the resulting folder in this `examples/c++` directory.
+The library files are available as part of our [releases on GitHub](https://github.com/moonshine-ai/moonshine/releases). Look for the most recent version, and you should see a file called moonshine-voice-_.tgz, where _ is your platform. Download and extract that archive, placing the resulting folder in this `examples/c++` directory.
 
 ## Build
 
