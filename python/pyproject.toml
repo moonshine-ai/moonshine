@@ -34,10 +34,10 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/usefulsensors/moonshine-v2"
-Documentation = "https://github.com/usefulsensors/moonshine-v2"
-Repository = "https://github.com/usefulsensors/moonshine-v2"
-Issues = "https://github.com/usefulsensors/moonshine-v2/issues"
+Homepage = "https://github.com/moonshine-ai/moonshine"
+Documentation = "https://github.com/moonshine-ai/moonshine"
+Repository = "https://github.com/moonshine-ai/moonshine"
+Issues = "https://github.com/moonshine-ai/moonshine/issues"
 
 [tool.setuptools]
 package-dir = { "" = "src" }

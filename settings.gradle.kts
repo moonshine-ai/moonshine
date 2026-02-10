@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "moonshine-v2"
+rootProject.name = "moonshine"
 

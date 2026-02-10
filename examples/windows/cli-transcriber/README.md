@@ -4,7 +4,7 @@ A command-line application for Windows that listens to the microphone and transc
 
 ## Setup
 
-1. **Download the Moonshine Voice Library**. Download [github.com/moonshine-ai/moonshine-v2/releases/latest/download/moonshine-voice-windows-x86_64.tar.gz](https://github.com/moonshine-ai/moonshine-v2/releases/latest/download/moonshine-voice-windows-x86_64.tar.gz) and extract it into this folder, or you can run `download-lib.bat`.
+1. **Download the Moonshine Voice Library**. Download [github.com/moonshine-ai/moonshine/releases/latest/download/moonshine-voice-windows-x86_64.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/moonshine-voice-windows-x86_64.tar.gz) and extract it into this folder, or you can run `download-lib.bat`.
 
 2. **Download the Models**. Run `pip install moonshine-voice` if you haven't already, and then run `python -m moonshine_voice.download --language en` to download the Moonshine English-language speech to text models. Make a note of the log output from that command, you'll use it to provide a model path when you run the transcriber.
 

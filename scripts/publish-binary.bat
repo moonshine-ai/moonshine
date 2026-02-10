@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 set VERSION=0.0.45
-set REPO=moonshine-ai/moonshine-v2
+set REPO=moonshine-ai/moonshine
 
 REM Get the directory where this script is located
 set SCRIPTS_DIR=%~dp0
