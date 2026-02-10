@@ -616,10 +616,11 @@ inline void Stream::removeListener(
           functionListeners_.begin(), functionListeners_.end(),
           [&listener](const std::function<void(const TranscriptEvent &)> &f) {
             // Best-effort comparison: compare target addresses if both have
-            // targets
-            auto f_target = f.target<void(const TranscriptEvent &)>();
-            auto listener_target =
-                listener.target<void(const TranscriptEvent &)>();
+            // targets (use function pointer type for target<> to avoid
+            // std::function::target const_cast issues with function types)
+            using fn_t = void (*)(const TranscriptEvent &);
+            auto f_target = f.target<fn_t>();
+            auto listener_target = listener.target<fn_t>();
             if (f_target == nullptr || listener_target == nullptr) {
               return false;  // Can't compare if either is null
             }
