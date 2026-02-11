@@ -1,4 +1,4 @@
-from moonshine_voice.download import (
+from moonshine_voice import (
     get_model_for_language,
     load_wav_file,
     Transcriber,
