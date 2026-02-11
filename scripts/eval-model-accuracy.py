@@ -54,7 +54,7 @@ english_text_normalizer = EnglishTextNormalizer()
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    "--languages", type=str, default="ar_eg,en_us,es_es,ja_jp,ko_kr,uk_ua,vi_vn,cmn_hans_cn"
+    "--languages", type=str, default="ar_eg,en_us,es_419,ja_jp,ko_kr,uk_ua,vi_vn,cmn_hans_cn"
 )
 parser.add_argument("--model-archs", type=str, default="base")
 parser.add_argument("--model-paths", type=str, default=None)
