@@ -44,11 +44,11 @@ Listens for user-defined action phrases, like "Turn on the lights", using semant
 
 ### iOS
 
-[Download](https://github.com/moonshine-ai/moonshine/archive/refs/heads/main.zip) or `git clone` this repository and open `examples/ios/Transcriber/Transcriber.xcodeproj` in Xcode.
+Download [github.com/moonshine-ai/moonshine/releases/latest/download/ios-examples.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-examples.tar.gz), extract it, and then open the `Transcriber/Transcriber.xcodeproj` project in Xcode.
 
 ### Android
 
-[Download](https://github.com/moonshine-ai/moonshine/archive/refs/heads/main.zip) or `git clone` this repository and open `examples/android/Transcriber/` in Android Studio.
+Download [github.com/moonshine-ai/moonshine/releases/latest/download/android-examples.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-examples.tar.gz), extract it, and then open the `Transcriber` folder in Android Studio.
 
 ### Linux
 
@@ -64,11 +64,11 @@ cmake --build .
 
 ### MacOS
 
-[Download](https://github.com/moonshine-ai/moonshine/archive/refs/heads/main.zip) or `git clone` this repository and open `examples/macos/MicTranscription/MicTranscription.xcodeproj` in Xcode.
+Download [github.com/moonshine-ai/moonshine/releases/latest/download/macos-examples.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/macos-examples.tar.gz), extract it, and then open the `MicTranscription/MicTranscription.xcodeproj` project in Xcode.
 
 ### Windows
 
-[Download](https://github.com/moonshine-ai/moonshine/archive/refs/heads/main.zip) or `git clone` this repository. 
+Download [github.com/moonshine-ai/moonshine/releases/latest/download/windows-examples.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/windows-examples.tar.gz), extract it, and then open the `cli-transcriber\cli-transcriber.vcxproj` project in Visual Studio.
 
 [Install Moonshine in Python](#python) for model downloading.
 
@@ -91,6 +91,9 @@ You'll need a USB microphone plugged in to get audio input, but the Python pip p
  pip install moonshine-voice
  python -m moonshine_voice.mic_transcriber --language en
  ```
+
+You can also download [github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-examples.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-examples.tar.gz) for some fun, Pi-specific examples.
+
 
 ## When should you choose Moonshine over Whisper?
 
