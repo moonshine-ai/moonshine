@@ -88,11 +88,11 @@ x64\Release\cli-transcriber.exe --model-path <path from the download command> --
 You'll need a USB microphone plugged in to get audio input, but the Python pip package has been optimized for the Pi, so you can run:
 
 ```bash
- pip install moonshine-voice
+ sudo pip install --break-system-packages moonshine-voice
  python -m moonshine_voice.mic_transcriber --language en
  ```
 
-You can also download [github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-examples.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-examples.tar.gz) for some fun, Pi-specific examples.
+I've recorded [a screencast on YouTube](https://www.youtube.com/watch?v=NNcqx1wFxl0) to help you get started, and you can also download [github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-examples.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-examples.tar.gz) for some fun, Pi-specific examples. [The README](examples/raspberry-pi/my-dalek/README.md) has information about using a virtual environment for the Python install if you don't want to use `--break-system-packages`.
 
 
 ## When should you choose Moonshine over Whisper?
