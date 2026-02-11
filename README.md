@@ -701,7 +701,7 @@ We're grateful to:
 
  ## License
 
- This code, apart from the contributions in `core/third-party` is licensed under the MIT License, see LICENSE in this repository.
+ This code, apart from the source in `core/third-party`, is licensed under the MIT License, see LICENSE in this repository.
 
  The English-language models are also released under the MIT License. Models for other languages are released under the [Moonshine Community License](https://moonshine.ai), which is a non-commercial license.
 
