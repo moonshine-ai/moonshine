@@ -4,6 +4,12 @@
 #include <string>
 #include <vector>
 
+#include <android/log.h>
+#define LOG_TAG "MoonshineJNI"
+#define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__))
+#define LOGW(...) ((void)__android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__))
+#define LOGE(...) ((void)__android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__))
+
 #include "moonshine-c-api.h"
 #include "utf8.h"
 
@@ -92,7 +98,8 @@ std::unique_ptr<transcript_t> c_transcript_from_jobject(
     transcript->lines[i].has_speaker_id =
         env->GetBooleanField(line, hasSpeakerIdField);
     transcript->lines[i].speaker_id = env->GetLongField(line, speakerIdField);
-    transcript->lines[i].speaker_index = env->GetIntField(line, speakerIndexField);
+    transcript->lines[i].speaker_index =
+        env->GetIntField(line, speakerIndexField);
   }
   return transcript;
 }
@@ -192,31 +199,36 @@ extern "C" JNIEXPORT int JNICALL
 Java_ai_moonshine_voice_JNI_moonshineLoadTranscriberFromFiles(
     JNIEnv *env, jobject /* this */, jstring path, jint model_arch,
     jobjectArray joptions) {
-  jclass optionClass = get_class(env, "ai/moonshine/voice/TranscriberOption");
-  jfieldID nameField =
-      get_field(env, optionClass, "name", "Ljava/lang/String;");
-  jfieldID valueField =
-      get_field(env, optionClass, "value", "Ljava/lang/String;");
+  try {
+    jclass optionClass = get_class(env, "ai/moonshine/voice/TranscriberOption");
+    jfieldID nameField =
+        get_field(env, optionClass, "name", "Ljava/lang/String;");
+    jfieldID valueField =
+        get_field(env, optionClass, "value", "Ljava/lang/String;");
 
-  std::vector<transcriber_option_t> coptions;
-  if (joptions != nullptr) {
-    for (int i = 0; i < env->GetArrayLength(joptions); i++) {
-      jobject joption = env->GetObjectArrayElement(joptions, i);
-      jstring jname = (jstring)env->GetObjectField(joption, nameField);
-      jstring jvalue = (jstring)env->GetObjectField(joption, valueField);
-      coptions.push_back({env->GetStringUTFChars(jname, nullptr),
-                          env->GetStringUTFChars(jvalue, nullptr)});
+    std::vector<transcriber_option_t> coptions;
+    if (joptions != nullptr) {
+      for (int i = 0; i < env->GetArrayLength(joptions); i++) {
+        jobject joption = env->GetObjectArrayElement(joptions, i);
+        jstring jname = (jstring)env->GetObjectField(joption, nameField);
+        jstring jvalue = (jstring)env->GetObjectField(joption, valueField);
+        coptions.push_back({env->GetStringUTFChars(jname, nullptr),
+                            env->GetStringUTFChars(jvalue, nullptr)});
+      }
     }
+    const char *path_str;
+    if (path != nullptr) {
+      path_str = env->GetStringUTFChars(path, nullptr);
+    } else {
+      path_str = nullptr;
+    }
+    return moonshine_load_transcriber_from_files(
+        path_str, model_arch, coptions.data(), coptions.size(),
+        MOONSHINE_HEADER_VERSION);
+  } catch (const std::exception &e) {
+    LOGE("moonshineLoadTranscriberFromFiles: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
   }
-  const char *path_str;
-  if (path != nullptr) {
-    path_str = env->GetStringUTFChars(path, nullptr);
-  } else {
-    path_str = nullptr;
-  }
-  return moonshine_load_transcriber_from_files(path_str, model_arch,
-                                               coptions.data(), coptions.size(),
-                                               MOONSHINE_HEADER_VERSION);
 }
 
 extern "C" JNIEXPORT int JNICALL
@@ -224,64 +236,83 @@ Java_ai_moonshine_voice_JNI_moonshineLoadTranscriberFromMemory(
     JNIEnv *env, jobject /* this */, jbyteArray encoder_model_data,
     jbyteArray decoder_model_data, jbyteArray tokenizer_data, jint model_arch,
     jobjectArray joptions) {
-  jclass optionClass = get_class(env, "ai/moonshine/voice/TranscriberOption");
-  jfieldID nameField =
-      get_field(env, optionClass, "name", "Ljava/lang/String;");
-  jfieldID valueField =
-      get_field(env, optionClass, "value", "Ljava/lang/String;");
-  std::vector<transcriber_option_t> coptions;
-  if (joptions != nullptr) {
-    for (int i = 0; i < env->GetArrayLength(joptions); i++) {
-      jobject joption = env->GetObjectArrayElement(joptions, i);
-      jstring jname = (jstring)env->GetObjectField(joption, nameField);
-      jstring jvalue = (jstring)env->GetObjectField(joption, valueField);
-      coptions.push_back({env->GetStringUTFChars(jname, nullptr),
-                          env->GetStringUTFChars(jvalue, nullptr)});
+  try {
+    jclass optionClass = get_class(env, "ai/moonshine/voice/TranscriberOption");
+    jfieldID nameField =
+        get_field(env, optionClass, "name", "Ljava/lang/String;");
+    jfieldID valueField =
+        get_field(env, optionClass, "value", "Ljava/lang/String;");
+    std::vector<transcriber_option_t> coptions;
+    if (joptions != nullptr) {
+      for (int i = 0; i < env->GetArrayLength(joptions); i++) {
+        jobject joption = env->GetObjectArrayElement(joptions, i);
+        jstring jname = (jstring)env->GetObjectField(joption, nameField);
+        jstring jvalue = (jstring)env->GetObjectField(joption, valueField);
+        coptions.push_back({env->GetStringUTFChars(jname, nullptr),
+                            env->GetStringUTFChars(jvalue, nullptr)});
+      }
     }
+    const uint8_t *encoder_model_data_ptr =
+        (uint8_t *)(env->GetByteArrayElements(encoder_model_data, nullptr));
+    size_t encoder_model_data_size = env->GetArrayLength(encoder_model_data);
+    const uint8_t *decoder_model_data_ptr =
+        (uint8_t *)(env->GetByteArrayElements(decoder_model_data, nullptr));
+    size_t decoder_model_data_size = env->GetArrayLength(decoder_model_data);
+    const uint8_t *tokenizer_data_ptr =
+        (uint8_t *)(env->GetByteArrayElements(tokenizer_data, nullptr));
+    size_t tokenizer_data_size = env->GetArrayLength(tokenizer_data);
+    return moonshine_load_transcriber_from_memory(
+        encoder_model_data_ptr, encoder_model_data_size, decoder_model_data_ptr,
+        decoder_model_data_size, tokenizer_data_ptr, tokenizer_data_size,
+        model_arch, coptions.data(), coptions.size(), MOONSHINE_HEADER_VERSION);
+  } catch (const std::exception &e) {
+    LOGE("moonshineLoadTranscriberFromMemory: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
   }
-  const uint8_t *encoder_model_data_ptr =
-      (uint8_t *)(env->GetByteArrayElements(encoder_model_data, nullptr));
-  size_t encoder_model_data_size = env->GetArrayLength(encoder_model_data);
-  const uint8_t *decoder_model_data_ptr =
-      (uint8_t *)(env->GetByteArrayElements(decoder_model_data, nullptr));
-  size_t decoder_model_data_size = env->GetArrayLength(decoder_model_data);
-  const uint8_t *tokenizer_data_ptr =
-      (uint8_t *)(env->GetByteArrayElements(tokenizer_data, nullptr));
-  size_t tokenizer_data_size = env->GetArrayLength(tokenizer_data);
-  return moonshine_load_transcriber_from_memory(
-      encoder_model_data_ptr, encoder_model_data_size, decoder_model_data_ptr,
-      decoder_model_data_size, tokenizer_data_ptr, tokenizer_data_size,
-      model_arch, coptions.data(), coptions.size(), MOONSHINE_HEADER_VERSION);
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_ai_moonshine_voice_JNI_moonshineFreeTranscriber(JNIEnv * /* env */,
                                                      jobject /* this */,
                                                      jint transcriber_handle) {
-  moonshine_free_transcriber(transcriber_handle);
+  try {
+    moonshine_free_transcriber(transcriber_handle);
+  } catch (const std::exception &e) {
+    LOGE("moonshineFreeTranscriber: %s\n", e.what());
+  }
 }
 
 extern "C" JNIEXPORT jobject JNICALL
 Java_ai_moonshine_voice_JNI_moonshineTranscribeWithoutStreaming(
     JNIEnv *env, jobject /* this */, jint transcriber_handle,
     jfloatArray audio_data, jint sample_rate, jint flags) {
-  float *audio_data_ptr = env->GetFloatArrayElements(audio_data, nullptr);
-  size_t audio_data_size = env->GetArrayLength(audio_data);
-  struct transcript_t *transcript = nullptr;
-  int transcription_error = moonshine_transcribe_without_streaming(
-      transcriber_handle, audio_data_ptr, audio_data_size, sample_rate, flags,
-      &transcript);
-  if (transcription_error != 0) {
+  try {
+    float *audio_data_ptr = env->GetFloatArrayElements(audio_data, nullptr);
+    size_t audio_data_size = env->GetArrayLength(audio_data);
+    struct transcript_t *transcript = nullptr;
+    int transcription_error = moonshine_transcribe_without_streaming(
+        transcriber_handle, audio_data_ptr, audio_data_size, sample_rate, flags,
+        &transcript);
+    if (transcription_error != 0) {
+      return nullptr;
+    }
+    return c_transcript_to_jobject(env, transcript);
+  } catch (const std::exception &e) {
+    LOGE("moonshineTranscribeWithoutStreaming: %s\n", e.what());
     return nullptr;
   }
-  return c_transcript_to_jobject(env, transcript);
 }
 
 extern "C" JNIEXPORT int JNICALL
 Java_ai_moonshine_voice_JNI_moonshineCreateStream(JNIEnv * /* env */,
                                                   jobject /* this */,
                                                   jint transcriber_handle) {
-  return moonshine_create_stream(transcriber_handle, 0);
+  try {
+    return moonshine_create_stream(transcriber_handle, 0);
+  } catch (const std::exception &e) {
+    LOGE("moonshineCreateStream: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -289,7 +320,11 @@ Java_ai_moonshine_voice_JNI_moonshineFreeStream(JNIEnv * /* env */,
                                                 jobject /* this */,
                                                 jint transcriber_handle,
                                                 jint stream_handle) {
-  moonshine_free_stream(transcriber_handle, stream_handle);
+  try {
+    moonshine_free_stream(transcriber_handle, stream_handle);
+  } catch (const std::exception &e) {
+    LOGE("moonshineFreeStream: %s\n", e.what());
+  }
 }
 
 extern "C" JNIEXPORT int JNICALL
@@ -297,7 +332,12 @@ Java_ai_moonshine_voice_JNI_moonshineStartStream(JNIEnv * /* env */,
                                                  jobject /* this */,
                                                  jint transcriber_handle,
                                                  jint stream_handle) {
-  return moonshine_start_stream(transcriber_handle, stream_handle);
+  try {
+    return moonshine_start_stream(transcriber_handle, stream_handle);
+  } catch (const std::exception &e) {
+    LOGE("moonshineStartStream: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
 }
 
 extern "C" JNIEXPORT int JNICALL
@@ -305,21 +345,31 @@ Java_ai_moonshine_voice_JNI_moonshineStopStream(JNIEnv * /* env */,
                                                 jobject /* this */,
                                                 jint transcriber_handle,
                                                 jint stream_handle) {
-  return moonshine_stop_stream(transcriber_handle, stream_handle);
+  try {
+    return moonshine_stop_stream(transcriber_handle, stream_handle);
+  } catch (const std::exception &e) {
+    LOGE("moonshineStopStream: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
 }
 
 extern "C" JNIEXPORT int JNICALL
 Java_ai_moonshine_voice_JNI_moonshineAddAudioToStream(
     JNIEnv *env, jobject /* this */, jint transcriber_handle,
     jint stream_handle, jfloatArray audio_data, jint sample_rate) {
-  if (audio_data == nullptr) {
-    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  try {
+    if (audio_data == nullptr) {
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
+    }
+    float *audio_data_ptr = env->GetFloatArrayElements(audio_data, nullptr);
+    size_t audio_data_size = env->GetArrayLength(audio_data);
+    return moonshine_transcribe_add_audio_to_stream(
+        transcriber_handle, stream_handle, audio_data_ptr, audio_data_size,
+        sample_rate, 0);
+  } catch (const std::exception &e) {
+    LOGE("moonshineAddAudioToStream: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
   }
-  float *audio_data_ptr = env->GetFloatArrayElements(audio_data, nullptr);
-  size_t audio_data_size = env->GetArrayLength(audio_data);
-  return moonshine_transcribe_add_audio_to_stream(
-      transcriber_handle, stream_handle, audio_data_ptr, audio_data_size,
-      sample_rate, 0);
 }
 
 extern "C" JNIEXPORT jobject JNICALL
@@ -328,11 +378,16 @@ Java_ai_moonshine_voice_JNI_moonshineTranscribeStream(JNIEnv *env,
                                                       jint transcriber_handle,
                                                       jint stream_handle,
                                                       jint flags) {
-  struct transcript_t *transcript = nullptr;
-  int transcription_error = moonshine_transcribe_stream(
-      transcriber_handle, stream_handle, flags, &transcript);
-  if (transcription_error != 0) {
+  try {
+    struct transcript_t *transcript = nullptr;
+    int transcription_error = moonshine_transcribe_stream(
+        transcriber_handle, stream_handle, flags, &transcript);
+    if (transcription_error != 0) {
+      return nullptr;
+    }
+    return c_transcript_to_jobject(env, transcript);
+  } catch (const std::exception &e) {
+    LOGE("moonshineTranscribeStream: %s\n", e.what());
     return nullptr;
   }
-  return c_transcript_to_jobject(env, transcript);
-}
+} 
