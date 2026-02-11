@@ -23,15 +23,46 @@ import pandas as pd
 import json
 from whisper.normalizers import EnglishTextNormalizer
 
+language_info = {
+    "ar": {
+        "english_name": "Arabic",
+    },
+    "es": {
+        "english_name": "Spanish",
+    },
+    "ja": {
+        "english_name": "Japanese",
+    },
+    "ko": {
+        "english_name": "Korean",
+    },
+    "en": {
+        "english_name": "English",
+    },
+    "uk": {
+        "english_name": "Ukrainian",
+    },
+    "vi": {
+        "english_name": "Vietnamese",
+    },
+    "zh": {
+        "english_name": "Mandarin",
+    },
+}
+
 english_text_normalizer = EnglishTextNormalizer()
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--audio", type=str, default=None)
-parser.add_argument("--model-archs", type=str, default="tiny,base")
+parser.add_argument(
+    "--languages", type=str, default="ar_eg,en_us,es_es,ja_jp,ko_kr,uk_ua,vi_vn,cmn_hans_cn"
+)
+parser.add_argument("--model-archs", type=str, default="base")
 parser.add_argument("--model-paths", type=str, default=None)
 parser.add_argument("--verbose", action="store_true")
 
 args = parser.parse_args()
+
+languages = args.languages.split(",")
 
 model_arch_strings = args.model_archs.split(",")
 model_archs = [
@@ -47,91 +78,95 @@ else:
     model_paths = None
 
 results = {}
+results["Language"] = []
 for model_arch in model_archs:
     results[f"{model_arch_to_string(model_arch).capitalize()} WER"] = []
     results[f"{model_arch_to_string(model_arch).capitalize()} CER"] = []
+
+results["Fleurs Code"] = []
 
 detailed_results = {
     "ground_truth": [],
     "transcription": [],
     "wer": [],
     "cer": [],
+    "language": [],
     "model_arch": [],
 }
 
-language_code = "en"
-country_code = "us"
-fleurs_language = f"{language_code}_{country_code}"
-
-for model_arch in model_archs:
-    print(
-        f"Evaluating {model_arch_to_string(model_arch)} model for {language_code} language on FLEURS dataset"
-    )
-
-    if model_paths is not None:
-        path = model_paths[model_archs.index(model_arch)]
-        arch = model_arch
+for fleurs_language in languages:
+    if fleurs_language == "cmn_hans_cn":
+        language_code = "zh"
+        country_code = "cn"
     else:
-        path, arch = get_model_for_language(language_code, model_arch)
-    transcriber = Transcriber(path, arch, options={"vad_threshold": 0.0})
+        language_code, country_code = fleurs_language.split("_")
 
-    fleurs_dataset = load_dataset(
-        "google/fleurs", fleurs_language, trust_remote_code=True
-    )
+    english_name = language_info[language_code]["english_name"]
+    results["Language"].append(english_name)
+    results["Fleurs Code"].append(fleurs_language)
 
-    test_dataset = fleurs_dataset["test"]
+    for model_arch in model_archs:
+        print(
+            f"Evaluating {model_arch_to_string(model_arch)} model for {english_name} on FLEURS dataset"
+        )
 
-    wer_total = 0
-    cer_total = 0
-    character_count = 0
+        if model_paths is not None:
+            path = model_paths[model_archs.index(model_arch)]
+            arch = model_arch
+        else:
+            path, arch = get_model_for_language(language_code, model_arch)
+        # Disable the VAD since these are already pre-segmented.
+        transcriber = Transcriber(path, arch, options={"vad_threshold": 0.0})
 
-    for sample in tqdm(test_dataset):
-        audio = sample["audio"]["array"].astype(np.float32)
-        ground_truth = sample["transcription"]
-        current_character_count = len(ground_truth)
-        character_count += current_character_count
-        audio_duration = audio.shape[0] / 16000.0
-        # Loop through the audio data in chunks to simulate live streaming
-        # from a microphone or other source.
-        transcriber.start()
-        chunk_duration = 0.1
-        chunk_size = int(chunk_duration * 16000)
-        for i in range(0, len(audio), chunk_size):
-            chunk = audio[i : i + chunk_size]
-            transcriber.add_audio(chunk, 16000)
-        transcript =transcriber.stop()
-        first_line = transcript.lines[0]
-        transcription = first_line.text
-        normalized_ground_truth = english_text_normalizer(ground_truth)
-        normalized_transcription = english_text_normalizer(transcription)
-        current_wer = wer(normalized_ground_truth, normalized_transcription)
-        current_cer = cer(normalized_ground_truth, normalized_transcription)
-        wer_total += current_wer * current_character_count
-        cer_total += current_cer * current_character_count
+        fleurs_dataset = load_dataset(
+            "google/fleurs", fleurs_language, trust_remote_code=True
+        )
 
-        if args.verbose:
-            print(f"Ground truth: {normalized_ground_truth}")
-            print(f"Transcription: {normalized_transcription}")
-            print(f"WER: {current_wer:.2%}, CER: {current_cer:.2%}")
-            print("--------------------------------")
+        test_dataset = fleurs_dataset["test"]
 
-        detailed_results["ground_truth"].append(normalized_ground_truth)
-        detailed_results["transcription"].append(normalized_transcription)
-        detailed_results["wer"].append(current_wer)
-        detailed_results["cer"].append(current_cer)
-        detailed_results["model_arch"].append(model_arch_to_string(model_arch))
+        wer_total = 0
+        cer_total = 0
+        character_count = 0
 
-    wer_result = wer_total / character_count
-    cer_result = cer_total / character_count
+        for sample in tqdm(test_dataset):
+            audio = sample["audio"]["array"].astype(np.float32)
+            ground_truth = sample["transcription"]
+            current_character_count = len(ground_truth)
+            character_count += current_character_count
+            audio_duration = audio.shape[0] / 16000.0
+            transcript = transcriber.transcribe_without_streaming(audio, 16000)
+            first_line = transcript.lines[0]
+            transcription = first_line.text
+            normalized_ground_truth = english_text_normalizer(ground_truth)
+            normalized_transcription = english_text_normalizer(transcription)
+            current_wer = wer(normalized_ground_truth, normalized_transcription)
+            current_cer = cer(normalized_ground_truth, normalized_transcription)
+            wer_total += current_wer * current_character_count
+            cer_total += current_cer * current_character_count
 
-    print(f"WER: {wer_result:.2%}, CER: {cer_result:.2%}")
+            if args.verbose:
+                print(f"Ground truth: {normalized_ground_truth}")
+                print(f"Transcription: {normalized_transcription}")
+                print(f"WER: {current_wer:.2%}, CER: {current_cer:.2%}")
+                print("--------------------------------")
 
-    results[f"{model_arch_to_string(model_arch).capitalize()} WER"].append(
-        f"{wer_result:.2%}"
-    )
-    results[f"{model_arch_to_string(model_arch).capitalize()} CER"].append(
-        f"{cer_result:.2%}"
-    )
+            detailed_results["ground_truth"].append(normalized_ground_truth)
+            detailed_results["transcription"].append(normalized_transcription)
+            detailed_results["wer"].append(current_wer)
+            detailed_results["cer"].append(current_cer)
+            detailed_results["model_arch"].append(model_arch_to_string(model_arch))
+
+        wer_result = wer_total / character_count
+        cer_result = cer_total / character_count
+
+        print(f"WER: {wer_result:.2%}, CER: {cer_result:.2%}")
+
+        results[f"{model_arch_to_string(model_arch).capitalize()} WER"].append(
+            f"{wer_result:.2%}"
+        )
+        results[f"{model_arch_to_string(model_arch).capitalize()} CER"].append(
+            f"{cer_result:.2%}"
+        )
 
 dataframe = pd.DataFrame(results)
 print(dataframe)

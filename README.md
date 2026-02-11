@@ -449,7 +449,7 @@ The easiest way to get the model files is using the Python module. After [instal
 python -m moonshine_voice.download --language en
 ```
 
-You can use either the two-letter code or the English name for the `language` argument. If you want to see which languages are supported by your current version supply a bogus language as the argument:
+You can use either the two-letter code or the English name for the `language` argument. If you want to see which languages are supported by your current version they're [listed below](#available-models), or you can supply a bogus language as the argument to this command:
 
 ```bash
 python -m moonshine_voice.download --language foo
@@ -498,11 +498,41 @@ For platforms that support Python, you can run the [`scripts/run-benchmarks.py`]
 
 ## Models
 
-Moonshine Voice is based on a family of speech to text models created by Manjunath Kudlur and team at Moonshine AI. If you want to download models to use with the framework, you can use [the Python package to access them](#downloading-models). This section contains more information about the history and 
+Moonshine Voice is based on a family of speech to text models created by the team at Moonshine AI. If you want to download models to use with the framework, you can use [the Python package to access them](#downloading-models). This section contains more information about the history and characteristics of the models we offer.
 
 ### Papers
 
-These research papers are a good resource for understanding the architectures and performance strategies behind the 
+These research papers are a good resource for understanding the architectures and performance strategies behind the models:
+
+ - [**Moonshine: Speech Recognition for Live Transcription and Voice Commands**](https://arxiv.org/abs/2410.15608): Describes the first-generation model architecture, which enabled flexible-duration input windows, improving on Whisper's fixed 30 second requirement.
+ - [**Flavors of Moonshine: Tiny Specialized ASR Models for Edge Devices**](https://arxiv.org/abs/2509.02523): How we improved accuracy for non-English languages by training mono-lingual models.
+ - [**Moonshine v2: Ergodic Streaming Encoder ASR for Latency-Critical Speech
+Applications**](): Introduces our approach to streaming, and the advantages it offers for live voice applications.
+
+### Available Models
+
+Here are the models currently available. See [Downloading Models](#downloading-models) for how to obtain them.
+
+| Language   | Architecture     | # Parameters | WER/CER    |
+| ---------- | ---------------- | ------------ | ------ |
+| English    | Tiny             | 26 million   | 12.66% |
+| English    | Tiny Streaming   | 34 million   | 12.00% |
+| English    | Base             | 58 million   | 10.07% |
+| English    | Small Streaming  | 123 million  | 7.84%  |
+| English    | Medium Streaming | 245 million  | 6.65%  |
+| Arabic     | Base             | 58 million   |        |
+| Japanese   | Base             | 58 million   |        |
+| Korean     | Base             | 58 million   |        |
+| Mandarin   | Base             | 58 million   |        |
+| Spanish    | Base             | 58 million   |        |
+| Ukrainian  | Base             | 58 million   |        |
+| Vietnamese | Base             | 58 million   |        |
+
+The English evaluations were done using the [HuggingFace OpenASR Leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard) datasets and methodology. The other languages were evaluated using the FLEURS dataset and the [`scripts/eval-model-accuracy`](scripts/eval-model-accuracy.py) script, with the character or word error rate chosen per language.
+
+### Domain Customization
+
+It's often useful to be able to calibrate a speech to text model towards certain words that you're expecting to hear in your application, whether it's technical terms, slang, or a particular dialect or accent. [Moonshine AI offers full retraining using our internal dataset for customization as a commercial service](mailto:contact@moonshine.ai) and we do hope to support free lighter-weight approaches in the future. You can find a community project working on this at [github.com/pierre-cheneau/finetune-moonshine-asr](https://github.com/pierre-cheneau/finetune-moonshine-asr).
 
 ## API Reference
 
