@@ -572,7 +572,7 @@ Represents a single "line" or speech segment in a transcript. It includes inform
     
  - `has_text_changed`: A boolean that's set if the contents of the line's text was modified by the last transcript update. If this is set, `is_updated` will always be set too, but if other properties of the line (for example the duration or the audio data) have changed but the text remains the same, then `is_updated` can be true while `has_text_changed` is false.
 
- - `has_speaker_id`: Whether a speaker has been identified for this line. Unless the `identify_speakers` option passed to the Transcriber is set to false, this will always be true by the time the line is complete, and potentially it may be set earlier.
+ - `has_speaker_id`: Whether a speaker has been identified for this line. Unless the `identify_speakers` option passed to the Transcriber is set to false, this will always be true by the time the line is complete, and potentially it may be set earlier. The speaker identification process is still experimental, so the current accuracy may not be reliable enough for some applications.
 
  - `speaker_id`: A unique-ish unsigned 64-bit integer that is designed for storage or used to identify the same speaker across multiple sessions.
 
@@ -686,6 +686,7 @@ This library is in active development, and we aim to implement:
  - More languages.
  - More streaming models.
  - Improved speaker identification.
+ - Lightweight domain customization.
 
 ## Acknowledgements
 
