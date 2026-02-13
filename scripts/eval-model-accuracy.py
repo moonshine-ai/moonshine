@@ -9,6 +9,7 @@ from moonshine_voice import (
     Transcriber,
     string_to_model_arch,
     model_arch_to_string,
+    ModelArch,
 )
 
 import argparse
@@ -54,7 +55,9 @@ english_text_normalizer = EnglishTextNormalizer()
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    "--languages", type=str, default="ar_eg,en_us,es_419,ja_jp,ko_kr,uk_ua,vi_vn,cmn_hans_cn"
+    "--languages",
+    type=str,
+    default="ar_eg,en_us,es_419,ja_jp,ko_kr,uk_ua,vi_vn,cmn_hans_cn",
 )
 parser.add_argument("--model-archs", type=str, default="base")
 parser.add_argument("--model-paths", type=str, default=None)
@@ -72,7 +75,9 @@ model_archs = [
 if args.model_paths is not None:
     model_paths = args.model_paths.split(":")
     if len(model_paths) != len(model_archs):
-        raise ValueError("Number of model paths must match number of model architectures")
+        raise ValueError(
+            "Number of model paths must match number of model architectures"
+        )
     model_paths = [model_path.strip() for model_path in model_paths]
 else:
     model_paths = None
@@ -105,7 +110,14 @@ for fleurs_language in languages:
     results["Language"].append(english_name)
     results["Fleurs Code"].append(fleurs_language)
 
-    for model_arch in model_archs:
+    if language_code == "ko":
+        current_model_archs = [ModelArch.TINY]
+        model_arch_string = "Base"
+    else:
+        current_model_archs = model_archs
+        model_arch_string = model_arch_to_string(model_arch).capitalize()
+
+    for model_arch in current_model_archs:
         print(
             f"Evaluating {model_arch_to_string(model_arch)} model for {english_name} on FLEURS dataset"
         )
@@ -115,8 +127,18 @@ for fleurs_language in languages:
             arch = model_arch
         else:
             path, arch = get_model_for_language(language_code, model_arch)
+        # English and Spanish use the tokenizer more efficiently, 
+        # so we can use a lower max tokens per second to avoid hallucinations.
+        if language_code == "en" or language_code == "es":
+            max_tokens_per_second = 6.5
+        else:
+            max_tokens_per_second = 13.0
         # Disable the VAD since these are already pre-segmented.
-        transcriber = Transcriber(path, arch, options={"vad_threshold": 0.0})
+        options = {
+            "vad_threshold": 0.0,
+            "max_tokens_per_second": max_tokens_per_second,
+        }
+        transcriber = Transcriber(path, arch, options=options)
 
         fleurs_dataset = load_dataset(
             "google/fleurs", fleurs_language, trust_remote_code=True
@@ -161,12 +183,8 @@ for fleurs_language in languages:
 
         print(f"WER: {wer_result:.2%}, CER: {cer_result:.2%}")
 
-        results[f"{model_arch_to_string(model_arch).capitalize()} WER"].append(
-            f"{wer_result:.2%}"
-        )
-        results[f"{model_arch_to_string(model_arch).capitalize()} CER"].append(
-            f"{cer_result:.2%}"
-        )
+        results[f"{model_arch_string} WER"].append(f"{wer_result:.2%}")
+        results[f"{model_arch_string} CER"].append(f"{cer_result:.2%}")
 
 dataframe = pd.DataFrame(results)
 print(dataframe)
