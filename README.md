@@ -18,7 +18,7 @@
 
 - Everything runs on-device, so it's fast, private, and you don't need an account, credit card, or API keys.
 - The framework and models are optimized for live streaming applications, offering low latency responses by doing a lot of the work while the user is still talking.
-- All models are based on our [cutting](https://arxiv.org/abs/2410.15608) [edge](https://arxiv.org/abs/2509.02523) research and trained from scratch, so we can offer [higher accuracy than Whisper Large V3 at the top end](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard), down to tiny 26MB models for constrained deployments.
+- All models are based on our [cutting edge research](https://arxiv.org/abs/2602.12241) and trained from scratch, so we can offer [higher accuracy than Whisper Large V3 at the top end](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard), down to tiny 26MB models for constrained deployments.
 - It's easy to integrate across platforms, with the same library running on [Python](#python), [iOS](#ios), [Android](#android), [MacOS](#macos), [Linux](#linux), [Windows](#windows), [Raspberry Pis](#raspberry-pi), [IoT devices](https://www.linkedin.com/posts/petewarden_most-of-the-recent-news-about-ai-seems-to-activity-7384664255242932224-v6Mr/), and wearables.
 - Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, speaker identification (diarization) and command recognition, so you don't need to be an expert to build a voice application.
 - It supports multiple languages, including English, Spanish, Mandarin, Japanese, Korean, Vietnamese, Ukrainian, and Arabic.
@@ -551,7 +551,7 @@ These research papers are a good resource for understanding the architectures an
 - [**Moonshine: Speech Recognition for Live Transcription and Voice Commands**](https://arxiv.org/abs/2410.15608): Describes the first-generation model architecture, which enabled flexible-duration input windows, improving on Whisper's fixed 30 second requirement.
 - [**Flavors of Moonshine: Tiny Specialized ASR Models for Edge Devices**](https://arxiv.org/abs/2509.02523): How we improved accuracy for non-English languages by training mono-lingual models.
 - [**Moonshine v2: Ergodic Streaming Encoder ASR for Latency-Critical Speech
-  Applications**](): Introduces our approach to streaming, and the advantages it offers for live voice applications.
+  Applications**](https://arxiv.org/abs/2602.12241): Introduces our approach to streaming, and the advantages it offers for live voice applications.
 
 ### Available Models
 
