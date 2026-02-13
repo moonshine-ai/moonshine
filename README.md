@@ -14,25 +14,25 @@
 - [Acknowledgements](#acknowledgements)
 - [License](#license)
 
-[Moonshine](https://moonshine.ai) Voice is an open source AI toolkit for developers building real-time voice applications. 
+[Moonshine](https://moonshine.ai) Voice is an open source AI toolkit for developers building real-time voice applications.
 
- - Everything runs on-device, so it's fast, private, and you don't need an account, credit card, or API keys. 
- - The framework and models are optimized for live streaming applications, offering low latency responses by doing a lot of the work while the user is still talking.
- - All models are based on our [cutting](https://arxiv.org/abs/2410.15608) [edge](https://arxiv.org/abs/2509.02523) research and trained from scratch, so we can offer [higher accuracy than Whisper Large V3 at the top end](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard), down to tiny 26MB models for constrained deployments.
- - It's easy to integrate across platforms, with the same library running on [Python](#python), [iOS](#ios), [Android](#android), [MacOS](#macos), [Linux](#linux), [Windows](#windows), [Raspberry Pis](#raspberry-pi), [IoT devices](https://www.linkedin.com/posts/petewarden_most-of-the-recent-news-about-ai-seems-to-activity-7384664255242932224-v6Mr/), and wearables.
- - Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, speaker identification (diarization) and command recognition, so you don't need to be an expert to build a voice application.
- - It supports multiple languages, including English, Spanish, Mandarin, Japanese, Korean, Vietnamese, Ukrainian, and Arabic.
+- Everything runs on-device, so it's fast, private, and you don't need an account, credit card, or API keys.
+- The framework and models are optimized for live streaming applications, offering low latency responses by doing a lot of the work while the user is still talking.
+- All models are based on our [cutting](https://arxiv.org/abs/2410.15608) [edge](https://arxiv.org/abs/2509.02523) research and trained from scratch, so we can offer [higher accuracy than Whisper Large V3 at the top end](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard), down to tiny 26MB models for constrained deployments.
+- It's easy to integrate across platforms, with the same library running on [Python](#python), [iOS](#ios), [Android](#android), [MacOS](#macos), [Linux](#linux), [Windows](#windows), [Raspberry Pis](#raspberry-pi), [IoT devices](https://www.linkedin.com/posts/petewarden_most-of-the-recent-news-about-ai-seems-to-activity-7384664255242932224-v6Mr/), and wearables.
+- Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, speaker identification (diarization) and command recognition, so you don't need to be an expert to build a voice application.
+- It supports multiple languages, including English, Spanish, Mandarin, Japanese, Korean, Vietnamese, Ukrainian, and Arabic.
 
- ## Quickstart
+## Quickstart
 
-[Join our community on Discord to get live support](https://discord.gg/27qp9zSRXF). 
+[Join our community on Discord to get live support](https://discord.gg/27qp9zSRXF).
 
- ### Python
+### Python
 
- ```bash
- pip install moonshine-voice
- python -m moonshine_voice.mic_transcriber --language en
- ```
+```bash
+pip install moonshine-voice
+python -m moonshine_voice.mic_transcriber --language en
+```
 
 Listens to the microphone and prints updates to the transcript as they come in.
 
@@ -90,31 +90,30 @@ You'll need a USB microphone plugged in to get audio input, but the Python pip p
 ```bash
  sudo pip install --break-system-packages moonshine-voice
  python -m moonshine_voice.mic_transcriber --language en
- ```
+```
 
 I've recorded [a screencast on YouTube](https://www.youtube.com/watch?v=NNcqx1wFxl0) to help you get started, and you can also download [github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-examples.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-examples.tar.gz) for some fun, Pi-specific examples. [The README](examples/raspberry-pi/my-dalek/README.md) has information about using a virtual environment for the Python install if you don't want to use `--break-system-packages`.
-
 
 ## When should you choose Moonshine over Whisper?
 
 TL;DR - When you're working with live speech.
 
-| Model | WER | MacBook Pro Latency | Linux x86 Latency | iPad | Pixel 9 | Raspberry Pi 5 | Parameters |
-| ----- | --- | ------------------- | ----------------- | ---- | ------- | -------------- | ---------- |
-| Moonshine Medium Streaming | % | 0ms | 0ms | 0ms | 0ms | 0ms | 200m |
-| Whisper Large v3 | % | 0ms | 0ms | 0ms | 0ms | 0ms | 1500m |
-| Moonshine Small Streaming | % | 0ms | 0ms | 0ms | 0ms | 0ms | ? |
-| Whisper Small | % | 0ms | 0ms | 0ms | 0ms | 0ms | 244m |
-| Moonshine Tiny Streaming | % | 0ms | 0ms | 0ms | 0ms | 0ms | 26m |
-| Whisper Tiny | % | 0ms | 0ms | 0ms | 0ms | 0ms | 39m |
+| Model                      | WER    | # Parameters | MacBook Pro | Linux x86 | 
+| -------------------------- | ------ | ------------ | ----------- | --------- | 
+| Moonshine Medium Streaming | 6.65%  | 245 million  | 258ms       | 347ms     | 
+| Whisper Large v3           | 7.44%  | 1.5 billion  | 11,286ms    | 16,919ms  | 
+| Moonshine Small Streaming  | 7.84%  | 123 million  | 148ms       | 201ms     | 
+| Whisper Small              | 8.59%  | 244 million  | 1940ms      | 3,425ms   | 
+| Moonshine Tiny Streaming   | 12.00% | 34 million   | 50ms        | 76ms      | 
+| Whisper Tiny               | 12.81% | 39 million   | 277ms       | 1,141ms   | 
 
-*See [benchmarks](#benchmarks) for how these were measured.*
+_See [benchmarks](#benchmarks) for how these numbers were measured._
 
 [OpenAI's release of their Whisper family of models]() was a massive step forward for open-source speech to text. They offered a range of sizes, allowing developers to trade off compute and storage space against accuracy to fit their applications. Their biggest models, like Large v3, also gave accuracy scores that were higher than anything available outside of large tech companies like Google or Apple. At Moonshine we were early and enthusiastic adopters of Whisper, and we still remain big fans of the models and the great frameworks like [FasterWhisper](https://github.com/SYSTRAN/faster-whisper) and others that have been built around them.
 
 However, as we built applications that needed a live voice interface we found we needed features that weren't available through Whisper:
 
- - **Whisper always operates on a 30-second input window**. This isn't an issue when you're processing audio in large batches, you can usually just look ahead in the file and find a 30-second-ish chunk of speech to apply it to. Voice interfaces can't look ahead to create larger chunks from their input stream, and phrases are seldom longer than five to ten seconds. This means there's a lot of wasted computation encoding zero padding in the encoder and decoder, which means longer latency in returning results. Since one of the most important requirements for any interface is responsiveness, usually defined as latency below 200ms, this hurts the user experience even on platforms that have compute to spare, and makes it unusable on more constrained devices.
+- **Whisper always operates on a 30-second input window**. This isn't an issue when you're processing audio in large batches, you can usually just look ahead in the file and find a 30-second-ish chunk of speech to apply it to. Voice interfaces can't look ahead to create larger chunks from their input stream, and phrases are seldom longer than five to ten seconds. This means there's a lot of wasted computation encoding zero padding in the encoder and decoder, which means longer latency in returning results. Since one of the most important requirements for any interface is responsiveness, usually defined as latency below 200ms, this hurts the user experience even on platforms that have compute to spare, and makes it unusable on more constrained devices.
 - **Whisper doesn't cache anything**. Another common requirement for voice interfaces is that they display feedback as the user is talking, so that they know the app is listening and understanding them. This means calling the speech to text model repeatedly over time as a sentence is spoken. Most of the audio input is the same, with only a short addition to the end. Even though a lot of the input is constant, Whisper starts from scratch every time, doing a lot of redundant work on audio that it has seen before. Like the fixed input window, this unnecessary latency impairs the user experience.
 - **Whisper supports a lot of languages poorly**. Whisper's multilingual support is an incredible feat of engineering, and demonstrated a single model could handle many languages, and even offer translations. This chart from OpenAI ([raw data in Appendix D-2.4](https://cdn.openai.com/papers/whisper.pdf)) shows the drop-off in Word Error Rate (WER) with the very largest 1.5 billion parameter model.
 
@@ -128,11 +127,11 @@ All these limitations drove us to create our own family of models that better me
 
 However we kept encountering applications that needed even lower latencies on even more constrained platforms. We also wanted to offer higher accuracy than the Base-equivalent that was the top end of the initial models. That led us to this second generation of Moonshine models, which offer:
 
- - **Flexible input windows**. You can supply any length of audio (though we recommend staying below around 30 seconds) and the model will only spend compute on that input, no zero-padding required. This gives us a significant latency boost.
- - **Caching for streaming**. Our models now support incremental addition of audio over time, and they cache the input encoding and part of the decoder's state so that we're able to skip even more of the compute, driving latency down dramatically.
- - **Language-specific models**. We have gathered data and trained models for multiple languages, including Arabic, Japanese, Korean, Spanish, Ukrainian, Vietnamese, and Chinese. As we discuss in our [Flavors of Moonshine paper](https://arxiv.org/abs/2509.02523), we've found that we can get much higher accuracy for the same size and compute if we restrict a model to focus on just one language, compared to training one model across many.
- - **Cross-platform library support**. We're building applications ourselves, and needed to be able to deploy these models across Linux, MacOS, Windows, iOS, and Android, as well as use them from languages like Python, Swift, Java, and C++. To support this we architected a portable C++ core library that handles all of the processing, uses OnnxRuntime for good performance across systems, and then built native interfaces for all the required high-level languages. This allows developers to learn one API, and then deploy it almost anywhere they want to run.
- - **Better accuracy than Whisper V3 Large**. On [HuggingFace's OpenASR leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard), our newest streaming model for English, Medium Streaming, achieves a lower word-error rate than the most-accurate Whisper model from OpenAI. This is despite Moonshine's version using 200 million parameters, versus Large v3's 1.5 billion, making it much easier to deploy on the edge.
+- **Flexible input windows**. You can supply any length of audio (though we recommend staying below around 30 seconds) and the model will only spend compute on that input, no zero-padding required. This gives us a significant latency boost.
+- **Caching for streaming**. Our models now support incremental addition of audio over time, and they cache the input encoding and part of the decoder's state so that we're able to skip even more of the compute, driving latency down dramatically.
+- **Language-specific models**. We have gathered data and trained models for multiple languages, including Arabic, Japanese, Korean, Spanish, Ukrainian, Vietnamese, and Chinese. As we discuss in our [Flavors of Moonshine paper](https://arxiv.org/abs/2509.02523), we've found that we can get much higher accuracy for the same size and compute if we restrict a model to focus on just one language, compared to training one model across many.
+- **Cross-platform library support**. We're building applications ourselves, and needed to be able to deploy these models across Linux, MacOS, Windows, iOS, and Android, as well as use them from languages like Python, Swift, Java, and C++. To support this we architected a portable C++ core library that handles all of the processing, uses OnnxRuntime for good performance across systems, and then built native interfaces for all the required high-level languages. This allows developers to learn one API, and then deploy it almost anywhere they want to run.
+- **Better accuracy than Whisper V3 Large**. On [HuggingFace's OpenASR leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard), our newest streaming model for English, Medium Streaming, achieves a lower word-error rate than the most-accurate Whisper model from OpenAI. This is despite Moonshine's version using 200 million parameters, versus Large v3's 1.5 billion, making it much easier to deploy on the edge.
 
 Hopefully this gives you a good idea of how Moonshine compares to Whisper. If you're working with GPUs in the cloud on data in bulk where throughput is most important then Whisper (or Nvidia alternatives like Parakeet) offer advantages like batch processing, but we believe we can't be beat for live speech. We've built the framework and models we wished we'd had when we first started building applications with voice interfaces, so if you're working with live voice inputs, [give Moonshine a try](#quickstart).
 
@@ -168,8 +167,8 @@ Our goal is to build a framework that any developer can pick up and use, even wi
 
 The basic flow is:
 
- - Create a `Transcriber` or `IntentRecognizer` object, depending on whether you want the text that's spoken, or just to know that a user has requested an action.
- - Attach an `EventListener` that gets called when important things occur, like the end of a phrase or an action being triggered, so your application can respond.
+- Create a `Transcriber` or `IntentRecognizer` object, depending on whether you want the text that's spoken, or just to know that a user has requested an action.
+- Attach an `EventListener` that gets called when important things occur, like the end of a phrase or an action being triggered, so your application can respond.
 
 Traditionally, adding a voice interface to an application or product required integrating a lot of different libraries to handle all the processing that's needed to capture audio and turn it into something actionable. The main steps involved are microphone capture, voice activity detection (to break a continuous stream of audio into sections of speech), speech to text, speaker identification, and intent recognition. Each of these steps typically involved a different framework, which greatly increased the complexity of integrating, optimizing, and maintaining these dependencies.
 
@@ -249,10 +248,10 @@ The transcriber needs some audio data to work with. If you want to try it with t
 
 The important things to notice here are:
 
- - We create an array of mono audio data from a wav file, using the convenience `load_wav_file()` function that's part of the Moonshine library.
- - We start the transcriber to activate its processing code.
- - The loop adds audio in chunks. These chunks can be any length and any sample rate, the library takes care of all the housekeeping.
- - As audio is added, the event listener you added will be called, giving information about the latest speech.
+- We create an array of mono audio data from a wav file, using the convenience `load_wav_file()` function that's part of the Moonshine library.
+- We start the transcriber to activate its processing code.
+- The loop adds audio in chunks. These chunks can be any length and any sample rate, the library takes care of all the housekeeping.
+- As audio is added, the event listener you added will be called, giving information about the latest speech.
 
 In a real application you'd be calling `add_audio()` from an audio handler that's receiving it from your source. Since the library can handle arbitrary durations and sample rates, just make sure it's mono and otherwise feed it in as-is.
 
@@ -270,22 +269,22 @@ We also offer a specialization of the base `Transcriber` class called `MicTransc
 
 The main communication channel between the library and your application is through events that are passed to any listener functions you have registered. There are four major event types:
 
- - `LineStarted`. This is sent to listeners when the beginning of a new speech segment is detected. It may or may not contain any text, but since it's dispatched near the start of an utterance, that text is likely to change over time.
- - `LineUpdated`. Called whenever any of the information about a line changes, including the duration, audio data, and text.
- - `LineTextChanged`. Called only when the text associated with a line is updated. This is a subset of `LineUpdated` that focuses on the common need to refresh the text shown to users as often as possible to keep the experience interactive.
- - `LineCompleted`. Sent when we detect that someone has paused speaking, and we've ended the current segment. The line data structure has the final values for the text, duration, and speaker ID.
+- `LineStarted`. This is sent to listeners when the beginning of a new speech segment is detected. It may or may not contain any text, but since it's dispatched near the start of an utterance, that text is likely to change over time.
+- `LineUpdated`. Called whenever any of the information about a line changes, including the duration, audio data, and text.
+- `LineTextChanged`. Called only when the text associated with a line is updated. This is a subset of `LineUpdated` that focuses on the common need to refresh the text shown to users as often as possible to keep the experience interactive.
+- `LineCompleted`. Sent when we detect that someone has paused speaking, and we've ended the current segment. The line data structure has the final values for the text, duration, and speaker ID.
 
 We offer some guarantees about these events:
 
- - `LineStarted` is always called exactly once for any segment.
- - `LineCompleted` is always called exactly once after `LineStarted` for any segment.
- - `LineUpdated` and `LineTextChanged` will only ever be called after the `LineStarted` and before the `LineCompleted` events for a segment.
- - Those update events are not guaranteed to be called (and in practice can be disabled by setting `update_interval` to a very large value).
- - There will only be one line active at any one time for any given stream.
- - Once `LineCompleted` has been called, the library will never alter that line's data again.
- - If `stop()` is called on a transcriber or stream, any active lines will have `LineCompleted` called. 
- - Each line has a 64-bit `lineId` that is designed to be unique enough to avoid collisions.
- - This `lineId` remains the same for the line over time, from the first `LineStarted` event onwards.
+- `LineStarted` is always called exactly once for any segment.
+- `LineCompleted` is always called exactly once after `LineStarted` for any segment.
+- `LineUpdated` and `LineTextChanged` will only ever be called after the `LineStarted` and before the `LineCompleted` events for a segment.
+- Those update events are not guaranteed to be called (and in practice can be disabled by setting `update_interval` to a very large value).
+- There will only be one line active at any one time for any given stream.
+- Once `LineCompleted` has been called, the library will never alter that line's data again.
+- If `stop()` is called on a transcriber or stream, any active lines will have `LineCompleted` called.
+- Each line has a 64-bit `lineId` that is designed to be unique enough to avoid collisions.
+- This `lineId` remains the same for the line over time, from the first `LineStarted` event onwards.
 
 ### Getting Started with Command Recognition
 
@@ -471,7 +470,7 @@ Downloaded model path: /Users/petewarden/Library/Caches/moonshine_voice/download
 
 The last two lines tell you which model architecture is being used, and where the model files are on disk. By default it uses your user cache directory, which is `~/Library/Caches/moonshine_voice` on MacOS, but you can use a different location by setting the `MOONSHINE_VOICE_CACHE` environment variable before running the script.
 
-### Benchmarking
+### Benchmarks
 
 The core library includes a benchmarking tool that simulates processing live audio by loading a .wav audio file and feeding it in chunks to the model. To run it:
 
@@ -484,17 +483,62 @@ cmake --build . --config Release
 ./benchmark
 ```
 
-This will report the absolute time taken to process the audio, what percentage of the audio file's duration that is, and the average latency for a response. 
+This will report the absolute time taken to process the audio, what percentage of the audio file's duration that is, and the average latency for a response.
 
 The percentage is helpful because it approximates how much of a compute load the model will be on your hardware. For example, if it shows 20% then that means the speech processing will take a fifth of the compute time when running in your application, leaving 80% for the rest of your code.
 
-The latency metric needs a bit of explanation. What most applications care about is how soon they are notified about a phrase after the user has finished talking, since this determines how fast the product can respond. As with any user interface, the time between speech ending and the app doing something determines how responsive the voice interface feels, with a goal of keeping it below 200ms. The latency figure logged here is the average time between when the library determines the user has stopped talking and the delivery of the final transcript of that phrase to the client. This is where streaming models have the most impact, since they do a lot of their work upfront, while speech is still happening, so they can usually finish very quickly. 
+The latency metric needs a bit of explanation. What most applications care about is how soon they are notified about a phrase after the user has finished talking, since this determines how fast the product can respond. As with any user interface, the time between speech ending and the app doing something determines how responsive the voice interface feels, with a goal of keeping it below 200ms. The latency figure logged here is the average time between when the library determines the user has stopped talking and the delivery of the final transcript of that phrase to the client. This is where streaming models have the most impact, since they do a lot of their work upfront, while speech is still happening, so they can usually finish very quickly.
 
 By default the benchmark binary uses the Tiny English model that's embedded in the framework, but you can pass in the `--model-path` and `--model-arch` parameters to choose [one that you've downloaded](#downloading-models).
 
 You can also choose how often the transcript should be updated using the `--transcription-interval` argument. This defaults to 0.5 seconds, but the right value will depend on how fast your application needs updates. Longer intervals reduce the compute required a bit, at the cost of slower updates.
 
+#### Whisper Comparisons
+
 For platforms that support Python, you can run the [`scripts/run-benchmarks.py`](scripts/run-benchmarks.py) script which will evaluate similar metrics, with the advantage that it can also download the models so you don't need to worry about path handling.
+
+It also evaluates equivalent Whisper models. This is a pretty opinionated benchmark that looks at the latency and total compute cost
+of the two families of models in a situation that is representative of many common
+real-time voice applications' requirements:
+
+- Speech needs to be responded to as quickly as possible once a user completes a phrase.
+- The phrases are of durations between a range of one to ten seconds.
+
+These are very different requirements from bulk offline processing scenarios, where the
+overall throughput of the system is more important, and so the latency on a single
+segment of speech is less important than the overall throughput of the system. This
+allows optimizations like batch processing.
+
+We are not claiming that Whisper is not a great model for offline processing, but we
+do want to highlight the advantages we that Moonshine offers for live speech
+applications with real-time latency requirements.
+
+The experimental setup is as follows:
+
+- We use the two_cities.wav audio file as a test case, since it has a mix of short
+  and long phrases. You can vary this by passing in your own audio file with the
+  --wav_path argument.
+- We use the Moonshine Tiny, Base, Tiny Streaming, Small Streaming, and Medium
+  Streaming models.
+- We compare these to the Whisper Tiny, Base, Small, and Large v3 models. Since the
+  Moonshine Medium Streaming model achieves lower WER than Whisper Large v3 we compare
+  those two, otherwise we compare each with their namesake.
+- We use the Moonshine VAD segmenter to split the audio into phrases, and feed each
+  phrase to Whisper for transcription.
+- Response latency for both models is measured as the time between a phrase being
+  identified as complete by the VAD segmenter and the transcribed text being returned.
+  For Whisper this means the full transcription time, but since the Moonshine models
+  are streaming we can do a lot of the work while speech is still happening, so the
+  latency is much lower.
+- We measure the total compute cost of the models by totalling the duration of the
+  audio processing times for each model, and then expressing that as a percentage of the
+  total audio duration. This is the inverse of the commonly used real-time factor (RTF)
+  metric, but it reflects the compute load required for a real-time application.
+- We're using faster-whisper for Whisper, since that seems to provide the best
+  cross-platform performance. We're also sticking with the CPU, since most applications
+  can't rely on GPU or NPU acceleration being present on all the platforms they target.
+  We know there are a lot of great GPU/NPU-accelerated Whisper implementations out there,
+  but these aren't portable enough to be useful for the applications we care about.
 
 ## Models
 
@@ -504,31 +548,33 @@ Moonshine Voice is based on a family of speech to text models created by the tea
 
 These research papers are a good resource for understanding the architectures and performance strategies behind the models:
 
- - [**Moonshine: Speech Recognition for Live Transcription and Voice Commands**](https://arxiv.org/abs/2410.15608): Describes the first-generation model architecture, which enabled flexible-duration input windows, improving on Whisper's fixed 30 second requirement.
- - [**Flavors of Moonshine: Tiny Specialized ASR Models for Edge Devices**](https://arxiv.org/abs/2509.02523): How we improved accuracy for non-English languages by training mono-lingual models.
- - [**Moonshine v2: Ergodic Streaming Encoder ASR for Latency-Critical Speech
-Applications**](): Introduces our approach to streaming, and the advantages it offers for live voice applications.
+- [**Moonshine: Speech Recognition for Live Transcription and Voice Commands**](https://arxiv.org/abs/2410.15608): Describes the first-generation model architecture, which enabled flexible-duration input windows, improving on Whisper's fixed 30 second requirement.
+- [**Flavors of Moonshine: Tiny Specialized ASR Models for Edge Devices**](https://arxiv.org/abs/2509.02523): How we improved accuracy for non-English languages by training mono-lingual models.
+- [**Moonshine v2: Ergodic Streaming Encoder ASR for Latency-Critical Speech
+  Applications**](): Introduces our approach to streaming, and the advantages it offers for live voice applications.
 
 ### Available Models
 
 Here are the models currently available. See [Downloading Models](#downloading-models) for how to obtain them.
 
-| Language   | Architecture     | # Parameters | WER/CER    |
-| ---------- | ---------------- | ------------ | ------ |
-| English    | Tiny             | 26 million   | 12.66% |
-| English    | Tiny Streaming   | 34 million   | 12.00% |
-| English    | Base             | 58 million   | 10.07% |
-| English    | Small Streaming  | 123 million  | 7.84%  |
-| English    | Medium Streaming | 245 million  | 6.65%  |
-| Arabic     | Base             | 58 million   |        |
-| Japanese   | Base             | 58 million   |        |
-| Korean     | Base             | 58 million   |        |
-| Mandarin   | Base             | 58 million   |        |
-| Spanish    | Base             | 58 million   |        |
-| Ukrainian  | Base             | 58 million   |        |
-| Vietnamese | Base             | 58 million   |        |
+| Language   | Architecture     | # Parameters | WER/CER |
+| ---------- | ---------------- | ------------ | ------- |
+| English    | Tiny             | 26 million   | 12.66%  |
+| English    | Tiny Streaming   | 34 million   | 12.00%  |
+| English    | Base             | 58 million   | 10.07%  |
+| English    | Small Streaming  | 123 million  | 7.84%   |
+| English    | Medium Streaming | 245 million  | 6.65%   |
+| Arabic     | Base             | 58 million   | 5.63%   |
+| Japanese   | Base             | 58 million   | 13.62%  |
+| Korean     | Tiny             | 26 million   | 6.46%   |
+| Mandarin   | Base             | 58 million   | 25.76%  |
+| Spanish    | Base             | 58 million   | 4.33%   |
+| Ukrainian  | Base             | 58 million   | 14.55%  |
+| Vietnamese | Base             | 58 million   | 8.82%   |
 
 The English evaluations were done using the [HuggingFace OpenASR Leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard) datasets and methodology. The other languages were evaluated using the FLEURS dataset and the [`scripts/eval-model-accuracy`](scripts/eval-model-accuracy.py) script, with the character or word error rate chosen per language.
+
+One common issue to watch out for if you're using models that don't use the Latin alphabet (so any languages except English and Spanish) is that you'll need to set the [`max_tokens_per_second` option](#transcriber-options) to 13.0 when you create the transcriber. This is because the most common pattern for hallucinations is endlessly repeating the last few words, and our heuristic to detect this is to check if there's an unusually high number of tokens for the duration of a segment. Unfortunately the base number of tokens per second for non-Latin languages is much higher than for English, thanks to how we're tokenizing, so you have to manually set the threshold higher to avoid cutting off valid outputs.
 
 ### Domain Customization
 
@@ -538,17 +584,17 @@ It's often useful to be able to calibrate a speech to text model towards certain
 
 This documentation covers the Python API, but the same functions and classes are present in all the other supported languages, just with native adaptations (for example CamelCase). You should be able to use this as a reference for all platforms the library runs on.
 
-  - [Data Structures](#data-structures)
-    - [TranscriberLine](#transcriberline)
-    - [Transcript](#transcript)
-    - [TranscriptEvent](#transcriptevent)
-    - [IntentMatch](#intentmatch)
-  - [Classes](#classes)
-    - [Transcriber](#transcriber)
-    - [MicTranscriber](#mictranscriber)
-    - [Stream](#stream)
-    - [TranscriptEventListener](#transcripteventlistener)
-    - [IntentRecognizer](#intentrecognizer)
+- [Data Structures](#data-structures)
+  - [TranscriberLine](#transcriberline)
+  - [Transcript](#transcript)
+  - [TranscriptEvent](#transcriptevent)
+  - [IntentMatch](#intentmatch)
+- [Classes](#classes)
+  - [Transcriber](#transcriber)
+  - [MicTranscriber](#mictranscriber)
+  - [Stream](#stream)
+  - [TranscriptEventListener](#transcripteventlistener)
+  - [IntentRecognizer](#intentrecognizer)
 
 ### Data Structures
 
@@ -556,29 +602,23 @@ This documentation covers the Python API, but the same functions and classes are
 
 Represents a single "line" or speech segment in a transcript. It includes information about the timing, speaker, and text content of the utterance, as well as state such as whether the speech is ongoing or done. If you're building an application that involves transcription, this data structure has all of the information available about each line of speech. Be aware that each line can be updated multiple times with new text and other information as the user keeps speaking.
 
- - `text`: A string containing the UTF-8 encoded text that has been extracted from the audio of this segment.
-    
- - `start_time`: A float value representing the time in seconds since the start of the current session that the current utterance was first detected.
-    
- - `duration`: A float that represents the duration in seconds of the current utterance.
-    
- - `line_id`: An unsigned 64-bit integer that represents a line in a collision-resistant way, for use in storage and ensuring the application can keep track of lines as they change over time. See [Transcription Event Flow](#transcription-event-flow) for more details.
-    
- - `is_complete`: A boolean that is false until the segment has been completed, and true for the remainder of the line's lifetime.
+- `text`: A string containing the UTF-8 encoded text that has been extracted from the audio of this segment.
+- `start_time`: A float value representing the time in seconds since the start of the current session that the current utterance was first detected.
+- `duration`: A float that represents the duration in seconds of the current utterance.
+- `line_id`: An unsigned 64-bit integer that represents a line in a collision-resistant way, for use in storage and ensuring the application can keep track of lines as they change over time. See [Transcription Event Flow](#transcription-event-flow) for more details.
+- `is_complete`: A boolean that is false until the segment has been completed, and true for the remainder of the line's lifetime.
 
- - `is_updated`: A boolean that's true if any information about the line has changed since the last time the transcript was updated. Since the transcript will be periodically updated internally by the library as you add audio chunks, you can't rely on polling this to detect changes. You should rely on the event/listener flow to catch modifications instead. This applies to all of the booleans below too.
-    
- - `is_new`: A boolean indicating whether the line has been added to the transcript by the last update call.
-    
- - `has_text_changed`: A boolean that's set if the contents of the line's text was modified by the last transcript update. If this is set, `is_updated` will always be set too, but if other properties of the line (for example the duration or the audio data) have changed but the text remains the same, then `is_updated` can be true while `has_text_changed` is false.
+- `is_updated`: A boolean that's true if any information about the line has changed since the last time the transcript was updated. Since the transcript will be periodically updated internally by the library as you add audio chunks, you can't rely on polling this to detect changes. You should rely on the event/listener flow to catch modifications instead. This applies to all of the booleans below too.
+- `is_new`: A boolean indicating whether the line has been added to the transcript by the last update call.
+- `has_text_changed`: A boolean that's set if the contents of the line's text was modified by the last transcript update. If this is set, `is_updated` will always be set too, but if other properties of the line (for example the duration or the audio data) have changed but the text remains the same, then `is_updated` can be true while `has_text_changed` is false.
 
- - `has_speaker_id`: Whether a speaker has been identified for this line. Unless the `identify_speakers` option passed to the Transcriber is set to false, this will always be true by the time the line is complete, and potentially it may be set earlier. The speaker identification process is still experimental, so the current accuracy may not be reliable enough for some applications.
+- `has_speaker_id`: Whether a speaker has been identified for this line. Unless the `identify_speakers` option passed to the Transcriber is set to false, this will always be true by the time the line is complete, and potentially it may be set earlier. The speaker identification process is still experimental, so the current accuracy may not be reliable enough for some applications.
 
- - `speaker_id`: A unique-ish unsigned 64-bit integer that is designed for storage or used to identify the same speaker across multiple sessions.
+- `speaker_id`: A unique-ish unsigned 64-bit integer that is designed for storage or used to identify the same speaker across multiple sessions.
 
- - `speaker_index`: An integer that represents the order in which the speaker appeared in the transcript, to make it easy to give speakers default names like "Speaker 1:", etc.
+- `speaker_index`: An integer that represents the order in which the speaker appeared in the transcript, to make it easy to give speakers default names like "Speaker 1:", etc.
 
- - `audio_data`: An array of 32-bit floats representing the raw audio data that the line is based on, as 16KHz mono PCM data between 0.0 and 1.0. This can be useful for further processing (for example to drive a visual indicator or to feed into a specialized speech to text model after the line is complete).
+- `audio_data`: An array of 32-bit floats representing the raw audio data that the line is based on, as 16KHz mono PCM data between 0.0 and 1.0. This can be useful for further processing (for example to drive a visual indicator or to feed into a specialized speech to text model after the line is complete).
 
 #### Transcript
 
@@ -592,9 +632,9 @@ Contains information about a change to the transcript. It has four subclasses, w
 
 This event is sent to any listeners you have registered when an `IntentRecognizer` finds a match to a command you've specified.
 
- - `trigger_phrase`: The string representing the canonical command, exactly as you registered it with the recognizer.
- - `utterance`: The text of the utterance that triggered the match.
- - `similarity`: A float value that reflects how confident the recognizer is that the utterance has the same meaning as the command, with zero being the least confident and one the most.
+- `trigger_phrase`: The string representing the canonical command, exactly as you registered it with the recognizer.
+- `utterance`: The text of the utterance that triggered the match.
+- `similarity`: A float value that reflects how confident the recognizer is that the utterance has the same meaning as the command, with zero being the least confident and one the most.
 
 ### Classes
 
@@ -602,48 +642,48 @@ This event is sent to any listeners you have registered when an `IntentRecognize
 
 Handles the speech to text pipeline.
 
- - <a id="transcriber-init"></a>`__init__()`: Loads and initializes the transcriber.
-   - `model_path`: The path to the directory holding the component model files needed for the complete flow. Note that this is a path to the **folder**, not an individual **file**. You can download and get a path to a cached version of the standard models using the [download_model()](#downloading-models) function.
-   - `model_arch`: The architecture of the model to load, from the selection defined in `ModelArch`.
-   - `update_interval`: By default the transcriber will periodically run text transcription as new audio data is fed, so that update events can be triggered. This value is how often the speech to text model should be run. You can set this to a large duration to suppress updates between a line starting and ending, but because the streaming models do a lot of their work before the final speech to text stage, this may not reduce overall latency by much.
-   - <a id="transcriber-options"></a>``options`: These are flags that affect how the transcription process works inside the library, often enabling performance optimizations or debug logging. They are passed as a dictionary mapping strings to strings, even if the values are to be interpreted as numbers - for example `{"max_tokens_per_second", "15"}`.
-     - "skip_transcription": If you only want the voice-activity detection and segmentation, but want to do further processing in your app, you can set this to "true" and then use the `audioData` array in each line.
-     - "max_tokens_per_second": The models occassionally get caught in an infinite decoder loop, where the same words are repeated over and over again. As a heuristic to catch this we compare the number of tokens in the current run to the duration of the audio, and if there seem to be too many tokens we truncate the decoding. By default this is set to 6.5, but for non-English languages where the models produce a lot more raw tokens per second, you may want to bump this to 13.0.
-     - "transcription_interval": How often to run transcription, in seconds.
-     - "vad_threshold": Controls the sensitivity of the initial voice-activity detection stage that decides how to break raw audio into segments. This defaults to 0.5, with lower values creating longer segments, potentially with more background noise sections, and higher values breaking up speech into smaller chunks, at the risk of losing some actual speech by clipping.
-     - "save_input_wav_path": One of the most common causes of poor transcription quality is incorrect conversion or corruption of the audio that's fed into the pipeline. If you set this option to a folder path, the transcriber will save out exactly what it has received as 16KHz mono WAV files, so you can ensure that your input audio is as you expect.
-     - "log_api_calls": Another debugging option, turning this on causes all calls to the C API entry points in the library to write out information on their arguments to stderr or the console each time they're run.
-     - "log_ort_runs": Prints information about the ONNXRuntime inference runs and how long they take.
-     - "vad_window_duration": The VAD runs every 30ms, but to get higher-confidence values we average the results over time. This value is the time in seconds to average over. The default is 0.5s, shorter durations will spot speech faster at the cost of lower accuracy, higher values may increase accuracy, but at the cost of missing shorter utterances.
-     - "vad_look_behind_sample_count": Because we're averaging over time, the mean VAD signal will lag behind the initial speech detection. To compensate for that, when speech is detected we pull in some of the audio immediately before the average passed the threshold. This value is the number of samples to prepend, and defaults to 8192 (all at 16KHz). 
-     - "vad_max_segment_duration": It can be hard to find gaps in rapid-fire speech, but a lot of applications want their text in chunks that aren't endless. This option sets the longest duration a line can be before it's marked as complete and a new segment is started. The default is 15 seconds, and to increase the chance that a natural break is found, the `vad_threshold` is linearly decreased over time from two thirds of the maximum duration until the maximum is reached. 
-     - "identify_speakers": A boolean that controls whether to run the speaker identification stage in the pipeline.
+- <a id="transcriber-init"></a>`__init__()`: Loads and initializes the transcriber.
+  - `model_path`: The path to the directory holding the component model files needed for the complete flow. Note that this is a path to the **folder**, not an individual **file**. You can download and get a path to a cached version of the standard models using the [download_model()](#downloading-models) function.
+  - `model_arch`: The architecture of the model to load, from the selection defined in `ModelArch`.
+  - `update_interval`: By default the transcriber will periodically run text transcription as new audio data is fed, so that update events can be triggered. This value is how often the speech to text model should be run. You can set this to a large duration to suppress updates between a line starting and ending, but because the streaming models do a lot of their work before the final speech to text stage, this may not reduce overall latency by much.
+  - <a id="transcriber-options"></a>`options`: These are flags that affect how the transcription process works inside the library, often enabling performance optimizations or debug logging. They are passed as a dictionary mapping strings to strings, even if the values are to be interpreted as numbers - for example `{"max_tokens_per_second", "15"}`.
+    - `skip_transcription`: If you only want the voice-activity detection and segmentation, but want to do further processing in your app, you can set this to "true" and then use the `audioData` array in each line.
+    - `max_tokens_per_second`: The models occassionally get caught in an infinite decoder loop, where the same words are repeated over and over again. As a heuristic to catch this we compare the number of tokens in the current run to the duration of the audio, and if there seem to be too many tokens we truncate the decoding. By default this is set to 6.5, but for non-English languages where the models produce a lot more raw tokens per second, you may want to bump this to 13.0.
+    - `transcription_interval`: How often to run transcription, in seconds.
+    - `vad_threshold`: Controls the sensitivity of the initial voice-activity detection stage that decides how to break raw audio into segments. This defaults to 0.5, with lower values creating longer segments, potentially with more background noise sections, and higher values breaking up speech into smaller chunks, at the risk of losing some actual speech by clipping.
+    - `save_input_wav_path`: One of the most common causes of poor transcription quality is incorrect conversion or corruption of the audio that's fed into the pipeline. If you set this option to a folder path, the transcriber will save out exactly what it has received as 16KHz mono WAV files, so you can ensure that your input audio is as you expect.
+    - `log_api_calls`: Another debugging option, turning this on causes all calls to the C API entry points in the library to write out information on their arguments to stderr or the console each time they're run.
+    - `log_ort_runs`: Prints information about the ONNXRuntime inference runs and how long they take.
+    - `vad_window_duration`: The VAD runs every 30ms, but to get higher-confidence values we average the results over time. This value is the time in seconds to average over. The default is 0.5s, shorter durations will spot speech faster at the cost of lower accuracy, higher values may increase accuracy, but at the cost of missing shorter utterances.
+    - `vad_look_behind_sample_count`: Because we're averaging over time, the mean VAD signal will lag behind the initial speech detection. To compensate for that, when speech is detected we pull in some of the audio immediately before the average passed the threshold. This value is the number of samples to prepend, and defaults to 8192 (all at 16KHz).
+    - `vad_max_segment_duration`: It can be hard to find gaps in rapid-fire speech, but a lot of applications want their text in chunks that aren't endless. This option sets the longest duration a line can be before it's marked as complete and a new segment is started. The default is 15 seconds, and to increase the chance that a natural break is found, the `vad_threshold` is linearly decreased over time from two thirds of the maximum duration until the maximum is reached.
+    - `identify_speakers`: A boolean that controls whether to run the speaker identification stage in the pipeline.
 
- - <a id="transcriber-transcribe-without-streaming"></a>`transcribe_without_streaming()`: A convenience function to extract text from a non-live audio source, such as a file. We optimize for streaming use cases, so you're probably better off using libraries that specialize in bulk, batched transcription if you use this a lot and have performance constraints. This will still call any registered event listeners as it processes the lines, so this can be useful to test your application using pre-recorded files, or to easily integrate offline audio sources.
-   - `audio_data`: An array of 32-bit float values, representing mono PCM audio between -1.0 and 1.0, to be analyzed for speech.
-   - `sample_rate`: The number of samples per second. The library uses this to convert to its working rate (16KHz) internally.
-   - `flags`: Integer, currently unused.
+- <a id="transcriber-transcribe-without-streaming"></a>`transcribe_without_streaming()`: A convenience function to extract text from a non-live audio source, such as a file. We optimize for streaming use cases, so you're probably better off using libraries that specialize in bulk, batched transcription if you use this a lot and have performance constraints. This will still call any registered event listeners as it processes the lines, so this can be useful to test your application using pre-recorded files, or to easily integrate offline audio sources.
+  - `audio_data`: An array of 32-bit float values, representing mono PCM audio between -1.0 and 1.0, to be analyzed for speech.
+  - `sample_rate`: The number of samples per second. The library uses this to convert to its working rate (16KHz) internally.
+  - `flags`: Integer, currently unused.
 
- - <a id="transcriber-start"></a>`start()`: Begins a new transcription session. You need to call this after you've created the `Transcriber` and before you add any audio.
- - <a id="transcriber-stop"></a>`stop()`: Ends a transcription session. If a speech segment was still active, it's marked as complete and the appropriate event handlers are called.
- - <a id="transcriber-add-audio"></a>`add_audio()`: Call this every time you have a new chunk of audio from your input, to begin processing. The size and sample rate of the audio should be whatever's natural for your source, since the library will handle all conversions.
-   - `audio_data`: Array of 32-bit floats representing a mono PCM chunk of audio.
-   - `sample_rate`: How many samples per second are present in the input audio. The library uses this to convert the data to its preferred rate.
- - <a id="transcriber-update-transcription"></a>`update_transcription`: The transcript is usually updated periodically as audio data is added, but if you need to trigger one yourself, for example when a user presses refresh, or want access to the complete transcript, you can call this manually.
-   - `flags`: Integer holding flags that are combined using bitwise or (`|`).
-     - `MOONSHINE_FLAG_FORCE_UPDATE`: By default the transcriber returns a cached version of the transcript if less than 200ms of new audio has come in since the last transcription, but by setting this you can ensure that a transcription happens regardless.
+- <a id="transcriber-start"></a>`start()`: Begins a new transcription session. You need to call this after you've created the `Transcriber` and before you add any audio.
+- <a id="transcriber-stop"></a>`stop()`: Ends a transcription session. If a speech segment was still active, it's marked as complete and the appropriate event handlers are called.
+- <a id="transcriber-add-audio"></a>`add_audio()`: Call this every time you have a new chunk of audio from your input, to begin processing. The size and sample rate of the audio should be whatever's natural for your source, since the library will handle all conversions.
+  - `audio_data`: Array of 32-bit floats representing a mono PCM chunk of audio.
+  - `sample_rate`: How many samples per second are present in the input audio. The library uses this to convert the data to its preferred rate.
+- <a id="transcriber-update-transcription"></a>`update_transcription`: The transcript is usually updated periodically as audio data is added, but if you need to trigger one yourself, for example when a user presses refresh, or want access to the complete transcript, you can call this manually.
+  - `flags`: Integer holding flags that are combined using bitwise or (`|`).
+    - `MOONSHINE_FLAG_FORCE_UPDATE`: By default the transcriber returns a cached version of the transcript if less than 200ms of new audio has come in since the last transcription, but by setting this you can ensure that a transcription happens regardless.
 
- - <a id="transcriber-create-stream"></a>`create_stream()`: If your application is taking audio input from multiple sources, for example a microphone and system audio, then you'll want to create multiple streams on a single transcriber to avoid loading multiple copies of the models. Each stream has its own transcript, and line events are tagged with the stream handle they came from. You don't need to worry about this if you only need to deal with a single input though, just use the `Transcriber` class's `start()`, `stop()`, etc. This function returns `Stream` class object.
-   - `flags`: Integer, reserved for future expansion.
-   - `update_interval`: Period in seconds between transcription updates.
+- <a id="transcriber-create-stream"></a>`create_stream()`: If your application is taking audio input from multiple sources, for example a microphone and system audio, then you'll want to create multiple streams on a single transcriber to avoid loading multiple copies of the models. Each stream has its own transcript, and line events are tagged with the stream handle they came from. You don't need to worry about this if you only need to deal with a single input though, just use the `Transcriber` class's `start()`, `stop()`, etc. This function returns `Stream` class object.
+  - `flags`: Integer, reserved for future expansion.
+  - `update_interval`: Period in seconds between transcription updates.
 
- - <a id="transcriber-add-listener"></a>`add_listener()`: Registers a callable object with the transcriber. This object will be called back as audio is fed in and text is extracted.
-   - `listener`: This is often a subclass of `TranscriptEventListener`, but can be a plain function. It defines what code is called when a speech event happens. 
+- <a id="transcriber-add-listener"></a>`add_listener()`: Registers a callable object with the transcriber. This object will be called back as audio is fed in and text is extracted.
+  - `listener`: This is often a subclass of `TranscriptEventListener`, but can be a plain function. It defines what code is called when a speech event happens.
 
- - <a id="transcriber-remove-listener"></a>`remove_listener()`: Deletes a listener so that it no longer receives events.
-   - `listener`: An object you previously passed into `add_listener()`.
+- <a id="transcriber-remove-listener"></a>`remove_listener()`: Deletes a listener so that it no longer receives events.
+  - `listener`: An object you previously passed into `add_listener()`.
 
- - <a id="transcriber-remove-all-listeners"></a>`remove_all_listeners()`: Deletes all registered listeners so than none of them receive events anymore.
+- <a id="transcriber-remove-all-listeners"></a>`remove_all_listeners()`: Deletes all registered listeners so than none of them receive events anymore.
 
 #### MicTranscriber
 
@@ -661,18 +701,18 @@ A convenience class to derive from to create your own listener code. Override an
 
 A specialized kind of event listener that you add as a listener to a `Transcriber`, and it then analyzes the transcription results to determine if any of the specified commands have been spoken, using natural-language fuzzy matching.
 
- - <a id="intentrecognizer-init"></a>`__init__()`: Constructs a new recognizer, loading required models.
-   - `model_path`: String holding a path to a folder that contains the required embedding model files. You can download and obtain a path by calling `download_embedding_model()`.
-   - `model_arch`: An `EmbeddingModelArch`, obtained from the `download_embedding_model()` function.
-   - `model_variant`: The precision to run the model at. "q4" is recommended.
-   - `threshold`: How close an utterance has to be to the target sentence to trigger an event.
- - <a id="intentrecognizer-register-intent"></a>`register_intent()`: Asks the recognizer to look for utterances that match a given command, and call back into the application when one is found.
-   - `trigger_phrase`: The canonical command sentence to match against.
-   - `handler`: A callable function or object that contains code you want to trigger when the command is recognized.
- - <a id="intentrecognizer-unregister-intent"></a>`unregister_intent()`: Removes an intent handler from the event callback process.
-   - `handler`: A handler that had previously been registered with the recognizer.
- - <a id="intentrecognizer-clear-intents"></a>`clear_intents()`: Removes all intent listeners from the recognizer.
- - <a id="intentrecognizer-set-on-intent"></a>`set_on_intent()`: Sets a callable that is called when any registered action is triggered, not just a single command as for `register_intent()`.
+- <a id="intentrecognizer-init"></a>`__init__()`: Constructs a new recognizer, loading required models.
+  - `model_path`: String holding a path to a folder that contains the required embedding model files. You can download and obtain a path by calling `download_embedding_model()`.
+  - `model_arch`: An `EmbeddingModelArch`, obtained from the `download_embedding_model()` function.
+  - `model_variant`: The precision to run the model at. "q4" is recommended.
+  - `threshold`: How close an utterance has to be to the target sentence to trigger an event.
+- <a id="intentrecognizer-register-intent"></a>`register_intent()`: Asks the recognizer to look for utterances that match a given command, and call back into the application when one is found.
+  - `trigger_phrase`: The canonical command sentence to match against.
+  - `handler`: A callable function or object that contains code you want to trigger when the command is recognized.
+- <a id="intentrecognizer-unregister-intent"></a>`unregister_intent()`: Removes an intent handler from the event callback process.
+  - `handler`: A handler that had previously been registered with the recognizer.
+- <a id="intentrecognizer-clear-intents"></a>`clear_intents()`: Removes all intent listeners from the recognizer.
+- <a id="intentrecognizer-set-on-intent"></a>`set_on_intent()`: Sets a callable that is called when any registered action is triggered, not just a single command as for `register_intent()`.
 
 ## Support
 
@@ -682,27 +722,27 @@ Our primary support channel is [the Moonshine Discord](https://discord.gg/27qp9z
 
 This library is in active development, and we aim to implement:
 
- - Binary size reduction for mobile deployment.
- - More languages.
- - More streaming models.
- - Improved speaker identification.
- - Lightweight domain customization.
+- Binary size reduction for mobile deployment.
+- More languages.
+- More streaming models.
+- Improved speaker identification.
+- Lightweight domain customization.
 
 ## Acknowledgements
 
 We're grateful to:
 
- - Lambda and Stephen Balaban for supporting our model training through [their foundational model grants](https://lambda.ai/research).
- - The ONNX Runtime community for building [a fast, cross-platform inference engine](https://github.com/microsoft/onnxruntime).
- - [Alexander Veysov](https://github.com/snakers4) for the great [Silero Voice Activity Detector](https://github.com/snakers4/silero-vad).
- - [Viktor Kirilov](https://github.com/onqtam) for [his fantastic DocTest C++ testing framework](https://github.com/doctest/doctest).
- - [Nemanja Trifunovic](https://github.com/nemtrif) for [his very helpful UTF8 CPP library](https://github.com/nemtrif/utfcpp).
- - The [Pyannote team](https://www.pyannote.ai/) for making available their speaker embedding model.
+- Lambda and Stephen Balaban for supporting our model training through [their foundational model grants](https://lambda.ai/research).
+- The ONNX Runtime community for building [a fast, cross-platform inference engine](https://github.com/microsoft/onnxruntime).
+- [Alexander Veysov](https://github.com/snakers4) for the great [Silero Voice Activity Detector](https://github.com/snakers4/silero-vad).
+- [Viktor Kirilov](https://github.com/onqtam) for [his fantastic DocTest C++ testing framework](https://github.com/doctest/doctest).
+- [Nemanja Trifunovic](https://github.com/nemtrif) for [his very helpful UTF8 CPP library](https://github.com/nemtrif/utfcpp).
+- The [Pyannote team](https://www.pyannote.ai/) for making available their speaker embedding model.
 
- ## License
+## License
 
- This code, apart from the source in `core/third-party`, is licensed under the MIT License, see LICENSE in this repository.
+This code, apart from the source in `core/third-party`, is licensed under the MIT License, see LICENSE in this repository.
 
- The English-language models are also released under the MIT License. Models for other languages are released under the [Moonshine Community License](https://moonshine.ai), which is a non-commercial license.
+The English-language models are also released under the MIT License. Models for other languages are released under the [Moonshine Community License](https://moonshine.ai), which is a non-commercial license.
 
- The code in `core/third-party` is licensed according to the terms of the open source projects it originates from, with details in a LICENSE file in each subfolder.
+The code in `core/third-party` is licensed according to the terms of the open source projects it originates from, with details in a LICENSE file in each subfolder.
