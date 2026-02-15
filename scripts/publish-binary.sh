@@ -68,7 +68,7 @@ if ! gh release view v$VERSION >/dev/null 2>&1; then
 	gh release create v$VERSION --title "v$VERSION" --notes "Release v$VERSION"
 fi
 
-# gh release upload v$VERSION $TAR_NAME --clobber
+gh release upload v$VERSION $TAR_NAME --clobber
 
 cd ${REPO_ROOT_DIR}/examples
 
