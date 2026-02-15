@@ -13,16 +13,14 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class MicTranscriber extends Transcriber {
   private boolean isRunning = false;
-  private AppCompatActivity parentContext;
   private boolean isMicCaptureLoopStarted = false;
   private MicCaptureProcessor micCaptureProcessor;
   private CompletableFuture<Void> isLoadedSignal = new CompletableFuture<>();
   private CompletableFuture<Void> hasMicPermissionSignal =
       new CompletableFuture<>();
 
-  public MicTranscriber(AppCompatActivity parentContext) {
+  public MicTranscriber() {
     super();
-    this.parentContext = parentContext;
     // When both isLoadedSignal and hasMicPermissionSignal are complete, run
     // startProcessing()
     CompletableFuture.allOf(isLoadedSignal, hasMicPermissionSignal)
