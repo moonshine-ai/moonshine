@@ -544,6 +544,12 @@ The experimental setup is as follows:
 
 Moonshine Voice is based on a family of speech to text models created by the team at Moonshine AI. If you want to download models to use with the framework, you can use [the Python package to access them](#downloading-models). This section contains more information about the history and characteristics of the models we offer.
 
+ - [Papers](#papers)
+ - [Available Models](#available-models)
+ - [Domain Customization](#domain-customization)
+ - [Quantization](#quantization)
+ - [HuggingFace](#huggingface)
+
 ### Papers
 
 These research papers are a good resource for understanding the architectures and performance strategies behind the models:
@@ -555,7 +561,7 @@ These research papers are a good resource for understanding the architectures an
 
 ### Available Models
 
-Here are the models currently available. See [Downloading Models](#downloading-models) for how to obtain them.
+Here are the models currently available. See [Downloading Models](#downloading-models) for how to obtain them. This library uses the Onnx model format, converted to the memory-mappable OnnxRuntime (`.ort`) flatbuffer encoding. For `safetensor` versions, see the [HuggingFace](#huggingface) section.
 
 | Language   | Architecture     | # Parameters | WER/CER |
 | ---------- | ---------------- | ------------ | ------- |
@@ -585,6 +591,10 @@ It's often useful to be able to calibrate a speech to text model towards certain
 We typically quantize our models to eight-bit weights across the board, and eight-bit calculations for heavy operations like MatMul. This is all post-training quantization, using a combination of OnnxRuntime's tools and [my Onnx Shrink Ray utility](https://pypi.org/project/onnx-shrink-ray/). The only anomaly in the process is the treatment of the frontend, which uses convolution layers to generate features, which produces results similar to the more traditional MEL spectrogram preprocessing, but in a learned way with standard ML operations. The inputs to this initial stage correspond to 16-bit signed integers from the raw audio data (though they're encoded as floats) so we've found it necessary to leave the convolution operations in at least B16 float precision. 
 
 You can see the options we use for the conversions in [scripts/quantize-streaming-model.sh](scripts/quantize-streaming-model.sh).
+
+### HuggingFace
+
+We have `safetensors` versions of the models linked from our organization on HF, [huggingface.co/UsefulSensors/models](https://huggingface.co/UsefulSensors/models). The organization name is from an earlier incarnation of the company, when we were focused on supplying complete voice interface solutions integrated onto a low-cost chip with a built-in microphone. These are all floating-point checkpoints exported from our training pipeline
 
 ## API Reference
 
