@@ -163,7 +163,6 @@ MoonshineStreamingModel::MoonshineStreamingModel(bool log_ort_run)
   LOG_ORT_ERROR(ort_api, ort_api->CreateSessionOptions(&ort_session_options));
   LOG_ORT_ERROR(ort_api, ort_api->SetSessionGraphOptimizationLevel(
                              ort_session_options, ORT_ENABLE_ALL));
-  LOG_ORT_ERROR(ort_api, ort_api->SetIntraOpNumThreads(ort_session_options, 1));
 
   memset(&config, 0, sizeof(config));
 }
