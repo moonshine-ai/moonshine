@@ -107,6 +107,7 @@ public class MicTranscriber {
         // Set up audio engine
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
+        try? inputNode.setVoiceProcessingEnabled(true)
         let inputFormat = inputNode.inputFormat(forBus: 0)
 
         // Create target format
