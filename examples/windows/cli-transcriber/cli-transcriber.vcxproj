@@ -68,7 +68,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(ProjectDir)\moonshine-voice-windows-x86_64\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>moonshine.lib;bin-tokenizer.lib;ort-utils.lib;ten_vad.lib;moonshine-utils.lib;onnxruntime.lib;ole32.lib;mmdevapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>moonshine.lib;bin-tokenizer.lib;ort-utils.lib;moonshine-utils.lib;onnxruntime.lib;ole32.lib;mmdevapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -91,7 +91,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(ProjectDir)\moonshine-voice-windows-x86_64\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>moonshine.lib;bin-tokenizer.lib;ort-utils.lib;ten_vad.lib;moonshine-utils.lib;onnxruntime.lib;ole32.lib;mmdevapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>moonshine.lib;bin-tokenizer.lib;ort-utils.lib;moonshine-utils.lib;onnxruntime.lib;ole32.lib;mmdevapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
