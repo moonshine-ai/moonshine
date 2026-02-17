@@ -4,19 +4,38 @@ import MoonshineVoice
 // MARK: - Main
 
 func main() async {
-    guard let bundle = Transcriber.frameworkBundle else {
-        fputs("Error: Could not find moonshine framework bundle\n", stderr)
-        exit(1)
+    let arguments = CommandLine.arguments
+
+    var modelPath: String? = nil
+    var modelArch: ModelArch? = nil
+    for i in 1..<arguments.count {
+        let argument = arguments[i]
+        if argument.starts(with: "--model-path") {
+            modelPath = argument.split(separator: "=").last.map(String.init)
+        } else if argument.starts(with: "--model-arch") {
+            let parts = argument.split(separator: "=")
+            if parts.count > 1 {
+                modelArch = ModelArch(rawValue: UInt32(parts[1]) ?? 0)
+            }
+        }
     }
 
-    guard let resourcePath = bundle.resourcePath else {
-        fputs("Error: Could not find resource path in bundle\n", stderr)
-        exit(1)
+    if modelPath == nil || modelArch == nil {
+        guard let bundle = Transcriber.frameworkBundle else {
+            fputs("Error: Could not find moonshine framework bundle\n", stderr)
+            exit(1)
+        }
+
+        guard let resourcePath = bundle.resourcePath else {
+            fputs("Error: Could not find resource path in bundle\n", stderr)
+            exit(1)
+        }
+        let testAssetsPath = resourcePath.appending("/test-assets")
+        modelPath = testAssetsPath.appending("/tiny-en")
+        modelArch = .tiny
     }
-    let testAssetsPath = resourcePath.appending("/test-assets")
-    let modelPath = testAssetsPath.appending("/tiny-en")
-    let modelArch: ModelArch = .tiny
-    let micTranscriber = try! MicTranscriber(modelPath: modelPath, modelArch: modelArch)
+
+    let micTranscriber = try! MicTranscriber(modelPath: modelPath!, modelArch: modelArch!)
     defer { micTranscriber.close() }
 
     class TestListener: TranscriptEventListener {
