@@ -109,6 +109,7 @@ struct TranscriberOptions {
   float speaker_id_cluster_threshold = 0.6f;
   std::string save_input_wav_path = "";
   bool log_ort_run = false;
+  bool return_audio_data = true;
 };
 
 class Transcriber {

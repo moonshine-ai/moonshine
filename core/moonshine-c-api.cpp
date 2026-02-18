@@ -103,6 +103,8 @@ void parse_transcriber_options(const transcriber_option_t *in_options,
       out_options.identify_speakers = bool_from_string(in_option.value);
     } else if (option_name == "speaker_id_cluster_threshold") {
       out_options.speaker_id_cluster_threshold = float_from_string(in_option.value);
+    } else if (option_name == "return_audio_data") {
+      out_options.return_audio_data = bool_from_string(in_option.value);
     } else {
       throw std::runtime_error("Unknown transcriber option: '" +
                                std::string(in_option.name) + "'");
