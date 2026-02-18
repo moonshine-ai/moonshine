@@ -456,7 +456,9 @@ void Transcriber::update_transcript_from_segments(
         (uint32_t)(std::chrono::duration_cast<std::chrono::milliseconds>(
                        end_time - start_time)
                        .count());
-    line.audio_data = segment.audio_data;
+    if (this->options.return_audio_data) {
+      line.audio_data = segment.audio_data;
+    }
     if (this->options.identify_speakers && !line.has_speaker_id) {
       const bool long_enough_to_analyze =
           segment.audio_data.size() >= SpeakerEmbeddingModel::ideal_input_size;
@@ -750,10 +752,13 @@ void TranscriptStreamOutput::update_transcript_from_lines() {
   this->output_lines.clear();
   for (const uint64_t &line_id : this->ordered_internal_line_ids) {
     const TranscriberLine &line = this->internal_lines_map[line_id];
+    const bool has_audio_data = line.audio_data.size() > 0;
+    const float *audio_data = has_audio_data ? line.audio_data.data() : nullptr;
+    const size_t audio_data_count = has_audio_data ? line.audio_data.size() : 0;
     this->output_lines.push_back({
         .text = line.text == nullptr ? nullptr : line.text->c_str(),
-        .audio_data = line.audio_data.data(),
-        .audio_data_count = line.audio_data.size(),
+        .audio_data = audio_data,
+        .audio_data_count = audio_data_count,
         .start_time = line.start_time,
         .duration = line.duration,
         .id = line.id,

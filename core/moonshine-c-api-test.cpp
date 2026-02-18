@@ -176,10 +176,15 @@ TEST_CASE("moonshine-test-v2") {
     REQUIRE(decoder_model_data.size() > 0);
     REQUIRE(tokenizer_data.size() > 0);
 
+    const transcriber_option_t options[] = {
+        {"return_audio_data", "false"},
+    };
+    const uint64_t options_count = sizeof(options) / sizeof(options[0]);
+
     int32_t transcriber_handle = moonshine_load_transcriber_from_memory(
         encoder_model_data.data(), encoder_model_data.size(),
         decoder_model_data.data(), decoder_model_data.size(),
-        tokenizer_data.data(), tokenizer_data.size(), model_arch, nullptr, 0,
+        tokenizer_data.data(), tokenizer_data.size(), model_arch, options, options_count,
         MOONSHINE_HEADER_VERSION);
     REQUIRE(transcriber_handle >= 0);
 
@@ -193,8 +198,8 @@ TEST_CASE("moonshine-test-v2") {
     for (size_t i = 0; i < transcript->line_count; i++) {
       const struct transcript_line_t &line = transcript->lines[i];
       REQUIRE(line.text != nullptr);
-      REQUIRE(line.audio_data != nullptr);
-      REQUIRE(line.audio_data_count > 0);
+      REQUIRE(line.audio_data == nullptr);
+      REQUIRE(line.audio_data_count == 0);
       REQUIRE(line.start_time >= 0.0f);
       REQUIRE(line.duration > 0.0f);
       REQUIRE(line.is_complete == 1);
@@ -312,6 +317,7 @@ TEST_CASE("moonshine-test-v2") {
         {"max_tokens_per_second", "6.5"},
         {"identify_speakers", "true"},
         {"speaker_id_cluster_threshold", "0.6"},
+        {"return_audio_data", "false"},
     };
     const uint64_t options_count = sizeof(options) / sizeof(options[0]);
     std::string root_model_path = "tiny-en";
