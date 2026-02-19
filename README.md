@@ -98,14 +98,14 @@ I've recorded [a screencast on YouTube](https://www.youtube.com/watch?v=NNcqx1wF
 
 TL;DR - When you're working with live speech.
 
-| Model                      | WER    | # Parameters | MacBook Pro | Linux x86 | 
-| -------------------------- | ------ | ------------ | ----------- | --------- | 
-| Moonshine Medium Streaming | 6.65%  | 245 million  | 107ms       | 269ms     | 
-| Whisper Large v3           | 7.44%  | 1.5 billion  | 11,286ms    | 16,919ms  | 
-| Moonshine Small Streaming  | 7.84%  | 123 million  | 73ms        | 165ms     | 
-| Whisper Small              | 8.59%  | 244 million  | 1940ms      | 3,425ms   | 
-| Moonshine Tiny Streaming   | 12.00% | 34 million   | 34ms        | 69ms      | 
-| Whisper Tiny               | 12.81% | 39 million   | 277ms       | 1,141ms   | 
+| Model                      | WER    | # Parameters | MacBook Pro | Linux x86 | R. Pi 5   |
+| -------------------------- | ------ | ------------ | ----------- | --------- | --------- |
+| Moonshine Medium Streaming | 6.65%  | 245 million  | 107ms       | 269ms     | 802ms     |
+| Whisper Large v3           | 7.44%  | 1.5 billion  | 11,286ms    | 16,919ms  | N/A       |
+| Moonshine Small Streaming  | 7.84%  | 123 million  | 73ms        | 165ms     | 527ms     |
+| Whisper Small              | 8.59%  | 244 million  | 1940ms      | 3,425ms   | 10,397ms  |
+| Moonshine Tiny Streaming   | 12.00% | 34 million   | 34ms        | 69ms      | 237ms     |
+| Whisper Tiny               | 12.81% | 39 million   | 277ms       | 1,141ms   | 5,863ms   |
 
 _See [benchmarks](#benchmarks) for how these numbers were measured._
 
