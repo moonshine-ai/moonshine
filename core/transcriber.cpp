@@ -272,6 +272,9 @@ void Transcriber::start_stream(int32_t stream_id) {
     std::lock_guard<std::mutex> output_lock(stream->transcript_output->mutex);
     stream->transcript_output->internal_lines_map.clear();
     stream->transcript_output->ordered_internal_line_ids.clear();
+    // Reset to an empty transcript.
+    stream->transcript_output->transcript.lines = nullptr;
+    stream->transcript_output->transcript.line_count = 0;
   }
   stream->start();
 }
