@@ -302,6 +302,12 @@ TEST_CASE("transcriber-test") {
     REQUIRE(transcript_duration >= expected_duration_min);
     REQUIRE(transcript_duration <= expected_duration_max);
 
+    LOGF("Original transcript: %s",
+      Transcriber::transcript_to_string(transcript).c_str());
+
+    // Store here because it will be overwritten when we restart the stream.
+    const size_t original_line_count = transcript->line_count;
+
     // Ensure that the transcript is cleared after restarting the stream.
     transcriber.start_stream(stream_id);
     transcript_t *restarted_transcript = nullptr;
@@ -309,10 +315,31 @@ TEST_CASE("transcriber-test") {
     REQUIRE(restarted_transcript != nullptr);
     REQUIRE(restarted_transcript->lines == nullptr);
     REQUIRE(restarted_transcript->line_count == 0);
-    transcriber.stop_stream(stream_id);
 
-    LOGF("Transcript: %s",
-         Transcriber::transcript_to_string(transcript).c_str());
+    // Ensure that a valid transcript is returned after restarting the stream.
+    for (size_t i = 0; i < wav_data_size; i += chunk_size) {
+      const float *chunk_data = wav_data + i;
+      const size_t chunk_data_size = std::min(chunk_size, wav_data_size - i);
+      transcriber.add_audio_to_stream(stream_id, chunk_data, chunk_data_size,
+                                      wav_sample_rate);
+      samples_since_last_transcription += chunk_data_size;
+      if (samples_since_last_transcription < samples_between_transcriptions) {
+        continue;
+      }
+      samples_since_last_transcription = 0;
+      transcriber.transcribe_stream(stream_id, 0, &restarted_transcript);
+      REQUIRE(restarted_transcript != nullptr);
+    }
+    transcriber.stop_stream(stream_id);
+    REQUIRE(restarted_transcript->line_count > 0);
+
+    LOGF("Restarted transcript: %s",
+      Transcriber::transcript_to_string(restarted_transcript).c_str());
+
+    // Ensure that the two transcripts have roughly the same number of lines.
+    const size_t line_delta = std::abs((int64_t)(restarted_transcript->line_count - original_line_count));
+    REQUIRE(line_delta <= 4);
+
     transcriber.free_stream(stream_id);
   }
   SUBCASE("no-transcription") {

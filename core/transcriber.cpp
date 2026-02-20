@@ -858,6 +858,15 @@ void TranscriberStream::save_audio_data_to_wav(const float *audio_data,
   if (current_second != previous_second || audio_data == nullptr) {
     std::string wav_path = append_path_component(this->save_input_wav_path,
                                                  this->get_wav_filename());
+    // Only log the first time we save a WAV file for a given stream.
+    static std::map<std::string, bool>* saved_wav_paths = nullptr;
+    if (saved_wav_paths == nullptr) {
+      saved_wav_paths = new std::map<std::string, bool>();
+    }
+    if (saved_wav_paths->find(wav_path) == saved_wav_paths->end()) {
+      saved_wav_paths->insert({wav_path, true});
+      LOGF("Saving audio data to WAV file: '%s'", wav_path.c_str());
+    }
     save_wav_data(wav_path.c_str(), save_input_data.data(),
                   save_input_data.size(), last_save_sample_rate);
   }
