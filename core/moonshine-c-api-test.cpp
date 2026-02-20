@@ -318,6 +318,7 @@ TEST_CASE("moonshine-test-v2") {
         {"identify_speakers", "true"},
         {"speaker_id_cluster_threshold", "0.6"},
         {"return_audio_data", "false"},
+        {"log_output_text", "true"},
     };
     const uint64_t options_count = sizeof(options) / sizeof(options[0]);
     std::string root_model_path = "tiny-en";

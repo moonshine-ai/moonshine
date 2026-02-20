@@ -447,6 +447,9 @@ void Transcriber::update_transcript_from_segments(
         throw std::runtime_error("Failed to transcribe: " +
                                  std::to_string(transcribe_error));
       }
+      if (this->options.log_output_text) {
+        LOGF("Transcribed text: '%s'", out_text);
+      }
       // Ensure the output text is valid UTF-8.
       line.text = sanitize_text(out_text);
     } else {
@@ -610,6 +613,9 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
 
   // Convert tokens to text
   std::string text = this->streaming_model->tokens_to_text(tokens);
+  if (this->options.log_output_text) {
+    LOGF("Streaming model transcribed text: '%s'", text.c_str());
+  }
   return sanitize_text(text.c_str());
 }
 

@@ -110,6 +110,7 @@ struct TranscriberOptions {
   std::string save_input_wav_path = "";
   bool log_ort_run = false;
   bool return_audio_data = true;
+  bool log_output_text = false;
 };
 
 class Transcriber {
