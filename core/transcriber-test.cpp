@@ -316,6 +316,8 @@ TEST_CASE("transcriber-test") {
     REQUIRE(restarted_transcript->lines == nullptr);
     REQUIRE(restarted_transcript->line_count == 0);
 
+    std::map<uint64_t, std::string> transcript_line_map;
+
     // Ensure that a valid transcript is returned after restarting the stream.
     for (size_t i = 0; i < wav_data_size; i += chunk_size) {
       const float *chunk_data = wav_data + i;
@@ -329,6 +331,25 @@ TEST_CASE("transcriber-test") {
       samples_since_last_transcription = 0;
       transcriber.transcribe_stream(stream_id, 0, &restarted_transcript);
       REQUIRE(restarted_transcript != nullptr);
+
+      // Make sure that all the flags are set correctly for the transcript lines.
+      for (size_t j = 0; j < restarted_transcript->line_count; j++) {
+        const struct transcript_line_t &line = restarted_transcript->lines[j];
+        if (transcript_line_map.find(line.id) == transcript_line_map.end()) {
+          REQUIRE(line.is_new == 1);
+          REQUIRE(line.is_updated == 1);
+          transcript_line_map[line.id] = line.text;
+        } else {
+          REQUIRE(line.is_new == 0);
+          if (line.has_text_changed) {
+            REQUIRE(line.is_updated == 1);
+            REQUIRE(transcript_line_map[line.id] != line.text);
+          } else {
+            REQUIRE(line.is_updated == 0);
+            REQUIRE(transcript_line_map[line.id] == line.text);
+          }
+        }
+      }
     }
     transcriber.stop_stream(stream_id);
     REQUIRE(restarted_transcript->line_count > 0);
