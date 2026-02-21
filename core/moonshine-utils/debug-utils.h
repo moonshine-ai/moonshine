@@ -6,6 +6,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <thread>
 
 #if defined(ANDROID)
 #include <android/asset_manager.h>
@@ -29,11 +30,14 @@ static inline const char *_moonshine_filename_without_path(const char *path) {
                         FILENAME_ONLY, __LINE__, __func__, __VA_ARGS__);   \
   } while (0)
 #else
-#define LOGF(format, ...)                                                     \
-  do {                                                                        \
-    fprintf(stderr, "%s:%d:%s(): " format, FILENAME_ONLY, __LINE__, __func__, \
-            __VA_ARGS__);                                                     \
-    fprintf(stderr, "\n");                                                    \
+#define LOGF(format, ...)                                                   \
+  do {                                                                      \
+    std::ostringstream oss;                                                 \
+    oss << std::this_thread::get_id();                                      \
+    std::string thread_id_str = oss.str();                                  \
+    fprintf(stderr, "Thread %s:%s:%d:%s(): " format, thread_id_str.c_str(), \
+            FILENAME_ONLY, __LINE__, __func__, __VA_ARGS__);                \
+    fprintf(stderr, "\n");                                                  \
   } while (0)
 #endif
 #define LOG(x) LOGF("%s", (x))
@@ -209,21 +213,25 @@ static inline size_t debug_alloc_get_size(void *voidMemPtr) {
 #define LOG_FLOAT(x) LOGF(#x " = %f", (x));
 #define LOG_STRING(x) LOGF(#x " = %s", (x).c_str());
 #define LOG_BOOL(x) LOGF(#x " = %s", (x) ? "true" : "false");
-#define LOG_BYTES(x, size)                                     \
-  do {                                                         \
-    std::stringstream ss;                                      \
-    ss << #x << " = [";                                        \
-    for (size_t i = 0; i < (size); i++) {                      \
-      if (i % 16 == 0) {                                       \
-        ss << "\n  ";                                          \
-      }                                                        \
-      char buffer[4];                                          \
-      snprintf(buffer, 4, "%02x ", (unsigned char)(((x))[i])); \
-      ss << buffer;                                            \
-    }                                                          \
-    ss << "\n]";                                               \
-    LOGF("%s", ss.str().c_str());                              \
+#define LOG_BYTES(x, size)                                       \
+  do {                                                           \
+    std::stringstream ss;                                        \
+    ss << #x << " (0x" << std::hex << (uintptr_t)(x) << ") = ["; \
+    for (size_t i = 0; i < (size); i++) {                        \
+      if (i % 16 == 0) {                                         \
+        ss << "\n  ";                                            \
+      }                                                          \
+      char buffer[4];                                            \
+      snprintf(buffer, 4, "%02x ", (unsigned char)(((x))[i]));   \
+      ss << buffer;                                              \
+    }                                                            \
+    ss << "\n]";                                                 \
+    LOGF("%s", ss.str().c_str());                                \
   } while (0)
+
+#define LOG_STRUCT_BYTES(x) LOG_BYTES((const unsigned char *)(&(x)), sizeof(x));
+
+void log_backtrace();
 
 bool load_wav_data(const char *path, float **out_float_data,
                    size_t *out_num_samples, int32_t *out_sample_rate = nullptr);

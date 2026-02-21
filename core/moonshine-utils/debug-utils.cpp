@@ -8,6 +8,46 @@
 #include <cstring>
 #include <numeric>
 
+#if defined(__APPLE__)
+#include <execinfo.h>
+#include <cxxabi.h>
+#endif
+
+void log_backtrace() {
+  // Only supported on Apple platforms for now
+#if defined(__APPLE__)
+  const int max_frames = 100;
+  void* callstack[max_frames];
+  int frames = backtrace(callstack, max_frames);
+  char** symbols = backtrace_symbols(callstack, frames);
+
+  LOGF("Backtrace (%d frames):", frames);
+
+  for (int i = 0; i < frames; ++i) {
+      std::string symbol_str(symbols[i]);
+
+      // Attempt to demangle the C++ symbol name
+      size_t begin = symbol_str.find_first_of('(');
+      size_t end = symbol_str.find_last_of('+');
+      if (begin != std::string::npos && end != std::string::npos && begin < end) {
+          std::string mangled_name = symbol_str.substr(begin + 1, end - begin - 1);
+          int status;
+          char* demangled_name = abi::__cxa_demangle(mangled_name.c_str(), nullptr, nullptr, &status);
+
+          if (status == 0) {
+              LOGF("%d: %s [0x%lx]", i, demangled_name, (uintptr_t)callstack[i]);
+              std::free(demangled_name);
+              continue; // Continue to next frame
+          }
+      }
+      // Fallback for non-c++ or failed demangling
+      LOGF("%d: %s", i, symbol_str.c_str());
+  }
+
+  std::free(symbols);
+#endif
+}
+
 bool load_wav_data(const char *path, float **out_float_data,
                    size_t *out_num_samples, int32_t *out_sample_rate) {
   *out_float_data = nullptr;
