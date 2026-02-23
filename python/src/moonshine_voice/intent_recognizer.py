@@ -372,7 +372,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--model-arch",
-        type=str,
+        type=int,
         default=None,
         help="Model architecture to use for transcription",
     )

@@ -97,13 +97,13 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--model-arch",
-        type=str,
-        default="4",
+        type=int,
+        default=None,
         help="Model architecture to use for transcription",
     )
     args = parser.parse_args()
     model_path, model_arch = get_model_for_language(
-        wanted_language=args.language, wanted_model_arch=int(args.model_arch)
+        wanted_language=args.language, wanted_model_arch=args.model_arch
     )
 
     mic_transcriber = MicTranscriber(model_path=model_path, model_arch=model_arch)
