@@ -400,6 +400,12 @@ if __name__ == "__main__":
         default=None,
         help="WAV file to process instead of using the microphone",
     )
+    parser.add_argument(
+        "--quantization",
+        type=str,
+        default="fp32",
+        help="Quantization type for model: fp32, fp16, q8, q4, or q4f16. Default is fp32.",
+    )
     args = parser.parse_args()
 
     def on_intent_triggered_on(trigger: str, utterance: str, similarity: float):
