@@ -496,7 +496,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model-arch",
         type=int,
-        default=5,
+        default=None,
         help="Model architecture to use for transcription",
     )
     parser.add_argument(
@@ -518,6 +518,8 @@ if __name__ == "__main__":
 
     if args.model_path is not None:
         model_path = args.model_path
+        if args.model_arch is None:
+            raise ValueError("--model-arch is required when --model-path is specified")
         model_arch = ModelArch(args.model_arch)
     else:
         model_path, model_arch = get_model_for_language(
