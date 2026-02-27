@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Foundation
 
 /// MicTranscriber is a class that transcribes audio from a microphone.
