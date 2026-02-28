@@ -3,6 +3,8 @@ package ai.moonshine.voice;
 import ai.moonshine.voice.JNI;
 import ai.moonshine.voice.TranscriberOption;
 import android.content.res.AssetManager;
+import android.util.Log;
+
 import androidx.appcompat.app.AppCompatActivity;
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,7 +18,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
 
 public class Transcriber {
   private int transcriberHandle = -1;
@@ -26,6 +33,9 @@ public class Transcriber {
   private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
   private final List<TranscriberOption> options = new ArrayList<>();
+
+  private final Map<Long, TranscriptLine> completedLines = new ConcurrentHashMap<>();
+  private final Lock completedLinesLock = new ReentrantLock();
 
   public Transcriber() {}
 
@@ -158,7 +168,21 @@ public class Transcriber {
         this.emit(new TranscriptEvent.LineTextChanged(line, streamHandle));
       }
       if (line.isComplete && line.isUpdated) {
-        this.emit(new TranscriptEvent.LineCompleted(line, streamHandle));
+        // There's a potential race condition when stop() is called from a different thread
+        // than the one that called addAudioToStream(), which is fairly common since the
+        // former is triggered by user interface.
+        // Most of the events are idempotent, so we can just ignore them if they're already
+        // emitted, but many applications need to be sure they only receive a single event
+        // for each completed line, so we do some checking to ensure that here.
+        completedLinesLock.lock();
+        TranscriptLine previousLine = completedLines.get(line.id);
+        if (previousLine == null) {
+          completedLines.put(line.id, line);
+        }
+        completedLinesLock.unlock();
+        if (previousLine == null) {
+          this.emit(new TranscriptEvent.LineCompleted(line, streamHandle));
+        }
       }
     }
   }
