@@ -84,7 +84,7 @@ MODEL_INFO = {
         "english_name": "Korean",
         "models": [
             {
-                "model_name": "base-ko",
+                "model_name": "tiny-ko",
                 "model_arch": ModelArch.TINY,
                 "download_url": "https://download.moonshine.ai/model/tiny-ko/quantized/tiny-ko",
             }
