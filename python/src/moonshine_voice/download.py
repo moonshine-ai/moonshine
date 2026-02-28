@@ -240,7 +240,7 @@ def get_embedding_model(
     Download an embedding model and return (path, arch).
 
     Args:
-        model_name: Name of the embedding model (e.g., "gemma-300m")
+        model_name: Name of the embedding model (e.g., "embeddinggemma-300m")
         variant: Model variant - one of "q4", "q8", "fp16", "fp32", "q4f16".
                  If None, uses the default variant (q4).
 
@@ -248,7 +248,7 @@ def get_embedding_model(
         Tuple of (model_path, model_arch) for use with IntentRecognizer.
 
     Example:
-        >>> model_path, model_arch = get_embedding_model("gemma-300m", "q4")
+        >>> model_path, model_arch = get_embedding_model("embeddinggemma-300m", "q4")
         >>> recognizer = IntentRecognizer(model_path=model_path, model_arch=model_arch)
     """
     if model_name not in EMBEDDING_MODEL_INFO:
