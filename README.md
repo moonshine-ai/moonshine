@@ -44,11 +44,11 @@ Listens for user-defined action phrases, like "Turn on the lights", using semant
 
 ### iOS
 
-Download [github.com/moonshine-ai/moonshine/releases/latest/download/ios-examples.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-examples.tar.gz), extract it, and then open the `Transcriber/Transcriber.xcodeproj` project in Xcode.
+Download [ios-examples.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-examples.tar.gz), extract it, and then open the `Transcriber/Transcriber.xcodeproj` project in Xcode.
 
 ### Android
 
-Download [github.com/moonshine-ai/moonshine/releases/latest/download/android-examples.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-examples.tar.gz), extract it, and then open the `Transcriber` folder in Android Studio.
+Download [android-examples.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-examples.tar.gz), extract it, and then open the `Transcriber` folder in Android Studio.
 
 ### Linux
 
