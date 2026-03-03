@@ -707,7 +707,13 @@ TranscriberLine::TranscriberLine(const TranscriberLine &other) {
 }
 
 TranscriberLine &TranscriberLine::operator=(const TranscriberLine &other) {
-  this->text = other.text == nullptr ? nullptr : new std::string(*other.text);
+  if (this == &other) {
+    return *this;
+  }
+  std::string *new_text =
+      other.text == nullptr ? nullptr : new std::string(*other.text);
+  delete this->text;
+  this->text = new_text;
   this->audio_data = other.audio_data;
   this->start_time = other.start_time;
   this->duration = other.duration;
