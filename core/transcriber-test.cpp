@@ -503,6 +503,77 @@ TEST_CASE("transcriber-test") {
     REQUIRE(*sanitized_utf8_string == valid_utf8_string);
     delete sanitized_utf8_string;
   }
+  SUBCASE("test-transcriberline-assignment-operator") {
+    TranscriberLine first;
+    first.text = new std::string("first");
+    first.id = 1;
+    first.start_time = 1.25f;
+    first.duration = 3.5f;
+    first.audio_data = {0.25f, 0.5f, 0.75f};
+    first.speaker_index = 3;
+    first.speaker_id = 55;
+    first.has_speaker_id = true;
+
+    TranscriberLine second;
+    second.text = new std::string("second");
+    second.id = 2;
+    second = first;
+    REQUIRE(second.text != nullptr);
+    REQUIRE(*second.text == "first");
+    REQUIRE(second.text != first.text);
+    REQUIRE(second.id == first.id);
+    REQUIRE(second.start_time == first.start_time);
+    REQUIRE(second.duration == first.duration);
+    REQUIRE(second.audio_data == first.audio_data);
+    REQUIRE(second.speaker_index == first.speaker_index);
+    REQUIRE(second.speaker_id == first.speaker_id);
+    REQUIRE(second.has_speaker_id == first.has_speaker_id);
+
+    TranscriberLine repeated_assignment_target;
+    repeated_assignment_target.text = new std::string("seed");
+    for (int i = 0; i < 200; i++) {
+      TranscriberLine source;
+      source.text = new std::string("value_" + std::to_string(i));
+      source.id = (uint64_t)(1000 + i);
+      source.duration = i * 0.01f;
+      source.speaker_index = (uint32_t)(i % 4);
+      repeated_assignment_target = source;
+      REQUIRE(repeated_assignment_target.text != nullptr);
+      REQUIRE(*repeated_assignment_target.text == *source.text);
+      REQUIRE(repeated_assignment_target.text != source.text);
+      REQUIRE(repeated_assignment_target.id == source.id);
+      REQUIRE(repeated_assignment_target.duration == source.duration);
+      REQUIRE(repeated_assignment_target.speaker_index == source.speaker_index);
+    }
+
+    const std::string before_self_assignment = *repeated_assignment_target.text;
+    TranscriberLine &self_alias = repeated_assignment_target;
+    repeated_assignment_target = self_alias;
+    REQUIRE(repeated_assignment_target.text != nullptr);
+    REQUIRE(*repeated_assignment_target.text == before_self_assignment);
+
+    TranscriberLine null_text_source;
+    null_text_source.id = 999;
+    null_text_source.text = nullptr;
+    repeated_assignment_target = null_text_source;
+    REQUIRE(repeated_assignment_target.text == nullptr);
+    REQUIRE(repeated_assignment_target.id == 999);
+
+    std::map<uint64_t, TranscriberLine> lines;
+    TranscriberLine first_map_line;
+    first_map_line.id = 42;
+    first_map_line.text = new std::string("map_first");
+    lines[first_map_line.id] = first_map_line;
+    TranscriberLine second_map_line;
+    second_map_line.id = 42;
+    second_map_line.text = new std::string("map_second");
+    second_map_line.duration = 4.2f;
+    lines[second_map_line.id] = second_map_line;
+    REQUIRE(lines.size() == 1);
+    REQUIRE(lines.at(42).text != nullptr);
+    REQUIRE(*lines.at(42).text == "map_second");
+    REQUIRE(lines.at(42).duration == second_map_line.duration);
+  }
   SUBCASE("test-save-input-wav-streaming") {
     std::string wav_path = "two_cities.wav";
     REQUIRE(std::filesystem::exists(wav_path));
