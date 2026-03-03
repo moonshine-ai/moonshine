@@ -871,7 +871,7 @@ void TranscriberStream::save_audio_data_to_wav(const float *audio_data,
     std::string wav_path = append_path_component(this->save_input_wav_path,
                                                  this->get_wav_filename());
     // Only log the first time we save a WAV file for a given stream.
-    static std::map<std::string, bool>* saved_wav_paths = nullptr;
+    static std::map<std::string, bool> *saved_wav_paths = nullptr;
     if (saved_wav_paths == nullptr) {
       saved_wav_paths = new std::map<std::string, bool>();
     }
