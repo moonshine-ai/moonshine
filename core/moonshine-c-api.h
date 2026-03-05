@@ -102,6 +102,9 @@ extern "C" {
 #define MOONSHINE_MODEL_ARCH_SMALL_STREAMING (4)
 #define MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING (5)
 
+/* Text-to-speech model architectures.                                       */
+#define MOONSHINE_TTS_MODEL_ARCH_TSUKI (0)
+
 /* Error codes.                                                            */
 #define MOONSHINE_ERROR_NONE (0)
 #define MOONSHINE_ERROR_UNKNOWN (-1)
@@ -572,6 +575,56 @@ moonshine_get_intent_count(int32_t intent_recognizer_handle);
 */
 MOONSHINE_EXPORT int32_t
 moonshine_clear_intents(int32_t intent_recognizer_handle);
+
+/* ------------------------------ TEXT TO SPEECH ----------------------------- */
+
+/* Result of a text-to-speech generation call.
+   The audio data is 24 kHz signed 16-bit PCM, owned by the TTS model and valid
+   until the next call to that model or until the model is freed.             */
+struct tts_result_t {
+  const int16_t *audio_data; /* PCM audio samples.                           */
+  uint64_t audio_length;     /* Number of samples in audio_data.             */
+  int32_t sample_rate;       /* Sample rate in Hz (24000).                   */
+};
+
+/* Creates a text-to-speech model from files on disk.
+
+   `model_path` should be the path to the directory containing the TTS model
+   files:
+     - model.onnx   (the ONNX text-to-speech model)
+     - vocab.json   (character-to-index mapping for tokenization)
+
+   `model_arch` should be one of the MOONSHINE_TTS_MODEL_ARCH_* constants.
+   Currently only MOONSHINE_TTS_MODEL_ARCH_TSUKI is supported.
+
+   Returns a non-negative handle on success, or a negative error code on
+   failure. The error code can be converted to a human-readable string using
+   moonshine_error_to_string.
+*/
+MOONSHINE_EXPORT int32_t moonshine_create_text_to_speech(const char *model_path,
+                                                         uint32_t model_arch);
+
+/* Frees a text-to-speech model and all its resources.
+   Subsequent creation calls may reuse this handle, so ensure you remove all
+   references to it after freeing.                                           */
+MOONSHINE_EXPORT void moonshine_free_text_to_speech(int32_t tts_handle);
+
+/* Generates speech audio from a phoneme string.
+
+   `tts_handle` should be a handle returned by moonshine_create_text_to_speech.
+
+   `phonemes` should be a UTF-8-encoded IPA phoneme string. The caller is
+   responsible for grapheme-to-phoneme conversion (e.g. using misaki in Python
+   or a platform-specific G2P front-end).
+
+   `out_result` will be populated with the generated PCM audio data. This data
+   is owned by the TTS model and is valid until the next call to that model or
+   until the model is freed.
+
+   Returns zero on success, or a non-zero error code on failure.
+*/
+MOONSHINE_EXPORT int32_t moonshine_text_to_speech_generate(
+    int32_t tts_handle, const char *phonemes, struct tts_result_t *out_result);
 
 #ifdef __cplusplus
 }

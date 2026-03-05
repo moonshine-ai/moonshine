@@ -52,6 +52,7 @@ set(MOONSHINE_SRC_FILES
     transcriber.cpp
     gemma-embedding-model.cpp
     intent-recognizer.cpp
+    text-to-speech-model.cpp
     speaker-embedding-model.cpp
     speaker-embedding-model-data.cpp
     online-clusterer.cpp
