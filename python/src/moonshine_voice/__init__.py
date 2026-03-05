@@ -46,11 +46,12 @@ __version__ = "0.1.0"
 _transcriber_imported = False
 _mic_transcriber_imported = False
 _intent_recognizer_imported = False
+_text_to_speech_imported = False
 
 
 def __getattr__(name):
     """Lazy import for transcriber, mic_transcriber, and intent_recognizer modules."""
-    global _transcriber_imported, _mic_transcriber_imported, _intent_recognizer_imported
+    global _transcriber_imported, _mic_transcriber_imported, _intent_recognizer_imported, _text_to_speech_imported
 
     # Lazy import transcriber module
     if name in (
@@ -113,6 +114,21 @@ def __getattr__(name):
             _intent_recognizer_imported = True
         return globals()[name]
 
+    # Lazy import text_to_speech module
+    if name in ("TextToSpeech", "TTSModelArch", "TTSResult"):
+        if not _text_to_speech_imported:
+            from moonshine_voice.text_to_speech import (
+                TextToSpeech,
+                TTSModelArch,
+                TTSResult,
+            )
+
+            globals()["TextToSpeech"] = TextToSpeech
+            globals()["TTSModelArch"] = TTSModelArch
+            globals()["TTSResult"] = TTSResult
+            _text_to_speech_imported = True
+        return globals()[name]
+
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -133,6 +149,9 @@ __all__ = [
     "IntentRecognizer",
     "EmbeddingModelArch",
     "IntentMatch",
+    "TextToSpeech",
+    "TTSModelArch",
+    "TTSResult",
     "MoonshineError",
     "MoonshineUnknownError",
     "MoonshineInvalidHandleError",

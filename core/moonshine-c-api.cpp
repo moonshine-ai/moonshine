@@ -51,6 +51,7 @@ SOFTWARE.
 #include "gemma-embedding-model.h"
 #include "intent-recognizer.h"
 #include "moonshine-model.h"
+#include "text-to-speech-model.h"
 #include "moonshine-ort-allocator.h"
 #include "moonshine-tensor-view.h"
 #include "ort-utils.h"
@@ -603,6 +604,127 @@ int32_t moonshine_clear_intents(int32_t intent_recognizer_handle) {
     }
   } catch (const std::exception &e) {
     LOGF("Failed to clear intents: %s", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+  return MOONSHINE_ERROR_NONE;
+}
+
+/* ------------------------------ TEXT TO SPEECH ----------------------------- */
+
+namespace {
+
+struct TtsState {
+  TextToSpeechModel *model;
+  TextToSpeechResult last_result;
+  tts_result_t c_result;
+};
+
+std::mutex tts_map_mutex;
+std::map<int32_t, TtsState *> tts_map;
+int32_t next_tts_handle = 0;
+
+int32_t allocate_tts_handle(TextToSpeechModel *model) {
+  std::lock_guard<std::mutex> lock(tts_map_mutex);
+  int32_t handle = next_tts_handle++;
+  auto *state = new TtsState();
+  state->model = model;
+  state->c_result = {};
+  tts_map[handle] = state;
+  return handle;
+}
+
+void free_tts_handle(int32_t handle) {
+  // Caller must hold tts_map_mutex.
+  auto *state = tts_map[handle];
+  delete state->model;
+  delete state;
+  tts_map.erase(handle);
+}
+
+#define CHECK_TTS_HANDLE(handle)                                       \
+  do {                                                                 \
+    if (handle < 0 || !tts_map.contains(handle)) {                     \
+      LOGF("Moonshine TTS handle is invalid: handle %d", handle);      \
+      return MOONSHINE_ERROR_INVALID_HANDLE;                           \
+    }                                                                  \
+  } while (0)
+
+}  // namespace
+
+int32_t moonshine_create_text_to_speech(const char *model_path,
+                                        uint32_t model_arch) {
+  if (log_api_calls) {
+    LOGF("moonshine_create_text_to_speech(model_path=%s, model_arch=%d)",
+         model_path, model_arch);
+  }
+
+  if (model_path == nullptr) {
+    LOGF("%s", "Invalid model_path: nullptr");
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (model_arch != MOONSHINE_TTS_MODEL_ARCH_TSUKI) {
+    LOGF("Unknown TTS model architecture: %d", model_arch);
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+
+  TextToSpeechModel *model = nullptr;
+  try {
+    model = new TextToSpeechModel();
+    int result = model->load(model_path);
+    if (result != 0) {
+      delete model;
+      LOG("Failed to load TTS model");
+      return MOONSHINE_ERROR_UNKNOWN;
+    }
+  } catch (const std::exception &e) {
+    delete model;
+    LOGF("Failed to create TTS model: %s", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+  return allocate_tts_handle(model);
+}
+
+void moonshine_free_text_to_speech(int32_t tts_handle) {
+  if (log_api_calls) {
+    LOGF("moonshine_free_text_to_speech(handle=%d)", tts_handle);
+  }
+  std::lock_guard<std::mutex> lock(tts_map_mutex);
+  if (tts_map.contains(tts_handle)) {
+    free_tts_handle(tts_handle);
+  }
+}
+
+int32_t moonshine_text_to_speech_generate(int32_t tts_handle,
+                                          const char *phonemes,
+                                          struct tts_result_t *out_result) {
+  if (log_api_calls) {
+    LOGF("moonshine_text_to_speech_generate(handle=%d, phonemes=%s)",
+         tts_handle, phonemes ? phonemes : "(null)");
+  }
+  CHECK_TTS_HANDLE(tts_handle);
+
+  if (phonemes == nullptr || out_result == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+
+  try {
+    auto *state = tts_map[tts_handle];
+    int result = state->model->generate(std::string(phonemes),
+                                        state->last_result);
+    if (result != 0) {
+      LOG("TTS generation failed");
+      return MOONSHINE_ERROR_UNKNOWN;
+    }
+
+    // Expose the result through the C struct.  The data is owned by the
+    // TtsState and remains valid until the next generate call or free.
+    state->c_result.audio_data = state->last_result.audio_data.data();
+    state->c_result.audio_length = state->last_result.audio_data.size();
+    state->c_result.sample_rate = state->last_result.sample_rate;
+    *out_result = state->c_result;
+  } catch (const std::exception &e) {
+    LOGF("TTS generation failed: %s", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
   return MOONSHINE_ERROR_NONE;
