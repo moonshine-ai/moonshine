@@ -707,7 +707,13 @@ TranscriberLine::TranscriberLine(const TranscriberLine &other) {
 }
 
 TranscriberLine &TranscriberLine::operator=(const TranscriberLine &other) {
-  this->text = other.text == nullptr ? nullptr : new std::string(*other.text);
+  if (this == &other) {
+    return *this;
+  }
+  std::string *new_text =
+      other.text == nullptr ? nullptr : new std::string(*other.text);
+  delete this->text;
+  this->text = new_text;
   this->audio_data = other.audio_data;
   this->start_time = other.start_time;
   this->duration = other.duration;
@@ -865,7 +871,7 @@ void TranscriberStream::save_audio_data_to_wav(const float *audio_data,
     std::string wav_path = append_path_component(this->save_input_wav_path,
                                                  this->get_wav_filename());
     // Only log the first time we save a WAV file for a given stream.
-    static std::map<std::string, bool>* saved_wav_paths = nullptr;
+    static std::map<std::string, bool> *saved_wav_paths = nullptr;
     if (saved_wav_paths == nullptr) {
       saved_wav_paths = new std::map<std::string, bool>();
     }
