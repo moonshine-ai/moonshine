@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "ai.moonshine.voice"
     compileSdk = 35
-    ndkVersion = "25.2.9519653"
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         minSdk = 35
@@ -18,6 +18,11 @@ android {
         ndk {
             // Only build for ARM64 to match the app module
             abiFilters += listOf("arm64-v8a")
+        }
+        externalNativeBuild {
+            cmake {
+                arguments("-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON")
+            }
         }
     }
 
