@@ -1,0 +1,57 @@
+name: Publish Android (Maven Central)
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-android-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Skip prereleases by default; keep manual dispatch available.
+    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+      ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+      ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+      ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Validate release tag matches Android artifact version
+        if: github.event_name == 'release'
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          FILE_VERSION=$(sed -n 's/.*coordinates("ai\.moonshine", "moonshine-voice", "\([^"]*\)").*/\1/p' build.gradle.kts | head -n1)
+          if [[ -z "${FILE_VERSION}" ]]; then
+            echo "Could not parse moonshine-voice version from build.gradle.kts"
+            exit 1
+          fi
+          if [[ "${TAG_VERSION}" != "${FILE_VERSION}" ]]; then
+            echo "Tag version (${TAG_VERSION}) does not match build.gradle.kts version (${FILE_VERSION})."
+            exit 1
+          fi
+
+      - name: Publish and release Android artifacts to Maven Central
+        run: ./gradlew --no-daemon --stacktrace publishAndReleaseToMavenCentral
