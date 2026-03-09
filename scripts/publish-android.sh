@@ -5,6 +5,6 @@ REPO_ROOT_DIR=$(dirname $SCRIPTS_DIR)
 
 cd ${REPO_ROOT_DIR}
 
-./gradlew publishAllPublicationsToMavenCentralRepository
+./gradlew publishAndReleaseToMavenCentral
 
 echo "Android published"
