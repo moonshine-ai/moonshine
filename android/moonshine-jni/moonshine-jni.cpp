@@ -130,7 +130,7 @@ jobject c_transcript_to_jobject(JNIEnv *env, struct transcript_t *transcript) {
   for (size_t i = 0; i < transcript->line_count; i++) {
     transcript_line_t *line = &transcript->lines[i];
     jobject jline = env->NewObject(lineClass, lineConstructor);
-    std::string raw_text(line->text);
+    std::string raw_text(line->text ? line->text : "");
     std::string sanitized_text = utf8::replace_invalid(raw_text);
     env->SetObjectField(jline, textField,
                         env->NewStringUTF(sanitized_text.c_str()));
@@ -380,11 +380,15 @@ Java_ai_moonshine_voice_JNI_moonshineTranscribeStream(JNIEnv *env,
                                                       jint flags) {
   try {
     struct transcript_t *transcript = nullptr;
+    LOGE("moonshineTranscribeStream: start transcribe stream");
     int transcription_error = moonshine_transcribe_stream(
         transcriber_handle, stream_handle, flags, &transcript);
+    LOGE("moonshineTranscribeStream: transcription error: %d", transcription_error);
     if (transcription_error != 0) {
+      LOGE("moonshineTranscribeStream: transcription error: %d", transcription_error);
       return nullptr;
     }
+    LOGE("moonshineTranscribeStream: transcript=%p", (void *)transcript);
     return c_transcript_to_jobject(env, transcript);
   } catch (const std::exception &e) {
     LOGE("moonshineTranscribeStream: %s\n", e.what());
