@@ -44,3 +44,4 @@ Package.resolved
 /datasets/.venv/
 test-assets/tiny-en/alignment_model.ort
 test_swift_api
+test-assets/tiny-en/decoder_with_attention.ort
