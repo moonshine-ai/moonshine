@@ -172,41 +172,11 @@ static bool token_starts_new_word(BinTokenizer* tokenizer, int token_id) {
 }
 
 // ============================================================================
-// Helper: decode a single token to text using the tokenizer.
-// Uses tokens_to_text with a single-element vector, but does NOT skip
-// special tokens so we can handle them separately.
-// ============================================================================
-
-static std::string decode_token(BinTokenizer* tokenizer, int token_id) {
-    std::vector<int> single_token = {token_id};
-    return tokenizer->tokens_to_text(single_token, true);
-}
-
-// ============================================================================
 // Helper: decode a list of token IDs to text.
 // ============================================================================
 
 static std::string decode_tokens(BinTokenizer* tokenizer, const std::vector<int>& token_ids) {
     return tokenizer->tokens_to_text(token_ids, true);
-}
-
-// ============================================================================
-// Helper: check if a token is a special token (e.g., <bos>, <eos>).
-// Special tokens have bytes that look like <...>.
-// ============================================================================
-
-static bool is_special_token(BinTokenizer* tokenizer, int token_id) {
-    if (token_id < 0 || token_id >= (int)tokenizer->tokens_to_bytes.size()) {
-        return true;
-    }
-    const std::vector<uint8_t>& bytes = tokenizer->tokens_to_bytes[token_id];
-    if (bytes.size() == 0) {
-        return true;
-    }
-    if (bytes.size() > 2 && bytes[0] == '<' && bytes[bytes.size() - 1] == '>') {
-        return true;
-    }
-    return false;
 }
 
 // ============================================================================
