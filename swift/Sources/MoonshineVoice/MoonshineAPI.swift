@@ -239,6 +239,24 @@ internal final class MoonshineAPI: @unchecked Sendable {
                 // If validation fails, audioData remains nil and we continue without audio data
             }
 
+            // Extract word timestamps if available
+            var words: [WordTiming] = []
+            if let wordsPtr = lineC.words, lineC.word_count > 0 {
+                for j in 0..<Int(lineC.word_count) {
+                    let wordC = wordsPtr[j]
+                    var wordText = ""
+                    if let wordTextPtr = wordC.text {
+                        wordText = String(cString: wordTextPtr)
+                    }
+                    words.append(WordTiming(
+                        word: wordText,
+                        start: wordC.start,
+                        end: wordC.end,
+                        confidence: wordC.confidence
+                    ))
+                }
+            }
+
             let line = TranscriptLine(
                 text: text,
                 startTime: lineC.start_time,
@@ -251,7 +269,8 @@ internal final class MoonshineAPI: @unchecked Sendable {
                 hasSpeakerId: lineC.has_speaker_id != 0,
                 speakerId: lineC.speaker_id,
                 speakerIndex: lineC.speaker_index,
-                audioData: audioData
+                audioData: audioData,
+                words: words
             )
             lines.append(line)
         }

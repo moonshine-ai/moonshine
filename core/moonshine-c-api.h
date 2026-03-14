@@ -165,6 +165,19 @@ See the stream transcription examples below for more details on what this
 means in practice.
 */
 
+/* A single word with timing information.
+   Only populated when word_timestamps option is enabled. */
+struct transcript_word_t {
+  /* UTF-8-encoded word text. */
+  const char *text;
+  /* Start time in seconds (absolute, from start of audio/stream). */
+  float start;
+  /* End time in seconds. */
+  float end;
+  /* Model confidence score, 0.0 to 1.0. */
+  float confidence;
+};
+
 /* Information about a single “line” of a transcript. */
 struct transcript_line_t {
   /* UTF-8-encoded transcription. */
@@ -199,6 +212,10 @@ struct transcript_line_t {
   uint32_t speaker_index;
   /* Streaming-only: The latency of the last transcription in milliseconds. */
   uint32_t last_transcription_latency_ms;
+  /* Word-level timestamps. NULL if word_timestamps option is not enabled. */
+  const struct transcript_word_t *words;
+  /* Number of words in the words array. 0 if not enabled. */
+  uint64_t word_count;
 };
 
 /* An entire transcription of an audio data array or stream.                 */

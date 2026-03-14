@@ -71,6 +71,22 @@ enum class ModelArch {
 
 /* --------------------------- DATA STRUCTURES ----------------------------- */
 
+/// A single word with timing information
+struct WordTiming {
+  /// The word text
+  std::string word;
+  /// Start time in seconds (absolute, from start of audio/stream)
+  float start;
+  /// End time in seconds
+  float end;
+  /// Model confidence score, 0.0 to 1.0
+  float confidence;
+
+  WordTiming() : start(0.0f), end(0.0f), confidence(0.0f) {}
+  WordTiming(const std::string &word, float start, float end, float confidence)
+      : word(word), start(start), end(end), confidence(confidence) {}
+};
+
 /// A single line of transcription
 struct TranscriptLine {
   /// UTF-8 encoded transcription text
@@ -112,6 +128,9 @@ struct TranscriptLine {
   /// Audio data for this line, if available (16KHz float PCM, -1.0 to 1.0)
   std::vector<float> audioData;
 
+  /// Word-level timestamps (empty if word_timestamps option is not enabled)
+  std::vector<WordTiming> words;
+
   /// Default constructor
   TranscriptLine()
       : startTime(0.0f),
@@ -145,6 +164,15 @@ struct TranscriptLine {
     if (line_c.audio_data && line_c.audio_data_count > 0) {
       audioData.assign(line_c.audio_data,
                        line_c.audio_data + line_c.audio_data_count);
+    }
+    if (line_c.words && line_c.word_count > 0) {
+      words.reserve(line_c.word_count);
+      for (uint64_t i = 0; i < line_c.word_count; i++) {
+        const auto &w = line_c.words[i];
+        words.emplace_back(
+            w.text ? std::string(w.text) : std::string(),
+            w.start, w.end, w.confidence);
+      }
     }
   }
 

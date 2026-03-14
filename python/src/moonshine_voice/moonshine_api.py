@@ -10,6 +10,17 @@ from moonshine_voice.errors import MoonshineError
 # C structure definitions matching moonshine-c-api.h
 
 
+class TranscriptWordC(ctypes.Structure):
+    """C structure for transcript_word_t."""
+
+    _fields_ = [
+        ("text", ctypes.POINTER(ctypes.c_char)),
+        ("start", ctypes.c_float),
+        ("end", ctypes.c_float),
+        ("confidence", ctypes.c_float),
+    ]
+
+
 class TranscriptLineC(ctypes.Structure):
     """C structure for transcript_line_t."""
 
@@ -28,6 +39,8 @@ class TranscriptLineC(ctypes.Structure):
         ("speaker_id", ctypes.c_uint64),
         ("speaker_index", ctypes.c_uint32),
         ("last_transcription_latency_ms", ctypes.c_uint32),
+        ("words", ctypes.POINTER(TranscriptWordC)),
+        ("word_count", ctypes.c_uint64),
     ]
 
 
@@ -97,6 +110,19 @@ def string_to_model_arch(model_arch_string: str) -> ModelArch:
 
 
 @dataclass
+class WordTiming:
+    """A single word with timing information."""
+
+    word: str
+    start: float
+    end: float
+    confidence: float
+
+    def __str__(self) -> str:
+        return f"[{self.start:.3f}s - {self.end:.3f}s] {self.word} (conf: {self.confidence:.2f})"
+
+
+@dataclass
 class TranscriptLine:
     """A single line of transcription."""
 
@@ -113,9 +139,10 @@ class TranscriptLine:
     speaker_index: int = 0
     audio_data: Optional[List[float]] = None
     last_transcription_latency_ms: int = 0
+    words: Optional[List[WordTiming]] = None
 
     def __str__(self) -> str:
-        return f"[{self.start_time:.2f}s] Speaker {self.speaker_index}: '{self.text}', metadata: [duration={self.duration:.2f}s, line_id={self.line_id}, is_complete={self.is_complete}, is_updated={self.is_updated}, is_new={self.is_new}, has_text_changed={self.has_text_changed}, has_speaker_id={self.has_speaker_id}, speaker_id={self.speaker_id}, audio_data_len={len(self.audio_data) if self.audio_data else 0}, last_transcription_latency_ms={self.last_transcription_latency_ms}]"
+        return f"[{self.start_time:.2f}s] Speaker {self.speaker_index}: '{self.text}', metadata: [duration={self.duration:.2f}s, line_id={self.line_id}, is_complete={self.is_complete}, is_updated={self.is_updated}, is_new={self.is_new}, has_text_changed={self.has_text_changed}, has_speaker_id={self.has_speaker_id}, speaker_id={self.speaker_id}, audio_data_len={len(self.audio_data) if self.audio_data else 0}, last_transcription_latency_ms={self.last_transcription_latency_ms}, words={len(self.words) if self.words else 0}]"
 
 
 @dataclass

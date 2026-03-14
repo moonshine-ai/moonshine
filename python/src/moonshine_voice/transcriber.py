@@ -14,6 +14,7 @@ from moonshine_voice.moonshine_api import (
     TranscriptLine,
     TranscriptC,
     TranscriberOptionC,
+    WordTiming,
 )
 from moonshine_voice.errors import MoonshineError, check_error
 from moonshine_voice.utils import get_model_path, get_assets_path, load_wav_file
@@ -213,6 +214,26 @@ class Transcriber:
                 ).contents
                 audio_data = list(audio_array)
 
+            # Extract word timestamps if available
+            words = None
+            if line_c.words and line_c.word_count > 0:
+                words = []
+                for j in range(line_c.word_count):
+                    word_c = line_c.words[j]
+                    word_text = ""
+                    if word_c.text:
+                        word_text = ctypes.string_at(word_c.text).decode(
+                            "utf-8", errors="ignore"
+                        )
+                    words.append(
+                        WordTiming(
+                            word=word_text,
+                            start=word_c.start,
+                            end=word_c.end,
+                            confidence=word_c.confidence,
+                        )
+                    )
+
             line = TranscriptLine(
                 text=text,
                 start_time=line_c.start_time,
@@ -227,6 +248,7 @@ class Transcriber:
                 speaker_index=line_c.speaker_index,
                 audio_data=audio_data,
                 last_transcription_latency_ms=line_c.last_transcription_latency_ms,
+                words=words,
             )
             lines.append(line)
 
