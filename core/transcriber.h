@@ -118,6 +118,7 @@ struct TranscriberOptions {
   bool log_ort_run = false;
   bool return_audio_data = true;
   bool log_output_text = false;
+  bool word_timestamps = false;
 };
 
 class Transcriber {

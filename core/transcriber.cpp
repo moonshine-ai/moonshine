@@ -160,6 +160,25 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
                                ", " + tokenizer_path +
                                ". Error code: " + std::to_string(load_error));
     }
+
+    // Load alignment model for word timestamps if enabled
+    if (this->options.word_timestamps) {
+      std::string alignment_model_path =
+          append_path_component(model_path, "alignment_model.ort");
+      if (std::filesystem::exists(alignment_model_path)) {
+        int32_t align_err =
+            this->stt_model->load_alignment_model(alignment_model_path.c_str());
+        if (align_err != 0) {
+          LOGF("Warning: Failed to load alignment model from %s, word "
+               "timestamps disabled\n",
+               alignment_model_path.c_str());
+        }
+      } else {
+        LOGF("Warning: Alignment model not found at %s, word timestamps "
+             "disabled\n",
+             alignment_model_path.c_str());
+      }
+    }
   }
 }
 
@@ -452,6 +471,24 @@ void Transcriber::update_transcript_from_segments(
       }
       // Ensure the output text is valid UTF-8.
       line.text = sanitize_text(out_text);
+
+      // Compute word timestamps if alignment model is loaded
+      if (this->options.word_timestamps &&
+          this->stt_model->alignment_session != nullptr) {
+        float seg_duration =
+            segment.audio_data.size() / (float)INTERNAL_SAMPLE_RATE;
+        std::vector<TranscriberWord> words;
+        int align_err =
+            this->stt_model->compute_word_timestamps(seg_duration, words);
+        if (align_err == 0 && !words.empty()) {
+          // Offset word times by the segment's start time
+          for (auto &w : words) {
+            w.start += segment.start_time;
+            w.end += segment.start_time;
+          }
+          line.words = std::move(words);
+        }
+      }
     } else {
       // No model available - return audio data and segment info only
       line.text = nullptr;
