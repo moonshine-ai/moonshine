@@ -283,6 +283,18 @@ int MoonshineModel::transcribe(const float *input_audio_data,
       ort_api, last_hidden_state, "last_hidden_state_tensor");
   ort_api->ReleaseValue(last_hidden_state);
 
+  // Save encoder hidden states for word alignment (if alignment model loaded)
+  if (alignment_session != nullptr) {
+    auto &enc_shape = last_hidden_state_tensor->shape();
+    // Shape: [1, enc_frames, encoder_dim]
+    last_encoder_frames = static_cast<int>(enc_shape[1]);
+    encoder_dim = static_cast<int>(enc_shape[2]);
+    size_t total = last_encoder_frames * encoder_dim;
+    last_encoder_hidden_states.resize(total);
+    memcpy(last_encoder_hidden_states.data(),
+           last_hidden_state_tensor->data<float>(), total * sizeof(float));
+  }
+
   delete encoder_input_tensor;
   encoder_input_tensor = nullptr;
 
@@ -490,6 +502,11 @@ int MoonshineModel::transcribe(const float *input_audio_data,
   }
   past_key_values_by_name.clear();
 
+  // Save tokens for word alignment
+  if (alignment_session != nullptr) {
+    last_tokens = tokens;
+  }
+
   last_result = tokenizer->tokens_to_text(tokens);
   *out_text = (char *)(last_result.c_str());
 
@@ -511,4 +528,156 @@ int MoonshineModel::transcribe_wav(const char *wav_path, char **out_text) {
     return 1;
   }
   return transcribe(wav_data, wav_data_size, out_text);
+}
+
+int MoonshineModel::load_alignment_model(const char *alignment_model_path) {
+  const char *alignment_mmapped_data = nullptr;
+  size_t alignment_mmapped_data_size = 0;
+  RETURN_ON_ERROR(ort_session_from_path(
+      ort_api, ort_env, ort_session_options, alignment_model_path,
+      &alignment_session, &alignment_mmapped_data,
+      &alignment_mmapped_data_size));
+  RETURN_ON_NULL(alignment_session);
+  return 0;
+}
+
+int MoonshineModel::compute_word_timestamps(
+    float audio_duration, std::vector<TranscriberWord> &words_out) {
+  words_out.clear();
+
+  if (alignment_session == nullptr) {
+    return 1;
+  }
+  if (last_encoder_hidden_states.empty() || last_tokens.size() < 2) {
+    return 1;
+  }
+
+  // Prepare inputs for alignment model:
+  //   input_ids: [1, num_tokens]
+  //   encoder_hidden_states: [1, enc_frames, encoder_dim]
+
+  int64_t num_tokens = static_cast<int64_t>(last_tokens.size());
+  std::vector<int64_t> input_ids_shape = {1, num_tokens};
+  std::vector<int64_t> enc_shape = {1, static_cast<int64_t>(last_encoder_frames),
+                                    static_cast<int64_t>(encoder_dim)};
+
+  OrtValue *input_ids_tensor = nullptr;
+  RETURN_ON_ORT_ERROR(
+      ort_api,
+      ort_api->CreateTensorWithDataAsOrtValue(
+          ort_memory_info, last_tokens.data(),
+          last_tokens.size() * sizeof(int64_t), input_ids_shape.data(),
+          input_ids_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64,
+          &input_ids_tensor));
+
+  OrtValue *enc_tensor = nullptr;
+  RETURN_ON_ORT_ERROR(
+      ort_api,
+      ort_api->CreateTensorWithDataAsOrtValue(
+          ort_memory_info, last_encoder_hidden_states.data(),
+          last_encoder_hidden_states.size() * sizeof(float), enc_shape.data(),
+          enc_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &enc_tensor));
+
+  // Run alignment model
+  // Outputs: logits, cross_attentions.0 .. cross_attentions.{num_layers-1}
+  size_t align_output_count = 0;
+  RETURN_ON_ORT_ERROR(ort_api, ort_api->SessionGetOutputCount(
+                                   alignment_session, &align_output_count));
+
+  std::vector<const char *> input_names = {"input_ids", "encoder_hidden_states"};
+  std::vector<char *> output_names_alloc(align_output_count);
+  for (size_t i = 0; i < align_output_count; i++) {
+    RETURN_ON_ORT_ERROR(ort_api,
+                        ort_api->SessionGetOutputName(
+                            alignment_session, i, &ort_string_allocator->base,
+                            &output_names_alloc[i]));
+  }
+  std::vector<const char *> output_names(align_output_count);
+  for (size_t i = 0; i < align_output_count; i++) {
+    output_names[i] = output_names_alloc[i];
+  }
+
+  OrtValue *inputs[] = {input_ids_tensor, enc_tensor};
+  std::vector<OrtValue *> outputs(align_output_count, nullptr);
+
+  OrtStatus *status = ORT_RUN(ort_api, alignment_session, input_names.data(),
+                              inputs, 2, output_names.data(),
+                              align_output_count, outputs.data());
+
+  ort_api->ReleaseValue(input_ids_tensor);
+  ort_api->ReleaseValue(enc_tensor);
+
+  if (status != nullptr) {
+    LOG_ORT_ERROR(ort_api, status);
+    for (auto *o : outputs) {
+      if (o) ort_api->ReleaseValue(o);
+    }
+    for (auto *n : output_names_alloc) {
+      ort_string_allocator->base.Free(&ort_string_allocator->base, n);
+    }
+    return 1;
+  }
+
+  // Extract cross-attention tensors (outputs[1] .. outputs[num_layers])
+  // Each has shape [1, num_heads, num_tokens, enc_frames]
+  int attn_layers = static_cast<int>(align_output_count) - 1;  // minus logits
+  if (attn_layers <= 0) {
+    for (auto *o : outputs) {
+      if (o) ort_api->ReleaseValue(o);
+    }
+    for (auto *n : output_names_alloc) {
+      ort_string_allocator->base.Free(&ort_string_allocator->base, n);
+    }
+    return 1;
+  }
+
+  // Get attention head count from first attention output shape
+  OrtTensorTypeAndShapeInfo *attn_info = nullptr;
+  RETURN_ON_ORT_ERROR(ort_api,
+                      ort_api->GetTensorTypeAndShape(outputs[1], &attn_info));
+  size_t attn_ndims = 0;
+  RETURN_ON_ORT_ERROR(ort_api,
+                      ort_api->GetDimensionsCount(attn_info, &attn_ndims));
+  std::vector<int64_t> attn_shape(attn_ndims);
+  RETURN_ON_ORT_ERROR(
+      ort_api,
+      ort_api->GetDimensions(attn_info, attn_shape.data(), attn_ndims));
+  ort_api->ReleaseTensorTypeAndShapeInfo(attn_info);
+
+  int num_heads = static_cast<int>(attn_shape[1]);
+  int dec_len = static_cast<int>(attn_shape[2]);
+  int enc_len = static_cast<int>(attn_shape[3]);
+
+  // Stack all attention layers into a flat buffer:
+  // [attn_layers * num_heads, dec_len, enc_len]
+  size_t per_layer = num_heads * dec_len * enc_len;
+  std::vector<float> cross_attention_data(attn_layers * per_layer);
+
+  for (int layer = 0; layer < attn_layers; layer++) {
+    float *layer_data = nullptr;
+    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(
+                                     outputs[1 + layer], (void **)&layer_data));
+    // Copy from [1, heads, dec_len, enc_len] to flat buffer
+    memcpy(cross_attention_data.data() + layer * per_layer, layer_data,
+           per_layer * sizeof(float));
+  }
+
+  // Release ONNX outputs
+  for (auto *o : outputs) {
+    if (o) ort_api->ReleaseValue(o);
+  }
+  for (auto *n : output_names_alloc) {
+    ort_string_allocator->base.Free(&ort_string_allocator->base, n);
+  }
+
+  // Convert tokens to int vector for align_words
+  std::vector<int> tokens_int(last_tokens.begin(), last_tokens.end());
+
+  float time_per_frame = audio_duration / static_cast<float>(enc_len);
+
+  words_out = align_words(cross_attention_data.data(), attn_layers, num_heads,
+                          dec_len, enc_len, tokens_int, time_per_frame,
+                          tokenizer);
+
+  return 0;
 }
