@@ -29,12 +29,12 @@ struct TranscriberApp: App {
                         print("Error: Could not find resource path in bundle")
                         return
                     }
-                    let modelPath = resourcePath.appending("/models/base-en/")
+                    let modelPath = resourcePath.appending("/models/small-streaming-en/")
                     if (!FileManager.default.fileExists(atPath: modelPath)) {
                         print("Error: Model path does not exist: \(modelPath)")
                         return
                     }
-                    let transcriber = try MicTranscriber(modelPath: modelPath, modelArch: ModelArch.base)
+                    let transcriber = try MicTranscriber(modelPath: modelPath, modelArch: ModelArch.smallStreaming)
                                             
                     // Add event listeners
                     transcriber.addListener { event in
