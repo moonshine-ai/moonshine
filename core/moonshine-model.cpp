@@ -364,6 +364,13 @@ int MoonshineModel::transcribe(const float *input_audio_data,
   std::vector<int64_t> tokens = {MOONSHINE_DECODER_START_TOKEN_ID};
   std::vector<int64_t> inputIDs = tokens;
 
+  // Buffer for collecting cross-attention weights during single-pass decoding.
+  // Filled when the decoder model has cross_attentions.* outputs.
+  std::vector<float> cross_attention_buffer;
+  int cross_attn_heads = 0;
+  int cross_attn_enc_len = 0;
+  int cross_attn_steps = 0;
+
   for (int token_index = 0; token_index < max_len; token_index++) {
     const bool use_cache_branch = token_index > 0;
     std::vector<MoonshineTensorView *> decoder_inputs_data(decoder_input_count);
@@ -380,16 +387,9 @@ int MoonshineModel::transcribe(const float *input_audio_data,
     decoder_inputs_data[encoder_hidden_states_index] =
         new MoonshineTensorView(*last_hidden_state_tensor);
 
-    if (encoder_attention_mask_tensor != nullptr) {
-      if (decoder_input_name_to_index.find("encoder_attention_mask") ==
-          decoder_input_name_to_index.end()) {
-        LOG("Encoder attention mask index not found "
-            "in decoder input names, "
-            "but it is in the encoder input names, "
-            "indicating an ONNX "
-            "conversion problem.\n");
-        return 1;
-      }
+    if (encoder_attention_mask_tensor != nullptr &&
+        decoder_input_name_to_index.find("encoder_attention_mask") !=
+            decoder_input_name_to_index.end()) {
       const int64_t encoder_attention_mask_index =
           decoder_input_name_to_index["encoder_attention_mask"];
       decoder_inputs_data[encoder_attention_mask_index] =
@@ -465,6 +465,35 @@ int MoonshineModel::transcribe(const float *input_audio_data,
             TENSOR_NAME(past_key_values_name));
       }
     }
+    // Collect cross-attention weights if available (single-pass mode)
+    if (alignment_session == nullptr) {
+      // Check if decoder outputs include cross_attentions (modified decoder)
+      for (int layer_idx = 0; layer_idx < num_layers; layer_idx++) {
+        std::string attn_name = "cross_attentions." + std::to_string(layer_idx);
+        if (decoder_output_name_to_index.find(attn_name) !=
+            decoder_output_name_to_index.end()) {
+          const int64_t attn_index = decoder_output_name_to_index[attn_name];
+          MoonshineTensorView attn_view(ort_api, decoder_outputs[attn_index],
+                                        "cross_attn");
+          auto &attn_shape = attn_view.shape();
+          // Shape: [1, heads, dec_step_len, enc_len]
+          int heads = static_cast<int>(attn_shape[1]);
+          int step_len = static_cast<int>(attn_shape[2]);
+          int enc_len = static_cast<int>(attn_shape[3]);
+          size_t step_size = heads * step_len * enc_len;
+          size_t old_size = cross_attention_buffer.size();
+          cross_attention_buffer.resize(old_size + step_size);
+          memcpy(cross_attention_buffer.data() + old_size,
+                 attn_view.data<float>(), step_size * sizeof(float));
+          if (token_index == 0) {
+            cross_attn_heads = heads;
+            cross_attn_enc_len = enc_len;
+          }
+          cross_attn_steps++;
+        }
+      }
+    }
+
     for (size_t i = 0; i < decoder_output_count; i++) {
       ort_api->ReleaseValue(decoder_outputs[i]);
     }
@@ -502,9 +531,15 @@ int MoonshineModel::transcribe(const float *input_audio_data,
   }
   past_key_values_by_name.clear();
 
-  // Save tokens for word alignment
-  if (alignment_session != nullptr) {
-    last_tokens = tokens;
+  // Save tokens and attention for word alignment
+  last_tokens = tokens;
+
+  // If we collected attention during single-pass decoding, save it
+  if (!cross_attention_buffer.empty() && cross_attn_steps > 0) {
+    last_cross_attention_buffer = std::move(cross_attention_buffer);
+    last_cross_attn_heads = cross_attn_heads;
+    last_cross_attn_enc_len = cross_attn_enc_len;
+    last_cross_attn_steps = cross_attn_steps;
   }
 
   last_result = tokenizer->tokens_to_text(tokens);
@@ -545,10 +580,54 @@ int MoonshineModel::compute_word_timestamps(
     float audio_duration, std::vector<TranscriberWord> &words_out) {
   words_out.clear();
 
+  if (last_tokens.size() < 2) {
+    return 1;
+  }
+
+  // Prefer single-pass attention (collected during decode) over alignment model
+  if (!last_cross_attention_buffer.empty() && last_cross_attn_steps > 0) {
+    std::vector<int> tokens_int(last_tokens.begin(), last_tokens.end());
+    int total_steps = last_cross_attn_steps / num_layers;
+    int H = last_cross_attn_heads;
+    int E = last_cross_attn_enc_len;
+    int L = num_layers;
+
+    // The buffer was collected as: for each decode step, for each layer:
+    //   [heads, 1, enc_len] → H*E floats
+    // So layout is: [step0_L0, step0_L1, ..., step0_L5, step1_L0, ...]
+    // We need: [L*H, total_steps, E] (layers*heads contiguous, then steps, then enc)
+    // Rearrange from [total_steps, L, H, E] to [L, H, total_steps, E]
+    size_t per_layer_step = H * E;
+    std::vector<float> rearranged(L * H * total_steps * E);
+    for (int s = 0; s < total_steps; s++) {
+      for (int l = 0; l < L; l++) {
+        // Source: step s, layer l → offset (s*L + l) * H * E
+        // Dest: layer l, all heads, step s → offset (l * H * total_steps + s) * E
+        // Actually for align_words: [L*H, total_steps, E]
+        // So dest for layer l, head h, step s = ((l*H + h) * total_steps + s) * E
+        const float *src =
+            last_cross_attention_buffer.data() + (s * L + l) * per_layer_step;
+        for (int h = 0; h < H; h++) {
+          float *dst =
+              rearranged.data() + ((l * H + h) * total_steps + s) * E;
+          memcpy(dst, src + h * E, E * sizeof(float));
+        }
+      }
+    }
+
+    float time_per_frame = audio_duration / static_cast<float>(E);
+    words_out = align_words(rearranged.data(), L, H, total_steps, E,
+                            tokens_int, time_per_frame, tokenizer);
+    last_cross_attention_buffer.clear();
+    last_cross_attn_steps = 0;
+    return 0;
+  }
+
+  // Fallback: use alignment model (two-pass)
   if (alignment_session == nullptr) {
     return 1;
   }
-  if (last_encoder_hidden_states.empty() || last_tokens.size() < 2) {
+  if (last_encoder_hidden_states.empty()) {
     return 1;
   }
 

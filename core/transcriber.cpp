@@ -8,6 +8,7 @@
 #include <string>
 
 #include "debug-utils.h"
+#include "ort-utils.h"
 #include "resampler.h"
 #include "string-utils.h"
 #include "utf8.h"
@@ -161,22 +162,42 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
                                ". Error code: " + std::to_string(load_error));
     }
 
-    // Load alignment model for word timestamps if enabled
+    // Load word timestamp model if enabled.
+    // Try decoder_with_attention.ort first (single-pass, replaces decoder
+    // with one that outputs cross-attention weights during decoding).
+    // Fall back to alignment_model.ort (two-pass, runs alignment after
+    // transcription using a separate teacher-forced decoder pass).
     if (this->options.word_timestamps) {
-      std::string alignment_model_path =
+      std::string decoder_attn_path =
+          append_path_component(model_path, "decoder_with_attention.ort");
+      std::string alignment_path =
           append_path_component(model_path, "alignment_model.ort");
-      if (std::filesystem::exists(alignment_model_path)) {
+
+      if (std::filesystem::exists(decoder_attn_path)) {
+        // Single-pass: replace decoder with attention-enabled version
+        this->stt_model->decoder_session = nullptr;
+        const char *dec_mmapped = nullptr;
+        size_t dec_mmapped_size = 0;
+        int32_t dec_err = ort_session_from_path(
+            this->stt_model->ort_api, this->stt_model->ort_env,
+            this->stt_model->ort_session_options,
+            decoder_attn_path.c_str(), &this->stt_model->decoder_session,
+            &dec_mmapped, &dec_mmapped_size);
+        if (dec_err != 0) {
+          LOGF("Warning: Failed to load decoder_with_attention from %s\n",
+               decoder_attn_path.c_str());
+        }
+      } else if (std::filesystem::exists(alignment_path)) {
+        // Two-pass fallback: separate alignment model
         int32_t align_err =
-            this->stt_model->load_alignment_model(alignment_model_path.c_str());
+            this->stt_model->load_alignment_model(alignment_path.c_str());
         if (align_err != 0) {
-          LOGF("Warning: Failed to load alignment model from %s, word "
-               "timestamps disabled\n",
-               alignment_model_path.c_str());
+          LOGF("Warning: Failed to load alignment model from %s\n",
+               alignment_path.c_str());
         }
       } else {
-        LOGF("Warning: Alignment model not found at %s, word timestamps "
-             "disabled\n",
-             alignment_model_path.c_str());
+        LOG("Warning: No word timestamp model found, word timestamps "
+            "disabled\n");
       }
     }
   }
@@ -472,9 +493,8 @@ void Transcriber::update_transcript_from_segments(
       // Ensure the output text is valid UTF-8.
       line.text = sanitize_text(out_text);
 
-      // Compute word timestamps if alignment model is loaded
-      if (this->options.word_timestamps &&
-          this->stt_model->alignment_session != nullptr) {
+      // Compute word timestamps (single-pass or alignment model)
+      if (this->options.word_timestamps) {
         float seg_duration =
             segment.audio_data.size() / (float)INTERNAL_SAMPLE_RATE;
         std::vector<TranscriberWord> words;
