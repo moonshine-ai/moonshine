@@ -359,6 +359,21 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
     )
     target_link_libraries(word-alignment-test PRIVATE moonshine)
 
+    add_executable(word-alignment-benchmark word-alignment-benchmark.cpp)
+    set_target_properties(word-alignment-benchmark PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(word-alignment-benchmark PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+        ${CMAKE_CURRENT_LIST_DIR}/ort-utils
+        ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
+    )
+    target_link_libraries(word-alignment-benchmark PRIVATE moonshine)
+
     add_executable(intent-recognizer-test intent-recognizer-test.cpp intent-recognizer.cpp gemma-embedding-model.cpp)
     set_target_properties(intent-recognizer-test PROPERTIES
         CXX_STANDARD 20
