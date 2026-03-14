@@ -55,6 +55,7 @@ set(MOONSHINE_SRC_FILES
     speaker-embedding-model.cpp
     speaker-embedding-model-data.cpp
     online-clusterer.cpp
+    word-alignment.cpp
 )
 
 # Build as STATIC framework for iOS/Swift (shared frameworks cannot be embedded)
