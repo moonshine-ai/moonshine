@@ -704,6 +704,7 @@ TranscriberLine::TranscriberLine(const TranscriberLine &other) {
   this->last_transcription_latency_ms = other.last_transcription_latency_ms;
   this->speaker_id = other.speaker_id;
   this->speaker_index = other.speaker_index;
+  this->words = other.words;
 }
 
 TranscriberLine &TranscriberLine::operator=(const TranscriberLine &other) {
@@ -726,6 +727,7 @@ TranscriberLine &TranscriberLine::operator=(const TranscriberLine &other) {
   this->last_transcription_latency_ms = other.last_transcription_latency_ms;
   this->speaker_id = other.speaker_id;
   this->speaker_index = other.speaker_index;
+  this->words = other.words;
   return *this;
 }
 
@@ -765,11 +767,38 @@ void TranscriptStreamOutput::add_or_update_line(TranscriberLine &line) {
 void TranscriptStreamOutput::update_transcript_from_lines() {
   std::lock_guard<std::mutex> lock(this->mutex);
   this->output_lines.clear();
+  this->output_words.clear();
+  this->output_word_texts.clear();
+
+  size_t num_lines = this->ordered_internal_line_ids.size();
+  this->output_words.resize(num_lines);
+  this->output_word_texts.resize(num_lines);
+
+  size_t line_index = 0;
   for (const uint64_t &line_id : this->ordered_internal_line_ids) {
     const TranscriberLine &line = this->internal_lines_map[line_id];
     const bool has_audio_data = line.audio_data.size() > 0;
     const float *audio_data = has_audio_data ? line.audio_data.data() : nullptr;
     const size_t audio_data_count = has_audio_data ? line.audio_data.size() : 0;
+
+    // Build word C structs for this line
+    auto &word_texts = this->output_word_texts[line_index];
+    auto &word_structs = this->output_words[line_index];
+    word_texts.clear();
+    word_structs.clear();
+
+    for (const auto &w : line.words) {
+      word_texts.push_back(w.text);
+    }
+    for (size_t i = 0; i < line.words.size(); i++) {
+      word_structs.push_back({
+          .text = word_texts[i].c_str(),
+          .start = line.words[i].start,
+          .end = line.words[i].end,
+          .confidence = line.words[i].confidence,
+      });
+    }
+
     this->output_lines.push_back({
         .text = line.text == nullptr ? nullptr : line.text->c_str(),
         .audio_data = audio_data,
@@ -785,7 +814,11 @@ void TranscriptStreamOutput::update_transcript_from_lines() {
         .speaker_id = line.speaker_id,
         .speaker_index = line.speaker_index,
         .last_transcription_latency_ms = line.last_transcription_latency_ms,
+        .words = word_structs.empty() ? nullptr : word_structs.data(),
+        .word_count = (uint64_t)word_structs.size(),
     });
+
+    line_index++;
   }
   this->transcript.lines = this->output_lines.data();
   this->transcript.line_count = (uint64_t)(this->output_lines.size());

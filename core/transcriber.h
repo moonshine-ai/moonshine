@@ -16,6 +16,7 @@
 #include "speaker-embedding-model.h"
 #include "speaker-embedding-model-data.h"
 #include "online-clusterer.h"
+#include "word-alignment.h"
 
 struct TranscriberLine {
   std::string *text = nullptr;
@@ -31,6 +32,7 @@ struct TranscriberLine {
   uint32_t last_transcription_latency_ms;
   uint64_t speaker_id;
   uint32_t speaker_index;
+  std::vector<TranscriberWord> words;
 
   TranscriberLine();
   TranscriberLine(const TranscriberLine &other);
@@ -43,6 +45,11 @@ struct TranscriptStreamOutput {
   std::map<uint64_t, TranscriberLine> internal_lines_map;
   std::vector<uint64_t> ordered_internal_line_ids;
   std::vector<transcript_line_t> output_lines;
+  // Storage for word C structs — one vector per line, kept alive alongside
+  // output_lines so that transcript_line_t.words pointers remain valid.
+  std::vector<std::vector<transcript_word_t>> output_words;
+  // Storage for word text strings (must outlive the transcript_word_t pointers)
+  std::vector<std::vector<std::string>> output_word_texts;
   std::mutex mutex;
 
   struct transcript_t transcript = {.lines = nullptr, .line_count = 0};

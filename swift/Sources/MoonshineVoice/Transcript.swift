@@ -1,5 +1,17 @@
 import Foundation
 
+/// A single word with timing information.
+public struct WordTiming {
+    /// The word text.
+    public let word: String
+    /// Start time in seconds (absolute, from start of audio/stream).
+    public let start: Float
+    /// End time in seconds.
+    public let end: Float
+    /// Model confidence score, 0.0 to 1.0.
+    public let confidence: Float
+}
+
 /// A single line of transcription.
 public struct TranscriptLine {
     /// UTF-8 encoded transcription text.
@@ -37,7 +49,10 @@ public struct TranscriptLine {
     
     /// Audio data for this line, if available.
     public let audioData: [Float]?
-    
+
+    /// Word-level timestamps. Empty if word_timestamps option is not enabled.
+    public let words: [WordTiming]
+
     internal init(
         text: String,
         startTime: Float,
@@ -50,7 +65,8 @@ public struct TranscriptLine {
         hasSpeakerId: Bool = false,
         speakerId: UInt64 = 0,
         speakerIndex: UInt32 = 0,
-        audioData: [Float]? = nil
+        audioData: [Float]? = nil,
+        words: [WordTiming] = []
     ) {
         self.text = text
         self.startTime = startTime
@@ -64,6 +80,7 @@ public struct TranscriptLine {
         self.speakerId = speakerId
         self.speakerIndex = speakerIndex
         self.audioData = audioData
+        self.words = words
     }
 
     public var description: String {
