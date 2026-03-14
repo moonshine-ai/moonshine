@@ -10,6 +10,7 @@
 #include "moonshine-c-api.h"
 #include "moonshine-ort-allocator.h"
 #include "onnxruntime_c_api.h"
+#include "word-alignment.h"
 
 struct MoonshineModel {
   const OrtApi *ort_api;
@@ -22,6 +23,7 @@ struct MoonshineModel {
   MoonshineOrtAllocator *ort_string_allocator;
   OrtSession *encoder_session;
   OrtSession *decoder_session;
+  OrtSession *alignment_session = nullptr;
   BinTokenizer *tokenizer;
   std::mutex processing_mutex;
 
@@ -29,6 +31,7 @@ struct MoonshineModel {
   int32_t num_kv_heads;
   int32_t head_dim;
   int32_t past_element_count;
+  int32_t encoder_dim = 0;
 
   const char *encoder_mmapped_data = nullptr;
   size_t encoder_mmapped_data_size = 0;
@@ -47,11 +50,18 @@ struct MoonshineModel {
 
   bool log_ort_run = false;
 
+  // Saved from last transcribe() call for word alignment
+  std::vector<float> last_encoder_hidden_states;
+  int last_encoder_frames = 0;
+  std::vector<int64_t> last_tokens;
+
   MoonshineModel(bool log_ort_run = false, float max_tokens_per_second = 6.5f);
   ~MoonshineModel();
 
   int load(const char *encoder_model_path, const char *decoder_model_path,
            const char *tokenizer_path, int32_t model_type);
+
+  int load_alignment_model(const char *alignment_model_path);
 
   int load_from_memory(const uint8_t *encoder_model_data,
                        size_t encoder_model_data_size,
@@ -71,6 +81,14 @@ struct MoonshineModel {
                  char **out_text);
 
   int transcribe_wav(const char *wav_path, char **out_text);
+
+  // Compute word-level timestamps using the alignment model and saved
+  // encoder states / tokens from the last transcribe() call.
+  // audio_duration: duration of the audio in seconds
+  // words_out: populated with word timestamps
+  // Returns 0 on success.
+  int compute_word_timestamps(float audio_duration,
+                              std::vector<TranscriberWord> &words_out);
 };
 
 #endif
