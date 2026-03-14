@@ -55,6 +55,12 @@ struct MoonshineModel {
   int last_encoder_frames = 0;
   std::vector<int64_t> last_tokens;
 
+  // Single-pass attention collection (when decoder has cross_attentions outputs)
+  std::vector<float> last_cross_attention_buffer;
+  int last_cross_attn_heads = 0;
+  int last_cross_attn_enc_len = 0;
+  int last_cross_attn_steps = 0;
+
   MoonshineModel(bool log_ort_run = false, float max_tokens_per_second = 6.5f);
   ~MoonshineModel();
 
