@@ -32,7 +32,8 @@ struct BenchResult {
 };
 
 static BenchResult run_benchmark(const char* model_path, const char* wav_path,
-                                  bool word_timestamps, int warmup, int runs) {
+                                  bool word_timestamps, int warmup, int runs,
+                                  int model_arch = MOONSHINE_MODEL_ARCH_TINY) {
     struct transcriber_option_t options[2];
     int opt_count = 1;
     options[0] = {.name = "identify_speakers", .value = "false"};
@@ -42,7 +43,7 @@ static BenchResult run_benchmark(const char* model_path, const char* wav_path,
     }
 
     int32_t handle = moonshine_load_transcriber_from_files(
-        model_path, MOONSHINE_MODEL_ARCH_TINY, options, opt_count,
+        model_path, model_arch, options, opt_count,
         moonshine_get_version());
     if (handle < 0) {
         fprintf(stderr, "Failed to load model\n");
@@ -90,10 +91,12 @@ int main(int argc, char** argv) {
     int warmup = 2;
     int runs = 5;
 
+    int model_arch = MOONSHINE_MODEL_ARCH_TINY;
     if (argc > 1) model_path = argv[1];
     if (argc > 2) wav_path = argv[2];
     if (argc > 3) warmup = atoi(argv[3]);
     if (argc > 4) runs = atoi(argv[4]);
+    if (argc > 5) model_arch = atoi(argv[5]);
 
     // Load audio to report duration
     long n = 0;
@@ -105,15 +108,18 @@ int main(int argc, char** argv) {
     printf("Model: %s\n", model_path);
     printf("Warmup: %d, Runs: %d\n\n", warmup, runs);
 
+    printf("Model arch: %d (%s)\n\n", model_arch,
+           model_arch == 0 ? "tiny" : model_arch == 2 ? "tiny-streaming" : "other");
+
     printf("=== 1. Without word timestamps ===\n");
-    auto r1 = run_benchmark(model_path, wav_path, false, warmup, runs);
+    auto r1 = run_benchmark(model_path, wav_path, false, warmup, runs, model_arch);
     printf("  Average: %.1f ms\n", r1.avg_ms);
     printf("  Min: %.1f ms, Max: %.1f ms\n", r1.min_ms, r1.max_ms);
     printf("  RTF: %.4fx\n", r1.avg_ms / 1000.0 / dur);
     printf("  Words: %d\n\n", r1.total_words);
 
     printf("=== 2. With word timestamps ===\n");
-    auto r2 = run_benchmark(model_path, wav_path, true, warmup, runs);
+    auto r2 = run_benchmark(model_path, wav_path, true, warmup, runs, model_arch);
     printf("  Average: %.1f ms\n", r2.avg_ms);
     printf("  Min: %.1f ms, Max: %.1f ms\n", r2.min_ms, r2.max_ms);
     printf("  RTF: %.4fx\n", r2.avg_ms / 1000.0 / dur);
