@@ -8,7 +8,7 @@ let package = Package(
         .macOS(.v13),
     ],
     products: [
-        .library(name: "Moonshine", type: .static, targets: ["MoonshineVoice"])
+        .library(name: "MoonshineVoice", type: .static, targets: ["MoonshineVoice"])
     ],
     targets: [
         .binaryTarget(
