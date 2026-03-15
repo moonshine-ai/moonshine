@@ -148,6 +148,50 @@ jobject c_transcript_to_jobject(JNIEnv *env, struct transcript_t *transcript) {
     env->SetBooleanField(jline, hasSpeakerIdField, line->has_speaker_id);
     env->SetLongField(jline, speakerIdField, line->speaker_id);
     env->SetIntField(jline, speakerIndexField, line->speaker_index);
+
+    // Populate word timestamps if available
+    if (line->words != nullptr && line->word_count > 0) {
+      jclass wordClass =
+          get_class(env, "ai/moonshine/voice/WordTiming");
+      jmethodID wordConstructor =
+          get_method(env, wordClass, "<init>", "()V");
+      jfieldID wordTextField =
+          get_field(env, wordClass, "word", "Ljava/lang/String;");
+      jfieldID wordStartField = get_field(env, wordClass, "start", "F");
+      jfieldID wordEndField = get_field(env, wordClass, "end", "F");
+      jfieldID wordConfField =
+          get_field(env, wordClass, "confidence", "F");
+
+      jclass wordListClass = get_class(env, "java/util/ArrayList");
+      jmethodID wordListConstructor =
+          get_method(env, wordListClass, "<init>", "()V");
+      jmethodID wordListAdd =
+          get_method(env, wordListClass, "add", "(Ljava/lang/Object;)Z");
+      jobject wordsList =
+          env->NewObject(wordListClass, wordListConstructor);
+
+      for (uint64_t j = 0; j < line->word_count; j++) {
+        const transcript_word_t *w = &line->words[j];
+        jobject jword = env->NewObject(wordClass, wordConstructor);
+        std::string wtext(w->text ? w->text : "");
+        std::string wsanitized = utf8::replace_invalid(wtext);
+        env->SetObjectField(jword, wordTextField,
+                            env->NewStringUTF(wsanitized.c_str()));
+        env->SetFloatField(jword, wordStartField, w->start);
+        env->SetFloatField(jword, wordEndField, w->end);
+        env->SetFloatField(jword, wordConfField, w->confidence);
+        env->CallBooleanMethod(wordsList, wordListAdd, jword);
+        env->DeleteLocalRef(jword);
+      }
+
+      jfieldID wordsField = get_field(env, lineClass, "words",
+                                      "Ljava/util/List;");
+      env->SetObjectField(jline, wordsField, wordsList);
+      env->DeleteLocalRef(wordsList);
+      env->DeleteLocalRef(wordClass);
+      env->DeleteLocalRef(wordListClass);
+    }
+
     env->CallBooleanMethod(linesList, addMethod, jline);
     env->DeleteLocalRef(jline);
   }
