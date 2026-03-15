@@ -1,5 +1,7 @@
 package ai.moonshine.voice;
 
+import java.util.List;
+
 public class TranscriptLine {
     public String text;
     public float[] audioData;
@@ -14,12 +16,13 @@ public class TranscriptLine {
     public long speakerId;
     public int speakerIndex;
     public int lastTranscriptionLatencyMs;
+    public List<WordTiming> words;
 
     public String toString() {
         return "TranscriptLine(text=" + text + ", audioData.length=" + audioData.length + ", startTime=" + startTime
                 + ", duration=" + duration + ", id=" + id + ", isComplete=" + isComplete + ", isUpdated=" + isUpdated
                 + ", isNew=" + isNew + ", hasTextChanged=" + hasTextChanged + ", hasSpeakerId=" + hasSpeakerId
                 + ", speakerId=" + speakerId + ", speakerIndex=" + speakerIndex + ", lastTranscriptionLatencyMs="
-                + lastTranscriptionLatencyMs + ")";
+                + lastTranscriptionLatencyMs + ", words=" + (words != null ? words.size() : 0) + ")";
     }
 }
