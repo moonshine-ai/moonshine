@@ -51,17 +51,29 @@ def main():
     import onnxruntime as ort
 
     model_dir = args.model_dir
-    input_ort = os.path.join(model_dir, "decoder_model_merged.ort")
-    output_onnx = os.path.join(model_dir, "decoder_with_attention.onnx")
-    output_ort = os.path.join(model_dir, "decoder_with_attention.ort")
 
-    if not os.path.exists(input_ort):
-        print(f"Error: {input_ort} not found", file=sys.stderr)
+    # Detect model type: non-streaming (decoder_model_merged) or streaming (decoder_kv)
+    non_streaming_ort = os.path.join(model_dir, "decoder_model_merged.ort")
+    streaming_ort = os.path.join(model_dir, "decoder_kv.ort")
+
+    if os.path.exists(non_streaming_ort):
+        input_ort = non_streaming_ort
+        output_onnx = os.path.join(model_dir, "decoder_with_attention.onnx")
+        output_ort = os.path.join(model_dir, "decoder_with_attention.ort")
+        is_streaming = False
+    elif os.path.exists(streaming_ort):
+        input_ort = streaming_ort
+        output_onnx = os.path.join(model_dir, "decoder_kv_with_attention.onnx")
+        output_ort = os.path.join(model_dir, "decoder_kv_with_attention.ort")
+        is_streaming = True
+    else:
+        print(f"Error: No decoder model found in {model_dir}", file=sys.stderr)
+        print("Expected decoder_model_merged.ort or decoder_kv.ort", file=sys.stderr)
         sys.exit(1)
 
+    print(f"Loading {input_ort} ({'streaming' if is_streaming else 'non-streaming'})...")
+
     # Step 1: Load the original .ort and save as ONNX
-    # (ORT can load .ort files; onnx library needs standard ONNX format)
-    print(f"Loading {input_ort}...")
     tmp_onnx = os.path.join(model_dir, "_tmp_decoder.onnx")
     so = ort.SessionOptions()
     so.optimized_model_filepath = tmp_onnx
@@ -72,94 +84,108 @@ def main():
     # Step 2: Modify the ONNX graph to add attention outputs
     model = onnx.load(tmp_onnx)
 
-    # Find the If node (optimum's merged decoder uses an If for cache branching)
+    # Find the If node (non-streaming merged decoder uses If for cache branching)
     top_node = None
     for node in model.graph.node:
         if node.op_type == "If":
             top_node = node
             break
 
-    if top_node is None:
-        print("Error: No If node found in decoder graph.", file=sys.stderr)
-        print("This script expects a merged decoder exported by optimum.", file=sys.stderr)
-        os.remove(tmp_onnx)
-        sys.exit(1)
-
-    # Auto-detect number of layers from encoder_attn Softmax nodes
     num_layers = args.num_layers
-    if num_layers is None:
+
+    if top_node is not None:
+        # Non-streaming: modify both If branches
+        if num_layers is None:
+            for attr in top_node.attribute:
+                if attr.type != onnx.AttributeProto.GRAPH:
+                    continue
+                count = sum(
+                    1
+                    for node in attr.g.node
+                    if node.op_type == "Softmax"
+                    and any("encoder_attn" in inp for inp in node.input)
+                )
+                if count > 0:
+                    num_layers = count
+                    break
+
+        if num_layers is None or num_layers == 0:
+            print("Error: Could not detect encoder_attn Softmax nodes.", file=sys.stderr)
+            os.remove(tmp_onnx)
+            sys.exit(1)
+
+        print(f"  Detected {num_layers} decoder layers (If-branched graph)")
+
         for attr in top_node.attribute:
             if attr.type != onnx.AttributeProto.GRAPH:
                 continue
-            count = sum(
-                1
-                for node in attr.g.node
-                if node.op_type == "Softmax"
-                and any("encoder_attn" in inp for inp in node.input)
+            g = attr.g
+            if not g.name:
+                g.name = attr.name
+
+            for node in g.node:
+                if node.op_type != "Softmax":
+                    continue
+                if not any("encoder_attn" in inp for inp in node.input):
+                    continue
+
+                layer_idx = None
+                for part in node.name.split("/"):
+                    if part.startswith("layers."):
+                        try:
+                            layer_idx = int(part.split(".")[1])
+                        except (IndexError, ValueError):
+                            pass
+
+                if layer_idx is None:
+                    continue
+
+                out_name = f"cross_attentions.{layer_idx}"
+                g.node.append(
+                    helper.make_node(
+                        "Identity", [node.output[0]], [out_name],
+                        name=f"attn_id_{attr.name}_{layer_idx}",
+                    )
+                )
+                g.output.append(
+                    helper.make_tensor_value_info(out_name, TensorProto.FLOAT, None)
+                )
+
+        for i in range(num_layers):
+            name = f"cross_attentions.{i}"
+            top_node.output.append(name)
+            model.graph.output.append(
+                helper.make_tensor_value_info(name, TensorProto.FLOAT, None)
             )
-            if count > 0:
-                num_layers = count
-                break
+    else:
+        # Streaming: flat graph, cross-attention Softmax nodes have mul_* inputs
+        # (self-attention Softmax has masked_fill* inputs)
+        cross_attn_nodes = [
+            n for n in model.graph.node
+            if n.op_type == "Softmax" and n.input[0].startswith("mul_")
+        ]
 
-    if num_layers is None or num_layers == 0:
-        print("Error: Could not detect encoder_attn Softmax nodes.", file=sys.stderr)
-        os.remove(tmp_onnx)
-        sys.exit(1)
+        if num_layers is None:
+            num_layers = len(cross_attn_nodes)
 
-    print(f"  Detected {num_layers} decoder layers")
+        if num_layers == 0:
+            print("Error: Could not detect cross-attention Softmax nodes.", file=sys.stderr)
+            os.remove(tmp_onnx)
+            sys.exit(1)
 
-    # Add attention outputs to both If branches (then_branch and else_branch)
-    for attr in top_node.attribute:
-        if attr.type != onnx.AttributeProto.GRAPH:
-            continue
-        g = attr.g
+        print(f"  Detected {num_layers} decoder layers (flat graph)")
 
-        # Ensure subgraph has a name (required by ORT validator)
-        if not g.name:
-            g.name = attr.name
-
-        # Find Softmax nodes for encoder_attn in this subgraph
-        for node in g.node:
-            if node.op_type != "Softmax":
-                continue
-            if not any("encoder_attn" in inp for inp in node.input):
-                continue
-
-            # Extract layer index from the node name
-            # e.g., "/model/decoder/layers.3/encoder_attn/Softmax"
-            layer_idx = None
-            for part in node.name.split("/"):
-                if part.startswith("layers."):
-                    try:
-                        layer_idx = int(part.split(".")[1])
-                    except (IndexError, ValueError):
-                        pass
-
-            if layer_idx is None:
-                continue
-
-            out_name = f"cross_attentions.{layer_idx}"
-
-            # Add Identity node: softmax output → named output
-            g.node.append(
+        for i, node in enumerate(cross_attn_nodes[:num_layers]):
+            out_name = f"cross_attentions.{i}"
+            model.graph.node.append(
                 helper.make_node(
-                    "Identity",
-                    [node.output[0]],
-                    [out_name],
-                    name=f"attn_id_{attr.name}_{layer_idx}",
+                    "Identity", [node.output[0]], [out_name],
+                    name=f"cross_attn_identity_{i}",
                 )
             )
-            g.output.append(
+            model.graph.output.append(
                 helper.make_tensor_value_info(out_name, TensorProto.FLOAT, None)
             )
-
-    # Add cross_attentions to the If node's outputs and the top-level graph outputs
-    for i in range(num_layers):
-        name = f"cross_attentions.{i}"
-        top_node.output.append(name)
-        model.graph.output.append(
-            helper.make_tensor_value_info(name, TensorProto.FLOAT, None)
-        )
 
     # Save modified ONNX
     onnx.save(model, output_onnx)

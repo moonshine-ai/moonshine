@@ -130,6 +130,28 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
     }
     const MoonshineStreamingConfig &config = this->streaming_model->config;
     this->streaming_state.reset(config);
+
+    // Load attention-enabled streaming decoder if word timestamps requested
+    if (this->options.word_timestamps) {
+      std::string decoder_attn_path =
+          append_path_component(model_path, "decoder_kv_with_attention.ort");
+      if (std::filesystem::exists(decoder_attn_path)) {
+        // Replace the streaming decoder with the attention-enabled version
+        this->streaming_model->decoder_kv_session = nullptr;
+        const char *dec_mmapped = nullptr;
+        size_t dec_mmapped_size = 0;
+        int32_t dec_err = ort_session_from_path(
+            this->streaming_model->ort_api, this->streaming_model->ort_env,
+            this->streaming_model->ort_session_options,
+            decoder_attn_path.c_str(),
+            &this->streaming_model->decoder_kv_session, &dec_mmapped,
+            &dec_mmapped_size);
+        if (dec_err != 0) {
+          LOGF("Warning: Failed to load decoder_kv_with_attention from %s\n",
+               decoder_attn_path.c_str());
+        }
+      }
+    }
   } else {
     // Non-streaming model: expects encoder_model.ort and
     // decoder_model_merged.ort
@@ -476,6 +498,52 @@ void Transcriber::update_transcript_from_segments(
       line.text = transcribe_segment_with_streaming_model(
           segment.audio_data.data(), segment.audio_data.size(), line.id,
           segment.is_complete);
+
+      // Compute word timestamps from streaming model's collected attention
+      if (this->options.word_timestamps &&
+          !this->streaming_model->cross_attention_buffer.empty() &&
+          !this->last_streaming_tokens.empty()) {
+        float seg_duration =
+            segment.audio_data.size() / (float)INTERNAL_SAMPLE_RATE;
+        int L = this->streaming_model->config.depth;
+        int total_steps = this->streaming_model->cross_attn_steps / L;
+        int H = this->streaming_model->cross_attn_heads;
+        int E = this->streaming_model->cross_attn_enc_len;
+
+        if (total_steps > 0 && H > 0 && E > 0) {
+          size_t per_layer_step = H * E;
+          std::vector<float> rearranged(L * H * total_steps * E);
+          for (int s = 0; s < total_steps; s++) {
+            for (int l = 0; l < L; l++) {
+              const float *src =
+                  this->streaming_model->cross_attention_buffer.data() +
+                  (s * L + l) * per_layer_step;
+              for (int h = 0; h < H; h++) {
+                float *dst =
+                    rearranged.data() + ((l * H + h) * total_steps + s) * E;
+                memcpy(dst, src + h * E, E * sizeof(float));
+              }
+            }
+          }
+
+          float time_per_frame = seg_duration / static_cast<float>(E);
+          std::vector<TranscriberWord> words =
+              align_words(rearranged.data(), L, H, total_steps, E,
+                          this->last_streaming_tokens, time_per_frame,
+                          this->streaming_model->tokenizer);
+
+          if (!words.empty()) {
+            for (auto &w : words) {
+              w.start += segment.start_time;
+              w.end += segment.start_time;
+            }
+            line.words = std::move(words);
+          }
+        }
+
+        this->streaming_model->cross_attention_buffer.clear();
+        this->streaming_model->cross_attn_steps = 0;
+      }
     } else if (this->stt_model != nullptr) {
       // Use non-streaming model for transcription
       std::lock_guard<std::mutex> lock(this->stt_model_mutex);
@@ -666,6 +734,12 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
 
       if (next_token == config.eos_id) break;
     }
+  }
+
+  // Save tokens for word timestamp alignment
+  this->last_streaming_tokens.clear();
+  for (auto t : tokens) {
+    this->last_streaming_tokens.push_back(static_cast<int>(t));
   }
 
   // Convert tokens to text

@@ -143,6 +143,7 @@ class Transcriber {
   // Track current segment for incremental processing
   uint64_t current_streaming_segment_id = UINT64_MAX;
   size_t streaming_samples_processed = 0;
+  std::vector<int> last_streaming_tokens;
 
   TranscriberStreamMap streams;
   int32_t next_stream_id;

@@ -11,6 +11,7 @@
 #include "bin-tokenizer.h"
 #include "moonshine-ort-allocator.h"
 #include "onnxruntime_c_api.h"
+#include "word-alignment.h"
 
 /* Streaming model configuration (matches streaming_config.json) */
 struct MoonshineStreamingConfig {
@@ -99,6 +100,13 @@ struct MoonshineStreamingModel {
   std::string last_result;
 
   bool log_ort_run = false;
+
+  // Word timestamp support: collected during decode when decoder has
+  // cross_attentions.* outputs
+  std::vector<float> cross_attention_buffer;
+  int cross_attn_heads = 0;
+  int cross_attn_enc_len = 0;
+  int cross_attn_steps = 0;  // total layer*step entries collected
 
   MoonshineStreamingModel(bool log_ort_run = false);
   ~MoonshineStreamingModel();

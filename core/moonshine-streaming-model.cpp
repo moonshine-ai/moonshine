@@ -918,18 +918,30 @@ int MoonshineStreamingModel::run_decoder_with_cross_kv(
           ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &v_cross_tensor));
 
   // Run decoder_kv session
-  // Note: decoder_kv expects cross K/V as "out_k_cross" and "out_v_cross"
-  // inputs
+  // Build output names dynamically (base 5 + optional cross_attentions)
+  size_t decoder_output_count = 0;
+  RETURN_ON_ORT_ERROR(ort_api, ort_api->SessionGetOutputCount(
+                                   decoder_kv_session, &decoder_output_count));
+
+  std::vector<const char *> output_names_vec;
+  std::vector<char *> output_names_alloc(decoder_output_count);
+  for (size_t i = 0; i < decoder_output_count; i++) {
+    RETURN_ON_ORT_ERROR(ort_api,
+                        ort_api->SessionGetOutputName(
+                            decoder_kv_session, i, &ort_allocator->base,
+                            &output_names_alloc[i]));
+    output_names_vec.push_back(output_names_alloc[i]);
+  }
+
   const char *input_names[] = {"token", "k_self", "v_self", "out_k_cross",
                                "out_v_cross"};
-  const char *output_names[] = {"logits", "out_k_self", "out_v_self"};
-
   OrtValue *inputs[] = {token_tensor, k_self_tensor, v_self_tensor,
                         k_cross_tensor, v_cross_tensor};
-  OrtValue *outputs[3] = {nullptr, nullptr, nullptr};
+  std::vector<OrtValue *> outputs(decoder_output_count, nullptr);
 
-  OrtStatus *status = ORT_RUN(ort_api, decoder_kv_session, input_names, inputs,
-                              5, output_names, 3, outputs);
+  OrtStatus *status =
+      ORT_RUN(ort_api, decoder_kv_session, input_names, inputs, 5,
+              output_names_vec.data(), decoder_output_count, outputs.data());
 
   // Release inputs
   for (int i = 0; i < 5; i++) {
@@ -938,22 +950,32 @@ int MoonshineStreamingModel::run_decoder_with_cross_kv(
 
   if (status != nullptr) {
     LOG_ORT_ERROR(ort_api, status);
+    for (auto *n : output_names_alloc)
+      ort_allocator->base.Free(&ort_allocator->base, n);
     return 1;
+  }
+
+  // Build name→index map for outputs
+  std::map<std::string, size_t> output_index;
+  for (size_t i = 0; i < decoder_output_count; i++) {
+    output_index[output_names_vec[i]] = i;
   }
 
   // Copy logits [1, token_len, vocab_size]
   float *logits_data = nullptr;
   RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(
-                                   outputs[0], (void **)&logits_data));
+                                   outputs[output_index["logits"]],
+                                   (void **)&logits_data));
 
   size_t total_logits = token_len * config.vocab_size;
   logits_out.resize(total_logits);
   memcpy(logits_out.data(), logits_data, total_logits * sizeof(float));
 
   // Update self-attention KV cache
+  size_t k_idx = output_index["out_k_self"];
   OrtTensorTypeAndShapeInfo *k_info = nullptr;
   RETURN_ON_ORT_ERROR(ort_api,
-                      ort_api->GetTensorTypeAndShape(outputs[1], &k_info));
+                      ort_api->GetTensorTypeAndShape(outputs[k_idx], &k_info));
   size_t num_dims = 0;
   RETURN_ON_ORT_ERROR(ort_api, ort_api->GetDimensionsCount(k_info, &num_dims));
   std::vector<int64_t> k_shape(num_dims);
@@ -970,18 +992,64 @@ int MoonshineStreamingModel::run_decoder_with_cross_kv(
 
   float *k_out_data = nullptr;
   float *v_out_data = nullptr;
-  RETURN_ON_ORT_ERROR(
-      ort_api, ort_api->GetTensorMutableData(outputs[1], (void **)&k_out_data));
-  RETURN_ON_ORT_ERROR(
-      ort_api, ort_api->GetTensorMutableData(outputs[2], (void **)&v_out_data));
+  RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(
+                                   outputs[k_idx], (void **)&k_out_data));
+  size_t v_idx = output_index["out_v_self"];
+  RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(
+                                   outputs[v_idx], (void **)&v_out_data));
 
   memcpy(state->k_self.data(), k_out_data, new_cache_size * sizeof(float));
   memcpy(state->v_self.data(), v_out_data, new_cache_size * sizeof(float));
   state->cache_seq_len = new_cache_len;
 
+  // Collect cross-attention weights if decoder has them
+  for (int layer = 0; layer < config.depth; layer++) {
+    std::string attn_name = "cross_attentions." + std::to_string(layer);
+    auto it = output_index.find(attn_name);
+    if (it == output_index.end()) break;
+
+    OrtTensorTypeAndShapeInfo *attn_info = nullptr;
+    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorTypeAndShape(
+                                     outputs[it->second], &attn_info));
+    size_t attn_ndims = 0;
+    RETURN_ON_ORT_ERROR(ort_api,
+                        ort_api->GetDimensionsCount(attn_info, &attn_ndims));
+    std::vector<int64_t> attn_shape(attn_ndims);
+    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetDimensions(
+                                     attn_info, attn_shape.data(), attn_ndims));
+    ort_api->ReleaseTensorTypeAndShapeInfo(attn_info);
+
+    // Shape: [batch, heads, seq_len, enc_len] or similar
+    int heads = (attn_ndims >= 2) ? static_cast<int>(attn_shape[1]) : config.nheads;
+    int enc_len = (attn_ndims >= 4) ? static_cast<int>(attn_shape[3])
+                : (attn_ndims >= 3) ? static_cast<int>(attn_shape[2])
+                : state->cross_len;
+
+    float *attn_data = nullptr;
+    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(
+                                     outputs[it->second], (void **)&attn_data));
+
+    size_t step_size = 1;
+    for (size_t d = 0; d < attn_ndims; d++) step_size *= attn_shape[d];
+
+    size_t old_size = cross_attention_buffer.size();
+    cross_attention_buffer.resize(old_size + step_size);
+    memcpy(cross_attention_buffer.data() + old_size, attn_data,
+           step_size * sizeof(float));
+
+    if (cross_attn_steps == 0) {
+      cross_attn_heads = heads;
+      cross_attn_enc_len = enc_len;
+    }
+    cross_attn_steps++;
+  }
+
   // Release outputs
-  for (int i = 0; i < 3; i++) {
-    ort_api->ReleaseValue(outputs[i]);
+  for (size_t i = 0; i < decoder_output_count; i++) {
+    if (outputs[i]) ort_api->ReleaseValue(outputs[i]);
+  }
+  for (auto *n : output_names_alloc) {
+    ort_allocator->base.Free(&ort_allocator->base, n);
   }
 
   return 0;
