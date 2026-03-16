@@ -27,7 +27,7 @@ class MicTranscriber:
         blocksize: int = 1024,
         options: dict = None
     ):
-        self.transcriber = Transcriber(model_path, model_arch, options)
+        self.transcriber = Transcriber(model_path, model_arch, options=options)
         self.mic_stream = self.transcriber.create_stream(update_interval)
         self._should_listen = False
         self._sd_stream = None
