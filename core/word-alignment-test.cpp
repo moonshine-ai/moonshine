@@ -31,14 +31,15 @@ TEST_CASE("word-timestamps") {
     // Load WAV file
     float *wav_data = nullptr;
     size_t wav_data_size = 0;
-    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size));
+    int32_t sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size, &sample_rate));
     REQUIRE(wav_data != nullptr);
     REQUIRE(wav_data_size > 0);
 
     // Transcribe
     struct transcript_t *transcript = nullptr;
     int32_t err = moonshine_transcribe_without_streaming(
-        handle, wav_data, wav_data_size, 16000, 0, &transcript);
+        handle, wav_data, wav_data_size, sample_rate, 0, &transcript);
     REQUIRE(err == 0);
     REQUIRE(transcript != nullptr);
     REQUIRE(transcript->line_count > 0);
