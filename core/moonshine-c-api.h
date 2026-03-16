@@ -609,13 +609,12 @@ MOONSHINE_EXPORT int32_t moonshine_create_text_to_speech(const char *model_path,
    references to it after freeing.                                           */
 MOONSHINE_EXPORT void moonshine_free_text_to_speech(int32_t tts_handle);
 
-/* Generates speech audio from a phoneme string.
+/* Generates speech audio from a text string.
 
    `tts_handle` should be a handle returned by moonshine_create_text_to_speech.
 
-   `phonemes` should be a UTF-8-encoded IPA phoneme string. The caller is
-   responsible for grapheme-to-phoneme conversion (e.g. using misaki in Python
-   or a platform-specific G2P front-end).
+   `text` should be a UTF-8-encoded plain text string. Grapheme-to-phoneme
+   conversion is handled internally by the library.
 
    `out_result` will be populated with the generated PCM audio data. This data
    is owned by the TTS model and is valid until the next call to that model or
@@ -624,7 +623,7 @@ MOONSHINE_EXPORT void moonshine_free_text_to_speech(int32_t tts_handle);
    Returns zero on success, or a non-zero error code on failure.
 */
 MOONSHINE_EXPORT int32_t moonshine_text_to_speech_generate(
-    int32_t tts_handle, const char *phonemes, struct tts_result_t *out_result);
+    int32_t tts_handle, const char *text, struct tts_result_t *out_result);
 
 #ifdef __cplusplus
 }

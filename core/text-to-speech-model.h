@@ -4,12 +4,19 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
 
 #include "moonshine-ort-allocator.h"
 #include "onnxruntime_c_api.h"
+
+// Forward-declare the Phonemis pipeline to avoid exposing the third-party
+// header to consumers of this header.
+namespace phonemis {
+class Pipeline;
+}  // namespace phonemis
 
 /**
  * Result of a text-to-speech generation call.
@@ -21,16 +28,15 @@ struct TextToSpeechResult {
 };
 
 /**
- * Text-to-speech model that converts phoneme strings into audio waveforms.
+ * Text-to-speech model that converts plain text into audio waveforms.
  *
- * The model expects pre-phonemized input (IPA phonemes) and uses:
- *   - A vocab.json file that maps characters to token indices.
- *   - An ONNX model (model.onnx) that takes tokenized phonemes and produces a
- *     waveform.
+ * The model handles grapheme-to-phoneme conversion internally using the
+ * Phonemis library, then tokenizes the phonemes and runs an ONNX model
+ * to produce a waveform.
  *
- * Phonemization (grapheme-to-phoneme conversion) is left to the caller so that
- * the core library stays dependency-free. Higher-level bindings (Python, Swift,
- * etc.) can use their own G2P front-end before calling into this model.
+ * Required model files:
+ *   - model.onnx   (the TTS ONNX model)
+ *   - vocab.json   (character-to-index mapping for tokenization)
  */
 class TextToSpeechModel {
  public:
@@ -59,12 +65,14 @@ class TextToSpeechModel {
                        const char *vocab_json, size_t vocab_json_size);
 
   /**
-   * Generate speech audio from a phoneme string.
-   * @param phonemes  IPA phoneme string (e.g. output of a G2P front-end).
-   * @param result    Output – populated with PCM audio data and sample rate.
+   * Generate speech audio from plain text.
+   * The text is internally converted to phonemes using the Phonemis G2P
+   * pipeline, then tokenized and fed to the ONNX model.
+   * @param text    Plain text string (UTF-8).
+   * @param result  Output – populated with PCM audio data and sample rate.
    * @return 0 on success, non-zero on failure.
    */
-  int generate(const std::string &phonemes, TextToSpeechResult &result);
+  int generate(const std::string &text, TextToSpeechResult &result);
 
   /** @return true if the model and vocab have been loaded successfully. */
   bool is_loaded() const;
@@ -78,6 +86,11 @@ class TextToSpeechModel {
    * "letters_ipa" string fields.
    */
   int parse_vocab(const std::string &json);
+
+  /**
+   * Convert plain text to an IPA phoneme string using the Phonemis pipeline.
+   */
+  std::string phonemize(const std::string &text);
 
   /**
    * Tokenize a phoneme string using the loaded vocabulary.
@@ -116,6 +129,9 @@ class TextToSpeechModel {
 
   /* ---- Vocab ---- */
   std::map<std::string, int64_t> char_to_index_;
+
+  /* ---- G2P pipeline ---- */
+  std::unique_ptr<phonemis::Pipeline> g2p_pipeline_;
 
   /* ---- Thread safety ---- */
   std::mutex mutex_;

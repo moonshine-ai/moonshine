@@ -24,6 +24,19 @@ endif()
 
 include(${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/find-ort-library-path.cmake)
 
+# Phonemis: grapheme-to-phoneme library (compiled as static, linked into moonshine)
+set(PHONEMIS_LANG "US" CACHE STRING "Phonemis language variant" FORCE)
+add_subdirectory(
+    ${CMAKE_CURRENT_LIST_DIR}/third-party/phonemis
+    ${CMAKE_CURRENT_LIST_DIR}/third-party/phonemis/build
+)
+# Phonemis needs -fPIC since it gets linked into our shared library
+target_compile_options(phonemis PRIVATE -fPIC)
+# Suppress -Werror for third-party code (Phonemis is built with its own warnings)
+if (NOT WIN32)
+  target_compile_options(phonemis PRIVATE -Wno-error)
+endif()
+
 add_subdirectory(
     ${CMAKE_CURRENT_LIST_DIR}/ort-utils
     ${CMAKE_CURRENT_LIST_DIR}/ort-utils/build
@@ -76,6 +89,12 @@ set_target_properties(moonshine PROPERTIES
     CXX_EXTENSIONS NO
 )
 
+# Phonemis headers use deprecated std::codecvt_utf8 / std::wstring_convert.
+# Suppress the deprecation warning for the one translation unit that includes them.
+set_source_files_properties(text-to-speech-model.cpp PROPERTIES
+    COMPILE_FLAGS "-Wno-deprecated-declarations"
+)
+
 # On macOS (non-framework builds), set rpath to @loader_path so the library looks for dependencies
 # (like libonnxruntime) in the same directory as libmoonshine.dylib
 # Note: Static frameworks don't need rpath since they're linked statically
@@ -92,12 +111,14 @@ target_include_directories(moonshine PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
     ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
     ${CMAKE_CURRENT_LIST_DIR}/third-party/utf-8/
+    ${CMAKE_CURRENT_LIST_DIR}/third-party/phonemis/phonemis/include
 )
 
 if (IOS OR MOONSHINE_BUILD_SWIFT)
     target_link_libraries(moonshine PUBLIC
         bin-tokenizer
         ort-utils
+        phonemis
         "-framework CoreFoundation"
         "-framework Foundation"
     )
@@ -135,6 +156,7 @@ if (IOS OR MOONSHINE_BUILD_SWIFT)
             "${ONNXRUNTIME_LIB_PATH}"
             "$<TARGET_FILE:ort-utils>"
             "$<TARGET_FILE:bin-tokenizer>"
+            "$<TARGET_FILE:phonemis>"
             "$<TARGET_FILE:moonshine>"
         COMMAND ${CMAKE_COMMAND} -E remove "$<TARGET_FILE:moonshine>"
         COMMAND ${CMAKE_COMMAND} -E rename "$<TARGET_FILE:moonshine>.merged" "$<TARGET_FILE:moonshine>"
@@ -158,6 +180,7 @@ else()
     target_link_libraries(moonshine PUBLIC
         bin-tokenizer
         ort-utils
+        phonemis
     )
 endif()
 
