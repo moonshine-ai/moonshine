@@ -56,7 +56,8 @@ Download [github.com/moonshine-ai/moonshine/releases/latest/download/android-exa
 
 ```bash
 cd core
-mkdir build
+mkdir -p build
+cd build
 cmake ..
 cmake --build .
 ./moonshine-cpp-test
