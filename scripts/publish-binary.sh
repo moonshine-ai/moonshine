@@ -10,7 +10,12 @@ CORE_DIR=${REPO_ROOT_DIR}/core
 BUILD_DIR=${CORE_DIR}/build
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
-	PLATFORM=macos
+	ARCH=$(uname -m)
+	if [[ "$ARCH" == "arm64" ]]; then
+		PLATFORM=macos-arm64
+	else
+		PLATFORM=macos-x86_64
+	fi
 elif grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null || grep -q "BCM2" /proc/cpuinfo 2>/dev/null; then
 	PLATFORM=rpi-arm64
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
@@ -31,7 +36,7 @@ fi
 rm -rf ${BUILD_DIR}
 mkdir -p ${BUILD_DIR}
 cd ${BUILD_DIR}
-if [[ "$PLATFORM" == "macos" ]]; then
+if [[ "$PLATFORM" == macos-* ]]; then
   cmake .. -DMOONSHINE_BUILD_SWIFT=YES
 else
   cmake ..
@@ -50,7 +55,7 @@ cp ${CORE_DIR}/moonshine-cpp.h ${INCLUDE_DIR}
 
 LIB_DIR=${BINARY_DIR}/lib
 mkdir -p ${LIB_DIR}
-if [[ "$PLATFORM" == "macos" ]]; then
+if [[ "$PLATFORM" == macos-* ]]; then
     cp ${BUILD_DIR}/moonshine.framework/Versions/A/moonshine ${LIB_DIR}/libmoonshine.a
 elif [[ "$PLATFORM" == "linux-x86_64" || "$PLATFORM" == "linux-arm64" || "$PLATFORM" == "rpi-arm64" ]]; then
     cp ${BUILD_DIR}/libmoonshine.so ${LIB_DIR}/libmoonshine.so
@@ -62,7 +67,7 @@ tar -czvf ${TAR_NAME} ${FOLDER_NAME}
 cp ${TAR_NAME} ${REPO_ROOT_DIR}
 
 
-if [[ "$PLATFORM" == "macos" ]]; then
+if [[ "$PLATFORM" == macos-* ]]; then
 
 	cd ${REPO_ROOT_DIR}
 
