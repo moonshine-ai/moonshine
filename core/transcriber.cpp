@@ -56,6 +56,7 @@ Transcriber::Transcriber(const TranscriberOptions &options)
     : stt_model(nullptr),
       streaming_model(nullptr),
       speaker_embedding_model(nullptr),
+      online_clusterer(nullptr),
       next_speaker_index(0),
       next_stream_id(1) {
   this->options = options;
