@@ -15,7 +15,12 @@ cmake --build . --config Release
 cp ${CORE_BUILD_DIR}/libmoonshine.* ${PYTHON_DIR}/src/moonshine_voice/
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
-	cp ${CORE_DIR}/third-party/onnxruntime/lib/macos/arm64/libonnxruntime*.dylib ${PYTHON_DIR}/src/moonshine_voice/
+	ARCH=$(uname -m)
+	if [[ "$ARCH" == "arm64" ]]; then
+		cp ${CORE_DIR}/third-party/onnxruntime/lib/macos/arm64/libonnxruntime*.dylib ${PYTHON_DIR}/src/moonshine_voice/
+	else
+		cp ${CORE_DIR}/third-party/onnxruntime/lib/macos/x86_64/libonnxruntime*.dylib ${PYTHON_DIR}/src/moonshine_voice/
+	fi
 elif grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null || grep -q "BCM2" /proc/cpuinfo 2>/dev/null; then
 	cp ${CORE_DIR}/third-party/onnxruntime/lib/linux/aarch64/libonnxruntime*.so* ${PYTHON_DIR}/src/moonshine_voice/
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
