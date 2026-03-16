@@ -353,9 +353,7 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
     target_include_directories(word-alignment-test PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
         ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
-        ${CMAKE_CURRENT_LIST_DIR}/ort-utils
-        ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
-        ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
     )
     target_link_libraries(word-alignment-test PRIVATE moonshine)
 
