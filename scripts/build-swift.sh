@@ -33,6 +33,7 @@ cmake --build build-simulator --config Release
 # Build for macOS
 cmake -B build-macos \
 	-G Xcode \
+	-DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
 	-DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
 	-DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO \
 	-DMOONSHINE_BUILD_SWIFT=YES \
