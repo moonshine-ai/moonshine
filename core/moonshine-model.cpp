@@ -387,6 +387,10 @@ int MoonshineModel::transcribe(const float *input_audio_data,
     decoder_inputs_data[encoder_hidden_states_index] =
         new MoonshineTensorView(*last_hidden_state_tensor);
 
+    // The attention mask is optional: the attention-enabled decoder
+    // (decoder_with_attention.ort) omits this input since it was not
+    // present in the original HuggingFace export. Only pass it if
+    // the decoder actually accepts it.
     if (encoder_attention_mask_tensor != nullptr &&
         decoder_input_name_to_index.find("encoder_attention_mask") !=
             decoder_input_name_to_index.end()) {
@@ -531,8 +535,10 @@ int MoonshineModel::transcribe(const float *input_audio_data,
   }
   past_key_values_by_name.clear();
 
-  // Save tokens and attention for word alignment
-  last_tokens = tokens;
+  // Save tokens and attention for word alignment (only when needed)
+  if (!cross_attention_buffer.empty() || alignment_session != nullptr) {
+    last_tokens = tokens;
+  }
 
   // If we collected attention during single-pass decoding, save it
   if (!cross_attention_buffer.empty() && cross_attn_steps > 0) {

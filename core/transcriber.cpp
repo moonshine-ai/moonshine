@@ -137,6 +137,10 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
           append_path_component(model_path, "decoder_kv_with_attention.ort");
       if (std::filesystem::exists(decoder_attn_path)) {
         // Replace the streaming decoder with the attention-enabled version
+        if (this->streaming_model->decoder_kv_session) {
+          this->streaming_model->ort_api->ReleaseSession(
+              this->streaming_model->decoder_kv_session);
+        }
         this->streaming_model->decoder_kv_session = nullptr;
         const char *dec_mmapped = nullptr;
         size_t dec_mmapped_size = 0;
@@ -197,6 +201,10 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
 
       if (std::filesystem::exists(decoder_attn_path)) {
         // Single-pass: replace decoder with attention-enabled version
+        if (this->stt_model->decoder_session) {
+          this->stt_model->ort_api->ReleaseSession(
+              this->stt_model->decoder_session);
+        }
         this->stt_model->decoder_session = nullptr;
         const char *dec_mmapped = nullptr;
         size_t dec_mmapped_size = 0;
