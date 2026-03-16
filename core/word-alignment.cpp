@@ -7,9 +7,7 @@
 #include <numeric>
 #include <vector>
 
-// ============================================================================
 // DTW (Dynamic Time Warping)
-// ============================================================================
 
 void dtw(const std::vector<float>& cost_matrix, int N, int M,
      std::vector<int>& text_indices_out, std::vector<int>& time_indices_out) {
@@ -85,9 +83,7 @@ void dtw(const std::vector<float>& cost_matrix, int N, int M,
   }
 }
 
-// ============================================================================
 // Median filter (along last axis of 3D array)
-// ============================================================================
 
 static float compute_median(std::vector<float>& window) {
   size_t n = window.size();
@@ -151,10 +147,8 @@ void median_filter(std::vector<float>& data, int channels, int height, int width
   }
 }
 
-// ============================================================================
 // Helper: check if a token's raw bytes start with the SentencePiece word
 // boundary marker (UTF-8 encoding of U+2581 LOWER ONE EIGHTH BLOCK).
-// ============================================================================
 
 static bool token_starts_new_word(BinTokenizer* tokenizer, int token_id) {
   if (token_id < 0 || token_id >= (int)tokenizer->tokens_to_bytes.size()) {
@@ -171,17 +165,13 @@ static bool token_starts_new_word(BinTokenizer* tokenizer, int token_id) {
   return false;
 }
 
-// ============================================================================
 // Helper: decode a list of token IDs to text.
-// ============================================================================
 
 static std::string decode_tokens(BinTokenizer* tokenizer, const std::vector<int>& token_ids) {
   return tokenizer->tokens_to_text(token_ids, true);
 }
 
-// ============================================================================
 // align_words: main entry point
-// ============================================================================
 
 std::vector<TranscriberWord> align_words(
   const float* cross_attention_data,
