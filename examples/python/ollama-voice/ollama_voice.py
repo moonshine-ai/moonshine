@@ -3,11 +3,15 @@
 import argparse
 import time
 
+import numpy as np
 import ollama
+import sounddevice as sd
 from moonshine_voice import (
     MicTranscriber,
+    TextToSpeech,
     TranscriptEventListener,
     get_model_for_language,
+    get_tts_model,
 )
 
 
@@ -31,13 +35,23 @@ class OllamaVoice(TranscriptEventListener):
     an Ollama LLM chat interface, outputting its streamed completion.
     """
 
-    def __init__(self, ollama_model: str, system_prompt: str):
+    def __init__(
+        self,
+        ollama_model: str,
+        system_prompt: str,
+        tts: TextToSpeech | None = None,
+        output_device: int | None = None,
+    ):
         """
         Initialize the OllamaVoice listener.
 
         Args:
             ollama_model (str): The Ollama model name to use for chat responses.
+            tts: An optional TextToSpeech instance for speaking responses aloud.
+            output_device: The sounddevice output device index for playback.
         """
+        self.tts = tts
+        self.output_device = output_device
         # Which Ollama model to use for chat responses.
         self.ollama_model = ollama_model
         # Download the Ollama model if it's not already on-disk.
@@ -91,6 +105,7 @@ class OllamaVoice(TranscriptEventListener):
             )
             spinner = Spinner()
             has_content = False
+            full_response = ""
             for chunk in stream:
                 # Extract and print each chunk of model output as it streams in
                 content = chunk["message"]["content"]
@@ -100,9 +115,25 @@ class OllamaVoice(TranscriptEventListener):
                         spinner.spin()
                 else:
                     has_content = True
+                    full_response += content
                     print(content, end="", flush=True)
             # Print newline to finish the response segment cleanly
             print("\n", end="", flush=True)
+
+            # Speak the response aloud via TTS.
+            if self.tts is not None and full_response.strip():
+                try:
+                    result = self.tts.generate(full_response.strip())
+                    audio_float = result.audio_data.astype(np.float32) / 32768.0
+                    sd.play(
+                        audio_float,
+                        samplerate=result.sample_rate,
+                        device=self.output_device,
+                    )
+                    sd.wait()
+                except Exception as e:
+                    print(f"[TTS error: {e}]")
+
             self.is_ollama_running = False
 
 
@@ -131,16 +162,43 @@ if __name__ == "__main__":
         default="You are a helpful assistant who is receiving requests from a user talking to them, and responding. Responses should be short and conversational.",
         help="System prompt to use",
     )
+    parser.add_argument(
+        "--tts-model-name",
+        type=str,
+        default="tsuki-max-en",
+        help="Name of the Moonshine TTS model for spoken responses (default: tsuki-max-en). "
+        "Set to 'none' to disable TTS.",
+    )
+    parser.add_argument(
+        "--output-device",
+        type=int,
+        default=None,
+        help="Audio output device index for TTS playback (see `python -m sounddevice`)",
+    )
     args = parser.parse_args()
 
     model_path, model_arch = get_model_for_language(
         args.language, args.moonshine_model_arch
     )
 
+    # Initialize TTS if requested.
+    tts = None
+    if args.tts_model_name.lower() != "none":
+        print(f"Loading TTS model '{args.tts_model_name}'...")
+        tts_model_path, tts_model_arch = get_tts_model(args.tts_model_name)
+        tts = TextToSpeech(tts_model_path, tts_model_arch)
+
     mic_transcriber = MicTranscriber(model_path=model_path, model_arch=model_arch)
 
     # Attach the Ollama voice response handler as a listener for transcriber events.
-    mic_transcriber.add_listener(OllamaVoice(args.ollama_model, args.system_prompt))
+    mic_transcriber.add_listener(
+        OllamaVoice(
+            args.ollama_model,
+            args.system_prompt,
+            tts=tts,
+            output_device=args.output_device,
+        )
+    )
 
     mic_transcriber.start()
 
@@ -154,3 +212,5 @@ if __name__ == "__main__":
         time.sleep(0.1)
 
     mic_transcriber.stop()
+    if tts is not None:
+        tts.close()
