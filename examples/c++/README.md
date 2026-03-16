@@ -25,12 +25,24 @@ g++ transcriber.cpp \
 export LD_LIBRARY_PATH=`pwd`/moonshine-voice-linux-x86_64/lib
 ```
 
-### MacOS
+### MacOS (Apple Silicon)
 
 ```bash
 g++ transcriber.cpp \
-  -Imoonshine-voice-macos/include \
-  -Lmoonshine-voice-macos/lib \
+  -Imoonshine-voice-macos-arm64/include \
+  -Lmoonshine-voice-macos-arm64/lib \
+  -lmoonshine \
+  -o transcriber \
+  -framework CoreFoundation \
+  -framework Foundation
+```
+
+### MacOS (Intel x86_64)
+
+```bash
+g++ transcriber.cpp \
+  -Imoonshine-voice-macos-x86_64/include \
+  -Lmoonshine-voice-macos-x86_64/lib \
   -lmoonshine \
   -o transcriber \
   -framework CoreFoundation \
