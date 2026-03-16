@@ -31,6 +31,11 @@ from moonshine_voice.download import (
     supported_embedding_models,
     supported_embedding_models_friendly,
     get_embedding_model_variants,
+    # TTS model functions
+    TTSModelArch,
+    get_tts_model,
+    supported_tts_models,
+    supported_tts_models_friendly,
 )
 
 from moonshine_voice.utils import (
@@ -115,16 +120,15 @@ def __getattr__(name):
         return globals()[name]
 
     # Lazy import text_to_speech module
-    if name in ("TextToSpeech", "TTSModelArch", "TTSResult"):
+    # Note: TTSModelArch is now imported directly from download module above
+    if name in ("TextToSpeech", "TTSResult"):
         if not _text_to_speech_imported:
             from moonshine_voice.text_to_speech import (
                 TextToSpeech,
-                TTSModelArch,
                 TTSResult,
             )
 
             globals()["TextToSpeech"] = TextToSpeech
-            globals()["TTSModelArch"] = TTSModelArch
             globals()["TTSResult"] = TTSResult
             _text_to_speech_imported = True
         return globals()[name]
@@ -170,4 +174,8 @@ __all__ = [
     "supported_embedding_models",
     "supported_embedding_models_friendly",
     "get_embedding_model_variants",
+    # TTS model functions
+    "get_tts_model",
+    "supported_tts_models",
+    "supported_tts_models_friendly",
 ]

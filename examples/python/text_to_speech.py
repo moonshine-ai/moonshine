@@ -1,16 +1,21 @@
 """Text-to-speech example using Moonshine Voice.
 
 This example demonstrates how to use the TextToSpeech class to synthesize
-speech from text. It uses the ``misaki`` library for grapheme-to-phoneme
-conversion and the Moonshine TTS C engine for waveform generation.
+speech from text. It uses the ``phonemizer`` library (backed by espeak) for
+grapheme-to-phoneme conversion and the Moonshine TTS C engine for waveform
+generation.
 
 Requirements:
-    pip install misaki soundfile
+    pip install phonemizer soundfile
+    # espeak-ng must also be installed on the system:
+    #   macOS:  brew install espeak-ng
+    #   Ubuntu: sudo apt install espeak-ng
 
 Usage:
     python text_to_speech.py "Hello, world!"
-    python text_to_speech.py --language en --output hello.wav "Hello, world!"
-    python text_to_speech.py --language ja "こんにちは世界"
+    python text_to_speech.py --model-name tsuki-max-en "Hello, world!"
+    python text_to_speech.py --model-path /path/to/model "Hello, world!"
+    python text_to_speech.py --language en-us "Hello, world!"
 """
 
 import argparse
@@ -18,27 +23,21 @@ import sys
 
 import numpy as np
 
-from misaki import en, ja
+from phonemizer import phonemize
 
-from moonshine_voice import TextToSpeech, TTSModelArch
-
-
-def create_g2p(language: str):
-    """Create a grapheme-to-phoneme converter for the given language."""
-    if language == "en":
-        return en.G2P(british=False)
-    elif language == "ja":
-        return ja.JAG2P(version="pyopenjtalk")
-    else:
-        raise ValueError(f"Unsupported language: {language}")
+from moonshine_voice import TextToSpeech, TTSModelArch, get_tts_model
 
 
-def phonemize(g2p, text: str) -> str:
-    """Convert text to IPA phonemes using the given G2P converter."""
-    phonemes = " ".join(
-        t.phonemes for t in g2p(text)[1] if t.phonemes is not None
+def text_to_phonemes(text: str, language: str = "en-us") -> str:
+    """Convert text to IPA phonemes using espeak via phonemizer."""
+    return phonemize(
+        text,
+        language=language,
+        backend="espeak",
+        preserve_punctuation=True,
+        with_stress=True,
+        strip=True,
     )
-    return phonemes
 
 
 def save_wav(path: str, audio_data: np.ndarray, sample_rate: int):
@@ -70,15 +69,22 @@ def main():
     parser.add_argument(
         "--model-path",
         type=str,
-        required=True,
-        help="Path to the TTS model directory (containing model.onnx and vocab.json)",
+        default=None,
+        help="Path to a local TTS model directory (containing model.onnx and vocab.json). "
+        "If not provided, the model is downloaded automatically.",
+    )
+    parser.add_argument(
+        "--model-name",
+        type=str,
+        default="tsuki-max-en",
+        help="Name of the TTS model to download (default: tsuki-max-en). "
+        "Ignored when --model-path is given.",
     )
     parser.add_argument(
         "--language",
         type=str,
-        default="en",
-        choices=["en", "ja"],
-        help="Language for grapheme-to-phoneme conversion (default: en)",
+        default="en-us",
+        help="espeak language code for phonemization (default: en-us)",
     )
     parser.add_argument(
         "--output",
@@ -89,17 +95,21 @@ def main():
     )
     args = parser.parse_args()
 
-    # 1. Set up the G2P front-end.
-    print(f"Loading G2P for language '{args.language}'...", file=sys.stderr)
-    g2p = create_g2p(args.language)
-
-    # 2. Convert text → phonemes.
-    phonemes = phonemize(g2p, args.text)
+    # 1. Convert text → phonemes.
+    phonemes = text_to_phonemes(args.text, language=args.language)
     print(f"Phonemes: {phonemes}", file=sys.stderr)
 
+    # 2. Resolve model path (download if needed).
+    if args.model_path:
+        model_path = args.model_path
+        model_arch = TTSModelArch.TSUKI
+    else:
+        print(f"Downloading TTS model '{args.model_name}'...", file=sys.stderr)
+        model_path, model_arch = get_tts_model(args.model_name)
+
     # 3. Load the TTS model.
-    print(f"Loading TTS model from '{args.model_path}'...", file=sys.stderr)
-    with TextToSpeech(args.model_path, TTSModelArch.TSUKI) as tts:
+    print(f"Loading TTS model from '{model_path}'...", file=sys.stderr)
+    with TextToSpeech(model_path, model_arch) as tts:
         # 4. Generate audio.
         result = tts.generate(phonemes)
         print(

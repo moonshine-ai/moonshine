@@ -7,7 +7,6 @@ conversion should be performed by the caller before invoking generate().
 
 import ctypes
 from dataclasses import dataclass
-from enum import IntEnum
 from typing import Optional
 
 import numpy as np
@@ -15,12 +14,7 @@ from numpy.typing import NDArray
 
 from moonshine_voice.moonshine_api import _MoonshineLib
 from moonshine_voice.errors import MoonshineError, check_error
-
-
-class TTSModelArch(IntEnum):
-    """Text-to-speech model architecture types."""
-
-    TSUKI = 0
+from moonshine_voice.download import TTSModelArch
 
 
 class TtsResultC(ctypes.Structure):

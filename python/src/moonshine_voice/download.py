@@ -8,10 +8,15 @@ from moonshine_voice.download_file import download_model, get_cache_dir
 from moonshine_voice.utils import get_assets_path, load_wav_file
 
 
-# Define EmbeddingModelArch here to avoid circular import with intent_recognizer
+# Define model arch enums here to avoid circular imports with their respective modules
 class EmbeddingModelArch(IntEnum):
     """Supported embedding model architectures."""
     GEMMA_300M = 0  # embeddinggemma-300m (768-dim embeddings)
+
+
+class TTSModelArch(IntEnum):
+    """Text-to-speech model architecture types."""
+    TSUKI = 0
 
 
 MODEL_INFO = {
@@ -131,6 +136,16 @@ EMBEDDING_MODEL_INFO = {
         "download_url": "https://download.moonshine.ai/model/embeddinggemma-300m",
         "variants": ["q4", "q8", "fp16", "fp32", "q4f16"],
         "default_variant": "q4",
+    },
+}
+
+# TTS models use a different arch enum and have their own component structure
+TTS_MODEL_INFO = {
+    "tsuki-max-en": {
+        "english_name": "Tsuki Max English",
+        "model_arch": TTSModelArch.TSUKI,
+        "download_url": "https://download.moonshine.ai/model/tsuki-max-en",
+        "components": ["model.onnx", "vocab.json"],
     },
 }
 
@@ -275,6 +290,61 @@ def get_embedding_model(
         components = [f"model_{variant}.onnx", "tokenizer.bin", f"model_{variant}.onnx_data"]
 
     # Download the model
+    cache_dir = get_cache_dir()
+    download_url = model_info["download_url"]
+    model_folder_name = download_url.replace("https://", "")
+    root_model_path = os.path.join(cache_dir, model_folder_name)
+
+    for component in components:
+        component_download_url = f"{download_url}/{component}"
+        component_path = os.path.join(root_model_path, component)
+        download_model(component_download_url, component_path)
+
+    return str(root_model_path), model_info["model_arch"]
+
+
+# ============================================================================
+# TTS Model Functions
+# ============================================================================
+
+
+def supported_tts_models() -> list[str]:
+    """Return list of supported TTS model names."""
+    return list(TTS_MODEL_INFO.keys())
+
+
+def supported_tts_models_friendly() -> str:
+    """Return a friendly string listing supported TTS models."""
+    return ", ".join(
+        [f"{key} ({info['english_name']})" for key, info in TTS_MODEL_INFO.items()]
+    )
+
+
+def get_tts_model(
+    model_name: str = "tsuki-max-en",
+) -> tuple[str, TTSModelArch]:
+    """
+    Download a TTS model and return (path, arch).
+
+    Args:
+        model_name: Name of the TTS model (e.g., "tsuki-max-en")
+
+    Returns:
+        Tuple of (model_path, model_arch) for use with TextToSpeech.
+
+    Example:
+        >>> model_path, model_arch = get_tts_model("tsuki-max-en")
+        >>> tts = TextToSpeech(model_path=model_path, model_arch=model_arch)
+    """
+    if model_name not in TTS_MODEL_INFO:
+        raise ValueError(
+            f"TTS model not found: {model_name}. "
+            f"Supported models: {supported_tts_models_friendly()}"
+        )
+
+    model_info = TTS_MODEL_INFO[model_name]
+    components = model_info["components"]
+
     cache_dir = get_cache_dir()
     download_url = model_info["download_url"]
     model_folder_name = download_url.replace("https://", "")
