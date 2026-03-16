@@ -1,8 +1,8 @@
 """Text-to-speech module for Moonshine Voice.
 
 This module provides text-to-speech synthesis using the Moonshine TTS C API.
-The model expects pre-phonemized input (IPA phonemes). Grapheme-to-phoneme
-conversion should be performed by the caller before invoking generate().
+Grapheme-to-phoneme conversion is handled internally by the C library using
+the Phonemis G2P engine.
 """
 
 import ctypes
@@ -44,23 +44,20 @@ class TextToSpeech:
     """Text-to-speech synthesizer using the Moonshine TTS engine.
 
     This class wraps the Moonshine C API for text-to-speech. It accepts
-    pre-phonemized IPA strings and produces 24 kHz signed 16-bit PCM audio.
-
-    Grapheme-to-phoneme conversion is intentionally left to the caller so
-    that the core library remains dependency-free. Use a G2P front-end such
-    as ``misaki`` to convert text to phonemes before calling :meth:`generate`.
+    plain text strings and produces 24 kHz signed 16-bit PCM audio.
+    Grapheme-to-phoneme conversion is handled internally by the C library.
 
     Example usage::
 
         >>> tts = TextToSpeech("path/to/tts-model")
-        >>> result = tts.generate("h ə l oʊ w ɜː l d .")
+        >>> result = tts.generate("Hello, world!")
         >>> # result.audio_data is a numpy int16 array at 24 kHz
         >>> tts.close()
 
     Context-manager usage::
 
         >>> with TextToSpeech("path/to/tts-model") as tts:
-        ...     result = tts.generate("h ə l oʊ w ɜː l d .")
+        ...     result = tts.generate("Hello, world!")
     """
 
     def __init__(
@@ -113,7 +110,7 @@ class TextToSpeech:
         lib.moonshine_text_to_speech_generate.restype = ctypes.c_int32
         lib.moonshine_text_to_speech_generate.argtypes = [
             ctypes.c_int32,  # tts_handle
-            ctypes.c_char_p,  # phonemes
+            ctypes.c_char_p,  # text
             ctypes.POINTER(TtsResultC),  # out_result
         ]
 
@@ -136,14 +133,15 @@ class TextToSpeech:
         if hasattr(self, "_handle"):
             self.close()
 
-    def generate(self, phonemes: str) -> TTSResult:
+    def generate(self, text: str) -> TTSResult:
         """
-        Generate speech audio from a phoneme string.
+        Generate speech audio from a text string.
+
+        Grapheme-to-phoneme conversion is performed internally by the C
+        library using the Phonemis G2P engine.
 
         Args:
-            phonemes: A UTF-8-encoded IPA phoneme string. The caller is
-                     responsible for grapheme-to-phoneme conversion (e.g.
-                     using misaki or a platform-specific G2P front-end).
+            text: A UTF-8-encoded plain text string.
 
         Returns:
             A TTSResult containing the generated PCM audio data (int16 numpy
@@ -151,17 +149,17 @@ class TextToSpeech:
 
         Raises:
             MoonshineError: If the model is not initialized.
-            MoonshineInvalidArgumentError: If phonemes is empty or None.
+            MoonshineInvalidArgumentError: If text is empty or None.
         """
         if self._handle is None:
             raise MoonshineError("Text-to-speech model is not initialized")
 
-        phonemes_bytes = phonemes.encode("utf-8")
+        text_bytes = text.encode("utf-8")
         result_c = TtsResultC()
 
         error = self._lib.moonshine_text_to_speech_generate(
             self._handle,
-            phonemes_bytes,
+            text_bytes,
             ctypes.byref(result_c),
         )
         check_error(error)

@@ -15,6 +15,9 @@
 
 #include "string-utils.h"
 
+#include <phonemis/pipeline.h>
+#include <phonemis/utilities/string_utils.h>
+
 #define DEBUG_ALLOC_ENABLED 1
 #include "debug-utils.h"
 #include "ort-utils.h"
@@ -235,6 +238,10 @@ int TextToSpeechModel::load(const char *model_dir) {
   }
   RETURN_ON_ERROR(parse_vocab(vocab_json));
 
+  // Initialize the Phonemis G2P pipeline.
+  g2p_pipeline_ = std::make_unique<phonemis::Pipeline>(
+      phonemis::phonemizer::Lang::EN_US);
+
   return 0;
 }
 
@@ -276,6 +283,10 @@ int TextToSpeechModel::load_from_memory(const uint8_t *model_data,
 
   std::string json_str(vocab_json, vocab_json_size);
   RETURN_ON_ERROR(parse_vocab(json_str));
+
+  // Initialize the Phonemis G2P pipeline.
+  g2p_pipeline_ = std::make_unique<phonemis::Pipeline>(
+      phonemis::phonemizer::Lang::EN_US);
 
   return 0;
 }
@@ -493,16 +504,37 @@ std::vector<int16_t> TextToSpeechModel::to_pcm16(
 }
 
 /* --------------------------------------------------------------------------
- * Public generate()
- *   phonemes → tokenize → run model → convert to PCM
+ * G2P: grapheme-to-phoneme via Phonemis
  * ---------------------------------------------------------------------- */
 
-int TextToSpeechModel::generate(const std::string &phonemes,
+std::string TextToSpeechModel::phonemize(const std::string &text) {
+  if (!g2p_pipeline_) {
+    LOG("TTS: G2P pipeline not initialized\n");
+    return "";
+  }
+  std::u32string phonemes_u32 = g2p_pipeline_->process(text);
+  return phonemis::utilities::string_utils::u32string_to_utf8(phonemes_u32);
+}
+
+/* --------------------------------------------------------------------------
+ * Public generate()
+ *   text → phonemize → tokenize → run model → convert to PCM
+ * ---------------------------------------------------------------------- */
+
+int TextToSpeechModel::generate(const std::string &text,
                                 TextToSpeechResult &result) {
   if (!is_loaded()) {
     LOG("TTS model is not loaded\n");
     return 1;
   }
+
+  // G2P conversion.
+  std::string phonemes = phonemize(text);
+  if (phonemes.empty()) {
+    LOG("TTS: G2P produced empty phonemes\n");
+    return 1;
+  }
+  LOGF("TTS phonemes: %s\n", phonemes.c_str());
 
   // Tokenize
   std::vector<int64_t> tokens;
@@ -529,5 +561,6 @@ int TextToSpeechModel::generate(const std::string &phonemes,
 }
 
 bool TextToSpeechModel::is_loaded() const {
-  return session_ != nullptr && !char_to_index_.empty();
+  return session_ != nullptr && !char_to_index_.empty() &&
+         g2p_pipeline_ != nullptr;
 }

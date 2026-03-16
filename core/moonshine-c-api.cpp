@@ -696,21 +696,21 @@ void moonshine_free_text_to_speech(int32_t tts_handle) {
 }
 
 int32_t moonshine_text_to_speech_generate(int32_t tts_handle,
-                                          const char *phonemes,
+                                          const char *text,
                                           struct tts_result_t *out_result) {
   if (log_api_calls) {
-    LOGF("moonshine_text_to_speech_generate(handle=%d, phonemes=%s)",
-         tts_handle, phonemes ? phonemes : "(null)");
+    LOGF("moonshine_text_to_speech_generate(handle=%d, text=%s)",
+         tts_handle, text ? text : "(null)");
   }
   CHECK_TTS_HANDLE(tts_handle);
 
-  if (phonemes == nullptr || out_result == nullptr) {
+  if (text == nullptr || out_result == nullptr) {
     return MOONSHINE_ERROR_INVALID_ARGUMENT;
   }
 
   try {
     auto *state = tts_map[tts_handle];
-    int result = state->model->generate(std::string(phonemes),
+    int result = state->model->generate(std::string(text),
                                         state->last_result);
     if (result != 0) {
       LOG("TTS generation failed");
