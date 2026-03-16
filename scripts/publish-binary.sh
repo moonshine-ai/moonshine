@@ -61,24 +61,28 @@ TAR_NAME=${FOLDER_NAME}.tar.gz
 tar -czvf ${TAR_NAME} ${FOLDER_NAME}
 cp ${TAR_NAME} ${REPO_ROOT_DIR}
 
-cd ${REPO_ROOT_DIR}
 
-# Check if the GitHub release exists; create it if missing
-if ! gh release view v$VERSION >/dev/null 2>&1; then
-	gh release create v$VERSION --title "v$VERSION" --notes "Release v$VERSION"
-fi
+if [[ "$PLATFORM" == "macos" ]]; then
 
-gh release upload v$VERSION $TAR_NAME --clobber
+	cd ${REPO_ROOT_DIR}
 
-cd ${REPO_ROOT_DIR}/examples
-
-for EXAMPLE_DIR in *; do
-	if [ -d "$EXAMPLE_DIR" ]; then
-	    TAR_NAME=${EXAMPLE_DIR}-examples.tar.gz
-		cd ${EXAMPLE_DIR}
-	    tar -czvf ${TAR_NAME} *
-		gh release upload v$VERSION ${TAR_NAME} --clobber
-		rm -rf ${TAR_NAME}
-		cd ..
+	# Check if the GitHub release exists; create it if missing
+	if ! gh release view v$VERSION >/dev/null 2>&1; then
+		gh release create v$VERSION --title "v$VERSION" --notes "Release v$VERSION"
 	fi
-done
+
+	gh release upload v$VERSION $TAR_NAME --clobber
+
+	cd ${REPO_ROOT_DIR}/examples
+
+	for EXAMPLE_DIR in *; do
+		if [ -d "$EXAMPLE_DIR" ]; then
+			TAR_NAME=${EXAMPLE_DIR}-examples.tar.gz
+			cd ${EXAMPLE_DIR}
+			tar -czvf ${TAR_NAME} *
+			gh release upload v$VERSION ${TAR_NAME} --clobber
+			rm -rf ${TAR_NAME}
+			cd ..
+		fi
+	done
+fi
