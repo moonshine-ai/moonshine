@@ -7,6 +7,7 @@ include_directories(${CMAKE_CURRENT_LIST_DIR}/../third-party/doctest)
 add_library(moonshine-utils STATIC
     string-utils.cpp
     debug-utils.cpp
+    json-utils.cpp
 )
 
 target_compile_options(moonshine-utils PRIVATE
