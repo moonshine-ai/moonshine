@@ -27,5 +27,6 @@ ${REPO_ROOT_DIR}/core/build/moonshine-cpp-test
 ${REPO_ROOT_DIR}/core/build/cosine-distance-test
 ${REPO_ROOT_DIR}/core/build/speaker-embedding-model-test
 ${REPO_ROOT_DIR}/core/build/online-clusterer-test
+${REPO_ROOT_DIR}/core/build/word-alignment-test
 
 echo "All tests passed"
