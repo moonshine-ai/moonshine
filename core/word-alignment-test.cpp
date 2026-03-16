@@ -14,27 +14,27 @@ int main(int argc, char **argv) {
 
   // Load with word_timestamps enabled
   struct transcriber_option_t options[] = {
-      {.name = "word_timestamps", .value = "true"},
-      {.name = "identify_speakers", .value = "false"},
+    {.name = "word_timestamps", .value = "true"},
+    {.name = "identify_speakers", .value = "false"},
   };
 
   printf("Loading model from %s with word_timestamps=true...\n", model_path);
   int32_t handle = moonshine_load_transcriber_from_files(
-      model_path, MOONSHINE_MODEL_ARCH_TINY, options, 2,
-      moonshine_get_version());
+    model_path, MOONSHINE_MODEL_ARCH_TINY, options, 2,
+    moonshine_get_version());
 
   if (handle < 0) {
-    printf("FAIL: Failed to load transcriber: %s\n",
-           moonshine_error_to_string(handle));
-    return 1;
+  printf("FAIL: Failed to load transcriber: %s\n",
+       moonshine_error_to_string(handle));
+  return 1;
   }
   printf("Model loaded (handle=%d)\n\n", handle);
 
   // Load WAV file
   FILE *f = fopen(wav_path, "rb");
   if (!f) {
-    printf("FAIL: Cannot open %s\n", wav_path);
-    return 1;
+  printf("FAIL: Cannot open %s\n", wav_path);
+  return 1;
   }
 
   // Read WAV header (44 bytes) then raw PCM data
@@ -50,31 +50,31 @@ int main(int argc, char **argv) {
   long num_samples = data_size / sizeof(int16_t);
   float *audio = (float *)malloc(num_samples * sizeof(float));
   for (long i = 0; i < num_samples; i++) {
-    audio[i] = raw[i] / 32768.0f;
+  audio[i] = raw[i] / 32768.0f;
   }
   free(raw);
 
   float audio_duration = num_samples / 16000.0f;
   printf("Audio: %s (%.2fs, %ld samples)\n\n", wav_path, audio_duration,
-         num_samples);
+     num_samples);
 
   // Transcribe
   struct transcript_t *transcript = NULL;
   int32_t err = moonshine_transcribe_without_streaming(handle, audio,
-                                                       num_samples, 16000, 0,
-                                                       &transcript);
+                             num_samples, 16000, 0,
+                             &transcript);
   free(audio);
 
   if (err != 0) {
-    printf("FAIL: Transcription failed: %s\n", moonshine_error_to_string(err));
-    moonshine_free_transcriber(handle);
-    return 1;
+  printf("FAIL: Transcription failed: %s\n", moonshine_error_to_string(err));
+  moonshine_free_transcriber(handle);
+  return 1;
   }
 
   if (!transcript || transcript->line_count == 0) {
-    printf("FAIL: No transcript lines produced\n");
-    moonshine_free_transcriber(handle);
-    return 1;
+  printf("FAIL: No transcript lines produced\n");
+  moonshine_free_transcriber(handle);
+  return 1;
   }
 
   printf("Transcript lines: %llu\n", transcript->line_count);
@@ -83,26 +83,26 @@ int main(int argc, char **argv) {
   int monotonicity_violations = 0;
 
   for (uint64_t i = 0; i < transcript->line_count; i++) {
-    struct transcript_line_t *line = &transcript->lines[i];
-    printf("\nLine %llu: \"%s\"\n", i, line->text ? line->text : "<null>");
-    printf("  start_time=%.3f, duration=%.3f\n", line->start_time,
-           line->duration);
-    printf("  word_count=%llu\n", line->word_count);
+  struct transcript_line_t *line = &transcript->lines[i];
+  printf("\nLine %llu: \"%s\"\n", i, line->text ? line->text : "<null>");
+  printf("  start_time=%.3f, duration=%.3f\n", line->start_time,
+       line->duration);
+  printf("  word_count=%llu\n", line->word_count);
 
-    if (line->words && line->word_count > 0) {
-      float prev_start = -1.0f;
-      for (uint64_t j = 0; j < line->word_count; j++) {
-        const struct transcript_word_t *word = &line->words[j];
-        printf("    [%7.3fs - %7.3fs] %-15s  (conf: %.2f)\n", word->start,
-               word->end, word->text ? word->text : "<null>", word->confidence);
+  if (line->words && line->word_count > 0) {
+    float prev_start = -1.0f;
+    for (uint64_t j = 0; j < line->word_count; j++) {
+    const struct transcript_word_t *word = &line->words[j];
+    printf("    [%7.3fs - %7.3fs] %-15s  (conf: %.2f)\n", word->start,
+         word->end, word->text ? word->text : "<null>", word->confidence);
 
-        if (word->start < prev_start) {
-          monotonicity_violations++;
-        }
-        prev_start = word->start;
-        total_words++;
-      }
+    if (word->start < prev_start) {
+      monotonicity_violations++;
     }
+    prev_start = word->start;
+    total_words++;
+    }
+  }
   }
 
   printf("\n=== Results ===\n");
@@ -110,15 +110,15 @@ int main(int argc, char **argv) {
   printf("Monotonicity violations: %d\n", monotonicity_violations);
 
   if (total_words == 0) {
-    printf("FAIL: No words produced\n");
-    moonshine_free_transcriber(handle);
-    return 1;
+  printf("FAIL: No words produced\n");
+  moonshine_free_transcriber(handle);
+  return 1;
   }
 
   if (monotonicity_violations > 0) {
-    printf("FAIL: Monotonicity violations detected\n");
-    moonshine_free_transcriber(handle);
-    return 1;
+  printf("FAIL: Monotonicity violations detected\n");
+  moonshine_free_transcriber(handle);
+  return 1;
   }
 
   printf("PASS: %d words with correct monotonic ordering\n", total_words);
