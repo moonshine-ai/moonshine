@@ -65,6 +65,8 @@ cmake --build .
 
 ### MacOS
 
+Moonshine Voice supports both Apple Silicon (arm64) and Intel (x86_64) Macs.
+
 Download [github.com/moonshine-ai/moonshine/releases/latest/download/macos-examples.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/macos-examples.tar.gz), extract it, and then open the `MicTranscription/MicTranscription.xcodeproj` project in Xcode.
 
 ### Windows
