@@ -3,8 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
-#include <fstream>
-#include <sstream>
 
 #ifndef _WIN32
 #include <fcntl.h>
@@ -13,6 +11,7 @@
 #include <unistd.h>
 #endif
 
+#include "json-utils.h"
 #include "string-utils.h"
 
 #include <phonemis/pipeline.h>
@@ -21,128 +20,6 @@
 #define DEBUG_ALLOC_ENABLED 1
 #include "debug-utils.h"
 #include "ort-utils.h"
-
-/* ============================================================================
- * Helpers – minimal vocab.json parsing
- *
- * The vocab.json produced by the training pipeline looks like:
- *
- *   {
- *     "pad": "_",
- *     "punctuation": ";:,.!?...",
- *     "letters": "ABCabc...",
- *     "letters_ipa": "ɑɐɒ..."
- *   }
- *
- * We only need the four string values.  A full JSON library is overkill, so we
- * reuse the same style of hand-rolled extraction that the streaming model uses
- * for its config.
- * ========================================================================= */
-
-namespace {
-
-/** Read the contents of a file into a std::string. */
-static std::string read_file_contents(const char *path) {
-  std::ifstream f(path);
-  if (!f.good()) return "";
-  std::stringstream buf;
-  buf << f.rdbuf();
-  return buf.str();
-}
-
-/**
- * Extract a JSON string value for a given key.
- * E.g. for key "pad" in {"pad": "_", ...} this returns "_".
- * Handles escaped characters (\", \\, \n, \t, \uXXXX basic-BMP).
- */
-static std::string json_get_string(const std::string &json, const char *key) {
-  std::string search = std::string("\"") + key + "\"";
-  size_t pos = json.find(search);
-  if (pos == std::string::npos) return "";
-
-  // Skip past the key, colon, and whitespace to the opening quote.
-  pos += search.length();
-  while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t' ||
-                                json[pos] == ':' || json[pos] == '\n' ||
-                                json[pos] == '\r'))
-    pos++;
-
-  if (pos >= json.size() || json[pos] != '"') return "";
-  pos++;  // skip opening quote
-
-  std::string result;
-  while (pos < json.size() && json[pos] != '"') {
-    if (json[pos] == '\\' && pos + 1 < json.size()) {
-      pos++;
-      switch (json[pos]) {
-        case '"':
-          result += '"';
-          break;
-        case '\\':
-          result += '\\';
-          break;
-        case 'n':
-          result += '\n';
-          break;
-        case 't':
-          result += '\t';
-          break;
-        case 'u': {
-          // Basic \uXXXX → UTF-8 (BMP only, sufficient for IPA symbols).
-          if (pos + 4 < json.size()) {
-            char hex[5] = {json[pos + 1], json[pos + 2], json[pos + 3],
-                           json[pos + 4], '\0'};
-            uint32_t cp = static_cast<uint32_t>(strtoul(hex, nullptr, 16));
-            pos += 4;
-            if (cp < 0x80) {
-              result += static_cast<char>(cp);
-            } else if (cp < 0x800) {
-              result += static_cast<char>(0xC0 | (cp >> 6));
-              result += static_cast<char>(0x80 | (cp & 0x3F));
-            } else {
-              result += static_cast<char>(0xE0 | (cp >> 12));
-              result += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-              result += static_cast<char>(0x80 | (cp & 0x3F));
-            }
-          }
-          break;
-        }
-        default:
-          result += json[pos];
-          break;
-      }
-    } else {
-      result += json[pos];
-    }
-    pos++;
-  }
-  return result;
-}
-
-/**
- * Iterate over a UTF-8 string one code-point at a time, calling `fn` with each
- * code-point as a std::string.
- */
-template <typename Fn>
-static void for_each_utf8_char(const std::string &s, Fn fn) {
-  size_t i = 0;
-  while (i < s.size()) {
-    size_t len = 1;
-    uint8_t c = static_cast<uint8_t>(s[i]);
-    if ((c & 0x80) == 0)
-      len = 1;
-    else if ((c & 0xE0) == 0xC0)
-      len = 2;
-    else if ((c & 0xF0) == 0xE0)
-      len = 3;
-    else if ((c & 0xF8) == 0xF0)
-      len = 4;
-    fn(s.substr(i, len));
-    i += len;
-  }
-}
-
-}  // namespace
 
 /* ============================================================================
  * TextToSpeechModel implementation
@@ -231,7 +108,7 @@ int TextToSpeechModel::load(const char *model_dir) {
   }
 
   // Load and parse vocab.json
-  std::string vocab_json = read_file_contents(vocab_path.c_str());
+  std::string vocab_json = read_file_to_string(vocab_path);
   if (vocab_json.empty()) {
     LOGF("Failed to read vocab file: %s\n", vocab_path.c_str());
     return 1;

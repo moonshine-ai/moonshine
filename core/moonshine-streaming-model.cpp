@@ -15,9 +15,9 @@
 
 #include <algorithm>
 #include <fstream>
-#include <sstream>
 
 #include "bin-tokenizer.h"
+#include "json-utils.h"
 #include "moonshine-ort-allocator.h"
 #include "string-utils.h"
 
@@ -46,53 +46,25 @@
  * ============================================================================
  */
 
-static std::string read_file_to_string(const std::string &path) {
-  std::ifstream f(path);
-  if (!f.good()) return "";
-  std::stringstream buffer;
-  buffer << f.rdbuf();
-  return buffer.str();
-}
-
 // TODO Use constants instead of loading config JSON
 static bool parse_config_json(const std::string &json,
                               MoonshineStreamingConfig *config) {
-  // Simple key-value extraction for our known config format
-  auto get_int = [&json](const char *key) -> int {
-    std::string search = std::string("\"") + key + "\":";
-    size_t pos = json.find(search);
-    if (pos == std::string::npos) return 0;
-    pos += search.length();
-    while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t')) pos++;
-    int val = 0;
-    bool negative = false;
-    if (json[pos] == '-') {
-      negative = true;
-      pos++;
-    }
-    while (pos < json.size() && json[pos] >= '0' && json[pos] <= '9') {
-      val = val * 10 + (json[pos] - '0');
-      pos++;
-    }
-    return negative ? -val : val;
-  };
-
-  config->encoder_dim = get_int("encoder_dim");
-  config->decoder_dim = get_int("decoder_dim");
-  config->depth = get_int("depth");
-  config->nheads = get_int("nheads");
-  config->head_dim = get_int("head_dim");
-  config->vocab_size = get_int("vocab_size");
-  config->bos_id = get_int("bos_id");
-  config->eos_id = get_int("eos_id");
-  config->frame_len = get_int("frame_len");
-  config->total_lookahead = get_int("total_lookahead");
-  config->d_model_frontend = get_int("d_model_frontend");
-  config->c1 = get_int("c1");
-  config->c2 = get_int("c2");
+  config->encoder_dim = json_get_int(json, "encoder_dim");
+  config->decoder_dim = json_get_int(json, "decoder_dim");
+  config->depth = json_get_int(json, "depth");
+  config->nheads = json_get_int(json, "nheads");
+  config->head_dim = json_get_int(json, "head_dim");
+  config->vocab_size = json_get_int(json, "vocab_size");
+  config->bos_id = json_get_int(json, "bos_id");
+  config->eos_id = json_get_int(json, "eos_id");
+  config->frame_len = json_get_int(json, "frame_len");
+  config->total_lookahead = json_get_int(json, "total_lookahead");
+  config->d_model_frontend = json_get_int(json, "d_model_frontend");
+  config->c1 = json_get_int(json, "c1");
+  config->c2 = json_get_int(json, "c2");
 
   // max_seq_len defaults to 448 if not in config
-  int max_seq = get_int("max_seq_len");
+  int max_seq = json_get_int(json, "max_seq_len");
   config->max_seq_len = (max_seq > 0) ? max_seq : 448;
 
   // Validate essential fields
@@ -193,7 +165,7 @@ MoonshineStreamingModel::~MoonshineStreamingModel() {
 }
 
 int MoonshineStreamingModel::load_config(const char *config_path) {
-  std::string config_json = read_file_to_string(config_path);
+  std::string config_json = read_file_to_string(std::string(config_path));
   if (config_json.empty()) {
     LOGF("Failed to read config file: %s\n", config_path);
     return 1;
