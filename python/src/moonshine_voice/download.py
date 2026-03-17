@@ -152,9 +152,12 @@ def find_model_info(language: str = "en", model_arch: ModelArch = None) -> dict:
     model_info = MODEL_INFO[language_key]
     available_models = model_info["models"]
     if model_arch is None:
-        return available_models[0]
+        result = available_models[0]
+        result["language"] = language_key
+        return result
     for model in available_models:
         if model["model_arch"] == model_arch:
+            model["language"] = language_key
             return model
     raise ValueError(
         f"Model not found for language: {language} and model arch: {model_arch}. Available models: {available_models}"
@@ -179,7 +182,7 @@ def get_components_for_model_info(model_info: dict) -> list[str]:
         ModelArch.SMALL_STREAMING,
         ModelArch.MEDIUM_STREAMING,
     ]:
-        return [
+        result = [
             "adapter.ort",
             "cross_kv.ort",
             "decoder_kv.ort",
@@ -188,8 +191,14 @@ def get_components_for_model_info(model_info: dict) -> list[str]:
             "streaming_config.json",
             "tokenizer.bin",
         ]
+        if model_info["language"] == "en":
+            result.append("decoder_kv_with_attention.ort")
     else:
-        return ["encoder_model.ort", "decoder_model_merged.ort", "tokenizer.bin"]
+        result = ["encoder_model.ort", "decoder_model_merged.ort", "tokenizer.bin"]
+        if model_info["language"] == "en":
+            result.append("decoder_with_attention.ort")
+
+    return result
 
 
 def download_model_from_info(model_info: dict) -> tuple[str, ModelArch]:
