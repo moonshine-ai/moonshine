@@ -536,6 +536,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--no-speaker-ids", action="store_true", help="Don't show speaker IDs"
     )
+    parser.add_argument(
+        "--word-timestamps", action="store_true", help="Show word timestamps"
+    )
     args = parser.parse_args()
 
     if args.model_path is not None:
@@ -558,6 +561,9 @@ if __name__ == "__main__":
         for option in args.options.split(","):
             key, value = option.split("=")
             options[key] = value
+
+    if args.word_timestamps:
+        options["word_timestamps"] = "true"
 
     transcriber = Transcriber(
         model_path=model_path, model_arch=model_arch, options=options
@@ -583,7 +589,12 @@ if __name__ == "__main__":
                 speaker_prefix = ""
             else:
                 speaker_prefix = f"Speaker #{event.line.speaker_index}: "
-            print(f"{speaker_prefix}{event.line.text}", file=sys.stderr)
+            if args.word_timestamps:
+                for word in event.line.words:
+                    print(f"  {word.word} [{word.start:.3f}s - {word.end:.3f}s] (conf: {word.confidence:.2f})", file=sys.stderr)
+            else:
+                print(f"{speaker_prefix}{event.line.text}", file=sys.stderr)
+
 
     listener = TestListener()
     transcriber.add_listener(listener)
