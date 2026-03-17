@@ -18,6 +18,13 @@
 #include "online-clusterer.h"
 #include "word-alignment.h"
 
+// Whenever this struct is modified, the following files must be updated:
+// - python/src/moonshine_voice/moonshine_api.py
+// - core/moonshine-c-api.h
+// - core/moonshine-cpp.h
+// - android/moonshine-jni/moonshine-jni.cpp
+// - swift/Sources/MoonshineVoice/MoonshineAPI.swift
+
 struct TranscriberLine {
   std::string *text = nullptr;
   std::vector<float> audio_data;
