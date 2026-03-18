@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		28EB9A0E6DF2DF6D789AFAB1 /* Moonshine in Frameworks */ = {isa = PBXBuildFile; productRef = 7F7B03E1028EB5161964044D /* Moonshine */; };
+		28EB9A0E6DF2DF6D789AFAB1 /* MoonshineVoice in Frameworks */ = {isa = PBXBuildFile; productRef = 7F7B03E1028EB5161964044D /* MoonshineVoice */; };
 		45505035DE2510C526A310D4 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8A5E552E56AC2B8EDE068B3 /* main.swift */; };
 /* End PBXBuildFile section */
 
@@ -21,7 +21,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				28EB9A0E6DF2DF6D789AFAB1 /* Moonshine in Frameworks */,
+				28EB9A0E6DF2DF6D789AFAB1 /* MoonshineVoice in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -77,7 +77,7 @@
 			);
 			name = BasicTranscription;
 			packageProductDependencies = (
-				7F7B03E1028EB5161964044D /* Moonshine */,
+				7F7B03E1028EB5161964044D /* MoonshineVoice */,
 			);
 			productName = BasicTranscription;
 			productReference = 5BB2C0F05E65996AD61BB563 /* BasicTranscription */;
@@ -310,10 +310,10 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		7F7B03E1028EB5161964044D /* Moonshine */ = {
+		7F7B03E1028EB5161964044D /* MoonshineVoice */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = E68EFCE52E5CBD663A132D80 /* XCRemoteSwiftPackageReference "moonshine-swift" */;
-			productName = Moonshine;
+			productName = MoonshineVoice;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
