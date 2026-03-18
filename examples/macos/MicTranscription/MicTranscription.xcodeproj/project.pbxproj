@@ -75,7 +75,7 @@
 			);
 			name = MicTranscription;
 			packageProductDependencies = (
-				7F7B03E1028EB5161964044D /* Moonshine */,
+				7F7B03E1028EB5161964044D /* MoonshineVoice */,
 			);
 			productName = MicTranscription;
 			productReference = 5BB2C0F05E65996AD61BB563 /* MicTranscription */;
@@ -307,10 +307,10 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		7F7B03E1028EB5161964044D /* Moonshine */ = {
+		7F7B03E1028EB5161964044D /* MoonshineVoice */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = E68EFCE52E5CBD663A132D80 /* XCRemoteSwiftPackageReference "moonshine-swift" */;
-			productName = Moonshine;
+			productName = MoonshineVoice;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
