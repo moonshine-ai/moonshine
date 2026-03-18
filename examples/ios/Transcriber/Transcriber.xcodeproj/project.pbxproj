@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		597E018B2F0762A200CE654B /* Moonshine in Frameworks */ = {isa = PBXBuildFile; productRef = 597E018C2F0762A200CE654C /* Moonshine */; };
+		597E018B2F0762A200CE654B /* MoonshineVoice in Frameworks */ = {isa = PBXBuildFile; productRef = 597E018C2F0762A200CE654C /* MoonshineVoice */; };
 		59A5FE2E2F09C4D70066D587 /* models in Resources */ = {isa = PBXBuildFile; fileRef = 59A5FE2D2F09C4D70066D587 /* models */; };
 /* End PBXBuildFile section */
 
@@ -58,7 +58,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				597E018B2F0762A200CE654B /* Moonshine in Frameworks */,
+				597E018B2F0762A200CE654B /* MoonshineVoice in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -120,7 +120,7 @@
 			);
 			name = Transcriber;
 			packageProductDependencies = (
-				597E018C2F0762A200CE654C /* Moonshine */,
+				597E018C2F0762A200CE654C /* MoonshineVoice */,
 			);
 			productName = Transcriber;
 			productReference = 597E01612F0762A100CE654A /* Transcriber.app */;
@@ -586,10 +586,10 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		597E018C2F0762A200CE654C /* Moonshine */ = {
+		597E018C2F0762A200CE654C /* MoonshineVoice */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 597E018D2F0762A200CE654D /* XCRemoteSwiftPackageReference "moonshine-swift" */;
-			productName = Moonshine;
+			productName = MoonshineVoice;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
