@@ -119,7 +119,8 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
     // Streaming model: expects frontend.onnx, encoder.onnx, adapter.onnx,
     // decoder.onnx, and streaming_config.json
     this->streaming_model =
-        new MoonshineStreamingModel(this->options.log_ort_run);
+        new MoonshineStreamingModel(this->options.log_ort_run,
+                                    this->options.use_nnapi);
 
     int32_t load_error = this->streaming_model->load(
         model_path, tokenizer_path.c_str(), model_arch);
@@ -161,7 +162,8 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
     // Non-streaming model: expects encoder_model.ort and
     // decoder_model_merged.ort
     this->stt_model = new MoonshineModel(this->options.log_ort_run,
-                                         this->options.max_tokens_per_second);
+                                         this->options.max_tokens_per_second,
+                                         this->options.use_nnapi);
 
     std::string encoder_model_path =
         append_path_component(model_path, "encoder_model.ort");
@@ -251,7 +253,8 @@ void Transcriber::load_from_memory(const uint8_t *encoder_model_data,
   }
 
   this->stt_model = new MoonshineModel(this->options.log_ort_run,
-                                       this->options.max_tokens_per_second);
+                                       this->options.max_tokens_per_second,
+                                       this->options.use_nnapi);
   int32_t load_error = this->stt_model->load_from_memory(
       encoder_model_data, encoder_model_data_size, decoder_model_data,
       decoder_model_data_size, tokenizer_data, tokenizer_data_size, model_arch);

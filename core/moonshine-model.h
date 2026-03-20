@@ -61,7 +61,8 @@ struct MoonshineModel {
   int last_cross_attn_enc_len = 0;
   int last_cross_attn_steps = 0;
 
-  MoonshineModel(bool log_ort_run = false, float max_tokens_per_second = 6.5f);
+  MoonshineModel(bool log_ort_run = false, float max_tokens_per_second = 6.5f,
+                  bool use_nnapi = false);
   ~MoonshineModel();
 
   int load(const char *encoder_model_path, const char *decoder_model_path,
