@@ -53,6 +53,30 @@ class TranscriptC(ctypes.Structure):
     ]
 
 
+def _require_struct_size(struct_name, struct_type, expected_size, extra_message=""):
+    """Fail fast if a ctypes definition drifts from the compiled C ABI."""
+    actual_size = ctypes.sizeof(struct_type)
+    if actual_size != expected_size:
+        message = (
+            f"{struct_name} size mismatch: expected {expected_size}, got "
+            f"{actual_size}. Python ctypes binding is out of sync with "
+            "moonshine-c-api.h."
+        )
+        if extra_message:
+            message = f"{message} {extra_message}"
+        raise ImportError(message)
+
+
+_require_struct_size("TranscriptWordC", TranscriptWordC, 24)
+_require_struct_size(
+    "TranscriptLineC",
+    TranscriptLineC,
+    80,
+    "See https://github.com/moonshine-ai/moonshine/issues/158",
+)
+_require_struct_size("TranscriptC", TranscriptC, 16)
+
+
 class TranscriberOptionC(ctypes.Structure):
     """C structure for transcriber_option_t."""
 
