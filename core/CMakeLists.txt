@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.22.1)
 
 project("moonshine")
 
+enable_testing()
+
 set(CMAKE_CXX_STANDARD 20)
 
 set(MOONSHINE_VERSION "0.0.51")
@@ -32,6 +34,11 @@ add_subdirectory(
 add_subdirectory(
     ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
     ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer/build
+)
+
+add_subdirectory(
+    ${CMAKE_CURRENT_LIST_DIR}/moonshine-tts
+    ${CMAKE_CURRENT_LIST_DIR}/moonshine-tts/build
 )
 
 if (ANDROID)

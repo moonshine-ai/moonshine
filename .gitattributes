@@ -4,3 +4,13 @@
 *.a filter=lfs diff=lfs merge=lfs -text
 *.examples/c++/transcriber filter=lfs diff=lfs merge=lfs -text
 core/speaker-embedding-model-data.cpp filter=lfs diff=lfs merge=lfs -text
+
+# moonshine-tts bundled data (same types as moonshine-ai/moonshine-tts; scoped to data/).
+core/moonshine-tts/data/**/*.tsv filter=lfs diff=lfs merge=lfs -text
+core/moonshine-tts/data/**/*.txt filter=lfs diff=lfs merge=lfs -text
+core/moonshine-tts/data/**/*.json filter=lfs diff=lfs merge=lfs -text
+core/moonshine-tts/data/**/*.csv filter=lfs diff=lfs merge=lfs -text
+core/moonshine-tts/data/**/*.onnx filter=lfs diff=lfs merge=lfs -text
+core/moonshine-tts/data/**/*.onnx.data filter=lfs diff=lfs merge=lfs -text
+# Documentation under data/ stays plain text (later rule wins).
+core/moonshine-tts/data/**/*.md -filter -diff -merge text
