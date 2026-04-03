@@ -71,11 +71,11 @@ namespace {
 
 bool log_api_calls = false;
 
-void parse_transcriber_options(const transcriber_option_t *in_options,
+void parse_transcriber_options(const moonshine_option_t *in_options,
                                uint64_t in_options_count,
                                TranscriberOptions &out_options) {
   for (uint64_t i = 0; i < in_options_count; i++) {
-    const transcriber_option_t &in_option = in_options[i];
+    const moonshine_option_t &in_option = in_options[i];
     std::string option_name = to_lowercase(in_option.name);
     if (option_name == "skip_transcription") {
       out_options.model_source = TranscriberOptions::ModelSource::NONE;
@@ -159,7 +159,7 @@ extern "C" const char *moonshine_error_to_string(int32_t error) {
 }
 
 extern "C" int32_t moonshine_load_transcriber_from_files(
-    const char *path, uint32_t model_arch, const transcriber_option_t *options,
+    const char *path, uint32_t model_arch, const moonshine_option_t *options,
     uint64_t options_count, int32_t moonshine_version) {
   if (log_api_calls) {
     LOGF(
@@ -167,7 +167,7 @@ extern "C" int32_t moonshine_load_transcriber_from_files(
         "options=%p, options_count=%" PRIu64 ", moonshine_version=%d)",
         path, model_arch, (void *)(options), options_count, moonshine_version);
     for (uint64_t i = 0; i < options_count; i++) {
-      const transcriber_option_t &option = options[i];
+      const moonshine_option_t &option = options[i];
       LOGF("  option[%" PRIu64 "] = %s=%s", i, option.name, option.value);
     }
   }
@@ -191,7 +191,7 @@ int32_t moonshine_load_transcriber_from_memory(
     const uint8_t *encoder_model_data, size_t encoder_model_data_size,
     const uint8_t *decoder_model_data, size_t decoder_model_data_size,
     const uint8_t *tokenizer_data, size_t tokenizer_data_size,
-    uint32_t model_arch, const transcriber_option_t *options,
+    uint32_t model_arch, const moonshine_option_t *options,
     uint64_t options_count, int32_t moonshine_version) {
   if (log_api_calls) {
     LOGF(
@@ -205,7 +205,7 @@ int32_t moonshine_load_transcriber_from_memory(
         (void *)(tokenizer_data), tokenizer_data_size, model_arch,
         (void *)(options), options_count, moonshine_version);
     for (uint64_t i = 0; i < options_count; i++) {
-      const transcriber_option_t &option = options[i];
+      const moonshine_option_t &option = options[i];
       LOGF("  option[%" PRIu64 "] = %s=%s", i, option.name, option.value);
     }
   }

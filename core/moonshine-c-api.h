@@ -113,12 +113,14 @@ extern "C" {
 
 /* --------------------------- DATA STRUCTURES ----------------------------- */
 
-/* Values passed to moonshine_load_transcriber at creation time that control
+/* Values passed to moonshine_load_transcriber,
+   moonshine_create_text_to_speech_synthesizer or
+   moonshine_create_graph_to_phonemizer at creation time that control
    the behavior of the transcriber. A typical use case would be to specify
    model configuration options like layer names that vary by language. The
    value is a string. You don't normally need to care about these, this is just
    for advanced customizations.                                              */
-struct transcriber_option_t {
+struct moonshine_option_t {
   const char *name;
   const char *value;
 };
@@ -278,7 +280,7 @@ MOONSHINE_EXPORT const char *moonshine_transcript_to_string(
 */
 MOONSHINE_EXPORT int32_t moonshine_load_transcriber_from_files(
     const char *path, uint32_t model_arch,
-    const struct transcriber_option_t *options, uint64_t options_count,
+    const struct moonshine_option_t *options, uint64_t options_count,
     int32_t moonshine_version);
 
 /* Loads models from memory. The `encoder_model_data`, `decoder_model_data` and
@@ -290,7 +292,7 @@ MOONSHINE_EXPORT int32_t moonshine_load_transcriber_from_memory(
     const uint8_t *encoder_model_data, size_t encoder_model_data_size,
     const uint8_t *decoder_model_data, size_t decoder_model_data_size,
     const uint8_t *tokenizer_data, size_t tokenizer_data_size,
-    uint32_t model_arch, const struct transcriber_option_t *options,
+    uint32_t model_arch, const struct moonshine_option_t *options,
     uint64_t options_count, int32_t moonshine_version);
 
 /* Releases all resources used by the transcriber. Subsequent transcriber
@@ -589,6 +591,78 @@ moonshine_get_intent_count(int32_t intent_recognizer_handle);
 */
 MOONSHINE_EXPORT int32_t
 moonshine_clear_intents(int32_t intent_recognizer_handle);
+
+/* ------------------------------ TEXT TO SPEECH ------------------------- */
+
+/* Creates a text to speech synthesizer from files on disk.
+   Returns a non-negative handle on success, or a negative error code on
+   failure. The error code can be converted to a human-readable string using
+   moonshine_error_to_string.
+*/
+MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_files(
+    const char *language, const char *voice, const char **filenames,
+    uint64_t filenames_count, const struct moonshine_option_t *options,
+    uint64_t options_count, int32_t moonshine_version);
+
+/* Creates a text to speech synthesizer from memory.
+   Returns a non-negative handle on success, or a negative error code on
+   failure. The error code can be converted to a human-readable string using
+   moonshine_error_to_string.
+*/
+MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_memory(
+    const char *language, const char *voice, const char **filenames,
+    const uint64_t filenames_count, const uint8_t **memory,
+    const uint64_t *memory_sizes, const struct moonshine_option_t *options,
+    uint64_t options_count, int32_t moonshine_version);
+
+/* Releases the resources used by a text to speech synthesizer.
+   Returns zero on success, or a non-zero error code on failure.
+*/
+MOONSHINE_EXPORT void moonshine_free_tts_synthesizer(
+    int32_t tts_synthesizer_handle);
+
+/* Synthesizes text to speech.
+   Returns zero on success, or a non-zero error code on failure.
+*/
+MOONSHINE_EXPORT int32_t moonshine_synthesize_text_to_speech(
+    int32_t tts_synthesizer_handle, const char *text, float **out_audio_data,
+    uint64_t *out_audio_data_size, const struct moonshine_option_t *options,
+    uint64_t options_count);
+
+/* Creates a grapheme to phonemizer from files on disk.
+   Returns a non-negative handle on success, or a negative error code on
+   failure. The error code can be converted to a human-readable string using
+   moonshine_error_to_string.
+*/
+MOONSHINE_EXPORT int32_t moonshine_create_grapheme_to_phonemizer_from_files(
+    const char *language, const char **filenames, uint64_t filenames_count,
+    const struct moonshine_option_t *options, uint64_t options_count,
+    int32_t moonshine_version);
+
+/* Creates a grapheme to phonemizer from memory.
+   Returns a non-negative handle on success, or a negative error code on
+   failure. The error code can be converted to a human-readable string using
+   moonshine_error_to_string.
+*/
+MOONSHINE_EXPORT int32_t moonshine_create_grapheme_to_phonemizer_from_memory(
+    const char *language, const char **filenames,
+    const uint64_t filenames_count, const uint8_t **memory,
+    const uint64_t *memory_sizes, const struct moonshine_option_t *options,
+    uint64_t options_count, int32_t moonshine_version);
+
+/* Releases the resources used by a grapheme to phonemizer.
+   Returns zero on success, or a non-zero error code on failure.
+*/
+MOONSHINE_EXPORT void moonshine_free_grapheme_to_phonemizer(
+    int32_t grapheme_to_phonemizer_handle);
+
+/* Converts a text into the equivalent International Phonetic Alphabet (IPA)
+   phonemes. Returns zero on success, or a non-zero error code on failure.
+*/
+MOONSHINE_EXPORT int32_t moonshine_text_to_phonemes(
+    int32_t grapheme_to_phonemizer_handle, const char *text,
+    const char **out_phonemes, uint64_t *out_phonemes_count,
+    const struct moonshine_option_t *options, uint64_t options_count);
 
 #ifdef __cplusplus
 }

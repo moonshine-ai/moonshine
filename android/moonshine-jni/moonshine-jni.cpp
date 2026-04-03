@@ -250,7 +250,7 @@ Java_ai_moonshine_voice_JNI_moonshineLoadTranscriberFromFiles(
     jfieldID valueField =
         get_field(env, optionClass, "value", "Ljava/lang/String;");
 
-    std::vector<transcriber_option_t> coptions;
+    std::vector<moonshine_option_t> coptions;
     if (joptions != nullptr) {
       for (int i = 0; i < env->GetArrayLength(joptions); i++) {
         jobject joption = env->GetObjectArrayElement(joptions, i);
@@ -286,7 +286,7 @@ Java_ai_moonshine_voice_JNI_moonshineLoadTranscriberFromMemory(
         get_field(env, optionClass, "name", "Ljava/lang/String;");
     jfieldID valueField =
         get_field(env, optionClass, "value", "Ljava/lang/String;");
-    std::vector<transcriber_option_t> coptions;
+    std::vector<moonshine_option_t> coptions;
     if (joptions != nullptr) {
       for (int i = 0; i < env->GetArrayLength(joptions); i++) {
         jobject joption = env->GetObjectArrayElement(joptions, i);

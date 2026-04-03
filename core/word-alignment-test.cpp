@@ -18,7 +18,7 @@ TEST_CASE("word-timestamps") {
     REQUIRE(std::filesystem::exists(wav_path));
 
     // Load with word_timestamps enabled
-    struct transcriber_option_t options[] = {
+    struct moonshine_option_t options[] = {
         {.name = "word_timestamps", .value = "true"},
         {.name = "identify_speakers", .value = "false"},
     };

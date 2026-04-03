@@ -54,7 +54,7 @@ class TranscriptC(ctypes.Structure):
 
 
 class TranscriberOptionC(ctypes.Structure):
-    """C structure for transcriber_option_t."""
+    """C structure for moonshine_option_t."""
 
     _fields_ = [
         ("name", ctypes.c_char_p),
