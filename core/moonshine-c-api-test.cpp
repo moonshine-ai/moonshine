@@ -66,7 +66,7 @@ TEST_CASE("moonshine-test-v2") {
 
     std::string root_model_path = "tiny-en";
     REQUIRE(std::filesystem::exists(root_model_path));
-    const transcriber_option_t options[] = {
+    const moonshine_option_t options[] = {
         {"identify_speakers", "false"},
     };
     const uint64_t options_count = sizeof(options) / sizeof(options[0]);
@@ -176,7 +176,7 @@ TEST_CASE("moonshine-test-v2") {
     REQUIRE(decoder_model_data.size() > 0);
     REQUIRE(tokenizer_data.size() > 0);
 
-    const transcriber_option_t options[] = {
+    const moonshine_option_t options[] = {
         {"return_audio_data", "false"},
     };
     const uint64_t options_count = sizeof(options) / sizeof(options[0]);
@@ -220,7 +220,7 @@ TEST_CASE("moonshine-test-v2") {
 
     int32_t model_arch = MOONSHINE_MODEL_ARCH_TINY;
 
-    const transcriber_option_t options[] = {
+    const moonshine_option_t options[] = {
         {"skip_transcription", "true"},
     };
     const uint64_t options_count = sizeof(options) / sizeof(options[0]);
@@ -264,7 +264,7 @@ TEST_CASE("moonshine-test-v2") {
 
     int32_t model_arch = MOONSHINE_MODEL_ARCH_TINY;
 
-    const transcriber_option_t options[] = {
+    const moonshine_option_t options[] = {
         {"vad_threshold", "0.0"},
     };
     const uint64_t options_count = sizeof(options) / sizeof(options[0]);
@@ -303,7 +303,7 @@ TEST_CASE("moonshine-test-v2") {
   }
   SUBCASE("transcribe-valid-options") {
     int32_t model_arch = MOONSHINE_MODEL_ARCH_TINY;
-    const transcriber_option_t options[] = {
+    const moonshine_option_t options[] = {
         {"skip_transcription", "true"},
         {"transcription_interval", "0.5"},
         {"vad_threshold", "0.5"},
@@ -329,7 +329,7 @@ TEST_CASE("moonshine-test-v2") {
     REQUIRE(transcriber_handle >= 0);
   }
   SUBCASE("transcribe-invalid-option") {
-    const transcriber_option_t options[] = {
+    const moonshine_option_t options[] = {
         {"invalid_option", "true"},
     };
     const uint64_t options_count = sizeof(options) / sizeof(options[0]);

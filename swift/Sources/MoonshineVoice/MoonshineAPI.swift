@@ -42,10 +42,10 @@ internal final class MoonshineAPI: @unchecked Sendable {
 
             // Build option structs - the C API only reads pointers during the call
             // so we can safely use the array base addresses
-            let optionStructs = (0..<options.count).map { i -> transcriber_option_t in
+            let optionStructs = (0..<options.count).map { i -> moonshine_option_t in
                 // Get base address of the C string array
                 // Note: These pointers are valid as long as the arrays exist
-                return transcriber_option_t(
+                return moonshine_option_t(
                     name: nameCStrings[i].withUnsafeBufferPointer { $0.baseAddress },
                     value: valueCStrings[i].withUnsafeBufferPointer { $0.baseAddress }
                 )
