@@ -135,6 +135,24 @@ void print_rule_based_dialect_catalog(std::ostream &os) {
 }  // namespace
 
 int main(int argc, char **argv) {
+  using moonshine_tts::kG2pArabicDictKey;
+  using moonshine_tts::kG2pArabicOnnxDirKey;
+  using moonshine_tts::kG2pChineseDictKey;
+  using moonshine_tts::kG2pChineseOnnxDirKey;
+  using moonshine_tts::kG2pDutchDictKey;
+  using moonshine_tts::kG2pEnglishDictKey;
+  using moonshine_tts::kG2pFrenchCsvDirKey;
+  using moonshine_tts::kG2pFrenchDictKey;
+  using moonshine_tts::kG2pGermanDictKey;
+  using moonshine_tts::kG2pHeteronymOnnxOverrideKey;
+  using moonshine_tts::kG2pHindiDictKey;
+  using moonshine_tts::kG2pJapaneseDictKey;
+  using moonshine_tts::kG2pJapaneseOnnxDirKey;
+  using moonshine_tts::kG2pKoreanDictKey;
+  using moonshine_tts::kG2pOovOnnxOverrideKey;
+  using moonshine_tts::kG2pPortugueseDictOverrideKey;
+  using moonshine_tts::kG2pRussianDictKey;
+
   std::string dialect_str = "en_us";
   MoonshineG2POptions opt;
   bool model_root_from_cli = false;
@@ -152,11 +170,11 @@ int main(int argc, char **argv) {
     if (a == "--print-spanish-dialects") {
       print_spanish_dialects = true;
     } else if ((a == "--dict" || a == "-d") && i + 1 < argc) {
-      opt.english_dict_path = argv[++i];
+      opt.files.set_path(kG2pEnglishDictKey, argv[++i]);
     } else if (a == "--heteronym-onnx" && i + 1 < argc) {
-      opt.heteronym_onnx_override = argv[++i];
+      opt.files.set_path(kG2pHeteronymOnnxOverrideKey, argv[++i]);
     } else if (a == "--oov-onnx" && i + 1 < argc) {
-      opt.oov_onnx_override = argv[++i];
+      opt.files.set_path(kG2pOovOnnxOverrideKey, argv[++i]);
     } else if (a == "--cuda") {
       opt.use_cuda = true;
     } else if (a == "--log-words" || a == "-v") {
@@ -169,34 +187,34 @@ int main(int argc, char **argv) {
     } else if ((a == "--language" || a == "--lang") && i + 1 < argc) {
       dialect_str = argv[++i];
     } else if (a == "--model-root" && i + 1 < argc) {
-      opt.model_root = argv[++i];
+      opt.g2p_root = argv[++i];
       model_root_from_cli = true;
     } else if (a == "--german-dict" && i + 1 < argc) {
-      opt.german_dict_path = argv[++i];
+      opt.files.set_path(kG2pGermanDictKey, argv[++i]);
     } else if (a == "--chinese-dict" && i + 1 < argc) {
-      opt.chinese_dict_path = argv[++i];
+      opt.files.set_path(kG2pChineseDictKey, argv[++i]);
     } else if (a == "--chinese-onnx-dir" && i + 1 < argc) {
-      opt.chinese_onnx_model_dir = argv[++i];
+      opt.files.set_path(kG2pChineseOnnxDirKey, argv[++i]);
     } else if (a == "--korean-dict" && i + 1 < argc) {
-      opt.korean_dict_path = argv[++i];
+      opt.files.set_path(kG2pKoreanDictKey, argv[++i]);
     } else if (a == "--japanese-dict" && i + 1 < argc) {
-      opt.japanese_dict_path = argv[++i];
+      opt.files.set_path(kG2pJapaneseDictKey, argv[++i]);
     } else if (a == "--japanese-onnx-dir" && i + 1 < argc) {
-      opt.japanese_onnx_model_dir = argv[++i];
+      opt.files.set_path(kG2pJapaneseOnnxDirKey, argv[++i]);
     } else if (a == "--arabic-dict" && i + 1 < argc) {
-      opt.arabic_dict_path = argv[++i];
+      opt.files.set_path(kG2pArabicDictKey, argv[++i]);
     } else if (a == "--arabic-onnx-dir" && i + 1 < argc) {
-      opt.arabic_onnx_model_dir = argv[++i];
+      opt.files.set_path(kG2pArabicOnnxDirKey, argv[++i]);
     } else if (a == "--no-korean-expand-digits") {
       opt.korean_expand_cardinal_digits = false;
     } else if (a == "--russian-dict" && i + 1 < argc) {
-      opt.russian_dict_path = argv[++i];
+      opt.files.set_path(kG2pRussianDictKey, argv[++i]);
     } else if (a == "--russian-syllable-initial-stress") {
       opt.russian_vocoder_stress = false;
     } else if (a == "--dutch-dict" && i + 1 < argc) {
-      opt.dutch_dict_path = argv[++i];
+      opt.files.set_path(kG2pDutchDictKey, argv[++i]);
     } else if (a == "--portuguese-dict" && i + 1 < argc) {
-      opt.portuguese_dict_path = argv[++i];
+      opt.files.set_path(kG2pPortugueseDictOverrideKey, argv[++i]);
     } else if (a == "--portuguese-syllable-initial-stress") {
       opt.portuguese_vocoder_stress = false;
     } else if (a == "--no-portuguese-expand-digits") {
@@ -206,13 +224,13 @@ int main(int argc, char **argv) {
     } else if (a == "--no-ukrainian-expand-digits") {
       opt.ukrainian_expand_cardinal_digits = false;
     } else if (a == "--hindi-dict" && i + 1 < argc) {
-      opt.hindi_dict_path = argv[++i];
+      opt.files.set_path(kG2pHindiDictKey, argv[++i]);
     } else if (a == "--no-hindi-expand-digits") {
       opt.hindi_expand_cardinal_digits = false;
     } else if (a == "--french-dict" && i + 1 < argc) {
-      opt.french_dict_path = argv[++i];
+      opt.files.set_path(kG2pFrenchDictKey, argv[++i]);
     } else if (a == "--french-csv-dir" && i + 1 < argc) {
-      opt.french_csv_dir = argv[++i];
+      opt.files.set_path(kG2pFrenchCsvDirKey, argv[++i]);
     } else if (a == "--no-french-liaison") {
       opt.french_liaison = false;
     } else if (a == "--no-french-oov") {
@@ -248,7 +266,7 @@ int main(int argc, char **argv) {
   }
 
   if (!model_root_from_cli) {
-    opt.model_root = moonshine_tts::builtin_cpp_data_root();
+    opt.g2p_root = moonshine_tts::builtin_cpp_data_root();
   }
 
   if (print_spanish_dialects) {

@@ -52,7 +52,7 @@ TEST_CASE("russian: MoonshineG2P ru uses rule backend and matches RussianRuleG2p
   const auto p = make_temp_tsv(
       "\xD1\x82\xD0\xB5\xD1\x81\xD1\x82\t\xCB\x88t\xC9\x9Bst\n");  // тест + IPA
   moonshine_tts::MoonshineG2POptions opt;
-  opt.russian_dict_path = p;
+  opt.files.set_path(moonshine_tts::kG2pRussianDictKey, p);
   moonshine_tts::MoonshineG2P g("ru", opt);
   CHECK(g.uses_russian_rules());
   CHECK_FALSE(g.uses_onnx());
@@ -66,7 +66,7 @@ TEST_CASE("russian: MoonshineG2P ru uses rule backend and matches RussianRuleG2p
 
 TEST_CASE("russian: litva matches reference IPA when data and golden exist") {
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const std::filesystem::path dict = repo / "data" / "ru" / "dict.tsv";
+  const std::filesystem::path dict = r::moonshine_tts_bundled_data_dir_relative() / "ru" / "dict.tsv";
   const std::filesystem::path golden = r::tests_data_dir(repo) / "ru" / "rule_g2p_litva_word.txt";
   if (!std::filesystem::is_regular_file(dict) || !std::filesystem::is_regular_file(golden)) {
     return;
@@ -78,7 +78,7 @@ TEST_CASE("russian: litva matches reference IPA when data and golden exist") {
 
 TEST_CASE("russian: Cyrillic preposition plus 1891 matches reference IPA when data and golden exist") {
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const std::filesystem::path dict = repo / "data" / "ru" / "dict.tsv";
+  const std::filesystem::path dict = r::moonshine_tts_bundled_data_dir_relative() / "ru" / "dict.tsv";
   const std::filesystem::path golden = r::tests_data_dir(repo) / "ru" / "rule_g2p_v_1891_line.txt";
   if (!std::filesystem::is_regular_file(dict) || !std::filesystem::is_regular_file(golden)) {
     return;
@@ -92,8 +92,8 @@ TEST_CASE("russian: Cyrillic preposition plus 1891 matches reference IPA when da
 TEST_CASE("russian: wiki-text first 100 lines match reference IPA when data and golden exist") {
   constexpr std::size_t kWikiParityLines = 100;
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const std::filesystem::path dict = repo / "data" / "ru" / "dict.tsv";
-  const std::filesystem::path wiki = repo / "data" / "ru" / "wiki-text.txt";
+  const std::filesystem::path dict = r::moonshine_tts_bundled_data_dir_relative() / "ru" / "dict.tsv";
+  const std::filesystem::path wiki = r::moonshine_tts_bundled_data_dir_relative() / "ru" / "wiki-text.txt";
   const std::filesystem::path golden = r::tests_data_dir(repo) / "ru" / "rule_g2p_wiki_100.txt";
   if (!std::filesystem::is_regular_file(dict) || !std::filesystem::is_regular_file(wiki) ||
       !std::filesystem::is_regular_file(golden)) {

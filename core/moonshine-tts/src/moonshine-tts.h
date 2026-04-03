@@ -1,60 +1,83 @@
 #ifndef MOONSHINE_TTS_MOONSHINE_TTS_H
 #define MOONSHINE_TTS_MOONSHINE_TTS_H
 
-#include "builtin-cpp-data-root.h"
-#include "moonshine-g2p-options.h"
-
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
-/** Moonshine Text to Speech C++ library: shared grapheme-to-phoneme (\c MoonshineG2P) plus multiple synthesis
- *  backends—open-source Kokoro and Piper (ONNX), and Moonshine AI in-house acoustic models where shipped.
- *  This header focuses on the Kokoro-backed \c MoonshineTTS API; \c PiperTTS is declared in \c piper-tts.h. */
+#include "builtin-cpp-data-root.h"
+#include "file-information.h"
+#include "moonshine-g2p-options.h"
+
 namespace moonshine_tts {
 
-/// Default Kokoro bundle: ``data/kokoro`` at the repository root (``config.json``, ``model.onnx``, ``voices/``).
-std::filesystem::path builtin_kokoro_bundle_dir();
+using MoonshineTTSFileInformation = FileInformation;
 
-/// When ``moonshine-tts`` lives at ``<repo>/moonshine-tts/`` and ``<repo>/models/kokoro/model.onnx`` exists
-/// and is strictly larger than ``moonshine-tts/data/kokoro/model.onnx``, returns ``<repo>/models/kokoro``.
-/// Otherwise returns an empty path. Monorepos often keep the full Kokoro graph under ``models/kokoro`` while
-/// the submodule bundles a smaller ONNX; the speak CLI uses this to default to the higher-fidelity model.
+/// Canonical keys for TTS asset paths (relative to ``g2p_options.g2p_root`` unless paths are absolute).
+inline constexpr std::string_view kTtsKokoroModelOnnxKey = "kokoro/model.onnx";
+inline constexpr std::string_view kTtsKokoroConfigJsonKey = "kokoro/config.json";
+/// Optional explicit Piper ONNX model (``*.onnx``).
+inline constexpr std::string_view kTtsPiperOnnxKey = "piper/onnx";
+/// Optional Piper model config (``*.onnx.json``) when it is not beside the ONNX file.
+inline constexpr std::string_view kTtsPiperOnnxJsonKey = "piper/onnx.json";
+/// Optional Piper voice directory (``*.onnx``) when ``kTtsPiperOnnxKey`` is unset.
+inline constexpr std::string_view kTtsPiperVoicesKey = "piper/voices";
+/// Optional directory of ``*.onnx.json`` files parallel to ``kTtsPiperVoicesKey`` (same basename rules).
+inline constexpr std::string_view kTtsPiperVoicesJsonKey = "piper/voices_json";
+
+std::filesystem::path builtin_kokoro_bundle_dir();
 std::filesystem::path preferred_parent_models_kokoro_dir();
 
-/// Configuration for the Kokoro-backed ``MoonshineTTS`` path (bundle layout, G2P, ONNX Runtime providers).
+/// Shared configuration for ``MoonshineTTS`` (Kokoro and Piper file paths, G2P, ORT, CLI-oriented fields).
+/// Vocoder assets use ``files`` (same pattern as ``MoonshineG2POptions::files``). The **language** is passed to
+/// ``MoonshineTTS``'s constructor.
 struct MoonshineTTSOptions {
-  /// Directory with ``config.json``, ``model.onnx``, and ``voices/*.kokorovoice`` (see
-  /// ``scripts/export_kokoro_voice_for_cpp.py``). Empty → ``builtin_kokoro_bundle_dir()``.
-  std::filesystem::path kokoro_dir{};
-  /// Locale tag: built-ins like ``en_us``, ``es``, ``ja``, or any Spanish rule id (``es_mx``, ``es-AR``, …).
-  std::string lang = "en_us";
-  /// Kokoro voice id (e.g. ``af_heart``). Empty → default for ``lang``.
+  MoonshineTTSOptions();
+
+  std::vector<MoonshineTTSFileInformation> file_information{};
+  /// Kokoro voice id (e.g. ``af_heart``) or Piper ONNX stem/basename when using Piper.
   std::string voice{};
   double speed = 1.0;
-  /// When true (default), ``g2p_options.model_root`` is replaced with ``builtin_cpp_data_root()`` (the
-  /// ``cpp/data`` tree: ``ja/``, ``en_us/``, ``zh_hans/``, …). Set false to use your own ``model_root``.
   bool use_bundled_cpp_g2p_data = true;
-  MoonshineG2POptions g2p_options{};
-  /// ONNX Runtime provider names (e.g. ``CUDAExecutionProvider``). Empty → CPU only.
   std::vector<std::string> ort_provider_names{};
+  MoonshineG2POptions g2p_options{};
+  FileInformationMap files{};
+  /// ``kokoro``, ``piper``, or ``auto`` (pick Kokoro when ``kokoro_tts_lang_supported(language, g2p_options)``).
+  std::string vocoder_engine = "auto";
+  bool piper_normalize_audio = true;
+  float piper_output_volume = 1.F;
+  std::optional<float> piper_noise_scale_override{};
+  std::optional<float> piper_noise_w_override{};
+  /// Default WAV path for CLI-style tooling (``-o`` / ``output`` in ``parse_options``).
+  std::filesystem::path output_path = "out.wav";
+
+  /// Relative or absolute path from ``files`` for key *k*, else ``std::filesystem::path(k)``.
+  std::filesystem::path tts_relative_path(std::string_view canonical_key) const;
+
+  /// Parses ``key=value``-style entries. G2P-specific keys are forwarded to ``g2p_options``.
+  ///
+  /// If ``cli_language`` is null and an entry names ``lang`` or ``language``, throws.
+  /// If non-null, those keys write into ``*cli_language`` and set ``*language_was_set`` when provided.
+  ///
+  /// ``model_root`` / ``path_root`` / ``tts_root`` set ``g2p_options.g2p_root`` and disable bundled G2P data.
+  /// Piper file keys: ``piper_onnx``, ``piper_onnx_json``, ``piper_voices_dir``, ``piper_voices_json_dir``
+  /// (hyphenated CLI flags are accepted). Other keys forward to ``g2p_options``.
+  void parse_options(const std::vector<std::pair<std::string, std::string>>& options,
+                     std::string* cli_language = nullptr,
+                     bool* language_was_set = nullptr);
 };
 
-/// True when ``MoonshineTTS`` / the Kokoro path accepts ``lang_cli`` (built-in Kokoro locales plus Spanish rule
-/// dialects). Used by the ``moonshine_tts`` CLI to choose Kokoro vs ``PiperTTS`` or other backends.
 bool kokoro_tts_lang_supported(std::string_view lang_cli, const MoonshineG2POptions& g2p_opt = {});
 
-/// Primary class for **Kokoro** synthesis in the Moonshine Text to Speech library.
-///
-/// This type composes ``MoonshineG2P`` with the Kokoro ONNX model and voices. The library as a whole also
-/// supports **Piper** (``PiperTTS``) and **Moonshine AI** in-house models on other code paths; see the
-/// namespace overview above. Options and bundled data paths are set through ``MoonshineTTSOptions``.
+/// Unified TTS: **Kokoro** and **Piper** ONNX backends; shared ``MoonshineG2P`` where applicable.
 class MoonshineTTS {
  public:
-  explicit MoonshineTTS(const MoonshineTTSOptions& opt);
+  MoonshineTTS(std::string_view language, const MoonshineTTSOptions& opt);
   MoonshineTTS(const MoonshineTTS&) = delete;
   MoonshineTTS& operator=(const MoonshineTTS&) = delete;
   MoonshineTTS(MoonshineTTS&&) noexcept;
@@ -63,8 +86,6 @@ class MoonshineTTS {
 
   static constexpr int kSampleRateHz = 24000;
 
-  /// Kokoro path: text → IPA (Moonshine G2P) → Kokoro phoneme string → ONNX → mono float waveform at
-  /// ``kSampleRateHz``. (Piper and in-house Moonshine backends use their respective APIs.)
   std::vector<float> synthesize(std::string_view text);
 
  private:
@@ -72,9 +93,9 @@ class MoonshineTTS {
   std::unique_ptr<Impl> impl_;
 };
 
-/// Writes mono 16-bit PCM WAV at ``MoonshineTTS::kSampleRateHz`` (samples clipped to [-1, 1]).
-void write_wav_mono_pcm16(const std::filesystem::path& path, const std::vector<float>& samples);
+void write_wav_mono_pcm16(const std::filesystem::path& path,
+                          const std::vector<float>& samples);
 
 }  // namespace moonshine_tts
 
-#endif  // MOONSHINE_TTS_MOONSHINE_TTS_H
+#endif

@@ -94,6 +94,13 @@ inline std::vector<std::string> read_text_first_lines(const std::filesystem::pat
   return src;
 }
 
+/// Path to the bundled ``moonshine-tts`` data tree, relative to the monorepo repository root.
+/// Tests that use this path must run with the process current working directory set to that root
+/// (see ``moonshine_tts_add_test`` in CMake).
+inline std::filesystem::path moonshine_tts_bundled_data_dir_relative() {
+  return std::filesystem::path("core") / "moonshine-tts" / "data";
+}
+
 }  // namespace moonshine_tts::rule_g2p_test
 
 #endif  // MOONSHINE_TTS_TESTS_RULE_G2P_TEST_SUPPORT_H

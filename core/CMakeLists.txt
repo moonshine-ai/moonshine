@@ -168,6 +168,20 @@ else()
     )
 endif()
 
+if(MOONSHINE_TTS_BUILD_ONNX AND NOT (IOS OR MOONSHINE_BUILD_SWIFT))
+    target_link_libraries(moonshine PRIVATE moonshine_tts_ort)
+    target_include_directories(moonshine PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-tts/src
+    )
+    target_compile_definitions(moonshine PRIVATE MOONSHINE_C_API_MOONSHINE_TTS=1)
+    moonshine_tts_set_ort_rpath(moonshine)
+    if(WIN32)
+        copy_onnxruntime_dll(moonshine)
+    endif()
+else()
+    target_compile_definitions(moonshine PRIVATE MOONSHINE_C_API_MOONSHINE_TTS=0)
+endif()
+
 add_executable(moonshine-c-api-test moonshine-c-api-test.cpp)
 set_target_properties(moonshine-c-api-test PROPERTIES
     CXX_STANDARD 20

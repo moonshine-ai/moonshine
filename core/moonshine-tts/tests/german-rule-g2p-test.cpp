@@ -89,7 +89,7 @@ TEST_CASE("german: text token preserves comma") {
 
 TEST_CASE("german: Im Jahr 1891 matches reference IPA when data and golden exist") {
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const std::filesystem::path dict = repo / "data" / "de" / "dict.tsv";
+  const std::filesystem::path dict = r::moonshine_tts_bundled_data_dir_relative() / "de" / "dict.tsv";
   const std::filesystem::path golden = r::tests_data_dir(repo) / "de" / "rule_g2p_im_jahr_1891.txt";
   if (!std::filesystem::is_regular_file(dict) || !std::filesystem::is_regular_file(golden)) {
     return;
@@ -102,8 +102,8 @@ TEST_CASE("german: Im Jahr 1891 matches reference IPA when data and golden exist
 TEST_CASE("german: wiki-text first 100 lines match reference IPA when data and golden exist") {
   constexpr std::size_t kWikiParityLines = 100;
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const std::filesystem::path dict = repo / "data" / "de" / "dict.tsv";
-  const std::filesystem::path wiki = repo / "data" / "de" / "wiki-text.txt";
+  const std::filesystem::path dict = r::moonshine_tts_bundled_data_dir_relative() / "de" / "dict.tsv";
+  const std::filesystem::path wiki = r::moonshine_tts_bundled_data_dir_relative() / "de" / "wiki-text.txt";
   const std::filesystem::path golden = r::tests_data_dir(repo) / "de" / "rule_g2p_wiki_100.txt";
   if (!std::filesystem::is_regular_file(dict) || !std::filesystem::is_regular_file(wiki) ||
       !std::filesystem::is_regular_file(golden)) {

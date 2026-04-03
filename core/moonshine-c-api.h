@@ -595,25 +595,28 @@ moonshine_clear_intents(int32_t intent_recognizer_handle);
 /* ------------------------------ TEXT TO SPEECH ------------------------- */
 
 /* Creates a text to speech synthesizer from files on disk.
-   Returns a non-negative handle on success, or a negative error code on
+   Returns a non-negative handle on success, or a non-zero error code on
    failure. The error code can be converted to a human-readable string using
    moonshine_error_to_string.
+   Pass Kokoro voice id or Piper ONNX stem via option ``voice`` (and other TTS
+   paths via ``moonshine_option_t`` as documented for ``MoonshineTTSOptions``).
 */
 MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_files(
-    const char *language, const char *voice, const char **filenames,
-    uint64_t filenames_count, const struct moonshine_option_t *options,
-    uint64_t options_count, int32_t moonshine_version);
+    const char *language, const char **filenames, uint64_t filenames_count,
+    const struct moonshine_option_t *options, uint64_t options_count,
+    int32_t moonshine_version);
 
 /* Creates a text to speech synthesizer from memory.
-   Returns a non-negative handle on success, or a negative error code on
+   Returns a non-negative handle on success, or a non-zero error code on
    failure. The error code can be converted to a human-readable string using
    moonshine_error_to_string.
+   Pass voice and asset layout via ``options`` (same as ``from_files``).
 */
 MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_memory(
-    const char *language, const char *voice, const char **filenames,
-    const uint64_t filenames_count, const uint8_t **memory,
-    const uint64_t *memory_sizes, const struct moonshine_option_t *options,
-    uint64_t options_count, int32_t moonshine_version);
+    const char *language, const char **filenames, const uint64_t filenames_count,
+    const uint8_t **memory, const uint64_t *memory_sizes,
+    const struct moonshine_option_t *options, uint64_t options_count,
+    int32_t moonshine_version);
 
 /* Releases the resources used by a text to speech synthesizer.
    Returns zero on success, or a non-zero error code on failure.
@@ -624,10 +627,11 @@ MOONSHINE_EXPORT void moonshine_free_tts_synthesizer(
 /* Synthesizes text to speech.
    Returns zero on success, or a non-zero error code on failure.
 */
-MOONSHINE_EXPORT int32_t moonshine_synthesize_text_to_speech(
-    int32_t tts_synthesizer_handle, const char *text, float **out_audio_data,
-    uint64_t *out_audio_data_size, const struct moonshine_option_t *options,
-    uint64_t options_count);
+MOONSHINE_EXPORT int32_t moonshine_text_to_speech(
+    int32_t tts_synthesizer_handle, const char *text,
+    const struct moonshine_option_t *options, uint64_t options_count,
+    float **out_audio_data, uint64_t *out_audio_data_size,
+    int32_t *out_sample_rate);
 
 /* Creates a grapheme to phonemizer from files on disk.
    Returns a non-negative handle on success, or a negative error code on
@@ -661,8 +665,8 @@ MOONSHINE_EXPORT void moonshine_free_grapheme_to_phonemizer(
 */
 MOONSHINE_EXPORT int32_t moonshine_text_to_phonemes(
     int32_t grapheme_to_phonemizer_handle, const char *text,
-    const char **out_phonemes, uint64_t *out_phonemes_count,
-    const struct moonshine_option_t *options, uint64_t options_count);
+    const struct moonshine_option_t *options, uint64_t options_count,
+    const char **out_phonemes, uint64_t *out_phonemes_count);
 
 #ifdef __cplusplus
 }

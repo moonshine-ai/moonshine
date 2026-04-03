@@ -56,7 +56,7 @@ TEST_CASE("portuguese: lexicon stress not shifted by vocoder") {
 
 TEST_CASE("portuguese: casa matches reference IPA when data and golden exist") {
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const std::filesystem::path dict = repo / "data" / "pt_br" / "dict.tsv";
+  const std::filesystem::path dict = r::moonshine_tts_bundled_data_dir_relative() / "pt_br" / "dict.tsv";
   const std::filesystem::path golden = r::tests_data_dir(repo) / "pt_br" / "rule_g2p_casa.txt";
   if (!std::filesystem::is_regular_file(dict) || !std::filesystem::is_regular_file(golden)) {
     return;
@@ -69,8 +69,8 @@ TEST_CASE("portuguese: casa matches reference IPA when data and golden exist") {
 TEST_CASE("portuguese: wiki-text first 100 lines pt_br match reference IPA when data and golden exist") {
   constexpr std::size_t kWikiParityLines = 100;
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const std::filesystem::path dict = repo / "data" / "pt_br" / "dict.tsv";
-  const std::filesystem::path wiki = repo / "data" / "pt_br" / "wiki-text.txt";
+  const std::filesystem::path dict = r::moonshine_tts_bundled_data_dir_relative() / "pt_br" / "dict.tsv";
+  const std::filesystem::path wiki = r::moonshine_tts_bundled_data_dir_relative() / "pt_br" / "wiki-text.txt";
   const std::filesystem::path golden = r::tests_data_dir(repo) / "pt_br" / "rule_g2p_wiki_100.txt";
   if (!std::filesystem::is_regular_file(dict) || !std::filesystem::is_regular_file(wiki) ||
       !std::filesystem::is_regular_file(golden)) {
@@ -89,8 +89,8 @@ TEST_CASE("portuguese: wiki-text first 100 lines pt_br match reference IPA when 
 TEST_CASE("portuguese: wiki-text first 100 lines pt_pt match reference IPA when data and golden exist") {
   constexpr std::size_t kWikiParityLines = 100;
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const std::filesystem::path dict = repo / "data" / "pt_pt" / "dict.tsv";
-  const std::filesystem::path wiki = repo / "data" / "pt_pt" / "wiki-text.txt";
+  const std::filesystem::path dict = r::moonshine_tts_bundled_data_dir_relative() / "pt_pt" / "dict.tsv";
+  const std::filesystem::path wiki = r::moonshine_tts_bundled_data_dir_relative() / "pt_pt" / "wiki-text.txt";
   const std::filesystem::path golden = r::tests_data_dir(repo) / "pt_pt" / "rule_g2p_wiki_100.txt";
   if (!std::filesystem::is_regular_file(dict) || !std::filesystem::is_regular_file(wiki) ||
       !std::filesystem::is_regular_file(golden)) {

@@ -17,7 +17,7 @@ TEST_CASE("MoonshineG2P en_us rule-based when MOONSHINE_TTS_MODELS_ROOT is set")
     return;
   }
   MoonshineG2POptions opt;
-  opt.model_root = std::filesystem::path(root).parent_path();
+  opt.g2p_root = std::filesystem::path(root).parent_path();
   const std::string dialect_dir = std::filesystem::path(root).filename().string();
   MoonshineG2P g2p(dialect_dir, opt);
   CHECK_FALSE(g2p.uses_onnx());
@@ -29,14 +29,13 @@ TEST_CASE("MoonshineG2P en_us rule-based when MOONSHINE_TTS_MODELS_ROOT is set")
 }
 
 TEST_CASE("MoonshineG2P ja-JP when data/ja assets exist under repo") {
-  const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const auto ja_onnx = repo / "data" / "ja" / "roberta_japanese_char_luw_upos_onnx" / "model.onnx";
-  const auto ja_dict = repo / "data" / "ja" / "dict.tsv";
+  const auto ja_onnx = r::moonshine_tts_bundled_data_dir_relative() / "ja" / "roberta_japanese_char_luw_upos_onnx" / "model.onnx";
+  const auto ja_dict = r::moonshine_tts_bundled_data_dir_relative() / "ja" / "dict.tsv";
   if (!std::filesystem::is_regular_file(ja_onnx) || !std::filesystem::is_regular_file(ja_dict)) {
     return;
   }
   MoonshineG2POptions opt;
-  opt.model_root = repo / "models";
+  opt.g2p_root = r::moonshine_tts_bundled_data_dir_relative();
   MoonshineG2P g2p("ja", opt);
   CHECK(g2p.uses_japanese_rules());
   CHECK_FALSE(g2p.uses_korean_rules());

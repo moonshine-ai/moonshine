@@ -56,6 +56,8 @@ SOFTWARE.
 #include "ort-utils.h"
 #include "string-utils.h"
 #include "transcriber.h"
+#include "moonshine-tts.h"
+
 
 // Defined as a macro to ensure we get meaningful line numbers in the error
 // message.
@@ -94,7 +96,8 @@ void parse_transcriber_options(const moonshine_option_t *in_options,
     } else if (option_name == "vad_hop_size") {
       out_options.vad_hop_size = int32_from_string(in_option.value);
     } else if (option_name == "vad_look_behind_sample_count") {
-      out_options.vad_look_behind_sample_count = size_t_from_string(in_option.value);
+      out_options.vad_look_behind_sample_count =
+          size_t_from_string(in_option.value);
     } else if (option_name == "vad_max_segment_duration") {
       out_options.vad_max_segment_duration = float_from_string(in_option.value);
     } else if (option_name == "max_tokens_per_second") {
@@ -102,7 +105,8 @@ void parse_transcriber_options(const moonshine_option_t *in_options,
     } else if (option_name == "identify_speakers") {
       out_options.identify_speakers = bool_from_string(in_option.value);
     } else if (option_name == "speaker_id_cluster_threshold") {
-      out_options.speaker_id_cluster_threshold = float_from_string(in_option.value);
+      out_options.speaker_id_cluster_threshold =
+          float_from_string(in_option.value);
     } else if (option_name == "return_audio_data") {
       out_options.return_audio_data = bool_from_string(in_option.value);
     } else if (option_name == "log_output_text") {
@@ -411,12 +415,13 @@ void free_intent_recognizer_handle(int32_t handle) {
   intent_callback_map.erase(handle);
 }
 
-#define CHECK_INTENT_RECOGNIZER_HANDLE(handle)                                  \
-  do {                                                                          \
-    if (handle < 0 || !intent_recognizer_map.contains(handle)) {                \
-      LOGF("Moonshine intent recognizer handle is invalid: handle %d", handle); \
-      return MOONSHINE_ERROR_INVALID_HANDLE;                                    \
-    }                                                                           \
+#define CHECK_INTENT_RECOGNIZER_HANDLE(handle)                         \
+  do {                                                                 \
+    if (handle < 0 || !intent_recognizer_map.contains(handle)) {       \
+      LOGF("Moonshine intent recognizer handle is invalid: handle %d", \
+           handle);                                                    \
+      return MOONSHINE_ERROR_INVALID_HANDLE;                           \
+    }                                                                  \
   } while (0)
 
 }  // namespace
@@ -426,10 +431,11 @@ int32_t moonshine_create_intent_recognizer(const char *model_path,
                                            const char *model_variant,
                                            float threshold) {
   if (log_api_calls) {
-    LOGF("moonshine_create_intent_recognizer(model_path=%s, model_arch=%d, "
-         "model_variant=%s, threshold=%f)",
-         model_path, model_arch, model_variant ? model_variant : "q4",
-         threshold);
+    LOGF(
+        "moonshine_create_intent_recognizer(model_path=%s, model_arch=%d, "
+        "model_variant=%s, threshold=%f)",
+        model_path, model_arch, model_variant ? model_variant : "q4",
+        threshold);
   }
 
   if (model_path == nullptr) {
@@ -456,7 +462,8 @@ int32_t moonshine_create_intent_recognizer(const char *model_path,
 
 void moonshine_free_intent_recognizer(int32_t intent_recognizer_handle) {
   if (log_api_calls) {
-    LOGF("moonshine_free_intent_recognizer(handle=%d)", intent_recognizer_handle);
+    LOGF("moonshine_free_intent_recognizer(handle=%d)",
+         intent_recognizer_handle);
   }
   std::lock_guard<std::mutex> lock(intent_recognizer_map_mutex);
   if (intent_recognizer_map.contains(intent_recognizer_handle)) {
@@ -490,9 +497,8 @@ int32_t moonshine_register_intent(int32_t intent_recognizer_handle,
     // original pointer may become invalid after this function returns.
     std::string trigger_copy = trigger_phrase;
     intent_recognizer_map[intent_recognizer_handle]->register_intent(
-        trigger_phrase,
-        [callback, user_data, trigger_copy](const std::string &utterance,
-                                            float similarity) {
+        trigger_phrase, [callback, user_data, trigger_copy](
+                            const std::string &utterance, float similarity) {
           if (callback) {
             callback(user_data, trigger_copy.c_str(), utterance.c_str(),
                      similarity);
@@ -513,8 +519,9 @@ int32_t moonshine_unregister_intent(int32_t intent_recognizer_handle,
   }
   CHECK_INTENT_RECOGNIZER_HANDLE(intent_recognizer_handle);
   try {
-    bool result = intent_recognizer_map[intent_recognizer_handle]
-                      ->unregister_intent(trigger_phrase);
+    bool result =
+        intent_recognizer_map[intent_recognizer_handle]->unregister_intent(
+            trigger_phrase);
     if (!result) {
       return MOONSHINE_ERROR_INVALID_ARGUMENT;
     }
@@ -544,8 +551,9 @@ int32_t moonshine_process_utterance(int32_t intent_recognizer_handle,
   }
   CHECK_INTENT_RECOGNIZER_HANDLE(intent_recognizer_handle);
   try {
-    bool result = intent_recognizer_map[intent_recognizer_handle]
-                      ->process_utterance(utterance);
+    bool result =
+        intent_recognizer_map[intent_recognizer_handle]->process_utterance(
+            utterance);
     return result ? 1 : 0;
   } catch (const std::exception &e) {
     LOGF("Failed to process utterance: %s", e.what());
@@ -608,4 +616,196 @@ int32_t moonshine_clear_intents(int32_t intent_recognizer_handle) {
     return MOONSHINE_ERROR_UNKNOWN;
   }
   return MOONSHINE_ERROR_NONE;
+}
+
+/* ------------------------------ TEXT TO SPEECH ------------------------- */
+
+namespace {
+
+std::mutex text_to_speech_synthesizer_map_mutex;
+std::map<int32_t, moonshine_tts::MoonshineTTS *> text_to_speech_synthesizer_map;
+int32_t next_text_to_speech_synthesizer_handle = 0;
+
+int32_t allocate_text_to_speech_synthesizer_handle(moonshine_tts::MoonshineTTS *synthesizer) {
+  std::lock_guard<std::mutex> lock(text_to_speech_synthesizer_map_mutex);
+  int32_t handle = next_text_to_speech_synthesizer_handle++;
+  text_to_speech_synthesizer_map[handle] = synthesizer;
+  return handle;
+}
+
+void parse_tts_options(const moonshine_option_t *in_options,
+                       uint64_t in_options_count,
+                       moonshine_tts::MoonshineTTSOptions &out_options,
+                       std::string &cli_language_out, bool &language_was_set_out) {
+  std::vector<std::pair<std::string, std::string>> options;
+  for (uint64_t i = 0; i < in_options_count; i++) {
+    const moonshine_option_t &option = in_options[i];
+    options.push_back(std::make_pair(option.name, option.value));
+  }
+  language_was_set_out = false;
+  out_options.parse_options(options, &cli_language_out, &language_was_set_out);
+}
+
+#define CHECK_TTS_SYNTHESIZER_HANDLE(synth_handle)                                          \
+  do {                                                                                      \
+    if ((synth_handle) < 0 ||                                                               \
+        !text_to_speech_synthesizer_map.contains((synth_handle))) {                       \
+      LOGF("Moonshine text to speech synthesizer handle is invalid: handle %d",           \
+           (int)(synth_handle));                                                            \
+      return MOONSHINE_ERROR_INVALID_HANDLE;                                                \
+    }                                                                                       \
+  } while (0)
+
+}  // namespace
+
+int32_t moonshine_create_tts_synthesizer_from_files(
+    const char *language, const char **filenames, uint64_t filenames_count,
+    const struct moonshine_option_t *options, uint64_t options_count,
+    int32_t moonshine_version) {
+  (void)filenames;
+  (void)filenames_count;
+  if (log_api_calls) {
+    LOGF(
+        "moonshine_create_tts_synthesizer_from_files(language=%s, "
+        "filenames=%p, filenames_count=%llu, options=%p, options_count=%llu, "
+        "moonshine_version=%d)",
+        language, reinterpret_cast<const void *>(filenames),
+        static_cast<unsigned long long>(filenames_count),
+        static_cast<const void *>(options),
+        static_cast<unsigned long long>(options_count), moonshine_version);
+  }
+  moonshine_tts::MoonshineTTSOptions tts_options;
+  std::string lang_from_options;
+  bool lang_from_options_set = false;
+  parse_tts_options(options, options_count, tts_options, lang_from_options,
+                    lang_from_options_set);
+  std::string lang =
+      (language != nullptr && language[0] != '\0') ? std::string(language) : std::string("en_us");
+  if (lang_from_options_set) {
+    lang = std::move(lang_from_options);
+  }
+  auto *synthesizer = new moonshine_tts::MoonshineTTS(lang, tts_options);
+  return allocate_text_to_speech_synthesizer_handle(synthesizer);
+}
+
+/* Releases the resources used by a text to speech synthesizer.
+ Returns zero on success, or a non-zero error code on failure.
+*/
+void moonshine_free_tts_synthesizer(int32_t tts_synthesizer_handle) {
+  if (log_api_calls) {
+    LOGF("moonshine_free_tts_synthesizer(handle=%d)", tts_synthesizer_handle);
+  }
+  std::lock_guard<std::mutex> lock(text_to_speech_synthesizer_map_mutex);
+  if (text_to_speech_synthesizer_map.contains(tts_synthesizer_handle)) {
+    delete text_to_speech_synthesizer_map[tts_synthesizer_handle];
+    text_to_speech_synthesizer_map[tts_synthesizer_handle] = nullptr;
+    text_to_speech_synthesizer_map.erase(tts_synthesizer_handle);
+  }
+}
+
+/* Synthesizes text to speech.
+ Returns zero on success, or a non-zero error code on failure.
+*/
+int32_t moonshine_text_to_speech(int32_t tts_synthesizer_handle,
+                                 const char *text,
+                                 const struct moonshine_option_t *options,
+                                 uint64_t options_count, float **out_audio_data,
+                                 uint64_t *out_audio_data_size,
+                                 int32_t *out_sample_rate) {
+  if (log_api_calls) {
+    LOGF(
+        "moonshine_text_to_speech(handle=%d, text=%s, options=%p, "
+        "options_count=%llu, out_audio_data=%p, out_audio_data_size=%p, "
+        "out_sample_rate=%p)",
+        tts_synthesizer_handle, text, static_cast<const void *>(options),
+        static_cast<unsigned long long>(options_count),
+        static_cast<void *>(out_audio_data),
+        static_cast<void *>(out_audio_data_size),
+        static_cast<void *>(out_sample_rate));
+  }
+  CHECK_TTS_SYNTHESIZER_HANDLE(tts_synthesizer_handle);
+  try {
+    moonshine_tts::MoonshineTTS *synth =
+        text_to_speech_synthesizer_map[tts_synthesizer_handle];
+    const std::vector<float> wave = synth->synthesize(text);
+    *out_sample_rate = moonshine_tts::MoonshineTTS::kSampleRateHz;
+    *out_audio_data_size = wave.size();
+    *out_audio_data = nullptr;
+    if (!wave.empty()) {
+      *out_audio_data = static_cast<float *>(std::malloc(wave.size() * sizeof(float)));
+      if (*out_audio_data == nullptr) {
+        return MOONSHINE_ERROR_UNKNOWN;
+      }
+      std::memcpy(*out_audio_data, wave.data(), wave.size() * sizeof(float));
+    }
+  } catch (const std::exception &e) {
+    LOGF("Failed to synthesize text to speech: %s", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+  return MOONSHINE_ERROR_NONE;
+}
+
+/* Creates a grapheme to phonemizer from files on disk.
+ Returns a non-negative handle on success, or a negative error code on
+ failure. The error code can be converted to a human-readable string using
+ moonshine_error_to_string.
+*/
+int32_t moonshine_create_grapheme_to_phonemizer_from_files(
+    const char *language, const char **filenames, uint64_t filenames_count,
+    const struct moonshine_option_t *options, uint64_t options_count,
+    int32_t moonshine_version) {
+  (void)language;
+  (void)filenames;
+  (void)filenames_count;
+  (void)options;
+  (void)options_count;
+  (void)moonshine_version;
+  return MOONSHINE_ERROR_UNKNOWN;
+}
+
+/* Creates a grapheme to phonemizer from memory.
+ Returns a non-negative handle on success, or a negative error code on
+ failure. The error code can be converted to a human-readable string using
+ moonshine_error_to_string.
+*/
+int32_t moonshine_create_grapheme_to_phonemizer_from_memory(
+    const char *language, const char **filenames,
+    const uint64_t filenames_count, const uint8_t **memory,
+    const uint64_t *memory_sizes, const struct moonshine_option_t *options,
+    uint64_t options_count, int32_t moonshine_version) {
+  (void)language;
+  (void)filenames;
+  (void)filenames_count;
+  (void)memory;
+  (void)memory_sizes;
+  (void)options;
+  (void)options_count;
+  (void)moonshine_version;
+  return MOONSHINE_ERROR_UNKNOWN;
+}
+
+/* Releases the resources used by a grapheme to phonemizer.
+ Returns zero on success, or a non-zero error code on failure.
+*/
+void moonshine_free_grapheme_to_phonemizer(
+    int32_t grapheme_to_phonemizer_handle) {
+  (void)grapheme_to_phonemizer_handle;
+}
+
+/* Converts a text into the equivalent International Phonetic Alphabet (IPA)
+ phonemes. Returns zero on success, or a non-zero error code on failure.
+*/
+int32_t moonshine_text_to_phonemes(int32_t grapheme_to_phonemizer_handle,
+                                   const char *text,
+                                   const struct moonshine_option_t *options,
+                                   uint64_t options_count,
+                                   const char **out_phonemes,
+                                   uint64_t *out_phonemes_count) {
+  (void)grapheme_to_phonemizer_handle;
+  (void)text;
+  (void)options;
+  (void)options_count;
+  (void)out_phonemes;
+  (void)out_phonemes_count;
+  return MOONSHINE_ERROR_UNKNOWN;
 }

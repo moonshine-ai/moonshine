@@ -1,6 +1,5 @@
-// CLI: Moonshine G2P + Kokoro or Piper ONNX → WAV.
+// CLI: Moonshine G2P + Kokoro or Piper ONNX → WAV (via MoonshineTTS).
 #include "moonshine-tts.h"
-#include "piper-tts.h"
 #include "utf8-utils.h"
 
 #include <cstdlib>
@@ -8,6 +7,7 @@
 #include <iostream>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -15,18 +15,23 @@ namespace {
 void usage(const char* argv0) {
   std::cerr
       << "Usage: " << argv0
-      << " [--engine kokoro|piper] [--model-root DIR] [--kokoro-dir DIR] [--piper-voices-dir DIR] "
+      << " [--engine kokoro|piper|auto] [--model-root DIR] [--kokoro-dir DIR] "
+         "[--piper-onnx PATH.onnx] [--piper-onnx-json PATH.onnx.json] [--piper-voices-dir DIR] "
+         "[--piper-voices-json-dir DIR] "
          "[--lang LANG] [--voice ID] [--speed N] [-o out.wav] [--text \"...\"] [TEXT...]\n"
       << "  G2P + layout: default ``builtin_cpp_data_root()`` (``cpp/data``). With ``--model-root DIR``, "
          "G2P uses ``DIR`` like ``cpp/data`` (``ja/``, ``en_us/``, ``zh_hans/``, …).\n"
-      << "  kokoro (default): ``kokoro/`` under model root (or ``--kokoro-dir`` override).\n"
-      << "  piper: ``<subdir>/piper-voices`` under model root (or ``--piper-voices-dir`` override).\n"
+      << "  engine auto (default): Kokoro when the language is supported, otherwise Piper.\n"
+      << "  kokoro: ``kokoro/`` under model root (or ``--kokoro-dir`` override).\n"
+      << "  piper: ``<subdir>/piper-voices`` under model root (or ``--piper-voices-dir`` / "
+         "``--piper-voices-json-dir`` for split ONNX vs JSON trees, or ``--piper-onnx`` + "
+         "``--piper-onnx-json`` for explicit files).\n"
       << "  If --lang is omitted, a simple script heuristic picks ja (kana), ko (Hangul), else en_us.\n"
-      << "  Custom layouts: use ``MoonshineTTS`` / ``PiperTTS`` from C++ with ``use_bundled_cpp_g2p_data = false``.\n"
+      << "  Custom layouts: use ``MoonshineTTS`` from C++ with ``use_bundled_cpp_g2p_data = false``.\n"
       << "  Export Kokoro voices: python scripts/export_kokoro_voice_for_cpp.py --voices-dir voices/\n"
       << "  Piper voices: python scripts/download_piper_voices_for_g2p.py (copy/sync to cpp/data/*/piper-voices).\n"
-      << "  --lang: Default engine Kokoro supports en_us, es, …, fr, ja, zh (and Spanish dialect ids); other "
-         "tags use Piper when ``--engine`` is omitted or ``kokoro``.\n"
+      << "  --lang: Kokoro supports en_us, es, …, fr, ja, zh (and Spanish dialect ids); other tags use Piper "
+         "when engine is auto or piper.\n"
       << "  --voice: Kokoro voice id (e.g. af_heart) or Piper ONNX stem/basename.\n"
       << "  Default output: out.wav. Default text if none: \"Hello world\".\n";
 }
@@ -56,71 +61,91 @@ std::optional<std::string> infer_lang_from_text_utf8(const std::string& text) {
   return std::nullopt;
 }
 
+std::string ascii_lowercase_copy(std::string_view s) {
+  std::string o(s);
+  for (char& c : o) {
+    if (c >= 'A' && c <= 'Z') {
+      c = static_cast<char>(c - 'A' + 'a');
+    }
+  }
+  return o;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
-  using moonshine_tts::kokoro_tts_lang_supported;
-  using moonshine_tts::MoonshineG2POptions;
+  using moonshine_tts::kTtsKokoroConfigJsonKey;
+  using moonshine_tts::kTtsKokoroModelOnnxKey;
   using moonshine_tts::MoonshineTTS;
   using moonshine_tts::MoonshineTTSOptions;
-  using moonshine_tts::PiperTTS;
-  using moonshine_tts::PiperTTSOptions;
+  using moonshine_tts::preferred_parent_models_kokoro_dir;
   using moonshine_tts::write_wav_mono_pcm16;
 
-  std::string engine = "kokoro";
-  std::filesystem::path model_root;
-  std::filesystem::path kokoro_dir;
-  std::filesystem::path piper_voices_dir;
-  std::string lang = "en_us";
-  bool lang_from_cli = false;
-  std::string voice;
-  std::string out_path = "out.wav";
-  std::string text_flag;
-  double speed = 1.0;
-
+  std::vector<std::pair<std::string, std::string>> pairs;
   std::vector<std::string> positionals;
-  for (int i = 1; i < argc; ++i) {
+  std::string text_flag;
+
+  for (int i = 1; i < argc;) {
     const std::string a = argv[i];
     if (a == "-h" || a == "--help") {
       usage(argv[0]);
       return 0;
     }
-    if (a == "--engine" && i + 1 < argc) {
-      engine = argv[++i];
-    } else if (a == "--model-root" && i + 1 < argc) {
-      model_root = argv[++i];
-    } else if (a == "--kokoro-dir" && i + 1 < argc) {
-      kokoro_dir = argv[++i];
-    } else if (a == "--piper-voices-dir" && i + 1 < argc) {
-      piper_voices_dir = argv[++i];
-    } else if (a == "--lang" && i + 1 < argc) {
-      lang = argv[++i];
-      lang_from_cli = true;
-    } else if (a == "--voice" && i + 1 < argc) {
-      voice = argv[++i];
-    } else if (a == "--speed" && i + 1 < argc) {
-      speed = std::strtod(argv[++i], nullptr);
-    } else if ((a == "-o" || a == "--output") && i + 1 < argc) {
-      out_path = argv[++i];
-    } else if (a == "--text" && i + 1 < argc) {
-      text_flag = argv[++i];
-    } else if (a.rfind("--", 0) == 0) {
-      std::cerr << "Unknown option: " << a << '\n';
-      usage(argv[0]);
-      return 2;
-    } else {
-      positionals.push_back(a);
+    if (a == "--text" && i + 1 < argc) {
+      text_flag = argv[i + 1];
+      i += 2;
+      continue;
     }
+    if (a == "-o" && i + 1 < argc) {
+      pairs.emplace_back("output", argv[i + 1]);
+      i += 2;
+      continue;
+    }
+    if (a.rfind("--", 0) == 0) {
+      const std::string key = a.substr(2);
+      if (key.empty()) {
+        std::cerr << "Empty option name.\n";
+        usage(argv[0]);
+        return 2;
+      }
+      if (i + 1 >= argc) {
+        std::cerr << "Missing value for --" << key << '\n';
+        usage(argv[0]);
+        return 2;
+      }
+      pairs.emplace_back(key, argv[i + 1]);
+      i += 2;
+      continue;
+    }
+    positionals.push_back(a);
+    ++i;
   }
 
-  if (engine != "kokoro" && engine != "piper") {
-    std::cerr << "Error: --engine must be kokoro or piper.\n";
+  MoonshineTTSOptions opt;
+  std::string lang = "en_us";
+  bool lang_set = false;
+  try {
+    opt.parse_options(pairs, &lang, &lang_set);
+  } catch (const std::exception& e) {
+    std::cerr << "Error: " << e.what() << '\n';
+    usage(argv[0]);
     return 2;
   }
 
-  if (engine == "kokoro" && kokoro_dir.empty() && model_root.empty()) {
-    if (std::filesystem::path p = moonshine_tts::preferred_parent_models_kokoro_dir(); !p.empty()) {
-      kokoro_dir = std::move(p);
+  if (opt.use_bundled_cpp_g2p_data && opt.g2p_options.g2p_root.empty()) {
+    const std::filesystem::path default_kokoro_model{kTtsKokoroModelOnnxKey};
+    if (opt.tts_relative_path(kTtsKokoroModelOnnxKey) == default_kokoro_model) {
+      std::string eng =
+          ascii_lowercase_copy(moonshine_tts::trim_ascii_ws_copy(opt.vocoder_engine));
+      if (eng.empty()) {
+        eng = "auto";
+      }
+      if (eng == "kokoro" || eng == "auto") {
+        if (std::filesystem::path p = preferred_parent_models_kokoro_dir(); !p.empty()) {
+          opt.files.set_path(kTtsKokoroModelOnnxKey, p / "model.onnx");
+          opt.files.set_path(kTtsKokoroConfigJsonKey, p / "config.json");
+        }
+      }
     }
   }
 
@@ -137,7 +162,7 @@ int main(int argc, char** argv) {
     text = "Hello world";
   }
 
-  if (!lang_from_cli) {
+  if (!lang_set) {
     if (const auto inferred = infer_lang_from_text_utf8(text)) {
       lang = *inferred;
       std::cerr << "moonshine-tts: inferred --lang " << lang << " from input text "
@@ -145,60 +170,16 @@ int main(int argc, char** argv) {
     }
   }
 
-  if (engine == "kokoro") {
-    MoonshineG2POptions g2p_for_lang;
-    if (!model_root.empty()) {
-      g2p_for_lang.model_root = model_root;
-    }
-    if (!kokoro_tts_lang_supported(lang, g2p_for_lang)) {
-      engine = "piper";
-    }
-  }
-
   try {
-    if (engine == "kokoro") {
-      MoonshineTTSOptions opt;
-      opt.kokoro_dir = std::move(kokoro_dir);
-      opt.lang = lang;
-      opt.voice = voice;
-      opt.speed = speed;
-      if (!model_root.empty()) {
-        opt.use_bundled_cpp_g2p_data = false;
-        opt.g2p_options.model_root = model_root;
-      } else {
-        opt.use_bundled_cpp_g2p_data = true;
-      }
-      MoonshineTTS tts(opt);
-      const std::vector<float> wav = tts.synthesize(text);
-      if (wav.empty()) {
-        std::cerr << "Error: empty waveform.\n";
-        return 1;
-      }
-      write_wav_mono_pcm16(out_path, wav);
-      std::cout << "Wrote " << out_path << " (" << wav.size() << " samples, "
-                << MoonshineTTS::kSampleRateHz << " Hz)\n";
-    } else {
-      PiperTTSOptions opt;
-      opt.voices_dir = std::move(piper_voices_dir);
-      opt.lang = lang;
-      opt.onnx_model = voice;
-      opt.speed = speed;
-      if (!model_root.empty()) {
-        opt.use_bundled_cpp_g2p_data = false;
-        opt.g2p_options.model_root = model_root;
-      } else {
-        opt.use_bundled_cpp_g2p_data = true;
-      }
-      PiperTTS tts(opt);
-      const std::vector<float> wav = tts.synthesize(text);
-      if (wav.empty()) {
-        std::cerr << "Error: empty waveform.\n";
-        return 1;
-      }
-      write_wav_mono_pcm16(out_path, wav);
-      std::cout << "Wrote " << out_path << " (" << wav.size() << " samples, "
-                << PiperTTS::kSampleRateHz << " Hz)\n";
+    MoonshineTTS tts(lang, opt);
+    const std::vector<float> wav = tts.synthesize(text);
+    if (wav.empty()) {
+      std::cerr << "Error: empty waveform.\n";
+      return 1;
     }
+    write_wav_mono_pcm16(opt.output_path, wav);
+    std::cout << "Wrote " << opt.output_path << " (" << wav.size() << " samples, "
+              << MoonshineTTS::kSampleRateHz << " Hz)\n";
   } catch (const std::exception& e) {
     std::cerr << "Error: " << e.what() << '\n';
     return 1;

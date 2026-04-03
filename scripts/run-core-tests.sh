@@ -30,6 +30,9 @@ ${REPO_ROOT_DIR}/core/build/speaker-embedding-model-test
 ${REPO_ROOT_DIR}/core/build/online-clusterer-test
 ${REPO_ROOT_DIR}/core/build/word-alignment-test
 
+# moonshine-tts tests resolve bundled assets via ``core/moonshine-tts/data`` relative to the monorepo root.
+cd "${REPO_ROOT_DIR}"
+
 # moonshine-tts (core + ONNX); binaries live under core/moonshine-tts/build
 ${MOONSHINE_TTS_BUILD_DIR}/utf8_utils_test
 ${MOONSHINE_TTS_BUILD_DIR}/german_rule_g2p_test

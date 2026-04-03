@@ -72,7 +72,7 @@ TEST_CASE("dutch: dialect_resolves_to_dutch_rules") {
 }
 
 TEST_CASE("dutch: optional real dict fiets matches Python when data present") {
-  const std::filesystem::path dict = r::repo_root_from_tests_cpp(__FILE__) / "data" / "nl" / "dict.tsv";
+  const std::filesystem::path dict = r::moonshine_tts_bundled_data_dir_relative() / "nl" / "dict.tsv";
   if (!std::filesystem::is_regular_file(dict)) {
     return;
   }
@@ -83,8 +83,8 @@ TEST_CASE("dutch: optional real dict fiets matches Python when data present") {
 TEST_CASE("dutch: wiki-text first 100 lines match reference IPA when data and golden exist") {
   constexpr std::size_t kWikiParityLines = 100;
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const std::filesystem::path dict = repo / "data" / "nl" / "dict.tsv";
-  const std::filesystem::path wiki = repo / "data" / "nl" / "wiki-text.txt";
+  const std::filesystem::path dict = r::moonshine_tts_bundled_data_dir_relative() / "nl" / "dict.tsv";
+  const std::filesystem::path wiki = r::moonshine_tts_bundled_data_dir_relative() / "nl" / "wiki-text.txt";
   const std::filesystem::path golden = r::tests_data_dir(repo) / "nl" / "rule_g2p_wiki_100.txt";
   if (!std::filesystem::is_regular_file(dict) || !std::filesystem::is_regular_file(wiki) ||
       !std::filesystem::is_regular_file(golden)) {

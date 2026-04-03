@@ -48,7 +48,7 @@ TEST_CASE("ukrainian: dialect ids include uk and uk-UA") {
 
 TEST_CASE("ukrainian: wiki-text first 100 lines match reference IPA when data and golden exist") {
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const std::filesystem::path wiki = repo / "data" / "uk" / "wiki-text.txt";
+  const std::filesystem::path wiki = r::moonshine_tts_bundled_data_dir_relative() / "uk" / "wiki-text.txt";
   const std::filesystem::path golden = r::tests_data_dir(repo) / "uk" / "rule_g2p_wiki_100.txt";
   check_wiki_parity(wiki, golden);
 }

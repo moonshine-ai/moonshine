@@ -513,8 +513,8 @@ std::unordered_map<std::string, int64_t> load_vocab_txt(const std::filesystem::p
 
 }  // namespace
 
-std::filesystem::path default_chinese_tok_pos_model_dir(const std::filesystem::path& repo_root) {
-  return repo_root / "data" / "zh_hans" / "roberta_chinese_base_upos_onnx";
+std::filesystem::path default_chinese_tok_pos_model_dir(const std::filesystem::path& g2p_data_root) {
+  return g2p_data_root / "zh_hans" / "roberta_chinese_base_upos_onnx";
 }
 
 ChineseTokPosOnnx::ChineseTokPosOnnx(std::filesystem::path model_dir, bool use_cuda)

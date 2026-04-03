@@ -28,7 +28,7 @@ class JapaneseOnnxG2p {
   std::unordered_map<std::string, std::vector<std::string>> by_first_;
 };
 
-std::filesystem::path default_japanese_dict_path(const std::filesystem::path& repo_root);
+std::filesystem::path default_japanese_dict_path(const std::filesystem::path& g2p_data_root);
 
 }  // namespace moonshine_tts
 

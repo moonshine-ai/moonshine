@@ -3,6 +3,7 @@
 
 set(_MOONSHINE_TTS_ROOT "${CMAKE_CURRENT_LIST_DIR}")
 set(_MOONSHINE_CORE_ROOT "${_MOONSHINE_TTS_ROOT}/..")
+set(MOONSHINE_MONOREPO_ROOT "${_MOONSHINE_CORE_ROOT}/..")
 
 add_library(moonshine_tts_utf8proc STATIC
   ${_MOONSHINE_CORE_ROOT}/third-party/utf8proc/utf8proc.c
@@ -20,6 +21,9 @@ enable_testing()
 
 add_library(moonshine_tts_core STATIC
   src/builtin-cpp-data-root.cpp
+  src/file-information.cpp
+  src/moonshine-g2p-options.cpp
+  src/moonshine-tts-options.cpp
   src/utf8-utils.cpp
   src/lang-specific/korean-numbers.cpp
   src/lang-specific/korean.cpp
@@ -60,8 +64,9 @@ target_include_directories(moonshine_tts_core PUBLIC
 )
 target_include_directories(moonshine_tts_core PRIVATE
   ${_MOONSHINE_TTS_ROOT}/src
+  ${_MOONSHINE_CORE_ROOT}/moonshine-utils
 )
-target_link_libraries(moonshine_tts_core PUBLIC moonshine_tts_utf8proc)
+target_link_libraries(moonshine_tts_core PUBLIC moonshine_tts_utf8proc moonshine-utils)
 
 add_executable(piper_ipa_normalize_cli tools/piper-ipa-normalize-cli.cpp)
 target_link_libraries(piper_ipa_normalize_cli PRIVATE moonshine_tts_core)
@@ -103,10 +108,12 @@ function(moonshine_tts_add_test name)
     ${MOONSHINE_TTS_DOCTEST_INC}
   )
   target_link_libraries(${name} PRIVATE ${ARGN})
-  add_test(NAME ${name} COMMAND ${name})
+  add_test(NAME ${name} COMMAND ${name} WORKING_DIRECTORY "${MOONSHINE_MONOREPO_ROOT}")
 endfunction()
 
 moonshine_tts_add_test(utf8_utils_test moonshine_tts_core)
+moonshine_tts_add_test(file_information_test moonshine_tts_core)
+moonshine_tts_add_test(moonshine_g2p_options_test moonshine_tts_core)
 moonshine_tts_add_test(german_rule_g2p_test moonshine_tts_core)
 moonshine_tts_add_test(dutch_rule_g2p_test moonshine_tts_core)
 moonshine_tts_add_test(italian_rule_g2p_test moonshine_tts_core)

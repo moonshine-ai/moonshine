@@ -39,7 +39,7 @@ class JapaneseTokPosOnnx {
 };
 
 /// ``<repo>/data/ja/roberta_japanese_char_luw_upos_onnx`` when *repo_root* is the repository root.
-std::filesystem::path default_japanese_tok_pos_model_dir(const std::filesystem::path& repo_root);
+std::filesystem::path default_japanese_tok_pos_model_dir(const std::filesystem::path& g2p_data_root);
 
 }  // namespace moonshine_tts
 

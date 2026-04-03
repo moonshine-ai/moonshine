@@ -6,17 +6,17 @@
 #include "moonshine-g2p.h"
 #endif
 
+#include "rule-g2p-test-support.h"
+
 #include <filesystem>
 #include <string>
 
+namespace r = moonshine_tts::rule_g2p_test;
+
 namespace {
 
-std::filesystem::path repo_root() {
-  return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
-}
-
 std::filesystem::path vi_dict_path() {
-  return repo_root() / "data" / "vi" / "dict.tsv";
+  return r::moonshine_tts_bundled_data_dir_relative() / "vi" / "dict.tsv";
 }
 
 }  // namespace
@@ -58,7 +58,7 @@ TEST_CASE("vietnamese: MoonshineG2P vi-VN") {
     return;
   }
   moonshine_tts::MoonshineG2POptions opt;
-  opt.vietnamese_dict_path = dict;
+  opt.files.set_path(moonshine_tts::kG2pVietnameseDictKey, dict);
   moonshine_tts::MoonshineG2P g("vi-VN", std::move(opt));
   CHECK(g.dialect_id() == "vi-VN");
   CHECK(g.uses_vietnamese_rules());

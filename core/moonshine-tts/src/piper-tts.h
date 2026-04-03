@@ -19,8 +19,20 @@ std::filesystem::path builtin_piper_voices_dir(std::string_view data_subdir);
 
 /// Piper ONNX TTS + ``MoonshineG2P`` IPA (filtered to each model's ``phoneme_id_map``; no eSpeak at runtime).
 struct PiperTTSOptions {
-  /// Directory containing ``*.onnx`` and ``*.onnx.json``. Empty → ``builtin_piper_voices_dir`` for resolved ``--lang``.
+  /// When non-empty, load this ``*.onnx`` directly; ``voices_dir`` / discovery is skipped.
+  /// Config JSON defaults to ``explicit_onnx_path`` with ``.onnx.json`` (same folder) unless
+  /// ``explicit_onnx_json_path`` is set.
+  std::filesystem::path explicit_onnx_path{};
+  /// Piper model config (``*.onnx.json``). Empty → beside ``explicit_onnx_path`` or, when using
+  /// ``voices_dir`` discovery, ``voices_json_dir / (<onnx_filename> + ".json")`` if ``voices_json_dir``
+  /// is non-empty, else beside the chosen ``*.onnx``.
+  std::filesystem::path explicit_onnx_json_path{};
+  /// Directory containing ``*.onnx`` for the resolved language. Empty → ``builtin_piper_voices_dir``
+  /// unless ``explicit_onnx_path`` is set.
   std::filesystem::path voices_dir{};
+  /// Optional directory containing ``*.onnx.json`` files whose basenames match ``*.onnx`` in
+  /// ``voices_dir`` (``<name>.onnx`` → ``<name>.onnx.json`` in this folder). Empty → JSON beside ONNX.
+  std::filesystem::path voices_json_dir{};
   /// Locale tag (e.g. ``en_us``, ``de``, ``es``, ``es-ES``, ``ar_msa``).
   std::string lang = "en_us";
   /// ONNX basename (e.g. ``en_US-lessac-medium.onnx``) or stem; empty → default for ``lang``.

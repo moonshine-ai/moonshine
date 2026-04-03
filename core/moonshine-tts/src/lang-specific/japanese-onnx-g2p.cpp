@@ -238,12 +238,8 @@ void build_by_first(const std::unordered_map<std::string, std::string>& lex,
 
 }  // namespace
 
-std::filesystem::path default_japanese_dict_path(const std::filesystem::path& repo_root) {
-  const std::filesystem::path under_data = repo_root / "data" / "ja" / "dict.tsv";
-  if (std::filesystem::is_regular_file(under_data)) {
-    return under_data;
-  }
-  return repo_root / "ja" / "dict.tsv";
+std::filesystem::path default_japanese_dict_path(const std::filesystem::path& g2p_data_root) {
+  return g2p_data_root / "ja" / "dict.tsv";
 }
 
 JapaneseOnnxG2p::JapaneseOnnxG2p(std::filesystem::path model_dir,

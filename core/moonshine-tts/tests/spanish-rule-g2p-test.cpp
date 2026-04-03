@@ -49,7 +49,7 @@ TEST_CASE("spanish: dialect ids include es-MX and es-ES") {
 
 TEST_CASE("spanish: wiki-text first 100 lines es_mx match reference IPA when data and golden exist") {
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const std::filesystem::path wiki = repo / "data" / "es_mx" / "wiki-text.txt";
+  const std::filesystem::path wiki = r::moonshine_tts_bundled_data_dir_relative() / "es_mx" / "wiki-text.txt";
   const std::filesystem::path golden = r::tests_data_dir(repo) / "es_mx" / "rule_g2p_wiki_100.txt";
   const auto dialect = moonshine_tts::spanish_dialect_from_cli_id("es-MX");
   check_wiki_parity(wiki, golden, dialect);
@@ -57,7 +57,7 @@ TEST_CASE("spanish: wiki-text first 100 lines es_mx match reference IPA when dat
 
 TEST_CASE("spanish: wiki-text first 100 lines es_es match reference IPA when data and golden exist") {
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const std::filesystem::path wiki = repo / "data" / "es_es" / "wiki-text.txt";
+  const std::filesystem::path wiki = r::moonshine_tts_bundled_data_dir_relative() / "es_es" / "wiki-text.txt";
   const std::filesystem::path golden = r::tests_data_dir(repo) / "es_es" / "rule_g2p_wiki_100.txt";
   const auto dialect = moonshine_tts::spanish_dialect_from_cli_id("es-ES");
   check_wiki_parity(wiki, golden, dialect);
