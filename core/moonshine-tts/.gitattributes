@@ -1,0 +1,15 @@
+*.tsv filter=lfs diff=lfs merge=lfs -text
+*.txt filter=lfs diff=lfs merge=lfs -text
+*.json filter=lfs diff=lfs merge=lfs -text
+*.onnx filter=lfs diff=lfs merge=lfs -text
+*.onnx.data filter=lfs diff=lfs merge=lfs -text
+# ONNX Runtime prebuilt native libraries (macOS .dylib/.a, Linux .so, Windows .dll/.lib).
+third-party/onnxruntime/lib/**/*.dylib filter=lfs diff=lfs merge=lfs -text
+third-party/onnxruntime/lib/**/*.a filter=lfs diff=lfs merge=lfs -text
+third-party/onnxruntime/lib/**/*.so filter=lfs diff=lfs merge=lfs -text
+third-party/onnxruntime/lib/**/*.so.* filter=lfs diff=lfs merge=lfs -text
+third-party/onnxruntime/lib/**/*.dll filter=lfs diff=lfs merge=lfs -text
+third-party/onnxruntime/lib/**/*.lib filter=lfs diff=lfs merge=lfs -text
+# Exception: C++ project listfile (last matching pattern wins for gitattributes).
+cpp/CMakeLists.txt -filter -diff -merge text
+CMakeLists.txt -filter -diff -merge text
