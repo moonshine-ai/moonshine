@@ -9,9 +9,10 @@ namespace r = moonshine_tts::rule_g2p_test;
 TEST_CASE("japanese onnx g2p: first 100 wiki IPA lines match reference when assets and golden exist") {
   constexpr std::size_t kWikiLines = 100;
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const auto model = moonshine_tts::default_japanese_tok_pos_model_dir(repo);
-  const auto dict = moonshine_tts::default_japanese_dict_path(repo);
-  const auto wiki = repo / "data" / "ja" / "wiki-text.txt";
+  const auto data = r::moonshine_tts_bundled_data_dir_relative();
+  const auto model = moonshine_tts::default_japanese_tok_pos_model_dir(data);
+  const auto dict = moonshine_tts::default_japanese_dict_path(data);
+  const auto wiki = r::moonshine_tts_bundled_data_dir_relative() / "ja" / "wiki-text.txt";
   const std::filesystem::path golden = r::tests_data_dir(repo) / "ja" / "onnx_g2p_wiki_100.txt";
   if (!std::filesystem::is_regular_file(model / "model.onnx") ||
       !std::filesystem::is_regular_file(dict) || !std::filesystem::is_regular_file(wiki) ||

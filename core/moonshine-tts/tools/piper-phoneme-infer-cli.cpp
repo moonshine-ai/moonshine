@@ -5,6 +5,7 @@
 #include <nlohmann/json.h>
 
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <optional>
@@ -15,7 +16,7 @@ namespace {
 
 void usage(const char* argv0) {
   std::cerr << "Usage: " << argv0
-            << " --onnx PATH.onnx --ids-json PATH.json [--lang en_us] [--speed N] "
+            << " --onnx PATH.onnx --ids-json PATH.json [--onnx-json PATH.onnx.json] [--lang en_us] [--speed N] "
                "[--noise-scale F] [--noise-w F] [-o out.wav]\n"
             << "  JSON file: array of int64 phoneme ids (Piper ``phonemes_to_ids`` layout).\n"
             << "  Optional --noise-scale / --noise-w override model JSON (use 0 0 for deterministic parity vs "
@@ -31,6 +32,7 @@ int main(int argc, char** argv) {
   using moonshine_tts::write_wav_mono_pcm16;
 
   std::filesystem::path onnx_path;
+  std::filesystem::path onnx_config_json;
   std::filesystem::path ids_json;
   std::filesystem::path out_path = "out.wav";
   std::string lang = "en_us";
@@ -46,6 +48,8 @@ int main(int argc, char** argv) {
     }
     if (a == "--onnx" && i + 1 < argc) {
       onnx_path = argv[++i];
+    } else if (a == "--onnx-json" && i + 1 < argc) {
+      onnx_config_json = argv[++i];
     } else if (a == "--ids-json" && i + 1 < argc) {
       ids_json = argv[++i];
     } else if (a == "--lang" && i + 1 < argc) {
@@ -92,7 +96,10 @@ int main(int argc, char** argv) {
 
   PiperTTSOptions opt;
   opt.lang = lang;
-  opt.voices_dir = onnx_path.parent_path();
+  opt.explicit_onnx_path = onnx_path;
+  if (!onnx_config_json.empty()) {
+    opt.explicit_onnx_json_path = onnx_config_json;
+  }
   opt.onnx_model = onnx_path.filename().string();
   opt.speed = speed;
   opt.use_bundled_cpp_g2p_data = true;

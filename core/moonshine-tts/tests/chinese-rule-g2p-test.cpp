@@ -7,10 +7,14 @@
 #include "moonshine-g2p.h"
 #endif
 
+#include "rule-g2p-test-support.h"
+
 #include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <string>
+
+namespace r = moonshine_tts::rule_g2p_test;
 
 namespace {
 
@@ -49,18 +53,16 @@ TEST_CASE("chinese: lexicon lookup and Arabic numeral expansion via per-char Han
 
 #ifdef MOONSHINE_TTS_WITH_G2P_CLASS
 TEST_CASE("chinese: MoonshineG2P zh matches ChineseOnnxG2p when ONNX bundle exists") {
-  const std::filesystem::path repo =
-      std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
-  const auto onnx_dir = moonshine_tts::default_chinese_tok_pos_model_dir(repo);
+  const auto data = r::moonshine_tts_bundled_data_dir_relative();
+  const auto onnx_dir = moonshine_tts::default_chinese_tok_pos_model_dir(data);
   const auto p = make_temp_tsv("\xe6\xb5\x8b\xe8\xaf\x95\tzh_test_ipa\n");
   if (!std::filesystem::is_regular_file(onnx_dir / "model.onnx")) {
     std::filesystem::remove(p);
     return;
   }
   moonshine_tts::MoonshineG2POptions opt;
-  opt.model_root = repo / "models";
-  opt.chinese_dict_path = p;
-  opt.chinese_onnx_model_dir = onnx_dir;
+  opt.g2p_root = data;
+  opt.files.set_path(moonshine_tts::kG2pChineseDictKey, p);
   moonshine_tts::MoonshineG2P g("zh", opt);
   CHECK(g.uses_chinese_rules());
   CHECK_FALSE(g.uses_onnx());

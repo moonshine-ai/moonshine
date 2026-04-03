@@ -1,5 +1,6 @@
 #include "piper-tts.h"
 
+#include "g2p-path.h"
 #include "ipa-postprocess.h"
 #include "moonshine-g2p.h"
 #include "utf8-utils.h"
@@ -186,6 +187,17 @@ std::filesystem::path pick_onnx_path(const std::filesystem::path& voices_dir, st
   return models[0];
 }
 
+/// Piper pairs ``foo.onnx`` with ``foo.onnx.json``. If ``json_dir`` is empty, that file sits beside ``onnx_path``.
+std::filesystem::path piper_model_json_path_for_onnx(const std::filesystem::path& onnx_path,
+                                                    const std::filesystem::path& json_dir) {
+  if (!json_dir.empty()) {
+    return json_dir / (onnx_path.filename().string() + ".json");
+  }
+  std::filesystem::path p = onnx_path;
+  p.replace_extension(".onnx.json");
+  return p;
+}
+
 void append_phoneme_ids(const std::unordered_map<std::string, std::vector<int64_t>>& id_map,
                         const std::string& key, std::vector<int64_t>& ids) {
   const auto it = id_map.find(key);
@@ -320,7 +332,9 @@ void load_piper_onnx_json(const std::filesystem::path& json_path,
 
 struct PiperTTS::Impl {
   std::filesystem::path voices_dir_;
+  std::filesystem::path voices_json_dir_;
   std::filesystem::path onnx_path_;
+  std::filesystem::path explicit_onnx_json_path_;
   Ort::Env env_{ORT_LOGGING_LEVEL_WARNING, "piper_tts"};
   Ort::Session session_{nullptr};
   Ort::MemoryInfo mem_{Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)};
@@ -342,6 +356,7 @@ struct PiperTTS::Impl {
   std::string default_onnx_{};
   std::string onnx_basename_request_{};
   bool user_voices_dir_ = false;
+  bool explicit_onnx_file_ = false;
   bool use_bundled_cpp_g2p_data_ = true;
   std::vector<std::string> ort_provider_names_{};
   bool piper_normalize_audio_ = true;
@@ -410,8 +425,10 @@ struct PiperTTS::Impl {
   }
 
   void reload_session_from_onnx() {
-    std::filesystem::path json_path = onnx_path_;
-    json_path.replace_extension(".onnx.json");
+    const std::filesystem::path json_path =
+        !explicit_onnx_json_path_.empty()
+            ? explicit_onnx_json_path_
+            : piper_model_json_path_for_onnx(onnx_path_, voices_json_dir_);
     if (!std::filesystem::is_regular_file(json_path)) {
       throw std::runtime_error("PiperTTS: missing config " + json_path.string());
     }
@@ -441,25 +458,40 @@ struct PiperTTS::Impl {
     g2p_opt_ = opt.g2p_options;
     use_bundled_cpp_g2p_data_ = opt.use_bundled_cpp_g2p_data;
     if (opt.use_bundled_cpp_g2p_data) {
-      g2p_opt_.model_root = builtin_cpp_data_root();
+      g2p_opt_.g2p_root = builtin_cpp_data_root();
     }
-    user_voices_dir_ = !opt.voices_dir.empty();
+    explicit_onnx_file_ = !opt.explicit_onnx_path.empty();
+    if (!opt.explicit_onnx_json_path.empty()) {
+      explicit_onnx_json_path_ = resolve_path_under_root(g2p_opt_.g2p_root, opt.explicit_onnx_json_path);
+    }
+    if (!opt.voices_json_dir.empty()) {
+      voices_json_dir_ = resolve_path_under_root(g2p_opt_.g2p_root, opt.voices_json_dir);
+    }
+    user_voices_dir_ =
+        explicit_onnx_file_ || !opt.voices_dir.empty() || !opt.voices_json_dir.empty();
     resolve_piper_lang(opt.lang, g2p_opt_, g2p_dialect_, data_subdir_, default_onnx_);
     piper_ipa_lang_key_ = piper_ipa_norm_lang_key(opt.lang, data_subdir_);
-    if (user_voices_dir_) {
+    if (explicit_onnx_file_) {
+      onnx_path_ = resolve_path_under_root(g2p_opt_.g2p_root, opt.explicit_onnx_path);
+      voices_dir_ = onnx_path_.parent_path();
+    } else if (!opt.voices_dir.empty()) {
       voices_dir_ = std::filesystem::path(opt.voices_dir);
     } else if (opt.use_bundled_cpp_g2p_data) {
       voices_dir_ = builtin_piper_voices_dir(data_subdir_);
     } else {
-      if (g2p_opt_.model_root.empty()) {
+      if (g2p_opt_.g2p_root.empty()) {
         throw std::runtime_error(
-            "PiperTTS: g2p_options.model_root must be set when use_bundled_cpp_g2p_data is false "
+            "PiperTTS: g2p_options.g2p_root must be set when use_bundled_cpp_g2p_data is false "
             "and voices_dir is empty");
       }
-      voices_dir_ = g2p_opt_.model_root / data_subdir_ / "piper-voices";
+      voices_dir_ = g2p_opt_.g2p_root / data_subdir_ / "piper-voices";
     }
     onnx_basename_request_ = opt.onnx_model;
-    onnx_path_ = pick_onnx_path(voices_dir_, onnx_basename_request_, default_onnx_);
+    if (explicit_onnx_file_) {
+      // onnx_path_ already set
+    } else {
+      onnx_path_ = pick_onnx_path(voices_dir_, onnx_basename_request_, default_onnx_);
+    }
     reload_session_from_onnx();
     g2p_ = std::make_unique<MoonshineG2P>(g2p_dialect_, g2p_opt_);
   }
@@ -474,21 +506,25 @@ struct PiperTTS::Impl {
   void set_lang(const std::string& lk) {
     resolve_piper_lang(lk, g2p_opt_, g2p_dialect_, data_subdir_, default_onnx_);
     piper_ipa_lang_key_ = piper_ipa_norm_lang_key(lk, data_subdir_);
-    if (!user_voices_dir_) {
-      if (use_bundled_cpp_g2p_data_) {
-        voices_dir_ = builtin_piper_voices_dir(data_subdir_);
-      } else {
-        voices_dir_ = g2p_opt_.model_root / data_subdir_ / "piper-voices";
+    if (!explicit_onnx_file_) {
+      if (!user_voices_dir_) {
+        if (use_bundled_cpp_g2p_data_) {
+          voices_dir_ = builtin_piper_voices_dir(data_subdir_);
+        } else {
+          voices_dir_ = g2p_opt_.g2p_root / data_subdir_ / "piper-voices";
+        }
       }
+      onnx_path_ = pick_onnx_path(voices_dir_, onnx_basename_request_, default_onnx_);
     }
-    onnx_path_ = pick_onnx_path(voices_dir_, onnx_basename_request_, default_onnx_);
     reload_session_from_onnx();
     g2p_ = std::make_unique<MoonshineG2P>(g2p_dialect_, g2p_opt_);
   }
 
   void set_onnx_model(std::string_view stem_or_base) {
     onnx_basename_request_ = std::string(trim_ascii_ws_copy(stem_or_base));
-    onnx_path_ = pick_onnx_path(voices_dir_, onnx_basename_request_, default_onnx_);
+    if (!explicit_onnx_file_) {
+      onnx_path_ = pick_onnx_path(voices_dir_, onnx_basename_request_, default_onnx_);
+    }
     reload_session_from_onnx();
   }
 

@@ -1,6 +1,8 @@
 #include "moonshine-tts.h"
 
+#include "g2p-path.h"
 #include "moonshine-g2p.h"
+#include "piper-tts.h"
 #include "utf8-utils.h"
 
 #include <onnxruntime_cxx_api.h>
@@ -414,8 +416,73 @@ bool kokoro_tts_lang_supported(std::string_view lang_cli, const MoonshineG2POpti
   return kokoro_tts_lang_supported_inner(lang_cli, g2p_opt);
 }
 
-struct MoonshineTTS::Impl {
-  std::filesystem::path kokoro_dir_;
+std::string ascii_lowercase_copy(std::string_view s) {
+  std::string o(s);
+  for (char& c : o) {
+    if (c >= 'A' && c <= 'Z') {
+      c = static_cast<char>(c - 'A' + 'a');
+    }
+  }
+  return o;
+}
+
+std::filesystem::path tts_map_path(const FileInformationMap& m, std::string_view canonical_key) {
+  const std::string k(canonical_key);
+  const auto it = m.entries.find(k);
+  if (it == m.entries.end()) {
+    return std::filesystem::path(canonical_key);
+  }
+  return it->second.path;
+}
+
+PiperTTSOptions make_piper_options(std::string_view language, const MoonshineTTSOptions& opt) {
+  PiperTTSOptions p;
+  p.lang = std::string(language);
+  const std::string onnx_key(kTtsPiperOnnxKey);
+  if (opt.files.entries.find(onnx_key) != opt.files.entries.end()) {
+    const std::filesystem::path rel = opt.tts_relative_path(kTtsPiperOnnxKey);
+    if (!rel.empty()) {
+      p.explicit_onnx_path = rel;
+    }
+  }
+  const std::string onnx_json_key(kTtsPiperOnnxJsonKey);
+  if (opt.files.entries.find(onnx_json_key) != opt.files.entries.end()) {
+    const std::filesystem::path jr = opt.tts_relative_path(kTtsPiperOnnxJsonKey);
+    if (!jr.empty()) {
+      p.explicit_onnx_json_path = jr;
+    }
+  }
+  const std::string pv_key(kTtsPiperVoicesKey);
+  if (p.explicit_onnx_path.empty() && opt.files.entries.find(pv_key) != opt.files.entries.end()) {
+    const std::filesystem::path vr = opt.tts_relative_path(kTtsPiperVoicesKey);
+    if (!vr.empty()) {
+      p.voices_dir = resolve_path_under_root(opt.g2p_options.g2p_root, vr);
+    }
+  }
+  const std::string pvj_key(kTtsPiperVoicesJsonKey);
+  if (p.explicit_onnx_path.empty() && opt.files.entries.find(pvj_key) != opt.files.entries.end()) {
+    const std::filesystem::path vjr = opt.tts_relative_path(kTtsPiperVoicesJsonKey);
+    if (!vjr.empty()) {
+      p.voices_json_dir = resolve_path_under_root(opt.g2p_options.g2p_root, vjr);
+    }
+  }
+  p.onnx_model = opt.voice;
+  p.speed = opt.speed;
+  p.use_bundled_cpp_g2p_data = opt.use_bundled_cpp_g2p_data;
+  p.g2p_options = opt.g2p_options;
+  p.ort_provider_names = opt.ort_provider_names;
+  p.piper_normalize_audio = opt.piper_normalize_audio;
+  p.piper_output_volume = opt.piper_output_volume;
+  p.piper_noise_scale_override = opt.piper_noise_scale_override;
+  p.piper_noise_w_override = opt.piper_noise_w_override;
+  return p;
+}
+
+struct KokoroTtsEngine {
+  std::filesystem::path model_path_;
+  std::filesystem::path config_path_;
+  std::filesystem::path voices_dir_;
+  FileInformationMap tts_files_;
   Ort::Env env_{ORT_LOGGING_LEVEL_WARNING, "moonshine_tts"};
   Ort::Session session_{nullptr};
   Ort::MemoryInfo mem_{Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)};
@@ -465,38 +532,25 @@ struct MoonshineTTS::Impl {
     speed_elem_type_ = static_cast<ONNXTensorElementDataType>(tinfo.GetElementType());
   }
 
-  explicit Impl(MoonshineTTSOptions opt) {
+  explicit KokoroTtsEngine(std::string_view language, MoonshineTTSOptions opt) {
     if (!(opt.speed > 0.0) || !std::isfinite(opt.speed)) {
       throw std::runtime_error("MoonshineTTS: speed must be a positive finite number");
     }
     speed_ = opt.speed;
     g2p_opt_ = std::move(opt.g2p_options);
-    if (opt.use_bundled_cpp_g2p_data) {
-      g2p_opt_.model_root = builtin_cpp_data_root();
+    tts_files_ = std::move(opt.files);
+    const std::filesystem::path& root = g2p_opt_.g2p_root;
+    model_path_ = resolve_path_under_root(root, tts_map_path(tts_files_, kTtsKokoroModelOnnxKey));
+    config_path_ = resolve_path_under_root(root, tts_map_path(tts_files_, kTtsKokoroConfigJsonKey));
+    if (!std::filesystem::is_regular_file(config_path_)) {
+      throw std::runtime_error("MoonshineTTS: missing Kokoro config " + config_path_.string());
     }
-    if (opt.kokoro_dir.empty()) {
-      kokoro_dir_ = opt.use_bundled_cpp_g2p_data ? builtin_kokoro_bundle_dir()
-                                                   : (g2p_opt_.model_root / "kokoro");
-    } else {
-      kokoro_dir_ = std::move(opt.kokoro_dir);
+    if (!std::filesystem::is_regular_file(model_path_)) {
+      throw std::runtime_error("MoonshineTTS: missing Kokoro model " + model_path_.string());
     }
-    if (!opt.use_bundled_cpp_g2p_data && g2p_opt_.model_root.empty()) {
-      throw std::runtime_error(
-          "MoonshineTTS: g2p_options.model_root must be set when use_bundled_cpp_g2p_data is false");
-    }
-    if (!std::filesystem::is_directory(kokoro_dir_)) {
-      throw std::runtime_error("MoonshineTTS: kokoro_dir is not a directory: " + kokoro_dir_.string());
-    }
-    const auto cfg_path = kokoro_dir_ / "config.json";
-    const auto onnx_path = kokoro_dir_ / "model.onnx";
-    if (!std::filesystem::is_regular_file(cfg_path)) {
-      throw std::runtime_error("MoonshineTTS: missing " + cfg_path.string());
-    }
-    if (!std::filesystem::is_regular_file(onnx_path)) {
-      throw std::runtime_error("MoonshineTTS: missing " + onnx_path.string());
-    }
+    voices_dir_ = model_path_.parent_path() / "voices";
     {
-      std::ifstream jf(cfg_path);
+      std::ifstream jf(config_path_);
       nlohmann::json j;
       jf >> j;
       if (!j.contains("vocab") || !j["vocab"].is_object()) {
@@ -510,39 +564,40 @@ struct MoonshineTTS::Impl {
     }
     Ort::SessionOptions session_opts = make_ort_options(opt.ort_provider_names);
 #ifdef _WIN32
-    const std::wstring wmodel = onnx_path.wstring();
+    const std::wstring wmodel = model_path_.wstring();
     session_ = Ort::Session(env_, wmodel.c_str(), session_opts);
 #else
-    const std::string u8 = onnx_path.string();
+    const std::string u8 = model_path_.string();
     session_ = Ort::Session(env_, u8.c_str(), session_opts);
 #endif
     detect_kokoro_style_input_name();
     detect_speed_input_element_type();
-    const std::string lk = normalize_lang_key(opt.lang);
+    const std::string lk = normalize_lang_key(language);
     resolve_lang_for_tts(lk, g2p_opt_, profile_, g2p_dialect_);
-    const std::filesystem::path voices_dir = kokoro_dir_ / "voices";
     maybe_align_en_profile_for_kokoro_voice(opt.voice, profile_, g2p_dialect_);
     kokoro_lang_ = profile_.kokoro_lang;
     g2p_ = std::make_unique<MoonshineG2P>(g2p_dialect_, g2p_opt_);
-    voice_id_ = select_voice_id(kokoro_lang_, opt.voice, profile_.default_voice, voices_dir);
+    voice_id_ = select_voice_id(kokoro_lang_, opt.voice, profile_.default_voice, voices_dir_);
     reload_voice_tensor();
   }
 
   void reload_voice_tensor() {
-    const auto path = kokoro_dir_ / "voices" / (voice_id_ + ".kokorovoice");
+    const std::string vk = std::string("kokoro/voices/") + voice_id_ + ".kokorovoice";
+    const auto path =
+        resolve_path_under_root(g2p_opt_.g2p_root, tts_map_path(tts_files_, vk));
     if (!std::filesystem::is_regular_file(path)) {
-      const auto pt = kokoro_dir_ / "voices" / (voice_id_ + ".pt");
+      const auto pt = voices_dir_ / (voice_id_ + ".pt");
       std::ostringstream msg;
       msg << "MoonshineTTS: missing voice file " << path.string();
       if (std::filesystem::is_regular_file(pt)) {
         msg << "\n  Export from PyTorch voice pack:\n  python scripts/export_kokoro_voice_for_cpp.py \""
             << pt.string() << "\" \"" << path.string() << '"';
       } else {
-        msg << "\n  Install voices under " << (kokoro_dir_ / "voices").string()
-            << " (e.g. python scripts/download_kokoro_onnx.py --out-dir " << kokoro_dir_.string()
-            << " --voices " << voice_id_
+        msg << "\n  Install voices under " << voices_dir_.string()
+            << " (e.g. python scripts/download_kokoro_onnx.py --out-dir "
+            << model_path_.parent_path().string() << " --voices " << voice_id_
             << "), then export:\n  python scripts/export_kokoro_voice_for_cpp.py \""
-            << (kokoro_dir_ / "voices" / (voice_id_ + ".pt")).string() << "\" \"" << path.string() << '"';
+            << (voices_dir_ / (voice_id_ + ".pt")).string() << "\" \"" << path.string() << '"';
       }
       throw std::runtime_error(msg.str());
     }
@@ -625,7 +680,45 @@ struct MoonshineTTS::Impl {
   }
 };
 
-MoonshineTTS::MoonshineTTS(const MoonshineTTSOptions& opt) : impl_(std::make_unique<Impl>(opt)) {}
+struct MoonshineTTS::Impl {
+  std::unique_ptr<KokoroTtsEngine> kokoro_;
+  std::unique_ptr<PiperTTS> piper_;
+
+  explicit Impl(std::string_view language, const MoonshineTTSOptions& opt_in) {
+    MoonshineTTSOptions opt = opt_in;
+    if (opt.use_bundled_cpp_g2p_data) {
+      opt.g2p_options.g2p_root = builtin_cpp_data_root();
+    } else if (opt.g2p_options.g2p_root.empty()) {
+      throw std::runtime_error(
+          "MoonshineTTS: set g2p_options.g2p_root when use_bundled_cpp_g2p_data is false");
+    }
+    std::string eng = ascii_lowercase_copy(trim_ascii_ws_copy(opt.vocoder_engine));
+    if (eng.empty()) {
+      eng = "auto";
+    }
+    if (eng != "kokoro" && eng != "piper" && eng != "auto") {
+      throw std::runtime_error(
+          "MoonshineTTS: vocoder_engine must be kokoro, piper, or auto (got \"" + eng + "\")");
+    }
+    const bool kokoro_ok = kokoro_tts_lang_supported_inner(language, opt.g2p_options);
+    const bool use_kokoro = (eng == "kokoro") || (eng == "auto" && kokoro_ok);
+    if (use_kokoro) {
+      kokoro_ = std::make_unique<KokoroTtsEngine>(language, std::move(opt));
+    } else {
+      piper_ = std::make_unique<PiperTTS>(make_piper_options(language, opt));
+    }
+  }
+
+  std::vector<float> synthesize(std::string_view text) {
+    if (kokoro_) {
+      return kokoro_->synthesize(text);
+    }
+    return piper_->synthesize(text);
+  }
+};
+
+MoonshineTTS::MoonshineTTS(std::string_view language, const MoonshineTTSOptions& opt)
+    : impl_(std::make_unique<Impl>(language, opt)) {}
 
 MoonshineTTS::~MoonshineTTS() = default;
 

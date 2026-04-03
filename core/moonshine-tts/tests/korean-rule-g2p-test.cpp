@@ -7,17 +7,17 @@
 #include "moonshine-g2p.h"
 #endif
 
+#include "rule-g2p-test-support.h"
+
 #include <filesystem>
 #include <string>
 
+namespace r = moonshine_tts::rule_g2p_test;
+
 namespace {
 
-std::filesystem::path repo_root() {
-  return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
-}
-
 std::filesystem::path ko_dict_path() {
-  return repo_root() / "data" / "ko" / "dict.tsv";
+  return r::moonshine_tts_bundled_data_dir_relative() / "ko" / "dict.tsv";
 }
 
 }  // namespace
@@ -104,7 +104,7 @@ TEST_CASE("korean: MoonshineG2P ko uses KoreanRuleG2p") {
     return;
   }
   moonshine_tts::MoonshineG2POptions opt;
-  opt.korean_dict_path = dict;
+  opt.files.set_path(moonshine_tts::kG2pKoreanDictKey, dict);
   moonshine_tts::MoonshineG2P g("ko", opt);
   CHECK(g.uses_korean_rules());
   CHECK_FALSE(g.uses_onnx());

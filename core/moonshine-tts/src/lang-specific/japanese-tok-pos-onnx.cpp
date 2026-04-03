@@ -541,8 +541,8 @@ std::unordered_map<std::string, int64_t> load_vocab_txt(const std::filesystem::p
 
 }  // namespace
 
-std::filesystem::path default_japanese_tok_pos_model_dir(const std::filesystem::path& repo_root) {
-  return repo_root / "data" / "ja" / "roberta_japanese_char_luw_upos_onnx";
+std::filesystem::path default_japanese_tok_pos_model_dir(const std::filesystem::path& g2p_data_root) {
+  return g2p_data_root / "ja" / "roberta_japanese_char_luw_upos_onnx";
 }
 
 JapaneseTokPosOnnx::JapaneseTokPosOnnx(std::filesystem::path model_dir, bool use_cuda)

@@ -54,7 +54,7 @@ TEST_CASE("italian: lexicon stress not shifted by vocoder") {
 
 TEST_CASE("italian: c'è matches reference IPA when data and golden exist") {
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const std::filesystem::path dict = repo / "data" / "it" / "dict.tsv";
+  const std::filesystem::path dict = r::moonshine_tts_bundled_data_dir_relative() / "it" / "dict.tsv";
   const std::filesystem::path g_ascii = r::tests_data_dir(repo) / "it" / "rule_g2p_ce_ascii.txt";
   const std::filesystem::path g_curly = r::tests_data_dir(repo) / "it" / "rule_g2p_ce_curly.txt";
   if (!std::filesystem::is_regular_file(dict) || !std::filesystem::is_regular_file(g_ascii) ||
@@ -69,8 +69,8 @@ TEST_CASE("italian: c'è matches reference IPA when data and golden exist") {
 TEST_CASE("italian: wiki-text first 100 lines match reference IPA when data and golden exist") {
   constexpr std::size_t kWikiParityLines = 100;
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const std::filesystem::path dict = repo / "data" / "it" / "dict.tsv";
-  const std::filesystem::path wiki = repo / "data" / "it" / "wiki-text.txt";
+  const std::filesystem::path dict = r::moonshine_tts_bundled_data_dir_relative() / "it" / "dict.tsv";
+  const std::filesystem::path wiki = r::moonshine_tts_bundled_data_dir_relative() / "it" / "wiki-text.txt";
   const std::filesystem::path golden = r::tests_data_dir(repo) / "it" / "rule_g2p_wiki_100.txt";
   if (!std::filesystem::is_regular_file(dict) || !std::filesystem::is_regular_file(wiki) ||
       !std::filesystem::is_regular_file(golden)) {

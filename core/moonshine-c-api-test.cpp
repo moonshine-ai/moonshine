@@ -184,8 +184,8 @@ TEST_CASE("moonshine-test-v2") {
     int32_t transcriber_handle = moonshine_load_transcriber_from_memory(
         encoder_model_data.data(), encoder_model_data.size(),
         decoder_model_data.data(), decoder_model_data.size(),
-        tokenizer_data.data(), tokenizer_data.size(), model_arch, options, options_count,
-        MOONSHINE_HEADER_VERSION);
+        tokenizer_data.data(), tokenizer_data.size(), model_arch, options,
+        options_count, MOONSHINE_HEADER_VERSION);
     REQUIRE(transcriber_handle >= 0);
 
     struct transcript_t *transcript = nullptr;
@@ -340,5 +340,24 @@ TEST_CASE("moonshine-test-v2") {
         root_model_path.c_str(), model_arch, options, options_count,
         MOONSHINE_HEADER_VERSION);
     REQUIRE(transcriber_handle < 0);
+  }
+  SUBCASE("tts-synthesizer-valid-options") {
+    const moonshine_option_t options[] = {
+        {"engine", "auto"},
+        {"model_root", ""},
+        {"kokoro_dir", ""},
+        {"piper_voices_dir", ""},
+        {"lang", "en_us"},
+        {"voice", "af_heart"},
+        {"speed", "1.0"},
+        {"output", "out.wav"},
+        {"bundle_g2p_data", "true"},  // corresponds to use_bundled_cpp_g2p_data
+    };
+    const uint64_t options_count = sizeof(options) / sizeof(options[0]);
+    int32_t tts_synthesizer_handle =
+        moonshine_create_tts_synthesizer_from_files(
+            "en_us", nullptr, 0, options, options_count,
+            MOONSHINE_HEADER_VERSION);
+    REQUIRE(tts_synthesizer_handle >= 0);
   }
 }

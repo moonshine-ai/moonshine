@@ -34,7 +34,7 @@ std::string strip_stress(std::string s) {
 }
 
 bool french_dict_present() {
-  return std::filesystem::is_regular_file(r::repo_root_from_tests_cpp(__FILE__) / "data" / "fr" / "dict.tsv");
+  return std::filesystem::is_regular_file(r::moonshine_tts_bundled_data_dir_relative() / "fr" / "dict.tsv");
 }
 
 }  // namespace
@@ -56,7 +56,7 @@ TEST_CASE("french: ensure_french_nuclear_stress") {
 
 TEST_CASE("french: liaison les amis" * doctest::skip(!french_dict_present())) {
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const auto dict = repo / "data" / "fr" / "dict.tsv";
+  const auto dict = r::moonshine_tts_bundled_data_dir_relative() / "fr" / "dict.tsv";
   const auto csv = dict.parent_path();
   moonshine_tts::FrenchRuleG2p g(dict, csv);
   const std::string out = g.text_to_ipa("les amis");
@@ -67,7 +67,7 @@ TEST_CASE("french: liaison les amis" * doctest::skip(!french_dict_present())) {
 
 TEST_CASE("french: En 1891 cardinal expansion" * doctest::skip(!french_dict_present())) {
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const auto dict = repo / "data" / "fr" / "dict.tsv";
+  const auto dict = r::moonshine_tts_bundled_data_dir_relative() / "fr" / "dict.tsv";
   const auto csv = dict.parent_path();
   moonshine_tts::FrenchRuleG2p g(dict, csv);
   const std::string out = g.text_to_ipa("En 1891");
@@ -78,7 +78,7 @@ TEST_CASE("french: En 1891 cardinal expansion" * doctest::skip(!french_dict_pres
 
 TEST_CASE("french: punctuation keeps space before next word" * doctest::skip(!french_dict_present())) {
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const auto dict = repo / "data" / "fr" / "dict.tsv";
+  const auto dict = r::moonshine_tts_bundled_data_dir_relative() / "fr" / "dict.tsv";
   const auto csv = dict.parent_path();
   moonshine_tts::FrenchRuleG2p g(dict, csv);
   CHECK(g.text_to_ipa("Bonjour! Salut").find("! ") != std::string::npos);
@@ -88,7 +88,7 @@ TEST_CASE("french: punctuation keeps space before next word" * doctest::skip(!fr
 TEST_CASE("french: hyphenated OOV allez-vous matches Python (UTF-8 trim + stress)" *
           doctest::skip(!french_dict_present())) {
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const auto dict = repo / "data" / "fr" / "dict.tsv";
+  const auto dict = r::moonshine_tts_bundled_data_dir_relative() / "fr" / "dict.tsv";
   const auto csv = dict.parent_path();
   moonshine_tts::FrenchRuleG2p g(dict, csv);
   CHECK(g.text_to_ipa("comment allez-vous") == "kɔmˈɑ̃ allˈə-vˈu");
@@ -97,7 +97,7 @@ TEST_CASE("french: hyphenated OOV allez-vous matches Python (UTF-8 trim + stress
 TEST_CASE("french: uppercase accented letters in words (Saint-Étienne)" *
           doctest::skip(!french_dict_present())) {
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const auto dict = repo / "data" / "fr" / "dict.tsv";
+  const auto dict = r::moonshine_tts_bundled_data_dir_relative() / "fr" / "dict.tsv";
   const auto csv = dict.parent_path();
   moonshine_tts::FrenchRuleG2p g(dict, csv);
   CHECK(g.text_to_ipa("Saint-\xC3\x89tienne") == "sˈɛ̃-etjˈɛ̃n");
@@ -106,8 +106,8 @@ TEST_CASE("french: uppercase accented letters in words (Saint-Étienne)" *
 TEST_CASE("french: wiki-text first 100 lines match reference IPA when data and golden exist") {
   constexpr std::size_t kWikiParityLines = 100;
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const std::filesystem::path dict = repo / "data" / "fr" / "dict.tsv";
-  const std::filesystem::path wiki = repo / "data" / "fr" / "wiki-text.txt";
+  const std::filesystem::path dict = r::moonshine_tts_bundled_data_dir_relative() / "fr" / "dict.tsv";
+  const std::filesystem::path wiki = r::moonshine_tts_bundled_data_dir_relative() / "fr" / "wiki-text.txt";
   const std::filesystem::path golden = r::tests_data_dir(repo) / "fr" / "rule_g2p_wiki_100.txt";
   if (!std::filesystem::is_regular_file(dict) || !std::filesystem::is_regular_file(wiki) ||
       !std::filesystem::is_regular_file(golden)) {
