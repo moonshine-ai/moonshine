@@ -7,10 +7,13 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 namespace moonshine_tts {
+
+struct MoonshineG2POptions;
 
 /// Korean whitespace-level words + UD UPOS via ONNX (``KoichiYasuoka/roberta-base-korean-morph-upos``),
 /// mirroring ``korean_tok_pos.KoreanTokPosOnnx`` / ``encode_for_morph_upos`` + WordPiece from
@@ -18,6 +21,8 @@ namespace moonshine_tts {
 class KoreanTokPosOnnx {
  public:
   explicit KoreanTokPosOnnx(std::filesystem::path model_dir, bool use_cuda = false);
+  KoreanTokPosOnnx(const MoonshineG2POptions* opt, std::string_view onnx_bundle_key,
+                   std::filesystem::path model_dir_fallback, bool use_cuda = false);
 
   /// One ``(surface, UPOS)`` per whitespace/punctuation word (empty input → empty list).
   std::vector<std::pair<std::string, std::string>> annotate(std::string_view text_utf8);
@@ -36,6 +41,9 @@ class KoreanTokPosOnnx {
   int64_t pad_id_ = 1;
   int max_sequence_length_ = 512;
   std::string logits_output_name_;
+  std::string cached_vocab_txt_;
+  std::string cached_tokenizer_cfg_json_;
+  std::vector<std::uint8_t> onnx_model_storage_;
 };
 
 /// ``<repo>/data/ko/roberta_korean_morph_upos_onnx`` when *repo_root* is the repository root.

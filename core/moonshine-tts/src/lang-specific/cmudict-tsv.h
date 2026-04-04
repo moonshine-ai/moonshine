@@ -3,6 +3,7 @@
 
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -12,6 +13,7 @@ namespace moonshine_tts {
 class CmudictTsv {
  public:
   explicit CmudictTsv(const std::filesystem::path& path);
+  explicit CmudictTsv(std::string_view utf8_contents);
 
   const std::vector<std::string>* lookup(std::string_view key) const;
 

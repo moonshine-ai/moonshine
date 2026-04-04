@@ -1,5 +1,6 @@
 #include "chinese.h"
 
+#include "g2p-path.h"
 #include "g2p-word-log.h"
 #include "chinese-numbers.h"
 #include "utf8-utils.h"
@@ -7,10 +8,13 @@
 #include <cctype>
 #include <cstdint>
 #include <fstream>
+#include <istream>
+#include <sstream>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
@@ -175,16 +179,7 @@ bool try_consume_g2p_token(const std::string& text, size_t pos, size_t& out_end)
   return false;
 }
 
-}  // namespace
-
-ChineseRuleG2p::ChineseRuleG2p(std::filesystem::path dict_tsv) {
-  if (!std::filesystem::is_regular_file(dict_tsv)) {
-    throw std::runtime_error("Chinese G2P: lexicon not found: " + dict_tsv.generic_string());
-  }
-  std::ifstream in(dict_tsv);
-  if (!in) {
-    throw std::runtime_error("Chinese G2P: failed to open " + dict_tsv.generic_string());
-  }
+void load_chinese_lexicon_stream(std::istream& in, std::unordered_map<std::string, std::vector<std::string>>& lex) {
   std::string line;
   while (std::getline(in, line)) {
     const std::string t = trim_copy_line(line);
@@ -200,10 +195,31 @@ ChineseRuleG2p::ChineseRuleG2p(std::filesystem::path dict_tsv) {
     if (key.empty()) {
       continue;
     }
-    lex_[std::move(key)].push_back(std::move(ipa));
+    lex[std::move(key)].push_back(std::move(ipa));
   }
+}
+
+}  // namespace
+
+ChineseRuleG2p::ChineseRuleG2p(std::filesystem::path dict_tsv) {
+  if (!std::filesystem::is_regular_file(dict_tsv)) {
+    throw std::runtime_error("Chinese G2P: lexicon not found: " + dict_tsv.generic_string());
+  }
+  std::ifstream in(dict_tsv);
+  if (!in) {
+    throw std::runtime_error("Chinese G2P: failed to open " + dict_tsv.generic_string());
+  }
+  load_chinese_lexicon_stream(in, lex_);
   if (lex_.empty()) {
     throw std::runtime_error("Chinese G2P: empty lexicon: " + dict_tsv.generic_string());
+  }
+}
+
+ChineseRuleG2p::ChineseRuleG2p(std::string dict_tsv_utf8) {
+  std::istringstream in(std::move(dict_tsv_utf8));
+  load_chinese_lexicon_stream(in, lex_);
+  if (lex_.empty()) {
+    throw std::runtime_error("Chinese G2P: empty lexicon (in-memory)");
   }
 }
 
@@ -530,7 +546,7 @@ std::filesystem::path resolve_chinese_dict_path(const std::filesystem::path& mod
 
 std::filesystem::path resolve_chinese_onnx_model_dir(const std::filesystem::path& model_root) {
   const auto try_dir = [](const std::filesystem::path& dir) -> std::optional<std::filesystem::path> {
-    const auto onnx = dir / "model.onnx";
+    const auto onnx = resolve_prefer_ort_model(dir, "model.ort");
     if (std::filesystem::is_regular_file(onnx)) {
       return dir;
     }

@@ -7,10 +7,13 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 namespace moonshine_tts {
+
+struct MoonshineG2POptions;
 
 /// Simplified-Chinese surfaces + UD UPOS via ONNX (``KoichiYasuoka/chinese-roberta-base-upos`` BIO),
 /// mirroring ``chinese_tok_pos_onnx.ChineseTokPosOnnx`` / WordPiece from
@@ -18,6 +21,10 @@ namespace moonshine_tts {
 class ChineseTokPosOnnx {
  public:
   explicit ChineseTokPosOnnx(std::filesystem::path model_dir, bool use_cuda = false);
+  /// Load tokenizer + ONNX from ``opt`` when non-null and assets exist, else from disk under
+  /// ``model_dir_fallback``.
+  ChineseTokPosOnnx(const MoonshineG2POptions* opt, std::string_view onnx_bundle_key,
+                    std::filesystem::path model_dir_fallback, bool use_cuda = false);
 
   /// One ``(surface, UPOS)`` per BIO word (empty input → empty list).
   std::vector<std::pair<std::string, std::string>> annotate(std::string_view text_utf8);
@@ -36,6 +43,9 @@ class ChineseTokPosOnnx {
   int64_t pad_id_ = 1;
   int max_sequence_length_ = 512;
   std::string logits_output_name_;
+  std::string cached_vocab_txt_;
+  std::string cached_tokenizer_cfg_json_;
+  std::vector<std::uint8_t> onnx_model_storage_;
 };
 
 /// ``<repo>/data/zh_hans/roberta_chinese_base_upos_onnx`` when *repo_root* is the repository root.

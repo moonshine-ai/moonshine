@@ -10,6 +10,8 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <istream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -608,12 +610,7 @@ const std::unordered_map<std::string, std::string>& function_word_ipa() {
   return m;
 }
 
-void load_dutch_lexicon_file(const std::filesystem::path& path,
-                             std::unordered_map<std::string, std::string>& out_map) {
-  std::ifstream in(path);
-  if (!in) {
-    throw std::runtime_error("Dutch lexicon: cannot open " + path.generic_string());
-  }
+void load_dutch_lexicon_stream(std::istream& in, std::unordered_map<std::string, std::string>& out_map) {
   struct Slot {
     std::string ipa;
     bool from_lower = false;
@@ -662,6 +659,15 @@ void load_dutch_lexicon_file(const std::filesystem::path& path,
   for (auto& e : tmp) {
     out_map.emplace(std::move(e.first), std::move(e.second.ipa));
   }
+}
+
+void load_dutch_lexicon_file(const std::filesystem::path& path,
+                             std::unordered_map<std::string, std::string>& out_map) {
+  std::ifstream in(path);
+  if (!in) {
+    throw std::runtime_error("Dutch lexicon: cannot open " + path.generic_string());
+  }
+  load_dutch_lexicon_stream(in, out_map);
 }
 
 bool is_vowel_letter32(char32_t c) {
@@ -1480,6 +1486,11 @@ DutchRuleG2p::DutchRuleG2p(std::filesystem::path dict_tsv) : DutchRuleG2p(std::m
 
 DutchRuleG2p::DutchRuleG2p(std::filesystem::path dict_tsv, Options options) : options_(options) {
   load_dutch_lexicon_file(std::move(dict_tsv), lexicon_);
+}
+
+DutchRuleG2p::DutchRuleG2p(std::string dict_tsv_utf8, Options options) : options_(options) {
+  std::istringstream in(std::move(dict_tsv_utf8));
+  load_dutch_lexicon_stream(in, lexicon_);
 }
 
 std::string DutchRuleG2p::finalize_ipa(std::string ipa, bool from_lexicon) const {

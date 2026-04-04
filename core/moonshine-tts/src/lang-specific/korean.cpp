@@ -6,6 +6,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <fstream>
+#include <istream>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -582,15 +583,7 @@ std::string KoreanRuleG2p::g2p_single_fragment(std::string_view frag) const {
 KoreanRuleG2p::KoreanRuleG2p(std::filesystem::path dict_tsv)
     : KoreanRuleG2p(std::move(dict_tsv), Options{}) {}
 
-KoreanRuleG2p::KoreanRuleG2p(std::filesystem::path dict_tsv, Options options)
-    : options_(std::move(options)) {
-  if (!std::filesystem::is_regular_file(dict_tsv)) {
-    throw std::runtime_error("Korean G2P: lexicon not found at " + dict_tsv.generic_string());
-  }
-  std::ifstream in(dict_tsv);
-  if (!in) {
-    throw std::runtime_error("Korean G2P: cannot open " + dict_tsv.generic_string());
-  }
+void load_korean_lexicon_stream(std::istream& in, std::unordered_map<std::string, std::string>& lexicon) {
   std::string line;
   while (std::getline(in, line)) {
     if (!line.empty() && (line.back() == '\r' || line.back() == '\n')) {
@@ -609,10 +602,28 @@ KoreanRuleG2p::KoreanRuleG2p(std::filesystem::path dict_tsv, Options options)
       continue;
     }
     const std::string k = utf8_nfc_utf8proc(surf);
-    if (lexicon_.find(k) == lexicon_.end()) {
-      lexicon_.emplace(k, normalize_korean_ipa(std::move(ipa_val)));
+    if (lexicon.find(k) == lexicon.end()) {
+      lexicon.emplace(k, KoreanRuleG2p::normalize_korean_ipa(std::move(ipa_val)));
     }
   }
+}
+
+KoreanRuleG2p::KoreanRuleG2p(std::filesystem::path dict_tsv, Options options)
+    : options_(std::move(options)) {
+  if (!std::filesystem::is_regular_file(dict_tsv)) {
+    throw std::runtime_error("Korean G2P: lexicon not found at " + dict_tsv.generic_string());
+  }
+  std::ifstream in(dict_tsv);
+  if (!in) {
+    throw std::runtime_error("Korean G2P: cannot open " + dict_tsv.generic_string());
+  }
+  load_korean_lexicon_stream(in, lexicon_);
+}
+
+KoreanRuleG2p::KoreanRuleG2p(std::string dict_tsv_utf8, Options options)
+    : options_(std::move(options)) {
+  std::istringstream in(std::move(dict_tsv_utf8));
+  load_korean_lexicon_stream(in, lexicon_);
 }
 
 std::string KoreanRuleG2p::text_to_ipa(std::string text,

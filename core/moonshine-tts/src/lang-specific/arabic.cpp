@@ -1,9 +1,12 @@
 #include "arabic.h"
 #include "arabic-ipa.h"
+#include "g2p-path.h"
+#include "moonshine-g2p-options.h"
 #include "utf8-utils.h"
 
 #include <cctype>
 #include <fstream>
+#include <istream>
 #include <sstream>
 #include <stdexcept>
 
@@ -41,12 +44,8 @@ bool has_arabic_script(std::string_view s) {
   return false;
 }
 
-std::unordered_map<std::string, std::string> load_lex_first_tsv(const std::filesystem::path& p) {
+std::unordered_map<std::string, std::string> load_lex_first_tsv_stream(std::istream& in) {
   std::unordered_map<std::string, std::string> lex;
-  std::ifstream in(p);
-  if (!in) {
-    return lex;
-  }
   std::string line;
   while (std::getline(in, line)) {
     if (!line.empty() && line.back() == '\r') {
@@ -77,12 +76,40 @@ std::unordered_map<std::string, std::string> load_lex_first_tsv(const std::files
   return lex;
 }
 
+std::unordered_map<std::string, std::string> load_lex_first_tsv(const std::filesystem::path& p) {
+  std::ifstream in(p);
+  if (!in) {
+    return {};
+  }
+  return load_lex_first_tsv_stream(in);
+}
+
 }  // namespace
 
 ArabicRuleG2p::ArabicRuleG2p(std::filesystem::path onnx_model_dir, std::filesystem::path dict_tsv,
                              bool use_cuda)
     : diac_(std::make_unique<ArabicDiacOnnx>(std::move(onnx_model_dir), use_cuda)),
       lex_(load_lex_first_tsv(std::move(dict_tsv))) {}
+
+ArabicRuleG2p::ArabicRuleG2p(std::filesystem::path onnx_model_dir, std::string dict_tsv_utf8,
+                             bool use_cuda)
+    : diac_(std::make_unique<ArabicDiacOnnx>(std::move(onnx_model_dir), use_cuda)), lex_() {
+  std::istringstream in(std::move(dict_tsv_utf8));
+  lex_ = load_lex_first_tsv_stream(in);
+}
+
+ArabicRuleG2p::ArabicRuleG2p(const MoonshineG2POptions& opt, std::filesystem::path onnx_model_dir,
+                             std::filesystem::path dict_tsv, bool use_cuda)
+    : diac_(std::make_unique<ArabicDiacOnnx>(&opt, kG2pArabicOnnxDirKey, std::move(onnx_model_dir), use_cuda)),
+      lex_(load_lex_first_tsv(std::move(dict_tsv))) {}
+
+ArabicRuleG2p::ArabicRuleG2p(const MoonshineG2POptions& opt, std::filesystem::path onnx_model_dir,
+                             std::string dict_tsv_utf8, bool use_cuda)
+    : diac_(std::make_unique<ArabicDiacOnnx>(&opt, kG2pArabicOnnxDirKey, std::move(onnx_model_dir), use_cuda)),
+      lex_() {
+  std::istringstream in(std::move(dict_tsv_utf8));
+  lex_ = load_lex_first_tsv_stream(in);
+}
 
 std::vector<std::string> ArabicRuleG2p::dialect_ids() {
   return dedupe_dialect_ids_preserve_first(
@@ -113,7 +140,7 @@ std::filesystem::path resolve_arabic_dict_path(const std::filesystem::path& mode
 std::filesystem::path resolve_arabic_onnx_model_dir(const std::filesystem::path& model_root) {
   const std::filesystem::path base = absolute_model_root_ar(model_root);
   const auto try_dir = [](const std::filesystem::path& dir) -> std::optional<std::filesystem::path> {
-    const auto onnx = dir / "model.onnx";
+    const auto onnx = resolve_prefer_ort_model(dir, "model.ort");
     if (std::filesystem::is_regular_file(onnx)) {
       return dir;
     }

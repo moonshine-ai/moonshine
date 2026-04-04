@@ -13,10 +13,14 @@
 
 namespace moonshine_tts {
 
+struct MoonshineG2POptions;
+
 /// BERT token-classification tashkīl (Arabert-style), mirroring :class:`arabic_diac_onnx_infer.ArabicDiacOnnx`.
 class ArabicDiacOnnx {
  public:
   explicit ArabicDiacOnnx(std::filesystem::path model_dir, bool use_cuda = false);
+  ArabicDiacOnnx(const MoonshineG2POptions* opt, std::string_view onnx_bundle_key,
+                 std::filesystem::path model_dir_fallback, bool use_cuda = false);
   ~ArabicDiacOnnx();
 
   ArabicDiacOnnx(const ArabicDiacOnnx&) = delete;
@@ -40,6 +44,9 @@ class ArabicDiacOnnx {
   std::unique_ptr<Ort::Session> session_;
   std::string logits_output_name_;
   std::unordered_map<std::string, std::string> label_to_diac_;
+  std::string cached_vocab_txt_;
+  std::string cached_tokenizer_cfg_json_;
+  std::vector<std::uint8_t> onnx_model_storage_;
 };
 
 }  // namespace moonshine_tts

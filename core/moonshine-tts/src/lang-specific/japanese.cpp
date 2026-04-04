@@ -1,6 +1,8 @@
 #include "japanese.h"
+#include "g2p-path.h"
 #include "g2p-word-log.h"
 #include "japanese-onnx-g2p.h"
+#include "moonshine-g2p-options.h"
 #include "utf8-utils.h"
 
 #include <cctype>
@@ -29,6 +31,21 @@ JapaneseRuleG2p::JapaneseRuleG2p(std::filesystem::path onnx_model_dir,
                                   std::filesystem::path dict_tsv,
                                   bool use_cuda)
     : impl_(std::make_unique<JapaneseOnnxG2p>(std::move(onnx_model_dir), std::move(dict_tsv), use_cuda)) {}
+
+JapaneseRuleG2p::JapaneseRuleG2p(std::filesystem::path onnx_model_dir, std::string dict_tsv_utf8,
+                                  bool use_cuda)
+    : impl_(std::make_unique<JapaneseOnnxG2p>(std::move(onnx_model_dir), std::move(dict_tsv_utf8),
+                                             use_cuda)) {}
+
+JapaneseRuleG2p::JapaneseRuleG2p(const MoonshineG2POptions& opt, std::filesystem::path onnx_model_dir,
+                                  std::filesystem::path dict_tsv, bool use_cuda)
+    : impl_(std::make_unique<JapaneseOnnxG2p>(opt, std::move(onnx_model_dir), std::move(dict_tsv),
+                                              use_cuda)) {}
+
+JapaneseRuleG2p::JapaneseRuleG2p(const MoonshineG2POptions& opt, std::filesystem::path onnx_model_dir,
+                                  std::string dict_tsv_utf8, bool use_cuda)
+    : impl_(std::make_unique<JapaneseOnnxG2p>(opt, std::move(onnx_model_dir), std::move(dict_tsv_utf8),
+                                              use_cuda)) {}
 
 JapaneseRuleG2p::~JapaneseRuleG2p() = default;
 
@@ -69,7 +86,7 @@ std::filesystem::path resolve_japanese_dict_path(const std::filesystem::path& mo
 std::filesystem::path resolve_japanese_onnx_model_dir(const std::filesystem::path& model_root) {
   const std::filesystem::path base = absolute_model_root(model_root);
   const auto try_dir = [](const std::filesystem::path& dir) -> std::optional<std::filesystem::path> {
-    const auto onnx = dir / "model.onnx";
+    const auto onnx = resolve_prefer_ort_model(dir, "model.ort");
     if (std::filesystem::is_regular_file(onnx)) {
       return dir;
     }

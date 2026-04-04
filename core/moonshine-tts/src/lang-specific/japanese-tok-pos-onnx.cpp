@@ -1,14 +1,19 @@
 #include "japanese-tok-pos-onnx.h"
+#include "g2p-path.h"
+#include "moonshine-g2p-options.h"
+#include "ort-onnx-external-data.h"
 #include "utf8-utils.h"
 
 #include <nlohmann/json.h>
 
 #include <cctype>
+#include <cstdint>
 #include <array>
 #include <cmath>
 #include <fstream>
 #include <limits>
 #include <optional>
+#include <sstream>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -37,6 +42,73 @@ std::unique_ptr<Ort::Session> open_session(Ort::Env& env, const std::filesystem:
   const std::string u8 = model_path.string();
   return std::make_unique<Ort::Session>(env, u8.c_str(), make_session_options(use_cuda));
 #endif
+}
+
+std::unique_ptr<Ort::Session> open_session_memory(Ort::Env& env, const void* data, size_t len,
+                                                  bool use_cuda, const MoonshineG2POptions* opt,
+                                                  std::string_view model_map_key) {
+  Ort::SessionOptions so = make_session_options(use_cuda);
+  if (opt != nullptr && !model_map_key.empty()) {
+    ort_add_external_initializer_files_for_onnx_model_buffer(so, opt->files, model_map_key);
+  }
+  return std::make_unique<Ort::Session>(env, data, len, so);
+}
+
+std::string slurp_utf8_file(const std::filesystem::path& p) {
+  std::ifstream in(p, std::ios::binary);
+  if (!in) {
+    return {};
+  }
+  std::ostringstream oss;
+  oss << in.rdbuf();
+  return oss.str();
+}
+
+bool bundle_load_utf8(const MoonshineG2POptions* opt, std::string_view bundle_key, std::string_view file,
+                      const std::filesystem::path& disk_dir, std::string& out) {
+  if (opt && !bundle_key.empty()) {
+    const std::string ak = g2p_bundle_file_key(bundle_key, file);
+    if (opt->asset_is_available(ak)) {
+      out = opt->read_utf8_asset(ak);
+      return true;
+    }
+  }
+  const auto p = disk_dir / std::string(file);
+  if (std::filesystem::is_regular_file(p)) {
+    out = slurp_utf8_file(p);
+    return true;
+  }
+  return false;
+}
+
+bool bundle_load_binary(const MoonshineG2POptions* opt, std::string_view bundle_key, std::string_view file,
+                        const std::filesystem::path& disk_dir, std::vector<std::uint8_t>& out) {
+  if (opt && !bundle_key.empty()) {
+    const std::string ak = g2p_bundle_file_key(bundle_key, file);
+    if (opt->asset_is_available(ak)) {
+      out = opt->read_binary_asset(ak);
+      return true;
+    }
+  }
+  const auto p = resolve_prefer_ort_model(disk_dir, file);
+  if (!std::filesystem::is_regular_file(p)) {
+    return false;
+  }
+  std::ifstream in(p, std::ios::binary);
+  if (!in) {
+    return false;
+  }
+  in.seekg(0, std::ios::end);
+  const auto sz = in.tellg();
+  in.seekg(0, std::ios::beg);
+  if (sz < 0) {
+    return false;
+  }
+  out.resize(static_cast<size_t>(sz));
+  if (!out.empty()) {
+    in.read(reinterpret_cast<char*>(out.data()), static_cast<std::streamsize>(out.size()));
+  }
+  return true;
 }
 
 std::u32string utf8_to_u32(std::string_view utf8) {
@@ -521,11 +593,7 @@ std::string morph_label_to_upos(std::string label) {
   return "X";
 }
 
-std::unordered_map<std::string, int64_t> load_vocab_txt(const std::filesystem::path& p) {
-  std::ifstream in(p);
-  if (!in) {
-    throw std::runtime_error("cannot open vocab: " + p.string());
-  }
+std::unordered_map<std::string, int64_t> load_vocab_txt_stream(std::istream& in) {
   std::unordered_map<std::string, int64_t> vocab;
   std::string line;
   int64_t index = 0;
@@ -539,6 +607,12 @@ std::unordered_map<std::string, int64_t> load_vocab_txt(const std::filesystem::p
   return vocab;
 }
 
+std::unordered_map<std::string, int64_t> load_vocab_txt_string(std::string_view utf8) {
+  const std::string buf(utf8);
+  std::istringstream in(buf);
+  return load_vocab_txt_stream(in);
+}
+
 }  // namespace
 
 std::filesystem::path default_japanese_tok_pos_model_dir(const std::filesystem::path& g2p_data_root) {
@@ -546,36 +620,45 @@ std::filesystem::path default_japanese_tok_pos_model_dir(const std::filesystem::
 }
 
 JapaneseTokPosOnnx::JapaneseTokPosOnnx(std::filesystem::path model_dir, bool use_cuda)
+    : JapaneseTokPosOnnx(nullptr, std::string_view{}, std::move(model_dir), use_cuda) {}
+
+JapaneseTokPosOnnx::JapaneseTokPosOnnx(const MoonshineG2POptions* opt, std::string_view onnx_bundle_key,
+                                      std::filesystem::path model_dir_fallback, bool use_cuda)
     : env_(ORT_LOGGING_LEVEL_WARNING, "moonshine_japanese_tok_pos"),
       mem_(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)),
-      model_dir_(std::move(model_dir)) {
-  const auto vocab_path = model_dir_ / "vocab.txt";
-  const auto cfg_path = model_dir_ / "tokenizer_config.json";
-  const auto meta_path = model_dir_ / "meta.json";
-  if (!std::filesystem::is_regular_file(vocab_path)) {
-    throw std::runtime_error("JapaneseTokPosOnnx: missing " + vocab_path.string());
+      model_dir_(std::move(model_dir_fallback)) {
+  const MoonshineG2POptions* opt_ptr = opt;
+  std::string meta_json;
+  if (!bundle_load_utf8(opt_ptr, onnx_bundle_key, "meta.json", model_dir_, meta_json)) {
+    throw std::runtime_error("JapaneseTokPosOnnx: missing meta.json (memory or disk under " +
+                             model_dir_.string() + ")");
   }
-  if (!std::filesystem::is_regular_file(cfg_path)) {
-    throw std::runtime_error("JapaneseTokPosOnnx: missing " + cfg_path.string());
-  }
-  if (!std::filesystem::is_regular_file(meta_path)) {
-    throw std::runtime_error("JapaneseTokPosOnnx: missing " + meta_path.string());
-  }
-
-  std::ifstream meta_in(meta_path);
-  const nlohmann::json meta = nlohmann::json::parse(meta_in);
+  const nlohmann::json meta = nlohmann::json::parse(meta_json);
   for (const auto& s : meta.at("id2label")) {
     id2label_.push_back(s.get<std::string>());
   }
   pad_id_ = meta.value("pad_token_id", 1);
   max_sequence_length_ = meta.value("max_sequence_length", 512);
-  const std::string onnx_name = meta.value("onnx_model_file", std::string("model.onnx"));
-  const auto onnx_path = model_dir_ / onnx_name;
-  if (!std::filesystem::is_regular_file(onnx_path)) {
-    throw std::runtime_error("JapaneseTokPosOnnx: missing " + onnx_path.string());
+  const std::string onnx_name = meta.value("onnx_model_file", std::string("model.ort"));
+  if (!bundle_load_utf8(opt_ptr, onnx_bundle_key, "vocab.txt", model_dir_, cached_vocab_txt_)) {
+    throw std::runtime_error("JapaneseTokPosOnnx: missing vocab.txt");
   }
-
-  session_ = open_session(env_, onnx_path, use_cuda);
+  if (!bundle_load_utf8(opt_ptr, onnx_bundle_key, "tokenizer_config.json", model_dir_,
+                        cached_tokenizer_cfg_json_)) {
+    throw std::runtime_error("JapaneseTokPosOnnx: missing tokenizer_config.json");
+  }
+  if (bundle_load_binary(opt_ptr, onnx_bundle_key, onnx_name, model_dir_, onnx_model_storage_) &&
+      !onnx_model_storage_.empty()) {
+    const std::string model_map_key = g2p_bundle_file_key(onnx_bundle_key, onnx_name);
+    session_ = open_session_memory(env_, onnx_model_storage_.data(), onnx_model_storage_.size(),
+                                   use_cuda, opt_ptr, model_map_key);
+  } else {
+    const auto onnx_path = resolve_prefer_ort_model(model_dir_, onnx_name);
+    if (!std::filesystem::is_regular_file(onnx_path)) {
+      throw std::runtime_error("JapaneseTokPosOnnx: missing " + onnx_path.string());
+    }
+    session_ = open_session(env_, onnx_path, use_cuda);
+  }
   {
     Ort::AllocatorWithDefaultOptions alloc;
     auto out_ptr = session_->GetOutputNameAllocated(0, alloc);
@@ -601,11 +684,11 @@ std::vector<std::pair<std::string, std::string>> JapaneseTokPosOnnx::annotate(st
     return {};
   }
 
-  const auto vocab_path = model_dir_ / "vocab.txt";
-  const auto cfg_path = model_dir_ / "tokenizer_config.json";
-  const std::unordered_map<std::string, int64_t> vocab = load_vocab_txt(vocab_path);
-  std::ifstream cfg_in(cfg_path);
-  const nlohmann::json cfg = nlohmann::json::parse(cfg_in);
+  if (cached_vocab_txt_.empty() || cached_tokenizer_cfg_json_.empty()) {
+    throw std::runtime_error("JapaneseTokPosOnnx: tokenizer assets not loaded");
+  }
+  const std::unordered_map<std::string, int64_t> vocab = load_vocab_txt_string(cached_vocab_txt_);
+  const nlohmann::json cfg = nlohmann::json::parse(cached_tokenizer_cfg_json_);
   BasicTokCfg bcfg;
   bcfg.do_lower_case = cfg.value("do_lower_case", true);
   bcfg.tokenize_chinese_chars = cfg.value("tokenize_chinese_chars", true);

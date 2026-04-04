@@ -610,7 +610,17 @@ MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_files(
    Returns a non-negative handle on success, or a non-zero error code on
    failure. The error code can be converted to a human-readable string using
    moonshine_error_to_string.
-   Pass voice and asset layout via ``options`` (same as ``from_files``).
+
+   ``filenames[i]`` is the canonical ``MoonshineTTSOptions::files`` key (e.g.
+   ``kokoro/model.onnx``, ``kokoro/config.json``, ``kokoro/voices/af_heart.kokorovoice``,
+   ``piper/onnx``, ``piper/onnx.json``). When ``memory[i]`` is non-NULL and
+   ``memory_sizes[i]`` > 0, that buffer is used as the asset bytes; the library
+   does not copy it—keep the buffers valid until ``moonshine_free_tts_synthesizer``.
+   When ``memory[i]`` is NULL or ``memory_sizes[i]`` is zero, the key string is
+   also used as a path relative to ``g2p_options.g2p_root`` (from ``options``),
+   same as path-only map entries.
+
+   Other ``options`` are parsed like ``moonshine_create_tts_synthesizer_from_files``.
 */
 MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_memory(
     const char *language, const char **filenames, const uint64_t filenames_count,
@@ -637,6 +647,18 @@ MOONSHINE_EXPORT int32_t moonshine_text_to_speech(
    Returns a non-negative handle on success, or a negative error code on
    failure. The error code can be converted to a human-readable string using
    moonshine_error_to_string.
+
+   Lexicons and bundled ONNX assets are resolved under ``g2p_root`` using the
+   same canonical relative keys as ``MoonshineG2POptions::files`` in the C++
+   API (for example ``en_us/dict_filtered_heteronyms.tsv``,
+   ``zh_hans/roberta_chinese_base_upos_onnx/meta.json``,
+   ``zh_hans/roberta_chinese_base_upos_onnx/model.onnx``,
+   ``en_us/heteronym/model.onnx``, ``en_us/heteronym/onnx-config.json``,
+   ``en_us/oov/model.onnx``, ``en_us/oov/onnx-config.json``). Japanese, Korean,
+   and Arabic tok-POS / diacritizer bundles use the same pattern under their
+   respective directory keys (``ja/...``, ``ko/...``, ``ar_msa/...``). If an ONNX
+   model uses external data files (e.g. ``model.onnx.data``), those must sit
+   beside the ``.onnx`` on disk so the runtime can open them.
 */
 MOONSHINE_EXPORT int32_t moonshine_create_grapheme_to_phonemizer_from_files(
     const char *language, const char **filenames, uint64_t filenames_count,
@@ -647,6 +669,23 @@ MOONSHINE_EXPORT int32_t moonshine_create_grapheme_to_phonemizer_from_files(
    Returns a non-negative handle on success, or a negative error code on
    failure. The error code can be converted to a human-readable string using
    moonshine_error_to_string.
+
+   ``filenames[i]`` is the canonical ``MoonshineG2POptions::files`` key.
+   When ``memory[i]`` is non-NULL and ``memory_sizes[i]`` > 0, that buffer is
+   used as the asset bytes (not copied—keep valid until the phonemizer is
+   freed). When ``memory[i]`` is NULL or size zero, the key is also used as a
+   path relative to ``g2p_root``, like path-only map entries.
+
+   Register every file the engine needs: language lexicon ``dict.tsv`` paths,
+   English ``g2p-config.json`` / ``homograph_index.json`` when applicable, and
+   for ONNX bundles the ``meta.json``, ``vocab.txt``, ``tokenizer_config.json``,
+   and ``model.onnx`` keys under the bundle directory key. English heteronym /
+   OOV overrides use ``heteronym_onnx_override`` / ``oov_onnx_override`` for the
+   ``.onnx`` bytes and ``heteronym_onnx_config`` / ``oov_onnx_config`` for the
+   merged JSON config UTF-8 text. Models split across ``model.onnx`` plus
+   external weight files must be supplied as a single self-contained ``.onnx``
+   buffer (or remain on disk via the path fallback) so the runtime does not
+   need a sidecar ``.data`` file.
 */
 MOONSHINE_EXPORT int32_t moonshine_create_grapheme_to_phonemizer_from_memory(
     const char *language, const char **filenames,

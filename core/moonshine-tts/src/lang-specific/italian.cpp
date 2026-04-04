@@ -12,6 +12,8 @@
 #include <cwctype>
 #include <limits>
 #include <fstream>
+#include <istream>
+#include <sstream>
 #include <regex>
 #include <stdexcept>
 #include <string>
@@ -111,12 +113,7 @@ std::string utf8_lowercase_italian(const std::string& word) {
   return out;
 }
 
-void load_italian_lexicon_file(const std::filesystem::path& path,
-                               std::unordered_map<std::string, std::string>& out_lex) {
-  std::ifstream in(path);
-  if (!in) {
-    throw std::runtime_error("Italian G2P: cannot read lexicon " + path.generic_string());
-  }
+void load_italian_lexicon_stream(std::istream& in, std::unordered_map<std::string, std::string>& out_lex) {
   std::unordered_map<std::string, std::pair<std::string, bool>> tmp;
   std::string line;
   while (std::getline(in, line)) {
@@ -145,6 +142,15 @@ void load_italian_lexicon_file(const std::filesystem::path& path,
   for (auto& e : tmp) {
     out_lex.emplace(std::move(e.first), std::move(e.second.first));
   }
+}
+
+void load_italian_lexicon_file(const std::filesystem::path& path,
+                               std::unordered_map<std::string, std::string>& out_lex) {
+  std::ifstream in(path);
+  if (!in) {
+    throw std::runtime_error("Italian G2P: cannot read lexicon " + path.generic_string());
+  }
+  load_italian_lexicon_stream(in, out_lex);
 }
 
 // --- Italian numbers (italian_numbers.py) ---------------------------------
@@ -1089,6 +1095,12 @@ ItalianRuleG2p::ItalianRuleG2p(std::filesystem::path dict_tsv)
 ItalianRuleG2p::ItalianRuleG2p(std::filesystem::path dict_tsv, Options options)
     : options_(options) {
   load_italian_lexicon_file(std::move(dict_tsv), lexicon_);
+}
+
+ItalianRuleG2p::ItalianRuleG2p(std::string dict_tsv_utf8, Options options)
+    : options_(options) {
+  std::istringstream in(std::move(dict_tsv_utf8));
+  load_italian_lexicon_stream(in, lexicon_);
 }
 
 std::string ItalianRuleG2p::finalize_ipa(std::string ipa, bool from_lexicon) const {

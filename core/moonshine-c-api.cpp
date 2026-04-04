@@ -27,6 +27,7 @@ SOFTWARE.
 #include <fcntl.h>
 
 #include <algorithm>
+#include <filesystem>
 #include <array>
 #include <cassert>
 #include <cctype>
@@ -684,8 +685,98 @@ int32_t moonshine_create_tts_synthesizer_from_files(
   if (lang_from_options_set) {
     lang = std::move(lang_from_options);
   }
-  auto *synthesizer = new moonshine_tts::MoonshineTTS(lang, tts_options);
-  return allocate_text_to_speech_synthesizer_handle(synthesizer);
+  try {
+    auto *synthesizer = new moonshine_tts::MoonshineTTS(lang, tts_options);
+    return allocate_text_to_speech_synthesizer_handle(synthesizer);
+  } catch (const std::exception &e) {
+    LOGF("Failed to create TTS synthesizer: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+int32_t moonshine_create_tts_synthesizer_from_memory(
+    const char *language, const char **filenames, uint64_t filenames_count,
+    const uint8_t **memory, const uint64_t *memory_sizes,
+    const struct moonshine_option_t *options, uint64_t options_count,
+    int32_t moonshine_version) {
+  (void)moonshine_version;
+  if (filenames_count > 0) {
+    if (filenames == nullptr || memory == nullptr || memory_sizes == nullptr) {
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
+    }
+  }
+  if (log_api_calls) {
+    LOGF(
+        "moonshine_create_tts_synthesizer_from_memory(language=%s, filenames=%p, "
+        "filenames_count=%llu, memory=%p, memory_sizes=%p, options=%p, "
+        "options_count=%llu, moonshine_version=%d)",
+        language, reinterpret_cast<const void *>(filenames),
+        static_cast<unsigned long long>(filenames_count),
+        reinterpret_cast<const void *>(memory),
+        reinterpret_cast<const void *>(memory_sizes),
+        static_cast<const void *>(options),
+        static_cast<unsigned long long>(options_count), moonshine_version);
+  }
+  try {
+    moonshine_tts::MoonshineTTSOptions tts_options;
+    bool any_g2p_asset = false;
+    for (uint64_t i = 0; i < filenames_count; ++i) {
+      if (filenames[i] == nullptr) {
+        return MOONSHINE_ERROR_INVALID_ARGUMENT;
+      }
+      const std::string key(filenames[i]);
+      const bool is_tts_only =
+          (key.size() >= 7 && key.compare(0, 7, "kokoro/") == 0) ||
+          (key.size() >= 6 && key.compare(0, 6, "piper/") == 0);
+      if (!is_tts_only) {
+        any_g2p_asset = true;
+      }
+      moonshine_tts::FileInformationMap& dest =
+          is_tts_only ? tts_options.files : tts_options.g2p_options.files;
+      if (memory[i] != nullptr && memory_sizes[i] > 0) {
+        dest.set_memory(key, memory[i], static_cast<size_t>(memory_sizes[i]));
+      } else {
+        dest.set_path(key, std::filesystem::path(key));
+      }
+    }
+    {
+      // Defaults use canonical key ``kokoro/model.ort``; on-disk bundles are often ``kokoro/model.onnx``.
+      // If only the .onnx key has buffers, wire them to the canonical key so Kokoro does not fall back
+      // to ``g2p_root/kokoro/model.ort`` on disk.
+      moonshine_tts::FileInformationMap& tf = tts_options.files;
+      const auto onnx_it = tf.entries.find("kokoro/model.onnx");
+      if (onnx_it != tf.entries.end() && onnx_it->second.memory != nullptr &&
+          onnx_it->second.memory_size > 0) {
+        const std::string ort_k(moonshine_tts::kTtsKokoroModelOnnxKey);
+        const auto ort_it = tf.entries.find(ort_k);
+        const bool ort_needs_alias =
+            ort_it == tf.entries.end() || ort_it->second.memory == nullptr ||
+            ort_it->second.memory_size == 0;
+        if (ort_needs_alias) {
+          const moonshine_tts::FileInformation& src = onnx_it->second;
+          tf.entries[ort_k] = moonshine_tts::FileInformation{
+              std::filesystem::path(ort_k), src.memory, src.memory_size};
+        }
+      }
+    }
+    if (any_g2p_asset) {
+      tts_options.g2p_options.allow_builtin_cpp_data_fallback = false;
+    }
+    std::string lang_from_options;
+    bool lang_from_options_set = false;
+    parse_tts_options(options, options_count, tts_options, lang_from_options,
+                      lang_from_options_set);
+    std::string lang =
+        (language != nullptr && language[0] != '\0') ? std::string(language) : std::string("en_us");
+    if (lang_from_options_set) {
+      lang = std::move(lang_from_options);
+    }
+    auto *synthesizer = new moonshine_tts::MoonshineTTS(lang, tts_options);
+    return allocate_text_to_speech_synthesizer_handle(synthesizer);
+  } catch (const std::exception &e) {
+    LOGF("Failed to create TTS synthesizer from memory: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
 }
 
 /* Releases the resources used by a text to speech synthesizer.

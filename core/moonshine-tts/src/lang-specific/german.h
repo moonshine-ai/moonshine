@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <string>
+#include <utility>
 #include <unordered_map>
 #include <vector>
 
@@ -26,6 +27,9 @@ class GermanRuleG2p : public RuleBasedG2p {
   /// Load ``word<TAB>IPA`` TSV; throws ``std::runtime_error`` if the file is missing/unreadable.
   explicit GermanRuleG2p(std::filesystem::path dict_tsv);
   explicit GermanRuleG2p(std::filesystem::path dict_tsv, Options options);
+  explicit GermanRuleG2p(std::string dict_tsv_utf8, Options options);
+  explicit GermanRuleG2p(std::string dict_tsv_utf8)
+      : GermanRuleG2p(std::move(dict_tsv_utf8), Options{}) {}
 
   static std::vector<std::string> dialect_ids();
 

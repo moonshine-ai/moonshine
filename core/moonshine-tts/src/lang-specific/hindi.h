@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <unordered_map>
 #include <vector>
 
@@ -23,6 +24,9 @@ class HindiRuleG2p : public RuleBasedG2p {
 
   explicit HindiRuleG2p(std::filesystem::path dict_tsv);
   explicit HindiRuleG2p(std::filesystem::path dict_tsv, Options options);
+  explicit HindiRuleG2p(std::string dict_tsv_utf8, Options options);
+  explicit HindiRuleG2p(std::string dict_tsv_utf8)
+      : HindiRuleG2p(std::move(dict_tsv_utf8), Options{}) {}
 
   static std::vector<std::string> dialect_ids();
 

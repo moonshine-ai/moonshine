@@ -13,6 +13,7 @@
 namespace moonshine_tts {
 
 struct G2pWordLog;
+struct MoonshineG2POptions;
 
 /// ONNX BIO segmentation + UPOS + ``data/zh_hans/dict.tsv`` (mirrors ``chinese_rule_g2p.ChineseOnnxLexiconG2p``).
 class ChineseOnnxG2p {
@@ -20,6 +21,11 @@ class ChineseOnnxG2p {
   explicit ChineseOnnxG2p(std::filesystem::path model_dir,
                           std::filesystem::path dict_tsv,
                           bool use_cuda = false);
+  explicit ChineseOnnxG2p(std::filesystem::path model_dir, std::string dict_tsv_utf8, bool use_cuda = false);
+  ChineseOnnxG2p(const MoonshineG2POptions& opt, std::filesystem::path model_dir,
+                 std::filesystem::path dict_tsv, bool use_cuda = false);
+  ChineseOnnxG2p(const MoonshineG2POptions& opt, std::filesystem::path model_dir,
+                 std::string dict_tsv_utf8, bool use_cuda = false);
 
   std::string text_to_ipa(std::string text_utf8, std::vector<G2pWordLog>* per_word_log = nullptr);
 
@@ -36,6 +42,12 @@ class ChineseOnnxRuleG2p : public RuleBasedG2p {
   explicit ChineseOnnxRuleG2p(std::filesystem::path onnx_model_dir,
                               std::filesystem::path dict_tsv,
                               bool use_cuda = false);
+  explicit ChineseOnnxRuleG2p(std::filesystem::path onnx_model_dir, std::string dict_tsv_utf8,
+                                bool use_cuda = false);
+  ChineseOnnxRuleG2p(const MoonshineG2POptions& opt, std::filesystem::path onnx_model_dir,
+                     std::filesystem::path dict_tsv, bool use_cuda = false);
+  ChineseOnnxRuleG2p(const MoonshineG2POptions& opt, std::filesystem::path onnx_model_dir,
+                     std::string dict_tsv_utf8, bool use_cuda = false);
 
   std::string text_to_ipa(std::string text, std::vector<G2pWordLog>* per_word_log = nullptr) override;
 

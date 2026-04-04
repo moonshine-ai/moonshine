@@ -12,6 +12,7 @@
 namespace moonshine_tts {
 
 struct G2pWordLog;
+struct MoonshineG2POptions;
 
 class JapaneseOnnxG2p;
 
@@ -21,6 +22,12 @@ class JapaneseRuleG2p : public RuleBasedG2p {
   explicit JapaneseRuleG2p(std::filesystem::path onnx_model_dir,
                            std::filesystem::path dict_tsv,
                            bool use_cuda = false);
+  explicit JapaneseRuleG2p(std::filesystem::path onnx_model_dir, std::string dict_tsv_utf8,
+                           bool use_cuda = false);
+  JapaneseRuleG2p(const MoonshineG2POptions& opt, std::filesystem::path onnx_model_dir,
+                  std::filesystem::path dict_tsv, bool use_cuda = false);
+  JapaneseRuleG2p(const MoonshineG2POptions& opt, std::filesystem::path onnx_model_dir,
+                  std::string dict_tsv_utf8, bool use_cuda = false);
   ~JapaneseRuleG2p() override;
 
   JapaneseRuleG2p(JapaneseRuleG2p&&) noexcept;

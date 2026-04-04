@@ -21,6 +21,7 @@ struct G2pWordLog;
 class ChineseRuleG2p : public RuleBasedG2p {
  public:
   explicit ChineseRuleG2p(std::filesystem::path dict_tsv);
+  explicit ChineseRuleG2p(std::string dict_tsv_utf8);
 
   static std::vector<std::string> dialect_ids();
 

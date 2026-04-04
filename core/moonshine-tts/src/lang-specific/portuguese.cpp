@@ -12,7 +12,9 @@
 #include <cstdint>
 #include <cwctype>
 #include <fstream>
+#include <istream>
 #include <limits>
+#include <sstream>
 #include <optional>
 #include <regex>
 #include <stdexcept>
@@ -47,11 +49,7 @@ std::string utf8_lowercase_pt_surface(const std::string& word) {
   return out;
 }
 
-void load_pt_lexicon_file(const std::filesystem::path& path, std::unordered_map<std::string, std::string>& out) {
-  std::ifstream in(path);
-  if (!in) {
-    throw std::runtime_error("Portuguese G2P: cannot read lexicon " + path.generic_string());
-  }
+void load_pt_lexicon_stream(std::istream& in, std::unordered_map<std::string, std::string>& out) {
   std::unordered_map<std::string, std::pair<std::string, bool>> tmp;
   std::string line;
   while (std::getline(in, line)) {
@@ -80,6 +78,14 @@ void load_pt_lexicon_file(const std::filesystem::path& path, std::unordered_map<
   for (auto& e : tmp) {
     out.emplace(std::move(e.first), std::move(e.second.first));
   }
+}
+
+void load_pt_lexicon_file(const std::filesystem::path& path, std::unordered_map<std::string, std::string>& out) {
+  std::ifstream in(path);
+  if (!in) {
+    throw std::runtime_error("Portuguese G2P: cannot read lexicon " + path.generic_string());
+  }
+  load_pt_lexicon_stream(in, out);
 }
 
 // --- Numbers (portuguese_numbers.py) ------------------------------------------
@@ -390,6 +396,13 @@ PortugueseRuleG2p::PortugueseRuleG2p(std::filesystem::path dict_tsv, bool is_por
     : is_portugal_(is_portugal), options_(options) {
   dialect_id_ = is_portugal ? "pt-PT" : "pt-BR";
   load_pt_lexicon_file(std::move(dict_tsv), lexicon_);
+}
+
+PortugueseRuleG2p::PortugueseRuleG2p(std::string dict_tsv_utf8, bool is_portugal, Options options)
+    : is_portugal_(is_portugal), options_(options) {
+  dialect_id_ = is_portugal ? "pt-PT" : "pt-BR";
+  std::istringstream in(std::move(dict_tsv_utf8));
+  load_pt_lexicon_stream(in, lexicon_);
 }
 
 std::string PortugueseRuleG2p::finalize_ipa(std::string ipa, bool from_lexicon) const {

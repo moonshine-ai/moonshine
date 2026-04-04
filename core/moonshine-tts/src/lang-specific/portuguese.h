@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <string>
+#include <utility>
 #include <unordered_map>
 #include <vector>
 
@@ -26,6 +27,9 @@ class PortugueseRuleG2p : public RuleBasedG2p {
 
   explicit PortugueseRuleG2p(std::filesystem::path dict_tsv, bool is_portugal);
   explicit PortugueseRuleG2p(std::filesystem::path dict_tsv, bool is_portugal, Options options);
+  explicit PortugueseRuleG2p(std::string dict_tsv_utf8, bool is_portugal, Options options);
+  explicit PortugueseRuleG2p(std::string dict_tsv_utf8, bool is_portugal)
+      : PortugueseRuleG2p(std::move(dict_tsv_utf8), is_portugal, Options{}) {}
 
   static std::vector<std::string> dialect_ids();
 

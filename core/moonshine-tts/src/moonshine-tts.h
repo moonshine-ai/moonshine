@@ -19,7 +19,7 @@ namespace moonshine_tts {
 using MoonshineTTSFileInformation = FileInformation;
 
 /// Canonical keys for TTS asset paths (relative to ``g2p_options.g2p_root`` unless paths are absolute).
-inline constexpr std::string_view kTtsKokoroModelOnnxKey = "kokoro/model.onnx";
+inline constexpr std::string_view kTtsKokoroModelOnnxKey = "kokoro/model.ort";
 inline constexpr std::string_view kTtsKokoroConfigJsonKey = "kokoro/config.json";
 /// Optional explicit Piper ONNX model (``*.onnx``).
 inline constexpr std::string_view kTtsPiperOnnxKey = "piper/onnx";

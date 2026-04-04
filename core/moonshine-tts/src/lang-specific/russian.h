@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <string>
+#include <utility>
 #include <unordered_map>
 #include <vector>
 
@@ -25,6 +26,9 @@ class RussianRuleG2p : public RuleBasedG2p {
 
   explicit RussianRuleG2p(std::filesystem::path dict_tsv);
   explicit RussianRuleG2p(std::filesystem::path dict_tsv, Options options);
+  explicit RussianRuleG2p(std::string dict_tsv_utf8, Options options);
+  explicit RussianRuleG2p(std::string dict_tsv_utf8)
+      : RussianRuleG2p(std::move(dict_tsv_utf8), Options{}) {}
 
   static std::vector<std::string> dialect_ids();
 

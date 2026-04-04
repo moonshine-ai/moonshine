@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <unordered_map>
 #include <vector>
 
@@ -23,6 +24,9 @@ class KoreanRuleG2p : public RuleBasedG2p {
 
   explicit KoreanRuleG2p(std::filesystem::path dict_tsv);
   explicit KoreanRuleG2p(std::filesystem::path dict_tsv, Options options);
+  explicit KoreanRuleG2p(std::string dict_tsv_utf8, Options options);
+  explicit KoreanRuleG2p(std::string dict_tsv_utf8)
+      : KoreanRuleG2p(std::move(dict_tsv_utf8), Options{}) {}
 
   static std::vector<std::string> dialect_ids();
 

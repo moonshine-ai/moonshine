@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cstring>
 #include <fstream>
+#include <istream>
 #include <sstream>
 #include <stdexcept>
 #include <unordered_map>
@@ -681,6 +682,30 @@ int max_lex_key_words(const std::unordered_map<std::string, std::string>& lex) {
   return m;
 }
 
+void load_vietnamese_lexicon_stream(std::istream& in, std::unordered_map<std::string, std::string>& lex) {
+  std::string line;
+  while (std::getline(in, line)) {
+    if (!line.empty() && (line.back() == '\r' || line.back() == '\n')) {
+      line.pop_back();
+    }
+    if (line.empty() || line[0] == '#') {
+      continue;
+    }
+    const size_t tab = line.find('\t');
+    if (tab == std::string::npos) {
+      continue;
+    }
+    std::string key = utf8_nfc_utf8proc(trim_ascii_ws_copy(std::string_view(line).substr(0, tab)));
+    std::string ipa = trim_ascii_ws_copy(std::string_view(line).substr(tab + 1));
+    if (key.empty()) {
+      continue;
+    }
+    if (lex.find(key) == lex.end()) {
+      lex.emplace(std::move(key), std::move(ipa));
+    }
+  }
+}
+
 }  // namespace
 
 std::string VietnameseRuleG2p::syllable_to_ipa(std::string_view syllable_utf8) {
@@ -717,29 +742,18 @@ VietnameseRuleG2p::VietnameseRuleG2p(std::filesystem::path dict_tsv) {
   if (!in) {
     throw std::runtime_error("Vietnamese G2P: cannot open " + dict_tsv.generic_string());
   }
-  std::string line;
-  while (std::getline(in, line)) {
-    if (!line.empty() && (line.back() == '\r' || line.back() == '\n')) {
-      line.pop_back();
-    }
-    if (line.empty() || line[0] == '#') {
-      continue;
-    }
-    const size_t tab = line.find('\t');
-    if (tab == std::string::npos) {
-      continue;
-    }
-    std::string key = utf8_nfc_utf8proc(trim_ascii_ws_copy(std::string_view(line).substr(0, tab)));
-    std::string ipa = trim_ascii_ws_copy(std::string_view(line).substr(tab + 1));
-    if (key.empty()) {
-      continue;
-    }
-    if (lex_.find(key) == lex_.end()) {
-      lex_.emplace(std::move(key), std::move(ipa));
-    }
-  }
+  load_vietnamese_lexicon_stream(in, lex_);
   if (lex_.empty()) {
     throw std::runtime_error("Vietnamese G2P: empty lexicon: " + dict_tsv.generic_string());
+  }
+  max_key_words_ = max_lex_key_words(lex_);
+}
+
+VietnameseRuleG2p::VietnameseRuleG2p(std::string dict_tsv_utf8) {
+  std::istringstream in(std::move(dict_tsv_utf8));
+  load_vietnamese_lexicon_stream(in, lex_);
+  if (lex_.empty()) {
+    throw std::runtime_error("Vietnamese G2P: empty lexicon (in-memory)");
   }
   max_key_words_ = max_lex_key_words(lex_);
 }
