@@ -164,6 +164,44 @@ def _write_wav_mono_pcm16(path: Path, samples: List[float], sample_rate_hz: int)
         w.writeframes(bytes(frames))
 
 
+def _parse_sounddevice_output_device(s: str) -> Union[int, str]:
+    """Accept device index or a name substring for sounddevice."""
+    t = s.strip()
+    try:
+        return int(t, 10)
+    except ValueError:
+        return t
+
+
+def _can_play_default(sample_rate_hz: int) -> bool:
+    import sounddevice as sd
+
+    try:
+        sd.check_output_settings(
+            samplerate=sample_rate_hz,
+            channels=1,
+            dtype="float32",
+            device=None,
+        )
+        return True
+    except (sd.PortAudioError, OSError, ValueError):
+        return False
+
+
+def _play_mono_samples(
+    samples: List[float],
+    sample_rate_hz: int,
+    *,
+    device: Optional[Union[int, str]] = None,
+) -> None:
+    import numpy as np
+    import sounddevice as sd
+
+    data = np.asarray(samples, dtype=np.float32)
+    sd.play(data, sample_rate_hz, device=device)
+    sd.wait()
+
+
 if __name__ == "__main__":
     import argparse
     import sys
@@ -191,11 +229,19 @@ if __name__ == "__main__":
         default="Hello world!",
         help="Text to speak (default: %(default)r)",
     )
-    parser.add_argument(
+    out_or_device = parser.add_mutually_exclusive_group()
+    out_or_device.add_argument(
         "--out",
-        default=Path("out.wav"),
+        default=None,
         type=Path,
-        help="Output WAV file path (mono PCM16) (default: %(default)s)",
+        metavar="PATH",
+        help="Write mono PCM16 WAV to PATH (omit to play on default output or fall back to out.wav)",
+    )
+    out_or_device.add_argument(
+        "--device",
+        default=None,
+        metavar="INDEX_OR_NAME",
+        help="sounddevice output device (index or name substring)",
     )
     parser.add_argument(
         "--options",
@@ -214,6 +260,10 @@ if __name__ == "__main__":
             print(e, file=sys.stderr)
             sys.exit(2)
 
+    sd_device: Optional[Union[int, str]] = None
+    if args.device is not None:
+        sd_device = _parse_sounddevice_output_device(args.device)
+
     try:
         with TextToSpeech(
             args.language,
@@ -222,7 +272,21 @@ if __name__ == "__main__":
             options=extra,
         ) as tts:
             samples, sr = tts.synthesize(args.text)
-        _write_wav_mono_pcm16(args.out, samples, sr)
+
+        if args.device is not None:
+            _play_mono_samples(samples, sr, device=sd_device)
+        elif args.out is not None:
+            _write_wav_mono_pcm16(args.out, samples, sr)
+        else:
+            fallback_path = Path("out.wav")
+            if _can_play_default(sr):
+                _play_mono_samples(samples, sr, device=None)
+            else:
+                print(
+                    "No audio output found, writing to out.wav",
+                    file=sys.stderr,
+                )
+                _write_wav_mono_pcm16(fallback_path, samples, sr)
     except MoonshineError as e:
         print(e, file=sys.stderr)
         sys.exit(1)
