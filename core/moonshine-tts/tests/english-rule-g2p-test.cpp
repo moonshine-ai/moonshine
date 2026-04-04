@@ -16,10 +16,6 @@ std::filesystem::path resolve_en_dict() {
   return r::moonshine_tts_bundled_data_dir_relative() / "en_us" / "dict_filtered_heteronyms.tsv";
 }
 
-std::filesystem::path en_homograph_json() {
-  return r::moonshine_tts_bundled_data_dir_relative() / "en_us" / "heteronym" / "homograph_index.json";
-}
-
 }  // namespace
 
 TEST_CASE("english: dialect_resolves_to_english_rules") {
@@ -41,8 +37,7 @@ TEST_CASE("english: wiki-text first 100 lines match reference IPA when data and 
       !std::filesystem::is_regular_file(golden)) {
     return;
   }
-  const std::filesystem::path homograph = en_homograph_json();
-  moonshine_tts::EnglishRuleG2p g(dict, homograph, std::nullopt, std::nullopt);
+  moonshine_tts::EnglishRuleG2p g(dict, std::nullopt);
   const auto src = r::read_text_first_lines(wiki, kWikiParityLines);
   const std::vector<std::string> py = r::ref_lines_prefix(golden, src.size());
   REQUIRE(py.size() == src.size());

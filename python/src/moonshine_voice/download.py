@@ -1,11 +1,17 @@
+import json
 import os
 import sys
 from enum import IntEnum
+from pathlib import Path
+from typing import Dict, List, Optional, Union
+from urllib.parse import quote
 
-from moonshine_voice.moonshine_api import ModelArch
-from moonshine_voice.transcriber import Transcriber
-from moonshine_voice.download_file import download_model, get_cache_dir
-from moonshine_voice.utils import get_assets_path, load_wav_file
+from moonshine_voice.download_file import download_file, download_model, get_cache_dir
+from moonshine_voice.moonshine_api import (
+    ModelArch,
+    moonshine_get_g2p_dependencies_string,
+    moonshine_get_tts_dependencies_string,
+)
 
 
 # Define EmbeddingModelArch here to avoid circular import with intent_recognizer
@@ -325,12 +331,163 @@ def log_model_info(
     print(f"Downloaded model path: {model_root_path}")
 
 
+# ============================================================================
+# TTS / G2P assets (moonshine_get_tts_dependencies / moonshine_get_g2p_dependencies)
+# ============================================================================
+
+TTS_CDN_BASE_URL = "https://download.moonshine.ai/tts/"
+
+
+def normalize_moonshine_language_tag(language: str) -> str:
+    """Normalize a user language tag to the form expected by the Moonshine C API (e.g. en_us)."""
+    s = language.strip().lower().replace("-", "_").replace(" ", "_")
+    return s
+
+
+def _tts_asset_cache_root(override: Optional[Path] = None) -> Path:
+    if override is not None:
+        return Path(override)
+    return get_cache_dir() / "download.moonshine.ai" / "tts"
+
+
+def _merge_tts_query_options(
+    options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
+    *,
+    voice: Optional[str] = None,
+    engine: Optional[str] = None,
+    vocoder_engine: Optional[str] = None,
+) -> Dict[str, Union[str, int, float, bool]]:
+    """Options passed to ``moonshine_get_tts_dependencies`` (voice, vocoder_engine, path overrides, …)."""
+    merged: Dict[str, Union[str, int, float, bool]] = dict(options) if options else {}
+    if voice is not None:
+        merged["voice"] = voice
+    ve = vocoder_engine if vocoder_engine is not None else engine
+    if ve is not None:
+        merged["vocoder_engine"] = ve
+    return merged
+
+
+def is_downloadable_tts_asset_key(key: str) -> bool:
+    """Return False for G2P override labels (no path) returned when custom options are set."""
+    k = key.strip()
+    if not k or "/" not in k:
+        return False
+    return True
+
+
+def cdn_url_for_tts_asset_key(key: str) -> str:
+    """HTTPS URL for a canonical asset key under ``TTS_CDN_BASE_URL``."""
+    parts = key.strip().split("/")
+    encoded = "/".join(quote(segment, safe="") for segment in parts)
+    return f"{TTS_CDN_BASE_URL}{encoded}"
+
+
+def list_tts_dependency_keys(
+    languages: str,
+    *,
+    voice: Optional[str] = None,
+    engine: Optional[str] = None,
+    vocoder_engine: Optional[str] = None,
+    options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
+) -> List[str]:
+    """
+    Resolve required TTS asset paths via the native ``moonshine_get_tts_dependencies`` API.
+
+    ``languages`` may be a comma-separated list (e.g. ``\"en_us,de\"``), matching the C API.
+    """
+    lang_arg = languages.strip() if languages else ""
+    opts = _merge_tts_query_options(
+        options, voice=voice, engine=engine, vocoder_engine=vocoder_engine
+    )
+    raw = moonshine_get_tts_dependencies_string(
+        lang_arg if lang_arg else None,
+        opts if opts else None,
+    )
+    if not raw.strip():
+        return []
+    keys = json.loads(raw)
+    if not isinstance(keys, list):
+        raise ValueError("moonshine_get_tts_dependencies did not return a JSON array")
+    return [str(k) for k in keys]
+
+
+def list_g2p_dependency_keys(
+    languages: str,
+    options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
+) -> List[str]:
+    """Resolve G2P-only asset paths via ``moonshine_get_g2p_dependencies`` (comma-separated from C)."""
+    lang_arg = languages.strip() if languages else ""
+    csv = moonshine_get_g2p_dependencies_string(
+        lang_arg if lang_arg else None,
+        options if options else None,
+    )
+    if not csv.strip():
+        return []
+    return [k.strip() for k in csv.split(",") if k.strip()]
+
+
+def download_tts_assets(
+    language: str,
+    *,
+    voice: Optional[str] = None,
+    engine: Optional[str] = None,
+    vocoder_engine: Optional[str] = None,
+    options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
+    cache_root: Optional[Path] = None,
+    show_progress: bool = True,
+) -> Path:
+    """
+    Download every file required for TTS for the given language (and voice/engine) into the cache.
+
+    Files are stored under the same relative paths as canonical asset keys (e.g. ``en_us/dict.tsv``).
+    Pass the returned directory as ``g2p_root`` when creating a synthesizer.
+    """
+    lang_tag = normalize_moonshine_language_tag(language)
+    keys = list_tts_dependency_keys(
+        lang_tag,
+        voice=voice,
+        engine=engine,
+        vocoder_engine=vocoder_engine,
+        options=options,
+    )
+    root = _tts_asset_cache_root(cache_root)
+    for key in keys:
+        if not is_downloadable_tts_asset_key(key):
+            continue
+        url = cdn_url_for_tts_asset_key(key)
+        dest = root / key
+        download_file(url, dest, show_progress=show_progress)
+    return root.resolve()
+
+
+def download_g2p_assets(
+    language: str,
+    *,
+    options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
+    cache_root: Optional[Path] = None,
+    show_progress: bool = True,
+) -> Path:
+    """Download G2P lexicon/model files into the TTS asset cache layout (same CDN tree as TTS)."""
+    lang_tag = normalize_moonshine_language_tag(language)
+    keys = list_g2p_dependency_keys(lang_tag, options=options)
+    root = _tts_asset_cache_root(cache_root)
+    for key in keys:
+        if not is_downloadable_tts_asset_key(key):
+            continue
+        url = cdn_url_for_tts_asset_key(key)
+        dest = root / key
+        download_file(url, dest, show_progress=show_progress)
+    return root.resolve()
+
+
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Model info example")
+    parser = argparse.ArgumentParser(
+        description="Download Moonshine STT, TTS, or G2P assets"
+    )
     parser.add_argument(
-        "--language", type=str, default="en", help="Language to use for transcription"
+        "--language", type=str, default="en", help="Language (STT, TTS, or G2P tag, e.g. en_us)"
     )
     parser.add_argument(
         "--model-arch",
@@ -338,8 +495,40 @@ if __name__ == "__main__":
         default=None,
         help="Model architecture to use for transcription",
     )
+    parser.add_argument(
+        "--tts",
+        action="store_true",
+        help="Download TTS assets from download.moonshine.ai/tts (uses native dependency API)",
+    )
+    parser.add_argument(
+        "--g2p",
+        action="store_true",
+        help="Download G2P-only assets (lexicons, ONNX bundles, …)",
+    )
+    parser.add_argument(
+        "--voice",
+        type=str,
+        default=None,
+        help="TTS voice id (e.g. Kokoro voice or Piper basename)",
+    )
+    parser.add_argument(
+        "--engine",
+        type=str,
+        default=None,
+        help="TTS vocoder engine: typically kokoro or piper (maps to vocoder_engine)",
+    )
     args = parser.parse_args()
 
-    model_path, model_arch = get_model_for_language(args.language, args.model_arch)
-
-    log_model_info(args.language, args.model_arch)
+    if args.tts:
+        root = download_tts_assets(
+            args.language, voice=args.voice, engine=args.engine
+        )
+        print(f"TTS assets root (use as g2p_root): {root}", file=sys.stderr)
+        print(root)
+    elif args.g2p:
+        root = download_g2p_assets(args.language)
+        print(f"G2P assets root (use as g2p_root): {root}", file=sys.stderr)
+        print(root)
+    else:
+        get_model_for_language(args.language, args.model_arch)
+        log_model_info(args.language, args.model_arch)

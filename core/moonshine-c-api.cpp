@@ -742,22 +742,18 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
       }
     }
     {
-      // Defaults use canonical key ``kokoro/model.ort``; on-disk bundles are often ``kokoro/model.onnx``.
-      // If only the .onnx key has buffers, wire them to the canonical key so Kokoro does not fall back
-      // to ``g2p_root/kokoro/model.ort`` on disk.
+      // Legacy callers used in-memory key ``kokoro/model.ort``. Canonical key is ``kokoro/model.onnx``.
       moonshine_tts::FileInformationMap& tf = tts_options.files;
-      const auto onnx_it = tf.entries.find("kokoro/model.onnx");
-      if (onnx_it != tf.entries.end() && onnx_it->second.memory != nullptr &&
-          onnx_it->second.memory_size > 0) {
-        const std::string ort_k(moonshine_tts::kTtsKokoroModelOnnxKey);
-        const auto ort_it = tf.entries.find(ort_k);
-        const bool ort_needs_alias =
-            ort_it == tf.entries.end() || ort_it->second.memory == nullptr ||
-            ort_it->second.memory_size == 0;
-        if (ort_needs_alias) {
-          const moonshine_tts::FileInformation& src = onnx_it->second;
-          tf.entries[ort_k] = moonshine_tts::FileInformation{
-              std::filesystem::path(ort_k), src.memory, src.memory_size};
+      const std::string canon_k{moonshine_tts::kTtsKokoroModelOnnxKey};
+      const auto canon_it = tf.entries.find(canon_k);
+      const bool canon_ok = canon_it != tf.entries.end() && canon_it->second.memory != nullptr &&
+                            canon_it->second.memory_size > 0;
+      if (!canon_ok) {
+        const auto leg = tf.entries.find("kokoro/model.ort");
+        if (leg != tf.entries.end() && leg->second.memory != nullptr && leg->second.memory_size > 0) {
+          const moonshine_tts::FileInformation& src = leg->second;
+          tf.entries[canon_k] = moonshine_tts::FileInformation{
+              std::filesystem::path(canon_k), src.memory, src.memory_size};
         }
       }
     }
@@ -990,12 +986,8 @@ void append_g2p_explicit_override_keys_from_c_options(const moonshine_option_t *
       continue;
     }
     const std::string key = replace_all(to_lowercase(std::string(options[i].name)), "-", "_");
-    if (key == "heteronym_onnx_override") {
-      append_unique_in_order(keys, {std::string(moonshine_tts::kG2pHeteronymOnnxOverrideKey)});
-    } else if (key == "oov_onnx_override") {
+    if (key == "oov_onnx_override") {
       append_unique_in_order(keys, {std::string(moonshine_tts::kG2pOovOnnxOverrideKey)});
-    } else if (key == "heteronym_onnx_config") {
-      append_unique_in_order(keys, {std::string(moonshine_tts::kG2pHeteronymOnnxConfigOverrideKey)});
     } else if (key == "oov_onnx_config") {
       append_unique_in_order(keys, {std::string(moonshine_tts::kG2pOovOnnxConfigOverrideKey)});
     } else if (key == "portuguese_dict_path") {

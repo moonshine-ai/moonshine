@@ -47,11 +47,8 @@ inline constexpr std::string_view kG2pPtPtDictKey = "pt_pt/dict.tsv";
 inline constexpr std::string_view kG2pPortugueseDictOverrideKey = "portuguese_dict_path";
 /// Optional English assets (same ``FileInformationMap`` / memory pattern as lexicons).
 inline constexpr std::string_view kG2pEnglishG2pConfigKey = "en_us/g2p-config.json";
-inline constexpr std::string_view kG2pEnglishHomographJsonKey = "en_us/heteronym/homograph_index.json";
-inline constexpr std::string_view kG2pHeteronymOnnxOverrideKey = "heteronym_onnx_override";
 inline constexpr std::string_view kG2pOovOnnxOverrideKey = "oov_onnx_override";
-/// UTF-8 ``onnx-config.json`` when ``heteronym_onnx_override`` / ``oov_onnx_override`` are in-memory.
-inline constexpr std::string_view kG2pHeteronymOnnxConfigOverrideKey = "heteronym_onnx_config";
+/// UTF-8 ``onnx-config.json`` when ``oov_onnx_override`` is used from memory.
 inline constexpr std::string_view kG2pOovOnnxConfigOverrideKey = "oov_onnx_config";
 
 /// Chinese tokenizer + ONNX bundle files (under ``kG2pChineseOnnxDirKey``).
@@ -79,14 +76,12 @@ inline constexpr std::string_view kG2pArabicOnnxTokenizerConfigKey =
     "ar_msa/arabertv02_tashkeel_fadel_onnx/tokenizer_config.json";
 inline constexpr std::string_view kG2pArabicOnnxModelKey = "ar_msa/arabertv02_tashkeel_fadel_onnx/model.ort";
 
-/// English heteronym / OOV ONNX next to ``en_us/g2p-config.json`` layout.
-inline constexpr std::string_view kG2pEnglishHeteronymModelKey = "en_us/heteronym/model.ort";
-inline constexpr std::string_view kG2pEnglishHeteronymOnnxConfigKey = "en_us/heteronym/onnx-config.json";
-inline constexpr std::string_view kG2pEnglishOovModelKey = "en_us/oov/model.ort";
+/// English OOV ONNX next to ``en_us/g2p-config.json`` (``.onnx`` in-tree; ``.ort`` sibling allowed on disk).
+inline constexpr std::string_view kG2pEnglishOovModelKey = "en_us/oov/model.onnx";
 inline constexpr std::string_view kG2pEnglishOovOnnxConfigKey = "en_us/oov/onnx-config.json";
 
-/// Options for constructing ``MoonshineG2P`` (rule-engine paths and toggles; optional heteronym/OOV
-/// ONNX overrides for English).
+/// Options for constructing ``MoonshineG2P`` (rule-engine paths and toggles; optional English OOV ONNX
+/// overrides).
 ///
 /// Lexicon and ONNX paths live in ``files`` under **canonical keys** equal to their default relative
 /// paths (e.g. ``fr/dict.tsv``). Set ``g2p_root`` to the directory that contains those subpaths, or leave
@@ -132,7 +127,7 @@ struct MoonshineG2POptions {
   /// ``canonical_key``, returns ``std::filesystem::path(canonical_key)``.
   std::filesystem::path relative_asset_path(std::string_view canonical_key) const;
 
-  /// Non-empty path stored under ``map_key`` (used for overrides such as ``heteronym_onnx_override``).
+  /// Non-empty path stored under ``map_key`` (used for overrides such as ``oov_onnx_override``).
   std::optional<std::filesystem::path> optional_override_path(
       std::string_view map_key) const;
 

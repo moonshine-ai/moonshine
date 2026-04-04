@@ -12,7 +12,7 @@ enum class G2pWordPath {
   kTokenNotLocatedInText,  // could not align token in full text (skipped)
   kRuleBasedG2p,  // language-specific rule engine (e.g. Spanish grapheme rules)
   kDictUnambiguous,  // exactly one CMUdict pronunciation
-  kDictHeteronym,  // multiple pronunciations; heteronym ONNX chose one
+  kDictHeteronym,  // reserved (English heteronym ONNX removed)
   kDictFirstAlternativeNoHeteronymModel,  // multiple pronunciations; no model — first alt
   kOovModel,  // OOV ONNX produced phoneme tokens
   kOovModelNoOutput,  // OOV ran but produced no non-empty IPA

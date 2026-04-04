@@ -60,8 +60,8 @@ class MoonshineG2P {
   bool uses_ukrainian_rules() const { return rule_backend_ == RuleBasedG2pKind::Ukrainian; }
   bool uses_hindi_rules() const { return rule_backend_ == RuleBasedG2pKind::Hindi; }
   bool uses_english_rules() const { return rule_backend_ == RuleBasedG2pKind::English; }
-  /// Always false: full-bundle ONNX G2P was removed; English may still load optional heteronym/OOV
-  /// ONNX inside ``EnglishRuleG2p``.
+  /// Always false: full-bundle ONNX G2P was removed; English may still load OOV ONNX inside
+  /// ``EnglishRuleG2p``.
   static constexpr bool uses_onnx() { return false; }
 
   /// Canonical dialect id (e.g. ``es-AR`` for Spanish, ``en_us`` for US English).

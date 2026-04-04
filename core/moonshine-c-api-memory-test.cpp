@@ -167,10 +167,10 @@ TEST_CASE("moonshine-c-api-memory: Kokoro every voice uses only buffers; CWD has
   REQUIRE(std::filesystem::is_directory(voices_dir));
 
   auto model_key_it =
-      std::find_if(bundle.begin(), bundle.end(), [](const auto& pr) { return pr.first == "kokoro/model.ort"; });
+      std::find_if(bundle.begin(), bundle.end(), [](const auto& pr) { return pr.first == "kokoro/model.onnx"; });
   if (model_key_it == bundle.end()) {
     model_key_it =
-        std::find_if(bundle.begin(), bundle.end(), [](const auto& pr) { return pr.first == "kokoro/model.onnx"; });
+        std::find_if(bundle.begin(), bundle.end(), [](const auto& pr) { return pr.first == "kokoro/model.ort"; });
   }
   REQUIRE(model_key_it != bundle.end());
   REQUIRE_FALSE(model_key_it->second.empty());

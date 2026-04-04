@@ -42,7 +42,7 @@ struct FileInformation {
 
 /// Maps canonical asset keys (typically default relative paths such as ``fr/dict.tsv``) to
 /// ``FileInformation``. Optional overrides use the same keys as ``MoonshineG2POptions::parse_options``
-/// where no single bundle default exists (e.g. ``portuguese_dict_path``, ``heteronym_onnx_override``).
+/// where no single bundle default exists (e.g. ``portuguese_dict_path``, ``oov_onnx_override``).
 struct FileInformationMap {
   std::map<std::string, FileInformation> entries;
 

@@ -6,7 +6,7 @@ This tree mirrors assets the C++ `moonshine-tts` (speak) and `moonshine-tts-g2p`
 |--------|------|
 | [ar_msa](ar_msa/README.md) | Arabic MSA: tashkīl ONNX + optional lexicon |
 | [de](de/README.md) | German IPA lexicon |
-| [en_us](en_us/README.md) | English CMU-style lexicon + heteronym/OOV ONNX |
+| [en_us](en_us/README.md) | English CMU-style lexicon + OOV ONNX (no heteronym ONNX in-tree) |
 | [fr](fr/README.md) | French lexicon + liaison POS CSVs |
 | [hi](hi/README.md) | Hindi Devanagari lexicon (Wiktionary + frequency merge) |
 | [it](it/README.md) | Italian IPA lexicon |
@@ -30,7 +30,7 @@ Commands below were run from a clean temp output directory and compared to the p
 |--------|-------------------------|--------|
 | `download_multilingual_ipa_lexicons.py` for `de`, `fr`, `it`, `ja`, `ko`, `nl`, `pt_br`, `pt_pt`, `ru`, `vi`, `zh_hans` | **Yes** | All eleven `dict.tsv` files matched the parent repo’s `data/<lang>/dict.tsv` and this tree’s `data/<lang>/dict.tsv`. |
 | `download_cmudict_to_tsv.py` → `data/en_us/dict.tsv` | **Yes** | Restored after run; output matched prior file. |
-| `export_models_to_onnx.py` (heteronym + OOV) | **Yes** (after bugfix) | `model.onnx` and `onnx-config.json` match `models/en_us/{heteronym,oov}/` when re-exported from the same checkpoints. A script bug that wrote `onnx_export.onnx_path` as `onnx-config.json` was fixed in `scripts/export_models_to_onnx.py` (must pass the `model.onnx` path into `_build_config_onnx`, not the JSON path). Copy `g2p-config.json` into the temp `model_root` if you rely on `--only config` defaults. |
+| `export_models_to_onnx.py` (English OOV) | **Yes** (after bugfix) | The shipped tree under `data/en_us/oov/` matches `models/en_us/oov/` when re-exported from the same OOV checkpoint. (Heteronym ONNX was removed from the runtime and is no longer present under `data/en_us/`.) A script bug that wrote `onnx_export.onnx_path` as `onnx-config.json` was fixed in `scripts/export_models_to_onnx.py` (must pass the `model.onnx` path into `_build_config_onnx`, not the JSON path). Copy `g2p-config.json` into the temp `model_root` if you rely on `--only config` defaults. |
 | `export_arabic_msa_diacritizer_onnx.py` | **No (failed)** | With `torch` 2.10 + current `transformers`, export raises `ValueError` on `attention_mask` shape inside BERT. The checked-in Arabic ONNX was produced with an older stack; see [ar_msa/README.md](ar_msa/README.md). |
 | `export_chinese_roberta_upos_onnx.py` | **Partial** | `meta.json` and `vocab.txt` match; `tokenizer_config.json` differs by an empty `extra_special_tokens` key (tokenizer version). `model.onnx` **differs** (same HF weights, different ONNX graph / int8 shrink / opset path under torch 2.10). |
 | `export_japanese_ud_onnx.py` | **Partial** | Same pattern as Chinese: `meta.json` / `vocab.txt` match; `tokenizer_config.json` minor JSON diff. Checked-in bundle uses **external** weights (`model.onnx` + `model.onnx.data`); a fresh export produced a single larger `model.onnx` (no `.data` split). |

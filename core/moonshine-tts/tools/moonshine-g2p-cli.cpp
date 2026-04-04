@@ -26,8 +26,8 @@ void usage(const char *argv0) {
       << "Usage: " << argv0
       << " [--language|--lang ID] [--model-root DIR]\n"
       << "       (omit DIR to use the process cwd as the asset root; same layout as MoonshineTTS/PiperTTS)\n"
-      << "       [--dict PATH] [--heteronym-onnx PATH] [--oov-onnx PATH]\n"
-      << "       [--cuda] [--log-words|-v] [--debug-heteronym]\n"
+      << "       [--dict PATH] [--oov-onnx PATH]\n"
+      << "       [--cuda] [--log-words|-v]\n"
       << "       [--no-stress] [--broad-phonemes] [--stdin]\n"
       << "       [--german-dict PATH] [--german-syllable-initial-stress]\n"
       << "       [--russian-dict PATH] [--russian-syllable-initial-stress]\n"
@@ -43,8 +43,8 @@ void usage(const char *argv0) {
       << "       [--no-french-liaison] [--no-french-oov] [--no-french-expand-digits]\n"
       << "       [--no-french-optional-liaison]\n"
       << "       [--print-spanish-dialects] [TEXT...]\n"
-      << "  Default dialect: en_us (rule-based CMUdict + optional heteronym/OOV ONNX under "
-         "<model-root>/en_us/). Default phrase when no TEXT: \"Hello world!\".\n"
+      << "  Default dialect: en_us (CMUdict + OOV ONNX under <model-root>/en_us/oov/). "
+         "Default phrase when no TEXT: \"Hello world!\".\n"
       << "  Spanish dialects use rule-based G2P (no ONNX). With a Spanish dialect and no TEXT, "
          "stdin is read unless you pass --stdin explicitly for empty input.\n"
       << "  German (de, de-DE, german): rule-based G2P with <model-root>/de/dict.tsv by default; "
@@ -143,7 +143,6 @@ int main(int argc, char **argv) {
   using moonshine_tts::kG2pFrenchCsvDirKey;
   using moonshine_tts::kG2pFrenchDictKey;
   using moonshine_tts::kG2pGermanDictKey;
-  using moonshine_tts::kG2pHeteronymOnnxOverrideKey;
   using moonshine_tts::kG2pHindiDictKey;
   using moonshine_tts::kG2pJapaneseDictKey;
   using moonshine_tts::kG2pJapaneseOnnxDirKey;
@@ -169,19 +168,12 @@ int main(int argc, char **argv) {
       print_spanish_dialects = true;
     } else if ((a == "--dict" || a == "-d") && i + 1 < argc) {
       opt.files.set_path(kG2pEnglishDictKey, argv[++i]);
-    } else if (a == "--heteronym-onnx" && i + 1 < argc) {
-      opt.files.set_path(kG2pHeteronymOnnxOverrideKey, argv[++i]);
     } else if (a == "--oov-onnx" && i + 1 < argc) {
       opt.files.set_path(kG2pOovOnnxOverrideKey, argv[++i]);
     } else if (a == "--cuda") {
       opt.use_cuda = true;
     } else if (a == "--log-words" || a == "-v") {
       log_words = true;
-    } else if (a == "--debug-heteronym") {
-      if (setenv("MOONSHINE_TTS_DEBUG_HET", "1", 1) != 0) {
-        std::cerr << "error: setenv MOONSHINE_TTS_DEBUG_HET failed\n";
-        return 1;
-      }
     } else if ((a == "--language" || a == "--lang") && i + 1 < argc) {
       dialect_str = argv[++i];
     } else if (a == "--model-root" && i + 1 < argc) {

@@ -9,7 +9,7 @@ import ctypes
 from dataclasses import dataclass
 from typing import Callable, Dict, Optional
 
-from moonshine_voice.moonshine_api import _MoonshineLib
+from moonshine_voice.moonshine_api import MoonshineIntentCallback, _MoonshineLib
 from moonshine_voice.errors import MoonshineError, check_error
 from moonshine_voice.transcriber import (
     TranscriptEventListener,
@@ -23,14 +23,8 @@ from moonshine_voice.download import EmbeddingModelArch
 # Signature: (trigger_phrase: str, utterance: str, similarity: float) -> None
 IntentHandler = Callable[[str, str, float], None]
 
-# C callback function type
-_INTENT_CALLBACK = ctypes.CFUNCTYPE(
-    None,
-    ctypes.c_void_p,  # user_data
-    ctypes.c_char_p,  # trigger_phrase
-    ctypes.c_char_p,  # utterance
-    ctypes.c_float,  # similarity
-)
+# C callback function type (must match ``moonshine_intent_callback`` / lib argtypes)
+_INTENT_CALLBACK = MoonshineIntentCallback
 
 
 @dataclass

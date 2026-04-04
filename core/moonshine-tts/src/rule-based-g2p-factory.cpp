@@ -125,13 +125,43 @@ bool g2p_onnx_bundle_reachable(const MoonshineG2POptions& o, std::string_view bu
   return std::filesystem::is_regular_file(disk_dir / "meta.json");
 }
 
+/// True when ``meta.json`` is available and the model file it names exists on disk or in memory.
+bool g2p_onnx_bundle_includes_model_file(const MoonshineG2POptions& o, std::string_view bundle_dir_key,
+                                         const std::filesystem::path& disk_dir) {
+  if (!g2p_onnx_bundle_reachable(o, bundle_dir_key, disk_dir)) {
+    return false;
+  }
+  const std::string meta_k = g2p_bundle_file_key(bundle_dir_key, "meta.json");
+  std::string meta_json;
+  if (o.asset_is_available(meta_k)) {
+    meta_json = o.read_utf8_asset(meta_k);
+  } else {
+    const auto mp = disk_dir / "meta.json";
+    if (!std::filesystem::is_regular_file(mp)) {
+      return false;
+    }
+    meta_json = read_path_as_utf8(mp);
+  }
+  try {
+    const nlohmann::json meta = nlohmann::json::parse(meta_json);
+    const std::string onnx_name = meta.value("onnx_model_file", std::string("model.ort"));
+    const std::string model_key = g2p_bundle_file_key(bundle_dir_key, onnx_name);
+    if (o.asset_is_available(model_key)) {
+      return true;
+    }
+    const auto resolved = resolve_prefer_ort_model(disk_dir, onnx_name);
+    return std::filesystem::is_regular_file(resolved);
+  } catch (...) {
+    return false;
+  }
+}
+
 std::optional<RuleBasedG2pInstance> try_english(std::string_view trimmed,
                                                  const MoonshineG2POptions& options) {
   if (!dialect_resolves_to_english_rules(trimmed)) {
     return std::nullopt;
   }
   const bool dict_from_files = options.asset_is_available(kG2pEnglishDictKey);
-  const bool homograph_from_files = options.asset_is_available(kG2pEnglishHomographJsonKey);
 
   const std::filesystem::path dict_tsv = resolve_path_under_root(
       options.g2p_root, options.relative_asset_path(kG2pEnglishDictKey));
@@ -145,9 +175,6 @@ std::optional<RuleBasedG2pInstance> try_english(std::string_view trimmed,
       std::filesystem::is_regular_file(dict_tsv) ? dict_tsv.parent_path()
                                                  : resolve_path_under_root(options.g2p_root, "en_us");
 
-  std::optional<std::filesystem::path> het_onnx;
-  std::optional<std::filesystem::path> oov_onnx;
-
   if (options.asset_is_available(kG2pEnglishG2pConfigKey)) {
     std::string cfg = options.read_utf8_asset(kG2pEnglishG2pConfigKey);
     if (utf8_content_git_lfs_pointer_stub(cfg)) {
@@ -156,11 +183,9 @@ std::optional<RuleBasedG2pInstance> try_english(std::string_view trimmed,
           "From the moonshine-tts directory run: git lfs pull");
     }
     const nlohmann::json j = nlohmann::json::parse(cfg);
-    if (j.value("uses_heteronym_model", false)) {
-      het_onnx = resolve_prefer_ort_model(data_root / "heteronym", "model.ort");
-    }
-    if (j.value("uses_oov_model", false)) {
-      oov_onnx = resolve_prefer_ort_model(data_root / "oov", "model.ort");
+    if (!j.value("uses_oov_model", true)) {
+      throw std::runtime_error(
+          "English G2P: bundled g2p-config.json must set uses_oov_model true");
     }
   } else {
     const std::filesystem::path g2p_cfg = data_root / "g2p-config.json";
@@ -172,78 +197,63 @@ std::optional<RuleBasedG2pInstance> try_english(std::string_view trimmed,
       }
       std::ifstream cfg_in(g2p_cfg);
       const nlohmann::json j = nlohmann::json::parse(cfg_in);
-      if (j.value("uses_heteronym_model", false)) {
-        het_onnx = resolve_prefer_ort_model(data_root / "heteronym", "model.ort");
-      }
-      if (j.value("uses_oov_model", false)) {
-        oov_onnx = resolve_prefer_ort_model(data_root / "oov", "model.ort");
+      if (!j.value("uses_oov_model", true)) {
+        throw std::runtime_error(
+            "English G2P: " + g2p_cfg.generic_string() + " must set uses_oov_model true");
       }
     }
   }
 
-  if (const auto het = options.optional_override_path(kG2pHeteronymOnnxOverrideKey)) {
-    het_onnx = resolve_path_under_root(options.g2p_root, *het);
-  }
+  std::optional<std::filesystem::path> oov_onnx{
+      resolve_prefer_ort_model(data_root / "oov", "model.onnx")};
+
   if (const auto oov = options.optional_override_path(kG2pOovOnnxOverrideKey)) {
     oov_onnx = resolve_path_under_root(options.g2p_root, *oov);
   }
-  if (het_onnx && !std::filesystem::is_regular_file(*het_onnx)) {
-    het_onnx.reset();
-  }
-  if (oov_onnx && !std::filesystem::is_regular_file(*oov_onnx)) {
-    oov_onnx.reset();
-  }
 
-  std::optional<EnglishOnnxAuxMemory> het_mem;
   std::optional<EnglishOnnxAuxMemory> oov_mem;
-  const auto fill_english_onnx_mem = [&](std::optional<std::filesystem::path>& disk_model,
-                                        std::string_view canonical_model_key,
-                                        std::string_view canonical_config_key,
-                                        std::string_view override_map_key,
-                                        std::string_view override_config_key,
-                                        std::optional<EnglishOnnxAuxMemory>& out_mem) {
-    const bool ov_reg =
-        options.files.entries.find(std::string(override_map_key)) != options.files.entries.end();
+  const auto fill_oov_mem = [&]() {
+    const bool ov_reg = options.files.entries.find(std::string(kG2pOovOnnxOverrideKey)) !=
+                        options.files.entries.end();
     if (ov_reg) {
-      if (options.asset_is_available(override_map_key) &&
-          options.asset_is_available(override_config_key)) {
-        out_mem = EnglishOnnxAuxMemory{options.read_binary_asset(override_map_key),
-                                       options.read_utf8_asset(override_config_key)};
-        disk_model.reset();
+      if (options.asset_is_available(kG2pOovOnnxOverrideKey) &&
+          options.asset_is_available(kG2pOovOnnxConfigOverrideKey)) {
+        oov_mem = EnglishOnnxAuxMemory{options.read_binary_asset(kG2pOovOnnxOverrideKey),
+                                       options.read_utf8_asset(kG2pOovOnnxConfigOverrideKey)};
+        oov_onnx.reset();
       }
       return;
     }
-    if (options.asset_is_available(canonical_model_key) &&
-        options.asset_is_available(canonical_config_key)) {
-      out_mem = EnglishOnnxAuxMemory{options.read_binary_asset(canonical_model_key),
-                                     options.read_utf8_asset(canonical_config_key)};
-      disk_model.reset();
+    if (options.asset_is_available(kG2pEnglishOovModelKey) &&
+        options.asset_is_available(kG2pEnglishOovOnnxConfigKey)) {
+      oov_mem = EnglishOnnxAuxMemory{options.read_binary_asset(kG2pEnglishOovModelKey),
+                                     options.read_utf8_asset(kG2pEnglishOovOnnxConfigKey)};
+      oov_onnx.reset();
     }
   };
-  fill_english_onnx_mem(het_onnx, kG2pEnglishHeteronymModelKey, kG2pEnglishHeteronymOnnxConfigKey,
-                        kG2pHeteronymOnnxOverrideKey, kG2pHeteronymOnnxConfigOverrideKey, het_mem);
-  fill_english_onnx_mem(oov_onnx, kG2pEnglishOovModelKey, kG2pEnglishOovOnnxConfigKey,
-                        kG2pOovOnnxOverrideKey, kG2pOovOnnxConfigOverrideKey, oov_mem);
+  fill_oov_mem();
 
-  const std::filesystem::path homograph_json = data_root / "heteronym" / "homograph_index.json";
+  const bool oov_ok =
+      oov_mem.has_value() ||
+      (oov_onnx.has_value() && std::filesystem::is_regular_file(*oov_onnx));
+  if (!oov_ok) {
+    throw std::runtime_error(
+        "English G2P: OOV ONNX missing (place model.onnx or model.ort and onnx-config.json under "
+        "en_us/oov/ beneath g2p_root, or register buffers for keys " +
+        std::string(kG2pEnglishOovModelKey) + " and " + std::string(kG2pEnglishOovOnnxConfigKey) + ")");
+  }
+
   RuleBasedG2pInstance out;
   out.canonical_dialect_id = "en_us";
   out.kind = RuleBasedG2pKind::English;
 
-  if (dict_from_files || homograph_from_files) {
-    std::string dict_utf8 =
-        dict_from_files ? options.read_utf8_asset(kG2pEnglishDictKey) : read_path_as_utf8(dict_tsv);
-    std::optional<std::string> homograph_utf8;
-    if (homograph_from_files) {
-      homograph_utf8 = options.read_utf8_asset(kG2pEnglishHomographJsonKey);
-    } else if (std::filesystem::is_regular_file(homograph_json)) {
-      homograph_utf8 = read_path_as_utf8(homograph_json);
-    }
-    out.engine = std::make_unique<EnglishRuleG2p>(std::move(dict_utf8), homograph_utf8, het_onnx,
-                                                    oov_onnx, options.use_cuda, het_mem, oov_mem);
+  if (dict_from_files) {
+    std::string dict_utf8 = options.read_utf8_asset(kG2pEnglishDictKey);
+    out.engine = std::make_unique<EnglishRuleG2p>(std::move(dict_utf8), oov_onnx, options.use_cuda,
+                                                  oov_mem);
   } else {
-    out.engine = std::make_unique<EnglishRuleG2p>(dict_tsv, homograph_json, het_onnx, oov_onnx,
-                                                  options.use_cuda, het_mem, oov_mem);
+    out.engine =
+        std::make_unique<EnglishRuleG2p>(dict_tsv, oov_onnx, options.use_cuda, oov_mem);
   }
   return out;
 }
@@ -440,11 +450,12 @@ std::optional<RuleBasedG2pInstance> try_chinese(std::string_view trimmed,
   }
   const std::filesystem::path mdir = resolve_path_under_root(
       options.g2p_root, options.relative_asset_path(kG2pChineseOnnxDirKey));
-  if (!g2p_onnx_bundle_reachable(options, kG2pChineseOnnxDirKey, mdir)) {
+  if (!g2p_onnx_bundle_includes_model_file(options, kG2pChineseOnnxDirKey, mdir)) {
     throw std::runtime_error(
-        "Chinese G2P: ONNX tokenizer bundle not found (need meta.json + tokenizer files under " +
+        "Chinese G2P: ONNX tokenizer bundle incomplete (need meta.json, tokenizer files, and the "
+        "onnx_model_file named in meta.json under " +
         mdir.generic_string() +
-        ", or register memory buffers under keys like " + std::string(kG2pChineseOnnxMetaKey) +
+        ", or register matching memory buffers under keys like " + std::string(kG2pChineseOnnxMetaKey) +
         "; set MoonshineG2POptions::files / chinese_onnx_model_dir or export "
         "KoichiYasuoka/chinese-roberta-base-upos to data/zh_hans/roberta_chinese_base_upos_onnx/)");
   }
@@ -525,10 +536,11 @@ std::optional<RuleBasedG2pInstance> try_japanese(std::string_view trimmed,
       options.g2p_root, options.relative_asset_path(kG2pJapaneseOnnxDirKey));
   const std::filesystem::path jdict = resolve_path_under_root(
       options.g2p_root, options.relative_asset_path(kG2pJapaneseDictKey));
-  if (!g2p_onnx_bundle_reachable(options, kG2pJapaneseOnnxDirKey, mdir)) {
+  if (!g2p_onnx_bundle_includes_model_file(options, kG2pJapaneseOnnxDirKey, mdir)) {
     throw std::runtime_error(
-        "Japanese G2P: ONNX tokenizer bundle not found under " + mdir.generic_string() +
-        " (or in-memory keys under " + std::string(kG2pJapaneseOnnxDirKey) +
+        "Japanese G2P: ONNX tokenizer bundle incomplete under " + mdir.generic_string() +
+        " (need meta.json, tokenizer files, and onnx_model_file; or in-memory keys under " +
+        std::string(kG2pJapaneseOnnxDirKey) +
         "/…); set MoonshineG2POptions::files / japanese_onnx_model_dir or export the char-LUW model to "
         "data/ja/roberta_japanese_char_luw_upos_onnx/)");
   }
@@ -557,10 +569,11 @@ std::optional<RuleBasedG2pInstance> try_arabic(std::string_view trimmed,
   }
   const std::filesystem::path mdir = resolve_path_under_root(
       options.g2p_root, options.relative_asset_path(kG2pArabicOnnxDirKey));
-  if (!g2p_onnx_bundle_reachable(options, kG2pArabicOnnxDirKey, mdir)) {
+  if (!g2p_onnx_bundle_includes_model_file(options, kG2pArabicOnnxDirKey, mdir)) {
     throw std::runtime_error(
-        "Arabic G2P: ONNX tokenizer bundle not found under " + mdir.generic_string() +
-        " (or in-memory keys under " + std::string(kG2pArabicOnnxDirKey) +
+        "Arabic G2P: ONNX tokenizer bundle incomplete under " + mdir.generic_string() +
+        " (need meta.json, tokenizer files, and onnx_model_file; or in-memory keys under " +
+        std::string(kG2pArabicOnnxDirKey) +
         "/…); set MoonshineG2POptions::files / arabic_onnx_model_dir or run "
         "scripts/export_arabic_msa_diacritizer_onnx.py)");
   }

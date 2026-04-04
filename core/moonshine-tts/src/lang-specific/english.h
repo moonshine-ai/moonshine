@@ -15,28 +15,21 @@ namespace moonshine_tts {
 
 struct G2pWordLog;
 
-/// Heteronym / OOV ONNX model bytes + merged ``onnx-config.json`` UTF-8 (for in-memory assets).
+/// OOV ONNX model bytes + merged ``onnx-config.json`` UTF-8 (for in-memory assets).
 struct EnglishOnnxAuxMemory {
   std::vector<uint8_t> model_onnx;
   std::string onnx_config_json_utf8;
 };
 
-/// US English lexicon + homograph merge + optional ONNX heteronym/OOV + hand OOV fallback
-/// (mirrors ``english_rule_g2p.EnglishLexiconRuleG2p`` + ``moonshine_onnx_g2p`` heteronym/OOV wiring).
+/// US English lexicon + OOV ONNX + hand OOV fallback (no heteronym ONNX).
 class EnglishRuleG2p : public RuleBasedG2p {
  public:
-  EnglishRuleG2p(std::filesystem::path dict_tsv,
-                 std::filesystem::path homograph_json,
-                 std::optional<std::filesystem::path> heteronym_onnx,
-                 std::optional<std::filesystem::path> oov_onnx,
+  EnglishRuleG2p(std::filesystem::path dict_tsv, std::optional<std::filesystem::path> oov_onnx,
                  bool use_cuda = false,
-                 std::optional<EnglishOnnxAuxMemory> heteronym_from_memory = std::nullopt,
                  std::optional<EnglishOnnxAuxMemory> oov_from_memory = std::nullopt);
-  /// Lexicon and optional homograph index as UTF-8; ONNX may be on-disk or in-memory.
-  EnglishRuleG2p(std::string dict_tsv_utf8, std::optional<std::string> homograph_index_json_utf8,
-                 std::optional<std::filesystem::path> heteronym_onnx,
-                 std::optional<std::filesystem::path> oov_onnx, bool use_cuda = false,
-                 std::optional<EnglishOnnxAuxMemory> heteronym_from_memory = std::nullopt,
+  /// Lexicon as UTF-8; OOV ONNX may be on-disk or in-memory.
+  EnglishRuleG2p(std::string dict_tsv_utf8, std::optional<std::filesystem::path> oov_onnx,
+                 bool use_cuda = false,
                  std::optional<EnglishOnnxAuxMemory> oov_from_memory = std::nullopt);
   ~EnglishRuleG2p() override;
 
