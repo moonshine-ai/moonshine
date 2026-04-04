@@ -45,6 +45,8 @@ SOFTWARE.
 #include <map>
 #include <mutex>
 #include <numeric>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "bin-tokenizer.h"
@@ -57,6 +59,7 @@ SOFTWARE.
 #include "ort-utils.h"
 #include "string-utils.h"
 #include "transcriber.h"
+#include "moonshine-g2p.h"
 #include "moonshine-tts.h"
 
 
@@ -719,7 +722,6 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
   }
   try {
     moonshine_tts::MoonshineTTSOptions tts_options;
-    bool any_g2p_asset = false;
     for (uint64_t i = 0; i < filenames_count; ++i) {
       if (filenames[i] == nullptr) {
         return MOONSHINE_ERROR_INVALID_ARGUMENT;
@@ -728,9 +730,6 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
       const bool is_tts_only =
           (key.size() >= 7 && key.compare(0, 7, "kokoro/") == 0) ||
           (key.size() >= 6 && key.compare(0, 6, "piper/") == 0);
-      if (!is_tts_only) {
-        any_g2p_asset = true;
-      }
       moonshine_tts::FileInformationMap& dest =
           is_tts_only ? tts_options.files : tts_options.g2p_options.files;
       if (memory[i] != nullptr && memory_sizes[i] > 0) {
@@ -758,9 +757,6 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
               std::filesystem::path(ort_k), src.memory, src.memory_size};
         }
       }
-    }
-    if (any_g2p_asset) {
-      tts_options.g2p_options.allow_builtin_cpp_data_fallback = false;
     }
     std::string lang_from_options;
     bool lang_from_options_set = false;
@@ -836,6 +832,73 @@ int32_t moonshine_text_to_speech(int32_t tts_synthesizer_handle,
   return MOONSHINE_ERROR_NONE;
 }
 
+/* ------------------------------ GRAPHEME TO PHONEMIZER ------------------- */
+
+namespace {
+
+std::mutex grapheme_phonemizer_map_mutex;
+std::map<int32_t, moonshine_tts::MoonshineG2P *> grapheme_phonemizer_map;
+int32_t next_grapheme_phonemizer_handle = 0;
+
+int32_t allocate_grapheme_phonemizer_handle(moonshine_tts::MoonshineG2P *g2p) {
+  std::lock_guard<std::mutex> lock(grapheme_phonemizer_map_mutex);
+  int32_t handle = next_grapheme_phonemizer_handle++;
+  grapheme_phonemizer_map[handle] = g2p;
+  return handle;
+}
+
+void parse_grapheme_phonemizer_options(const moonshine_option_t *in_options,
+                                     uint64_t in_options_count,
+                                     moonshine_tts::MoonshineG2POptions &g2p_options,
+                                     std::string &cli_language_out,
+                                     bool &language_was_set_out) {
+  language_was_set_out = false;
+  cli_language_out.clear();
+  std::vector<std::pair<std::string, std::string>> g2p_pairs;
+  g2p_pairs.reserve(in_options_count);
+  for (uint64_t i = 0; i < in_options_count; i++) {
+    const moonshine_option_t &option = in_options[i];
+    const std::string name = option.name != nullptr ? std::string(option.name) : std::string();
+    const std::string value = option.value != nullptr ? std::string(option.value) : std::string();
+    const std::string key = replace_all(to_lowercase(name), "-", "_");
+    if (key == "tts_root" || key == "path_root" || key == "model_root") {
+      const std::string t = trim(value);
+      if (!t.empty()) {
+        g2p_options.g2p_root = std::filesystem::path(t);
+      }
+    } else if (key == "g2p_root") {
+      g2p_options.g2p_root = std::filesystem::path(trim(value));
+    } else if (key == "lang" || key == "language") {
+      cli_language_out = trim(value);
+      language_was_set_out = true;
+    } else if (key == "use_bundled_cpp_g2p_data" || key == "bundle_g2p_data") {
+      // Deprecated: cwd-based discovery removed; value ignored.
+      (void)value;
+    } else if (key == "log_api_calls") {
+      log_api_calls = bool_from_string(value.c_str());
+    } else {
+      g2p_pairs.emplace_back(name, value);
+    }
+  }
+  g2p_options.parse_options(g2p_pairs);
+}
+
+void finalize_g2p_options_for_phonemizer_create(moonshine_tts::MoonshineG2POptions &g2p_opt) {
+  if (g2p_opt.g2p_root.empty()) {
+    g2p_opt.g2p_root = std::filesystem::current_path();
+  }
+}
+
+#define CHECK_GRAPHEME_PHONEMIZER_HANDLE(g2p_handle)                                          \
+  do {                                                                                        \
+    if ((g2p_handle) < 0 || !grapheme_phonemizer_map.contains((g2p_handle))) {                 \
+      LOGF("Moonshine grapheme phonemizer handle is invalid: handle %d", (int)(g2p_handle)); \
+      return MOONSHINE_ERROR_INVALID_HANDLE;                                                  \
+    }                                                                                         \
+  } while (0)
+
+}  // namespace
+
 /* Creates a grapheme to phonemizer from files on disk.
  Returns a non-negative handle on success, or a negative error code on
  failure. The error code can be converted to a human-readable string using
@@ -845,13 +908,48 @@ int32_t moonshine_create_grapheme_to_phonemizer_from_files(
     const char *language, const char **filenames, uint64_t filenames_count,
     const struct moonshine_option_t *options, uint64_t options_count,
     int32_t moonshine_version) {
-  (void)language;
-  (void)filenames;
-  (void)filenames_count;
-  (void)options;
-  (void)options_count;
   (void)moonshine_version;
-  return MOONSHINE_ERROR_UNKNOWN;
+  if (filenames_count > 0 && filenames == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  if (options_count > 0 && options == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  if (log_api_calls) {
+    LOGF(
+        "moonshine_create_grapheme_to_phonemizer_from_files(language=%s, "
+        "filenames=%p, filenames_count=%llu, options=%p, options_count=%llu, "
+        "moonshine_version=%d)",
+        language != nullptr ? language : "", reinterpret_cast<const void *>(filenames),
+        static_cast<unsigned long long>(filenames_count),
+        static_cast<const void *>(options),
+        static_cast<unsigned long long>(options_count), moonshine_version);
+  }
+  moonshine_tts::MoonshineG2POptions g2p_options;
+  std::string lang_from_options;
+  bool lang_from_options_set = false;
+  try {
+    parse_grapheme_phonemizer_options(options, options_count, g2p_options, lang_from_options,
+                                      lang_from_options_set);
+    for (uint64_t i = 0; i < filenames_count; ++i) {
+      if (filenames[i] == nullptr) {
+        return MOONSHINE_ERROR_INVALID_ARGUMENT;
+      }
+      const std::string key(filenames[i]);
+      g2p_options.files.set_path(key, std::filesystem::path(key));
+    }
+    finalize_g2p_options_for_phonemizer_create(g2p_options);
+    std::string lang = (language != nullptr && language[0] != '\0') ? std::string(language)
+                                                                     : std::string("en_us");
+    if (lang_from_options_set) {
+      lang = std::move(lang_from_options);
+    }
+    auto *g2p = new moonshine_tts::MoonshineG2P(lang, std::move(g2p_options));
+    return allocate_grapheme_phonemizer_handle(g2p);
+  } catch (const std::exception &e) {
+    LOGF("Failed to create grapheme phonemizer from files: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
 }
 
 /* Creates a grapheme to phonemizer from memory.
@@ -864,15 +962,55 @@ int32_t moonshine_create_grapheme_to_phonemizer_from_memory(
     const uint64_t filenames_count, const uint8_t **memory,
     const uint64_t *memory_sizes, const struct moonshine_option_t *options,
     uint64_t options_count, int32_t moonshine_version) {
-  (void)language;
-  (void)filenames;
-  (void)filenames_count;
-  (void)memory;
-  (void)memory_sizes;
-  (void)options;
-  (void)options_count;
   (void)moonshine_version;
-  return MOONSHINE_ERROR_UNKNOWN;
+  if (filenames_count > 0) {
+    if (filenames == nullptr || memory == nullptr || memory_sizes == nullptr) {
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
+    }
+  }
+  if (options_count > 0 && options == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  if (log_api_calls) {
+    LOGF(
+        "moonshine_create_grapheme_to_phonemizer_from_memory(language=%s, filenames=%p, "
+        "filenames_count=%llu, memory=%p, memory_sizes=%p, options=%p, "
+        "options_count=%llu, moonshine_version=%d)",
+        language != nullptr ? language : "", reinterpret_cast<const void *>(filenames),
+        static_cast<unsigned long long>(filenames_count),
+        reinterpret_cast<const void *>(memory), reinterpret_cast<const void *>(memory_sizes),
+        static_cast<const void *>(options),
+        static_cast<unsigned long long>(options_count), moonshine_version);
+  }
+  try {
+    moonshine_tts::MoonshineG2POptions g2p_options;
+    for (uint64_t i = 0; i < filenames_count; ++i) {
+      if (filenames[i] == nullptr) {
+        return MOONSHINE_ERROR_INVALID_ARGUMENT;
+      }
+      const std::string key(filenames[i]);
+      if (memory[i] != nullptr && memory_sizes[i] > 0) {
+        g2p_options.files.set_memory(key, memory[i], static_cast<size_t>(memory_sizes[i]));
+      } else {
+        g2p_options.files.set_path(key, std::filesystem::path(key));
+      }
+    }
+    std::string lang_from_options;
+    bool lang_from_options_set = false;
+    parse_grapheme_phonemizer_options(options, options_count, g2p_options, lang_from_options,
+                                      lang_from_options_set);
+    finalize_g2p_options_for_phonemizer_create(g2p_options);
+    std::string lang = (language != nullptr && language[0] != '\0') ? std::string(language)
+                                                                     : std::string("en_us");
+    if (lang_from_options_set) {
+      lang = std::move(lang_from_options);
+    }
+    auto *g2p = new moonshine_tts::MoonshineG2P(lang, std::move(g2p_options));
+    return allocate_grapheme_phonemizer_handle(g2p);
+  } catch (const std::exception &e) {
+    LOGF("Failed to create grapheme phonemizer from memory: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
 }
 
 /* Releases the resources used by a grapheme to phonemizer.
@@ -880,7 +1018,16 @@ int32_t moonshine_create_grapheme_to_phonemizer_from_memory(
 */
 void moonshine_free_grapheme_to_phonemizer(
     int32_t grapheme_to_phonemizer_handle) {
-  (void)grapheme_to_phonemizer_handle;
+  if (log_api_calls) {
+    LOGF("moonshine_free_grapheme_to_phonemizer(handle=%d)",
+         grapheme_to_phonemizer_handle);
+  }
+  std::lock_guard<std::mutex> lock(grapheme_phonemizer_map_mutex);
+  if (grapheme_phonemizer_map.contains(grapheme_to_phonemizer_handle)) {
+    delete grapheme_phonemizer_map[grapheme_to_phonemizer_handle];
+    grapheme_phonemizer_map[grapheme_to_phonemizer_handle] = nullptr;
+    grapheme_phonemizer_map.erase(grapheme_to_phonemizer_handle);
+  }
 }
 
 /* Converts a text into the equivalent International Phonetic Alphabet (IPA)
@@ -892,11 +1039,40 @@ int32_t moonshine_text_to_phonemes(int32_t grapheme_to_phonemizer_handle,
                                    uint64_t options_count,
                                    const char **out_phonemes,
                                    uint64_t *out_phonemes_count) {
-  (void)grapheme_to_phonemizer_handle;
-  (void)text;
   (void)options;
   (void)options_count;
-  (void)out_phonemes;
-  (void)out_phonemes_count;
-  return MOONSHINE_ERROR_UNKNOWN;
+  if (log_api_calls) {
+    LOGF(
+        "moonshine_text_to_phonemes(handle=%d, text=%s, options=%p, "
+        "options_count=%llu, out_phonemes=%p, out_phonemes_count=%p)",
+        grapheme_to_phonemizer_handle, text != nullptr ? text : "",
+        static_cast<const void *>(options),
+        static_cast<unsigned long long>(options_count), static_cast<void *>(out_phonemes),
+        static_cast<void *>(out_phonemes_count));
+  }
+  if (text == nullptr || out_phonemes == nullptr || out_phonemes_count == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  CHECK_GRAPHEME_PHONEMIZER_HANDLE(grapheme_to_phonemizer_handle);
+  try {
+    moonshine_tts::MoonshineG2P *g2p =
+        grapheme_phonemizer_map[grapheme_to_phonemizer_handle];
+    const std::string ipa = g2p->text_to_ipa(text);
+    *out_phonemes_count = 0;
+    *out_phonemes = nullptr;
+    if (ipa.empty()) {
+      return MOONSHINE_ERROR_NONE;
+    }
+    char *buf = static_cast<char *>(std::malloc(ipa.size() + 1));
+    if (buf == nullptr) {
+      return MOONSHINE_ERROR_UNKNOWN;
+    }
+    std::memcpy(buf, ipa.c_str(), ipa.size() + 1);
+    *out_phonemes = buf;
+    *out_phonemes_count = 1;
+  } catch (const std::exception &e) {
+    LOGF("Failed to convert text to phonemes: %s", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+  return MOONSHINE_ERROR_NONE;
 }

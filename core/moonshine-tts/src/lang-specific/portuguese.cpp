@@ -602,10 +602,6 @@ std::vector<std::string> PortugueseRuleG2p::dialect_ids() {
 
 std::filesystem::path resolve_portuguese_dict_path(const std::filesystem::path& model_root, bool is_portugal) {
   const char* sub = is_portugal ? "pt_pt" : "pt_br";
-  const std::filesystem::path under_data = model_root.parent_path() / "data" / sub / "dict.tsv";
-  if (std::filesystem::is_regular_file(under_data)) {
-    return under_data;
-  }
   return model_root / sub / "dict.tsv";
 }
 

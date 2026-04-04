@@ -10,7 +10,6 @@
 #include <utility>
 #include <vector>
 
-#include "builtin-cpp-data-root.h"
 #include "file-information.h"
 #include "moonshine-g2p-options.h"
 
@@ -19,6 +18,7 @@ namespace moonshine_tts {
 using MoonshineTTSFileInformation = FileInformation;
 
 /// Canonical keys for TTS asset paths (relative to ``g2p_options.g2p_root`` unless paths are absolute).
+/// When ``g2p_root`` is empty, ``MoonshineTTS`` uses the process current working directory as the root.
 inline constexpr std::string_view kTtsKokoroModelOnnxKey = "kokoro/model.ort";
 inline constexpr std::string_view kTtsKokoroConfigJsonKey = "kokoro/config.json";
 /// Optional explicit Piper ONNX model (``*.onnx``).
@@ -30,9 +30,6 @@ inline constexpr std::string_view kTtsPiperVoicesKey = "piper/voices";
 /// Optional directory of ``*.onnx.json`` files parallel to ``kTtsPiperVoicesKey`` (same basename rules).
 inline constexpr std::string_view kTtsPiperVoicesJsonKey = "piper/voices_json";
 
-std::filesystem::path builtin_kokoro_bundle_dir();
-std::filesystem::path preferred_parent_models_kokoro_dir();
-
 /// Shared configuration for ``MoonshineTTS`` (Kokoro and Piper file paths, G2P, ORT, CLI-oriented fields).
 /// Vocoder assets use ``files`` (same pattern as ``MoonshineG2POptions::files``). The **language** is passed to
 /// ``MoonshineTTS``'s constructor.
@@ -43,7 +40,6 @@ struct MoonshineTTSOptions {
   /// Kokoro voice id (e.g. ``af_heart``) or Piper ONNX stem/basename when using Piper.
   std::string voice{};
   double speed = 1.0;
-  bool use_bundled_cpp_g2p_data = true;
   std::vector<std::string> ort_provider_names{};
   MoonshineG2POptions g2p_options{};
   FileInformationMap files{};
@@ -64,7 +60,8 @@ struct MoonshineTTSOptions {
   /// If ``cli_language`` is null and an entry names ``lang`` or ``language``, throws.
   /// If non-null, those keys write into ``*cli_language`` and set ``*language_was_set`` when provided.
   ///
-  /// ``model_root`` / ``path_root`` / ``tts_root`` set ``g2p_options.g2p_root`` and disable bundled G2P data.
+  /// ``model_root`` / ``path_root`` / ``tts_root`` / ``g2p_root`` set ``g2p_options.g2p_root``.
+  /// If none are set, the cwd is used as the asset root when constructing ``MoonshineTTS``.
   /// Piper file keys: ``piper_onnx``, ``piper_onnx_json``, ``piper_voices_dir``, ``piper_voices_json_dir``
   /// (hyphenated CLI flags are accepted). Other keys forward to ``g2p_options``.
   void parse_options(const std::vector<std::pair<std::string, std::string>>& options,

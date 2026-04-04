@@ -89,7 +89,8 @@ inline constexpr std::string_view kG2pEnglishOovOnnxConfigKey = "en_us/oov/onnx-
 /// ONNX overrides for English).
 ///
 /// Lexicon and ONNX paths live in ``files`` under **canonical keys** equal to their default relative
-/// paths (e.g. ``fr/dict.tsv``). Set ``g2p_root`` to the directory that contains those subpaths.
+/// paths (e.g. ``fr/dict.tsv``). Set ``g2p_root`` to the directory that contains those subpaths, or leave
+/// it empty to resolve those relative paths against the process current working directory only.
 struct MoonshineG2POptions {
   MoonshineG2POptions();
 
@@ -124,10 +125,6 @@ struct MoonshineG2POptions {
   bool ukrainian_expand_cardinal_digits = true;
   bool hindi_with_stress = true;
   bool hindi_expand_cardinal_digits = true;
-
-  /// When false, lexicon resolution never falls back to ``builtin_cpp_data_root()`` (disk under the
-  /// compiled ``cpp/data`` tree). Used for strict memory-only or custom-root setups.
-  bool allow_builtin_cpp_data_fallback = true;
 
   FileInformationMap files;
 

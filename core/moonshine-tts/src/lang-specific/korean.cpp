@@ -682,10 +682,6 @@ bool dialect_resolves_to_korean_rules(std::string_view dialect_id) {
 }
 
 std::filesystem::path resolve_korean_dict_path(const std::filesystem::path& model_root) {
-  const std::filesystem::path under_data = model_root.parent_path() / "data" / "ko" / "dict.tsv";
-  if (std::filesystem::is_regular_file(under_data)) {
-    return under_data;
-  }
   return model_root / "ko" / "dict.tsv";
 }
 

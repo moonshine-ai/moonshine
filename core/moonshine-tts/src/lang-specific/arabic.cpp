@@ -126,33 +126,11 @@ bool dialect_resolves_to_arabic_rules(std::string_view dialect_id) {
 
 std::filesystem::path resolve_arabic_dict_path(const std::filesystem::path& model_root) {
   const std::filesystem::path base = absolute_model_root_ar(model_root);
-  const std::filesystem::path p1 = base.parent_path() / "data" / "ar_msa" / "dict.tsv";
-  if (std::filesystem::is_regular_file(p1)) {
-    return p1;
-  }
-  const std::filesystem::path p2 = base.parent_path().parent_path() / "data" / "ar_msa" / "dict.tsv";
-  if (std::filesystem::is_regular_file(p2)) {
-    return p2;
-  }
   return base / "ar_msa" / "dict.tsv";
 }
 
 std::filesystem::path resolve_arabic_onnx_model_dir(const std::filesystem::path& model_root) {
   const std::filesystem::path base = absolute_model_root_ar(model_root);
-  const auto try_dir = [](const std::filesystem::path& dir) -> std::optional<std::filesystem::path> {
-    const auto onnx = resolve_prefer_ort_model(dir, "model.ort");
-    if (std::filesystem::is_regular_file(onnx)) {
-      return dir;
-    }
-    return std::nullopt;
-  };
-  if (auto o = try_dir(base.parent_path() / "data" / "ar_msa" / "arabertv02_tashkeel_fadel_onnx")) {
-    return *o;
-  }
-  if (auto o = try_dir(base.parent_path().parent_path() / "data" / "ar_msa" /
-                       "arabertv02_tashkeel_fadel_onnx")) {
-    return *o;
-  }
   return base / "ar_msa" / "arabertv02_tashkeel_fadel_onnx";
 }
 

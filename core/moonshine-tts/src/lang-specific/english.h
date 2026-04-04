@@ -59,9 +59,6 @@ class EnglishRuleG2p : public RuleBasedG2p {
 /// True for ``en_us``, ``en-us``, ``en``, ``english`` (case-insensitive).
 bool dialect_resolves_to_english_rules(std::string_view dialect_id);
 
-/// Default: ``<model-root>/en_us/dict_filtered_heteronyms.tsv``.
-std::filesystem::path resolve_english_dict_path(const std::filesystem::path& model_root);
-
 }  // namespace moonshine_tts
 
 #endif  // MOONSHINE_TTS_LANG_SPECIFIC_ENGLISH_H

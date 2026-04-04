@@ -1,11 +1,11 @@
 // Unified G2P CLI: rule-based dialects (English, Spanish, German, …).
-#include "builtin-cpp-data-root.h"
 #include "g2p-word-log.h"
 #include "spanish.h"
 #include "moonshine-g2p.h"
 
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -25,7 +25,7 @@ void usage(const char *argv0) {
   std::cerr
       << "Usage: " << argv0
       << " [--language|--lang ID] [--model-root DIR]\n"
-      << "       (default model root: builtin_cpp_data_root() / bundled data/; same as MoonshineTTS/PiperTTS)\n"
+      << "       (omit DIR to use the process cwd as the asset root; same layout as MoonshineTTS/PiperTTS)\n"
       << "       [--dict PATH] [--heteronym-onnx PATH] [--oov-onnx PATH]\n"
       << "       [--cuda] [--log-words|-v] [--debug-heteronym]\n"
       << "       [--no-stress] [--broad-phonemes] [--stdin]\n"
@@ -49,30 +49,29 @@ void usage(const char *argv0) {
          "stdin is read unless you pass --stdin explicitly for empty input.\n"
       << "  German (de, de-DE, german): rule-based G2P with <model-root>/de/dict.tsv by default; "
          "override with --german-dict.\n"
-      << "  French (fr, fr-FR, french): rule-based G2P; default lexicon <model-root>/../data/fr/dict.tsv "
-         "or <model-root>/fr/dict.tsv; POS CSVs in the same directory tree.\n"
-      << "  Dutch (nl, nl-NL, dutch): rule-based G2P; default lexicon <model-root>/../data/nl/dict.tsv "
-         "or <model-root>/nl/dict.tsv; override with --dutch-dict.\n"
-      << "  Russian (ru, ru-RU, russian): rule-based G2P; default <model-root>/../data/ru/dict.tsv "
-         "or <model-root>/ru/dict.tsv; override with --russian-dict.\n"
+      << "  French (fr, fr-FR, french): rule-based G2P; default lexicon <model-root>/fr/dict.tsv; "
+         "POS CSVs under <model-root>/fr/.\n"
+      << "  Dutch (nl, nl-NL, dutch): rule-based G2P; default <model-root>/nl/dict.tsv; "
+         "override with --dutch-dict.\n"
+      << "  Russian (ru, ru-RU, russian): rule-based G2P; default <model-root>/ru/dict.tsv; "
+         "override with --russian-dict.\n"
       << "  Chinese (zh, zh-Hans, cmn, …): RoBERTa UPOS ONNX + lexicon; default "
-         "<model-root>/../data/zh_hans/dict.tsv and "
-         "<model-root>/../data/zh_hans/roberta_chinese_base_upos_onnx/; override with "
-         "--chinese-dict / --chinese-onnx-dir.\n"
-      << "  Korean (ko, ko-KR, korean): rule-based G2P; default <model-root>/../data/ko/dict.tsv "
-         "or <model-root>/ko/dict.tsv; override with --korean-dict.\n"
-      << "  Japanese (ja, ja-JP, japanese): ONNX LUW + lexicon; default <model-root>/../data/ja/dict.tsv "
-         "and <model-root>/../data/ja/roberta_japanese_char_luw_upos_onnx/; override with "
+         "<model-root>/zh_hans/dict.tsv and <model-root>/zh_hans/roberta_chinese_base_upos_onnx/; "
+         "override with --chinese-dict / --chinese-onnx-dir.\n"
+      << "  Korean (ko, ko-KR, korean): rule-based G2P; default <model-root>/ko/dict.tsv; "
+         "override with --korean-dict.\n"
+      << "  Japanese (ja, ja-JP, japanese): ONNX LUW + lexicon; default <model-root>/ja/dict.tsv "
+         "and <model-root>/ja/roberta_japanese_char_luw_upos_onnx/; override with "
          "--japanese-dict / --japanese-onnx-dir.\n"
-      << "  Arabic (ar, ar-MSA, msa, arabic): ONNX tashkīl + rules; default <model-root>/../data/ar_msa/ "
-         "arabertv02_tashkeel_fadel_onnx + dict.tsv; override with --arabic-onnx-dir / --arabic-dict.\n"
+      << "  Arabic (ar, ar-MSA, msa, arabic): ONNX tashkīl + rules; default "
+         "<model-root>/ar_msa/arabertv02_tashkeel_fadel_onnx + dict.tsv; override with "
+         "--arabic-onnx-dir / --arabic-dict.\n"
       << "  Portuguese (pt_br, pt-br, pt_pt, portugal, …): rule-based G2P; default "
-         "<model-root>/../data/pt_br/dict.tsv or pt_pt/dict.tsv; override with --portuguese-dict.\n"
+         "<model-root>/pt_br/dict.tsv or <model-root>/pt_pt/dict.tsv; override with --portuguese-dict.\n"
       << "  Turkish (tr, tr-TR, turkish): rule-based G2P (no lexicon); optional cardinal digit expansion.\n"
       << "  Ukrainian (uk, uk-UA, ukrainian): rule-based G2P (no lexicon); optional cardinal digit expansion.\n"
-      << "  Hindi (hi, hi-IN, hindi): lexicon lookup + Devanagari rules; default <model-root>/../data/hi/dict.tsv "
-         "(or grandparent …/data/hi), else <model-root>/hi/dict.tsv; bundled cpp/data/hi/dict.tsv; "
-         "override with --hindi-dict.\n"
+      << "  Hindi (hi, hi-IN, hindi): lexicon lookup + Devanagari rules; default "
+         "<model-root>/hi/dict.tsv; override with --hindi-dict.\n"
       << "  -d PATH / --dict PATH: English CMU TSV (en_us only; overrides default under "
          "<model-root>/en_us/).\n";
 }
@@ -155,7 +154,6 @@ int main(int argc, char **argv) {
 
   std::string dialect_str = "en_us";
   MoonshineG2POptions opt;
-  bool model_root_from_cli = false;
   bool log_words = false;
   bool force_stdin = false;
   bool print_spanish_dialects = false;
@@ -188,7 +186,6 @@ int main(int argc, char **argv) {
       dialect_str = argv[++i];
     } else if (a == "--model-root" && i + 1 < argc) {
       opt.g2p_root = argv[++i];
-      model_root_from_cli = true;
     } else if (a == "--german-dict" && i + 1 < argc) {
       opt.files.set_path(kG2pGermanDictKey, argv[++i]);
     } else if (a == "--chinese-dict" && i + 1 < argc) {
@@ -263,10 +260,6 @@ int main(int argc, char **argv) {
     } else {
       text_parts.push_back(a);
     }
-  }
-
-  if (!model_root_from_cli) {
-    opt.g2p_root = moonshine_tts::builtin_cpp_data_root();
   }
 
   if (print_spanish_dialects) {

@@ -12,7 +12,7 @@ namespace {
 void usage(const char* argv0) {
   std::cerr << "Usage: " << argv0
             << " [--dict PATH] [--no-expand-digits] [--no-stress] [--stdin] [TEXT...]\n"
-            << "  Default dict: builtin_hindi_dict_path() — repo data/hi/dict.tsv or cpp/data/hi/dict.tsv.\n";
+            << "  Default dict: <cwd>/hi/dict.tsv (run with cwd = your asset root, or pass --dict).\n";
 }
 
 std::string read_all_stdin() {

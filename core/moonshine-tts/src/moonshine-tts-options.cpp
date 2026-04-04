@@ -35,14 +35,11 @@ void MoonshineTTSOptions::parse_options(
       const std::string t = trim(value);
       if (!t.empty()) {
         g2p_options.g2p_root = std::filesystem::path(t);
-        use_bundled_cpp_g2p_data = false;
       }
     } else if (key == "g2p_root") {
-      const std::string t = trim(value);
-      g2p_options.g2p_root = std::filesystem::path(t);
-      if (!t.empty()) {
-        use_bundled_cpp_g2p_data = false;
-      }
+      g2p_options.g2p_root = std::filesystem::path(trim(value));
+    } else if (key == "use_bundled_cpp_g2p_data" || key == "bundle_g2p_data") {
+      // Deprecated: cwd-based asset discovery was removed; value ignored.
     } else if (key == "lang" || key == "language") {
       if (!cli_language) {
         throw std::runtime_error(
@@ -111,8 +108,6 @@ void MoonshineTTSOptions::parse_options(
       vocoder_engine = trim(value);
     } else if (key == "output" || key == "o") {
       output_path = std::filesystem::path(trim(value));
-    } else if (key == "use_bundled_cpp_g2p_data" || key == "bundle_g2p_data") {
-      use_bundled_cpp_g2p_data = bool_from_string(value.c_str());
     } else if (key == "piper_normalize_audio") {
       piper_normalize_audio = bool_from_string(value.c_str());
     } else if (key == "piper_output_volume") {

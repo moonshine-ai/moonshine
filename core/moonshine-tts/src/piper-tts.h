@@ -1,7 +1,6 @@
 #ifndef MOONSHINE_TTS_PIPER_TTS_H
 #define MOONSHINE_TTS_PIPER_TTS_H
 
-#include "builtin-cpp-data-root.h"
 #include "file-information.h"
 #include "moonshine-g2p-options.h"
 
@@ -15,9 +14,6 @@
 
 namespace moonshine_tts {
 
-/// ``cpp/data/<lang>/piper-voices`` for bundled ONNX + ``.onnx.json`` (see ``scripts/download_piper_voices_for_g2p.py``).
-std::filesystem::path builtin_piper_voices_dir(std::string_view data_subdir);
-
 /// Piper ONNX TTS + ``MoonshineG2P`` IPA (filtered to each model's ``phoneme_id_map``; no eSpeak at runtime).
 struct PiperTTSOptions {
   /// When non-empty, load this ``*.onnx`` directly; ``voices_dir`` / discovery is skipped.
@@ -28,8 +24,9 @@ struct PiperTTSOptions {
   /// ``voices_dir`` discovery, ``voices_json_dir / (<onnx_filename> + ".json")`` if ``voices_json_dir``
   /// is non-empty, else beside the chosen ``*.onnx``.
   std::filesystem::path explicit_onnx_json_path{};
-  /// Directory containing ``*.onnx`` for the resolved language. Empty → ``builtin_piper_voices_dir``
-  /// unless ``explicit_onnx_path`` is set.
+  /// Directory containing ``*.onnx`` for the resolved language. Empty →
+  /// ``g2p_options.g2p_root / <lang-subdir> / piper-voices`` unless ``explicit_onnx_path`` is set
+  /// (``g2p_root`` defaults to the process cwd when empty).
   std::filesystem::path voices_dir{};
   /// Optional directory containing ``*.onnx.json`` files whose basenames match ``*.onnx`` in
   /// ``voices_dir`` (``<name>.onnx`` → ``<name>.onnx.json`` in this folder). Empty → JSON beside ONNX.
@@ -39,7 +36,6 @@ struct PiperTTSOptions {
   /// ONNX basename (e.g. ``en_US-lessac-medium.onnx``) or stem; empty → default for ``lang``.
   std::string onnx_model{};
   double speed = 1.0;
-  bool use_bundled_cpp_g2p_data = true;
   MoonshineG2POptions g2p_options{};
   std::vector<std::string> ort_provider_names{};
   /// Match ``piper-tts`` ``SynthesisConfig.normalize_audio`` (scale chunk to full range before clip).

@@ -19,10 +19,9 @@ Comment headers inside `dict.tsv` repeat the URLs and licenses for the merged Wi
 
 ## Path resolution (C++)
 
-- **`MoonshineG2P` / factory:** `resolve_hindi_dict_path(model_root)` checks, in order:  
-  `model_root/../data/hi/dict.tsv`, `model_root/../../data/hi/dict.tsv`, then `model_root/hi/dict.tsv`.
-- **`hindi_text_to_ipa` / doctest parity:** `builtin_hindi_dict_path()` prefers repo `data/hi/dict.tsv`, else `data/hi/dict.tsv` (paths derived from `hindi.cpp`).
-- **`hindi_rule_g2p` standalone tool:** same default as `builtin_hindi_dict_path()`; override with `--dict PATH`.
+- **`MoonshineG2P` / factory:** `resolve_hindi_dict_path(model_root)` → `model_root/hi/dict.tsv`.
+- **`hindi_text_to_ipa`:** optional explicit `dict_tsv` argument; when empty, uses `builtin_hindi_dict_path()` → `<cwd>/hi/dict.tsv`.
+- **`hindi_rule_g2p` standalone tool:** default dict `<cwd>/hi/dict.tsv`; override with `--dict PATH`.
 
 ## Recreating / refreshing
 

@@ -10,7 +10,6 @@
 #include <fstream>
 #include <istream>
 #include <sstream>
-#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -537,28 +536,10 @@ std::vector<std::string> ChineseRuleG2p::dialect_ids() {
 }
 
 std::filesystem::path resolve_chinese_dict_path(const std::filesystem::path& model_root) {
-  const std::filesystem::path under_data = model_root.parent_path() / "data" / "zh_hans" / "dict.tsv";
-  if (std::filesystem::is_regular_file(under_data)) {
-    return under_data;
-  }
   return model_root / "zh_hans" / "dict.tsv";
 }
 
 std::filesystem::path resolve_chinese_onnx_model_dir(const std::filesystem::path& model_root) {
-  const auto try_dir = [](const std::filesystem::path& dir) -> std::optional<std::filesystem::path> {
-    const auto onnx = resolve_prefer_ort_model(dir, "model.ort");
-    if (std::filesystem::is_regular_file(onnx)) {
-      return dir;
-    }
-    return std::nullopt;
-  };
-  if (auto o = try_dir(model_root.parent_path() / "data" / "zh_hans" / "roberta_chinese_base_upos_onnx")) {
-    return *o;
-  }
-  if (auto o = try_dir(model_root.parent_path().parent_path() / "data" / "zh_hans" /
-                       "roberta_chinese_base_upos_onnx")) {
-    return *o;
-  }
   return model_root / "zh_hans" / "roberta_chinese_base_upos_onnx";
 }
 

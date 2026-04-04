@@ -1,6 +1,5 @@
 #include "english.h"
 
-#include "builtin-cpp-data-root.h"
 #include "cmudict-tsv.h"
 #include "g2p-word-log.h"
 #include "english-hand-oov.h"
@@ -10,6 +9,7 @@
 #include "utf8-utils.h"
 
 #include <cctype>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <optional>
@@ -288,19 +288,6 @@ bool dialect_resolves_to_english_rules(std::string_view dialect_id) {
     return false;
   }
   return s == "en-us" || s == "english" || s == "en";
-}
-
-std::filesystem::path resolve_english_dict_path(const std::filesystem::path& model_root) {
-  const std::filesystem::path under = model_root / "en_us" / "dict_filtered_heteronyms.tsv";
-  if (std::filesystem::is_regular_file(under)) {
-    return under;
-  }
-  const std::filesystem::path bundled =
-      builtin_cpp_data_root() / "en_us" / "dict_filtered_heteronyms.tsv";
-  if (std::filesystem::is_regular_file(bundled)) {
-    return bundled;
-  }
-  return model_root.parent_path() / "models" / "en_us" / "dict_filtered_heteronyms.tsv";
 }
 
 }  // namespace moonshine_tts

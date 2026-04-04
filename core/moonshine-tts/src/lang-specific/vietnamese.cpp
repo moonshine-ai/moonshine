@@ -899,10 +899,6 @@ bool dialect_resolves_to_vietnamese_rules(std::string_view dialect_id) {
 }
 
 std::filesystem::path resolve_vietnamese_dict_path(const std::filesystem::path& model_root) {
-  const std::filesystem::path under_data = model_root.parent_path() / "data" / "vi" / "dict.tsv";
-  if (std::filesystem::is_regular_file(under_data)) {
-    return under_data;
-  }
   return model_root / "vi" / "dict.tsv";
 }
 

@@ -1,6 +1,5 @@
 #include "rule-based-g2p-factory.h"
 
-#include "builtin-cpp-data-root.h"
 #include "g2p-path.h"
 #include "moonshine-g2p-options.h"
 #include "rule-based-g2p.h"
@@ -134,21 +133,8 @@ std::optional<RuleBasedG2pInstance> try_english(std::string_view trimmed,
   const bool dict_from_files = options.asset_is_available(kG2pEnglishDictKey);
   const bool homograph_from_files = options.asset_is_available(kG2pEnglishHomographJsonKey);
 
-  std::filesystem::path dict_tsv = resolve_path_under_root(
+  const std::filesystem::path dict_tsv = resolve_path_under_root(
       options.g2p_root, options.relative_asset_path(kG2pEnglishDictKey));
-  if (!std::filesystem::is_regular_file(dict_tsv)) {
-    if (options.allow_builtin_cpp_data_fallback) {
-      const std::filesystem::path bundled = resolve_path_under_root(
-          builtin_cpp_data_root(), options.relative_asset_path(kG2pEnglishDictKey));
-      if (std::filesystem::is_regular_file(bundled)) {
-        dict_tsv = bundled;
-      } else {
-        dict_tsv = resolve_english_dict_path(options.g2p_root);
-      }
-    } else {
-      dict_tsv = resolve_english_dict_path(options.g2p_root);
-    }
-  }
   if (!dict_from_files && !std::filesystem::is_regular_file(dict_tsv)) {
     throw std::runtime_error(
         "English G2P: lexicon not found at " + dict_tsv.generic_string() +
@@ -293,15 +279,8 @@ std::optional<RuleBasedG2pInstance> try_german(std::string_view trimmed,
     out.engine = std::make_unique<GermanRuleG2p>(std::move(g));
     return out;
   }
-  std::filesystem::path gdict = resolve_path_under_root(
+  const std::filesystem::path gdict = resolve_path_under_root(
       options.g2p_root, options.relative_asset_path(kG2pGermanDictKey));
-  if (!std::filesystem::is_regular_file(gdict) && options.allow_builtin_cpp_data_fallback) {
-    const std::filesystem::path bundled =
-        resolve_path_under_root(builtin_cpp_data_root(), std::filesystem::path{"de/dict.tsv"});
-    if (std::filesystem::is_regular_file(bundled)) {
-      gdict = bundled;
-    }
-  }
   if (!std::filesystem::is_regular_file(gdict)) {
     throw std::runtime_error(
         "German G2P: lexicon not found at " + gdict.generic_string() +
