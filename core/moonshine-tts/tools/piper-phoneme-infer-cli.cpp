@@ -102,7 +102,12 @@ int main(int argc, char** argv) {
   }
   opt.onnx_model = onnx_path.filename().string();
   opt.speed = speed;
-  opt.use_bundled_cpp_g2p_data = true;
+  {
+    std::error_code ec;
+    const std::filesystem::path canon = std::filesystem::weakly_canonical(onnx_path, ec);
+    const std::filesystem::path base = ec ? std::filesystem::absolute(onnx_path) : canon;
+    opt.g2p_options.g2p_root = base.parent_path().parent_path().parent_path();
+  }
   opt.piper_normalize_audio = true;
   opt.piper_output_volume = 1.F;
   opt.piper_noise_scale_override = noise_scale_override;

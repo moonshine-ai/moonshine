@@ -49,18 +49,17 @@ class HindiRuleG2p : public RuleBasedG2p {
 
 bool dialect_resolves_to_hindi_rules(std::string_view dialect_id);
 
-/// Tries ``<model-root>/../data/hi/dict.tsv``, then grandparent ``…/data/hi/dict.tsv`` (e.g. build dirs),
-/// else ``<model-root>/hi/dict.tsv``.
+/// Lexicon path: ``<model-root>/hi/dict.tsv``.
 std::filesystem::path resolve_hindi_dict_path(const std::filesystem::path& model_root);
 
-/// Default lexicon next to the source tree: ``<repo>/data/hi/dict.tsv`` if present, else
-/// ``cpp/data/hi/dict.tsv`` (paths derived from ``hindi.cpp``).
+/// Default lexicon path when no explicit root is supplied: ``<cwd>/hi/dict.tsv``.
 std::filesystem::path builtin_hindi_dict_path();
 
-/// Convenience for tests / CLI (uses ``builtin_hindi_dict_path()``).
+/// Convenience for tests / CLI. When ``dict_tsv`` is empty, uses ``builtin_hindi_dict_path()``.
 std::string hindi_text_to_ipa(const std::string& text, bool with_stress = true,
                                 std::vector<G2pWordLog>* per_word_log = nullptr,
-                                bool expand_cardinal_digits = true);
+                                bool expand_cardinal_digits = true,
+                                const std::filesystem::path& dict_tsv = {});
 
 }  // namespace moonshine_tts
 

@@ -28,33 +28,6 @@ extern "C" {
 
 namespace moonshine_tts {
 
-std::filesystem::path builtin_kokoro_bundle_dir() {
-  return std::filesystem::path(__FILE__).parent_path().parent_path() / "data" /
-         "kokoro";
-}
-
-std::filesystem::path preferred_parent_models_kokoro_dir() {
-  namespace fs = std::filesystem;
-  const fs::path bundled_dir = builtin_kokoro_bundle_dir();
-  const fs::path bundled_onnx = resolve_prefer_ort_model(bundled_dir, "model.ort");
-  if (!fs::is_regular_file(bundled_onnx)) {
-    return {};
-  }
-  const fs::path alt_dir =
-      builtin_cpp_data_root().parent_path().parent_path() / "models" / "kokoro";
-  const fs::path alt_onnx = resolve_prefer_ort_model(alt_dir, "model.ort");
-  if (!fs::is_regular_file(alt_onnx)) {
-    return {};
-  }
-  try {
-    if (fs::file_size(alt_onnx) > fs::file_size(bundled_onnx)) {
-      return alt_dir;
-    }
-  } catch (...) {
-  }
-  return {};
-}
-
 namespace {
 
 constexpr std::string_view kVoiceMagic = "KVO1";
@@ -144,7 +117,7 @@ const LangProfile* lookup_lang_profile(std::string_view key) {
       {"en_us", {'a', "af_heart", "en_us"}},
       {"en-us", {'a', "af_heart", "en_us"}},
       {"en", {'a', "af_heart", "en_us"}},
-      // UK Kokoro voice uses the same English rule + ONNX G2P assets as US (``en_us`` under cpp/data).
+      // UK Kokoro voice uses the same English rule + ONNX G2P assets as US (``en_us`` under g2p_root).
       {"en_gb", {'b', "bf_emma", "en_us"}},
       {"en-gb", {'b', "bf_emma", "en_us"}},
       // Spanish G2P must be a concrete dialect id (same default as spanish_rule_g2p.text_to_ipa).
@@ -498,7 +471,6 @@ PiperTTSOptions make_piper_options(std::string_view language, const MoonshineTTS
   }
   p.onnx_model = opt.voice;
   p.speed = opt.speed;
-  p.use_bundled_cpp_g2p_data = opt.use_bundled_cpp_g2p_data;
   p.g2p_options = opt.g2p_options;
   p.ort_provider_names = opt.ort_provider_names;
   p.piper_normalize_audio = opt.piper_normalize_audio;
@@ -774,11 +746,8 @@ struct MoonshineTTS::Impl {
         opt.g2p_options.files.entries[map_key] = fi;
       }
     }
-    if (opt.use_bundled_cpp_g2p_data) {
-      opt.g2p_options.g2p_root = builtin_cpp_data_root();
-    } else if (opt.g2p_options.g2p_root.empty()) {
-      throw std::runtime_error(
-          "MoonshineTTS: set g2p_options.g2p_root when use_bundled_cpp_g2p_data is false");
+    if (opt.g2p_options.g2p_root.empty()) {
+      opt.g2p_options.g2p_root = std::filesystem::current_path();
     }
     std::string eng = ascii_lowercase_copy(trim_ascii_ws_copy(opt.vocoder_engine));
     if (eng.empty()) {

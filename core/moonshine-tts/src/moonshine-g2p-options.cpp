@@ -348,7 +348,8 @@ void MoonshineG2POptions::parse_options(
     } else if (key == "oov_onnx_config") {
       set_override_file(files, kG2pOovOnnxConfigOverrideKey, value);
     } else if (key == "allow_builtin_g2p_data") {
-      allow_builtin_cpp_data_fallback = bool_from_string(v);
+      // Deprecated: cwd / multi-path fallbacks were removed; value ignored.
+      (void)v;
     } else {
       throw std::logic_error("MoonshineG2POptions::parse_options: unhandled option '" + name + "'");
     }

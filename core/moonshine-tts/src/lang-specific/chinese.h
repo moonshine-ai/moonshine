@@ -51,11 +51,11 @@ class ChineseRuleG2p : public RuleBasedG2p {
 
 bool dialect_resolves_to_chinese_rules(std::string_view dialect_id);
 
-/// ``<model-root>/../data/zh_hans/dict.tsv`` or ``<model-root>/zh_hans/dict.tsv``.
+/// ``<model-root>/zh_hans/dict.tsv``.
 std::filesystem::path resolve_chinese_dict_path(const std::filesystem::path& model_root);
 
-/// Directory with Chinese RoBERTa UPOS ONNX (``model.onnx``, ``vocab.txt``, …); default under
-/// ``data/zh_hans/roberta_chinese_base_upos_onnx``.
+/// Directory with Chinese RoBERTa UPOS ONNX (``model.onnx``, ``vocab.txt``, …):
+/// ``<model-root>/zh_hans/roberta_chinese_base_upos_onnx``.
 std::filesystem::path resolve_chinese_onnx_model_dir(const std::filesystem::path& model_root);
 
 }  // namespace moonshine_tts

@@ -1,6 +1,6 @@
 # Kokoro — bundled TTS for `moonshine_tts`
 
-This directory is the **default Kokoro ONNX bundle** for the C++ CLI and `MoonshineTTS` (`builtin_kokoro_bundle_dir()` / `data/kokoro`). It must contain at least:
+This directory is a **Kokoro ONNX bundle** layout (`kokoro/` under your asset root or current working directory). It must contain at least:
 
 | Path | Role |
 |------|------|

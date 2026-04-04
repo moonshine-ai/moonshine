@@ -1127,10 +1127,6 @@ std::vector<std::string> RussianRuleG2p::dialect_ids() {
 }
 
 std::filesystem::path resolve_russian_dict_path(const std::filesystem::path& model_root) {
-  const std::filesystem::path under_data = model_root.parent_path() / "data" / "ru" / "dict.tsv";
-  if (std::filesystem::is_regular_file(under_data)) {
-    return under_data;
-  }
   return model_root / "ru" / "dict.tsv";
 }
 

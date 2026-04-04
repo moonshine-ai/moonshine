@@ -1,6 +1,6 @@
 # Japanese — `ja`
 
-`moonshine_tts` and ``MoonshineTTS`` (with ``use_bundled_cpp_g2p_data``) use ``MoonshineG2POptions::model_root = builtin_cpp_data_root()`` (i.e. this ``data`` tree), so no ``--model-root`` flag is required for CLI TTS.
+Set ``MoonshineTTSOptions::g2p_options.g2p_root`` (or ``--model-root`` on the CLI) to the directory that contains this ``ja/`` tree, or run with the process cwd as that directory when the root is left unset.
 
 ## Contents
 

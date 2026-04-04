@@ -20,7 +20,6 @@ target_compile_definitions(moonshine_tts_utf8proc PRIVATE UTF8PROC_EXPORTS PUBLI
 enable_testing()
 
 add_library(moonshine_tts_core STATIC
-  src/builtin-cpp-data-root.cpp
   src/file-information.cpp
   src/moonshine-g2p-options.cpp
   src/moonshine-tts-options.cpp

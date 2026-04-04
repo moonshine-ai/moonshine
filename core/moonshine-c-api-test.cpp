@@ -6,6 +6,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -37,6 +38,64 @@ std::vector<uint8_t> read_binary_file(const std::filesystem::path& p) {
   }
   return std::vector<uint8_t>((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
 }
+
+/// Resolve ``moonshine-tts/data`` for tests run from ``test-assets/``, repo root, or ``core/build``.
+std::optional<std::filesystem::path> find_moonshine_tts_data_dir() {
+  namespace fs = std::filesystem;
+  const fs::path cwd = fs::current_path();
+  const fs::path candidates[] = {
+      cwd / "core" / "moonshine-tts" / "data",
+      cwd.parent_path() / "core" / "moonshine-tts" / "data",
+      cwd / "moonshine-tts" / "data",
+      cwd.parent_path() / "moonshine-tts" / "data",
+      cwd / ".." / "moonshine-tts" / "data",
+      cwd / ".." / ".." / "moonshine-tts" / "data",
+  };
+  for (const auto& p : candidates) {
+    std::error_code ec;
+    const fs::path abs = fs::absolute(p, ec);
+    if (ec) {
+      continue;
+    }
+    if (fs::is_directory(abs / "en_us")) {
+      return abs;
+    }
+  }
+  return std::nullopt;
+}
+
+void free_phonemes_output(const char* ipa) {
+  std::free(const_cast<char*>(ipa));
+}
+
+/// Creates a phonemizer with ``g2p_root`` = *data_root*, runs ``text`` → IPA, frees output.
+void grapheme_phonemizer_smoke(const std::filesystem::path& data_root, const char* language,
+                               const char* text) {
+  const std::string g2p_root_str = data_root.string();
+  const moonshine_option_t opts[] = {
+      {"g2p_root", g2p_root_str.c_str()},
+  };
+  const uint64_t n_opt = sizeof(opts) / sizeof(opts[0]);
+  int32_t h = moonshine_create_grapheme_to_phonemizer_from_files(language, nullptr, 0, opts, n_opt,
+                                                                 MOONSHINE_HEADER_VERSION);
+  REQUIRE(h >= 0);
+  const char* ipa = nullptr;
+  uint64_t phoneme_count = 0;
+  REQUIRE(moonshine_text_to_phonemes(h, text, nullptr, 0, &ipa, &phoneme_count) ==
+          MOONSHINE_ERROR_NONE);
+  REQUIRE(phoneme_count == 1);
+  REQUIRE(ipa != nullptr);
+  REQUIRE(std::strlen(ipa) > 0);
+  free_phonemes_output(ipa);
+  moonshine_free_grapheme_to_phonemizer(h);
+}
+
+struct GraphemePhonemizerLangCase {
+  const char* language;
+  const char* text;
+  /// If non-null, skip the case when this path is not a regular file under the data root.
+  const char* required_relative_file;
+};
 
 }  // namespace
 
@@ -373,16 +432,21 @@ TEST_CASE("moonshine-test-v2") {
     REQUIRE(transcriber_handle < 0);
   }
   SUBCASE("tts-synthesizer-valid-options") {
+    const auto data_root = find_moonshine_tts_data_dir();
+    if (!data_root) {
+      MESSAGE("skip: moonshine-tts data directory not found");
+      return;
+    }
+    const std::string model_root_str = data_root->string();
     const moonshine_option_t options[] = {
         {"engine", "auto"},
-        {"model_root", ""},
+        {"model_root", model_root_str.c_str()},
         {"kokoro_dir", ""},
         {"piper_voices_dir", ""},
         {"lang", "en_us"},
         {"voice", "af_heart"},
         {"speed", "1.0"},
         {"output", "out.wav"},
-        {"bundle_g2p_data", "true"},  // corresponds to use_bundled_cpp_g2p_data
     };
     const uint64_t options_count = sizeof(options) / sizeof(options[0]);
     int32_t tts_synthesizer_handle =
@@ -423,11 +487,16 @@ TEST_CASE("moonshine-test-v2") {
     const uint64_t mem_sizes[2] = {static_cast<uint64_t>(onnx_data.size()),
                                    static_cast<uint64_t>(json_data.size())};
     const std::string voice_stem = onnx_path.filename().string();
+    const auto g2p_root = find_moonshine_tts_data_dir();
+    if (!g2p_root) {
+      return;
+    }
+    const std::string g2p_root_str = g2p_root->string();
     const moonshine_option_t opts[] = {
         {"engine", "piper"},
         {"voice", voice_stem.c_str()},
         {"speed", "1.0"},
-        {"bundle_g2p_data", "true"},
+        {"model_root", g2p_root_str.c_str()},
     };
     int32_t h = moonshine_create_tts_synthesizer_from_memory(
         "de", filenames, 2, mem_ptrs, mem_sizes, opts, sizeof(opts) / sizeof(opts[0]),
@@ -442,5 +511,130 @@ TEST_CASE("moonshine-test-v2") {
     REQUIRE(audio != nullptr);
     std::free(audio);
     moonshine_free_tts_synthesizer(h);
+  }
+}
+
+TEST_CASE("grapheme-to-phonemizer-c-api") {
+  SUBCASE("create-invalid-filenames-pointer") {
+    const moonshine_option_t opts[] = {
+        {"g2p_root", "."},
+    };
+    const int32_t h = moonshine_create_grapheme_to_phonemizer_from_files(
+        "en_us", nullptr, 1, opts, sizeof(opts) / sizeof(opts[0]), MOONSHINE_HEADER_VERSION);
+    CHECK(h == MOONSHINE_ERROR_INVALID_ARGUMENT);
+  }
+
+  SUBCASE("text-to-phonemes-invalid-handle") {
+    const char* ipa = nullptr;
+    uint64_t n = 0;
+    CHECK(moonshine_text_to_phonemes(-1, "a", nullptr, 0, &ipa, &n) ==
+          MOONSHINE_ERROR_INVALID_HANDLE);
+  }
+
+  SUBCASE("text-to-phonemes-invalid-arguments") {
+    const auto data_root = find_moonshine_tts_data_dir();
+    if (!data_root) {
+      MESSAGE("skip: moonshine-tts data directory not found (run from test-assets or set cwd)");
+      return;
+    }
+    const std::string g2p_root_str = data_root->string();
+    const moonshine_option_t opts[] = {
+        {"g2p_root", g2p_root_str.c_str()},
+    };
+    int32_t h = moonshine_create_grapheme_to_phonemizer_from_files(
+        "en_us", nullptr, 0, opts, sizeof(opts) / sizeof(opts[0]), MOONSHINE_HEADER_VERSION);
+    REQUIRE(h >= 0);
+    const char* ipa = nullptr;
+    uint64_t phoneme_count = 0;
+    CHECK(moonshine_text_to_phonemes(h, nullptr, nullptr, 0, &ipa, &phoneme_count) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(moonshine_text_to_phonemes(h, "hi", nullptr, 0, nullptr, &phoneme_count) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    moonshine_free_grapheme_to_phonemizer(h);
+  }
+
+  SUBCASE("rule-based-languages-smoke") {
+    const auto data_root = find_moonshine_tts_data_dir();
+    if (!data_root) {
+      MESSAGE("skip: moonshine-tts data directory not found");
+      return;
+    }
+    static const GraphemePhonemizerLangCase kCases[] = {
+        {"en_us", "Hello", "en_us/dict_filtered_heteronyms.tsv"},
+        {"es_mx", "hola", nullptr},
+        {"de", "Hallo", "de/dict.tsv"},
+        {"fr", "bonjour", "fr/dict.tsv"},
+        {"nl", "hallo", "nl/dict.tsv"},
+        {"it", "ciao", "it/dict.tsv"},
+        {"ru", "\xd0\xbf\xd1\x80\xd0\xb8\xd0\xb2\xd0\xb5\xd1\x82", "ru/dict.tsv"},
+        {"vi", "xin", "vi/dict.tsv"},
+        {"ko", "\xec\x95\x88\xeb\x85\x95", "ko/dict.tsv"},
+        {"pt_br", "ol\xc3\xa1", "pt_br/dict.tsv"},
+        {"pt_pt", "ol\xc3\xa1", "pt_pt/dict.tsv"},
+        {"tr", "merhaba", nullptr},
+        {"uk", "\xd0\xbf\xd1\x80\xd1\x96\xd0\xb2\xd1\x96\xd1\x82", nullptr},
+        {"hi", "\xe0\xa4\xa8\xe0\xa4\xae\xe0\xa4\xb8\xe0\xa5\x8d\xe0\xa4\xa4\xe0\xa5\x87", "hi/dict.tsv"},
+    };
+    namespace fs = std::filesystem;
+    for (const auto& c : kCases) {
+      if (c.required_relative_file != nullptr &&
+          !fs::is_regular_file(*data_root / c.required_relative_file)) {
+        MESSAGE("skip language ", c.language, ": missing ", c.required_relative_file);
+        continue;
+      }
+      INFO("grapheme phonemizer language: " << c.language);
+      grapheme_phonemizer_smoke(*data_root, c.language, c.text);
+    }
+  }
+
+  SUBCASE("chinese-when-onnx-bundle-present") {
+    const auto data_root = find_moonshine_tts_data_dir();
+    if (!data_root) {
+      MESSAGE("skip: moonshine-tts data directory not found");
+      return;
+    }
+    namespace fs = std::filesystem;
+    const fs::path zh_meta =
+        *data_root / "zh_hans" / "roberta_chinese_base_upos_onnx" / "meta.json";
+    const fs::path zh_dict = *data_root / "zh_hans" / "dict.tsv";
+    if (!fs::is_regular_file(zh_meta) || !fs::is_regular_file(zh_dict)) {
+      MESSAGE("skip: Chinese ONNX bundle or dict not present");
+      return;
+    }
+    grapheme_phonemizer_smoke(*data_root, "zh", "\xe4\xbd\xa0\xe5\xa5\xbd");
+  }
+
+  SUBCASE("japanese-when-onnx-bundle-present") {
+    const auto data_root = find_moonshine_tts_data_dir();
+    if (!data_root) {
+      MESSAGE("skip: moonshine-tts data directory not found");
+      return;
+    }
+    namespace fs = std::filesystem;
+    const fs::path ja_meta =
+        *data_root / "ja" / "roberta_japanese_char_luw_upos_onnx" / "meta.json";
+    const fs::path ja_dict = *data_root / "ja" / "dict.tsv";
+    if (!fs::is_regular_file(ja_meta) || !fs::is_regular_file(ja_dict)) {
+      MESSAGE("skip: Japanese ONNX bundle or dict not present");
+      return;
+    }
+    grapheme_phonemizer_smoke(*data_root, "ja", "\xe3\x81\x93\xe3\x82\x93\xe3\x81\xab\xe3\x81\xa1\xe3\x81\xaf");
+  }
+
+  SUBCASE("arabic-when-onnx-bundle-present") {
+    const auto data_root = find_moonshine_tts_data_dir();
+    if (!data_root) {
+      MESSAGE("skip: moonshine-tts data directory not found");
+      return;
+    }
+    namespace fs = std::filesystem;
+    const fs::path ar_meta =
+        *data_root / "ar_msa" / "arabertv02_tashkeel_fadel_onnx" / "meta.json";
+    const fs::path ar_dict = *data_root / "ar_msa" / "dict.tsv";
+    if (!fs::is_regular_file(ar_meta) || !fs::is_regular_file(ar_dict)) {
+      MESSAGE("skip: Arabic ONNX bundle or dict not present");
+      return;
+    }
+    grapheme_phonemizer_smoke(*data_root, "ar_msa", "\xd9\x85\xd8\xb1\xd8\xad\xd8\xa8\xd8\xa7");
   }
 }

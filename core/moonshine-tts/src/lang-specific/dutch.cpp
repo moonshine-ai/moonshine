@@ -1419,11 +1419,7 @@ std::string rules_word_to_ipa_utf8(const std::string& raw_word, bool with_stress
 }  // namespace
 
 std::filesystem::path resolve_dutch_dict_path(const std::filesystem::path& model_root) {
-  const std::filesystem::path under_model = model_root / "nl" / "dict.tsv";
-  if (std::filesystem::is_regular_file(under_model)) {
-    return under_model;
-  }
-  return model_root.parent_path() / "data" / "nl" / "dict.tsv";
+  return model_root / "nl" / "dict.tsv";
 }
 
 bool dialect_resolves_to_dutch_rules(std::string_view dialect_id) {

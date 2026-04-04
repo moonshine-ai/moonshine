@@ -648,8 +648,9 @@ MOONSHINE_EXPORT int32_t moonshine_text_to_speech(
    failure. The error code can be converted to a human-readable string using
    moonshine_error_to_string.
 
-   Lexicons and bundled ONNX assets are resolved under ``g2p_root`` using the
-   same canonical relative keys as ``MoonshineG2POptions::files`` in the C++
+   Lexicons and bundled ONNX assets are resolved under ``g2p_root`` (or the
+   process current working directory when ``g2p_root`` / ``model_root`` is unset)
+   using the same canonical relative keys as ``MoonshineG2POptions::files`` in the C++
    API (for example ``en_us/dict_filtered_heteronyms.tsv``,
    ``zh_hans/roberta_chinese_base_upos_onnx/meta.json``,
    ``zh_hans/roberta_chinese_base_upos_onnx/model.onnx``,

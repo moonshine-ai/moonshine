@@ -6,7 +6,6 @@
 #include "utf8-utils.h"
 
 #include <cctype>
-#include <optional>
 #include <utility>
 
 namespace moonshine_tts {
@@ -71,34 +70,11 @@ bool dialect_resolves_to_japanese_rules(std::string_view dialect_id) {
 
 std::filesystem::path resolve_japanese_dict_path(const std::filesystem::path& model_root) {
   const std::filesystem::path base = absolute_model_root(model_root);
-  const std::filesystem::path p1 = base.parent_path() / "data" / "ja" / "dict.tsv";
-  if (std::filesystem::is_regular_file(p1)) {
-    return p1;
-  }
-  const std::filesystem::path p2 =
-      base.parent_path().parent_path() / "data" / "ja" / "dict.tsv";
-  if (std::filesystem::is_regular_file(p2)) {
-    return p2;
-  }
   return base / "ja" / "dict.tsv";
 }
 
 std::filesystem::path resolve_japanese_onnx_model_dir(const std::filesystem::path& model_root) {
   const std::filesystem::path base = absolute_model_root(model_root);
-  const auto try_dir = [](const std::filesystem::path& dir) -> std::optional<std::filesystem::path> {
-    const auto onnx = resolve_prefer_ort_model(dir, "model.ort");
-    if (std::filesystem::is_regular_file(onnx)) {
-      return dir;
-    }
-    return std::nullopt;
-  };
-  if (auto o = try_dir(base.parent_path() / "data" / "ja" / "roberta_japanese_char_luw_upos_onnx")) {
-    return *o;
-  }
-  if (auto o = try_dir(base.parent_path().parent_path() / "data" / "ja" /
-                       "roberta_japanese_char_luw_upos_onnx")) {
-    return *o;
-  }
   return base / "ja" / "roberta_japanese_char_luw_upos_onnx";
 }
 

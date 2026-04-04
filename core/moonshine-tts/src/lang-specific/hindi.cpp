@@ -1,10 +1,10 @@
-#include "builtin-cpp-data-root.h"
 #include "hindi.h"
 #include "hindi-numbers.h"
 #include "g2p-word-log.h"
 #include "utf8-utils.h"
 
 #include <cctype>
+#include <filesystem>
 #include <fstream>
 #include <istream>
 #include <sstream>
@@ -456,13 +456,7 @@ bool all_ascii_digits_sv(std::string_view s) {
 }  // namespace
 
 std::filesystem::path builtin_hindi_dict_path() {
-  const std::filesystem::path bundled = builtin_cpp_data_root() / "hi" / "dict.tsv";
-  if (std::filesystem::is_regular_file(bundled)) {
-    return bundled;
-  }
-  const std::filesystem::path here = std::filesystem::path(__FILE__).parent_path();
-  const std::filesystem::path repo_root = here.parent_path().parent_path().parent_path().parent_path();
-  return repo_root / "data" / "hi" / "dict.tsv";
+  return std::filesystem::current_path() / "hi" / "dict.tsv";
 }
 
 HindiRuleG2p::HindiRuleG2p(std::filesystem::path dict_tsv)
@@ -598,24 +592,18 @@ bool dialect_resolves_to_hindi_rules(std::string_view dialect_id) {
 }
 
 std::filesystem::path resolve_hindi_dict_path(const std::filesystem::path& model_root) {
-  const std::filesystem::path under_data = model_root.parent_path() / "data" / "hi" / "dict.tsv";
-  if (std::filesystem::is_regular_file(under_data)) {
-    return under_data;
-  }
-  const std::filesystem::path under_data2 =
-      model_root.parent_path().parent_path() / "data" / "hi" / "dict.tsv";
-  if (std::filesystem::is_regular_file(under_data2)) {
-    return under_data2;
-  }
   return model_root / "hi" / "dict.tsv";
 }
 
 std::string hindi_text_to_ipa(const std::string& text, bool with_stress,
-                                std::vector<G2pWordLog>* per_word_log, bool expand_cardinal_digits) {
+                                std::vector<G2pWordLog>* per_word_log, bool expand_cardinal_digits,
+                                const std::filesystem::path& dict_tsv) {
   HindiRuleG2p::Options o;
   o.with_stress = with_stress;
   o.expand_cardinal_digits = expand_cardinal_digits;
-  HindiRuleG2p g(builtin_hindi_dict_path(), std::move(o));
+  const std::filesystem::path path =
+      dict_tsv.empty() ? builtin_hindi_dict_path() : dict_tsv;
+  HindiRuleG2p g(path, std::move(o));
   return g.text_to_ipa(text, per_word_log);
 }
 

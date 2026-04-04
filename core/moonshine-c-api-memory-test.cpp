@@ -227,9 +227,7 @@ TEST_CASE("moonshine-c-api-memory: Kokoro every voice uses only buffers; CWD has
         {"engine", "kokoro"},
         {"voice", voice.c_str()},
         {"speed", "1.0"},
-        {"bundle_g2p_data", "false"},
         {"model_root", model_root_str.c_str()},
-        {"allow_builtin_g2p_data", "false"},
     };
     const uint64_t n_opts = sizeof(opts) / sizeof(opts[0]);
 

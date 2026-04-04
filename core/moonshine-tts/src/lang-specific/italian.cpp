@@ -1273,10 +1273,6 @@ std::vector<std::string> ItalianRuleG2p::dialect_ids() {
 }
 
 std::filesystem::path resolve_italian_dict_path(const std::filesystem::path& model_root) {
-  const std::filesystem::path under_data = model_root.parent_path() / "data" / "it" / "dict.tsv";
-  if (std::filesystem::is_regular_file(under_data)) {
-    return under_data;
-  }
   return model_root / "it" / "dict.tsv";
 }
 
