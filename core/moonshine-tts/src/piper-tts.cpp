@@ -18,6 +18,7 @@ extern "C" {
 #include <array>
 #include <cmath>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <stdexcept>
 #include <unordered_map>
@@ -628,6 +629,35 @@ std::vector<float> PiperTTS::synthesize(std::string_view text) { return impl_->s
 
 std::vector<float> PiperTTS::synthesize_phoneme_ids(const std::vector<int64_t>& phoneme_ids) {
   return impl_->synthesize_phoneme_ids(phoneme_ids);
+}
+
+bool piper_default_model_bundle_relative_paths(std::string_view lang_cli, const MoonshineG2POptions& opt,
+                                               std::string* onnx_relpath_out, std::string* onnx_json_relpath_out,
+                                               std::string_view onnx_model_stem) {
+  if (onnx_relpath_out == nullptr || onnx_json_relpath_out == nullptr) {
+    return false;
+  }
+  try {
+    std::string g2p_dialect;
+    std::string data_subdir;
+    std::string default_onnx;
+    resolve_piper_lang(std::string(lang_cli), opt, g2p_dialect, data_subdir, default_onnx);
+    std::string chosen = default_onnx;
+    const std::string stem_req = trim_ascii_ws_copy(std::string(onnx_model_stem));
+    if (!stem_req.empty()) {
+      chosen = stem_req;
+      if (chosen.size() < 5 || chosen.compare(chosen.size() - 5, 5, ".onnx") != 0) {
+        chosen += ".onnx";
+      }
+    }
+    *onnx_relpath_out = data_subdir + "/piper-voices/" + chosen;
+    std::filesystem::path p(chosen);
+    p.replace_extension(".onnx.json");
+    *onnx_json_relpath_out = data_subdir + "/piper-voices/" + p.filename().string();
+    return true;
+  } catch (const std::exception&) {
+    return false;
+  }
 }
 
 }  // namespace moonshine_tts

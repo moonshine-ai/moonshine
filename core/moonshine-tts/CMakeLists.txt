@@ -21,6 +21,7 @@ enable_testing()
 
 add_library(moonshine_tts_core STATIC
   src/file-information.cpp
+  src/moonshine-asset-catalog.cpp
   src/moonshine-g2p-options.cpp
   src/moonshine-tts-options.cpp
   src/utf8-utils.cpp
