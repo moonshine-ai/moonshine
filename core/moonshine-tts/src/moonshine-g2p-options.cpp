@@ -1,5 +1,6 @@
 #include "moonshine-g2p-options.h"
 
+#include "moonshine-asset-catalog.h"
 #include "g2p-path.h"
 #include "string-utils.h"
 
@@ -122,51 +123,7 @@ void prepare_g2p_file_information_path(FileInformation& fi, const std::filesyste
 }  // namespace
 
 MoonshineG2POptions::MoonshineG2POptions() {
-  static const struct {
-    std::string_view key;
-    std::string_view path;
-  } kDefaults[] = {
-      {kG2pGermanDictKey, kG2pGermanDictKey},
-      {kG2pFrenchDictKey, kG2pFrenchDictKey},
-      {kG2pFrenchCsvDirKey, kG2pFrenchCsvDirKey},
-      {kG2pDutchDictKey, kG2pDutchDictKey},
-      {kG2pItalianDictKey, kG2pItalianDictKey},
-      {kG2pRussianDictKey, kG2pRussianDictKey},
-      {kG2pChineseDictKey, kG2pChineseDictKey},
-      {kG2pChineseOnnxDirKey, kG2pChineseOnnxDirKey},
-      {kG2pKoreanDictKey, kG2pKoreanDictKey},
-      {kG2pKoreanOnnxDirKey, kG2pKoreanOnnxDirKey},
-      {kG2pVietnameseDictKey, kG2pVietnameseDictKey},
-      {kG2pJapaneseDictKey, kG2pJapaneseDictKey},
-      {kG2pJapaneseOnnxDirKey, kG2pJapaneseOnnxDirKey},
-      {kG2pArabicOnnxDirKey, kG2pArabicOnnxDirKey},
-      {kG2pArabicDictKey, kG2pArabicDictKey},
-      {kG2pHindiDictKey, kG2pHindiDictKey},
-      {kG2pEnglishDictKey, kG2pEnglishDictKey},
-      {kG2pChineseOnnxMetaKey, kG2pChineseOnnxMetaKey},
-      {kG2pChineseOnnxVocabKey, kG2pChineseOnnxVocabKey},
-      {kG2pChineseOnnxTokenizerConfigKey, kG2pChineseOnnxTokenizerConfigKey},
-      {kG2pChineseOnnxModelKey, kG2pChineseOnnxModelKey},
-      {kG2pJapaneseOnnxMetaKey, kG2pJapaneseOnnxMetaKey},
-      {kG2pJapaneseOnnxVocabKey, kG2pJapaneseOnnxVocabKey},
-      {kG2pJapaneseOnnxTokenizerConfigKey, kG2pJapaneseOnnxTokenizerConfigKey},
-      {kG2pJapaneseOnnxModelKey, kG2pJapaneseOnnxModelKey},
-      {kG2pKoreanOnnxMetaKey, kG2pKoreanOnnxMetaKey},
-      {kG2pKoreanOnnxVocabKey, kG2pKoreanOnnxVocabKey},
-      {kG2pKoreanOnnxTokenizerConfigKey, kG2pKoreanOnnxTokenizerConfigKey},
-      {kG2pKoreanOnnxModelKey, kG2pKoreanOnnxModelKey},
-      {kG2pArabicOnnxMetaKey, kG2pArabicOnnxMetaKey},
-      {kG2pArabicOnnxVocabKey, kG2pArabicOnnxVocabKey},
-      {kG2pArabicOnnxTokenizerConfigKey, kG2pArabicOnnxTokenizerConfigKey},
-      {kG2pArabicOnnxModelKey, kG2pArabicOnnxModelKey},
-      {kG2pEnglishHeteronymModelKey, kG2pEnglishHeteronymModelKey},
-      {kG2pEnglishHeteronymOnnxConfigKey, kG2pEnglishHeteronymOnnxConfigKey},
-      {kG2pEnglishOovModelKey, kG2pEnglishOovModelKey},
-      {kG2pEnglishOovOnnxConfigKey, kG2pEnglishOovOnnxConfigKey},
-  };
-  for (const auto& d : kDefaults) {
-    files.set_path(d.key, std::filesystem::path(d.path));
-  }
+  moonshine_asset_catalog_populate_default_g2p_files(files);
 }
 
 std::filesystem::path MoonshineG2POptions::relative_asset_path(std::string_view canonical_key) const {

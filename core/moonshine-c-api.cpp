@@ -39,6 +39,7 @@ SOFTWARE.
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <optional>
 #include <cstdlib>
 #include <cstring>
 #include <cstring>  // For strerror
@@ -59,9 +60,11 @@ SOFTWARE.
 #include "ort-utils.h"
 #include "string-utils.h"
 #include "transcriber.h"
+#include "moonshine-asset-catalog.h"
 #include "moonshine-g2p.h"
 #include "moonshine-tts.h"
 
+#include <unordered_set>
 
 // Defined as a macro to ensure we get meaningful line numbers in the error
 // message.
@@ -830,6 +833,303 @@ int32_t moonshine_text_to_speech(int32_t tts_synthesizer_handle,
     return MOONSHINE_ERROR_UNKNOWN;
   }
   return MOONSHINE_ERROR_NONE;
+}
+
+namespace {
+
+char *malloc_string_copy(const std::string &s) {
+  char *p = static_cast<char *>(std::malloc(s.size() + 1));
+  if (p == nullptr) {
+    return nullptr;
+  }
+  std::memcpy(p, s.c_str(), s.size() + 1);
+  return p;
+}
+
+std::vector<std::string> split_comma_nonempty_language_tokens(const char *s) {
+  std::vector<std::string> parts;
+  if (s == nullptr) {
+    return parts;
+  }
+  std::string cur;
+  for (const unsigned char *p = reinterpret_cast<const unsigned char *>(s); *p != '\0'; ++p) {
+    if (*p == ',') {
+      const std::string t = trim(cur);
+      if (!t.empty()) {
+        parts.push_back(t);
+      }
+      cur.clear();
+    } else {
+      cur += static_cast<char>(*p);
+    }
+  }
+  const std::string t = trim(cur);
+  if (!t.empty()) {
+    parts.push_back(t);
+  }
+  return parts;
+}
+
+void append_unique_in_order(std::vector<std::string> &acc, const std::vector<std::string> &more) {
+  std::unordered_set<std::string> seen(acc.begin(), acc.end());
+  for (const std::string &x : more) {
+    if (seen.insert(x).second) {
+      acc.push_back(x);
+    }
+  }
+}
+
+std::string json_utf8_string_literal(const std::string &s) {
+  std::string r;
+  r.push_back('"');
+  for (unsigned char c : s) {
+    switch (c) {
+      case '"':
+        r += "\\\"";
+        break;
+      case '\\':
+        r += "\\\\";
+        break;
+      case '\b':
+        r += "\\b";
+        break;
+      case '\f':
+        r += "\\f";
+        break;
+      case '\n':
+        r += "\\n";
+        break;
+      case '\r':
+        r += "\\r";
+        break;
+      case '\t':
+        r += "\\t";
+        break;
+      default:
+        if (c < 0x20U) {
+          char buf[7];
+          std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned int>(c));
+          r += buf;
+        } else {
+          r += static_cast<char>(c);
+        }
+        break;
+    }
+  }
+  r.push_back('"');
+  return r;
+}
+
+std::string json_flat_string_array(const std::vector<std::string> &items) {
+  std::string o;
+  o.push_back('[');
+  for (size_t i = 0; i < items.size(); ++i) {
+    if (i > 0) {
+      o.push_back(',');
+    }
+    o += json_utf8_string_literal(items[i]);
+  }
+  o.push_back(']');
+  return o;
+}
+
+void apply_g2p_dependency_query_c_options(const moonshine_option_t *options, uint64_t options_count,
+                                           moonshine_tts::MoonshineG2POptions &g2p_options) {
+  if (options == nullptr || options_count == 0) {
+    return;
+  }
+  std::vector<std::pair<std::string, std::string>> g2p_pairs;
+  g2p_pairs.reserve(options_count);
+  for (uint64_t i = 0; i < options_count; i++) {
+    const moonshine_option_t &option = options[i];
+    const std::string name = option.name != nullptr ? std::string(option.name) : std::string();
+    const std::string value = option.value != nullptr ? std::string(option.value) : std::string();
+    const std::string key = replace_all(to_lowercase(name), "-", "_");
+    if (key == "tts_root" || key == "path_root" || key == "model_root") {
+      const std::string t = trim(value);
+      if (!t.empty()) {
+        g2p_options.g2p_root = std::filesystem::path(t);
+      }
+    } else if (key == "g2p_root") {
+      g2p_options.g2p_root = std::filesystem::path(trim(value));
+    } else if (key == "lang" || key == "language") {
+      continue;
+    } else if (key == "use_bundled_cpp_g2p_data" || key == "bundle_g2p_data") {
+      (void)value;
+    } else if (key == "log_api_calls") {
+      log_api_calls = bool_from_string(value.c_str());
+    } else if (key == "voice" || key == "speed" || key == "vocoder_engine" || key == "engine" ||
+               key == "output" || key == "o" || key == "piper_normalize_audio" ||
+               key == "piper_output_volume" || key == "kokoro_dir" || key == "kokoro_model" ||
+               key == "kokoro_model_onnx" || key == "kokoro_config" || key == "kokoro_config_json" ||
+               key == "piper_onnx" || key == "piper_model_onnx" || key == "piper_onnx_json" ||
+               key == "piper_model_json" || key == "piper_onnx_config" || key == "piper_voices_dir" ||
+               key == "voices_dir" || key == "piper_voices_json_dir" || key == "voices_json_dir" ||
+               key == "piper_noise_scale" || key == "piper_noise_scale_override" || key == "piper_noise_w" ||
+               key == "piper_noise_w_override") {
+      continue;
+    } else {
+      g2p_pairs.emplace_back(name, value);
+    }
+  }
+  g2p_options.parse_options(g2p_pairs);
+}
+
+void append_g2p_explicit_override_keys_from_c_options(const moonshine_option_t *options,
+                                                      uint64_t options_count,
+                                                      std::vector<std::string> &keys) {
+  if (options == nullptr || options_count == 0) {
+    return;
+  }
+  for (uint64_t i = 0; i < options_count; ++i) {
+    if (options[i].name == nullptr || options[i].value == nullptr) {
+      continue;
+    }
+    const std::string v = trim(std::string(options[i].value));
+    if (v.empty()) {
+      continue;
+    }
+    const std::string key = replace_all(to_lowercase(std::string(options[i].name)), "-", "_");
+    if (key == "heteronym_onnx_override") {
+      append_unique_in_order(keys, {std::string(moonshine_tts::kG2pHeteronymOnnxOverrideKey)});
+    } else if (key == "oov_onnx_override") {
+      append_unique_in_order(keys, {std::string(moonshine_tts::kG2pOovOnnxOverrideKey)});
+    } else if (key == "heteronym_onnx_config") {
+      append_unique_in_order(keys, {std::string(moonshine_tts::kG2pHeteronymOnnxConfigOverrideKey)});
+    } else if (key == "oov_onnx_config") {
+      append_unique_in_order(keys, {std::string(moonshine_tts::kG2pOovOnnxConfigOverrideKey)});
+    } else if (key == "portuguese_dict_path") {
+      append_unique_in_order(keys, {std::string(moonshine_tts::kG2pPortugueseDictOverrideKey)});
+    }
+  }
+}
+
+}  // namespace
+
+int32_t moonshine_get_g2p_dependencies(const char *languages, const moonshine_option_t *options,
+                                       uint64_t options_count, char **out_dependencies_json) {
+  if (out_dependencies_json == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  if (options_count > 0 && options == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  *out_dependencies_json = nullptr;
+  const bool all_langs = (languages == nullptr || languages[0] == '\0');
+  try {
+    moonshine_tts::MoonshineG2POptions g2p_opts;
+    apply_g2p_dependency_query_c_options(options, options_count, g2p_opts);
+    if (g2p_opts.g2p_root.empty()) {
+      g2p_opts.g2p_root = std::filesystem::current_path();
+    }
+    (void)g2p_opts;
+    std::vector<std::string> keys;
+    if (all_langs) {
+      keys = moonshine_tts::moonshine_asset_catalog_all_g2p_dependency_keys_union();
+    } else {
+      const std::vector<std::string> parts = split_comma_nonempty_language_tokens(languages);
+      if (parts.empty()) {
+        keys = moonshine_tts::moonshine_asset_catalog_all_g2p_dependency_keys_union();
+      } else {
+        for (const std::string &part : parts) {
+          const std::optional<std::vector<std::string>> chunk =
+              moonshine_tts::moonshine_asset_catalog_g2p_dependency_keys(part);
+          if (!chunk.has_value()) {
+            LOGF("moonshine_get_g2p_dependencies: unsupported language \"%s\"\n", part.c_str());
+            return MOONSHINE_ERROR_INVALID_ARGUMENT;
+          }
+          append_unique_in_order(keys, *chunk);
+        }
+      }
+    }
+    append_g2p_explicit_override_keys_from_c_options(options, options_count, keys);
+    std::string joined;
+    for (size_t i = 0; i < keys.size(); ++i) {
+      if (i > 0) {
+        joined += ',';
+      }
+      joined += keys[i];
+    }
+    char *buf = malloc_string_copy(joined);
+    if (buf == nullptr) {
+      return MOONSHINE_ERROR_UNKNOWN;
+    }
+    *out_dependencies_json = buf;
+    return MOONSHINE_ERROR_NONE;
+  } catch (const std::exception &e) {
+    LOGF("moonshine_get_g2p_dependencies failed: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+int32_t moonshine_get_tts_dependencies(const char *languages, const moonshine_option_t *options,
+                                       uint64_t options_count, char **out_dependencies_json) {
+  if (out_dependencies_json == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  if (options_count > 0 && options == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  *out_dependencies_json = nullptr;
+  const bool all_langs = (languages == nullptr || languages[0] == '\0');
+  try {
+    moonshine_tts::MoonshineTTSOptions tts_opt;
+    std::string cli_lang;
+    bool lang_set = false;
+    parse_tts_options(options, options_count, tts_opt, cli_lang, lang_set);
+    if (tts_opt.g2p_options.g2p_root.empty()) {
+      tts_opt.g2p_options.g2p_root = std::filesystem::current_path();
+    }
+    std::vector<std::string> merged;
+    if (all_langs) {
+      merged = moonshine_tts::moonshine_asset_catalog_all_g2p_dependency_keys_union();
+      const std::vector<std::string> tags =
+          moonshine_tts::moonshine_asset_catalog_all_registered_language_tags();
+      for (const std::string &tag : tags) {
+        append_unique_in_order(
+            merged, moonshine_tts::moonshine_catalog_tts_vocoder_only_dependency_keys(tag, tts_opt));
+      }
+    } else {
+      const std::vector<std::string> parts = split_comma_nonempty_language_tokens(languages);
+      if (parts.empty()) {
+        merged = moonshine_tts::moonshine_asset_catalog_all_g2p_dependency_keys_union();
+        const std::vector<std::string> tags =
+            moonshine_tts::moonshine_asset_catalog_all_registered_language_tags();
+        for (const std::string &tag : tags) {
+          append_unique_in_order(
+              merged, moonshine_tts::moonshine_catalog_tts_vocoder_only_dependency_keys(tag, tts_opt));
+        }
+      } else {
+        for (const std::string &part : parts) {
+          const std::optional<std::vector<std::string>> g2p =
+              moonshine_tts::moonshine_asset_catalog_g2p_dependency_keys(part);
+          if (!g2p.has_value()) {
+            LOGF("moonshine_get_tts_dependencies: unsupported language \"%s\"\n", part.c_str());
+            return MOONSHINE_ERROR_INVALID_ARGUMENT;
+          }
+          const std::vector<std::string> voc =
+              moonshine_tts::moonshine_catalog_tts_vocoder_only_dependency_keys(part, tts_opt);
+          if (voc.empty()) {
+            LOGF("moonshine_get_tts_dependencies: no TTS layout for \"%s\" (vocoder_engine?)\n",
+                 part.c_str());
+            return MOONSHINE_ERROR_INVALID_ARGUMENT;
+          }
+          append_unique_in_order(merged, *g2p);
+          append_unique_in_order(merged, voc);
+        }
+      }
+    }
+    const std::string dumped = json_flat_string_array(merged);
+    char *buf = malloc_string_copy(dumped);
+    if (buf == nullptr) {
+      return MOONSHINE_ERROR_UNKNOWN;
+    }
+    *out_dependencies_json = buf;
+    return MOONSHINE_ERROR_NONE;
+  } catch (const std::exception &e) {
+    LOGF("moonshine_get_tts_dependencies failed: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
 }
 
 /* ------------------------------ GRAPHEME TO PHONEMIZER ------------------- */

@@ -1,5 +1,6 @@
 #include "moonshine-tts.h"
 
+#include "moonshine-asset-catalog.h"
 #include "g2p-path.h"
 #include "moonshine-g2p.h"
 #include "ort-onnx-external-data.h"
@@ -481,6 +482,47 @@ PiperTTSOptions make_piper_options(std::string_view language, const MoonshineTTS
   return p;
 }
 
+std::vector<std::string> kokoro_vocoder_dependency_keys_with_options(std::string_view language,
+                                                                     const MoonshineTTSOptions& opt) {
+  MoonshineG2POptions g2p = opt.g2p_options;
+  if (g2p.g2p_root.empty()) {
+    g2p.g2p_root = std::filesystem::current_path();
+  }
+  LangProfile profile{};
+  std::string g2p_dialect;
+  const std::string lk = normalize_lang_key(language);
+  resolve_lang_for_tts(lk, g2p, profile, g2p_dialect);
+  maybe_align_en_profile_for_kokoro_voice(opt.voice, profile, g2p_dialect);
+  std::filesystem::path model_path =
+      resolve_path_under_root(g2p.g2p_root, tts_map_path(opt.files, kTtsKokoroModelOnnxKey));
+  resolve_disk_model_file_path(model_path);
+  const std::filesystem::path voices_dir = model_path.parent_path() / "voices";
+  const std::string vid =
+      select_voice_id(profile.kokoro_lang, opt.voice, profile.default_voice, voices_dir, &opt.files,
+                      g2p.g2p_root);
+  return {std::string(kTtsKokoroModelOnnxKey), std::string(kTtsKokoroConfigJsonKey),
+          std::string("kokoro/voices/") + vid + ".kokorovoice"};
+}
+
+std::vector<std::string> piper_vocoder_dependency_keys_with_options(std::string_view language,
+                                                                    const MoonshineTTSOptions& opt) {
+  const std::string onnx_key(kTtsPiperOnnxKey);
+  const std::string json_key(kTtsPiperOnnxJsonKey);
+  if (opt.files.entries.find(onnx_key) != opt.files.entries.end()) {
+    return {onnx_key, json_key};
+  }
+  MoonshineG2POptions g2p = opt.g2p_options;
+  if (g2p.g2p_root.empty()) {
+    g2p.g2p_root = std::filesystem::current_path();
+  }
+  std::string o;
+  std::string j;
+  if (piper_default_model_bundle_relative_paths(language, g2p, &o, &j, opt.voice)) {
+    return {std::move(o), std::move(j)};
+  }
+  return {};
+}
+
 struct KokoroTtsEngine {
   std::filesystem::path model_path_;
   std::filesystem::path config_path_;
@@ -841,6 +883,46 @@ void write_wav_mono_pcm16(const std::filesystem::path& path, const std::vector<f
   u32(data_bytes);
   out.write(reinterpret_cast<const char*>(pcm.data()),
             static_cast<std::streamsize>(pcm.size() * sizeof(int16_t)));
+}
+
+std::vector<std::string> moonshine_catalog_tts_vocoder_only_dependency_keys(
+    std::string_view lang_cli, const MoonshineTTSOptions& opt_in) {
+  MoonshineTTSOptions opt = opt_in;
+  if (opt.g2p_options.g2p_root.empty()) {
+    opt.g2p_options.g2p_root = std::filesystem::current_path();
+  }
+  std::string eng = ascii_lowercase_copy(trim_ascii_ws_copy(opt.vocoder_engine));
+  if (eng.empty()) {
+    eng = "auto";
+  }
+  if (eng != "kokoro" && eng != "piper" && eng != "auto") {
+    return {};
+  }
+  const std::string lk = normalize_lang_key(lang_cli);
+  const bool kokoro_ok = kokoro_tts_lang_supported_inner(lk, opt.g2p_options);
+  const bool use_kokoro = (eng == "kokoro") || (eng == "auto" && kokoro_ok);
+  if (use_kokoro) {
+    return kokoro_vocoder_dependency_keys_with_options(lk, opt);
+  }
+  return piper_vocoder_dependency_keys_with_options(lk, opt);
+}
+
+std::vector<std::string> moonshine_catalog_tts_vocoder_only_dependency_keys(std::string_view lang_cli) {
+  return moonshine_catalog_tts_vocoder_only_dependency_keys(lang_cli, MoonshineTTSOptions{});
+}
+
+std::vector<std::string> moonshine_catalog_all_tts_vocoder_dependency_keys_union() {
+  const std::vector<std::string> tags = moonshine_asset_catalog_all_registered_language_tags();
+  std::unordered_set<std::string> seen;
+  std::vector<std::string> out;
+  for (const std::string& tag : tags) {
+    for (std::string p : moonshine_catalog_tts_vocoder_only_dependency_keys(tag)) {
+      if (seen.insert(p).second) {
+        out.push_back(std::move(p));
+      }
+    }
+  }
+  return out;
 }
 
 }  // namespace moonshine_tts

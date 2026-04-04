@@ -93,6 +93,17 @@ class MoonshineTTS {
 void write_wav_mono_pcm16(const std::filesystem::path& path,
                           const std::vector<float>& samples);
 
+/// Kokoro or Piper vocoder asset keys only (no G2P), relative to ``g2p_root``.
+/// With default ``MoonshineTTSOptions{}``, uses ``vocoder_engine=auto`` and default voice layout.
+std::vector<std::string> moonshine_catalog_tts_vocoder_only_dependency_keys(std::string_view language_cli);
+/// Uses ``vocoder_engine`` (``kokoro`` / ``piper`` / ``auto``), ``voice``, Piper/Kokoro file map entries, and
+/// ``g2p_options`` (e.g. Spanish narrow obstruents for auto engine) like ``MoonshineTTS``.
+std::vector<std::string> moonshine_catalog_tts_vocoder_only_dependency_keys(
+    std::string_view language_cli, const MoonshineTTSOptions& options);
+
+/// Union of vocoder keys across all languages in ``moonshine_asset_catalog_all_registered_language_tags``.
+std::vector<std::string> moonshine_catalog_all_tts_vocoder_dependency_keys_union();
+
 }  // namespace moonshine_tts
 
 #endif

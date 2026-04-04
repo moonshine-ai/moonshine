@@ -634,6 +634,33 @@ MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_memory(
 MOONSHINE_EXPORT void moonshine_free_tts_synthesizer(
     int32_t tts_synthesizer_handle);
 
+/* Returns G2P-only canonical asset keys for one or more languages.
+   ``languages`` is comma-separated CLI tags (same as ``moonshine_create_*`` ``language``);
+   an empty string (or NULL) means all known languages (union of keys).
+   ``options`` / ``options_count``: same ``moonshine_option_t`` entries as grapheme phonemizer / G2P
+   (``g2p_root``, ``spanish_narrow_obstruents``, ``heteronym_onnx_override``, …). TTS-only keys
+   (``voice``, ``vocoder_engine``, Piper/Kokoro paths) are ignored here. Non-empty values for in-memory
+   override keys add those canonical key names to the list.
+   On success, writes a comma-separated list to ``*out_dependencies_json`` and returns
+   ``MOONSHINE_ERROR_NONE``. The buffer is allocated with ``malloc``; release with ``free``.
+   On failure (e.g. unknown language token), logs and returns a non-zero error code and sets
+   ``*out_dependencies_json`` to NULL.
+*/
+MOONSHINE_EXPORT int32_t moonshine_get_g2p_dependencies(
+    const char *languages, const struct moonshine_option_t *options, uint64_t options_count,
+    char **out_dependencies_json);
+
+/* Returns merged G2P + TTS vocoder canonical asset keys as a JSON array of strings (flat list).
+   ``languages`` is comma-separated; empty or NULL means all known languages.
+   ``options`` / ``options_count``: same entries as ``moonshine_create_tts_synthesizer_from_files``
+   (``vocoder_engine`` / ``engine``, ``voice``, ``g2p_root``, ``piper_onnx``, ``kokoro_model``, …).
+   Vocoder keys follow Kokoro vs Piper selection and the requested ``voice`` like ``MoonshineTTS``.
+   On success, ``*out_dependencies_json`` is a NUL-terminated JSON array; free with ``free``.
+*/
+MOONSHINE_EXPORT int32_t moonshine_get_tts_dependencies(
+    const char *languages, const struct moonshine_option_t *options, uint64_t options_count,
+    char **out_dependencies_json);
+
 /* Synthesizes text to speech.
    Returns zero on success, or a non-zero error code on failure.
 */

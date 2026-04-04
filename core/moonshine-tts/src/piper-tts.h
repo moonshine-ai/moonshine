@@ -79,6 +79,13 @@ class PiperTTS {
   std::unique_ptr<Impl> impl_;
 };
 
+/// Default Piper ONNX + ``*.onnx.json`` paths relative to ``g2p_root`` (under ``<data_subdir>/piper-voices/``).
+/// If ``onnx_model_stem`` is non-empty (basename or stem), it selects that ``*.onnx`` instead of the table default
+/// (same rules as ``PiperTTSOptions::onnx_model``).
+bool piper_default_model_bundle_relative_paths(std::string_view lang_cli, const MoonshineG2POptions& opt,
+                                               std::string* onnx_relpath_out, std::string* onnx_json_relpath_out,
+                                               std::string_view onnx_model_stem = {});
+
 }  // namespace moonshine_tts
 
 #endif  // MOONSHINE_TTS_PIPER_TTS_H
