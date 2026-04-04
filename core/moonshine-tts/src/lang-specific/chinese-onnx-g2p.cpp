@@ -1,6 +1,7 @@
 #include "chinese-onnx-g2p.h"
 
 #include "g2p-word-log.h"
+#include "moonshine-g2p-options.h"
 #include "utf8-utils.h"
 
 #include <utility>
@@ -31,6 +32,18 @@ ChineseOnnxG2p::ChineseOnnxG2p(std::filesystem::path model_dir,
                                bool use_cuda)
     : tok_(std::move(model_dir), use_cuda), lex_(std::move(dict_tsv)) {}
 
+ChineseOnnxG2p::ChineseOnnxG2p(std::filesystem::path model_dir, std::string dict_tsv_utf8, bool use_cuda)
+    : tok_(std::move(model_dir), use_cuda), lex_(std::move(dict_tsv_utf8)) {}
+
+ChineseOnnxG2p::ChineseOnnxG2p(const MoonshineG2POptions& opt, std::filesystem::path model_dir,
+                               std::filesystem::path dict_tsv, bool use_cuda)
+    : tok_(&opt, kG2pChineseOnnxDirKey, std::move(model_dir), use_cuda), lex_(std::move(dict_tsv)) {}
+
+ChineseOnnxG2p::ChineseOnnxG2p(const MoonshineG2POptions& opt, std::filesystem::path model_dir,
+                               std::string dict_tsv_utf8, bool use_cuda)
+    : tok_(&opt, kG2pChineseOnnxDirKey, std::move(model_dir), use_cuda),
+      lex_(std::move(dict_tsv_utf8)) {}
+
 std::string ChineseOnnxG2p::text_to_ipa(std::string text_utf8, std::vector<G2pWordLog>* per_word_log) {
   std::string raw = utf8_nfc_utf8proc(trim_ascii_ws_copy(text_utf8));
   if (raw.empty()) {
@@ -59,6 +72,19 @@ ChineseOnnxRuleG2p::ChineseOnnxRuleG2p(std::filesystem::path onnx_model_dir,
                                        std::filesystem::path dict_tsv,
                                        bool use_cuda)
     : impl_(std::make_unique<ChineseOnnxG2p>(std::move(onnx_model_dir), std::move(dict_tsv), use_cuda)) {}
+
+ChineseOnnxRuleG2p::ChineseOnnxRuleG2p(std::filesystem::path onnx_model_dir, std::string dict_tsv_utf8,
+                                       bool use_cuda)
+    : impl_(std::make_unique<ChineseOnnxG2p>(std::move(onnx_model_dir), std::move(dict_tsv_utf8), use_cuda)) {}
+
+ChineseOnnxRuleG2p::ChineseOnnxRuleG2p(const MoonshineG2POptions& opt, std::filesystem::path onnx_model_dir,
+                                       std::filesystem::path dict_tsv, bool use_cuda)
+    : impl_(std::make_unique<ChineseOnnxG2p>(opt, std::move(onnx_model_dir), std::move(dict_tsv), use_cuda)) {}
+
+ChineseOnnxRuleG2p::ChineseOnnxRuleG2p(const MoonshineG2POptions& opt, std::filesystem::path onnx_model_dir,
+                                       std::string dict_tsv_utf8, bool use_cuda)
+    : impl_(std::make_unique<ChineseOnnxG2p>(opt, std::move(onnx_model_dir), std::move(dict_tsv_utf8),
+                                            use_cuda)) {}
 
 std::string ChineseOnnxRuleG2p::text_to_ipa(std::string text, std::vector<G2pWordLog>* per_word_log) {
   return impl_->text_to_ipa(std::move(text), per_word_log);

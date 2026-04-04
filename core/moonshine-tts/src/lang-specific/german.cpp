@@ -6,7 +6,9 @@
 #include <algorithm>
 #include <cctype>
 #include <fstream>
+#include <istream>
 #include <regex>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -724,12 +726,7 @@ std::string rules_word_to_ipa_utf8(const std::string& raw_word, bool with_stress
   return ipa;
 }
 
-void load_german_lexicon_file(const std::filesystem::path& path,
-                              std::unordered_map<std::string, std::string>& out_map) {
-  std::ifstream in(path);
-  if (!in) {
-    throw std::runtime_error("German lexicon: cannot open " + path.generic_string());
-  }
+void load_german_lexicon_stream(std::istream& in, std::unordered_map<std::string, std::string>& out_map) {
   struct Slot {
     std::string ipa;
     bool from_lower = false;
@@ -780,6 +777,15 @@ void load_german_lexicon_file(const std::filesystem::path& path,
   for (auto& e : tmp) {
     out_map.emplace(std::move(e.first), std::move(e.second.ipa));
   }
+}
+
+void load_german_lexicon_file(const std::filesystem::path& path,
+                              std::unordered_map<std::string, std::string>& out_map) {
+  std::ifstream in(path);
+  if (!in) {
+    throw std::runtime_error("German lexicon: cannot open " + path.generic_string());
+  }
+  load_german_lexicon_stream(in, out_map);
 }
 
 }  // namespace
@@ -1024,6 +1030,12 @@ GermanRuleG2p::GermanRuleG2p(std::filesystem::path dict_tsv)
 GermanRuleG2p::GermanRuleG2p(std::filesystem::path dict_tsv, Options options)
     : options_(options) {
   load_german_lexicon_file(std::move(dict_tsv), lexicon_);
+}
+
+GermanRuleG2p::GermanRuleG2p(std::string dict_tsv_utf8, Options options)
+    : options_(options) {
+  std::istringstream in(std::move(dict_tsv_utf8));
+  load_german_lexicon_stream(in, lexicon_);
 }
 
 std::string GermanRuleG2p::finalize_ipa(std::string ipa) const {

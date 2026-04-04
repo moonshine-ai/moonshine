@@ -16,6 +16,7 @@ struct G2pWordLog;
 class VietnameseRuleG2p : public RuleBasedG2p {
  public:
   explicit VietnameseRuleG2p(std::filesystem::path dict_tsv);
+  explicit VietnameseRuleG2p(std::string dict_tsv_utf8);
 
   static std::vector<std::string> dialect_ids();
 

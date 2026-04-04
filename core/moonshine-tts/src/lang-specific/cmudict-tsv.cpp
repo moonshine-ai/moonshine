@@ -3,16 +3,15 @@
 #include "text-normalize.h"
 
 #include <fstream>
+#include <istream>
 #include <set>
 #include <sstream>
 
 namespace moonshine_tts {
 
-CmudictTsv::CmudictTsv(const std::filesystem::path& path) {
-  std::ifstream in(path);
-  if (!in) {
-    throw std::runtime_error("failed to open dictionary: " + path.string());
-  }
+namespace {
+
+void parse_cmudict_tsv_lines(std::istream& in, std::unordered_map<std::string, std::vector<std::string>>& ipa_by_word) {
   std::unordered_map<std::string, std::set<std::string>> raw;
   std::string line;
   while (std::getline(in, line)) {
@@ -45,9 +44,26 @@ CmudictTsv::CmudictTsv(const std::filesystem::path& path) {
     const std::string key = normalize_grapheme_key(word_token);
     raw[key].insert(std::move(ipa));
   }
+  ipa_by_word.clear();
   for (auto& [k, v] : raw) {
-    ipa_by_word_[k] = {v.begin(), v.end()};
+    ipa_by_word[k] = {v.begin(), v.end()};
   }
+}
+
+}  // namespace
+
+CmudictTsv::CmudictTsv(const std::filesystem::path& path) {
+  std::ifstream in(path);
+  if (!in) {
+    throw std::runtime_error("failed to open dictionary: " + path.string());
+  }
+  parse_cmudict_tsv_lines(in, ipa_by_word_);
+}
+
+CmudictTsv::CmudictTsv(std::string_view utf8_contents) {
+  const std::string buf(utf8_contents);
+  std::istringstream in(buf);
+  parse_cmudict_tsv_lines(in, ipa_by_word_);
 }
 
 const std::vector<std::string>* CmudictTsv::lookup(std::string_view key) const {

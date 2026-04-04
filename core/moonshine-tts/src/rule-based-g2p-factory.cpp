@@ -27,8 +27,12 @@
 #include <filesystem>
 #include <fstream>
 #include <nlohmann/json.h>
+#include <optional>
+#include <sstream>
 #include <stdexcept>
+#include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 
 namespace moonshine_tts {
@@ -73,46 +77,124 @@ bool file_looks_like_git_lfs_pointer(const std::filesystem::path& p) {
   return line.size() >= kPrefix.size() && line.compare(0, kPrefix.size(), kPrefix) == 0;
 }
 
+bool utf8_content_git_lfs_pointer_stub(std::string_view content) {
+  const size_t n = content.find('\n');
+  const std::string_view line = n == std::string_view::npos ? content : content.substr(0, n);
+  static constexpr std::string_view kPrefix = "version https://git-lfs.github.com/spec/v1";
+  return line.size() >= kPrefix.size() && line.compare(0, kPrefix.size(), kPrefix) == 0;
+}
+
+std::string read_path_as_utf8(const std::filesystem::path& p) {
+  std::ifstream in(p, std::ios::binary);
+  if (!in) {
+    throw std::runtime_error("Failed to read file: " + p.generic_string());
+  }
+  std::ostringstream oss;
+  oss << in.rdbuf();
+  return oss.str();
+}
+
+std::unordered_map<std::string, std::string> collect_french_pos_csv_from_options(
+    const MoonshineG2POptions& o) {
+  std::unordered_map<std::string, std::string> out;
+  for (const auto& pr : o.files.entries) {
+    const std::string& k = pr.first;
+    if (k.size() < 8 || k.compare(0, 3, "fr/") != 0) {
+      continue;
+    }
+    if (k.size() < 4 || k.compare(k.size() - 4, 4, ".csv") != 0) {
+      continue;
+    }
+    if (!o.asset_is_available(k)) {
+      continue;
+    }
+    std::string stem = std::filesystem::path(k).stem().string();
+    for (char& c : stem) {
+      c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    }
+    out[std::move(stem)] = o.read_utf8_asset(k);
+  }
+  return out;
+}
+
+bool g2p_onnx_bundle_reachable(const MoonshineG2POptions& o, std::string_view bundle_dir_key,
+                              const std::filesystem::path& disk_dir) {
+  const std::string meta_k = g2p_bundle_file_key(bundle_dir_key, "meta.json");
+  if (o.asset_is_available(meta_k)) {
+    return true;
+  }
+  return std::filesystem::is_regular_file(disk_dir / "meta.json");
+}
+
 std::optional<RuleBasedG2pInstance> try_english(std::string_view trimmed,
                                                  const MoonshineG2POptions& options) {
   if (!dialect_resolves_to_english_rules(trimmed)) {
     return std::nullopt;
   }
+  const bool dict_from_files = options.asset_is_available(kG2pEnglishDictKey);
+  const bool homograph_from_files = options.asset_is_available(kG2pEnglishHomographJsonKey);
+
   std::filesystem::path dict_tsv = resolve_path_under_root(
       options.g2p_root, options.relative_asset_path(kG2pEnglishDictKey));
   if (!std::filesystem::is_regular_file(dict_tsv)) {
-    const std::filesystem::path bundled = resolve_path_under_root(
-        builtin_cpp_data_root(), options.relative_asset_path(kG2pEnglishDictKey));
-    if (std::filesystem::is_regular_file(bundled)) {
-      dict_tsv = bundled;
+    if (options.allow_builtin_cpp_data_fallback) {
+      const std::filesystem::path bundled = resolve_path_under_root(
+          builtin_cpp_data_root(), options.relative_asset_path(kG2pEnglishDictKey));
+      if (std::filesystem::is_regular_file(bundled)) {
+        dict_tsv = bundled;
+      } else {
+        dict_tsv = resolve_english_dict_path(options.g2p_root);
+      }
     } else {
       dict_tsv = resolve_english_dict_path(options.g2p_root);
     }
   }
-  if (!std::filesystem::is_regular_file(dict_tsv)) {
+  if (!dict_from_files && !std::filesystem::is_regular_file(dict_tsv)) {
     throw std::runtime_error(
         "English G2P: lexicon not found at " + dict_tsv.generic_string() +
         " (set MoonshineG2POptions::files / english_dict_path)");
   }
-  const std::filesystem::path data_root = dict_tsv.parent_path();
+
+  const std::filesystem::path data_root =
+      std::filesystem::is_regular_file(dict_tsv) ? dict_tsv.parent_path()
+                                                 : resolve_path_under_root(options.g2p_root, "en_us");
+
   std::optional<std::filesystem::path> het_onnx;
   std::optional<std::filesystem::path> oov_onnx;
-  const std::filesystem::path g2p_cfg = data_root / "g2p-config.json";
-  if (std::filesystem::is_regular_file(g2p_cfg)) {
-    if (file_looks_like_git_lfs_pointer(g2p_cfg)) {
+
+  if (options.asset_is_available(kG2pEnglishG2pConfigKey)) {
+    std::string cfg = options.read_utf8_asset(kG2pEnglishG2pConfigKey);
+    if (utf8_content_git_lfs_pointer_stub(cfg)) {
       throw std::runtime_error(
-          "English G2P: " + g2p_cfg.generic_string() +
-          " is a Git LFS pointer stub, not JSON. From the moonshine-tts directory run: git lfs pull");
+          "English G2P: in-memory g2p-config.json is a Git LFS pointer stub, not JSON. "
+          "From the moonshine-tts directory run: git lfs pull");
     }
-    std::ifstream cfg_in(g2p_cfg);
-    const nlohmann::json j = nlohmann::json::parse(cfg_in);
+    const nlohmann::json j = nlohmann::json::parse(cfg);
     if (j.value("uses_heteronym_model", false)) {
-      het_onnx = data_root / "heteronym" / "model.onnx";
+      het_onnx = resolve_prefer_ort_model(data_root / "heteronym", "model.ort");
     }
     if (j.value("uses_oov_model", false)) {
-      oov_onnx = data_root / "oov" / "model.onnx";
+      oov_onnx = resolve_prefer_ort_model(data_root / "oov", "model.ort");
+    }
+  } else {
+    const std::filesystem::path g2p_cfg = data_root / "g2p-config.json";
+    if (std::filesystem::is_regular_file(g2p_cfg)) {
+      if (file_looks_like_git_lfs_pointer(g2p_cfg)) {
+        throw std::runtime_error(
+            "English G2P: " + g2p_cfg.generic_string() +
+            " is a Git LFS pointer stub, not JSON. From the moonshine-tts directory run: git lfs pull");
+      }
+      std::ifstream cfg_in(g2p_cfg);
+      const nlohmann::json j = nlohmann::json::parse(cfg_in);
+      if (j.value("uses_heteronym_model", false)) {
+        het_onnx = resolve_prefer_ort_model(data_root / "heteronym", "model.ort");
+      }
+      if (j.value("uses_oov_model", false)) {
+        oov_onnx = resolve_prefer_ort_model(data_root / "oov", "model.ort");
+      }
     }
   }
+
   if (const auto het = options.optional_override_path(kG2pHeteronymOnnxOverrideKey)) {
     het_onnx = resolve_path_under_root(options.g2p_root, *het);
   }
@@ -125,12 +207,58 @@ std::optional<RuleBasedG2pInstance> try_english(std::string_view trimmed,
   if (oov_onnx && !std::filesystem::is_regular_file(*oov_onnx)) {
     oov_onnx.reset();
   }
+
+  std::optional<EnglishOnnxAuxMemory> het_mem;
+  std::optional<EnglishOnnxAuxMemory> oov_mem;
+  const auto fill_english_onnx_mem = [&](std::optional<std::filesystem::path>& disk_model,
+                                        std::string_view canonical_model_key,
+                                        std::string_view canonical_config_key,
+                                        std::string_view override_map_key,
+                                        std::string_view override_config_key,
+                                        std::optional<EnglishOnnxAuxMemory>& out_mem) {
+    const bool ov_reg =
+        options.files.entries.find(std::string(override_map_key)) != options.files.entries.end();
+    if (ov_reg) {
+      if (options.asset_is_available(override_map_key) &&
+          options.asset_is_available(override_config_key)) {
+        out_mem = EnglishOnnxAuxMemory{options.read_binary_asset(override_map_key),
+                                       options.read_utf8_asset(override_config_key)};
+        disk_model.reset();
+      }
+      return;
+    }
+    if (options.asset_is_available(canonical_model_key) &&
+        options.asset_is_available(canonical_config_key)) {
+      out_mem = EnglishOnnxAuxMemory{options.read_binary_asset(canonical_model_key),
+                                     options.read_utf8_asset(canonical_config_key)};
+      disk_model.reset();
+    }
+  };
+  fill_english_onnx_mem(het_onnx, kG2pEnglishHeteronymModelKey, kG2pEnglishHeteronymOnnxConfigKey,
+                        kG2pHeteronymOnnxOverrideKey, kG2pHeteronymOnnxConfigOverrideKey, het_mem);
+  fill_english_onnx_mem(oov_onnx, kG2pEnglishOovModelKey, kG2pEnglishOovOnnxConfigKey,
+                        kG2pOovOnnxOverrideKey, kG2pOovOnnxConfigOverrideKey, oov_mem);
+
   const std::filesystem::path homograph_json = data_root / "heteronym" / "homograph_index.json";
   RuleBasedG2pInstance out;
   out.canonical_dialect_id = "en_us";
   out.kind = RuleBasedG2pKind::English;
-  out.engine = std::make_unique<EnglishRuleG2p>(dict_tsv, homograph_json, het_onnx, oov_onnx,
-                                                options.use_cuda);
+
+  if (dict_from_files || homograph_from_files) {
+    std::string dict_utf8 =
+        dict_from_files ? options.read_utf8_asset(kG2pEnglishDictKey) : read_path_as_utf8(dict_tsv);
+    std::optional<std::string> homograph_utf8;
+    if (homograph_from_files) {
+      homograph_utf8 = options.read_utf8_asset(kG2pEnglishHomographJsonKey);
+    } else if (std::filesystem::is_regular_file(homograph_json)) {
+      homograph_utf8 = read_path_as_utf8(homograph_json);
+    }
+    out.engine = std::make_unique<EnglishRuleG2p>(std::move(dict_utf8), homograph_utf8, het_onnx,
+                                                    oov_onnx, options.use_cuda, het_mem, oov_mem);
+  } else {
+    out.engine = std::make_unique<EnglishRuleG2p>(dict_tsv, homograph_json, het_onnx, oov_onnx,
+                                                  options.use_cuda, het_mem, oov_mem);
+  }
   return out;
 }
 
@@ -155,9 +283,19 @@ std::optional<RuleBasedG2pInstance> try_german(std::string_view trimmed,
   if (!dialect_resolves_to_german_rules(trimmed)) {
     return std::nullopt;
   }
+  GermanRuleG2p::Options go{.with_stress = options.german_with_stress,
+                              .vocoder_stress = options.german_vocoder_stress};
+  if (options.asset_is_available(kG2pGermanDictKey)) {
+    GermanRuleG2p g(options.read_utf8_asset(kG2pGermanDictKey), go);
+    RuleBasedG2pInstance out;
+    out.canonical_dialect_id = "de-DE";
+    out.kind = RuleBasedG2pKind::German;
+    out.engine = std::make_unique<GermanRuleG2p>(std::move(g));
+    return out;
+  }
   std::filesystem::path gdict = resolve_path_under_root(
       options.g2p_root, options.relative_asset_path(kG2pGermanDictKey));
-  if (!std::filesystem::is_regular_file(gdict)) {
+  if (!std::filesystem::is_regular_file(gdict) && options.allow_builtin_cpp_data_fallback) {
     const std::filesystem::path bundled =
         resolve_path_under_root(builtin_cpp_data_root(), std::filesystem::path{"de/dict.tsv"});
     if (std::filesystem::is_regular_file(bundled)) {
@@ -169,8 +307,7 @@ std::optional<RuleBasedG2pInstance> try_german(std::string_view trimmed,
         "German G2P: lexicon not found at " + gdict.generic_string() +
         " (set MoonshineG2POptions::files / german_dict_path)");
   }
-  GermanRuleG2p g(gdict, GermanRuleG2p::Options{.with_stress = options.german_with_stress,
-                                                 .vocoder_stress = options.german_vocoder_stress});
+  GermanRuleG2p g(gdict, go);
   RuleBasedG2pInstance out;
   out.canonical_dialect_id = "de-DE";
   out.kind = RuleBasedG2pKind::German;
@@ -183,12 +320,6 @@ std::optional<RuleBasedG2pInstance> try_french(std::string_view trimmed,
   if (!dialect_resolves_to_french_rules(trimmed)) {
     return std::nullopt;
   }
-  const std::filesystem::path fdict = resolve_french_dict_path(options);
-  if (!std::filesystem::is_regular_file(fdict)) {
-    throw std::runtime_error(
-        "French G2P: lexicon not found at " + fdict.generic_string() +
-        " (set MoonshineG2POptions::files / french_dict_path)");
-  }
   const std::filesystem::path fcsv = resolve_french_csv_dir(options);
   FrenchRuleG2p::Options fo;
   fo.with_stress = options.french_with_stress;
@@ -196,11 +327,38 @@ std::optional<RuleBasedG2pInstance> try_french(std::string_view trimmed,
   fo.liaison_optional = options.french_liaison_optional;
   fo.oov_rules = options.french_oov_rules;
   fo.expand_cardinal_digits = options.french_expand_cardinal_digits;
-  FrenchRuleG2p fr(fdict, fcsv, fo);
+  std::unordered_map<std::string, std::string> fr_pos_mem =
+      collect_french_pos_csv_from_options(options);
+  if (options.asset_is_available(kG2pFrenchDictKey)) {
+    std::unique_ptr<FrenchRuleG2p> engine;
+    if (!fr_pos_mem.empty()) {
+      engine = std::make_unique<FrenchRuleG2p>(options.read_utf8_asset(kG2pFrenchDictKey),
+                                               std::move(fr_pos_mem), fo);
+    } else {
+      engine = std::make_unique<FrenchRuleG2p>(options.read_utf8_asset(kG2pFrenchDictKey), fcsv, fo);
+    }
+    RuleBasedG2pInstance out;
+    out.canonical_dialect_id = "fr-FR";
+    out.kind = RuleBasedG2pKind::French;
+    out.engine = std::move(engine);
+    return out;
+  }
+  const std::filesystem::path fdict = resolve_french_dict_path(options);
+  if (!std::filesystem::is_regular_file(fdict)) {
+    throw std::runtime_error(
+        "French G2P: lexicon not found at " + fdict.generic_string() +
+        " (set MoonshineG2POptions::files / french_dict_path)");
+  }
+  std::unique_ptr<FrenchRuleG2p> engine;
+  if (!fr_pos_mem.empty()) {
+    engine = std::make_unique<FrenchRuleG2p>(read_path_as_utf8(fdict), std::move(fr_pos_mem), fo);
+  } else {
+    engine = std::make_unique<FrenchRuleG2p>(fdict, fcsv, fo);
+  }
   RuleBasedG2pInstance out;
   out.canonical_dialect_id = "fr-FR";
   out.kind = RuleBasedG2pKind::French;
-  out.engine = std::make_unique<FrenchRuleG2p>(std::move(fr));
+  out.engine = std::move(engine);
   return out;
 }
 
@@ -209,6 +367,17 @@ std::optional<RuleBasedG2pInstance> try_dutch(std::string_view trimmed,
   if (!dialect_resolves_to_dutch_rules(trimmed)) {
     return std::nullopt;
   }
+  DutchRuleG2p::Options dopts{.with_stress = options.dutch_with_stress,
+                              .vocoder_stress = options.dutch_vocoder_stress,
+                              .expand_cardinal_digits = options.dutch_expand_cardinal_digits};
+  if (options.asset_is_available(kG2pDutchDictKey)) {
+    DutchRuleG2p dutch(options.read_utf8_asset(kG2pDutchDictKey), dopts);
+    RuleBasedG2pInstance out;
+    out.canonical_dialect_id = "nl-NL";
+    out.kind = RuleBasedG2pKind::Dutch;
+    out.engine = std::make_unique<DutchRuleG2p>(std::move(dutch));
+    return out;
+  }
   const std::filesystem::path ndict = resolve_path_under_root(
       options.g2p_root, options.relative_asset_path(kG2pDutchDictKey));
   if (!std::filesystem::is_regular_file(ndict)) {
@@ -216,10 +385,7 @@ std::optional<RuleBasedG2pInstance> try_dutch(std::string_view trimmed,
         "Dutch G2P: lexicon not found at " + ndict.generic_string() +
         " (set MoonshineG2POptions::files / dutch_dict_path)");
   }
-  DutchRuleG2p dutch(ndict, DutchRuleG2p::Options{.with_stress = options.dutch_with_stress,
-                                                  .vocoder_stress = options.dutch_vocoder_stress,
-                                                  .expand_cardinal_digits =
-                                                      options.dutch_expand_cardinal_digits});
+  DutchRuleG2p dutch(ndict, dopts);
   RuleBasedG2pInstance out;
   out.canonical_dialect_id = "nl-NL";
   out.kind = RuleBasedG2pKind::Dutch;
@@ -232,6 +398,17 @@ std::optional<RuleBasedG2pInstance> try_italian(std::string_view trimmed,
   if (!dialect_resolves_to_italian_rules(trimmed)) {
     return std::nullopt;
   }
+  ItalianRuleG2p::Options iopts{.with_stress = options.italian_with_stress,
+                                .vocoder_stress = options.italian_vocoder_stress,
+                                .expand_cardinal_digits = options.italian_expand_cardinal_digits};
+  if (options.asset_is_available(kG2pItalianDictKey)) {
+    ItalianRuleG2p it(options.read_utf8_asset(kG2pItalianDictKey), iopts);
+    RuleBasedG2pInstance out;
+    out.canonical_dialect_id = "it-IT";
+    out.kind = RuleBasedG2pKind::Italian;
+    out.engine = std::make_unique<ItalianRuleG2p>(std::move(it));
+    return out;
+  }
   const std::filesystem::path idict = resolve_path_under_root(
       options.g2p_root, options.relative_asset_path(kG2pItalianDictKey));
   if (!std::filesystem::is_regular_file(idict)) {
@@ -239,10 +416,7 @@ std::optional<RuleBasedG2pInstance> try_italian(std::string_view trimmed,
         "Italian G2P: lexicon not found at " + idict.generic_string() +
         " (set MoonshineG2POptions::files / italian_dict_path)");
   }
-  ItalianRuleG2p it(idict, ItalianRuleG2p::Options{.with_stress = options.italian_with_stress,
-                                                  .vocoder_stress = options.italian_vocoder_stress,
-                                                  .expand_cardinal_digits =
-                                                      options.italian_expand_cardinal_digits});
+  ItalianRuleG2p it(idict, iopts);
   RuleBasedG2pInstance out;
   out.canonical_dialect_id = "it-IT";
   out.kind = RuleBasedG2pKind::Italian;
@@ -255,6 +429,16 @@ std::optional<RuleBasedG2pInstance> try_russian(std::string_view trimmed,
   if (!dialect_resolves_to_russian_rules(trimmed)) {
     return std::nullopt;
   }
+  RussianRuleG2p::Options ropts{.with_stress = options.russian_with_stress,
+                                .vocoder_stress = options.russian_vocoder_stress};
+  if (options.asset_is_available(kG2pRussianDictKey)) {
+    RussianRuleG2p ru(options.read_utf8_asset(kG2pRussianDictKey), ropts);
+    RuleBasedG2pInstance out;
+    out.canonical_dialect_id = "ru-RU";
+    out.kind = RuleBasedG2pKind::Russian;
+    out.engine = std::make_unique<RussianRuleG2p>(std::move(ru));
+    return out;
+  }
   const std::filesystem::path rdict = resolve_path_under_root(
       options.g2p_root, options.relative_asset_path(kG2pRussianDictKey));
   if (!std::filesystem::is_regular_file(rdict)) {
@@ -262,8 +446,7 @@ std::optional<RuleBasedG2pInstance> try_russian(std::string_view trimmed,
         "Russian G2P: lexicon not found at " + rdict.generic_string() +
         " (set MoonshineG2POptions::files / russian_dict_path)");
   }
-  RussianRuleG2p ru(rdict, RussianRuleG2p::Options{.with_stress = options.russian_with_stress,
-                                                     .vocoder_stress = options.russian_vocoder_stress});
+  RussianRuleG2p ru(rdict, ropts);
   RuleBasedG2pInstance out;
   out.canonical_dialect_id = "ru-RU";
   out.kind = RuleBasedG2pKind::Russian;
@@ -278,12 +461,22 @@ std::optional<RuleBasedG2pInstance> try_chinese(std::string_view trimmed,
   }
   const std::filesystem::path mdir = resolve_path_under_root(
       options.g2p_root, options.relative_asset_path(kG2pChineseOnnxDirKey));
-  const auto onnx = mdir / "model.onnx";
-  if (!std::filesystem::is_regular_file(onnx)) {
+  if (!g2p_onnx_bundle_reachable(options, kG2pChineseOnnxDirKey, mdir)) {
     throw std::runtime_error(
-        "Chinese G2P: ONNX bundle not found at " + onnx.generic_string() +
-        " (set MoonshineG2POptions::files / chinese_onnx_model_dir or export "
+        "Chinese G2P: ONNX tokenizer bundle not found (need meta.json + tokenizer files under " +
+        mdir.generic_string() +
+        ", or register memory buffers under keys like " + std::string(kG2pChineseOnnxMetaKey) +
+        "; set MoonshineG2POptions::files / chinese_onnx_model_dir or export "
         "KoichiYasuoka/chinese-roberta-base-upos to data/zh_hans/roberta_chinese_base_upos_onnx/)");
+  }
+  RuleBasedG2pInstance out;
+  out.canonical_dialect_id = "zh-Hans";
+  out.kind = RuleBasedG2pKind::Chinese;
+  if (options.asset_is_available(kG2pChineseDictKey)) {
+    out.engine = std::make_unique<ChineseOnnxRuleG2p>(options, mdir,
+                                                     options.read_utf8_asset(kG2pChineseDictKey),
+                                                     options.use_cuda);
+    return out;
   }
   const std::filesystem::path cdict = resolve_path_under_root(
       options.g2p_root, options.relative_asset_path(kG2pChineseDictKey));
@@ -292,10 +485,7 @@ std::optional<RuleBasedG2pInstance> try_chinese(std::string_view trimmed,
         "Chinese G2P: lexicon not found at " + cdict.generic_string() +
         " (set MoonshineG2POptions::files / chinese_dict_path)");
   }
-  RuleBasedG2pInstance out;
-  out.canonical_dialect_id = "zh-Hans";
-  out.kind = RuleBasedG2pKind::Chinese;
-  out.engine = std::make_unique<ChineseOnnxRuleG2p>(mdir, cdict, options.use_cuda);
+  out.engine = std::make_unique<ChineseOnnxRuleG2p>(options, mdir, cdict, options.use_cuda);
   return out;
 }
 
@@ -304,6 +494,15 @@ std::optional<RuleBasedG2pInstance> try_korean(std::string_view trimmed,
   if (!dialect_resolves_to_korean_rules(trimmed)) {
     return std::nullopt;
   }
+  KoreanRuleG2p::Options ko;
+  ko.expand_cardinal_digits = options.korean_expand_cardinal_digits;
+  RuleBasedG2pInstance out;
+  out.canonical_dialect_id = "ko-KR";
+  out.kind = RuleBasedG2pKind::Korean;
+  if (options.asset_is_available(kG2pKoreanDictKey)) {
+    out.engine = std::make_unique<KoreanRuleG2p>(options.read_utf8_asset(kG2pKoreanDictKey), ko);
+    return out;
+  }
   const std::filesystem::path kdict = resolve_path_under_root(
       options.g2p_root, options.relative_asset_path(kG2pKoreanDictKey));
   if (!std::filesystem::is_regular_file(kdict)) {
@@ -311,11 +510,6 @@ std::optional<RuleBasedG2pInstance> try_korean(std::string_view trimmed,
         "Korean G2P: lexicon not found at " + kdict.generic_string() +
         " (set MoonshineG2POptions::files / korean_dict_path)");
   }
-  KoreanRuleG2p::Options ko;
-  ko.expand_cardinal_digits = options.korean_expand_cardinal_digits;
-  RuleBasedG2pInstance out;
-  out.canonical_dialect_id = "ko-KR";
-  out.kind = RuleBasedG2pKind::Korean;
   out.engine = std::make_unique<KoreanRuleG2p>(kdict, ko);
   return out;
 }
@@ -325,6 +519,13 @@ std::optional<RuleBasedG2pInstance> try_vietnamese(std::string_view trimmed,
   if (!dialect_resolves_to_vietnamese_rules(trimmed)) {
     return std::nullopt;
   }
+  RuleBasedG2pInstance out;
+  out.canonical_dialect_id = "vi-VN";
+  out.kind = RuleBasedG2pKind::Vietnamese;
+  if (options.asset_is_available(kG2pVietnameseDictKey)) {
+    out.engine = std::make_unique<VietnameseRuleG2p>(options.read_utf8_asset(kG2pVietnameseDictKey));
+    return out;
+  }
   const std::filesystem::path vdict = resolve_path_under_root(
       options.g2p_root, options.relative_asset_path(kG2pVietnameseDictKey));
   if (!std::filesystem::is_regular_file(vdict)) {
@@ -332,9 +533,6 @@ std::optional<RuleBasedG2pInstance> try_vietnamese(std::string_view trimmed,
         "Vietnamese G2P: lexicon not found at " + vdict.generic_string() +
         " (set MoonshineG2POptions::files / vietnamese_dict_path)");
   }
-  RuleBasedG2pInstance out;
-  out.canonical_dialect_id = "vi-VN";
-  out.kind = RuleBasedG2pKind::Vietnamese;
   out.engine = std::make_unique<VietnameseRuleG2p>(vdict);
   return out;
 }
@@ -348,22 +546,28 @@ std::optional<RuleBasedG2pInstance> try_japanese(std::string_view trimmed,
       options.g2p_root, options.relative_asset_path(kG2pJapaneseOnnxDirKey));
   const std::filesystem::path jdict = resolve_path_under_root(
       options.g2p_root, options.relative_asset_path(kG2pJapaneseDictKey));
-  const auto onnx = mdir / "model.onnx";
-  if (!std::filesystem::is_regular_file(onnx)) {
+  if (!g2p_onnx_bundle_reachable(options, kG2pJapaneseOnnxDirKey, mdir)) {
     throw std::runtime_error(
-        "Japanese G2P: ONNX bundle not found at " + onnx.generic_string() +
-        " (set MoonshineG2POptions::files / japanese_onnx_model_dir or export the char-LUW model to "
+        "Japanese G2P: ONNX tokenizer bundle not found under " + mdir.generic_string() +
+        " (or in-memory keys under " + std::string(kG2pJapaneseOnnxDirKey) +
+        "/…); set MoonshineG2POptions::files / japanese_onnx_model_dir or export the char-LUW model to "
         "data/ja/roberta_japanese_char_luw_upos_onnx/)");
+  }
+  RuleBasedG2pInstance out;
+  out.canonical_dialect_id = "ja-JP";
+  out.kind = RuleBasedG2pKind::Japanese;
+  if (options.asset_is_available(kG2pJapaneseDictKey)) {
+    out.engine = std::make_unique<JapaneseRuleG2p>(options, mdir,
+                                                    options.read_utf8_asset(kG2pJapaneseDictKey),
+                                                    options.use_cuda);
+    return out;
   }
   if (!std::filesystem::is_regular_file(jdict)) {
     throw std::runtime_error(
         "Japanese G2P: lexicon not found at " + jdict.generic_string() +
         " (set MoonshineG2POptions::files / japanese_dict_path)");
   }
-  RuleBasedG2pInstance out;
-  out.canonical_dialect_id = "ja-JP";
-  out.kind = RuleBasedG2pKind::Japanese;
-  out.engine = std::make_unique<JapaneseRuleG2p>(mdir, jdict, options.use_cuda);
+  out.engine = std::make_unique<JapaneseRuleG2p>(options, mdir, jdict, options.use_cuda);
   return out;
 }
 
@@ -374,19 +578,30 @@ std::optional<RuleBasedG2pInstance> try_arabic(std::string_view trimmed,
   }
   const std::filesystem::path mdir = resolve_path_under_root(
       options.g2p_root, options.relative_asset_path(kG2pArabicOnnxDirKey));
-  const auto onnx = mdir / "model.onnx";
-  if (!std::filesystem::is_regular_file(onnx)) {
+  if (!g2p_onnx_bundle_reachable(options, kG2pArabicOnnxDirKey, mdir)) {
     throw std::runtime_error(
-        "Arabic G2P: ONNX bundle not found at " + onnx.generic_string() +
-        " (set MoonshineG2POptions::files / arabic_onnx_model_dir or run "
+        "Arabic G2P: ONNX tokenizer bundle not found under " + mdir.generic_string() +
+        " (or in-memory keys under " + std::string(kG2pArabicOnnxDirKey) +
+        "/…); set MoonshineG2POptions::files / arabic_onnx_model_dir or run "
         "scripts/export_arabic_msa_diacritizer_onnx.py)");
   }
-  const std::filesystem::path adict = resolve_path_under_root(
-      options.g2p_root, options.relative_asset_path(kG2pArabicDictKey));
   RuleBasedG2pInstance out;
   out.canonical_dialect_id = "ar-MSA";
   out.kind = RuleBasedG2pKind::Arabic;
-  out.engine = std::make_unique<ArabicRuleG2p>(mdir, adict, options.use_cuda);
+  if (options.asset_is_available(kG2pArabicDictKey)) {
+    out.engine = std::make_unique<ArabicRuleG2p>(options, mdir,
+                                                 options.read_utf8_asset(kG2pArabicDictKey),
+                                                 options.use_cuda);
+    return out;
+  }
+  const std::filesystem::path adict = resolve_path_under_root(
+      options.g2p_root, options.relative_asset_path(kG2pArabicDictKey));
+  if (!std::filesystem::is_regular_file(adict)) {
+    throw std::runtime_error(
+        "Arabic G2P: lexicon not found at " + adict.generic_string() +
+        " (set MoonshineG2POptions::files / arabic_dict_path)");
+  }
+  out.engine = std::make_unique<ArabicRuleG2p>(options, mdir, adict, options.use_cuda);
   return out;
 }
 
@@ -425,6 +640,16 @@ std::optional<RuleBasedG2pInstance> try_hindi(std::string_view trimmed,
   if (!dialect_resolves_to_hindi_rules(trimmed)) {
     return std::nullopt;
   }
+  HindiRuleG2p::Options ho;
+  ho.with_stress = options.hindi_with_stress;
+  ho.expand_cardinal_digits = options.hindi_expand_cardinal_digits;
+  RuleBasedG2pInstance out;
+  out.canonical_dialect_id = "hi-IN";
+  out.kind = RuleBasedG2pKind::Hindi;
+  if (options.asset_is_available(kG2pHindiDictKey)) {
+    out.engine = std::make_unique<HindiRuleG2p>(options.read_utf8_asset(kG2pHindiDictKey), ho);
+    return out;
+  }
   const std::filesystem::path hdict = resolve_path_under_root(
       options.g2p_root, options.relative_asset_path(kG2pHindiDictKey));
   if (!std::filesystem::is_regular_file(hdict)) {
@@ -432,12 +657,6 @@ std::optional<RuleBasedG2pInstance> try_hindi(std::string_view trimmed,
         "Hindi G2P: lexicon not found at " + hdict.generic_string() +
         " (set MoonshineG2POptions::files / hindi_dict_path)");
   }
-  HindiRuleG2p::Options ho;
-  ho.with_stress = options.hindi_with_stress;
-  ho.expand_cardinal_digits = options.hindi_expand_cardinal_digits;
-  RuleBasedG2pInstance out;
-  out.canonical_dialect_id = "hi-IN";
-  out.kind = RuleBasedG2pKind::Hindi;
   out.engine = std::make_unique<HindiRuleG2p>(hdict, ho);
   return out;
 }
@@ -450,9 +669,40 @@ std::optional<RuleBasedG2pInstance> try_portuguese(std::string_view trimmed,
     return std::nullopt;
   }
   const bool is_portugal = want_pt_pt && !want_pt_br;
+  const std::string pt_override_key(kG2pPortugueseDictOverrideKey);
+  const bool pt_override_registered =
+      options.files.entries.find(pt_override_key) != options.files.entries.end();
+  PortugueseRuleG2p::Options pto{
+      .with_stress = options.portuguese_with_stress,
+      .vocoder_stress = options.portuguese_vocoder_stress,
+      .keep_syllable_dots = options.portuguese_keep_syllable_dots,
+      .apply_pt_pt_final_esh = options.portuguese_apply_pt_pt_final_esh,
+      .expand_cardinal_digits = options.portuguese_expand_cardinal_digits};
+  RuleBasedG2pInstance out;
+  out.canonical_dialect_id = is_portugal ? "pt-PT" : "pt-BR";
+  out.kind = RuleBasedG2pKind::Portuguese;
+
+  if (pt_override_registered && options.asset_is_available(kG2pPortugueseDictOverrideKey)) {
+    out.engine = std::make_unique<PortugueseRuleG2p>(
+        options.read_utf8_asset(kG2pPortugueseDictOverrideKey), is_portugal, pto);
+    return out;
+  }
+  if (!pt_override_registered &&
+      options.asset_is_available(is_portugal ? kG2pPtPtDictKey : kG2pPtBrDictKey)) {
+    out.engine = std::make_unique<PortugueseRuleG2p>(
+        options.read_utf8_asset(is_portugal ? kG2pPtPtDictKey : kG2pPtBrDictKey), is_portugal, pto);
+    return out;
+  }
+
   std::filesystem::path rel_pt;
-  if (const auto o = options.optional_override_path(kG2pPortugueseDictOverrideKey)) {
-    rel_pt = *o;
+  if (pt_override_registered) {
+    if (const auto o = options.optional_override_path(kG2pPortugueseDictOverrideKey)) {
+      rel_pt = *o;
+    } else {
+      throw std::runtime_error(
+          "Portuguese G2P: portuguese_dict_path map entry has no path and no in-memory buffer "
+          "(set a path or register bytes under that key)");
+    }
   } else {
     rel_pt = std::filesystem::path(is_portugal ? kG2pPtPtDictKey : kG2pPtBrDictKey);
   }
@@ -462,16 +712,7 @@ std::optional<RuleBasedG2pInstance> try_portuguese(std::string_view trimmed,
         "Portuguese G2P: lexicon not found at " + pdict.generic_string() +
         " (set MoonshineG2POptions::files / portuguese_dict_path)");
   }
-  PortugueseRuleG2p pt(
-      pdict, is_portugal,
-      PortugueseRuleG2p::Options{.with_stress = options.portuguese_with_stress,
-                                 .vocoder_stress = options.portuguese_vocoder_stress,
-                                 .keep_syllable_dots = options.portuguese_keep_syllable_dots,
-                                 .apply_pt_pt_final_esh = options.portuguese_apply_pt_pt_final_esh,
-                                 .expand_cardinal_digits = options.portuguese_expand_cardinal_digits});
-  RuleBasedG2pInstance out;
-  out.canonical_dialect_id = is_portugal ? "pt-PT" : "pt-BR";
-  out.kind = RuleBasedG2pKind::Portuguese;
+  PortugueseRuleG2p pt(pdict, is_portugal, pto);
   out.engine = std::make_unique<PortugueseRuleG2p>(std::move(pt));
   return out;
 }

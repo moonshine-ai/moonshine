@@ -10,6 +10,8 @@
 #include <array>
 #include <cctype>
 #include <fstream>
+#include <istream>
+#include <sstream>
 #include <regex>
 #include <stdexcept>
 #include <string>
@@ -182,12 +184,7 @@ std::string to_lower_pos_inventory_utf8(const std::string& word) {
   return out;
 }
 
-void load_french_lexicon_file(const std::filesystem::path& path,
-                              std::unordered_map<std::string, std::string>& out_lex) {
-  std::ifstream in(path);
-  if (!in) {
-    throw std::runtime_error("French G2P: cannot read lexicon " + path.generic_string());
-  }
+void load_french_lexicon_stream(std::istream& in, std::unordered_map<std::string, std::string>& out_lex) {
   std::unordered_map<std::string, std::pair<std::string, bool>> tmp;
   std::string line;
   while (std::getline(in, line)) {
@@ -218,6 +215,15 @@ void load_french_lexicon_file(const std::filesystem::path& path,
   }
 }
 
+void load_french_lexicon_file(const std::filesystem::path& path,
+                              std::unordered_map<std::string, std::string>& out_lex) {
+  std::ifstream in(path);
+  if (!in) {
+    throw std::runtime_error("French G2P: cannot read lexicon " + path.generic_string());
+  }
+  load_french_lexicon_stream(in, out_lex);
+}
+
 std::string parse_first_csv_field(std::string_view line) {
   if (line.empty()) {
     return {};
@@ -245,6 +251,29 @@ std::string parse_first_csv_field(std::string_view line) {
   return trim_ascii_ws_copy(line.substr(0, comma == std::string::npos ? line.size() : comma));
 }
 
+void load_french_pos_csv_stream(std::istream& in, const std::string& cat_upper,
+                                std::unordered_map<std::string, std::unordered_set<std::string>>& out) {
+  std::string header;
+  if (!std::getline(in, header)) {
+    return;
+  }
+  if (header.find("form") == std::string::npos) {
+    return;
+  }
+  std::unordered_set<std::string> forms;
+  std::string line;
+  while (std::getline(in, line)) {
+    const std::string form = parse_first_csv_field(line);
+    if (form.empty() || form == "-" || form.find(' ') != std::string::npos) {
+      continue;
+    }
+    forms.insert(to_lower_ascii(form));
+  }
+  if (!forms.empty()) {
+    out[cat_upper] = std::move(forms);
+  }
+}
+
 void load_french_pos_dir(const std::filesystem::path& dir,
                          std::unordered_map<std::string, std::unordered_set<std::string>>& out) {
   out.clear();
@@ -270,25 +299,24 @@ void load_french_pos_dir(const std::filesystem::path& dir,
     if (!in) {
       continue;
     }
-    std::string header;
-    if (!std::getline(in, header)) {
-      continue;
-    }
-    if (header.find("form") == std::string::npos) {
-      continue;
-    }
-    std::unordered_set<std::string> forms;
-    std::string line;
-    while (std::getline(in, line)) {
-      const std::string form = parse_first_csv_field(line);
-      if (form.empty() || form == "-" || form.find(' ') != std::string::npos) {
-        continue;
-      }
-      forms.insert(to_lower_ascii(form));
-    }
-    if (!forms.empty()) {
-      out[std::move(cat)] = std::move(forms);
-    }
+    load_french_pos_csv_stream(in, cat, out);
+  }
+}
+
+void load_french_pos_from_csv_utf8_map(
+    const std::unordered_map<std::string, std::string>& cat_upper_to_utf8,
+    std::unordered_map<std::string, std::unordered_set<std::string>>& out) {
+  out.clear();
+  std::vector<std::pair<std::string, const std::string*>> sorted;
+  sorted.reserve(cat_upper_to_utf8.size());
+  for (const auto& pr : cat_upper_to_utf8) {
+    sorted.emplace_back(pr.first, &pr.second);
+  }
+  std::sort(sorted.begin(), sorted.end(),
+            [](const auto& a, const auto& b) { return a.first < b.first; });
+  for (const auto& pr : sorted) {
+    std::istringstream in(*pr.second);
+    load_french_pos_csv_stream(in, pr.first, out);
   }
 }
 
@@ -1022,6 +1050,22 @@ FrenchRuleG2p::FrenchRuleG2p(std::filesystem::path dict_tsv, std::filesystem::pa
     : options_(options), csv_dir_(std::move(csv_dir)) {
   load_french_lexicon_file(dict_tsv, lexicon_);
   load_french_pos_dir(csv_dir_, pos_by_cat_);
+}
+
+FrenchRuleG2p::FrenchRuleG2p(std::string dict_tsv_utf8, std::filesystem::path csv_dir, Options options)
+    : options_(options), csv_dir_(std::move(csv_dir)) {
+  std::istringstream in(std::move(dict_tsv_utf8));
+  load_french_lexicon_stream(in, lexicon_);
+  load_french_pos_dir(csv_dir_, pos_by_cat_);
+}
+
+FrenchRuleG2p::FrenchRuleG2p(std::string dict_tsv_utf8,
+                             std::unordered_map<std::string, std::string> pos_csv_utf8_by_cat_upper,
+                             Options options)
+    : options_(options), csv_dir_{} {
+  std::istringstream in(std::move(dict_tsv_utf8));
+  load_french_lexicon_stream(in, lexicon_);
+  load_french_pos_from_csv_utf8_map(pos_csv_utf8_by_cat_upper, pos_by_cat_);
 }
 
 std::string FrenchRuleG2p::finalize_word_ipa(std::string ipa, bool from_compound) const {

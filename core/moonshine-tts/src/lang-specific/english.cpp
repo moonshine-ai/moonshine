@@ -11,6 +11,8 @@
 
 #include <cctype>
 #include <fstream>
+#include <iterator>
+#include <optional>
 #include <unordered_map>
 #include <nlohmann/json.h>
 #include <onnxruntime_cxx_api.h>
@@ -36,13 +38,9 @@ void append_log(std::vector<G2pWordLog>* out, G2pWordLog entry) {
   }
 }
 
-void load_homograph_json(const std::filesystem::path& path,
-                         std::unordered_map<std::string, std::vector<std::string>>& out) {
-  std::ifstream in(path);
-  if (!in) {
-    throw std::runtime_error("English G2P: failed to open homograph index: " + path.generic_string());
-  }
-  const nlohmann::json j = nlohmann::json::parse(in);
+void load_homograph_json_string(std::string_view utf8,
+                                std::unordered_map<std::string, std::vector<std::string>>& out) {
+  const nlohmann::json j = nlohmann::json::parse(std::string(utf8));
   const auto it = j.find("ordered_candidates");
   if (it == j.end() || !it->is_object()) {
     return;
@@ -63,6 +61,16 @@ void load_homograph_json(const std::filesystem::path& path,
     }
     out[std::move(key)] = std::move(ipas);
   }
+}
+
+void load_homograph_json(const std::filesystem::path& path,
+                         std::unordered_map<std::string, std::vector<std::string>>& out) {
+  std::ifstream in(path);
+  if (!in) {
+    throw std::runtime_error("English G2P: failed to open homograph index: " + path.generic_string());
+  }
+  const std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  load_homograph_json_string(content, out);
 }
 
 std::vector<std::string> merge_candidates(
@@ -104,7 +112,9 @@ EnglishRuleG2p::EnglishRuleG2p(std::filesystem::path dict_tsv,
                              std::filesystem::path homograph_json,
                              std::optional<std::filesystem::path> heteronym_onnx,
                              std::optional<std::filesystem::path> oov_onnx,
-                             bool use_cuda)
+                             bool use_cuda,
+                             std::optional<EnglishOnnxAuxMemory> heteronym_from_memory,
+                             std::optional<EnglishOnnxAuxMemory> oov_from_memory)
     : impl_(std::make_unique<Impl>()) {
   if (!std::filesystem::is_regular_file(dict_tsv)) {
     throw std::runtime_error("English G2P: dictionary not found at " + dict_tsv.generic_string());
@@ -117,10 +127,60 @@ EnglishRuleG2p::EnglishRuleG2p(std::filesystem::path dict_tsv,
       impl_->homograph_order.clear();
     }
   }
-  if (heteronym_onnx && std::filesystem::is_regular_file(*heteronym_onnx)) {
+  if (heteronym_from_memory && !heteronym_from_memory->model_onnx.empty() &&
+      !heteronym_from_memory->onnx_config_json_utf8.empty()) {
+    impl_->het = std::make_unique<OnnxHeteronymG2p>(
+        impl_->env, heteronym_from_memory->model_onnx.data(),
+        heteronym_from_memory->model_onnx.size(),
+        nlohmann::json::parse(heteronym_from_memory->onnx_config_json_utf8), use_cuda);
+  } else if (heteronym_onnx && std::filesystem::is_regular_file(*heteronym_onnx)) {
     impl_->het = std::make_unique<OnnxHeteronymG2p>(impl_->env, *heteronym_onnx, use_cuda);
   }
-  if (oov_onnx && std::filesystem::is_regular_file(*oov_onnx)) {
+  if (oov_from_memory && !oov_from_memory->model_onnx.empty() &&
+      !oov_from_memory->onnx_config_json_utf8.empty()) {
+    impl_->oov = std::make_unique<OnnxOovG2p>(impl_->env, oov_from_memory->model_onnx.data(),
+                                              oov_from_memory->model_onnx.size(),
+                                              nlohmann::json::parse(oov_from_memory->onnx_config_json_utf8),
+                                              use_cuda);
+  } else if (oov_onnx && std::filesystem::is_regular_file(*oov_onnx)) {
+    impl_->oov = std::make_unique<OnnxOovG2p>(impl_->env, *oov_onnx, use_cuda);
+  }
+}
+
+EnglishRuleG2p::EnglishRuleG2p(std::string dict_tsv_utf8,
+                               std::optional<std::string> homograph_index_json_utf8,
+                               std::optional<std::filesystem::path> heteronym_onnx,
+                               std::optional<std::filesystem::path> oov_onnx, bool use_cuda,
+                               std::optional<EnglishOnnxAuxMemory> heteronym_from_memory,
+                               std::optional<EnglishOnnxAuxMemory> oov_from_memory)
+    : impl_(std::make_unique<Impl>()) {
+  if (dict_tsv_utf8.empty()) {
+    throw std::runtime_error("English G2P: empty dictionary buffer");
+  }
+  impl_->dict = std::make_unique<CmudictTsv>(std::string_view(dict_tsv_utf8));
+  if (homograph_index_json_utf8 && !homograph_index_json_utf8->empty()) {
+    try {
+      load_homograph_json_string(*homograph_index_json_utf8, impl_->homograph_order);
+    } catch (const std::exception&) {
+      impl_->homograph_order.clear();
+    }
+  }
+  if (heteronym_from_memory && !heteronym_from_memory->model_onnx.empty() &&
+      !heteronym_from_memory->onnx_config_json_utf8.empty()) {
+    impl_->het = std::make_unique<OnnxHeteronymG2p>(
+        impl_->env, heteronym_from_memory->model_onnx.data(),
+        heteronym_from_memory->model_onnx.size(),
+        nlohmann::json::parse(heteronym_from_memory->onnx_config_json_utf8), use_cuda);
+  } else if (heteronym_onnx && std::filesystem::is_regular_file(*heteronym_onnx)) {
+    impl_->het = std::make_unique<OnnxHeteronymG2p>(impl_->env, *heteronym_onnx, use_cuda);
+  }
+  if (oov_from_memory && !oov_from_memory->model_onnx.empty() &&
+      !oov_from_memory->onnx_config_json_utf8.empty()) {
+    impl_->oov = std::make_unique<OnnxOovG2p>(impl_->env, oov_from_memory->model_onnx.data(),
+                                              oov_from_memory->model_onnx.size(),
+                                              nlohmann::json::parse(oov_from_memory->onnx_config_json_utf8),
+                                              use_cuda);
+  } else if (oov_onnx && std::filesystem::is_regular_file(*oov_onnx)) {
     impl_->oov = std::make_unique<OnnxOovG2p>(impl_->env, *oov_onnx, use_cuda);
   }
 }

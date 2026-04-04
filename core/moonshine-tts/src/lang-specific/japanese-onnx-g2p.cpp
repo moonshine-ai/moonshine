@@ -1,9 +1,11 @@
 #include "japanese-onnx-g2p.h"
 #include "japanese-kana-to-ipa.h"
+#include "moonshine-g2p-options.h"
 #include "utf8-utils.h"
 
 #include <algorithm>
 #include <fstream>
+#include <istream>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
@@ -183,11 +185,7 @@ const std::vector<std::string>& trailing_particles_sorted() {
   return k;
 }
 
-std::unordered_map<std::string, std::string> load_ja_lexicon_first_ipa(const std::filesystem::path& p) {
-  std::ifstream in(p);
-  if (!in) {
-    throw std::runtime_error("JapaneseOnnxG2p: cannot open dict " + p.string());
-  }
+std::unordered_map<std::string, std::string> load_ja_lexicon_first_ipa_stream(std::istream& in) {
   std::unordered_map<std::string, std::string> lex;
   std::string line;
   while (std::getline(in, line)) {
@@ -211,6 +209,14 @@ std::unordered_map<std::string, std::string> load_ja_lexicon_first_ipa(const std
     lex.emplace(std::move(w), std::move(ipa0));
   }
   return lex;
+}
+
+std::unordered_map<std::string, std::string> load_ja_lexicon_first_ipa(const std::filesystem::path& p) {
+  std::ifstream in(p);
+  if (!in) {
+    throw std::runtime_error("JapaneseOnnxG2p: cannot open dict " + p.string());
+  }
+  return load_ja_lexicon_first_ipa_stream(in);
 }
 
 void build_by_first(const std::unordered_map<std::string, std::string>& lex,
@@ -247,6 +253,29 @@ JapaneseOnnxG2p::JapaneseOnnxG2p(std::filesystem::path model_dir,
                                    bool use_cuda)
     : tok_(std::move(model_dir), use_cuda) {
   lex_ = load_ja_lexicon_first_ipa(dict_tsv);
+  build_by_first(lex_, by_first_);
+}
+
+JapaneseOnnxG2p::JapaneseOnnxG2p(std::filesystem::path model_dir, std::string dict_tsv_utf8,
+                                   bool use_cuda)
+    : tok_(std::move(model_dir), use_cuda) {
+  std::istringstream in(std::move(dict_tsv_utf8));
+  lex_ = load_ja_lexicon_first_ipa_stream(in);
+  build_by_first(lex_, by_first_);
+}
+
+JapaneseOnnxG2p::JapaneseOnnxG2p(const MoonshineG2POptions& opt, std::filesystem::path model_dir,
+                                 std::filesystem::path dict_tsv, bool use_cuda)
+    : tok_(&opt, kG2pJapaneseOnnxDirKey, std::move(model_dir), use_cuda) {
+  lex_ = load_ja_lexicon_first_ipa(dict_tsv);
+  build_by_first(lex_, by_first_);
+}
+
+JapaneseOnnxG2p::JapaneseOnnxG2p(const MoonshineG2POptions& opt, std::filesystem::path model_dir,
+                                 std::string dict_tsv_utf8, bool use_cuda)
+    : tok_(&opt, kG2pJapaneseOnnxDirKey, std::move(model_dir), use_cuda) {
+  std::istringstream in(std::move(dict_tsv_utf8));
+  lex_ = load_ja_lexicon_first_ipa_stream(in);
   build_by_first(lex_, by_first_);
 }
 

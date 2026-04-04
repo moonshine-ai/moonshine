@@ -14,11 +14,17 @@
 namespace moonshine_tts {
 
 struct G2pWordLog;
+struct MoonshineG2POptions;
 
 /// MSA Arabic G2P: ONNX partial tashkīl + lexicon + IPA rules (mirrors :mod:`arabic_rule_g2p`).
 class ArabicRuleG2p : public RuleBasedG2p {
  public:
   ArabicRuleG2p(std::filesystem::path onnx_model_dir, std::filesystem::path dict_tsv, bool use_cuda = false);
+  ArabicRuleG2p(std::filesystem::path onnx_model_dir, std::string dict_tsv_utf8, bool use_cuda = false);
+  ArabicRuleG2p(const MoonshineG2POptions& opt, std::filesystem::path onnx_model_dir,
+                std::filesystem::path dict_tsv, bool use_cuda = false);
+  ArabicRuleG2p(const MoonshineG2POptions& opt, std::filesystem::path onnx_model_dir,
+                std::string dict_tsv_utf8, bool use_cuda = false);
 
   ArabicRuleG2p(const ArabicRuleG2p&) = delete;
   ArabicRuleG2p& operator=(const ArabicRuleG2p&) = delete;

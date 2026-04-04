@@ -3,6 +3,7 @@
 
 #include "file-information.h"
 
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -11,6 +12,16 @@
 #include <vector>
 
 namespace moonshine_tts {
+
+/// ``<bundle_dir_key>/<filename>`` for ``FileInformationMap`` / ``read_*_asset``.
+inline std::string g2p_bundle_file_key(std::string_view bundle_dir_key, std::string_view filename) {
+  std::string s;
+  s.reserve(bundle_dir_key.size() + 1 + filename.size());
+  s.append(bundle_dir_key);
+  s.push_back('/');
+  s.append(filename);
+  return s;
+}
 
 /// Canonical ``FileInformationMap`` keys for bundled relative assets (default path = key).
 inline constexpr std::string_view kG2pGermanDictKey = "de/dict.tsv";
@@ -22,6 +33,7 @@ inline constexpr std::string_view kG2pRussianDictKey = "ru/dict.tsv";
 inline constexpr std::string_view kG2pChineseDictKey = "zh_hans/dict.tsv";
 inline constexpr std::string_view kG2pChineseOnnxDirKey = "zh_hans/roberta_chinese_base_upos_onnx";
 inline constexpr std::string_view kG2pKoreanDictKey = "ko/dict.tsv";
+inline constexpr std::string_view kG2pKoreanOnnxDirKey = "ko/roberta_korean_morph_upos_onnx";
 inline constexpr std::string_view kG2pVietnameseDictKey = "vi/dict.tsv";
 inline constexpr std::string_view kG2pJapaneseDictKey = "ja/dict.tsv";
 inline constexpr std::string_view kG2pJapaneseOnnxDirKey = "ja/roberta_japanese_char_luw_upos_onnx";
@@ -33,8 +45,45 @@ inline constexpr std::string_view kG2pPtBrDictKey = "pt_br/dict.tsv";
 inline constexpr std::string_view kG2pPtPtDictKey = "pt_pt/dict.tsv";
 /// Map key for ``parse_options`` / CLI override (not a bundled default path).
 inline constexpr std::string_view kG2pPortugueseDictOverrideKey = "portuguese_dict_path";
+/// Optional English assets (same ``FileInformationMap`` / memory pattern as lexicons).
+inline constexpr std::string_view kG2pEnglishG2pConfigKey = "en_us/g2p-config.json";
+inline constexpr std::string_view kG2pEnglishHomographJsonKey = "en_us/heteronym/homograph_index.json";
 inline constexpr std::string_view kG2pHeteronymOnnxOverrideKey = "heteronym_onnx_override";
 inline constexpr std::string_view kG2pOovOnnxOverrideKey = "oov_onnx_override";
+/// UTF-8 ``onnx-config.json`` when ``heteronym_onnx_override`` / ``oov_onnx_override`` are in-memory.
+inline constexpr std::string_view kG2pHeteronymOnnxConfigOverrideKey = "heteronym_onnx_config";
+inline constexpr std::string_view kG2pOovOnnxConfigOverrideKey = "oov_onnx_config";
+
+/// Chinese tokenizer + ONNX bundle files (under ``kG2pChineseOnnxDirKey``).
+inline constexpr std::string_view kG2pChineseOnnxMetaKey = "zh_hans/roberta_chinese_base_upos_onnx/meta.json";
+inline constexpr std::string_view kG2pChineseOnnxVocabKey = "zh_hans/roberta_chinese_base_upos_onnx/vocab.txt";
+inline constexpr std::string_view kG2pChineseOnnxTokenizerConfigKey =
+    "zh_hans/roberta_chinese_base_upos_onnx/tokenizer_config.json";
+inline constexpr std::string_view kG2pChineseOnnxModelKey = "zh_hans/roberta_chinese_base_upos_onnx/model.ort";
+
+inline constexpr std::string_view kG2pJapaneseOnnxMetaKey = "ja/roberta_japanese_char_luw_upos_onnx/meta.json";
+inline constexpr std::string_view kG2pJapaneseOnnxVocabKey = "ja/roberta_japanese_char_luw_upos_onnx/vocab.txt";
+inline constexpr std::string_view kG2pJapaneseOnnxTokenizerConfigKey =
+    "ja/roberta_japanese_char_luw_upos_onnx/tokenizer_config.json";
+inline constexpr std::string_view kG2pJapaneseOnnxModelKey = "ja/roberta_japanese_char_luw_upos_onnx/model.ort";
+
+inline constexpr std::string_view kG2pKoreanOnnxMetaKey = "ko/roberta_korean_morph_upos_onnx/meta.json";
+inline constexpr std::string_view kG2pKoreanOnnxVocabKey = "ko/roberta_korean_morph_upos_onnx/vocab.txt";
+inline constexpr std::string_view kG2pKoreanOnnxTokenizerConfigKey =
+    "ko/roberta_korean_morph_upos_onnx/tokenizer_config.json";
+inline constexpr std::string_view kG2pKoreanOnnxModelKey = "ko/roberta_korean_morph_upos_onnx/model.ort";
+
+inline constexpr std::string_view kG2pArabicOnnxMetaKey = "ar_msa/arabertv02_tashkeel_fadel_onnx/meta.json";
+inline constexpr std::string_view kG2pArabicOnnxVocabKey = "ar_msa/arabertv02_tashkeel_fadel_onnx/vocab.txt";
+inline constexpr std::string_view kG2pArabicOnnxTokenizerConfigKey =
+    "ar_msa/arabertv02_tashkeel_fadel_onnx/tokenizer_config.json";
+inline constexpr std::string_view kG2pArabicOnnxModelKey = "ar_msa/arabertv02_tashkeel_fadel_onnx/model.ort";
+
+/// English heteronym / OOV ONNX next to ``en_us/g2p-config.json`` layout.
+inline constexpr std::string_view kG2pEnglishHeteronymModelKey = "en_us/heteronym/model.ort";
+inline constexpr std::string_view kG2pEnglishHeteronymOnnxConfigKey = "en_us/heteronym/onnx-config.json";
+inline constexpr std::string_view kG2pEnglishOovModelKey = "en_us/oov/model.ort";
+inline constexpr std::string_view kG2pEnglishOovOnnxConfigKey = "en_us/oov/onnx-config.json";
 
 /// Options for constructing ``MoonshineG2P`` (rule-engine paths and toggles; optional heteronym/OOV
 /// ONNX overrides for English).
@@ -76,6 +125,10 @@ struct MoonshineG2POptions {
   bool hindi_with_stress = true;
   bool hindi_expand_cardinal_digits = true;
 
+  /// When false, lexicon resolution never falls back to ``builtin_cpp_data_root()`` (disk under the
+  /// compiled ``cpp/data`` tree). Used for strict memory-only or custom-root setups.
+  bool allow_builtin_cpp_data_fallback = true;
+
   FileInformationMap files;
 
   /// Relative path (under ``g2p_root``) for a bundled asset. If ``files`` has no entry for
@@ -85,6 +138,15 @@ struct MoonshineG2POptions {
   /// Non-empty path stored under ``map_key`` (used for overrides such as ``heteronym_onnx_override``).
   std::optional<std::filesystem::path> optional_override_path(
       std::string_view map_key) const;
+
+  /// True if the asset has a client buffer or exists on disk under ``g2p_root`` (canonical key or map key).
+  bool asset_is_available(std::string_view canonical_key) const;
+
+  /// Full file contents via ``FileInformation::load`` (memory buffer or disk). Does not mutate ``files``.
+  std::vector<uint8_t> read_binary_asset(std::string_view canonical_key) const;
+
+  /// ``read_binary_asset`` interpreted as UTF-8 bytes (no BOM handling).
+  std::string read_utf8_asset(std::string_view canonical_key) const;
 
   void parse_options(const std::vector<std::pair<std::string, std::string>>& options);
 };

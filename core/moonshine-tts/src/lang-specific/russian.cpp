@@ -10,7 +10,9 @@
 #include <cstdint>
 #include <cwctype>
 #include <fstream>
+#include <istream>
 #include <limits>
+#include <sstream>
 #include <regex>
 #include <stdexcept>
 #include <string>
@@ -200,12 +202,7 @@ bool surface_is_all_lowercase_russian(const std::string& surf) {
   return surf == utf8_russian_lowercase(surf);
 }
 
-void load_russian_lexicon_file(const std::filesystem::path& path,
-                               std::unordered_map<std::string, std::string>& out_lex) {
-  std::ifstream in(path);
-  if (!in) {
-    throw std::runtime_error("Russian G2P: cannot read lexicon " + path.generic_string());
-  }
+void load_russian_lexicon_stream(std::istream& in, std::unordered_map<std::string, std::string>& out_lex) {
   std::unordered_map<std::string, std::pair<std::string, bool>> tmp;
   std::string line;
   while (std::getline(in, line)) {
@@ -234,6 +231,15 @@ void load_russian_lexicon_file(const std::filesystem::path& path,
   for (auto& e : tmp) {
     out_lex.emplace(std::move(e.first), std::move(e.second.first));
   }
+}
+
+void load_russian_lexicon_file(const std::filesystem::path& path,
+                               std::unordered_map<std::string, std::string>& out_lex) {
+  std::ifstream in(path);
+  if (!in) {
+    throw std::runtime_error("Russian G2P: cannot read lexicon " + path.generic_string());
+  }
+  load_russian_lexicon_stream(in, out_lex);
 }
 
 std::string filter_russian_graphemes_keep_stress(std::string_view raw) {
@@ -944,6 +950,12 @@ RussianRuleG2p::RussianRuleG2p(std::filesystem::path dict_tsv)
 RussianRuleG2p::RussianRuleG2p(std::filesystem::path dict_tsv, Options options)
     : options_(options) {
   load_russian_lexicon_file(std::move(dict_tsv), lexicon_);
+}
+
+RussianRuleG2p::RussianRuleG2p(std::string dict_tsv_utf8, Options options)
+    : options_(options) {
+  std::istringstream in(std::move(dict_tsv_utf8));
+  load_russian_lexicon_stream(in, lexicon_);
 }
 
 std::string RussianRuleG2p::finalize_ipa(std::string ipa) const {

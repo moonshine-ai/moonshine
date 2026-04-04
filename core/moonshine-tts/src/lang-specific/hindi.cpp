@@ -6,8 +6,9 @@
 
 #include <cctype>
 #include <fstream>
-#include <optional>
+#include <istream>
 #include <sstream>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -467,15 +468,7 @@ std::filesystem::path builtin_hindi_dict_path() {
 HindiRuleG2p::HindiRuleG2p(std::filesystem::path dict_tsv)
     : HindiRuleG2p(std::move(dict_tsv), Options{}) {}
 
-HindiRuleG2p::HindiRuleG2p(std::filesystem::path dict_tsv, Options options)
-    : options_(std::move(options)) {
-  if (!std::filesystem::is_regular_file(dict_tsv)) {
-    throw std::runtime_error("Hindi G2P: lexicon not found at " + dict_tsv.generic_string());
-  }
-  std::ifstream in(dict_tsv);
-  if (!in) {
-    throw std::runtime_error("Hindi G2P: cannot open " + dict_tsv.generic_string());
-  }
+void load_hindi_lexicon_stream(std::istream& in, std::unordered_map<std::string, std::string>& lexicon) {
   std::string line;
   while (std::getline(in, line)) {
     if (!line.empty() && (line.back() == '\r' || line.back() == '\n')) {
@@ -494,10 +487,28 @@ HindiRuleG2p::HindiRuleG2p(std::filesystem::path dict_tsv, Options options)
       continue;
     }
     const std::string k = utf8_nfc_utf8proc(surf);
-    if (lexicon_.find(k) == lexicon_.end()) {
-      lexicon_.emplace(k, std::move(ipa_val));
+    if (lexicon.find(k) == lexicon.end()) {
+      lexicon.emplace(k, std::move(ipa_val));
     }
   }
+}
+
+HindiRuleG2p::HindiRuleG2p(std::filesystem::path dict_tsv, Options options)
+    : options_(std::move(options)) {
+  if (!std::filesystem::is_regular_file(dict_tsv)) {
+    throw std::runtime_error("Hindi G2P: lexicon not found at " + dict_tsv.generic_string());
+  }
+  std::ifstream in(dict_tsv);
+  if (!in) {
+    throw std::runtime_error("Hindi G2P: cannot open " + dict_tsv.generic_string());
+  }
+  load_hindi_lexicon_stream(in, lexicon_);
+}
+
+HindiRuleG2p::HindiRuleG2p(std::string dict_tsv_utf8, Options options)
+    : options_(std::move(options)) {
+  std::istringstream in(std::move(dict_tsv_utf8));
+  load_hindi_lexicon_stream(in, lexicon_);
 }
 
 std::string HindiRuleG2p::word_to_ipa(const std::string& word) const {

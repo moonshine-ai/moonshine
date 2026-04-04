@@ -21,13 +21,13 @@ nlohmann::json read_json_file(const std::filesystem::path& p) {
 }
 
 void validate_header(const nlohmann::json& cfg, const std::string& expect_kind,
-                     const std::filesystem::path& path_for_msg) {
+                     std::string_view source_label) {
   if (!cfg.contains("config_schema_version") ||
       cfg["config_schema_version"].get<int>() != kConfigOnnxSchemaVersion) {
-    throw std::runtime_error("unsupported config_schema_version in " + path_for_msg.string());
+    throw std::runtime_error("unsupported config_schema_version in " + std::string(source_label));
   }
   if (!cfg.contains("model_kind") || cfg["model_kind"].get<std::string>() != expect_kind) {
-    throw std::runtime_error("model_kind mismatch in " + path_for_msg.string());
+    throw std::runtime_error("model_kind mismatch in " + std::string(source_label));
   }
 }
 
@@ -55,23 +55,12 @@ std::vector<std::string> stoi_to_itos(const std::unordered_map<std::string, int6
 
 }  // namespace
 
-OovOnnxTables load_oov_tables(const std::filesystem::path& model_onnx_path) {
-  const std::filesystem::path parent = model_onnx_path.parent_path();
-  const std::filesystem::path merged = parent / std::string(kConfigOnnxFileName);
-  nlohmann::json char_j;
-  nlohmann::json phon_j;
-  nlohmann::json train_cfg;
-  nlohmann::json oov_meta;
-
-  if (!std::filesystem::exists(merged)) {
-    throw std::runtime_error("onnx-config.json not found at " + merged.generic_string());
-  }
-  const nlohmann::json cfg = read_json_file(merged);
-  validate_header(cfg, "oov", merged);
-  char_j = cfg["char_vocab"];
-  phon_j = cfg["phoneme_vocab"];
-  train_cfg = cfg["train_config"];
-  oov_meta = cfg["oov_index"];
+OovOnnxTables load_oov_tables_from_json(const nlohmann::json& cfg, std::string_view source_label) {
+  validate_header(cfg, "oov", source_label);
+  const nlohmann::json& char_j = cfg["char_vocab"];
+  const nlohmann::json& phon_j = cfg["phoneme_vocab"];
+  const nlohmann::json& train_cfg = cfg["train_config"];
+  const nlohmann::json& oov_meta = cfg["oov_index"];
 
   OovOnnxTables t;
   t.char_stoi = json_object_to_string_int_map(char_j);
@@ -89,23 +78,23 @@ OovOnnxTables load_oov_tables(const std::filesystem::path& model_onnx_path) {
   return t;
 }
 
-HeteronymOnnxTables load_heteronym_tables(const std::filesystem::path& model_onnx_path) {
+OovOnnxTables load_oov_tables(const std::filesystem::path& model_onnx_path) {
   const std::filesystem::path parent = model_onnx_path.parent_path();
   const std::filesystem::path merged = parent / std::string(kConfigOnnxFileName);
-  nlohmann::json char_j;
-  nlohmann::json phon_j;
-  nlohmann::json train_cfg;
-  nlohmann::json homograph;
-
   if (!std::filesystem::exists(merged)) {
     throw std::runtime_error("onnx-config.json not found at " + merged.generic_string());
   }
   const nlohmann::json cfg = read_json_file(merged);
-  validate_header(cfg, "heteronym", merged);
-  char_j = cfg["char_vocab"];
-  phon_j = cfg["phoneme_vocab"];
-  train_cfg = cfg["train_config"];
-  homograph = cfg["homograph_index"];
+  return load_oov_tables_from_json(cfg, merged.generic_string());
+}
+
+HeteronymOnnxTables load_heteronym_tables_from_json(const nlohmann::json& cfg,
+                                                    std::string_view source_label) {
+  validate_header(cfg, "heteronym", source_label);
+  const nlohmann::json& char_j = cfg["char_vocab"];
+  const nlohmann::json& phon_j = cfg["phoneme_vocab"];
+  const nlohmann::json& train_cfg = cfg["train_config"];
+  const nlohmann::json& homograph = cfg["homograph_index"];
 
   HeteronymOnnxTables t;
   t.char_stoi = json_object_to_string_int_map(char_j);
@@ -144,6 +133,16 @@ HeteronymOnnxTables load_heteronym_tables(const std::filesystem::path& model_onn
   t.eos = t.phoneme_stoi.at(std::string(kPhonEos));
   t.phon_pad = t.phoneme_stoi.at(std::string(kPhonPad));
   return t;
+}
+
+HeteronymOnnxTables load_heteronym_tables(const std::filesystem::path& model_onnx_path) {
+  const std::filesystem::path parent = model_onnx_path.parent_path();
+  const std::filesystem::path merged = parent / std::string(kConfigOnnxFileName);
+  if (!std::filesystem::exists(merged)) {
+    throw std::runtime_error("onnx-config.json not found at " + merged.generic_string());
+  }
+  const nlohmann::json cfg = read_json_file(merged);
+  return load_heteronym_tables_from_json(cfg, merged.generic_string());
 }
 
 }  // namespace moonshine_tts

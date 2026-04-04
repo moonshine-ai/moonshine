@@ -1,6 +1,7 @@
 #include "piper-tts.h"
 
 #include "g2p-path.h"
+#include "ort-onnx-external-data.h"
 #include "ipa-postprocess.h"
 #include "moonshine-g2p.h"
 #include "utf8-utils.h"
@@ -328,6 +329,49 @@ void load_piper_onnx_json(const std::filesystem::path& json_path,
   }
 }
 
+void load_piper_onnx_json_bytes(const char* data, size_t size, std::string_view ctx,
+                                std::unordered_map<std::string, std::vector<int64_t>>& phoneme_id_map,
+                                int& native_sample_rate, float& noise_scale, float& length_scale_default,
+                                float& noise_w, int& num_speakers) {
+  nlohmann::json j = nlohmann::json::parse(data, data + size);
+  if (!j.contains("phoneme_id_map") || !j["phoneme_id_map"].is_object()) {
+    throw std::runtime_error("PiperTTS: phoneme_id_map missing in piper config (" + std::string(ctx) + ")");
+  }
+  phoneme_id_map.clear();
+  for (auto it = j["phoneme_id_map"].begin(); it != j["phoneme_id_map"].end(); ++it) {
+    std::vector<int64_t> seq;
+    if (it.value().is_array()) {
+      for (const auto& el : it.value()) {
+        seq.push_back(el.get<int64_t>());
+      }
+    }
+    phoneme_id_map[it.key()] = std::move(seq);
+  }
+  native_sample_rate = 22050;
+  noise_scale = 0.667F;
+  length_scale_default = 1.F;
+  noise_w = 0.8F;
+  num_speakers = 1;
+  if (j.contains("audio") && j["audio"].is_object() && j["audio"].contains("sample_rate")) {
+    native_sample_rate = j["audio"]["sample_rate"].get<int>();
+  }
+  if (j.contains("inference") && j["inference"].is_object()) {
+    const auto& inf = j["inference"];
+    if (inf.contains("noise_scale")) {
+      noise_scale = inf["noise_scale"].get<float>();
+    }
+    if (inf.contains("length_scale")) {
+      length_scale_default = inf["length_scale"].get<float>();
+    }
+    if (inf.contains("noise_w")) {
+      noise_w = inf["noise_w"].get<float>();
+    }
+  }
+  if (j.contains("num_speakers")) {
+    num_speakers = j["num_speakers"].get<int>();
+  }
+}
+
 }  // namespace
 
 struct PiperTTS::Impl {
@@ -363,6 +407,13 @@ struct PiperTTS::Impl {
   float piper_output_volume_ = 1.F;
   std::optional<float> noise_scale_override_{};
   std::optional<float> noise_w_override_{};
+  FileInformationMap tts_asset_files_{};
+
+  ~Impl() {
+    for (auto& e : tts_asset_files_.entries) {
+      e.second.free();
+    }
+  }
 
   std::vector<float> run_ort_from_phoneme_ids(const std::vector<int64_t>& ids) {
     if (ids.size() < 3) {
@@ -425,27 +476,52 @@ struct PiperTTS::Impl {
   }
 
   void reload_session_from_onnx() {
-    const std::filesystem::path json_path =
+    static const std::string k_piper_json("piper/onnx.json");
+    static const std::string k_piper_onnx("piper/onnx");
+    const std::filesystem::path json_disk =
         !explicit_onnx_json_path_.empty()
             ? explicit_onnx_json_path_
             : piper_model_json_path_for_onnx(onnx_path_, voices_json_dir_);
-    if (!std::filesystem::is_regular_file(json_path)) {
-      throw std::runtime_error("PiperTTS: missing config " + json_path.string());
+
+    const auto jit = tts_asset_files_.entries.find(k_piper_json);
+    if (jit != tts_asset_files_.entries.end()) {
+      FileInformation& jf = jit->second;
+      const uint8_t* jb = nullptr;
+      size_t jn = 0;
+      jf.load(&jb, &jn);
+      load_piper_onnx_json_bytes(reinterpret_cast<const char*>(jb), jn, k_piper_json, phoneme_id_map_,
+                                 native_sample_rate_, noise_scale_, length_scale_default_, noise_w_, num_speakers_);
+      jf.free();
+    } else {
+      if (!std::filesystem::is_regular_file(json_disk)) {
+        throw std::runtime_error("PiperTTS: missing config " + json_disk.string());
+      }
+      load_piper_onnx_json(json_disk, phoneme_id_map_, native_sample_rate_, noise_scale_, length_scale_default_,
+                           noise_w_, num_speakers_);
     }
-    load_piper_onnx_json(json_path, phoneme_id_map_, native_sample_rate_, noise_scale_, length_scale_default_, noise_w_,
-                         num_speakers_);
     phoneme_map_keys_.clear();
     for (const auto& e : phoneme_id_map_) {
       phoneme_map_keys_.insert(e.first);
     }
     Ort::SessionOptions session_opts = make_ort_options(ort_provider_names_);
+    const auto oit = tts_asset_files_.entries.find(k_piper_onnx);
+    if (oit != tts_asset_files_.entries.end()) {
+      FileInformation& of = oit->second;
+      const uint8_t* ob = nullptr;
+      size_t on = 0;
+      of.load(&ob, &on);
+      ort_add_external_initializer_files_for_onnx_model_buffer(session_opts, tts_asset_files_, k_piper_onnx);
+      session_ = Ort::Session(env_, ob, on, session_opts);
+      of.free();
+    } else {
 #ifdef _WIN32
-    const std::wstring wmodel = onnx_path_.wstring();
-    session_ = Ort::Session(env_, wmodel.c_str(), session_opts);
+      const std::wstring wmodel = onnx_path_.wstring();
+      session_ = Ort::Session(env_, wmodel.c_str(), session_opts);
 #else
-    const std::string u8 = onnx_path_.string();
-    session_ = Ort::Session(env_, u8.c_str(), session_opts);
+      const std::string u8 = onnx_path_.string();
+      session_ = Ort::Session(env_, u8.c_str(), session_opts);
 #endif
+    }
   }
 
   explicit Impl(const PiperTTSOptions& opt)
@@ -454,7 +530,8 @@ struct PiperTTS::Impl {
         piper_normalize_audio_(opt.piper_normalize_audio),
         piper_output_volume_(opt.piper_output_volume),
         noise_scale_override_(opt.piper_noise_scale_override),
-        noise_w_override_(opt.piper_noise_w_override) {
+        noise_w_override_(opt.piper_noise_w_override),
+        tts_asset_files_(opt.tts_asset_files) {
     g2p_opt_ = opt.g2p_options;
     use_bundled_cpp_g2p_data_ = opt.use_bundled_cpp_g2p_data;
     if (opt.use_bundled_cpp_g2p_data) {

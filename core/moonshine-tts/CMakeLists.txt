@@ -140,6 +140,7 @@ if(MOONSHINE_TTS_BUILD_ONNX)
   include(${_MOONSHINE_TTS_ROOT}/cmake/moonshine-tts-onnxruntime.cmake)
 
   add_library(moonshine_tts_ort STATIC
+    src/ort-onnx-external-data.cpp
     src/lang-specific/onnx-g2p-models.cpp
     src/lang-specific/korean-tok-pos-onnx.cpp
     src/lang-specific/japanese-tok-pos-onnx.cpp

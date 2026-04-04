@@ -1,7 +1,9 @@
 #include "moonshine-g2p-options.h"
 
+#include "g2p-path.h"
 #include "string-utils.h"
 
+#include <filesystem>
 #include <unordered_set>
 
 namespace moonshine_tts {
@@ -90,8 +92,31 @@ bool is_known_g2p_option(std::string_view key) {
       "english_dict_path",
       "heteronym_onnx_override",
       "oov_onnx_override",
+      "heteronym_onnx_config",
+      "oov_onnx_config",
+      "allow_builtin_g2p_data",
   };
   return kKnown.find(std::string(key)) != kKnown.end();
+}
+
+void prepare_g2p_file_information_path(FileInformation& fi, const std::filesystem::path& g2p_root) {
+  if (fi.memory != nullptr && fi.memory_size > 0) {
+    return;
+  }
+  if (fi.path.empty()) {
+    return;
+  }
+  if (!fi.path.is_absolute()) {
+    fi.path = resolve_path_under_root(g2p_root, fi.path);
+  }
+  if (fi.memory == nullptr || fi.memory_size == 0) {
+    const std::string fn = fi.path.filename().string();
+    const bool model_ext = (fn.size() >= 5 && fn.compare(fn.size() - 5, 5, ".onnx") == 0) ||
+                           (fn.size() >= 4 && fn.compare(fn.size() - 4, 4, ".ort") == 0);
+    if (model_ext) {
+      resolve_disk_model_file_path(fi.path);
+    }
+  }
 }
 
 }  // namespace
@@ -110,6 +135,7 @@ MoonshineG2POptions::MoonshineG2POptions() {
       {kG2pChineseDictKey, kG2pChineseDictKey},
       {kG2pChineseOnnxDirKey, kG2pChineseOnnxDirKey},
       {kG2pKoreanDictKey, kG2pKoreanDictKey},
+      {kG2pKoreanOnnxDirKey, kG2pKoreanOnnxDirKey},
       {kG2pVietnameseDictKey, kG2pVietnameseDictKey},
       {kG2pJapaneseDictKey, kG2pJapaneseDictKey},
       {kG2pJapaneseOnnxDirKey, kG2pJapaneseOnnxDirKey},
@@ -117,6 +143,26 @@ MoonshineG2POptions::MoonshineG2POptions() {
       {kG2pArabicDictKey, kG2pArabicDictKey},
       {kG2pHindiDictKey, kG2pHindiDictKey},
       {kG2pEnglishDictKey, kG2pEnglishDictKey},
+      {kG2pChineseOnnxMetaKey, kG2pChineseOnnxMetaKey},
+      {kG2pChineseOnnxVocabKey, kG2pChineseOnnxVocabKey},
+      {kG2pChineseOnnxTokenizerConfigKey, kG2pChineseOnnxTokenizerConfigKey},
+      {kG2pChineseOnnxModelKey, kG2pChineseOnnxModelKey},
+      {kG2pJapaneseOnnxMetaKey, kG2pJapaneseOnnxMetaKey},
+      {kG2pJapaneseOnnxVocabKey, kG2pJapaneseOnnxVocabKey},
+      {kG2pJapaneseOnnxTokenizerConfigKey, kG2pJapaneseOnnxTokenizerConfigKey},
+      {kG2pJapaneseOnnxModelKey, kG2pJapaneseOnnxModelKey},
+      {kG2pKoreanOnnxMetaKey, kG2pKoreanOnnxMetaKey},
+      {kG2pKoreanOnnxVocabKey, kG2pKoreanOnnxVocabKey},
+      {kG2pKoreanOnnxTokenizerConfigKey, kG2pKoreanOnnxTokenizerConfigKey},
+      {kG2pKoreanOnnxModelKey, kG2pKoreanOnnxModelKey},
+      {kG2pArabicOnnxMetaKey, kG2pArabicOnnxMetaKey},
+      {kG2pArabicOnnxVocabKey, kG2pArabicOnnxVocabKey},
+      {kG2pArabicOnnxTokenizerConfigKey, kG2pArabicOnnxTokenizerConfigKey},
+      {kG2pArabicOnnxModelKey, kG2pArabicOnnxModelKey},
+      {kG2pEnglishHeteronymModelKey, kG2pEnglishHeteronymModelKey},
+      {kG2pEnglishHeteronymOnnxConfigKey, kG2pEnglishHeteronymOnnxConfigKey},
+      {kG2pEnglishOovModelKey, kG2pEnglishOovModelKey},
+      {kG2pEnglishOovOnnxConfigKey, kG2pEnglishOovOnnxConfigKey},
   };
   for (const auto& d : kDefaults) {
     files.set_path(d.key, std::filesystem::path(d.path));
@@ -143,6 +189,43 @@ std::optional<std::filesystem::path> MoonshineG2POptions::optional_override_path
     return std::nullopt;
   }
   return it->second.path;
+}
+
+bool MoonshineG2POptions::asset_is_available(std::string_view canonical_key) const {
+  const std::string k(canonical_key);
+  FileInformation fi;
+  if (const auto it = files.entries.find(k); it != files.entries.end()) {
+    fi = it->second;
+  } else {
+    fi = FileInformation{std::filesystem::path(k), nullptr, 0};
+  }
+  prepare_g2p_file_information_path(fi, g2p_root);
+  if (fi.memory != nullptr && fi.memory_size > 0) {
+    return true;
+  }
+  return std::filesystem::is_regular_file(fi.path);
+}
+
+std::vector<uint8_t> MoonshineG2POptions::read_binary_asset(std::string_view canonical_key) const {
+  const std::string k(canonical_key);
+  FileInformation fi;
+  if (const auto it = files.entries.find(k); it != files.entries.end()) {
+    fi = it->second;
+  } else {
+    fi = FileInformation{std::filesystem::path(k), nullptr, 0};
+  }
+  prepare_g2p_file_information_path(fi, g2p_root);
+  const uint8_t* p = nullptr;
+  size_t n = 0;
+  fi.load(&p, &n);
+  std::vector<uint8_t> out(p, p + n);
+  fi.free();
+  return out;
+}
+
+std::string MoonshineG2POptions::read_utf8_asset(std::string_view canonical_key) const {
+  std::vector<uint8_t> raw = read_binary_asset(canonical_key);
+  return std::string(reinterpret_cast<const char*>(raw.data()), raw.size());
 }
 
 void MoonshineG2POptions::parse_options(
@@ -260,6 +343,12 @@ void MoonshineG2POptions::parse_options(
       set_override_file(files, kG2pHeteronymOnnxOverrideKey, value);
     } else if (key == "oov_onnx_override") {
       set_override_file(files, kG2pOovOnnxOverrideKey, value);
+    } else if (key == "heteronym_onnx_config") {
+      set_override_file(files, kG2pHeteronymOnnxConfigOverrideKey, value);
+    } else if (key == "oov_onnx_config") {
+      set_override_file(files, kG2pOovOnnxConfigOverrideKey, value);
+    } else if (key == "allow_builtin_g2p_data") {
+      allow_builtin_cpp_data_fallback = bool_from_string(v);
     } else {
       throw std::logic_error("MoonshineG2POptions::parse_options: unhandled option '" + name + "'");
     }

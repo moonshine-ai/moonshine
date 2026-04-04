@@ -2,6 +2,7 @@
 #define MOONSHINE_TTS_PIPER_TTS_H
 
 #include "builtin-cpp-data-root.h"
+#include "file-information.h"
 #include "moonshine-g2p-options.h"
 
 #include <cstdint>
@@ -49,6 +50,8 @@ struct PiperTTSOptions {
   std::optional<float> piper_noise_scale_override{};
   /// When set, replaces JSON ``inference.noise_w`` for ORT.
   std::optional<float> piper_noise_w_override{};
+  /// Optional in-memory TTS assets (keys ``piper/onnx``, ``piper/onnx.json``) from ``MoonshineTTSOptions::files``.
+  FileInformationMap tts_asset_files{};
 };
 
 class PiperTTS {

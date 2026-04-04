@@ -10,12 +10,20 @@
 
 namespace moonshine_tts {
 
+struct MoonshineG2POptions;
+
 /// ONNX LUW segmentation + ``data/ja/dict.tsv`` + kana IPA (mirrors ``japanese_onnx_g2p.py``).
 class JapaneseOnnxG2p {
  public:
   explicit JapaneseOnnxG2p(std::filesystem::path model_dir,
                            std::filesystem::path dict_tsv,
                            bool use_cuda = false);
+  explicit JapaneseOnnxG2p(std::filesystem::path model_dir, std::string dict_tsv_utf8,
+                           bool use_cuda = false);
+  JapaneseOnnxG2p(const MoonshineG2POptions& opt, std::filesystem::path model_dir,
+                  std::filesystem::path dict_tsv, bool use_cuda = false);
+  JapaneseOnnxG2p(const MoonshineG2POptions& opt, std::filesystem::path model_dir,
+                  std::string dict_tsv_utf8, bool use_cuda = false);
 
   std::string g2p_word(std::string word_utf8);
   std::string text_to_ipa(std::string text_utf8);

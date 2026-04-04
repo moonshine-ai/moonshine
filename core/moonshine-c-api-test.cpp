@@ -1,13 +1,44 @@
 #include "moonshine-c-api.h"
 
+#include <array>
+#include <algorithm>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <string>
+#include <vector>
 
 #include "debug-utils.h"
 #include "string-utils.h"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest.h>
+
+namespace {
+
+std::filesystem::path find_de_piper_voices_dir() {
+  const std::filesystem::path candidates[] = {
+      std::filesystem::path("core") / "moonshine-tts" / "data" / "de" / "piper-voices",
+      std::filesystem::path("..") / "core" / "moonshine-tts" / "data" / "de" / "piper-voices",
+  };
+  for (const auto& c : candidates) {
+    if (std::filesystem::is_directory(c)) {
+      return c;
+    }
+  }
+  return {};
+}
+
+std::vector<uint8_t> read_binary_file(const std::filesystem::path& p) {
+  std::ifstream f(p, std::ios::binary);
+  if (!f) {
+    return {};
+  }
+  return std::vector<uint8_t>((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+}
+
+}  // namespace
 
 TEST_CASE("moonshine-test-v2") {
   SUBCASE("transcribe-complete") {
@@ -359,5 +390,57 @@ TEST_CASE("moonshine-test-v2") {
             "en_us", nullptr, 0, options, options_count,
             MOONSHINE_HEADER_VERSION);
     REQUIRE(tts_synthesizer_handle >= 0);
+  }
+  SUBCASE("tts-piper-german-from-memory") {
+    const std::filesystem::path voices_dir = find_de_piper_voices_dir();
+    if (voices_dir.empty()) {
+      return;
+    }
+    std::filesystem::path onnx_path;
+    for (const auto& ent : std::filesystem::directory_iterator(voices_dir)) {
+      if (!ent.is_regular_file()) {
+        continue;
+      }
+      const auto& p = ent.path();
+      if (p.extension() == ".onnx") {
+        onnx_path = p;
+        break;
+      }
+    }
+    if (onnx_path.empty()) {
+      return;
+    }
+    std::filesystem::path json_path = onnx_path;
+    json_path.replace_extension(".onnx.json");
+    std::vector<uint8_t> onnx_data = read_binary_file(onnx_path);
+    std::vector<uint8_t> json_data = read_binary_file(json_path);
+    if (onnx_data.empty() || json_data.empty()) {
+      return;
+    }
+    std::array<std::string, 2> keys = {std::string("piper/onnx"), std::string("piper/onnx.json")};
+    const char* filenames[2] = {keys[0].c_str(), keys[1].c_str()};
+    const uint8_t* mem_ptrs[2] = {onnx_data.data(), json_data.data()};
+    const uint64_t mem_sizes[2] = {static_cast<uint64_t>(onnx_data.size()),
+                                   static_cast<uint64_t>(json_data.size())};
+    const std::string voice_stem = onnx_path.filename().string();
+    const moonshine_option_t opts[] = {
+        {"engine", "piper"},
+        {"voice", voice_stem.c_str()},
+        {"speed", "1.0"},
+        {"bundle_g2p_data", "true"},
+    };
+    int32_t h = moonshine_create_tts_synthesizer_from_memory(
+        "de", filenames, 2, mem_ptrs, mem_sizes, opts, sizeof(opts) / sizeof(opts[0]),
+        MOONSHINE_HEADER_VERSION);
+    REQUIRE(h >= 0);
+    float* audio = nullptr;
+    uint64_t audio_n = 0;
+    int32_t sr = 0;
+    REQUIRE(moonshine_text_to_speech(h, "Hallo", nullptr, 0, &audio, &audio_n, &sr) ==
+            MOONSHINE_ERROR_NONE);
+    REQUIRE(audio_n > 0);
+    REQUIRE(audio != nullptr);
+    std::free(audio);
+    moonshine_free_tts_synthesizer(h);
   }
 }

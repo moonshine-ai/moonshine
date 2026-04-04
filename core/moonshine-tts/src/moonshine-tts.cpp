@@ -2,6 +2,7 @@
 
 #include "g2p-path.h"
 #include "moonshine-g2p.h"
+#include "ort-onnx-external-data.h"
 #include "piper-tts.h"
 #include "utf8-utils.h"
 
@@ -35,13 +36,13 @@ std::filesystem::path builtin_kokoro_bundle_dir() {
 std::filesystem::path preferred_parent_models_kokoro_dir() {
   namespace fs = std::filesystem;
   const fs::path bundled_dir = builtin_kokoro_bundle_dir();
-  const fs::path bundled_onnx = bundled_dir / "model.onnx";
+  const fs::path bundled_onnx = resolve_prefer_ort_model(bundled_dir, "model.ort");
   if (!fs::is_regular_file(bundled_onnx)) {
     return {};
   }
   const fs::path alt_dir =
       builtin_cpp_data_root().parent_path().parent_path() / "models" / "kokoro";
-  const fs::path alt_onnx = alt_dir / "model.onnx";
+  const fs::path alt_onnx = resolve_prefer_ort_model(alt_dir, "model.ort");
   if (!fs::is_regular_file(alt_onnx)) {
     return {};
   }
@@ -232,18 +233,39 @@ void maybe_align_en_profile_for_kokoro_voice(std::string_view voice, LangProfile
   }
 }
 
-std::string select_voice_id(char kokoro_lang, std::string_view requested, std::string_view default_voice,
-                            const std::filesystem::path& voices_dir) {
+bool kokoro_voice_asset_exists(const std::string& voice_id, const std::filesystem::path& voices_dir,
+                               const FileInformationMap* tts_files,
+                               const std::filesystem::path& g2p_root) {
   const auto voice_path = [&](const std::string& id) { return voices_dir / (id + ".kokorovoice"); };
+  if (tts_files != nullptr) {
+    const std::string vk = std::string("kokoro/voices/") + voice_id + ".kokorovoice";
+    const auto it = tts_files->entries.find(vk);
+    if (it != tts_files->entries.end()) {
+      const FileInformation& fi = it->second;
+      if (fi.memory != nullptr && fi.memory_size > 0) {
+        return true;
+      }
+      if (!fi.path.empty()) {
+        const std::filesystem::path p = resolve_path_under_root(g2p_root, fi.path);
+        return std::filesystem::is_regular_file(p);
+      }
+    }
+  }
+  return std::filesystem::is_regular_file(voice_path(voice_id));
+}
+
+std::string select_voice_id(char kokoro_lang, std::string_view requested, std::string_view default_voice,
+                            const std::filesystem::path& voices_dir, const FileInformationMap* tts_files,
+                            const std::filesystem::path& g2p_root) {
   std::string v = requested.empty() ? std::string(default_voice) : std::string(requested);
-  if (!requested.empty() && std::filesystem::is_regular_file(voice_path(v)) &&
+  if (!requested.empty() && kokoro_voice_asset_exists(v, voices_dir, tts_files, g2p_root) &&
       voice_prefix_ok(kokoro_lang, v)) {
     return v;
   }
   if (!voice_prefix_ok(kokoro_lang, v)) {
     v = std::string(default_voice);
   }
-  if (!std::filesystem::is_regular_file(voice_path(v))) {
+  if (!kokoro_voice_asset_exists(v, voices_dir, tts_files, g2p_root)) {
     v = std::string(default_voice);
   }
   return v;
@@ -373,32 +395,40 @@ std::vector<int64_t> phoneme_str_to_input_ids(const std::string& phonemes,
   return ids;
 }
 
+void read_kokorovoice_bytes(const uint8_t* data, size_t size, std::string_view context_for_errors,
+                            std::vector<float>& out_flat, uint32_t& rows, uint32_t& cols) {
+  if (data == nullptr || size < 4 + 4 + 4) {
+    throw std::runtime_error("MoonshineTTS: voice buffer too small (" + std::string(context_for_errors) + ")");
+  }
+  if (std::string_view(reinterpret_cast<const char*>(data), 4) != kVoiceMagic) {
+    throw std::runtime_error("MoonshineTTS: bad magic (" + std::string(context_for_errors) + ") (expected KVO1)");
+  }
+  uint32_t r = 0;
+  uint32_t c = 0;
+  std::memcpy(&r, data + 4, 4);
+  std::memcpy(&c, data + 8, 4);
+  if (r == 0 || c == 0) {
+    throw std::runtime_error("MoonshineTTS: invalid voice header (" + std::string(context_for_errors) + ")");
+  }
+  const size_t n = static_cast<size_t>(r) * static_cast<size_t>(c);
+  const size_t need = 12 + n * sizeof(float);
+  if (size < need) {
+    throw std::runtime_error("MoonshineTTS: truncated voice data (" + std::string(context_for_errors) + ")");
+  }
+  out_flat.resize(n);
+  std::memcpy(out_flat.data(), data + 12, n * sizeof(float));
+  rows = r;
+  cols = c;
+}
+
 void read_kokorovoice(const std::filesystem::path& path, std::vector<float>& out_flat, uint32_t& rows,
                       uint32_t& cols) {
   std::ifstream f(path, std::ios::binary);
   if (!f) {
     throw std::runtime_error("MoonshineTTS: cannot open voice file " + path.string());
   }
-  char magic[4]{};
-  f.read(magic, 4);
-  if (!f || std::string_view(magic, 4) != kVoiceMagic) {
-    throw std::runtime_error("MoonshineTTS: bad magic in " + path.string() + " (expected KVO1)");
-  }
-  uint32_t r = 0;
-  uint32_t c = 0;
-  f.read(reinterpret_cast<char*>(&r), 4);
-  f.read(reinterpret_cast<char*>(&c), 4);
-  if (!f || r == 0 || c == 0) {
-    throw std::runtime_error("MoonshineTTS: invalid voice header in " + path.string());
-  }
-  const size_t n = static_cast<size_t>(r) * static_cast<size_t>(c);
-  out_flat.resize(n);
-  f.read(reinterpret_cast<char*>(out_flat.data()), static_cast<std::streamsize>(n * sizeof(float)));
-  if (!f || static_cast<size_t>(f.gcount()) != n * sizeof(float)) {
-    throw std::runtime_error("MoonshineTTS: truncated voice data in " + path.string());
-  }
-  rows = r;
-  cols = c;
+  std::vector<uint8_t> buf((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  read_kokorovoice_bytes(buf.data(), buf.size(), path.string(), out_flat, rows, cols);
 }
 
 Ort::SessionOptions make_ort_options(const std::vector<std::string>& names) {
@@ -475,6 +505,7 @@ PiperTTSOptions make_piper_options(std::string_view language, const MoonshineTTS
   p.piper_output_volume = opt.piper_output_volume;
   p.piper_noise_scale_override = opt.piper_noise_scale_override;
   p.piper_noise_w_override = opt.piper_noise_w_override;
+  p.tts_asset_files = opt.files;
   return p;
 }
 
@@ -505,6 +536,12 @@ struct KokoroTtsEngine {
   /// Hugging Face ``onnx-community/Kokoro-82M-v1.0-ONNX`` quantized graph names the style vector ``style``;
   /// local torch exports use ``ref_s``.
   std::string style_input_name_ = "ref_s";
+
+  ~KokoroTtsEngine() {
+    for (auto& e : tts_files_.entries) {
+      e.second.free();
+    }
+  }
 
   void detect_kokoro_style_input_name() {
     const std::vector<std::string> names = session_.GetInputNames();
@@ -541,19 +578,35 @@ struct KokoroTtsEngine {
     tts_files_ = std::move(opt.files);
     const std::filesystem::path& root = g2p_opt_.g2p_root;
     model_path_ = resolve_path_under_root(root, tts_map_path(tts_files_, kTtsKokoroModelOnnxKey));
+    resolve_disk_model_file_path(model_path_);
     config_path_ = resolve_path_under_root(root, tts_map_path(tts_files_, kTtsKokoroConfigJsonKey));
-    if (!std::filesystem::is_regular_file(config_path_)) {
-      throw std::runtime_error("MoonshineTTS: missing Kokoro config " + config_path_.string());
-    }
-    if (!std::filesystem::is_regular_file(model_path_)) {
-      throw std::runtime_error("MoonshineTTS: missing Kokoro model " + model_path_.string());
-    }
     voices_dir_ = model_path_.parent_path() / "voices";
+
+    const auto mit = tts_files_.entries.find(std::string(kTtsKokoroModelOnnxKey));
+    const auto cit = tts_files_.entries.find(std::string(kTtsKokoroConfigJsonKey));
+    if (mit == tts_files_.entries.end() || cit == tts_files_.entries.end()) {
+      throw std::runtime_error("MoonshineTTS: missing Kokoro file map entries (model/config keys)");
+    }
+    FileInformation& model_fi = mit->second;
+    FileInformation& cfg_fi = cit->second;
+    // FileInformation::load opens `path` as-is; resolve against g2p_root here so defaults like
+    // ``kokoro/config.json`` work when the process cwd is not the bundle (model_path_/config_path_
+    // already use resolve_path_under_root).
+    model_fi.path = model_path_;
+    cfg_fi.path = config_path_;
+
+    const uint8_t* cfg_buf = nullptr;
+    size_t cfg_len = 0;
+    cfg_fi.load(&cfg_buf, &cfg_len);
+    if (cfg_len == 0) {
+      cfg_fi.free();
+      throw std::runtime_error("MoonshineTTS: empty Kokoro config (" + config_path_.string() + ")");
+    }
     {
-      std::ifstream jf(config_path_);
-      nlohmann::json j;
-      jf >> j;
+      const std::string cfg_str(reinterpret_cast<const char*>(cfg_buf), cfg_len);
+      nlohmann::json j = nlohmann::json::parse(cfg_str);
       if (!j.contains("vocab") || !j["vocab"].is_object()) {
+        cfg_fi.free();
         throw std::runtime_error("MoonshineTTS: config.json missing vocab object");
       }
       for (auto it = j["vocab"].begin(); it != j["vocab"].end(); ++it) {
@@ -562,14 +615,21 @@ struct KokoroTtsEngine {
         vocab_keys_.insert(key);
       }
     }
+    cfg_fi.free();
+
+    const uint8_t* onnx_buf = nullptr;
+    size_t onnx_len = 0;
+    model_fi.load(&onnx_buf, &onnx_len);
+    if (onnx_len == 0) {
+      model_fi.free();
+      throw std::runtime_error("MoonshineTTS: empty Kokoro ONNX (" + model_path_.string() + ")");
+    }
     Ort::SessionOptions session_opts = make_ort_options(opt.ort_provider_names);
-#ifdef _WIN32
-    const std::wstring wmodel = model_path_.wstring();
-    session_ = Ort::Session(env_, wmodel.c_str(), session_opts);
-#else
-    const std::string u8 = model_path_.string();
-    session_ = Ort::Session(env_, u8.c_str(), session_opts);
-#endif
+    ort_add_external_initializer_files_for_onnx_model_buffer(session_opts, tts_files_,
+                                                               kTtsKokoroModelOnnxKey);
+    session_ = Ort::Session(env_, onnx_buf, onnx_len, session_opts);
+    model_fi.free();
+
     detect_kokoro_style_input_name();
     detect_speed_input_element_type();
     const std::string lk = normalize_lang_key(language);
@@ -577,12 +637,26 @@ struct KokoroTtsEngine {
     maybe_align_en_profile_for_kokoro_voice(opt.voice, profile_, g2p_dialect_);
     kokoro_lang_ = profile_.kokoro_lang;
     g2p_ = std::make_unique<MoonshineG2P>(g2p_dialect_, g2p_opt_);
-    voice_id_ = select_voice_id(kokoro_lang_, opt.voice, profile_.default_voice, voices_dir_);
+    voice_id_ = select_voice_id(kokoro_lang_, opt.voice, profile_.default_voice, voices_dir_, &tts_files_,
+                                g2p_opt_.g2p_root);
     reload_voice_tensor();
   }
 
   void reload_voice_tensor() {
     const std::string vk = std::string("kokoro/voices/") + voice_id_ + ".kokorovoice";
+    const auto vit = tts_files_.entries.find(vk);
+    if (vit != tts_files_.entries.end()) {
+      FileInformation& vf = vit->second;
+      if (vf.memory == nullptr || vf.memory_size == 0) {
+        vf.path = resolve_path_under_root(g2p_opt_.g2p_root, tts_map_path(tts_files_, vk));
+      }
+      const uint8_t* vb = nullptr;
+      size_t vz = 0;
+      vf.load(&vb, &vz);
+      read_kokorovoice_bytes(vb, vz, vk, voice_, voice_rows_, voice_cols_);
+      vf.free();
+      return;
+    }
     const auto path =
         resolve_path_under_root(g2p_opt_.g2p_root, tts_map_path(tts_files_, vk));
     if (!std::filesystem::is_regular_file(path)) {
@@ -686,6 +760,20 @@ struct MoonshineTTS::Impl {
 
   explicit Impl(std::string_view language, const MoonshineTTSOptions& opt_in) {
     MoonshineTTSOptions opt = opt_in;
+    for (const moonshine_tts::FileInformation& fi : opt.file_information) {
+      const std::string map_key = fi.path.generic_string();
+      if (map_key.empty()) {
+        continue;
+      }
+      const bool is_tts_only =
+          (map_key.size() >= 7 && map_key.compare(0, 7, "kokoro/") == 0) ||
+          (map_key.size() >= 6 && map_key.compare(0, 6, "piper/") == 0);
+      if (is_tts_only) {
+        opt.files.entries[map_key] = fi;
+      } else {
+        opt.g2p_options.files.entries[map_key] = fi;
+      }
+    }
     if (opt.use_bundled_cpp_g2p_data) {
       opt.g2p_options.g2p_root = builtin_cpp_data_root();
     } else if (opt.g2p_options.g2p_root.empty()) {

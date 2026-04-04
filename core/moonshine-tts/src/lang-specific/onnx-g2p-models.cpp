@@ -6,11 +6,13 @@
 #include "utf8-utils.h"
 
 #include <array>
+#include <cstddef>
 #include <cstdlib>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <nlohmann/json.h>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -37,6 +39,10 @@ Ort::Session open_session(Ort::Env& env, const std::filesystem::path& model_path
   const std::string u8 = model_path.string();
   return Ort::Session(env, u8.c_str(), make_session_options(use_cuda));
 #endif
+}
+
+Ort::Session open_session_memory(Ort::Env& env, const void* data, size_t len, bool use_cuda) {
+  return Ort::Session(env, data, len, make_session_options(use_cuda));
 }
 
 std::vector<int64_t> encode_chars_for_model(
@@ -105,6 +111,11 @@ void log_once_onnxruntime_version() {
 
 OnnxOovG2p::OnnxOovG2p(Ort::Env& env, const std::filesystem::path& model_onnx, bool use_cuda)
     : tab_(load_oov_tables(model_onnx)), session_(open_session(env, model_onnx, use_cuda)) {}
+
+OnnxOovG2p::OnnxOovG2p(Ort::Env& env, const void* model_onnx_bytes, size_t model_onnx_size,
+                       const nlohmann::json& onnx_config, bool use_cuda)
+    : tab_(load_oov_tables_from_json(onnx_config, "onnx-config (memory)")),
+      session_(open_session_memory(env, model_onnx_bytes, model_onnx_size, use_cuda)) {}
 
 std::vector<std::string> OnnxOovG2p::predict_phonemes(const std::string& word) {
   if (word.empty()) {
@@ -189,6 +200,11 @@ std::vector<std::string> OnnxOovG2p::predict_phonemes(const std::string& word) {
 OnnxHeteronymG2p::OnnxHeteronymG2p(Ort::Env& env, const std::filesystem::path& model_onnx,
                                    bool use_cuda)
     : tab_(load_heteronym_tables(model_onnx)), session_(open_session(env, model_onnx, use_cuda)) {}
+
+OnnxHeteronymG2p::OnnxHeteronymG2p(Ort::Env& env, const void* model_onnx_bytes, size_t model_onnx_size,
+                                   const nlohmann::json& onnx_config, bool use_cuda)
+    : tab_(load_heteronym_tables_from_json(onnx_config, "onnx-config (memory)")),
+      session_(open_session_memory(env, model_onnx_bytes, model_onnx_size, use_cuda)) {}
 
 std::string OnnxHeteronymG2p::disambiguate_ipa(const std::string& full_text,
                                                int span_s,

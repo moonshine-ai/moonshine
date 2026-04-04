@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <string>
+#include <utility>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -27,6 +28,14 @@ class FrenchRuleG2p : public RuleBasedG2p {
   /// Load ``word<TAB>IPA`` TSV and POS CSV inventory from *csv_dir* (if directory exists).
   explicit FrenchRuleG2p(std::filesystem::path dict_tsv, std::filesystem::path csv_dir);
   explicit FrenchRuleG2p(std::filesystem::path dict_tsv, std::filesystem::path csv_dir, Options options);
+  explicit FrenchRuleG2p(std::string dict_tsv_utf8, std::filesystem::path csv_dir, Options options);
+  explicit FrenchRuleG2p(std::string dict_tsv_utf8, std::filesystem::path csv_dir)
+      : FrenchRuleG2p(std::move(dict_tsv_utf8), std::move(csv_dir), Options{}) {}
+
+  /// POS lexicon CSVs as UTF-8 (keys: uppercase stems e.g. ``NOUN``, ``ADJ`` — same as on-disk ``.csv`` names).
+  explicit FrenchRuleG2p(std::string dict_tsv_utf8,
+                         std::unordered_map<std::string, std::string> pos_csv_utf8_by_cat_upper,
+                         Options options);
 
   static std::vector<std::string> dialect_ids();
 
