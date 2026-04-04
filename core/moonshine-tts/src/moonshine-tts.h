@@ -19,7 +19,8 @@ using MoonshineTTSFileInformation = FileInformation;
 
 /// Canonical keys for TTS asset paths (relative to ``g2p_options.g2p_root`` unless paths are absolute).
 /// When ``g2p_root`` is empty, ``MoonshineTTS`` uses the process current working directory as the root.
-inline constexpr std::string_view kTtsKokoroModelOnnxKey = "kokoro/model.ort";
+/// Canonical map / CDN key for the Kokoro ONNX graph (``.onnx``; ``resolve_disk_model_file_path`` still prefers a sibling ``.ort`` on disk when present).
+inline constexpr std::string_view kTtsKokoroModelOnnxKey = "kokoro/model.onnx";
 inline constexpr std::string_view kTtsKokoroConfigJsonKey = "kokoro/config.json";
 /// Optional explicit Piper ONNX model (``*.onnx``).
 inline constexpr std::string_view kTtsPiperOnnxKey = "piper/onnx";

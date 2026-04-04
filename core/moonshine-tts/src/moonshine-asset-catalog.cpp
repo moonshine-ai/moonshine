@@ -37,8 +37,7 @@ std::string hyphen_to_underscore(std::string s) {
 std::vector<std::string> english_g2p_keys() {
   return {
       std::string(kG2pEnglishDictKey),
-      std::string(kG2pEnglishHeteronymModelKey),
-      std::string(kG2pEnglishHeteronymOnnxConfigKey),
+      std::string(kG2pEnglishG2pConfigKey),
       std::string(kG2pEnglishOovModelKey),
       std::string(kG2pEnglishOovOnnxConfigKey),
   };
@@ -67,14 +66,8 @@ std::vector<std::string> japanese_g2p_keys() {
 }
 
 std::vector<std::string> korean_g2p_keys() {
-  return {
-      std::string(kG2pKoreanDictKey),
-      std::string(kG2pKoreanOnnxDirKey),
-      std::string(kG2pKoreanOnnxMetaKey),
-      std::string(kG2pKoreanOnnxVocabKey),
-      std::string(kG2pKoreanOnnxTokenizerConfigKey),
-      std::string(kG2pKoreanOnnxModelKey),
-  };
+  // Rule-based Korean G2P uses the lexicon only (see ``try_korean``). Morph ONNX is test/tooling-only.
+  return {std::string(kG2pKoreanDictKey)};
 }
 
 std::vector<std::string> arabic_g2p_keys() {

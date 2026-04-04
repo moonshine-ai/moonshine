@@ -91,9 +91,7 @@ bool is_known_g2p_option(std::string_view key) {
       "hindi_with_stress",
       "hindi_expand_cardinal_digits",
       "english_dict_path",
-      "heteronym_onnx_override",
       "oov_onnx_override",
-      "heteronym_onnx_config",
       "oov_onnx_config",
       "allow_builtin_g2p_data",
   };
@@ -296,12 +294,8 @@ void MoonshineG2POptions::parse_options(
       hindi_expand_cardinal_digits = bool_from_string(v);
     } else if (key == "english_dict_path") {
       set_canonical_file(files, kG2pEnglishDictKey, value);
-    } else if (key == "heteronym_onnx_override") {
-      set_override_file(files, kG2pHeteronymOnnxOverrideKey, value);
     } else if (key == "oov_onnx_override") {
       set_override_file(files, kG2pOovOnnxOverrideKey, value);
-    } else if (key == "heteronym_onnx_config") {
-      set_override_file(files, kG2pHeteronymOnnxConfigOverrideKey, value);
     } else if (key == "oov_onnx_config") {
       set_override_file(files, kG2pOovOnnxConfigOverrideKey, value);
     } else if (key == "allow_builtin_g2p_data") {

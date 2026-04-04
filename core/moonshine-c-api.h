@@ -638,7 +638,7 @@ MOONSHINE_EXPORT void moonshine_free_tts_synthesizer(
    ``languages`` is comma-separated CLI tags (same as ``moonshine_create_*`` ``language``);
    an empty string (or NULL) means all known languages (union of keys).
    ``options`` / ``options_count``: same ``moonshine_option_t`` entries as grapheme phonemizer / G2P
-   (``g2p_root``, ``spanish_narrow_obstruents``, ``heteronym_onnx_override``, …). TTS-only keys
+   (``g2p_root``, ``spanish_narrow_obstruents``, ``oov_onnx_override``, …). TTS-only keys
    (``voice``, ``vocoder_engine``, Piper/Kokoro paths) are ignored here. Non-empty values for in-memory
    override keys add those canonical key names to the list.
    On success, writes a comma-separated list to ``*out_dependencies_json`` and returns
@@ -681,10 +681,9 @@ MOONSHINE_EXPORT int32_t moonshine_text_to_speech(
    API (for example ``en_us/dict_filtered_heteronyms.tsv``,
    ``zh_hans/roberta_chinese_base_upos_onnx/meta.json``,
    ``zh_hans/roberta_chinese_base_upos_onnx/model.onnx``,
-   ``en_us/heteronym/model.onnx``, ``en_us/heteronym/onnx-config.json``,
-   ``en_us/oov/model.onnx``, ``en_us/oov/onnx-config.json``). Japanese, Korean,
-   and Arabic tok-POS / diacritizer bundles use the same pattern under their
-   respective directory keys (``ja/...``, ``ko/...``, ``ar_msa/...``). If an ONNX
+   ``en_us/g2p-config.json``, ``en_us/oov/model.onnx``, ``en_us/oov/onnx-config.json``). Japanese and Arabic
+   tok-POS / diacritizer bundles use the same pattern under ``ja/...`` and
+   ``ar_msa/...``. Korean rule G2P uses ``ko/dict.tsv`` only. If an ONNX
    model uses external data files (e.g. ``model.onnx.data``), those must sit
    beside the ``.onnx`` on disk so the runtime can open them.
 */
@@ -705,11 +704,10 @@ MOONSHINE_EXPORT int32_t moonshine_create_grapheme_to_phonemizer_from_files(
    path relative to ``g2p_root``, like path-only map entries.
 
    Register every file the engine needs: language lexicon ``dict.tsv`` paths,
-   English ``g2p-config.json`` / ``homograph_index.json`` when applicable, and
+   English ``g2p-config.json`` and OOV ONNX keys under ``en_us/oov/``, and
    for ONNX bundles the ``meta.json``, ``vocab.txt``, ``tokenizer_config.json``,
-   and ``model.onnx`` keys under the bundle directory key. English heteronym /
-   OOV overrides use ``heteronym_onnx_override`` / ``oov_onnx_override`` for the
-   ``.onnx`` bytes and ``heteronym_onnx_config`` / ``oov_onnx_config`` for the
+   and ``model.onnx`` keys under the bundle directory key. English OOV overrides
+   use ``oov_onnx_override`` for the ``.onnx`` bytes and ``oov_onnx_config`` for the
    merged JSON config UTF-8 text. Models split across ``model.onnx`` plus
    external weight files must be supplied as a single self-contained ``.onnx``
    buffer (or remain on disk via the path fallback) so the runtime does not

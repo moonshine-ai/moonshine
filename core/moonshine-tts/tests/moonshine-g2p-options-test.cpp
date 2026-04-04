@@ -13,7 +13,6 @@ using moonshine_tts::kG2pEnglishDictKey;
 using moonshine_tts::kG2pFrenchCsvDirKey;
 using moonshine_tts::kG2pFrenchDictKey;
 using moonshine_tts::kG2pGermanDictKey;
-using moonshine_tts::kG2pHeteronymOnnxOverrideKey;
 using moonshine_tts::kG2pOovOnnxOverrideKey;
 using moonshine_tts::kG2pPortugueseDictOverrideKey;
 
@@ -25,7 +24,7 @@ TEST_CASE("MoonshineG2POptions default constructor seeds canonical file keys") {
   CHECK(o.relative_asset_path(kG2pFrenchCsvDirKey) == std::filesystem::path{kG2pFrenchCsvDirKey});
   CHECK(o.relative_asset_path(kG2pEnglishDictKey) == std::filesystem::path{kG2pEnglishDictKey});
   CHECK_FALSE(o.optional_override_path(kG2pPortugueseDictOverrideKey).has_value());
-  CHECK_FALSE(o.optional_override_path(kG2pHeteronymOnnxOverrideKey).has_value());
+  CHECK_FALSE(o.optional_override_path(kG2pOovOnnxOverrideKey).has_value());
 }
 
 TEST_CASE("MoonshineG2POptions relative_asset_path falls back when key absent") {
@@ -92,7 +91,6 @@ TEST_CASE("MoonshineG2POptions parse_options accepts every known option") {
   all.emplace_back("hindi_with_stress", "true");
   all.emplace_back("hindi_expand_cardinal_digits", "true");
   all.emplace_back("english_dict_path", "custom/en.tsv");
-  all.emplace_back("heteronym_onnx_override", "custom/het.onnx");
   all.emplace_back("oov_onnx_override", "custom/oov.onnx");
 
   CHECK_NOTHROW(o.parse_options(all));
@@ -104,8 +102,8 @@ TEST_CASE("MoonshineG2POptions parse_options accepts every known option") {
   CHECK(o.relative_asset_path(kG2pFrenchCsvDirKey) == std::filesystem::path{"custom/frdir"});
   CHECK(*o.optional_override_path(kG2pPortugueseDictOverrideKey) ==
         std::filesystem::path{"custom/pt.tsv"});
-  CHECK(*o.optional_override_path(kG2pHeteronymOnnxOverrideKey) ==
-        std::filesystem::path{"custom/het.onnx"});
+  CHECK(*o.optional_override_path(kG2pOovOnnxOverrideKey) ==
+        std::filesystem::path{"custom/oov.onnx"});
 }
 
 TEST_CASE("MoonshineG2POptions parse_options empty path clears canonical entry") {

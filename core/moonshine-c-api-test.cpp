@@ -689,12 +689,12 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
 
   SUBCASE("g2p-appends-override-key-when-option-set") {
     const moonshine_option_t opts[] = {
-        {"heteronym_onnx_override", "/nonexistent/heteronym.onnx"},
+        {"oov_onnx_override", "/nonexistent/oov.onnx"},
     };
     char* out = nullptr;
     REQUIRE(moonshine_get_g2p_dependencies("de", opts, 1, &out) == MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
-    CHECK(std::string(out).find("heteronym_onnx_override") != std::string::npos);
+    CHECK(std::string(out).find("oov_onnx_override") != std::string::npos);
     std::free(out);
   }
 
@@ -706,7 +706,7 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     CHECK(json.size() >= 2);
     CHECK(json.front() == '[');
     CHECK(json.back() == ']');
-    CHECK(json.find("\"kokoro/model.ort\"") != std::string::npos);
+    CHECK(json.find("\"kokoro/model.onnx\"") != std::string::npos);
     CHECK(json.find("\"en_us/dict_filtered_heteronyms.tsv\"") != std::string::npos);
     std::free(out);
   }
@@ -717,7 +717,7 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.front() == '[');
-    CHECK(json.find("\"kokoro/model.ort\"") != std::string::npos);
+    CHECK(json.find("\"kokoro/model.onnx\"") != std::string::npos);
     std::free(out);
   }
 
@@ -748,7 +748,7 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.find("piper-voices") != std::string::npos);
-    CHECK(json.find("kokoro/model.ort") == std::string::npos);
+    CHECK(json.find("kokoro/model.onnx") == std::string::npos);
     std::free(out);
   }
 
@@ -760,7 +760,7 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     REQUIRE(moonshine_get_tts_dependencies("fr", opts, 1, &out) == MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
-    CHECK(json.find("\"kokoro/model.ort\"") != std::string::npos);
+    CHECK(json.find("\"kokoro/model.onnx\"") != std::string::npos);
     CHECK(json.find("piper-voices") == std::string::npos);
     std::free(out);
   }

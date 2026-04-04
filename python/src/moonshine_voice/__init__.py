@@ -31,6 +31,15 @@ from moonshine_voice.download import (
     supported_embedding_models,
     supported_embedding_models_friendly,
     get_embedding_model_variants,
+    # TTS / G2P asset helpers
+    TTS_CDN_BASE_URL,
+    cdn_url_for_tts_asset_key,
+    download_g2p_assets,
+    download_tts_assets,
+    is_downloadable_tts_asset_key,
+    list_g2p_dependency_keys,
+    list_tts_dependency_keys,
+    normalize_moonshine_language_tag,
 )
 
 from moonshine_voice.utils import (
@@ -46,11 +55,14 @@ __version__ = "0.1.0"
 _transcriber_imported = False
 _mic_transcriber_imported = False
 _intent_recognizer_imported = False
+_tts_imported = False
+_g2p_imported = False
 
 
 def __getattr__(name):
     """Lazy import for transcriber, mic_transcriber, and intent_recognizer modules."""
     global _transcriber_imported, _mic_transcriber_imported, _intent_recognizer_imported
+    global _tts_imported, _g2p_imported
 
     # Lazy import transcriber module
     if name in (
@@ -97,6 +109,23 @@ def __getattr__(name):
 
             globals()["MicTranscriber"] = MicTranscriber
             _mic_transcriber_imported = True
+        return globals()[name]
+
+    # Lazy import TTS / G2P
+    if name == "TextToSpeech":
+        if not _tts_imported:
+            from moonshine_voice.tts import TextToSpeech
+
+            globals()["TextToSpeech"] = TextToSpeech
+            _tts_imported = True
+        return globals()[name]
+
+    if name == "GraphemeToPhonemizer":
+        if not _g2p_imported:
+            from moonshine_voice.g2p import GraphemeToPhonemizer
+
+            globals()["GraphemeToPhonemizer"] = GraphemeToPhonemizer
+            _g2p_imported = True
         return globals()[name]
 
     # Lazy import intent_recognizer module
@@ -151,4 +180,15 @@ __all__ = [
     "supported_embedding_models",
     "supported_embedding_models_friendly",
     "get_embedding_model_variants",
+    # TTS / G2P
+    "TextToSpeech",
+    "GraphemeToPhonemizer",
+    "TTS_CDN_BASE_URL",
+    "cdn_url_for_tts_asset_key",
+    "download_tts_assets",
+    "download_g2p_assets",
+    "is_downloadable_tts_asset_key",
+    "list_tts_dependency_keys",
+    "list_g2p_dependency_keys",
+    "normalize_moonshine_language_tag",
 ]
