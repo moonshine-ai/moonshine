@@ -439,12 +439,11 @@ TEST_CASE("moonshine-test-v2") {
     }
     const std::string model_root_str = data_root->string();
     const moonshine_option_t options[] = {
-        {"engine", "auto"},
         {"model_root", model_root_str.c_str()},
         {"kokoro_dir", ""},
         {"piper_voices_dir", ""},
         {"lang", "en_us"},
-        {"voice", "af_heart"},
+        {"voice", "kokoro_af_heart"},
         {"speed", "1.0"},
         {"output", "out.wav"},
     };
@@ -486,15 +485,15 @@ TEST_CASE("moonshine-test-v2") {
     const uint8_t* mem_ptrs[2] = {onnx_data.data(), json_data.data()};
     const uint64_t mem_sizes[2] = {static_cast<uint64_t>(onnx_data.size()),
                                    static_cast<uint64_t>(json_data.size())};
-    const std::string voice_stem = onnx_path.filename().string();
+    const std::string voice_stem = onnx_path.stem().string();
     const auto g2p_root = find_moonshine_tts_data_dir();
     if (!g2p_root) {
       return;
     }
     const std::string g2p_root_str = g2p_root->string();
+    const std::string piper_voice = std::string("piper_") + voice_stem;
     const moonshine_option_t opts[] = {
-        {"engine", "piper"},
-        {"voice", voice_stem.c_str()},
+        {"voice", piper_voice.c_str()},
         {"speed", "1.0"},
         {"model_root", g2p_root_str.c_str()},
     };
@@ -643,12 +642,14 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
   SUBCASE("null-output-pointer") {
     CHECK(moonshine_get_g2p_dependencies("en_us", nullptr, 0, nullptr) == MOONSHINE_ERROR_INVALID_ARGUMENT);
     CHECK(moonshine_get_tts_dependencies("en_us", nullptr, 0, nullptr) == MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(moonshine_get_tts_voices("en_us", nullptr, 0, nullptr) == MOONSHINE_ERROR_INVALID_ARGUMENT);
   }
 
   SUBCASE("options-count-without-options-pointer") {
     char* out = nullptr;
     CHECK(moonshine_get_g2p_dependencies("en_us", nullptr, 1, &out) == MOONSHINE_ERROR_INVALID_ARGUMENT);
     CHECK(moonshine_get_tts_dependencies("en_us", nullptr, 1, &out) == MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(moonshine_get_tts_voices("en_us", nullptr, 1, &out) == MOONSHINE_ERROR_INVALID_ARGUMENT);
   }
 
   SUBCASE("g2p-empty-means-all-languages") {
@@ -741,7 +742,7 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
 
   SUBCASE("tts-piper-engine-on-en_us") {
     const moonshine_option_t opts[] = {
-        {"vocoder_engine", "piper"},
+        {"voice", "piper_en_us-test-voice"},
     };
     char* out = nullptr;
     REQUIRE(moonshine_get_tts_dependencies("en_us", opts, 1, &out) == MOONSHINE_ERROR_NONE);
@@ -754,7 +755,7 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
 
   SUBCASE("tts-kokoro-engine-on-fr") {
     const moonshine_option_t opts[] = {
-        {"vocoder_engine", "kokoro"},
+        {"voice", "kokoro_ff_siwis"},
     };
     char* out = nullptr;
     REQUIRE(moonshine_get_tts_dependencies("fr", opts, 1, &out) == MOONSHINE_ERROR_NONE);
@@ -767,7 +768,7 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
 
   SUBCASE("tts-explicit-piper-onnx-map-keys") {
     const moonshine_option_t opts[] = {
-        {"vocoder_engine", "piper"},
+        {"voice", "piper_custom"},
         {"piper_onnx", "custom/model.onnx"},
     };
     char* out = nullptr;
@@ -781,14 +782,74 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
 
   SUBCASE("tts-piper-voice-selects-onnx-basename") {
     const moonshine_option_t opts[] = {
-        {"vocoder_engine", "piper"},
-        {"voice", "de_DE-thorsten-medium"},
+        {"voice", "piper_de_DE-thorsten-medium"},
     };
     char* out = nullptr;
-    REQUIRE(moonshine_get_tts_dependencies("de", opts, 2, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_tts_dependencies("de", opts, 1, &out) == MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.find("de_DE-thorsten-medium.onnx") != std::string::npos);
+    std::free(out);
+  }
+
+  SUBCASE("tts-voices-json-object-en_us") {
+    const auto data_root = find_moonshine_tts_data_dir();
+    if (!data_root) {
+      MESSAGE("skip: moonshine-tts data directory not found");
+      return;
+    }
+    const std::string g2p_root_str = data_root->string();
+    const moonshine_option_t opts[] = {
+        {"g2p_root", g2p_root_str.c_str()},
+    };
+    char* out = nullptr;
+    REQUIRE(moonshine_get_tts_voices("en_us", opts, 1, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string json(out);
+    CHECK(json.front() == '{');
+    CHECK(json.back() == '}');
+    CHECK(json.find("\"en_us\"") != std::string::npos);
+    CHECK(json.find("\"kokoro_af_heart\"") != std::string::npos);
+    CHECK(json.find("\"state\":\"found\"") != std::string::npos);
+    std::free(out);
+  }
+
+  SUBCASE("tts-voices-kokoro-reports-missing-without-assets") {
+    const moonshine_option_t opts[] = {
+        {"g2p_root", "/tmp"},
+    };
+    char* out = nullptr;
+    REQUIRE(moonshine_get_tts_voices("en_us", opts, 1, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string json(out);
+    CHECK(json.find("\"state\":\"missing\"") != std::string::npos);
+    CHECK(json.find("\"kokoro_af_heart\"") != std::string::npos);
+    std::free(out);
+  }
+
+  SUBCASE("tts-voices-unsupported-language") {
+    char* out = nullptr;
+    CHECK(moonshine_get_tts_voices("zzz_not_a_supported_language", nullptr, 0, &out) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(out == nullptr);
+  }
+
+  SUBCASE("tts-voices-piper-de-includes-thorsten-stem") {
+    const auto data_root = find_moonshine_tts_data_dir();
+    if (!data_root) {
+      MESSAGE("skip: moonshine-tts data directory not found");
+      return;
+    }
+    const std::string g2p_root_str = data_root->string();
+    const moonshine_option_t opts[] = {
+        {"g2p_root", g2p_root_str.c_str()},
+    };
+    char* out = nullptr;
+    REQUIRE(moonshine_get_tts_voices("de", opts, 1, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string json(out);
+    CHECK(json.find("\"piper_de_DE-thorsten-medium\"") != std::string::npos);
+    CHECK(json.find("\"state\":\"found\"") != std::string::npos);
     std::free(out);
   }
 }

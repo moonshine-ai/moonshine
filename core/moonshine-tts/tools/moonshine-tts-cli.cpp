@@ -15,13 +15,14 @@ namespace {
 void usage(const char* argv0) {
   std::cerr
       << "Usage: " << argv0
-      << " [--engine kokoro|piper|auto] [--model-root DIR] [--kokoro-dir DIR] "
+      << " [--model-root DIR] [--kokoro-dir DIR] "
          "[--piper-onnx PATH.onnx] [--piper-onnx-json PATH.onnx.json] [--piper-voices-dir DIR] "
          "[--piper-voices-json-dir DIR] "
          "[--lang LANG] [--voice ID] [--speed N] [-o out.wav] [--text \"...\"] [TEXT...]\n"
       << "  G2P + layout: if ``--model-root`` is omitted, the process current working directory is the "
          "asset root (``kokoro/``, ``ja/``, ``en_us/``, …); relative paths resolve from there only.\n"
-      << "  engine auto (default): Kokoro when the language is supported, otherwise Piper.\n"
+      << "  Default vocoder: Kokoro when the language is supported, otherwise Piper (same as "
+         "``MoonshineTTSOptions::vocoder_engine=auto``).\n"
       << "  kokoro: ``kokoro/`` under model root (or ``--kokoro-dir`` override).\n"
       << "  piper: ``<subdir>/piper-voices`` under model root (or ``--piper-voices-dir`` / "
          "``--piper-voices-json-dir`` for split ONNX vs JSON trees, or ``--piper-onnx`` + "
@@ -31,8 +32,10 @@ void usage(const char* argv0) {
       << "  Export Kokoro voices: python scripts/export_kokoro_voice_for_cpp.py --voices-dir voices/\n"
       << "  Piper voices: python scripts/download_piper_voices_for_g2p.py (copy/sync to <model-root>/*/piper-voices).\n"
       << "  --lang: Kokoro supports en_us, es, …, fr, ja, zh (and Spanish dialect ids); other tags use Piper "
-         "when engine is auto or piper.\n"
-      << "  --voice: Kokoro voice id (e.g. af_heart) or Piper ONNX stem/basename.\n"
+         "by default.\n"
+      << "  --voice: prefix with ``kokoro_`` or ``piper_`` to choose the backend, then the Kokoro id or Piper ONNX "
+         "stem (e.g. ``kokoro_af_heart``, ``piper_de_DE-thorsten-medium``). Without a prefix, the default backend "
+         "uses the id/stem as today (e.g. ``af_heart`` with Kokoro on en_us).\n"
       << "  Default output: out.wav. Default text if none: \"Hello world\".\n";
 }
 

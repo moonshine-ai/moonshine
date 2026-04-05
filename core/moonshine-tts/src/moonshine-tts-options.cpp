@@ -3,12 +3,30 @@
 #include "string-utils.h"
 
 #include <stdexcept>
+#include <string_view>
 
 namespace moonshine_tts {
 
 MoonshineTTSOptions::MoonshineTTSOptions() {
   files.set_path(kTtsKokoroModelOnnxKey, std::filesystem::path{kTtsKokoroModelOnnxKey});
   files.set_path(kTtsKokoroConfigJsonKey, std::filesystem::path{kTtsKokoroConfigJsonKey});
+}
+
+void MoonshineTTSOptions::apply_voice_engine_prefix() {
+  voice = trim(voice);
+  if (voice.empty()) {
+    return;
+  }
+  const std::string low = to_lowercase(voice);
+  static constexpr std::string_view k_k = "kokoro_";
+  static constexpr std::string_view k_p = "piper_";
+  if (low.size() >= k_k.size() && low.compare(0, k_k.size(), k_k) == 0) {
+    vocoder_engine = "kokoro";
+    voice = trim(voice.substr(k_k.size()));
+  } else if (low.size() >= k_p.size() && low.compare(0, k_p.size(), k_p) == 0) {
+    vocoder_engine = "piper";
+    voice = trim(voice.substr(k_p.size()));
+  }
 }
 
 std::filesystem::path MoonshineTTSOptions::tts_relative_path(std::string_view canonical_key) const {
@@ -105,7 +123,8 @@ void MoonshineTTSOptions::parse_options(
         files.set_path(kTtsPiperVoicesJsonKey, std::filesystem::path(t));
       }
     } else if (key == "engine" || key == "vocoder_engine") {
-      vocoder_engine = trim(value);
+      // Deprecated: vocoder is selected via voice prefix (kokoro_* / piper_*). Ignored for compatibility.
+      (void)value;
     } else if (key == "output" || key == "o") {
       output_path = std::filesystem::path(trim(value));
     } else if (key == "piper_normalize_audio") {
@@ -126,6 +145,7 @@ void MoonshineTTSOptions::parse_options(
   }
 
   g2p_options.parse_options(g2p_pairs);
+  apply_voice_engine_prefix();
 }
 
 }  // namespace moonshine_tts

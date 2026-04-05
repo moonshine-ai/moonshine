@@ -10,6 +10,9 @@ from moonshine_voice.errors import (
     MoonshineUnknownError,
     MoonshineInvalidHandleError,
     MoonshineInvalidArgumentError,
+    MoonshineAudioOutputError,
+    MoonshineTtsLanguageError,
+    MoonshineTtsVoiceError,
 )
 
 from moonshine_voice.moonshine_api import (
@@ -33,6 +36,7 @@ from moonshine_voice.download import (
     get_embedding_model_variants,
     # TTS / G2P asset helpers
     TTS_CDN_BASE_URL,
+    tts_asset_cache_path,
     cdn_url_for_tts_asset_key,
     download_g2p_assets,
     download_tts_assets,
@@ -40,6 +44,14 @@ from moonshine_voice.download import (
     list_g2p_dependency_keys,
     list_tts_dependency_keys,
     normalize_moonshine_language_tag,
+    TtsVoiceEntry,
+    TtsVoicesByAvailability,
+    get_tts_voice_catalog,
+    list_tts_languages,
+    list_tts_voices,
+    validate_tts_language,
+    validate_tts_voice_downloaded,
+    ensure_tts_voice_downloaded,
 )
 
 from moonshine_voice.utils import (
@@ -166,6 +178,9 @@ __all__ = [
     "MoonshineUnknownError",
     "MoonshineInvalidHandleError",
     "MoonshineInvalidArgumentError",
+    "MoonshineAudioOutputError",
+    "MoonshineTtsLanguageError",
+    "MoonshineTtsVoiceError",
     "get_assets_path",
     "get_model_path",
     "load_wav_file",
@@ -184,6 +199,7 @@ __all__ = [
     "TextToSpeech",
     "GraphemeToPhonemizer",
     "TTS_CDN_BASE_URL",
+    "tts_asset_cache_path",
     "cdn_url_for_tts_asset_key",
     "download_tts_assets",
     "download_g2p_assets",
@@ -191,4 +207,12 @@ __all__ = [
     "list_tts_dependency_keys",
     "list_g2p_dependency_keys",
     "normalize_moonshine_language_tag",
+    "TtsVoiceEntry",
+    "TtsVoicesByAvailability",
+    "get_tts_voice_catalog",
+    "list_tts_languages",
+    "list_tts_voices",
+    "validate_tts_language",
+    "validate_tts_voice_downloaded",
+    "ensure_tts_voice_downloaded",
 ]

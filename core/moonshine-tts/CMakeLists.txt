@@ -155,6 +155,7 @@ if(MOONSHINE_TTS_BUILD_ONNX)
     src/lang-specific/arabic.cpp
     src/moonshine-tts.cpp
     src/piper-tts.cpp
+    src/piper-voice-catalog.cpp
   )
   target_link_libraries(moonshine_tts_ort PUBLIC moonshine_tts_core)
   moonshine_tts_link_onnxruntime(moonshine_tts_ort)

@@ -20,7 +20,9 @@ std::optional<std::vector<std::string>> moonshine_asset_catalog_g2p_dependency_k
 /// Sorted union of all G2P dependency keys (for ``languages`` empty / all).
 std::vector<std::string> moonshine_asset_catalog_all_g2p_dependency_keys_union();
 
-/// Tags that appear in the G2P dependency map (for TTS vocoder union and tooling).
+/// Canonical registered language tags (one per locale, ``ll-RR`` / ``ll-Script`` style), sorted.
+/// Client aliases (e.g. ``ko``, ``ar``) are accepted by ``moonshine_asset_catalog_g2p_dependency_keys`` but
+/// are not listed here.
 std::vector<std::string> moonshine_asset_catalog_all_registered_language_tags();
 
 }  // namespace moonshine_tts

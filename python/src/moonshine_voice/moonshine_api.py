@@ -318,6 +318,51 @@ def moonshine_get_tts_dependencies_string(
         moonshine_free(addr)
 
 
+def moonshine_try_get_tts_voices(
+    languages: Optional[str] = None,
+    options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
+) -> Tuple[int, str]:
+    """
+    Call ``moonshine_get_tts_voices`` without raising.
+
+    Returns ``(error_code, json_text)``. On success, ``error_code`` is ``MOONSHINE_ERROR_NONE`` and
+    ``json_text`` is the JSON object. On failure, ``json_text`` is ``""``.
+    """
+    lib = _MoonshineLib().lib
+    opt_arr, opt_n, opt_keep = moonshine_options_array(options)
+    lang_b = languages.encode("utf-8") if languages is not None else None
+    out_p = ctypes.c_void_p()
+    err = int(lib.moonshine_get_tts_voices(lang_b, opt_arr, opt_n, ctypes.byref(out_p)))
+    addr = out_p.value
+    if err != MOONSHINE_ERROR_NONE:
+        if addr:
+            moonshine_free(addr)
+        return err, ""
+    if not addr:
+        return err, "{}"
+    try:
+        text = ctypes.string_at(addr).decode("utf-8")
+        return err, text if text else "{}"
+    finally:
+        moonshine_free(addr)
+
+
+def moonshine_get_tts_voices_string(
+    languages: Optional[str] = None,
+    options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
+) -> str:
+    """Call ``moonshine_get_tts_voices`` and return the JSON object string (UTF-8)."""
+    err, text = moonshine_try_get_tts_voices(languages, options)
+    if err != MOONSHINE_ERROR_NONE:
+        lib = _MoonshineLib().lib
+        raise MoonshineError(
+            lib.moonshine_error_to_string(err).decode("utf-8")
+            if lib.moonshine_error_to_string(err)
+            else f"moonshine_get_tts_voices failed ({err})"
+        )
+    return text if text else "{}"
+
+
 def moonshine_text_to_speech_samples(
     tts_synthesizer_handle: int,
     text: str,
@@ -622,6 +667,14 @@ class _MoonshineLib:
 
         lib.moonshine_get_tts_dependencies.restype = ctypes.c_int32
         lib.moonshine_get_tts_dependencies.argtypes = [
+            ctypes.c_char_p,
+            ctypes.POINTER(TranscriberOptionC),
+            ctypes.c_uint64,
+            ctypes.POINTER(ctypes.c_void_p),
+        ]
+
+        lib.moonshine_get_tts_voices.restype = ctypes.c_int32
+        lib.moonshine_get_tts_voices.argtypes = [
             ctypes.c_char_p,
             ctypes.POINTER(TranscriberOptionC),
             ctypes.c_uint64,

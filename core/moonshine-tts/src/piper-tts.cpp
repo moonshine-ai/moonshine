@@ -1,5 +1,6 @@
 #include "piper-tts.h"
 
+#include "piper-voice-catalog.h"
 #include "g2p-path.h"
 #include "ort-onnx-external-data.h"
 #include "ipa-postprocess.h"
@@ -20,6 +21,7 @@ extern "C" {
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -32,6 +34,8 @@ std::string normalize_lang_key(std::string_view raw) {
   std::string s = trim_ascii_ws_copy(raw);
   for (char& c : s) {
     if (c == ' ') {
+      c = '_';
+    } else if (c == '-') {
       c = '_';
     } else if (c >= 'A' && c <= 'Z') {
       c = static_cast<char>(c - 'A' + 'a');
@@ -64,6 +68,8 @@ struct PiperLangRow {
 };
 
 const PiperLangRow* lookup_piper_lang_row(std::string_view k) {
+  // Keys are mostly ``ll`` or ``ll_rr`` (underscore). Canonical API tags like ``hi-in`` / ``de-de``
+  // normalize to ``hi_in`` / ``de_de``; collapse those to the primary map key when equivalent.
   static const std::unordered_map<std::string, PiperLangRow> m{
       {"en_us", {"en_us", "en_us", "en_US-lessac-medium.onnx"}},
       {"en-us", {"en_us", "en_us", "en_US-lessac-medium.onnx"}},
@@ -96,12 +102,20 @@ const PiperLangRow* lookup_piper_lang_row(std::string_view k) {
       {"ko_kr", {"ko", "ko", "ko_KR-melotts-medium.onnx"}},
       {"korean", {"ko", "ko", "ko_KR-melotts-medium.onnx"}},
   };
-  const std::string key(k);
-  const auto it = m.find(key);
-  if (it == m.end()) {
-    return nullptr;
+  const std::string key = normalize_lang_key(k);
+  if (const auto it = m.find(key); it != m.end()) {
+    return &it->second;
   }
-  return &it->second;
+  static const std::unordered_map<std::string, std::string> kBcp47UnderscoreToPrimary{
+      {"de_de", "de"}, {"fr_fr", "fr"}, {"hi_in", "hi"}, {"it_it", "it"}, {"nl_nl", "nl"},
+      {"ru_ru", "ru"}, {"vi_vn", "vi"}, {"uk_ua", "uk"}, {"tr_tr", "tr"},
+  };
+  if (const auto c = kBcp47UnderscoreToPrimary.find(key); c != kBcp47UnderscoreToPrimary.end()) {
+    if (const auto it2 = m.find(c->second); it2 != m.end()) {
+      return &it2->second;
+    }
+  }
+  return nullptr;
 }
 
 std::string piper_ipa_norm_lang_key(const std::string& lk, std::string_view data_subdir) {
@@ -120,7 +134,7 @@ std::string piper_ipa_norm_lang_key(const std::string& lk, std::string_view data
 void resolve_piper_lang(const std::string& lk, const MoonshineG2POptions& opt, std::string& g2p_dialect,
                         std::string& data_subdir, std::string& default_onnx) {
   const std::string k = normalize_lang_key(lk);
-  if (k == "ja" || k == "jp") {
+  if (k == "ja" || k == "jp" || k == "ja_jp") {
     throw std::runtime_error(
         "PiperTTS: Japanese is not available as a Piper ONNX bundle here; use MoonshineTTS (Kokoro).");
   }
@@ -629,6 +643,79 @@ std::vector<float> PiperTTS::synthesize(std::string_view text) { return impl_->s
 
 std::vector<float> PiperTTS::synthesize_phoneme_ids(const std::vector<int64_t>& phoneme_ids) {
   return impl_->synthesize_phoneme_ids(phoneme_ids);
+}
+
+std::vector<std::pair<std::string, bool>> piper_list_voices_with_availability(const PiperTTSOptions& opt) {
+  static const std::string k_piper_onnx("piper/onnx");
+  MoonshineG2POptions g2p_opt = opt.g2p_options;
+  if (g2p_opt.g2p_root.empty()) {
+    g2p_opt.g2p_root = std::filesystem::current_path();
+  }
+  const bool explicit_onnx_file = !opt.explicit_onnx_path.empty();
+  if (explicit_onnx_file) {
+    const std::filesystem::path onnx_path = resolve_path_under_root(g2p_opt.g2p_root, opt.explicit_onnx_path);
+    const std::string stem = onnx_path.stem().string();
+    if (std::filesystem::is_regular_file(onnx_path)) {
+      return {{stem, true}};
+    }
+    const auto oit = opt.tts_asset_files.entries.find(k_piper_onnx);
+    if (oit != opt.tts_asset_files.entries.end() && oit->second.memory != nullptr && oit->second.memory_size > 0) {
+      return {{stem, true}};
+    }
+    return {{stem, false}};
+  }
+  // No Piper ONNX layout for Japanese (Kokoro-only); avoid resolve_piper_lang throwing when callers
+  // merge Piper + Kokoro voice lists (e.g. ``moonshine_get_tts_voices`` for ``ja`` / ``ja-jp``).
+  {
+    const std::string lk = normalize_lang_key(opt.lang);
+    if (lk == "ja" || lk == "jp" || lk == "ja_jp") {
+      return {};
+    }
+  }
+  std::filesystem::path voices_dir;
+  std::string default_onnx;
+  std::string g2p_dialect;
+  std::string data_subdir;
+  resolve_piper_lang(opt.lang, g2p_opt, g2p_dialect, data_subdir, default_onnx);
+  (void)g2p_dialect;
+  if (!opt.voices_dir.empty()) {
+    voices_dir = opt.voices_dir;
+  } else {
+    voices_dir = g2p_opt.g2p_root / data_subdir / "piper-voices";
+  }
+  std::map<std::string, bool> by_id;
+  const auto onnx_present = [&](const std::string& stem) {
+    return std::filesystem::is_regular_file(voices_dir / (stem + ".onnx"));
+  };
+  const std::vector<std::string>& bundled = piper_bundled_voice_stems_for_data_subdir(data_subdir);
+  if (!bundled.empty()) {
+    for (const std::string& stem : bundled) {
+      by_id[stem] = onnx_present(stem);
+    }
+  } else {
+    const std::filesystem::path p(default_onnx);
+    const std::string def_stem = p.stem().string();
+    by_id[def_stem] = onnx_present(def_stem);
+  }
+  if (std::filesystem::is_directory(voices_dir)) {
+    for (const auto& ent : std::filesystem::directory_iterator(voices_dir)) {
+      if (!ent.is_regular_file()) {
+        continue;
+      }
+      const std::filesystem::path& fp = ent.path();
+      if (fp.extension() != ".onnx") {
+        continue;
+      }
+      const std::string stem = fp.stem().string();
+      by_id[stem] = onnx_present(stem);
+    }
+  }
+  std::vector<std::pair<std::string, bool>> out;
+  out.reserve(by_id.size());
+  for (const auto& pr : by_id) {
+    out.emplace_back(pr.first, pr.second);
+  }
+  return out;
 }
 
 bool piper_default_model_bundle_relative_paths(std::string_view lang_cli, const MoonshineG2POptions& opt,

@@ -929,6 +929,44 @@ std::string json_flat_string_array(const std::vector<std::string> &items) {
   return o;
 }
 
+std::string json_tts_voice_entry(const moonshine_tts::MoonshineTtsVoiceAvailability &v) {
+  std::string o = "{\"id\":";
+  o += json_utf8_string_literal(v.id);
+  o += ",\"state\":";
+  o += json_utf8_string_literal(v.available ? "found" : "missing");
+  o += "}";
+  return o;
+}
+
+std::string json_tts_voices_lang_array(const std::vector<moonshine_tts::MoonshineTtsVoiceAvailability> &voices) {
+  std::string o;
+  o.push_back('[');
+  for (size_t i = 0; i < voices.size(); ++i) {
+    if (i > 0) {
+      o.push_back(',');
+    }
+    o += json_tts_voice_entry(voices[i]);
+  }
+  o.push_back(']');
+  return o;
+}
+
+std::string json_tts_voices_root_object(
+    const std::vector<std::pair<std::string, std::vector<moonshine_tts::MoonshineTtsVoiceAvailability>>> &rows) {
+  std::string o;
+  o.push_back('{');
+  for (size_t i = 0; i < rows.size(); ++i) {
+    if (i > 0) {
+      o.push_back(',');
+    }
+    o += json_utf8_string_literal(rows[i].first);
+    o.push_back(':');
+    o += json_tts_voices_lang_array(rows[i].second);
+  }
+  o.push_back('}');
+  return o;
+}
+
 void apply_g2p_dependency_query_c_options(const moonshine_option_t *options, uint64_t options_count,
                                            moonshine_tts::MoonshineG2POptions &g2p_options) {
   if (options == nullptr || options_count == 0) {
@@ -1102,7 +1140,7 @@ int32_t moonshine_get_tts_dependencies(const char *languages, const moonshine_op
           const std::vector<std::string> voc =
               moonshine_tts::moonshine_catalog_tts_vocoder_only_dependency_keys(part, tts_opt);
           if (voc.empty()) {
-            LOGF("moonshine_get_tts_dependencies: no TTS layout for \"%s\" (vocoder_engine?)\n",
+            LOGF("moonshine_get_tts_dependencies: no TTS layout for \"%s\" (voice prefix / paths?)\n",
                  part.c_str());
             return MOONSHINE_ERROR_INVALID_ARGUMENT;
           }
@@ -1120,6 +1158,92 @@ int32_t moonshine_get_tts_dependencies(const char *languages, const moonshine_op
     return MOONSHINE_ERROR_NONE;
   } catch (const std::exception &e) {
     LOGF("moonshine_get_tts_dependencies failed: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+int32_t moonshine_get_tts_voices(const char *languages, const moonshine_option_t *options,
+                                 uint64_t options_count, char **out_voices_json) {
+  if (out_voices_json == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  if (options_count > 0 && options == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  *out_voices_json = nullptr;
+  const bool all_langs = (languages == nullptr || languages[0] == '\0');
+  try {
+    moonshine_tts::MoonshineTTSOptions tts_opt;
+    std::string cli_lang;
+    bool lang_set = false;
+    parse_tts_options(options, options_count, tts_opt, cli_lang, lang_set);
+    if (tts_opt.g2p_options.g2p_root.empty()) {
+      tts_opt.g2p_options.g2p_root = std::filesystem::current_path();
+    }
+    (void)lang_set;
+    (void)cli_lang;
+
+    std::vector<std::pair<std::string, std::vector<moonshine_tts::MoonshineTtsVoiceAvailability>>> rows;
+
+    if (all_langs) {
+      const std::vector<std::string> tags =
+          moonshine_tts::moonshine_asset_catalog_all_registered_language_tags();
+      for (const std::string &tag : tags) {
+        const std::vector<std::string> voc =
+            moonshine_tts::moonshine_catalog_tts_vocoder_only_dependency_keys(tag, tts_opt);
+        if (voc.empty()) {
+          continue;
+        }
+        std::vector<moonshine_tts::MoonshineTtsVoiceAvailability> voices =
+            moonshine_tts::moonshine_list_tts_voices_with_availability(tag, tts_opt);
+        rows.emplace_back(tag, std::move(voices));
+      }
+    } else {
+      const std::vector<std::string> parts = split_comma_nonempty_language_tokens(languages);
+      if (parts.empty()) {
+        const std::vector<std::string> tags =
+            moonshine_tts::moonshine_asset_catalog_all_registered_language_tags();
+        for (const std::string &tag : tags) {
+          const std::vector<std::string> voc =
+              moonshine_tts::moonshine_catalog_tts_vocoder_only_dependency_keys(tag, tts_opt);
+          if (voc.empty()) {
+            continue;
+          }
+          std::vector<moonshine_tts::MoonshineTtsVoiceAvailability> voices =
+              moonshine_tts::moonshine_list_tts_voices_with_availability(tag, tts_opt);
+          rows.emplace_back(tag, std::move(voices));
+        }
+      } else {
+        for (const std::string &part : parts) {
+          const std::optional<std::vector<std::string>> g2p =
+              moonshine_tts::moonshine_asset_catalog_g2p_dependency_keys(part);
+          if (!g2p.has_value()) {
+            LOGF("moonshine_get_tts_voices: unsupported language \"%s\"\n", part.c_str());
+            return MOONSHINE_ERROR_INVALID_ARGUMENT;
+          }
+          const std::vector<std::string> voc =
+              moonshine_tts::moonshine_catalog_tts_vocoder_only_dependency_keys(part, tts_opt);
+          if (voc.empty()) {
+            LOGF("moonshine_get_tts_voices: no TTS layout for \"%s\" (voice prefix / paths?)\n",
+                 part.c_str());
+            return MOONSHINE_ERROR_INVALID_ARGUMENT;
+          }
+          std::vector<moonshine_tts::MoonshineTtsVoiceAvailability> voices =
+              moonshine_tts::moonshine_list_tts_voices_with_availability(part, tts_opt);
+          rows.emplace_back(part, std::move(voices));
+        }
+      }
+    }
+
+    const std::string dumped = json_tts_voices_root_object(rows);
+    char *buf = malloc_string_copy(dumped);
+    if (buf == nullptr) {
+      return MOONSHINE_ERROR_UNKNOWN;
+    }
+    *out_voices_json = buf;
+    return MOONSHINE_ERROR_NONE;
+  } catch (const std::exception &e) {
+    LOGF("moonshine_get_tts_voices failed: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
 }

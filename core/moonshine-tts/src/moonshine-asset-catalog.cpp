@@ -18,6 +18,8 @@ std::string normalize_lang_key_cli(std::string_view raw) {
   for (char& c : s) {
     if (c == ' ') {
       c = '_';
+    } else if (c == '-') {
+      c = '_';
     } else if (c >= 'A' && c <= 'Z') {
       c = static_cast<char>(c - 'A' + 'a');
     }
@@ -139,10 +141,13 @@ const std::unordered_map<std::string, std::vector<std::string>>& g2p_dependency_
     add("chinese", kZh);
 
     add("ja", kJa);
+    add("ja-jp", kJa);
+    add("ja_jp", kJa);
     add("jp", kJa);
     add("japanese", kJa);
 
     add("ko", kKo);
+    add("ko-kr", kKo);
     add("ko_kr", kKo);
     add("korean", kKo);
 
@@ -152,10 +157,13 @@ const std::unordered_map<std::string, std::vector<std::string>>& g2p_dependency_
     add("vietnamese", kVi);
 
     add("ar_msa", kAr);
+    add("ar-msa", kAr);
     add("ar", kAr);
     add("arabic", kAr);
 
     add("hi", kHi);
+    add("hi-in", kHi);
+    add("hi_in", kHi);
     add("hindi", kHi);
 
     add("pt_br", kPtBr);
@@ -174,6 +182,7 @@ const std::unordered_map<std::string, std::vector<std::string>>& g2p_dependency_
 
     add("tr", kEmpty);
     add("tr-tr", kEmpty);
+    add("tr_tr", kEmpty);
     add("turkish", kEmpty);
 
     add("uk", kEmpty);
@@ -235,14 +244,30 @@ std::vector<std::string> moonshine_asset_catalog_all_g2p_dependency_keys_union()
 }
 
 std::vector<std::string> moonshine_asset_catalog_all_registered_language_tags() {
-  const auto& m = g2p_dependency_map();
-  std::vector<std::string> tags;
-  tags.reserve(m.size());
-  for (const auto& pr : m) {
-    tags.push_back(pr.first);
-  }
-  std::sort(tags.begin(), tags.end());
-  return tags;
+  // One canonical BCP47-style tag per supported locale (hyphens). Aliases (e.g. ``ar``, ``ko``) stay in
+  // ``g2p_dependency_map`` for client lookups only.
+  return std::vector<std::string>{
+      "ar-msa",
+      "de-de",
+      "en-gb",
+      "en-us",
+      "es-ar",
+      "es-es",
+      "es-mx",
+      "fr-fr",
+      "hi-in",
+      "it-it",
+      "ja-jp",
+      "ko-kr",
+      "nl-nl",
+      "pt-br",
+      "pt-pt",
+      "ru-ru",
+      "tr-tr",
+      "uk-ua",
+      "vi-vn",
+      "zh-hans",
+  };
 }
 
 }  // namespace moonshine_tts
