@@ -418,7 +418,7 @@ If a voice is marked as `downloadable` that means if you pass it in to the `Text
 
 As you may notice from the voice names, Moonshine Voice uses models from the fantastic [Kokoro](https://github.com/hexgrad/kokoro) and [PiperTTS](https://huggingface.co/rhasspy/piper-voices) projects. You can find full details on all the model and data sources we use for text to speech at [core/moonshine-tts/data/README.md](core/moonshine-tts/data/README.md). 
 
-Given that there are other great TTS projects out there, you might be wondering why the world needs yet another implementation? Moonshine tries to run on as many platforms as possible and supports commercial applications, and both Kokoro and Piper use [espeak-ng](https://github.com/espeak-ng/espeak-ng/) to convert text strings into phonemes, representations of the noises associated with the sentence, in the International Pronunciation Alphabet. Espeak-ng is licensed under the GPL, and while I am a fan of free software, the terms do make it hard to incorporate into applications that don't also release their source code under a similar license.
+Given that there are other great TTS projects out there, why does the world need yet another implementation? Moonshine tries to run on as many platforms as possible and supports commercial applications, and both Kokoro and Piper use [espeak-ng](https://github.com/espeak-ng/espeak-ng/) to convert text strings into phonemes, representations of the noises associated with the sentence, in the International Pronunciation Alphabet. Espeak-ng is licensed under the GPL, and while I am a fan of free software, the terms do make it hard to incorporate into applications that don't also release their source code under a similar license.
 
 In the cloud this isn't as much of an issue, as many uses of espeak-ng can be implemented by calling out to an external executable, so the dependency isn't as problematic. This isn't an option on many edge operating systems unfortunately, as the only way to include code on iOS or Android is to link it into the application, which requires open sourcing the calling code.
 
@@ -525,7 +525,7 @@ If you want to call this library from a language we don't support, then you shou
 
 ### Downloading Models
 
-### Speech to Text Models
+#### Speech to Text Models
 
 The easiest way to get the model files required for transcription is by using the Python download module. After [installing it](#python) run the downloader like this:
 
@@ -727,12 +727,16 @@ This documentation covers the Python API, but the same functions and classes are
   - [Transcript](#transcript)
   - [TranscriptEvent](#transcriptevent)
   - [IntentMatch](#intentmatch)
+  - [TtsVoiceEntry](#ttsvoiceentry)
+  - [TtsVoicesByAvailability](#ttsvoicesbyavailability)
 - [Classes](#classes)
   - [Transcriber](#transcriber)
   - [MicTranscriber](#mictranscriber)
   - [Stream](#stream)
   - [TranscriptEventListener](#transcripteventlistener)
   - [IntentRecognizer](#intentrecognizer)
+  - [TextToSpeech](#texttospeech)
+  - [GraphemeToPhonemizer](#graphemetophonemizer)
 
 ### Data Structures
 
@@ -773,6 +777,20 @@ This event is sent to any listeners you have registered when an `IntentRecognize
 - `trigger_phrase`: The string representing the canonical command, exactly as you registered it with the recognizer.
 - `utterance`: The text of the utterance that triggered the match.
 - `similarity`: A float value that reflects how confident the recognizer is that the utterance has the same meaning as the command, with zero being the least confident and one the most.
+
+#### TtsVoiceEntry
+
+A single voice row from the native TTS catalog (as returned inside the map from `get_tts_voice_catalog()`).
+
+- `id`: The voice identifier string (often with a `kokoro_` or `piper_` prefix to pin the vocoder).
+- `state`: Either `"found"` (assets present under the resolved asset root) or `"missing"` (listed in the catalog but not on disk yet).
+
+#### TtsVoicesByAvailability
+
+The dictionary shape returned by `list_tts_voices()`.
+
+- `present`: Sorted list of voice ids that are already available under the asset root used for the query.
+- `downloadable`: Sorted list of catalog voice ids that are not on disk yet but can be fetched (for example when constructing `TextToSpeech` with `download=True`).
 
 ### Classes
 
@@ -853,6 +871,66 @@ A specialized kind of event listener that you add as a listener to a `Transcribe
   - `handler`: A handler that had previously been registered with the recognizer.
 - <a id="intentrecognizer-clear-intents"></a>`clear_intents()`: Removes all intent listeners from the recognizer.
 - <a id="intentrecognizer-set-on-intent"></a>`set_on_intent()`: Sets a callable that is called when any registered action is triggered, not just a single command as for `register_intent()`.
+
+#### TextToSpeech
+
+On-device text-to-speech using the Moonshine native stack (Kokoro and Piper vocoders plus per-language G2P assets). Required files are resolved from the CDN unless you pass `download=False` and supply a populated tree. Invalid language tags raise `MoonshineTtsLanguageError`; missing or unknown voices raise `MoonshineTtsVoiceError`. Playback failures from `say()` raise `MoonshineAudioOutputError` with a list of output devices when enumeration succeeds.
+
+Use `list_tts_languages()`, `list_tts_voices()`, and `get_tts_voice_catalog()` to discover supported tags and voices. Asset layout and licenses are summarized in [`core/moonshine-tts/data/README.md`](core/moonshine-tts/data/README.md); see also [Downloading Models](#text-to-speech-models).
+
+- <a id="texttospeech-init"></a>`__init__()`: Creates a synthesizer and optionally downloads dependencies into the package cache (or a custom root).
+  - `language`: BCP-47-style tag for the speaking locale (for example `en_us`, `de`, `fr`). Aliases such as `en-us` are normalized by the library.
+  - `voice`: Optional voice id. Prefix with `kokoro_` or `piper_` to choose the vocoder (for example `kokoro_af_heart`). When `download` is true, a catalogued voice that is not yet on disk is downloaded automatically.
+  - `options`: Optional mapping of string keys to strings, numbers, or booleans, passed through to the native option parser (see below). The Python binding always sets `g2p_root` to the resolved asset directory; do not rely on overriding that key for a different layout—use `asset_root` / `tts_root`-style options instead.
+  - `asset_root`: Optional directory to use as the TTS cache or as the on-disk asset tree. When `download` is true, downloads go under this root when set; when false, this path must already contain the expected `g2p_root` layout.
+  - `download`: When true (default), missing TTS assets are downloaded from `https://download.moonshine.ai/tts/`. When false, `asset_root` is required and must already contain the files the native layer expects.
+
+- `language`: Read-only property returning the normalized language tag in use.
+
+- `asset_root`: Read-only property returning the `pathlib.Path` directory passed to the native layer as `g2p_root`.
+
+- <a id="texttospeech-synthesize"></a>`synthesize()`: Converts `text` to mono PCM audio.
+  - `text`: UTF-8 string to speak.
+  - `options`: Optional extra native options for this call only (merged with the constructor’s `options` semantics on the C side as documented there).
+  - Returns a tuple `(samples, sample_rate)` where `samples` is a list of 32-bit floats in roughly the −1.0…1.0 range and `sample_rate` is the output sample rate in Hz.
+
+- <a id="texttospeech-say"></a>`say()`: Calls `synthesize()` and plays the result on the default or selected output device using PortAudio via the `sounddevice` package (requires `pip install numpy sounddevice`).
+  - `text`: String to speak.
+  - `device`: `None` for the host default output, an integer PortAudio output device index, a decimal string index, or a case-insensitive substring of a device name.
+  - `options`: Optional per-call native options, passed through to synthesis unchanged.
+
+- <a id="texttospeech-close"></a>`close()`: Releases the native synthesizer handle. Called automatically when using a `with TextToSpeech(...) as tts:` block or on garbage collection.
+
+<a id="texttospeech-options"></a>**Common `options` keys (TTS):** These mirror `MoonshineTTSOptions` in the C++ layer. Values are strings in the underlying API; the Python binding accepts bools and numbers where noted.
+
+- `tts_root`, `path_root`, `model_root`: Aliases for the asset root directory when you need to override layout discovery (same role as `g2p_root` in the native parser).
+- `voice`: Default voice id if not passed to the constructor (constructor argument wins when both are set in typical use).
+- `speed`: Speaking rate multiplier (floating-point).
+- `kokoro_dir`, `kokoro_model` / `kokoro_model_onnx`, `kokoro_config` / `kokoro_config_json`: Override paths for Kokoro ONNX and config within the asset tree.
+- `piper_onnx` / `piper_model_onnx`, `piper_onnx_json`, `piper_voices_dir` / `voices_dir`, `piper_voices_json_dir` / `voices_json_dir`: Override paths for Piper model, JSON sidecar, and voice directories.
+- `piper_normalize_audio`, `piper_output_volume`, `piper_noise_scale` / `piper_noise_scale_override`, `piper_noise_w` / `piper_noise_w_override`: Piper inference tuning (see native option parsing for types).
+
+Additional keys are forwarded to the G2P option parser (language-specific ONNX overrides, feature flags, and so on).
+
+#### GraphemeToPhonemizer
+
+IPA string generation without speech synthesis. Dependencies are the same CDN lexicon and ONNX bundles as TTS, but restricted to what `moonshine_get_g2p_dependencies` reports for the language. When `download` is true, assets are placed under the package cache or `asset_root`; when false, `asset_root` must already contain those files.
+
+- <a id="graphemetophonemizer-init"></a>`__init__()`: Creates a native G2P handle.
+  - `language`: Locale tag (for example `en_us`, `ja`). Normalized the same way as for TTS.
+  - `options`: Optional mapping passed to the native layer (G2P keys only; the binding sets `g2p_root` automatically).
+  - `asset_root`: Optional cache or pre-populated directory, same semantics as for `TextToSpeech`.
+  - `download`: When true (default), missing G2P assets are downloaded. When false, `asset_root` is required.
+
+- `language`: Read-only normalized tag.
+
+- `asset_root`: Read-only `pathlib.Path` to the directory used as `g2p_root`.
+
+- <a id="graphemetophonemizer-to-ipa"></a>`to_ipa()`: Returns a single IPA string for the input text.
+  - `text`: UTF-8 surface string.
+  - `options`: Optional per-call native G2P options.
+
+- <a id="graphemetophonemizer-close"></a>`close()`: Frees the native handle; also invoked by context manager exit and `__del__`.
 
 ## Support
 
