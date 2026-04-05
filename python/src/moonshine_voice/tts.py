@@ -2,13 +2,15 @@
 
 import wave
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from moonshine_voice.download import (
     download_tts_assets,
-    normalize_moonshine_language_tag,
+    ensure_tts_voice_downloaded,
+    tts_asset_cache_path,
+    validate_tts_language,
 )
-from moonshine_voice.errors import MoonshineError
+from moonshine_voice.errors import MoonshineAudioOutputError, MoonshineError
 from moonshine_voice.moonshine_api import (
     MOONSHINE_HEADER_VERSION,
     _MoonshineLib,
@@ -17,12 +19,104 @@ from moonshine_voice.moonshine_api import (
 )
 
 
+def _import_say_audio_deps():
+    """Import numpy and sounddevice for `TextToSpeech.say`; raise MoonshineError if missing."""
+    try:
+        import numpy as np
+        import sounddevice as sd
+    except ImportError as e:
+        raise MoonshineError(
+            "TextToSpeech.say() requires numpy and sounddevice "
+            "(e.g. `pip install numpy sounddevice`)."
+        ) from e
+    return np, sd
+
+
+def _say_enumerate_output_devices(sd) -> List[Tuple[int, str]]:
+    """PortAudio device indices with at least one output channel, and host API name."""
+    out: List[Tuple[int, str]] = []
+    try:
+        devices = sd.query_devices()
+    except (sd.PortAudioError, OSError, ValueError) as e:
+        raise MoonshineAudioOutputError(
+            f"Could not query audio devices: {e}",
+            available_outputs=[],
+        ) from e
+    for i, d in enumerate(devices):
+        try:
+            n_out = int(d.get("max_output_channels", 0) or 0)
+        except (TypeError, ValueError):
+            n_out = 0
+        if n_out <= 0:
+            continue
+        name = str(d.get("name", "") or "")
+        out.append((i, name))
+    return out
+
+
+def _say_device_lines(outs: List[Tuple[int, str]]) -> List[str]:
+    return [f"[{i}] {name}" for i, name in outs]
+
+
+def _say_device_spec_key(device: Optional[Union[int, str]]) -> Tuple[Any, ...]:
+    if device is None:
+        return ("default",)
+    if isinstance(device, int):
+        return ("idx", device)
+    s = str(device).strip()
+    if not s:
+        return ("default",)
+    try:
+        return ("idx", int(s, 10))
+    except ValueError:
+        return ("name", s.casefold())
+
+
+def _say_resolve_output_index(
+    spec_key: Tuple[Any, ...],
+    outs: List[Tuple[int, str]],
+    *,
+    device_label_for_errors: str,
+) -> Optional[int]:
+    """Return PortAudio output device index, or None for the host default stream device."""
+    lines = _say_device_lines(outs)
+    if spec_key == ("default",):
+        return None
+    if spec_key[0] == "idx":
+        idx = spec_key[1]
+        valid = {i for i, _ in outs}
+        if idx not in valid:
+            raise MoonshineAudioOutputError(
+                f"Output device index {idx} is not available or is not an output device.",
+                available_outputs=lines,
+            )
+        return int(idx)
+    needle = spec_key[1]
+    for i, name in outs:
+        if needle in name.casefold():
+            return i
+    raise MoonshineAudioOutputError(
+        f"No output device name contains substring {device_label_for_errors!r} "
+        "(match is case-insensitive substring).",
+        available_outputs=lines,
+    )
+
+
 class TextToSpeech:
     """
     On-device TTS using Moonshine (Kokoro / Piper and language assets under ``g2p_root``).
 
     Required assets are resolved with ``moonshine_get_tts_dependencies`` and, unless you pass
     ``download=False`` and ``asset_root``, downloaded from ``https://download.moonshine.ai/tts/``.
+
+    The ``language`` tag is validated against the native TTS catalog before download
+    (`MoonshineTtsLanguageError` lists supported tags).     If ``voice`` is set, it is checked against
+    voices reported as ``found`` for that language under the resolved asset root
+    (`MoonshineTtsVoiceError` lists downloaded ids then catalog ids available for download).
+    With ``download=True``, a voice that is catalogued but not yet on disk is downloaded automatically.
+    Use a ``kokoro_`` or ``piper_`` prefix on ``voice`` to pin the vocoder (e.g. ``kokoro_af_heart``).
+    Use `list_tts_languages` and
+    `list_tts_voices` (``present`` / ``downloadable``) or `get_tts_voice_catalog` to discover options.
     """
 
     def __init__(
@@ -30,31 +124,50 @@ class TextToSpeech:
         language: str,
         *,
         voice: Optional[str] = None,
-        engine: Optional[str] = None,
         options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
         asset_root: Optional[Path] = None,
         download: bool = True,
     ):
-        self._language = normalize_moonshine_language_tag(language)
-        self._voice = voice
-        self._engine = engine
         self._extra_options = dict(options) if options else {}
-
+        if voice is not None:
+            vs = str(voice).strip()
+            voice = vs if vs else None
+        self._voice = voice
         if download:
-            self._asset_root = download_tts_assets(
-                self._language,
-                voice=voice,
-                engine=engine,
-                options=self._extra_options,
-                cache_root=Path(asset_root) if asset_root is not None else None,
-            )
+            validate_root = tts_asset_cache_path(Path(asset_root) if asset_root is not None else None)
         else:
             if asset_root is None:
                 raise MoonshineError(
                     "When download=False, asset_root must point to a directory "
                     "already populated with TTS assets (g2p_root layout)."
                 )
-            self._asset_root = Path(asset_root).resolve()
+            validate_root = Path(asset_root).resolve()
+        self._language = validate_tts_language(
+            language,
+            voice=voice,
+            options=self._extra_options,
+            root_path=validate_root,
+        )
+
+        if download:
+            self._asset_root = download_tts_assets(
+                self._language,
+                voice=voice,
+                options=self._extra_options,
+                cache_root=Path(asset_root) if asset_root is not None else None,
+            )
+        else:
+            self._asset_root = validate_root
+
+        if self._voice is not None:
+            ensure_tts_voice_downloaded(
+                self._language,
+                self._voice,
+                self._asset_root,
+                options=self._extra_options,
+                download_missing=download,
+                show_progress=True,
+            )
 
         self._lib = _MoonshineLib().lib
         create_opts = self._c_options_for_create()
@@ -74,14 +187,14 @@ class TextToSpeech:
                 msg.decode("utf-8") if msg else f"Failed to create TTS synthesizer ({handle})"
             )
         self._handle = handle
+        self._say_device_cache: Optional[Tuple[Tuple[Any, ...], Optional[int]]] = None
+        self._say_settings_ok: Optional[Tuple[Tuple[Any, ...], int]] = None
 
     def _c_options_for_create(self) -> Dict[str, Union[str, int, float, bool]]:
         merged: Dict[str, Union[str, int, float, bool]] = dict(self._extra_options)
         merged["g2p_root"] = str(self._asset_root)
         if self._voice is not None:
             merged["voice"] = self._voice
-        if self._engine is not None:
-            merged["vocoder_engine"] = self._engine
         return merged
 
     @property
@@ -100,7 +213,83 @@ class TextToSpeech:
         """Synthesize ``text`` to PCM float samples ``(-1..1)`` and sample rate in Hz."""
         return moonshine_text_to_speech_samples(self._handle, text, options)
 
+    def say(
+        self,
+        text: str,
+        *,
+        device: Optional[Union[int, str]] = None,
+        options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
+    ) -> None:
+        """
+        Synthesize ``text`` and play it on an audio output device via ``sounddevice``.
+
+        Uses `synthesize` for audio generation; ``options`` is passed through unchanged.
+
+        ``device`` may be ``None`` (host default output), a PortAudio device index, a decimal string
+        index, or a substring of the device name (case-insensitive). If there are no output devices,
+        the index is invalid, or no name matches, raises `MoonshineAudioOutputError` with a list of
+        available devices. Device resolution and successful `check_output_settings` results are
+        cached per ``device`` argument and sample rate so repeated calls avoid re-querying hardware.
+        """
+        np, sd = _import_say_audio_deps()
+        spec_key = _say_device_spec_key(device)
+        if isinstance(device, str):
+            name_label = device.strip()
+        elif device is not None:
+            name_label = str(device)
+        else:
+            name_label = ""
+
+        if self._say_device_cache is None or self._say_device_cache[0] != spec_key:
+            outs = _say_enumerate_output_devices(sd)
+            if not outs:
+                raise MoonshineAudioOutputError(
+                    "No audio output devices are available.",
+                    available_outputs=[],
+                )
+            resolved = _say_resolve_output_index(
+                spec_key,
+                outs,
+                device_label_for_errors=name_label or str(device) if device is not None else "",
+            )
+            self._say_device_cache = (spec_key, resolved)
+            self._say_settings_ok = None
+
+        resolved = self._say_device_cache[1]
+        samples, sr = self.synthesize(text, options)
+        sample_rate = int(sr)
+
+        settings_key = (spec_key, sample_rate)
+        if self._say_settings_ok != settings_key:
+            try:
+                sd.check_output_settings(
+                    samplerate=sample_rate,
+                    channels=1,
+                    dtype="float32",
+                    device=resolved,
+                )
+            except (sd.PortAudioError, OSError, ValueError) as e:
+                outs = _say_enumerate_output_devices(sd)
+                raise MoonshineAudioOutputError(
+                    f"Audio output cannot play {sample_rate} Hz mono float32 on the selected device: {e}",
+                    available_outputs=_say_device_lines(outs),
+                ) from e
+            self._say_settings_ok = settings_key
+
+        data = np.asarray(samples, dtype=np.float32)
+        try:
+            sd.play(data, sample_rate, device=resolved)
+            sd.wait()
+        except (sd.PortAudioError, OSError, ValueError) as e:
+            outs = _say_enumerate_output_devices(sd)
+            raise MoonshineAudioOutputError(
+                f"Failed to play audio: {e}",
+                available_outputs=_say_device_lines(outs),
+            ) from e
+
     def close(self) -> None:
+        self._say_device_cache = None
+        self._say_settings_ok = None
         if getattr(self, "_handle", None) is not None:
             self._lib.moonshine_free_tts_synthesizer(self._handle)
             self._handle = None
@@ -164,44 +353,6 @@ def _write_wav_mono_pcm16(path: Path, samples: List[float], sample_rate_hz: int)
         w.writeframes(bytes(frames))
 
 
-def _parse_sounddevice_output_device(s: str) -> Union[int, str]:
-    """Accept device index or a name substring for sounddevice."""
-    t = s.strip()
-    try:
-        return int(t, 10)
-    except ValueError:
-        return t
-
-
-def _can_play_default(sample_rate_hz: int) -> bool:
-    import sounddevice as sd
-
-    try:
-        sd.check_output_settings(
-            samplerate=sample_rate_hz,
-            channels=1,
-            dtype="float32",
-            device=None,
-        )
-        return True
-    except (sd.PortAudioError, OSError, ValueError):
-        return False
-
-
-def _play_mono_samples(
-    samples: List[float],
-    sample_rate_hz: int,
-    *,
-    device: Optional[Union[int, str]] = None,
-) -> None:
-    import numpy as np
-    import sounddevice as sd
-
-    data = np.asarray(samples, dtype=np.float32)
-    sd.play(data, sample_rate_hz, device=device)
-    sd.wait()
-
-
 if __name__ == "__main__":
     import argparse
     import sys
@@ -215,14 +366,9 @@ if __name__ == "__main__":
         help="Language tag (e.g. en_us, de, fr) (default: %(default)s)",
     )
     parser.add_argument(
-        "--engine",
-        default=None,
-        help="Vocoder: kokoro, piper, or auto (maps to vocoder_engine)",
-    )
-    parser.add_argument(
         "--voice",
         default=None,
-        help="Kokoro voice id or Piper ONNX stem",
+        help="Voice id with kokoro_ or piper_ prefix (e.g. kokoro_af_heart)",
     )
     parser.add_argument(
         "--text",
@@ -260,33 +406,30 @@ if __name__ == "__main__":
             print(e, file=sys.stderr)
             sys.exit(2)
 
-    sd_device: Optional[Union[int, str]] = None
-    if args.device is not None:
-        sd_device = _parse_sounddevice_output_device(args.device)
-
     try:
         with TextToSpeech(
             args.language,
             voice=args.voice,
-            engine=args.engine,
             options=extra,
         ) as tts:
-            samples, sr = tts.synthesize(args.text)
-
-        if args.device is not None:
-            _play_mono_samples(samples, sr, device=sd_device)
-        elif args.out is not None:
-            _write_wav_mono_pcm16(args.out, samples, sr)
-        else:
-            fallback_path = Path("out.wav")
-            if _can_play_default(sr):
-                _play_mono_samples(samples, sr, device=None)
+            if args.out is not None:
+                samples, sr = tts.synthesize(args.text, options=extra)
+                _write_wav_mono_pcm16(args.out, samples, sr)
             else:
-                print(
-                    "No audio output found, writing to out.wav",
-                    file=sys.stderr,
-                )
-                _write_wav_mono_pcm16(fallback_path, samples, sr)
+                dev = None
+                if args.device is not None:
+                    t = args.device.strip()
+                    dev = t if t else None
+                try:
+                    tts.say(args.text, device=dev, options=extra)
+                except MoonshineError as play_err:
+                    fallback_path = Path("out.wav")
+                    print(
+                        f"Audio playback failed ({play_err}); writing {fallback_path}",
+                        file=sys.stderr,
+                    )
+                    samples, sr = tts.synthesize(args.text, options=extra)
+                    _write_wav_mono_pcm16(fallback_path, samples, sr)
     except MoonshineError as e:
         print(e, file=sys.stderr)
         sys.exit(1)

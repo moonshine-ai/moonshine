@@ -223,9 +223,9 @@ TEST_CASE("moonshine-c-api-memory: Kokoro every voice uses only buffers; CWD has
     }
 
     const std::string model_root_str = cwd.string();
+    const std::string kokoro_voice = std::string("kokoro_") + voice;
     const moonshine_option_t opts[] = {
-        {"engine", "kokoro"},
-        {"voice", voice.c_str()},
+        {"voice", kokoro_voice.c_str()},
         {"speed", "1.0"},
         {"model_root", model_root_str.c_str()},
     };

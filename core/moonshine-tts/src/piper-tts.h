@@ -86,6 +86,11 @@ bool piper_default_model_bundle_relative_paths(std::string_view lang_cli, const 
                                                std::string* onnx_relpath_out, std::string* onnx_json_relpath_out,
                                                std::string_view onnx_model_stem = {});
 
+/// Piper voice stems (no ``.onnx``) with availability (on-disk ``*.onnx`` or in-memory ``piper/onnx``), same
+/// resolution as ``PiperTTS``. Known voices are the language default plus any ``*.onnx`` under the resolved
+/// voices directory (union, sorted).
+std::vector<std::pair<std::string, bool>> piper_list_voices_with_availability(const PiperTTSOptions& opt);
+
 }  // namespace moonshine_tts
 
 #endif  // MOONSHINE_TTS_PIPER_TTS_H

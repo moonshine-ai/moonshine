@@ -598,8 +598,9 @@ moonshine_clear_intents(int32_t intent_recognizer_handle);
    Returns a non-negative handle on success, or a non-zero error code on
    failure. The error code can be converted to a human-readable string using
    moonshine_error_to_string.
-   Pass Kokoro voice id or Piper ONNX stem via option ``voice`` (and other TTS
-   paths via ``moonshine_option_t`` as documented for ``MoonshineTTSOptions``).
+   Pass option ``voice`` as ``kokoro_<id>`` or ``piper_<stem>`` to select the vocoder, or as a bare
+   Kokoro id / Piper stem when using the default auto choice (and other TTS paths via ``moonshine_option_t``
+   as documented for ``MoonshineTTSOptions``). ``engine`` / ``vocoder_engine`` options are ignored.
 */
 MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_files(
     const char *language, const char **filenames, uint64_t filenames_count,
@@ -612,21 +613,24 @@ MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_files(
    moonshine_error_to_string.
 
    ``filenames[i]`` is the canonical ``MoonshineTTSOptions::files`` key (e.g.
-   ``kokoro/model.onnx``, ``kokoro/config.json``, ``kokoro/voices/af_heart.kokorovoice``,
+   ``kokoro/model.onnx``, ``kokoro/config.json``,
+   ``kokoro/voices/af_heart.kokorovoice``,
    ``piper/onnx``, ``piper/onnx.json``). When ``memory[i]`` is non-NULL and
    ``memory_sizes[i]`` > 0, that buffer is used as the asset bytes; the library
-   does not copy it—keep the buffers valid until ``moonshine_free_tts_synthesizer``.
-   When ``memory[i]`` is NULL or ``memory_sizes[i]`` is zero, the key string is
-   also used as a path relative to ``g2p_options.g2p_root`` (from ``options``),
-   same as path-only map entries.
+   does not copy it—keep the buffers valid until
+   ``moonshine_free_tts_synthesizer``. When ``memory[i]`` is NULL or
+   ``memory_sizes[i]`` is zero, the key string is also used as a path relative
+   to ``g2p_options.g2p_root`` (from ``options``), same as path-only map
+   entries.
 
-   Other ``options`` are parsed like ``moonshine_create_tts_synthesizer_from_files``.
+   Other ``options`` are parsed like
+   ``moonshine_create_tts_synthesizer_from_files``.
 */
 MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_memory(
-    const char *language, const char **filenames, const uint64_t filenames_count,
-    const uint8_t **memory, const uint64_t *memory_sizes,
-    const struct moonshine_option_t *options, uint64_t options_count,
-    int32_t moonshine_version);
+    const char *language, const char **filenames,
+    const uint64_t filenames_count, const uint8_t **memory,
+    const uint64_t *memory_sizes, const struct moonshine_option_t *options,
+    uint64_t options_count, int32_t moonshine_version);
 
 /* Releases the resources used by a text to speech synthesizer.
    Returns zero on success, or a non-zero error code on failure.
@@ -635,31 +639,64 @@ MOONSHINE_EXPORT void moonshine_free_tts_synthesizer(
     int32_t tts_synthesizer_handle);
 
 /* Returns G2P-only canonical asset keys for one or more languages.
-   ``languages`` is comma-separated CLI tags (same as ``moonshine_create_*`` ``language``);
-   an empty string (or NULL) means all known languages (union of keys).
-   ``options`` / ``options_count``: same ``moonshine_option_t`` entries as grapheme phonemizer / G2P
-   (``g2p_root``, ``spanish_narrow_obstruents``, ``oov_onnx_override``, …). TTS-only keys
-   (``voice``, ``vocoder_engine``, Piper/Kokoro paths) are ignored here. Non-empty values for in-memory
-   override keys add those canonical key names to the list.
-   On success, writes a comma-separated list to ``*out_dependencies_json`` and returns
-   ``MOONSHINE_ERROR_NONE``. The buffer is allocated with ``malloc``; release with ``free``.
-   On failure (e.g. unknown language token), logs and returns a non-zero error code and sets
+   ``languages`` is comma-separated CLI tags (same as ``moonshine_create_*``
+   ``language``); an empty string (or NULL) means all known languages (union of
+   keys).
+   ``options`` / ``options_count``: same ``moonshine_option_t`` entries as
+   grapheme phonemizer / G2P
+   (``g2p_root``, ``spanish_narrow_obstruents``, ``oov_onnx_override``, …).
+   TTS-only keys
+   (``voice``, deprecated ``vocoder_engine`` / ``engine``, Piper/Kokoro paths) are ignored here.
+   Non-empty values for in-memory override keys add those canonical key names to
+   the list. On success, writes a comma-separated list to
+   ``*out_dependencies_json`` and returns
+   ``MOONSHINE_ERROR_NONE``. The buffer is allocated with ``malloc``; release
+   with ``free``. On failure (e.g. unknown language token), logs and returns a
+   non-zero error code and sets
    ``*out_dependencies_json`` to NULL.
 */
 MOONSHINE_EXPORT int32_t moonshine_get_g2p_dependencies(
-    const char *languages, const struct moonshine_option_t *options, uint64_t options_count,
-    char **out_dependencies_json);
+    const char *languages, const struct moonshine_option_t *options,
+    uint64_t options_count, char **out_dependencies_json);
 
-/* Returns merged G2P + TTS vocoder canonical asset keys as a JSON array of strings (flat list).
+/* Returns merged G2P + TTS vocoder canonical asset keys as a JSON array of
+   strings (flat list).
    ``languages`` is comma-separated; empty or NULL means all known languages.
-   ``options`` / ``options_count``: same entries as ``moonshine_create_tts_synthesizer_from_files``
-   (``vocoder_engine`` / ``engine``, ``voice``, ``g2p_root``, ``piper_onnx``, ``kokoro_model``, …).
-   Vocoder keys follow Kokoro vs Piper selection and the requested ``voice`` like ``MoonshineTTS``.
-   On success, ``*out_dependencies_json`` is a NUL-terminated JSON array; free with ``free``.
+   ``options`` / ``options_count``: same entries as
+   ``moonshine_create_tts_synthesizer_from_files``
+   (``voice`` with optional ``kokoro_`` / ``piper_`` prefix, ``g2p_root``, ``piper_onnx``,
+   ``kokoro_model``, …; ``vocoder_engine`` / ``engine`` are ignored). Vocoder keys follow Kokoro vs Piper selection and the
+   requested ``voice`` like ``MoonshineTTS``. On success,
+   ``*out_dependencies_json`` is a NUL-terminated JSON array; free with
+   ``free``.
 */
 MOONSHINE_EXPORT int32_t moonshine_get_tts_dependencies(
-    const char *languages, const struct moonshine_option_t *options, uint64_t options_count,
-    char **out_dependencies_json);
+    const char *languages, const struct moonshine_option_t *options,
+    uint64_t options_count, char **out_dependencies_json);
+
+/* Returns known TTS voices for the requested languages with availability state.
+   ``languages`` is comma-separated; empty or NULL means all registered catalog
+   languages (same tag set as G2P dependencies) that have a resolved TTS layout.
+   ``options`` / ``options_count``: same entries as
+   ``moonshine_create_tts_synthesizer_from_files``
+   (``voice`` prefix selects vocoder for listing; ``vocoder_engine`` / ``engine`` are ignored;
+   Piper/Kokoro path overrides). For accurate ``found`` / ``missing``, set an asset root with
+   ``g2p_root`` or the aliases ``path_root``, ``tts_root``, or ``model_root`` (see
+   ``MoonshineTTSOptions::parse_options``). If none are set, the implementation uses the process
+   current working directory. Language bindings typically default this to their download/cache
+   directory. The ``voice`` option does not filter the list.
+
+   On success, ``*out_voices_json`` is a NUL-terminated JSON object mapping each
+   language tag to a JSON array of objects ``{"id":"<voice>","state":"found"}``
+   or ``{"id":"<voice>","state":"missing"}``. Voice ids are prefixed with ``kokoro_`` or ``piper_``. Kokoro uses the upstream
+   Kokoro-82M voice id catalog plus any extra ``*.kokorovoice`` in the bundle;
+   Piper lists the language default ONNX stem plus any ``*.onnx`` in the
+   resolved voices directory. ``found`` means the asset is on disk or supplied
+   via the in-memory file map like ``MoonshineTTS``. Free with ``free``.
+*/
+MOONSHINE_EXPORT int32_t moonshine_get_tts_voices(
+    const char *languages, const struct moonshine_option_t *options,
+    uint64_t options_count, char **out_voices_json);
 
 /* Synthesizes text to speech.
    Returns zero on success, or a non-zero error code on failure.
@@ -676,13 +713,15 @@ MOONSHINE_EXPORT int32_t moonshine_text_to_speech(
    moonshine_error_to_string.
 
    Lexicons and bundled ONNX assets are resolved under ``g2p_root`` (or the
-   process current working directory when ``g2p_root`` / ``model_root`` is unset)
-   using the same canonical relative keys as ``MoonshineG2POptions::files`` in the C++
-   API (for example ``en_us/dict_filtered_heteronyms.tsv``,
+   process current working directory when ``g2p_root`` / ``model_root`` is
+   unset) using the same canonical relative keys as
+   ``MoonshineG2POptions::files`` in the C++ API (for example
+   ``en_us/dict_filtered_heteronyms.tsv``,
    ``zh_hans/roberta_chinese_base_upos_onnx/meta.json``,
    ``zh_hans/roberta_chinese_base_upos_onnx/model.onnx``,
-   ``en_us/g2p-config.json``, ``en_us/oov/model.onnx``, ``en_us/oov/onnx-config.json``). Japanese and Arabic
-   tok-POS / diacritizer bundles use the same pattern under ``ja/...`` and
+   ``en_us/g2p-config.json``, ``en_us/oov/model.onnx``,
+   ``en_us/oov/onnx-config.json``). Japanese and Arabic tok-POS / diacritizer
+   bundles use the same pattern under ``ja/...`` and
    ``ar_msa/...``. Korean rule G2P uses ``ko/dict.tsv`` only. If an ONNX
    model uses external data files (e.g. ``model.onnx.data``), those must sit
    beside the ``.onnx`` on disk so the runtime can open them.
@@ -707,8 +746,8 @@ MOONSHINE_EXPORT int32_t moonshine_create_grapheme_to_phonemizer_from_files(
    English ``g2p-config.json`` and OOV ONNX keys under ``en_us/oov/``, and
    for ONNX bundles the ``meta.json``, ``vocab.txt``, ``tokenizer_config.json``,
    and ``model.onnx`` keys under the bundle directory key. English OOV overrides
-   use ``oov_onnx_override`` for the ``.onnx`` bytes and ``oov_onnx_config`` for the
-   merged JSON config UTF-8 text. Models split across ``model.onnx`` plus
+   use ``oov_onnx_override`` for the ``.onnx`` bytes and ``oov_onnx_config`` for
+   the merged JSON config UTF-8 text. Models split across ``model.onnx`` plus
    external weight files must be supplied as a single self-contained ``.onnx``
    buffer (or remain on disk via the path fallback) so the runtime does not
    need a sidecar ``.data`` file.
