@@ -170,6 +170,9 @@ The Moonshine API is designed to take care of the details around capturing and t
   - [Language Bindings](#language-bindings)
   - [Porting](#porting)
 - [Downloading Models](#downloading-models)
+  - [Speech to Text Models](#speech-to-text-models)
+  - [Intent Recognition Models](#intent-recognition-models)
+  - [Text to Speech Models](#text-to-speech-models)
 - [Benchmarking](#benchmarking)
 
 ### Architecture
@@ -586,6 +589,8 @@ TTS assets root (use as g2p_root): /private/tmp/tts-files
 ```
 
 The downloaded models are placed in child folders underneath the root folder, and by default the text to speech module expects the files to have the same relative paths so it can find them automatically given only the parent's path. If you do need to move them to different locations, you can supply new paths for each file using the `options` argument to `TextToSpeech`'s constructor, with the usual relative path as the key, and the actual path to the file as the key.
+
+If you have an application that may be stored in an arbitrary location after installation, you can also pass in a `tts_root` value as an option to set the path to the actual root folder of the TTS data at runtime.
 
 ### Benchmarks
 
