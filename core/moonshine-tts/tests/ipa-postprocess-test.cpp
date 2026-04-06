@@ -79,3 +79,36 @@ TEST_CASE("normalize_g2p_ipa_for_piper Korean rule IPA toward eSpeak-ng") {
   const std::string yeobo_es = std::string("j\xcb\x88\xca\x8c" "bos\xcb\x8c") + "ejo";
   CHECK(normalize_g2p_ipa_for_piper(yeobo, "ko") == yeobo_es);
 }
+
+TEST_CASE("normalize_russian_ipa_piper_style") {
+  // Moonshine *что* cluster → Piper-style /ʃto/.
+  const std::string chto_in = std::string("t\xc9\x95t\xcb\x88o");
+  CHECK(normalize_russian_ipa_piper_style(chto_in) == std::string("\xca\x83to"));
+  // *дж* stays /dʐ/; bare /ʐ/ becomes /ʒ/.
+  CHECK(normalize_russian_ipa_piper_style(std::string("d\xcd\xa1\xca\x90")) == std::string("d\xca\x90"));
+  CHECK(normalize_russian_ipa_piper_style(std::string("d\xca\x90")) == std::string("d\xca\x90"));
+  CHECK(normalize_russian_ipa_piper_style(std::string("a\xca\x90" "b")) == std::string("a\xca\x92" "b"));
+  // Espeak-style vowels / laterals for Piper & Kokoro.
+  CHECK(normalize_russian_ipa_piper_style(std::string("t\xc9\xa8s")) == "tys");   // ɨ → y
+  CHECK(normalize_russian_ipa_piper_style(std::string("p\xc9\xab" "o")) ==
+        std::string("p\xc9\xad" "o"));  // ɫ → ɭ
+  CHECK(normalize_russian_ipa_piper_style(std::string("n\xca\x89t")) == "nut");  // ʉ → u
+  // Second phase: ʌ/ɪ/ʊ → ASCII (before boundary `` i `` → ɪ).
+  CHECK(normalize_russian_ipa_piper_style(std::string("\xca\x8c" "ka")) == "aka");  // ʌ → a
+  CHECK(normalize_russian_ipa_piper_style(std::string("\xca\x8a" "ka")) == "uka");  // ʊ → u
+  CHECK(normalize_russian_ipa_piper_style(std::string("b\xc9\xaat")) == "bit");  // interior ɪ → i (no boundary)
+  CHECK(normalize_russian_ipa_piper_style(std::string("foo \xc9\xaa bar")) ==
+        std::string("foo \xc9\xaa bar"));  // `` ɪ `` between spaces → i then restored to ɪ
+  CHECK(normalize_russian_ipa_piper_style(std::string("\xc9\x99" "ka")) == "aka");  // ə → ʌ → a
+  // Combining acute on nucleus → ˈ, then same vowel remaps as stressed pair (ˈɨ → ˈy).
+  const std::string acute = std::string("\xcc\x81", 2);
+  CHECK(normalize_russian_ipa_piper_style(std::string("t\xc9\xa8") + acute + "s") ==
+        std::string("t\xcb\x88" "ys"));  // acute on ɨ → ˈ before nucleus: tˈɨs → tˈys
+  CHECK(normalize_russian_ipa_piper_style(std::string("\xcb\x88\xc9\xa8")) ==
+        std::string("\xcb\x88") + "y");
+  // Redundant acute after existing ˈ is dropped (no double ˈ).
+  CHECK(normalize_russian_ipa_piper_style(std::string("\xcb\x88\xc9\xa8") + acute) ==
+        std::string("\xcb\x88") + "y");
+  CHECK(normalize_russian_ipa_piper_style(std::string("\xca\x8c") + acute + "ka") ==
+        std::string("\xcb\x88" "aka"));
+}

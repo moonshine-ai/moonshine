@@ -12,6 +12,12 @@ namespace moonshine_tts {
 /// NFC (Unicode canonical composition) via utf8proc; frees the same way as other call sites.
 std::string utf8_nfc_copy(std::string_view ipa_utf8);
 
+/// Rewrite Russian IPA from Moonshine rule/lexicon G2P toward Piper / Kokoro / espeak-ng-like symbols
+/// (NFC; combining acute U+0301 → ˈ on the nucleus; affricate digraphs; non-retroflex fricatives;
+/// stress+nucleus units like ˈɨ→ˈy before bare ɨ→y; ɫ→ɭ, ʉ→u, ʌ→a, ɪ→i, ʊ→u; *что* as /ʃto/, etc.;
+/// boundary ASCII ``i`` may become ɪ after vowel-to-ASCII passes).
+std::string normalize_russian_ipa_piper_style(std::string ipa);
+
 /// NFC, then shared + per-language substring replacements (``piper_lang_key`` matches Python
 /// ``piper_ipa_normalization.normalize_g2p_ipa_for_piper``, e.g. ``en_us``, ``de``, ``es_mx``).
 std::string normalize_g2p_ipa_for_piper(std::string_view ipa_utf8, std::string_view piper_lang_key);

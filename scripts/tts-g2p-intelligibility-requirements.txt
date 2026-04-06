@@ -1,0 +1,11 @@
+# Optional deps for scripts/tts_g2p_intelligibility.py (install in your venv):
+faster-whisper>=1.0.0
+jiwer>=3.0.0
+tqdm>=4.0.0
+# 4.4.0+ required on Python 3.14 (pickle / dill vs CPython; see huggingface/datasets#7839)
+datasets>=4.4.0
+# Upstream comparison engines (espeak-ng G2P is bundled or used inside these packages):
+kokoro>=0.7.0
+piper-tts>=1.2.0
+# kokoro pulls torch; install a torch build appropriate for your platform if needed
+fugashi
