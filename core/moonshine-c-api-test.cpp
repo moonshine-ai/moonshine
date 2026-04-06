@@ -660,6 +660,19 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     CHECK(csv.find("de/dict.tsv") != std::string::npos);
     CHECK(csv.find("en_us/dict_filtered_heteronyms.tsv") != std::string::npos);
     CHECK(csv.find("fr/adj.csv") != std::string::npos);
+    CHECK(csv.find("zh_hans/roberta_chinese_base_upos_onnx/model.onnx") != std::string::npos);
+    CHECK(csv.find("zh_hans/roberta_chinese_base_upos_onnx/model.ort") == std::string::npos);
+    CHECK(csv.find("ja/roberta_japanese_char_luw_upos_onnx/model.ort") != std::string::npos);
+    std::free(out);
+  }
+
+  SUBCASE("g2p-arabic-onnx-model-key-matches-meta-onnx-filename") {
+    char* out = nullptr;
+    REQUIRE(moonshine_get_g2p_dependencies("ar_msa", nullptr, 0, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string csv(out);
+    CHECK(csv.find("ar_msa/arabertv02_tashkeel_fadel_onnx/model.onnx") != std::string::npos);
+    CHECK(csv.find("ar_msa/arabertv02_tashkeel_fadel_onnx/model.ort") == std::string::npos);
     std::free(out);
   }
 

@@ -60,30 +60,33 @@ inline constexpr std::string_view kG2pOovOnnxOverrideKey = "oov_onnx_override";
 /// UTF-8 ``onnx-config.json`` when ``oov_onnx_override`` is used from memory.
 inline constexpr std::string_view kG2pOovOnnxConfigOverrideKey = "oov_onnx_config";
 
-/// Chinese tokenizer + ONNX bundle files (under ``kG2pChineseOnnxDirKey``).
+/// Chinese tokenizer + ONNX bundle files (under ``kG2pChineseOnnxDirKey``). Model basename matches
+/// ``onnx_model_file`` in ``meta.json`` (loaders still resolve a sibling ``model.ort`` via ``resolve_prefer_ort_model``).
 inline constexpr std::string_view kG2pChineseOnnxMetaKey = "zh_hans/roberta_chinese_base_upos_onnx/meta.json";
 inline constexpr std::string_view kG2pChineseOnnxVocabKey = "zh_hans/roberta_chinese_base_upos_onnx/vocab.txt";
 inline constexpr std::string_view kG2pChineseOnnxTokenizerConfigKey =
     "zh_hans/roberta_chinese_base_upos_onnx/tokenizer_config.json";
-inline constexpr std::string_view kG2pChineseOnnxModelKey = "zh_hans/roberta_chinese_base_upos_onnx/model.ort";
+inline constexpr std::string_view kG2pChineseOnnxModelKey = "zh_hans/roberta_chinese_base_upos_onnx/model.onnx";
 
 inline constexpr std::string_view kG2pJapaneseOnnxMetaKey = "ja/roberta_japanese_char_luw_upos_onnx/meta.json";
 inline constexpr std::string_view kG2pJapaneseOnnxVocabKey = "ja/roberta_japanese_char_luw_upos_onnx/vocab.txt";
 inline constexpr std::string_view kG2pJapaneseOnnxTokenizerConfigKey =
     "ja/roberta_japanese_char_luw_upos_onnx/tokenizer_config.json";
+/// Matches ``onnx_model_file`` in bundled ``meta.json`` (``.ort`` in-tree; loaders also accept ``.onnx``).
 inline constexpr std::string_view kG2pJapaneseOnnxModelKey = "ja/roberta_japanese_char_luw_upos_onnx/model.ort";
 
 inline constexpr std::string_view kG2pKoreanOnnxMetaKey = "ko/roberta_korean_morph_upos_onnx/meta.json";
 inline constexpr std::string_view kG2pKoreanOnnxVocabKey = "ko/roberta_korean_morph_upos_onnx/vocab.txt";
 inline constexpr std::string_view kG2pKoreanOnnxTokenizerConfigKey =
     "ko/roberta_korean_morph_upos_onnx/tokenizer_config.json";
-inline constexpr std::string_view kG2pKoreanOnnxModelKey = "ko/roberta_korean_morph_upos_onnx/model.ort";
+/// Default export name; runtime uses ``onnx_model_file`` from ``meta.json`` when present.
+inline constexpr std::string_view kG2pKoreanOnnxModelKey = "ko/roberta_korean_morph_upos_onnx/model.onnx";
 
 inline constexpr std::string_view kG2pArabicOnnxMetaKey = "ar_msa/arabertv02_tashkeel_fadel_onnx/meta.json";
 inline constexpr std::string_view kG2pArabicOnnxVocabKey = "ar_msa/arabertv02_tashkeel_fadel_onnx/vocab.txt";
 inline constexpr std::string_view kG2pArabicOnnxTokenizerConfigKey =
     "ar_msa/arabertv02_tashkeel_fadel_onnx/tokenizer_config.json";
-inline constexpr std::string_view kG2pArabicOnnxModelKey = "ar_msa/arabertv02_tashkeel_fadel_onnx/model.ort";
+inline constexpr std::string_view kG2pArabicOnnxModelKey = "ar_msa/arabertv02_tashkeel_fadel_onnx/model.onnx";
 
 /// English OOV ONNX next to ``en_us/g2p-config.json`` (``.onnx`` in-tree; ``.ort`` sibling allowed on disk).
 inline constexpr std::string_view kG2pEnglishOovModelKey = "en_us/oov/model.onnx";
