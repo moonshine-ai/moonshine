@@ -659,6 +659,20 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     const std::string csv(out);
     CHECK(csv.find("de/dict.tsv") != std::string::npos);
     CHECK(csv.find("en_us/dict_filtered_heteronyms.tsv") != std::string::npos);
+    CHECK(csv.find("fr/adj.csv") != std::string::npos);
+    std::free(out);
+  }
+
+  SUBCASE("g2p-french-lists-pos-csv-files-not-directory-prefix") {
+    char* out = nullptr;
+    REQUIRE(moonshine_get_g2p_dependencies("fr", nullptr, 0, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string csv(out);
+    CHECK(csv.find("fr/dict.tsv") != std::string::npos);
+    CHECK(csv.find("fr/noun.csv") != std::string::npos);
+    CHECK(csv.find("fr/verb.csv") != std::string::npos);
+    CHECK(csv.compare(0, 3, "fr,") != 0);
+    CHECK(csv.find(",fr,") == std::string::npos);
     std::free(out);
   }
 

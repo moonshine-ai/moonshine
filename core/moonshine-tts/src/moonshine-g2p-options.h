@@ -26,7 +26,16 @@ inline std::string g2p_bundle_file_key(std::string_view bundle_dir_key, std::str
 /// Canonical ``FileInformationMap`` keys for bundled relative assets (default path = key).
 inline constexpr std::string_view kG2pGermanDictKey = "de/dict.tsv";
 inline constexpr std::string_view kG2pFrenchDictKey = "fr/dict.tsv";
+/// Directory override for French POS CSVs (disk scan); CDN keys use the ``fr/*.csv`` paths below.
 inline constexpr std::string_view kG2pFrenchCsvDirKey = "fr";
+inline constexpr std::string_view kG2pFrenchPosAdjKey = "fr/adj.csv";
+inline constexpr std::string_view kG2pFrenchPosAdvKey = "fr/adv.csv";
+inline constexpr std::string_view kG2pFrenchPosConjKey = "fr/conj.csv";
+inline constexpr std::string_view kG2pFrenchPosDetKey = "fr/det.csv";
+inline constexpr std::string_view kG2pFrenchPosNounKey = "fr/noun.csv";
+inline constexpr std::string_view kG2pFrenchPosPrepKey = "fr/prep.csv";
+inline constexpr std::string_view kG2pFrenchPosPronKey = "fr/pron.csv";
+inline constexpr std::string_view kG2pFrenchPosVerbKey = "fr/verb.csv";
 inline constexpr std::string_view kG2pDutchDictKey = "nl/dict.tsv";
 inline constexpr std::string_view kG2pItalianDictKey = "it/dict.tsv";
 inline constexpr std::string_view kG2pRussianDictKey = "ru/dict.tsv";

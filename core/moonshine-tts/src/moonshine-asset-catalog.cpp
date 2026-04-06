@@ -48,7 +48,6 @@ std::vector<std::string> english_g2p_keys() {
 std::vector<std::string> chinese_g2p_keys() {
   return {
       std::string(kG2pChineseDictKey),
-      std::string(kG2pChineseOnnxDirKey),
       std::string(kG2pChineseOnnxMetaKey),
       std::string(kG2pChineseOnnxVocabKey),
       std::string(kG2pChineseOnnxTokenizerConfigKey),
@@ -59,7 +58,6 @@ std::vector<std::string> chinese_g2p_keys() {
 std::vector<std::string> japanese_g2p_keys() {
   return {
       std::string(kG2pJapaneseDictKey),
-      std::string(kG2pJapaneseOnnxDirKey),
       std::string(kG2pJapaneseOnnxMetaKey),
       std::string(kG2pJapaneseOnnxVocabKey),
       std::string(kG2pJapaneseOnnxTokenizerConfigKey),
@@ -75,11 +73,24 @@ std::vector<std::string> korean_g2p_keys() {
 std::vector<std::string> arabic_g2p_keys() {
   return {
       std::string(kG2pArabicDictKey),
-      std::string(kG2pArabicOnnxDirKey),
       std::string(kG2pArabicOnnxMetaKey),
       std::string(kG2pArabicOnnxVocabKey),
       std::string(kG2pArabicOnnxTokenizerConfigKey),
       std::string(kG2pArabicOnnxModelKey),
+  };
+}
+
+std::vector<std::string> french_g2p_keys() {
+  return {
+      std::string(kG2pFrenchDictKey),
+      std::string(kG2pFrenchPosAdjKey),
+      std::string(kG2pFrenchPosAdvKey),
+      std::string(kG2pFrenchPosConjKey),
+      std::string(kG2pFrenchPosDetKey),
+      std::string(kG2pFrenchPosNounKey),
+      std::string(kG2pFrenchPosPrepKey),
+      std::string(kG2pFrenchPosPronKey),
+      std::string(kG2pFrenchPosVerbKey),
   };
 }
 
@@ -88,7 +99,7 @@ const std::unordered_map<std::string, std::vector<std::string>>& g2p_dependency_
     const std::vector<std::string> kEmpty;
     const std::vector<std::string> kEnglish = english_g2p_keys();
     const std::vector<std::string> kDe = {std::string(kG2pGermanDictKey)};
-    const std::vector<std::string> kFr = {std::string(kG2pFrenchDictKey), std::string(kG2pFrenchCsvDirKey)};
+    const std::vector<std::string> kFr = french_g2p_keys();
     const std::vector<std::string> kNl = {std::string(kG2pDutchDictKey)};
     const std::vector<std::string> kIt = {std::string(kG2pItalianDictKey)};
     const std::vector<std::string> kRu = {std::string(kG2pRussianDictKey)};
