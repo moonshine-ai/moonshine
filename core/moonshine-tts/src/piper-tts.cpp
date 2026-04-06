@@ -90,6 +90,8 @@ const PiperLangRow* lookup_piper_lang_row(std::string_view k) {
       {"pt-pt", {"pt_pt", "pt_pt", "pt_PT-tugão-medium.onnx"}},
       {"zh", {"zh", "zh_hans", "zh_CN-huayan-medium.onnx"}},
       {"zh_hans", {"zh", "zh_hans", "zh_CN-huayan-medium.onnx"}},
+      {"zh_cn", {"zh", "zh_hans", "zh_CN-huayan-medium.onnx"}},
+      {"zt", {"zh", "zh_hans", "zh_CN-huayan-medium.onnx"}},
       {"ar_msa", {"ar", "ar_msa", "ar_JO-kareem-medium.onnx"}},
       {"ar", {"ar", "ar_msa", "ar_JO-kareem-medium.onnx"}},
       {"de", {"de-DE", "de", "de_DE-thorsten-medium.onnx"}},

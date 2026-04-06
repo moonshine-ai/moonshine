@@ -34,6 +34,8 @@ TEST_CASE("chinese: dialect_resolves_to_chinese_rules") {
   CHECK(dialect_resolves_to_chinese_rules("zh"));
   CHECK(dialect_resolves_to_chinese_rules("zh-Hans"));
   CHECK(dialect_resolves_to_chinese_rules("ZH_cn"));
+  CHECK(dialect_resolves_to_chinese_rules("zh_cn"));
+  CHECK(dialect_resolves_to_chinese_rules("zt"));
   CHECK(dialect_resolves_to_chinese_rules("cmn"));
   CHECK_FALSE(dialect_resolves_to_chinese_rules("ja"));
 }
