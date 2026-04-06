@@ -138,6 +138,8 @@ const std::unordered_map<std::string, std::vector<std::string>>& g2p_dependency_
 
     add("zh", kZh);
     add("zh_hans", kZh);
+    add("zh_cn", kZh);
+    add("zt", kZh);
     add("chinese", kZh);
 
     add("ja", kJa);

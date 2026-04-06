@@ -527,12 +527,12 @@ bool dialect_resolves_to_chinese_rules(std::string_view dialect_id) {
   if (s.empty()) {
     return false;
   }
-  return s == "zh" || s == "zh-hans" || s == "zh-cn" || s == "cmn" || s == "chinese";
+  return s == "zh" || s == "zh-hans" || s == "zh-cn" || s == "zt" || s == "cmn" || s == "chinese";
 }
 
 std::vector<std::string> ChineseRuleG2p::dialect_ids() {
   return dedupe_dialect_ids_preserve_first(
-      {"zh", "zh-Hans", "zh_CN", "zh-CN", "zh_hans", "cmn", "Chinese"});
+      {"zh", "zh-Hans", "zh_CN", "zh-CN", "zh_hans", "zt", "cmn", "Chinese"});
 }
 
 std::filesystem::path resolve_chinese_dict_path(const std::filesystem::path& model_root) {

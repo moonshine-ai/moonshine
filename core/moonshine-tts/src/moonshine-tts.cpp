@@ -136,6 +136,8 @@ const LangProfile* lookup_lang_profile(std::string_view key) {
       {"jp", {'j', "jf_alpha", "ja"}},
       {"zh", {'z', "zf_xiaobei", "zh"}},
       {"zh_hans", {'z', "zf_xiaobei", "zh"}},
+      {"zh_cn", {'z', "zf_xiaobei", "zh"}},
+      {"zt", {'z', "zf_xiaobei", "zh"}},
   };
   const std::string k = normalize_lang_key(key);
   const auto it = m.find(k);
