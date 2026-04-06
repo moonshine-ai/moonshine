@@ -163,7 +163,146 @@ char32_t utf8_singleton_codepoint(std::string_view token) {
   return cp;
 }
 
+size_t utf8_prev_codepoint_start(const std::string& s, size_t char_start) {
+  if (char_start == 0) {
+    return 0;
+  }
+  size_t k = char_start;
+  do {
+    --k;
+  } while (k > 0 && (static_cast<unsigned char>(s[k]) & 0xC0) == 0x80);
+  return k;
+}
+
+// Map combining acute (U+0301) after a nucleus onto U+02C8 ˈ (Piper-style modifier stress). If the
+// nucleus already has ˈ/ˌ immediately before it, drop the redundant acute only.
+void rewrite_russian_combining_acute_to_primary_stress(std::string& s) {
+  static const std::string kAcute("\xcc\x81");
+  static const std::string kPri("\xcb\x88");
+  static const std::string kSec("\xcb\x8c");  // U+02CC ˌ (secondary stress; not ʌ U+028C)
+  size_t p = 0;
+  while ((p = s.find(kAcute, p)) != std::string::npos) {
+    if (p == 0) {
+      s.erase(p, kAcute.size());
+      continue;
+    }
+    size_t anchor = utf8_prev_codepoint_start(s, p);
+    char32_t cp = 0;
+    size_t adv = 0;
+    if (!utf8_decode_at(s, anchor, cp, adv)) {
+      s.erase(p, kAcute.size());
+      continue;
+    }
+    if (cp == U'\u02B2') {
+      const size_t prev = utf8_prev_codepoint_start(s, anchor);
+      if (prev < anchor) {
+        anchor = prev;
+      }
+    }
+    if (anchor >= 2 && s.compare(anchor - 2, 2, kPri) == 0) {
+      s.erase(p, kAcute.size());
+      p = anchor;
+      continue;
+    }
+    if (anchor >= 2 && s.compare(anchor - 2, 2, kSec) == 0) {
+      s.erase(p, kAcute.size());
+      p = anchor;
+      continue;
+    }
+    const std::string nucleus = s.substr(anchor, p - anchor);
+    const std::string replacement = kPri + nucleus;
+    s.replace(anchor, (p + kAcute.size()) - anchor, replacement);
+    p = anchor + replacement.size();
+  }
+}
+
+// Russian G2P uses narrow-IPA tie bars and retroflex letters; Piper / Kokoro / espeak-ng expect
+// digraph affricates, /ʃ/ /ʒ/, ASCII a/i/u/y for many vowel slots, retroflex ɭ (not velarized ɫ).
+// NFC first; combining acute → ˈ before vowel remaps; stress+nucleus pairs (ˈɨ→ˈy, …) before bare
+// ɨ→y so ˈ stays aligned. ɪ→i runs before the boundary pass that maps ASCII `` i `` back to ɪ.
+void apply_russian_ipa_piper_style(std::string& s) {
+  {
+    std::string nfc = utf8_nfc_copy(s);
+    s.swap(nfc);
+  }
+  static const std::vector<std::pair<std::string, std::string>> kAffricateSchwa = {
+      {std::string("t") + "\xc9\x95" + "t" + "\xcb\x88" + "o", std::string("\xca\x83") + "to"},
+      {std::string("t") + "\xc9\x95" + "t" + "\xcb\x88" + "\xc9\x94", std::string("\xca\x83") + "to"},
+      {std::string("t") + "\xc9\x95" + "to", std::string("\xca\x83") + "to"},
+      {std::string("t") + "\xc9\x95" + "t" + "\xca\x8c", std::string("\xca\x83") + "to"},
+      {std::string("t") + "\xcd\xa1" + "\xc9\x95", std::string("t") + "\xca\x83" + "\xca\xb2"},
+      {std::string("d") + "\xcd\xa1" + "\xca\x90", std::string("d") + "\xca\x90"},
+      {std::string("t") + "\xcd\xa1" + "s", std::string("ts")},
+      {std::string("d") + "\xcd\xa1" + "z", std::string("dz")},
+      {std::string("t") + "\xc9\x95", std::string("t") + "\xca\x83" + "\xca\xb2"},
+      {"\xca\x82", "\xca\x83"},
+      {"\xc9\x90", "\xca\x8c"},
+      {"\xc9\x99", "\xca\x8c"},
+  };
+  for (const auto& pr : kAffricateSchwa) {
+    replace_utf8_all(s, pr.first, pr.second);
+  }
+  rewrite_russian_combining_acute_to_primary_stress(s);
+  static const std::vector<std::pair<std::string, std::string>> kStressNucleus = {
+      {"\xcb\x88\xc9\xa8", std::string("\xcb\x88") + "y"},        // ˈɨ → ˈy
+      {"\xcb\x8c\xc9\xa8", std::string("\xcb\x8c") + "y"},        // ˌɨ → ˌy
+      {"\xcb\x88\xc9\xab", std::string("\xcb\x88\xc9\xad")},       // ˈɫ → ˈɭ
+      {"\xcb\x8c\xc9\xab", std::string("\xcb\x8c\xc9\xad")},       // ˌɫ → ˌɭ
+      {"\xcb\x88\xca\x8c", std::string("\xcb\x88") + "a"},         // ˈʌ → ˈa
+      {"\xcb\x8c\xca\x8c", std::string("\xcb\x8c") + "a"},         // ˌʌ → ˌa
+      {"\xcb\x88\xc9\xaa", std::string("\xcb\x88") + "i"},        // ˈɪ → ˈi
+      {"\xcb\x8c\xc9\xaa", std::string("\xcb\x8c") + "i"},        // ˌɪ → ˌi
+      {"\xcb\x88\xca\x8a", std::string("\xcb\x88") + "u"},         // ˈʊ → ˈu
+      {"\xcb\x8c\xca\x8a", std::string("\xcb\x8c") + "u"},         // ˌʊ → ˌu
+      {"\xcb\x88\xca\x89", std::string("\xcb\x88") + "u"},         // ˈʉ → ˈu
+      {"\xcb\x8c\xca\x89", std::string("\xcb\x8c") + "u"},         // ˌʉ → ˌu
+  };
+  for (const auto& pr : kStressNucleus) {
+    replace_utf8_all(s, pr.first, pr.second);
+  }
+  static const std::vector<std::pair<std::string, std::string>> kBareNucleus = {
+      {"\xc9\xab", "\xc9\xad"},  // ɫ → ɭ
+      {"\xc9\xa8", "y"},         // ɨ → y
+      {"\xca\x89", "u"},         // ʉ → u (U+0289)
+      {"\xca\x8c", "a"},         // ʌ → a (U+028C)
+      {"\xc9\xaa", "i"},         // ɪ → i (U+026A)
+      {"\xca\x8a", "u"},         // ʊ → u (U+028A)
+  };
+  for (const auto& pr : kBareNucleus) {
+    replace_utf8_all(s, pr.first, pr.second);
+  }
+  static const std::string kZhd("\xca\x90");
+  static const std::string kZhj("\xca\x92");
+  size_t p = 0;
+  while ((p = s.find(kZhd, p)) != std::string::npos) {
+    if (p >= 1 && s[p - 1] == 'd') {
+      p += kZhd.size();
+      continue;
+    }
+    s.replace(p, kZhd.size(), kZhj);
+    p += kZhj.size();
+  }
+  replace_utf8_all(s, " i ", " \xc9\xaa ");
+  replace_utf8_all(s, ")i ", ")\xc9\xaa ");
+  replace_utf8_all(s, "\xc2\xab" "i ", "\xc2\xab" "\xc9\xaa ");
+  replace_utf8_all(s, ", i ", ", \xc9\xaa ");
+  if (s.size() >= 2 && s[0] == 'i' && s[1] == ' ') {
+    static const std::string kIsp("\xc9\xaa ");
+    s.replace(0, 2, kIsp);
+  }
+  for (const char sep : std::string_view(",;:")) {
+    const std::string pat = std::string(1, sep) + " i ";
+    const std::string rep = std::string(1, sep) + " \xc9\xaa ";
+    replace_utf8_all(s, pat, rep);
+  }
+}
+
 }  // namespace
+
+std::string normalize_russian_ipa_piper_style(std::string ipa) {
+  apply_russian_ipa_piper_style(ipa);
+  return ipa;
+}
 
 std::string utf8_nfc_copy(std::string_view s) {
   const std::string tmp(s);

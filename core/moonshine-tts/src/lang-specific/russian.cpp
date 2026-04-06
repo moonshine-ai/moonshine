@@ -1,6 +1,7 @@
 #include "russian.h"
 
 #include "g2p-word-log.h"
+#include "ipa-postprocess.h"
 #include "ipa-symbols.h"
 #include "german.h"
 #include "utf8-utils.h"
@@ -452,6 +453,9 @@ bool palatalizable_cons(char32_t ch) {
 
 std::string emit_consonant(char32_t ch, bool palatal) {
   switch (ch) {
+  case U'\u0448':
+    // Was omitted in the Python port (``ш`` not in ``_CONS_PHONE``); TTS needs a segment.
+    return "\xCA\x82";  // U+0282 LATIN SMALL LETTER S WITH HOOK (ʂ); \xC9\x82 is U+0242 ɂ (wrong).
   case U'\u0447':
     return "tɕ";
   case U'\u0449':
@@ -623,7 +627,8 @@ std::string letters_to_ipa_rules(const std::string& w_clean, int stress_syl) {
       return false;
     }
     const std::string& last = out.back();
-    if (last == "tɕ" || last == "ɕː" || last == "ts" || last == "ʐ") {
+    if (last == "tɕ" || last == "ɕː" || last == "ts" || last == "ʐ" ||
+        last == "\xCA\x82") {  // ʂ (U+0282)
       return false;
     }
     return ipa_piece_ends_with_palatal(last);
@@ -658,14 +663,6 @@ std::string letters_to_ipa_rules(const std::string& w_clean, int stress_syl) {
       after_vowel = false;
       continue;
     }
-    // Python ``_letters_to_ipa_rules``: ``ш`` is not in ``_CONS_PHONE`` and not in ``цчщ``, so it is skipped.
-    if (ch == U'\u0448' || ch == U'\u0428') {
-      byte_i += adv;
-      ++cp_index;
-      after_vowel = false;
-      continue;
-    }
-
     if (is_russian_vowel_letter(ch)) {
       const bool jot = out.empty() || after_vowel;
       const bool ap = after_palatal();
@@ -940,6 +937,18 @@ bool try_consume_unicode_word(const std::string& text, size_t pos, size_t& out_e
   return out_end > pos;
 }
 
+/// Lexicon entries mark a fleeting soft sign as ⁽ʲ⁾ (U+207D U+02B2 U+207E). Piper / espeak-style
+/// phones and many vocoders only understand plain U+02B2; leaving the superscript parens in the
+/// string mis-anchors palatalization and hurts synthesis intelligibility.
+std::string normalize_russian_fleeting_palatal_markers_utf8(std::string ipa) {
+  static const std::string kFleeting{"\xE2\x81\xBD\xCA\xB2\xE2\x81\xBE"};
+  for (size_t p = ipa.find(kFleeting); p != std::string::npos; p = ipa.find(kFleeting, p)) {
+    ipa.replace(p, kFleeting.size(), kPalatal);
+    p += kPalatal.size();
+  }
+  return ipa;
+}
+
 }  // namespace
 
 #include "russian-numbers.cpp"
@@ -962,12 +971,14 @@ std::string RussianRuleG2p::finalize_ipa(std::string ipa) const {
   if (!options_.with_stress) {
     erase_utf8_substr(ipa, kPri);
     erase_utf8_substr(ipa, kSec);
-    return ipa;
+    ipa = normalize_russian_fleeting_palatal_markers_utf8(std::move(ipa));
+    return normalize_russian_ipa_piper_style(std::move(ipa));
   }
   if (options_.vocoder_stress) {
-    return GermanRuleG2p::normalize_ipa_stress_for_vocoder(std::move(ipa));
+    ipa = GermanRuleG2p::normalize_ipa_stress_for_vocoder(std::move(ipa));
   }
-  return ipa;
+  ipa = normalize_russian_fleeting_palatal_markers_utf8(std::move(ipa));
+  return normalize_russian_ipa_piper_style(std::move(ipa));
 }
 
 std::string RussianRuleG2p::lookup_or_rules(const std::string& raw_word) const {

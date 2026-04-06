@@ -25,6 +25,14 @@ MOONSHINE_FLAG_FORCE_UPDATE = 1 << 0
 MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M = 0
 
 
+def _decode_utf8_from_c(buf: bytes) -> str:
+    """Decode C malloc NUL-terminated bytes; tolerate rare invalid UTF-8 from native G2P output."""
+    try:
+        return buf.decode("utf-8")
+    except UnicodeDecodeError:
+        return buf.decode("utf-8", errors="replace")
+
+
 def _load_libc():
     if sys.platform == "win32":
         return ctypes.CDLL("msvcrt")
@@ -420,16 +428,19 @@ def moonshine_text_to_phonemes_string(
         ctypes.byref(out_count),
     )
     if err != MOONSHINE_ERROR_NONE:
-        raise MoonshineError(
-            lib.moonshine_error_to_string(err).decode("utf-8")
-            if lib.moonshine_error_to_string(err)
-            else f"moonshine_text_to_phonemes failed ({err})"
-        )
+        raw = lib.moonshine_error_to_string(err)
+        msg = raw.decode("utf-8") if raw else f"moonshine_text_to_phonemes failed ({err})"
+        if err == MOONSHINE_ERROR_UNKNOWN and msg == "Unknown error":
+            msg = (
+                "G2P failed (unknown error; the native layer usually logs the cause on stderr, "
+                "e.g. tokenizer / WordPiece alignment)"
+            )
+        raise MoonshineError(msg)
     if not out_ph.value:
         return ""
     addr = ctypes.cast(out_ph, ctypes.c_void_p).value
     try:
-        return ctypes.string_at(addr).decode("utf-8")
+        return _decode_utf8_from_c(ctypes.string_at(addr))
     finally:
         moonshine_free(addr)
 
