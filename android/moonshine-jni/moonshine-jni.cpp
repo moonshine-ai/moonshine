@@ -1,7 +1,13 @@
 #include <jni.h>
 
+#include <cstdint>
+#include <cstdlib>
+#include <algorithm>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <android/log.h>
@@ -13,8 +19,7 @@
 #include "moonshine-c-api.h"
 #include "utf8.h"
 
-namespace {
-jclass get_class(JNIEnv *env, const char *className) {
+static jclass get_class(JNIEnv *env, const char *className) {
   jclass clazz = env->FindClass(className);
   if (clazz == nullptr) {
     throw std::runtime_error(std::string("Failed to find class: ") + className);
@@ -22,8 +27,8 @@ jclass get_class(JNIEnv *env, const char *className) {
   return clazz;
 }
 
-jfieldID get_field(JNIEnv *env, jclass clazz, const char *fieldName,
-                   const char *fieldType) {
+static jfieldID get_field(JNIEnv *env, jclass clazz, const char *fieldName,
+                          const char *fieldType) {
   jfieldID field = env->GetFieldID(clazz, fieldName, fieldType);
   if (field == nullptr) {
     throw std::runtime_error(std::string("Failed to find field: ") + fieldName);
@@ -31,8 +36,8 @@ jfieldID get_field(JNIEnv *env, jclass clazz, const char *fieldName,
   return field;
 }
 
-jmethodID get_method(JNIEnv *env, jclass clazz, const char *methodName,
-                     const char *methodSignature) {
+static jmethodID get_method(JNIEnv *env, jclass clazz, const char *methodName,
+                            const char *methodSignature) {
   jmethodID method = env->GetMethodID(clazz, methodName, methodSignature);
   if (method == nullptr) {
     throw std::runtime_error(std::string("Failed to find method: ") +
@@ -41,7 +46,7 @@ jmethodID get_method(JNIEnv *env, jclass clazz, const char *methodName,
   return method;
 }
 
-std::unique_ptr<transcript_t> c_transcript_from_jobject(
+static std::unique_ptr<transcript_t> c_transcript_from_jobject(
     JNIEnv *env, jobject javaTranscript) {
   jclass transcriptClass = env->GetObjectClass(javaTranscript);
   jfieldID linesField =
@@ -104,7 +109,7 @@ std::unique_ptr<transcript_t> c_transcript_from_jobject(
   return transcript;
 }
 
-jobject c_transcript_to_jobject(JNIEnv *env, struct transcript_t *transcript) {
+static jobject c_transcript_to_jobject(JNIEnv *env, struct transcript_t *transcript) {
   jclass listClass = get_class(env, "java/util/ArrayList");
   jmethodID addMethod =
       get_method(env, listClass, "add", "(Ljava/lang/Object;)Z");
@@ -210,7 +215,61 @@ jobject c_transcript_to_jobject(JNIEnv *env, struct transcript_t *transcript) {
   return jtranscript;
 }
 
-}  // namespace
+static bool fill_moonshine_options(
+    JNIEnv *env, jobjectArray joptions, std::vector<moonshine_option_t> *out_c,
+    std::vector<std::pair<jstring, jstring>> *jhold) {
+  if (!out_c || !jhold) {
+    return false;
+  }
+  jhold->clear();
+  out_c->clear();
+  if (joptions == nullptr) {
+    return true;
+  }
+  jclass optionClass = get_class(env, "ai/moonshine/voice/TranscriberOption");
+  jfieldID nameField =
+      get_field(env, optionClass, "name", "Ljava/lang/String;");
+  jfieldID valueField =
+      get_field(env, optionClass, "value", "Ljava/lang/String;");
+  const jsize n = env->GetArrayLength(joptions);
+  for (jsize i = 0; i < n; i++) {
+    jobject joption = env->GetObjectArrayElement(joptions, i);
+    if (joption == nullptr) {
+      continue;
+    }
+    jstring jname = (jstring)env->GetObjectField(joption, nameField);
+    jstring jvalue = (jstring)env->GetObjectField(joption, valueField);
+    if (jname == nullptr || jvalue == nullptr) {
+      continue;
+    }
+    const char *name_utf = env->GetStringUTFChars(jname, nullptr);
+    const char *value_utf = env->GetStringUTFChars(jvalue, nullptr);
+    jhold->push_back({jname, jvalue});
+    out_c->push_back({name_utf, value_utf});
+  }
+  return true;
+}
+
+static void release_moonshine_options(
+    JNIEnv *env, const std::vector<moonshine_option_t> &copts,
+    const std::vector<std::pair<jstring, jstring>> &jhold) {
+  const size_t m = std::min(copts.size(), jhold.size());
+  for (size_t i = 0; i < m; i++) {
+    if (jhold[i].first != nullptr) {
+      env->ReleaseStringUTFChars(jhold[i].first, copts[i].name);
+    }
+    if (jhold[i].second != nullptr) {
+      env->ReleaseStringUTFChars(jhold[i].second, copts[i].value);
+    }
+  }
+}
+
+static std::mutex g_tts_memory_backing_mutex;
+static std::unordered_map<int32_t, std::vector<std::vector<uint8_t>>>
+    g_tts_memory_backing;
+static std::mutex g_g2p_memory_backing_mutex;
+static std::unordered_map<int32_t, std::vector<std::vector<uint8_t>>>
+    g_g2p_memory_backing;
 
 extern "C" JNIEXPORT jint JNICALL
 Java_ai_moonshine_voice_JNI_moonshineGetVersion(JNIEnv * /* env */,
@@ -438,4 +497,523 @@ Java_ai_moonshine_voice_JNI_moonshineTranscribeStream(JNIEnv *env,
     LOGE("moonshineTranscribeStream: %s\n", e.what());
     return nullptr;
   }
-} 
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_ai_moonshine_voice_JNI_moonshineCreateTtsSynthesizerFromFiles(
+    JNIEnv *env, jobject /* this */, jstring language, jobjectArray jfilenames,
+    jobjectArray joptions) {
+  try {
+    std::vector<moonshine_option_t> copts;
+    std::vector<std::pair<jstring, jstring>> jhold;
+    if (!fill_moonshine_options(env, joptions, &copts, &jhold)) {
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
+    }
+    const char *lang_ptr = nullptr;
+    if (language != nullptr) {
+      lang_ptr = env->GetStringUTFChars(language, nullptr);
+    }
+    const char **c_filenames_ptr = nullptr;
+    uint64_t filenames_count = 0;
+    std::vector<std::string> filename_storage;
+    std::vector<const char *> c_filenames;
+    if (jfilenames != nullptr) {
+      const jsize n = env->GetArrayLength(jfilenames);
+      filename_storage.reserve(static_cast<size_t>(n));
+      c_filenames.reserve(static_cast<size_t>(n));
+      for (jsize i = 0; i < n; i++) {
+        jstring jf = (jstring)env->GetObjectArrayElement(jfilenames, i);
+        if (jf == nullptr) {
+          release_moonshine_options(env, copts, jhold);
+          if (lang_ptr != nullptr) {
+            env->ReleaseStringUTFChars(language, lang_ptr);
+          }
+          return MOONSHINE_ERROR_INVALID_ARGUMENT;
+        }
+        const char *u = env->GetStringUTFChars(jf, nullptr);
+        filename_storage.emplace_back(u);
+        env->ReleaseStringUTFChars(jf, u);
+        c_filenames.push_back(filename_storage.back().c_str());
+      }
+      filenames_count = static_cast<uint64_t>(c_filenames.size());
+      c_filenames_ptr = c_filenames.data();
+    }
+    const int32_t handle = moonshine_create_tts_synthesizer_from_files(
+        lang_ptr, c_filenames_ptr, filenames_count, copts.data(), copts.size(),
+        MOONSHINE_HEADER_VERSION);
+    release_moonshine_options(env, copts, jhold);
+    if (lang_ptr != nullptr) {
+      env->ReleaseStringUTFChars(language, lang_ptr);
+    }
+    return handle;
+  } catch (const std::exception &e) {
+    LOGE("moonshineCreateTtsSynthesizerFromFiles: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_ai_moonshine_voice_JNI_moonshineCreateTtsSynthesizerFromMemory(
+    JNIEnv *env, jobject /* this */, jstring language, jobjectArray jfilenames,
+    jobjectArray jmemory, jobjectArray joptions) {
+  try {
+    std::vector<moonshine_option_t> copts;
+    std::vector<std::pair<jstring, jstring>> jhold;
+    if (!fill_moonshine_options(env, joptions, &copts, &jhold)) {
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
+    }
+    const char *lang_ptr = nullptr;
+    if (language != nullptr) {
+      lang_ptr = env->GetStringUTFChars(language, nullptr);
+    }
+    const jsize n = jfilenames != nullptr ? env->GetArrayLength(jfilenames) : 0;
+    if (n > 0 && jmemory == nullptr) {
+      release_moonshine_options(env, copts, jhold);
+      if (lang_ptr != nullptr) {
+        env->ReleaseStringUTFChars(language, lang_ptr);
+      }
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
+    }
+    if (n > 0 && env->GetArrayLength(jmemory) != n) {
+      release_moonshine_options(env, copts, jhold);
+      if (lang_ptr != nullptr) {
+        env->ReleaseStringUTFChars(language, lang_ptr);
+      }
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
+    }
+    std::vector<std::string> filename_storage;
+    std::vector<const char *> c_filenames;
+    filename_storage.reserve(static_cast<size_t>(n));
+    c_filenames.reserve(static_cast<size_t>(n));
+    std::vector<std::vector<uint8_t>> backing;
+    std::vector<const uint8_t *> c_mem;
+    std::vector<uint64_t> c_sizes;
+    c_mem.reserve(static_cast<size_t>(n));
+    c_sizes.reserve(static_cast<size_t>(n));
+    for (jsize i = 0; i < n; i++) {
+      jstring jf = (jstring)env->GetObjectArrayElement(jfilenames, i);
+      if (jf == nullptr) {
+        release_moonshine_options(env, copts, jhold);
+        if (lang_ptr != nullptr) {
+          env->ReleaseStringUTFChars(language, lang_ptr);
+        }
+        return MOONSHINE_ERROR_INVALID_ARGUMENT;
+      }
+      const char *u = env->GetStringUTFChars(jf, nullptr);
+      filename_storage.emplace_back(u);
+      env->ReleaseStringUTFChars(jf, u);
+      c_filenames.push_back(filename_storage.back().c_str());
+      jbyteArray jbuf = (jbyteArray)env->GetObjectArrayElement(jmemory, i);
+      if (jbuf == nullptr) {
+        c_mem.push_back(nullptr);
+        c_sizes.push_back(0);
+        continue;
+      }
+      const jsize len = env->GetArrayLength(jbuf);
+      if (len <= 0) {
+        c_mem.push_back(nullptr);
+        c_sizes.push_back(0);
+        continue;
+      }
+      std::vector<uint8_t> copy(static_cast<size_t>(len));
+      env->GetByteArrayRegion(jbuf, 0, len,
+                              reinterpret_cast<jbyte *>(copy.data()));
+      backing.push_back(std::move(copy));
+      c_mem.push_back(backing.back().data());
+      c_sizes.push_back(static_cast<uint64_t>(backing.back().size()));
+    }
+    const int32_t handle = moonshine_create_tts_synthesizer_from_memory(
+        lang_ptr, c_filenames.data(), static_cast<uint64_t>(c_filenames.size()),
+        c_mem.data(), c_sizes.data(), copts.data(), copts.size(),
+        MOONSHINE_HEADER_VERSION);
+    release_moonshine_options(env, copts, jhold);
+    if (lang_ptr != nullptr) {
+      env->ReleaseStringUTFChars(language, lang_ptr);
+    }
+    if (handle >= 0 && !backing.empty()) {
+      std::lock_guard<std::mutex> lock(g_tts_memory_backing_mutex);
+      g_tts_memory_backing[handle] = std::move(backing);
+    }
+    return handle;
+  } catch (const std::exception &e) {
+    LOGE("moonshineCreateTtsSynthesizerFromMemory: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_ai_moonshine_voice_JNI_moonshineFreeTtsSynthesizer(JNIEnv * /* env */,
+                                                        jobject /* this */,
+                                                        jint tts_handle) {
+  try {
+    moonshine_free_tts_synthesizer(tts_handle);
+    std::lock_guard<std::mutex> lock(g_tts_memory_backing_mutex);
+    g_tts_memory_backing.erase(tts_handle);
+  } catch (const std::exception &e) {
+    LOGE("moonshineFreeTtsSynthesizer: %s\n", e.what());
+  }
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_ai_moonshine_voice_JNI_moonshineGetG2pDependencies(JNIEnv *env,
+                                                      jobject /* this */,
+                                                      jstring languages,
+                                                      jobjectArray joptions) {
+  try {
+    std::vector<moonshine_option_t> copts;
+    std::vector<std::pair<jstring, jstring>> jhold;
+    if (!fill_moonshine_options(env, joptions, &copts, &jhold)) {
+      return nullptr;
+    }
+    const char *lang_ptr = nullptr;
+    if (languages != nullptr) {
+      lang_ptr = env->GetStringUTFChars(languages, nullptr);
+    }
+    char *out = nullptr;
+    const int32_t err = moonshine_get_g2p_dependencies(
+        lang_ptr, copts.data(), copts.size(), &out);
+    release_moonshine_options(env, copts, jhold);
+    if (languages != nullptr && lang_ptr != nullptr) {
+      env->ReleaseStringUTFChars(languages, lang_ptr);
+    }
+    if (err != MOONSHINE_ERROR_NONE) {
+      if (out != nullptr) {
+        std::free(out);
+      }
+      return nullptr;
+    }
+    if (out == nullptr) {
+      return env->NewStringUTF("");
+    }
+    std::string sanitized = utf8::replace_invalid(std::string(out));
+    std::free(out);
+    return env->NewStringUTF(sanitized.c_str());
+  } catch (const std::exception &e) {
+    LOGE("moonshineGetG2pDependencies: %s\n", e.what());
+    return nullptr;
+  }
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_ai_moonshine_voice_JNI_moonshineGetTtsDependencies(JNIEnv *env,
+                                                      jobject /* this */,
+                                                      jstring languages,
+                                                      jobjectArray joptions) {
+  try {
+    std::vector<moonshine_option_t> copts;
+    std::vector<std::pair<jstring, jstring>> jhold;
+    if (!fill_moonshine_options(env, joptions, &copts, &jhold)) {
+      return nullptr;
+    }
+    const char *lang_ptr = nullptr;
+    if (languages != nullptr) {
+      lang_ptr = env->GetStringUTFChars(languages, nullptr);
+    }
+    char *out = nullptr;
+    const int32_t err = moonshine_get_tts_dependencies(
+        lang_ptr, copts.data(), copts.size(), &out);
+    release_moonshine_options(env, copts, jhold);
+    if (languages != nullptr && lang_ptr != nullptr) {
+      env->ReleaseStringUTFChars(languages, lang_ptr);
+    }
+    if (err != MOONSHINE_ERROR_NONE) {
+      if (out != nullptr) {
+        std::free(out);
+      }
+      return nullptr;
+    }
+    if (out == nullptr) {
+      return env->NewStringUTF("");
+    }
+    std::string sanitized = utf8::replace_invalid(std::string(out));
+    std::free(out);
+    return env->NewStringUTF(sanitized.c_str());
+  } catch (const std::exception &e) {
+    LOGE("moonshineGetTtsDependencies: %s\n", e.what());
+    return nullptr;
+  }
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_ai_moonshine_voice_JNI_moonshineGetTtsVoices(JNIEnv *env, jobject /* this */,
+                                                  jstring languages,
+                                                  jobjectArray joptions) {
+  try {
+    std::vector<moonshine_option_t> copts;
+    std::vector<std::pair<jstring, jstring>> jhold;
+    if (!fill_moonshine_options(env, joptions, &copts, &jhold)) {
+      return nullptr;
+    }
+    const char *lang_ptr = nullptr;
+    if (languages != nullptr) {
+      lang_ptr = env->GetStringUTFChars(languages, nullptr);
+    }
+    char *out = nullptr;
+    const int32_t err = moonshine_get_tts_voices(lang_ptr, copts.data(),
+                                                 copts.size(), &out);
+    release_moonshine_options(env, copts, jhold);
+    if (languages != nullptr && lang_ptr != nullptr) {
+      env->ReleaseStringUTFChars(languages, lang_ptr);
+    }
+    if (err != MOONSHINE_ERROR_NONE) {
+      if (out != nullptr) {
+        std::free(out);
+      }
+      return nullptr;
+    }
+    if (out == nullptr) {
+      return env->NewStringUTF("{}");
+    }
+    std::string sanitized = utf8::replace_invalid(std::string(out));
+    std::free(out);
+    return env->NewStringUTF(sanitized.c_str());
+  } catch (const std::exception &e) {
+    LOGE("moonshineGetTtsVoices: %s\n", e.what());
+    return nullptr;
+  }
+}
+
+extern "C" JNIEXPORT jobject JNICALL
+Java_ai_moonshine_voice_JNI_moonshineTextToSpeech(JNIEnv *env, jobject /* this */,
+                                                  jint tts_handle, jstring text,
+                                                  jobjectArray joptions) {
+  try {
+    std::vector<moonshine_option_t> copts;
+    std::vector<std::pair<jstring, jstring>> jhold;
+    if (!fill_moonshine_options(env, joptions, &copts, &jhold)) {
+      return nullptr;
+    }
+    if (text == nullptr) {
+      release_moonshine_options(env, copts, jhold);
+      return nullptr;
+    }
+    const char *text_ptr = env->GetStringUTFChars(text, nullptr);
+    float *out_audio = nullptr;
+    uint64_t out_size = 0;
+    int32_t out_sr = 0;
+    const int32_t err = moonshine_text_to_speech(
+        tts_handle, text_ptr, copts.data(), copts.size(), &out_audio, &out_size,
+        &out_sr);
+    env->ReleaseStringUTFChars(text, text_ptr);
+    release_moonshine_options(env, copts, jhold);
+    if (err != MOONSHINE_ERROR_NONE) {
+      if (out_audio != nullptr) {
+        std::free(out_audio);
+      }
+      return nullptr;
+    }
+    jclass resClass = get_class(env, "ai/moonshine/voice/TtsSynthesisResult");
+    jmethodID ctor = get_method(env, resClass, "<init>", "()V");
+    jobject res = env->NewObject(resClass, ctor);
+    jfieldID samplesField = get_field(env, resClass, "samples", "[F");
+    jfieldID srField = get_field(env, resClass, "sampleRateHz", "I");
+    jfloatArray jsamples = env->NewFloatArray(static_cast<jsize>(out_size));
+    if (out_audio != nullptr && out_size > 0) {
+      env->SetFloatArrayRegion(jsamples, 0, static_cast<jsize>(out_size),
+                               out_audio);
+      std::free(out_audio);
+    }
+    env->SetObjectField(res, samplesField, jsamples);
+    env->SetIntField(res, srField, out_sr);
+    env->DeleteLocalRef(resClass);
+    return res;
+  } catch (const std::exception &e) {
+    LOGE("moonshineTextToSpeech: %s\n", e.what());
+    return nullptr;
+  }
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_ai_moonshine_voice_JNI_moonshineCreateGraphemeToPhonemizerFromFiles(
+    JNIEnv *env, jobject /* this */, jstring language, jobjectArray jfilenames,
+    jobjectArray joptions) {
+  try {
+    std::vector<moonshine_option_t> copts;
+    std::vector<std::pair<jstring, jstring>> jhold;
+    if (!fill_moonshine_options(env, joptions, &copts, &jhold)) {
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
+    }
+    const char *lang_ptr = nullptr;
+    if (language != nullptr) {
+      lang_ptr = env->GetStringUTFChars(language, nullptr);
+    }
+    const char **c_filenames_ptr = nullptr;
+    uint64_t filenames_count = 0;
+    std::vector<std::string> filename_storage;
+    std::vector<const char *> c_filenames;
+    if (jfilenames != nullptr) {
+      const jsize n = env->GetArrayLength(jfilenames);
+      filename_storage.reserve(static_cast<size_t>(n));
+      c_filenames.reserve(static_cast<size_t>(n));
+      for (jsize i = 0; i < n; i++) {
+        jstring jf = (jstring)env->GetObjectArrayElement(jfilenames, i);
+        if (jf == nullptr) {
+          release_moonshine_options(env, copts, jhold);
+          if (lang_ptr != nullptr) {
+            env->ReleaseStringUTFChars(language, lang_ptr);
+          }
+          return MOONSHINE_ERROR_INVALID_ARGUMENT;
+        }
+        const char *u = env->GetStringUTFChars(jf, nullptr);
+        filename_storage.emplace_back(u);
+        env->ReleaseStringUTFChars(jf, u);
+        c_filenames.push_back(filename_storage.back().c_str());
+      }
+      filenames_count = static_cast<uint64_t>(c_filenames.size());
+      c_filenames_ptr = c_filenames.data();
+    }
+    const int32_t handle = moonshine_create_grapheme_to_phonemizer_from_files(
+        lang_ptr, c_filenames_ptr, filenames_count, copts.data(), copts.size(),
+        MOONSHINE_HEADER_VERSION);
+    release_moonshine_options(env, copts, jhold);
+    if (lang_ptr != nullptr) {
+      env->ReleaseStringUTFChars(language, lang_ptr);
+    }
+    return handle;
+  } catch (const std::exception &e) {
+    LOGE("moonshineCreateGraphemeToPhonemizerFromFiles: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_ai_moonshine_voice_JNI_moonshineCreateGraphemeToPhonemizerFromMemory(
+    JNIEnv *env, jobject /* this */, jstring language, jobjectArray jfilenames,
+    jobjectArray jmemory, jobjectArray joptions) {
+  try {
+    std::vector<moonshine_option_t> copts;
+    std::vector<std::pair<jstring, jstring>> jhold;
+    if (!fill_moonshine_options(env, joptions, &copts, &jhold)) {
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
+    }
+    const char *lang_ptr = nullptr;
+    if (language != nullptr) {
+      lang_ptr = env->GetStringUTFChars(language, nullptr);
+    }
+    const jsize n = jfilenames != nullptr ? env->GetArrayLength(jfilenames) : 0;
+    if (n > 0 && jmemory == nullptr) {
+      release_moonshine_options(env, copts, jhold);
+      if (lang_ptr != nullptr) {
+        env->ReleaseStringUTFChars(language, lang_ptr);
+      }
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
+    }
+    if (n > 0 && env->GetArrayLength(jmemory) != n) {
+      release_moonshine_options(env, copts, jhold);
+      if (lang_ptr != nullptr) {
+        env->ReleaseStringUTFChars(language, lang_ptr);
+      }
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
+    }
+    std::vector<std::string> filename_storage;
+    std::vector<const char *> c_filenames;
+    filename_storage.reserve(static_cast<size_t>(n));
+    c_filenames.reserve(static_cast<size_t>(n));
+    std::vector<std::vector<uint8_t>> backing;
+    std::vector<const uint8_t *> c_mem;
+    std::vector<uint64_t> c_sizes;
+    c_mem.reserve(static_cast<size_t>(n));
+    c_sizes.reserve(static_cast<size_t>(n));
+    for (jsize i = 0; i < n; i++) {
+      jstring jf = (jstring)env->GetObjectArrayElement(jfilenames, i);
+      if (jf == nullptr) {
+        release_moonshine_options(env, copts, jhold);
+        if (lang_ptr != nullptr) {
+          env->ReleaseStringUTFChars(language, lang_ptr);
+        }
+        return MOONSHINE_ERROR_INVALID_ARGUMENT;
+      }
+      const char *u = env->GetStringUTFChars(jf, nullptr);
+      filename_storage.emplace_back(u);
+      env->ReleaseStringUTFChars(jf, u);
+      c_filenames.push_back(filename_storage.back().c_str());
+      jbyteArray jbuf = (jbyteArray)env->GetObjectArrayElement(jmemory, i);
+      if (jbuf == nullptr) {
+        c_mem.push_back(nullptr);
+        c_sizes.push_back(0);
+        continue;
+      }
+      const jsize len = env->GetArrayLength(jbuf);
+      if (len <= 0) {
+        c_mem.push_back(nullptr);
+        c_sizes.push_back(0);
+        continue;
+      }
+      std::vector<uint8_t> copy(static_cast<size_t>(len));
+      env->GetByteArrayRegion(jbuf, 0, len,
+                              reinterpret_cast<jbyte *>(copy.data()));
+      backing.push_back(std::move(copy));
+      c_mem.push_back(backing.back().data());
+      c_sizes.push_back(static_cast<uint64_t>(backing.back().size()));
+    }
+    const int32_t handle = moonshine_create_grapheme_to_phonemizer_from_memory(
+        lang_ptr, c_filenames.data(), static_cast<uint64_t>(c_filenames.size()),
+        c_mem.data(), c_sizes.data(), copts.data(), copts.size(),
+        MOONSHINE_HEADER_VERSION);
+    release_moonshine_options(env, copts, jhold);
+    if (lang_ptr != nullptr) {
+      env->ReleaseStringUTFChars(language, lang_ptr);
+    }
+    if (handle >= 0 && !backing.empty()) {
+      std::lock_guard<std::mutex> lock(g_g2p_memory_backing_mutex);
+      g_g2p_memory_backing[handle] = std::move(backing);
+    }
+    return handle;
+  } catch (const std::exception &e) {
+    LOGE("moonshineCreateGraphemeToPhonemizerFromMemory: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_ai_moonshine_voice_JNI_moonshineFreeGraphemeToPhonemizer(
+    JNIEnv * /* env */, jobject /* this */, jint g2p_handle) {
+  try {
+    moonshine_free_grapheme_to_phonemizer(g2p_handle);
+    std::lock_guard<std::mutex> lock(g_g2p_memory_backing_mutex);
+    g_g2p_memory_backing.erase(g2p_handle);
+  } catch (const std::exception &e) {
+    LOGE("moonshineFreeGraphemeToPhonemizer: %s\n", e.what());
+  }
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_ai_moonshine_voice_JNI_moonshineTextToPhonemes(
+    JNIEnv *env, jobject /* this */, jint g2p_handle, jstring text,
+    jobjectArray joptions) {
+  try {
+    std::vector<moonshine_option_t> copts;
+    std::vector<std::pair<jstring, jstring>> jhold;
+    if (!fill_moonshine_options(env, joptions, &copts, &jhold)) {
+      return nullptr;
+    }
+    if (text == nullptr) {
+      release_moonshine_options(env, copts, jhold);
+      return nullptr;
+    }
+    const char *text_ptr = env->GetStringUTFChars(text, nullptr);
+    const char *out_ph = nullptr;
+    uint64_t out_count = 0;
+    const int32_t err = moonshine_text_to_phonemes(
+        g2p_handle, text_ptr, copts.data(), copts.size(), &out_ph, &out_count);
+    env->ReleaseStringUTFChars(text, text_ptr);
+    release_moonshine_options(env, copts, jhold);
+    if (err != MOONSHINE_ERROR_NONE) {
+      if (out_ph != nullptr) {
+        std::free(const_cast<char *>(out_ph));
+      }
+      return nullptr;
+    }
+    if (out_ph == nullptr || out_count == 0) {
+      return env->NewStringUTF("");
+    }
+    std::string ipa(out_ph);
+    std::free(const_cast<char *>(out_ph));
+    std::string sanitized = utf8::replace_invalid(ipa);
+    return env->NewStringUTF(sanitized.c_str());
+  } catch (const std::exception &e) {
+    LOGE("moonshineTextToPhonemes: %s\n", e.what());
+    return nullptr;
+  }
+}
+

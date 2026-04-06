@@ -15,6 +15,9 @@ public class JNI {
 
     public static final int MOONSHINE_FLAG_FORCE_UPDATE = 1 << 0;
 
+    /** Pass to TTS/G2P create calls; must match native {@code moonshine-c-api.h}. */
+    public static final int MOONSHINE_HEADER_VERSION = 20000;
+
     public static native int moonshineGetVersion();
 
     public static native String moonshineErrorToString(int error);
@@ -47,6 +50,38 @@ public class JNI {
 
     public static native Transcript moonshineTranscribeStream(int transcriber_handle,
             int stream_handle, int flags);
+
+    public static native int moonshineCreateTtsSynthesizerFromFiles(String language,
+            String[] filenames, TranscriberOption[] options);
+
+    public static native int moonshineCreateTtsSynthesizerFromMemory(String language,
+            String[] filenames, byte[][] memory, TranscriberOption[] options);
+
+    public static native void moonshineFreeTtsSynthesizer(int tts_synthesizer_handle);
+
+    public static native String moonshineGetG2pDependencies(String languages,
+            TranscriberOption[] options);
+
+    public static native String moonshineGetTtsDependencies(String languages,
+            TranscriberOption[] options);
+
+    public static native String moonshineGetTtsVoices(String languages,
+            TranscriberOption[] options);
+
+    public static native TtsSynthesisResult moonshineTextToSpeech(int tts_synthesizer_handle,
+            String text, TranscriberOption[] options);
+
+    public static native int moonshineCreateGraphemeToPhonemizerFromFiles(String language,
+            String[] filenames, TranscriberOption[] options);
+
+    public static native int moonshineCreateGraphemeToPhonemizerFromMemory(String language,
+            String[] filenames, byte[][] memory, TranscriberOption[] options);
+
+    public static native void moonshineFreeGraphemeToPhonemizer(
+            int grapheme_to_phonemizer_handle);
+
+    public static native String moonshineTextToPhonemes(int grapheme_to_phonemizer_handle,
+            String text, TranscriberOption[] options);
 
     static boolean isLibraryLoaded = false;
 
