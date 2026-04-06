@@ -46,6 +46,13 @@ public class JNITest {
     }
 
     @Test
+    public void testMoonshineGetG2pDependencies() {
+        String deps = JNI.moonshineGetG2pDependencies("en_us", null);
+        assertTrue(deps != null);
+        assertTrue(deps.length() > 0);
+    }
+
+    @Test
     public void testMoonshineErrorToString() {
         assertTrue(JNI.moonshineErrorToString(JNI.MOONSHINE_ERROR_NONE) != null);
     }

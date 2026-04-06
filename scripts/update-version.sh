@@ -37,6 +37,13 @@ done < <(grep -rlI \
   --exclude=PKG-INFO \
   --exclude=cli-transcriber.sln \
   --exclude=transcriber-test.cpp \
+  --exclude=silero-vad-model-data.h \
+  --exclude=spanish-unicode-tables.cpp \
+  --exclude=russian.cpp \
+  --exclude=arabic-ipa.cpp \
+  --exclude=speaker-embedding-model-data.cpp \
+  --exclude=moonshine-cpp-test.cpp \
+  --exclude=.env \
   "$OLD_VERSION" .)
 for FILE in "${ACTUAL_FILES[@]}"; do
 	echo "Checking file '$FILE'"
