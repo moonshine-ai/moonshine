@@ -1,5 +1,14 @@
 package ai.moonshine.voice;
 
+import android.content.Context;
+import android.media.AudioAttributes;
+import android.media.AudioDeviceInfo;
+import android.media.AudioFormat;
+import android.media.AudioManager;
+import android.media.AudioTrack;
+
+import androidx.annotation.Nullable;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -13,6 +22,13 @@ import java.util.List;
 public class TextToSpeech {
     private int handle = -1;
     private final String language;
+
+    private final Object sayLock = new Object();
+    /** {@code -1} means default output route (no {@link AudioTrack#setPreferredDevice}). */
+    private int sayCachedDeviceId = Integer.MIN_VALUE;
+    private int sayCachedSampleRateHz;
+    @Nullable
+    private AudioTrack sayCachedTrack;
 
     /**
      * Load TTS from files on disk (optional {@code filenames} keys; same semantics as the C API).
@@ -128,7 +144,160 @@ public class TextToSpeech {
         return synthesize(text, null);
     }
 
+    /**
+     * Synthesizes {@code text} and plays mono float PCM on the default audio output, blocking until
+     * playback finishes.
+     *
+     * <p>Uses {@link Context#getApplicationContext()} internally. Call from a background thread if
+     * utterances are long to avoid janking the UI.
+     */
+    public void say(Context context, String text) {
+        say(context, text, null, null);
+    }
+
+    /**
+     * Same as {@link #say(Context, String)} but routes output to {@code outputDevice} when non-null
+     * (see {@link AudioTrack#setPreferredDevice}).
+     */
+    public void say(Context context, String text, @Nullable AudioDeviceInfo outputDevice) {
+        say(context, text, outputDevice, null);
+    }
+
+    /**
+     * Synthesizes with optional native options, then plays through {@code outputDevice} or the default
+     * route. Reuses a single {@link AudioTrack} when {@code outputDevice} and sample rate match the
+     * previous call so routing and buffer sizing are not recomputed each time.
+     */
+    public void say(Context context, String text, @Nullable AudioDeviceInfo outputDevice,
+            @Nullable List<TranscriberOption> synthesizeOptions) {
+        if (context == null) {
+            throw new IllegalArgumentException("context is required");
+        }
+        Context appContext = context.getApplicationContext();
+        TtsSynthesisResult result = synthesize(text, synthesizeOptions);
+        float[] samples = result.samples != null ? result.samples : new float[0];
+        int sampleRate = result.sampleRateHz;
+        if (sampleRate <= 0) {
+            throw new RuntimeException("Invalid TTS sample rate: " + sampleRate);
+        }
+        int wantDeviceId = outputDevice != null ? outputDevice.getId() : -1;
+        synchronized (sayLock) {
+            AudioTrack track =
+                    obtainSayTrackLocked(appContext, wantDeviceId, outputDevice, sampleRate);
+            playPcmFloatBlocking(track, samples);
+        }
+    }
+
+    /**
+     * Lists output devices suitable for {@link #say(Context, String, AudioDeviceInfo)} (e.g. speaker,
+     * wired headset, USB audio).
+     */
+    public static AudioDeviceInfo[] getAudioOutputDevices(Context context) {
+        if (context == null) {
+            throw new IllegalArgumentException("context is required");
+        }
+        AudioManager am = (AudioManager) context.getApplicationContext()
+                .getSystemService(Context.AUDIO_SERVICE);
+        if (am == null) {
+            return new AudioDeviceInfo[0];
+        }
+        return am.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
+    }
+
+    private AudioTrack obtainSayTrackLocked(Context appContext, int wantDeviceId,
+            @Nullable AudioDeviceInfo outputDevice, int sampleRateHz) {
+        if (sayCachedTrack != null
+                && wantDeviceId == sayCachedDeviceId
+                && sampleRateHz == sayCachedSampleRateHz) {
+            return sayCachedTrack;
+        }
+        releaseSayTrackLocked();
+        AudioAttributes attrs = new AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build();
+        AudioFormat format = new AudioFormat.Builder()
+                .setSampleRate(sampleRateHz)
+                .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                .build();
+        int minBufBytes = AudioTrack.getMinBufferSize(
+                sampleRateHz,
+                AudioFormat.CHANNEL_OUT_MONO,
+                AudioFormat.ENCODING_PCM_FLOAT);
+        if (minBufBytes <= 0) {
+            throw new RuntimeException("AudioTrack.getMinBufferSize failed for sampleRate=" + sampleRateHz);
+        }
+        AudioTrack track = new AudioTrack.Builder()
+                .setContext(appContext)
+                .setAudioAttributes(attrs)
+                .setAudioFormat(format)
+                .setBufferSizeInBytes(minBufBytes)
+                .setTransferMode(AudioTrack.MODE_STREAM)
+                .build();
+        if (outputDevice != null) {
+            track.setPreferredDevice(outputDevice);
+        }
+        sayCachedTrack = track;
+        sayCachedDeviceId = wantDeviceId;
+        sayCachedSampleRateHz = sampleRateHz;
+        return track;
+    }
+
+    private static void playPcmFloatBlocking(AudioTrack track, float[] samples) {
+        if (track.getState() != AudioTrack.STATE_INITIALIZED) {
+            throw new RuntimeException("AudioTrack is not initialized");
+        }
+        track.stop();
+        track.flush();
+        if (samples.length == 0) {
+            return;
+        }
+        track.play();
+        int offset = 0;
+        while (offset < samples.length) {
+            int wrote = track.write(samples, offset, samples.length - offset, AudioTrack.WRITE_BLOCKING);
+            if (wrote <= 0) {
+                track.stop();
+                throw new RuntimeException("AudioTrack.write failed: " + wrote);
+            }
+            offset += wrote;
+        }
+        final int totalFrames = samples.length;
+        final long deadline = System.nanoTime() + 60_000_000_000L;
+        while (System.nanoTime() < deadline) {
+            int head = track.getPlaybackHeadPosition();
+            if (head >= totalFrames - 1) {
+                break;
+            }
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                track.stop();
+                throw new RuntimeException(e);
+            }
+        }
+        track.stop();
+    }
+
+    private void releaseSayTrackLocked() {
+        if (sayCachedTrack != null) {
+            try {
+                sayCachedTrack.stop();
+            } catch (Exception ignored) {
+            }
+            sayCachedTrack.release();
+            sayCachedTrack = null;
+        }
+        sayCachedDeviceId = Integer.MIN_VALUE;
+        sayCachedSampleRateHz = 0;
+    }
+
     public void close() {
+        synchronized (sayLock) {
+            releaseSayTrackLocked();
+        }
         if (handle >= 0) {
             JNI.moonshineFreeTtsSynthesizer(handle);
             handle = -1;
