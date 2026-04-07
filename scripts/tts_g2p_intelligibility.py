@@ -1135,6 +1135,9 @@ class LineResult:
     cer_moonshine: Optional[float] = None
     cer_upstream_kokoro: Optional[float] = None
     cer_upstream_piper: Optional[float] = None
+    wav_path_moonshine: Optional[str] = None
+    wav_path_upstream_kokoro: Optional[str] = None
+    wav_path_upstream_piper: Optional[str] = None
 
 
 def transcribe_whisper(
@@ -1274,6 +1277,12 @@ def run_language(
             "voice": moonshine_voice,
             "text": text,
         }
+        _m_stem = _tts_cache_stem(text, "moonshine", payload_m)
+        wav_path_m: Optional[str] = (
+            str(_tts_cache_wav_and_meta_paths(tts_wav_cache_dir, lang, _m_stem)[0])
+            if tts_wav_cache_dir is not None
+            else None
+        )
         cached_m = (
             None
             if tts_skip_wav_cache_read
@@ -1291,6 +1300,7 @@ def run_language(
 
         hyp_uk: Optional[str] = None
         uk_ph: Optional[str] = None
+        wav_path_uk: Optional[str] = None
         if upstream_k_pipe is not None and upstream_k_pkg_voice:
             payload_uk = {
                 "v": _TTS_WAV_CACHE_FORMAT,
@@ -1302,6 +1312,9 @@ def run_language(
                 "repo": _UPSTREAM_KOKORO_REPO_ID,
                 "text": text,
             }
+            if tts_wav_cache_dir is not None:
+                _uk_stem = _tts_cache_stem(text, "upstream_kokoro", payload_uk)
+                wav_path_uk = str(_tts_cache_wav_and_meta_paths(tts_wav_cache_dir, lang, _uk_stem)[0])
             cached_uk = (
                 None
                 if tts_skip_wav_cache_read
@@ -1322,6 +1335,7 @@ def run_language(
 
         hyp_up: Optional[str] = None
         up_ph: Optional[str] = None
+        wav_path_up: Optional[str] = None
         if upstream_piper_voice is not None:
             payload_up: Dict[str, Any] = {
                 "v": _TTS_WAV_CACHE_FORMAT,
@@ -1331,6 +1345,9 @@ def run_language(
             }
             if piper_onnx is not None:
                 payload_up["onnx"] = str(piper_onnx.resolve())
+            if tts_wav_cache_dir is not None:
+                _up_stem = _tts_cache_stem(text, "upstream_piper", payload_up)
+                wav_path_up = str(_tts_cache_wav_and_meta_paths(tts_wav_cache_dir, lang, _up_stem)[0])
             cached_up = (
                 None
                 if tts_skip_wav_cache_read
@@ -1369,6 +1386,9 @@ def run_language(
                 cer_moonshine=cm,
                 cer_upstream_kokoro=cuk,
                 cer_upstream_piper=cup,
+                wav_path_moonshine=wav_path_m,
+                wav_path_upstream_kokoro=wav_path_uk,
+                wav_path_upstream_piper=wav_path_up,
             )
         )
 
@@ -1409,6 +1429,9 @@ def line_result_to_dict(r: LineResult) -> Dict[str, Any]:
         "character_error_rate_moonshine_internal_g2p": r.cer_moonshine,
         "character_error_rate_upstream_kokoro_python": r.cer_upstream_kokoro,
         "character_error_rate_upstream_piper_python": r.cer_upstream_piper,
+        "wav_path_moonshine_internal_g2p": r.wav_path_moonshine,
+        "wav_path_upstream_kokoro_python": r.wav_path_upstream_kokoro,
+        "wav_path_upstream_piper_python": r.wav_path_upstream_piper,
     }
 
 

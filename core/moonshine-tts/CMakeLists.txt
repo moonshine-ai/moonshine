@@ -69,6 +69,9 @@ target_include_directories(moonshine_tts_core PRIVATE
 )
 target_link_libraries(moonshine_tts_core PUBLIC moonshine_tts_utf8proc moonshine-utils)
 set_target_properties(moonshine_tts_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(MSVC)
+  target_compile_options(moonshine_tts_core PRIVATE /utf-8)
+endif()
 
 add_executable(piper_ipa_normalize_cli tools/piper-ipa-normalize-cli.cpp)
 target_link_libraries(piper_ipa_normalize_cli PRIVATE moonshine_tts_core)

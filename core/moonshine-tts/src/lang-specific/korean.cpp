@@ -88,9 +88,8 @@ std::string strip_mn_after_nfd(const std::string& ipa) {
   const std::u32string u32 = utf8_str_to_u32(nfd_str);
   std::string filtered;
   for (char32_t cp : u32) {
-    if (utf8proc_category(static_cast<utf8proc_int32_t>(cp)) == UTF8PROC_CATEGORY_MN && cp != 0x31A &&
-        cp != 0x348) {
-      continue;
+    if (utf8proc_category(static_cast<utf8proc_int32_t>(cp)) == UTF8PROC_CATEGORY_MN) {
+      continue;  // strip all combining marks (incl. U+031A unreleased, U+0348 tense)
     }
     utf8_append_codepoint(filtered, cp);
   }
@@ -275,7 +274,7 @@ std::string ipa_onset(int cho, bool tense, bool aspirate) {
     ip = "k";
     break;
   case kChoKk:
-    ip = "k\xCD\x88";
+    ip = "k";  // tense ㄲ: ͈ stripped → plain k
     break;
   case kChoN:
     ip = "n";
@@ -284,7 +283,7 @@ std::string ipa_onset(int cho, bool tense, bool aspirate) {
     ip = "d";
     break;
   case kChoTt:
-    ip = "t\xCD\x88";
+    ip = "t";  // tense ㄸ: ͈ stripped → plain t
     break;
   case kChoR:
     ip = "\xC9\xBE";  // ɾ
@@ -296,31 +295,31 @@ std::string ipa_onset(int cho, bool tense, bool aspirate) {
     ip = "p";
     break;
   case kChoPp:
-    ip = "p\xCD\x88";
+    ip = "p";  // tense ㅃ: ͈ stripped → plain p
     break;
   case kChoS:
     ip = "s";
     break;
   case kChoSs:
-    ip = "s\xCD\x88";
+    ip = "s";  // tense ㅆ: ͈ stripped → plain s
     break;
   case kChoC:
-    ip = "t\xC9\x95";
+    ip = "t\xCA\x83";  // tʃ (eSpeak style, was tɕ)
     break;
   case kChoCc:
-    ip = "t\xCD\x88\xC9\x95";
+    ip = "t\xCA\x83";  // tense tʃ (͈ stripped, was t͈ɕ)
     break;
   case kChoCh:
-    ip = "t\xC9\x95\xCA\xB0";
+    ip = "t\xCA\x83h";  // tʃh (eSpeak style, was tɕʰ)
     break;
   case kChoKh:
-    ip = "k\xCA\xB0";
+    ip = "kh";  // ASCII h for aspiration (eSpeak style, was kʰ)
     break;
   case kChoTh:
-    ip = "t\xCA\xB0";
+    ip = "th";  // (was tʰ)
     break;
   case kChoPh:
-    ip = "p\xCA\xB0";
+    ip = "ph";  // (was pʰ)
     break;
   case kChoH:
     ip = "h";
@@ -335,25 +334,17 @@ std::string ipa_onset(int cho, bool tense, bool aspirate) {
     }
   }
   if (aspirate) {
-    if (cho == kChoK) {
-      return "k\xCA\xB0";
-    }
-    if (cho == kChoT) {
-      return "t\xCA\xB0";
-    }
-    if (cho == kChoP) {
-      return "p\xCA\xB0";
-    }
-    if (cho == kChoC) {
-      return "t\xC9\x95\xCA\xB0";
-    }
+    if (cho == kChoK) return "kh";
+    if (cho == kChoT) return "th";
+    if (cho == kChoP) return "ph";
+    if (cho == kChoC) return "t\xCA\x83h";  // tʃh
   }
   return ip;
 }
 
 std::string ipa_nucleus(int jung) {
   static const char* const vmap[] = {
-      "a",   "\xC9\x9B",   "ja",  "j\xC9\x9B",  "\xCA\x8C",   "e",   "j\xCA\x8C",  "je",  "o",   "wa",  "w\xC9\x9B",  "\xC3\xB8",
+      "a",   "\xC9\x9B",   "ja",  "j\xC9\x9B",  "\xCA\x8C",   "e",   "j\xCA\x8C",  "je",  "o",   "wa",  "w\xC9\x9B",  "we",
       "jo",  "u",   "w\xCA\x8C",  "we",  "wi",  "ju",  "\xC9\xAF",   "\xC9\xAFj",  "i",
   };
   if (jung < 0 || jung > 20) {
@@ -441,16 +432,22 @@ std::string syllables_to_ipa(const std::vector<Syllable>& syls, std::string_view
       const bool tense_after =
           prev != nullptr && jong_triggers_tense(prev->jong) &&
           (cho == kChoK || cho == kChoT || cho == kChoP || cho == kChoS || cho == kChoC);
+      // Voiced allophone: ㄱ → ɡ (U+0261) between voiced sounds.
+      const bool voiced_context =
+          i > 0 && prev != nullptr && prev->jong == 0;
       if (after_h) {
         onset_ipa = ipa_onset(cho, false, true);
       } else if (tense_after) {
         onset_ipa = ipa_onset(cho, true, false);
+      } else if (voiced_context && cho == kChoK) {
+        onset_ipa = "\xC9\xA1";  // ɡ
       } else {
         onset_ipa = ipa_onset(cho, false, false);
       }
     }
 
-    const std::string nucleus = ipa_nucleus(s.jung);
+    // Unstressed ㅏ (jung==0) in non-initial syllables reduces to ɐ (U+0250).
+    const std::string nucleus = (i > 0 && s.jung == 0) ? "\xC9\x90" : ipa_nucleus(s.jung);
 
     std::string coda_ipa;
     if (s.jong != 0) {
@@ -501,26 +498,31 @@ std::string KoreanRuleG2p::normalize_korean_ipa(std::string ipa) {
     return ipa;
   }
   std::string t = strip_mn_after_nfd(ipa);
+  // Normalize tie-bar affricates → tʃ / tʃh (eSpeak style)
   const std::string tie = "\xCD\xA1";
-  replace_all(t, "t" + tie + "\xC9\x95\xCA\xB0", "t\xC9\x95\xCA\xB0");
-  replace_all(t, "t" + tie + "\xC9\x95", "t\xC9\x95");
-  replace_all(t, "d" + tie + "\xCA\x91\xCA\xB0", "t\xC9\x95\xCA\xB0");
-  replace_all(t, "d" + tie + "\xCA\x91", "t\xC9\x95");
-  replace_all(t, "t" + tie + "\xCA\x83\xCA\xB0", "t\xC9\x95\xCA\xB0");
-  replace_all(t, "t" + tie + "s", "ts");
-  replace_all(t, "d" + tie + "\xCA\x91", "t\xC9\x95");
-  replace_all(t, "d" + tie + "\xCA\x91\xCA\xB0", "t\xC9\x95\xCA\xB0");
-  replace_all(t, "t" + tie + "\xCA\x83", "t\xC9\x95\xCA\xB0");
-  replace_all(t, "p" + tie + "\xC9\xB8", "p\xCA\xB0");
-  replace_all(t, "k" + tie + "x", "k\xCA\xB0");
-  replace_all(t, "\xC9\x95\xCA\xB0", "\xC9\x95");
-  replace_all(t, "\xCA\x83\xCA\xB0", "\xC9\x95");
-  replace_all(t, "\xC9\xAD", "\xC9\xAB");  // ɭ → ɫ
-  replace_all(t, "\xCE\xB2", "b");
-  replace_all(t, "\xC9\xA6", "h");
-  replace_all(t, "\xC3\xA7", "h");
-  replace_all(t, "\xC9\xA1", "k");
-  replace_all(t, "\xC9\x9F", "t\xC9\x95");
+  replace_all(t, "t" + tie + "\xCA\x83h",       "t\xCA\x83h");   // t͡ʃh → tʃh
+  replace_all(t, "t" + tie + "\xCA\x83",         "t\xCA\x83");    // t͡ʃ  → tʃ
+  replace_all(t, "t" + tie + "\xC9\x95\xCA\xB0","t\xCA\x83h");   // t͡ɕʰ → tʃh
+  replace_all(t, "t" + tie + "\xC9\x95",         "t\xCA\x83");    // t͡ɕ  → tʃ
+  replace_all(t, "d" + tie + "\xCA\x91\xCA\xB0","t\xCA\x83h");   // d͡ʑʰ → tʃh
+  replace_all(t, "d" + tie + "\xCA\x91",         "t\xCA\x83");    // d͡ʑ  → tʃ
+  replace_all(t, "t" + tie + "s",                "ts");            // t͡s  → ts
+  replace_all(t, "p" + tie + "\xC9\xB8",         "ph");           // p͡ɸ  → ph
+  replace_all(t, "k" + tie + "x",                "kh");           // k͡x  → kh
+  // ɕ/ʃ + aspiration → ʃh; bare ɕ → ʃ
+  replace_all(t, "\xC9\x95\xCA\xB0", "\xCA\x83h");  // ɕʰ → ʃh
+  replace_all(t, "\xCA\x83\xCA\xB0", "\xCA\x83h");  // ʃʰ → ʃh
+  replace_all(t, "\xC9\x95",         "\xCA\x83");    // ɕ  → ʃ
+  // Aspiration: sʰ → s (eSpeak treats ㅅ as plain s); remaining ʰ → ASCII h
+  replace_all(t, "s\xCA\xB0", "s");   // sʰ → s
+  replace_all(t, "\xCA\xB0",  "h");   // ʰ  → h (kh, th, ph etc.)
+  replace_all(t, "\xC9\xAD",  "\xC9\xAB");  // ɭ → ɫ
+  replace_all(t, "\xC9\xB2",  "n");          // ɲ → n
+  replace_all(t, "\xCE\xB2",  "b");
+  replace_all(t, "\xC9\xA6",  "h");          // ɦ → h
+  replace_all(t, "\xC3\xA7",  "h");          // ç → h
+  // ɡ (U+0261) preserved: vocoder trained on eSpeak which uses ɡ for voiced ㄱ
+  replace_all(t, "\xC9\x9F",  "t\xCA\x83");  // ɟ → tʃ
   return t;
 }
 
