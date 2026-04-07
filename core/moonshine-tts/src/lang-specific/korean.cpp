@@ -304,10 +304,10 @@ std::string ipa_onset(int cho, bool tense, bool aspirate) {
     ip = "s";  // tense ㅆ: ͈ stripped → plain s
     break;
   case kChoC:
-    ip = "t\xCA\x83";  // tʃ (eSpeak style, was tɕ)
+    ip = "t\xC9\x95";  // tɕ (alveolo-palatal, eSpeak style for lenis ㅈ)
     break;
   case kChoCc:
-    ip = "t\xCA\x83";  // tense tʃ (͈ stripped, was t͈ɕ)
+    ip = "t\xC9\x95";  // tɕ (tense ㅉ, tense mark stripped)
     break;
   case kChoCh:
     ip = "t\xCA\x83h";  // tʃh (eSpeak style, was tɕʰ)
@@ -337,7 +337,7 @@ std::string ipa_onset(int cho, bool tense, bool aspirate) {
     if (cho == kChoK) return "kh";
     if (cho == kChoT) return "th";
     if (cho == kChoP) return "ph";
-    if (cho == kChoC) return "t\xCA\x83h";  // tʃh
+    if (cho == kChoC) return "t\xCA\x83h";  // tʃh for aspirated ㅊ (postalveolar, eSpeak convention)
   }
   return ip;
 }
@@ -432,15 +432,24 @@ std::string syllables_to_ipa(const std::vector<Syllable>& syls, std::string_view
       const bool tense_after =
           prev != nullptr && jong_triggers_tense(prev->jong) &&
           (cho == kChoK || cho == kChoT || cho == kChoP || cho == kChoS || cho == kChoC);
-      // Voiced allophone: ㄱ → ɡ (U+0261) between voiced sounds.
+      // Voiced allophones: ㄱ→ɡ, ㅂ→b, ㅈ→dʑ between voiced sounds (vowels, nasals, liquids).
       const bool voiced_context =
-          i > 0 && prev != nullptr && prev->jong == 0;
+          i > 0 && prev != nullptr &&
+          (prev->jong == 0 ||           // after vowel (no coda)
+           prev->jong == 4 ||           // after n
+           prev->jong == 8 ||           // after ɫ
+           prev->jong == 16 ||          // after m
+           prev->jong == kJongNgCoda);  // after ŋ
       if (after_h) {
         onset_ipa = ipa_onset(cho, false, true);
       } else if (tense_after) {
         onset_ipa = ipa_onset(cho, true, false);
       } else if (voiced_context && cho == kChoK) {
         onset_ipa = "\xC9\xA1";  // ɡ
+      } else if (voiced_context && cho == kChoP) {
+        onset_ipa = "b";
+      } else if (voiced_context && cho == kChoC) {
+        onset_ipa = "d\xCA\x91";  // dʑ
       } else {
         onset_ipa = ipa_onset(cho, false, false);
       }
@@ -498,24 +507,26 @@ std::string KoreanRuleG2p::normalize_korean_ipa(std::string ipa) {
     return ipa;
   }
   std::string t = strip_mn_after_nfd(ipa);
-  // Normalize tie-bar affricates → tʃ / tʃh (eSpeak style)
+  // Normalize tie-bar affricates.
+  // ㅊ (aspirated): postalveolar tʃh (eSpeak convention).
+  // ㅈ (lenis unvoiced): alveolo-palatal tɕ; (voiced): dʑ — preserved as-is.
   const std::string tie = "\xCD\xA1";
-  replace_all(t, "t" + tie + "\xCA\x83h",       "t\xCA\x83h");   // t͡ʃh → tʃh
-  replace_all(t, "t" + tie + "\xCA\x83",         "t\xCA\x83");    // t͡ʃ  → tʃ
-  replace_all(t, "t" + tie + "\xC9\x95\xCA\xB0","t\xCA\x83h");   // t͡ɕʰ → tʃh
-  replace_all(t, "t" + tie + "\xC9\x95",         "t\xCA\x83");    // t͡ɕ  → tʃ
-  replace_all(t, "d" + tie + "\xCA\x91\xCA\xB0","t\xCA\x83h");   // d͡ʑʰ → tʃh
-  replace_all(t, "d" + tie + "\xCA\x91",         "t\xCA\x83");    // d͡ʑ  → tʃ
-  replace_all(t, "t" + tie + "s",                "ts");            // t͡s  → ts
-  replace_all(t, "p" + tie + "\xC9\xB8",         "ph");           // p͡ɸ  → ph
-  replace_all(t, "k" + tie + "x",                "kh");           // k͡x  → kh
-  // ɕ/ʃ + aspiration → ʃh; bare ɕ → ʃ
-  replace_all(t, "\xC9\x95\xCA\xB0", "\xCA\x83h");  // ɕʰ → ʃh
-  replace_all(t, "\xCA\x83\xCA\xB0", "\xCA\x83h");  // ʃʰ → ʃh
-  replace_all(t, "\xC9\x95",         "\xCA\x83");    // ɕ  → ʃ
-  // Aspiration: sʰ → s (eSpeak treats ㅅ as plain s); remaining ʰ → ASCII h
-  replace_all(t, "s\xCA\xB0", "s");   // sʰ → s
-  replace_all(t, "\xCA\xB0",  "h");   // ʰ  → h (kh, th, ph etc.)
+  replace_all(t, "t" + tie + "\xCA\x83h",        "t\xCA\x83h");   // t͡ʃh → tʃh
+  replace_all(t, "t" + tie + "\xC9\x95\xCA\xB0", "t\xCA\x83h");   // t͡ɕʰ → tʃh (aspirated → postalveolar)
+  replace_all(t, "d" + tie + "\xCA\x91\xCA\xB0", "t\xCA\x83h");   // d͡ʑʰ → tʃh
+  replace_all(t, "t" + tie + "\xCA\x83",          "t\xCA\x83");    // t͡ʃ  → tʃ
+  replace_all(t, "t" + tie + "\xC9\x95",          "t\xC9\x95");    // t͡ɕ  → tɕ (keep alveolo-palatal)
+  replace_all(t, "d" + tie + "\xCA\x91",          "d\xCA\x91");    // d͡ʑ  → dʑ (keep voiced)
+  replace_all(t, "t" + tie + "s",                 "ts");            // t͡s  → ts
+  replace_all(t, "p" + tie + "\xC9\xB8",          "ph");           // p͡ɸ  → ph
+  replace_all(t, "k" + tie + "x",                 "kh");           // k͡x  → kh
+  // Aspiration: sʰ → s; bare ɕʰ → tʃh; remaining ʰ → ASCII h
+  replace_all(t, "s\xCA\xB0",         "s");          // sʰ → s (eSpeak treats ㅅ as plain s)
+  replace_all(t, "\xC9\x95\xCA\xB0",  "t\xCA\x83h"); // ɕʰ → tʃh
+  replace_all(t, "\xCA\x83\xCA\xB0",  "t\xCA\x83h"); // ʃʰ → tʃh
+  replace_all(t, "\xCA\xB0",          "h");           // ʰ  → h (kh, th, ph etc.)
+  // tɕh (from ɕʰ after ʰ→h — shouldn't remain, but guard) → tʃh
+  replace_all(t, "t\xC9\x95h",        "t\xCA\x83h"); // tɕh → tʃh (bare aspirated affricate)
   replace_all(t, "\xC9\xAD",  "\xC9\xAB");  // ɭ → ɫ
   replace_all(t, "\xC9\xB2",  "n");          // ɲ → n
   replace_all(t, "\xCE\xB2",  "b");
@@ -644,6 +655,33 @@ std::string KoreanRuleG2p::text_to_ipa(std::string text,
           }
         }
         continue;
+      }
+    }
+    // Handle mixed numeric+Hangul tokens such as "1986년", "7월", "3일", "8개월".
+    // Split leading ASCII digits from the Hangul suffix, expand the number, then G2P the combined
+    // Hangul string (e.g. "1986년" → "천구백팔십육년").
+    if (options_.expand_cardinal_digits) {
+      size_t num_end = 0;
+      bool has_digit = false;
+      while (num_end < w.size()) {
+        const unsigned char uc = static_cast<unsigned char>(w[num_end]);
+        if (uc >= '0' && uc <= '9') { has_digit = true; ++num_end; }
+        else if ((uc == ',' || uc == '_') && has_digit) { ++num_end; }
+        else { break; }
+      }
+      if (has_digit && num_end < w.size()) {
+        const std::string num_sv(w, 0, num_end);
+        const std::string hangul_tail = extract_hangul(std::string_view(w).substr(num_end));
+        if (!hangul_tail.empty()) {
+          if (const auto num_frags = korean_reading_fragments_from_ascii_numeral_token(num_sv)) {
+            std::string combined;
+            for (const auto& frag : *num_frags) combined += frag;
+            combined += hangul_tail;
+            const std::string ipa = g2p_single_fragment(combined);
+            if (!ipa.empty()) ipa_words.push_back(add_word_stress(ipa));
+            continue;
+          }
+        }
       }
     }
     const std::string h = extract_hangul(w);
