@@ -31,9 +31,9 @@ TEST_CASE("korean: dialect_resolves_to_korean_rules") {
   CHECK_FALSE(dialect_resolves_to_korean_rules("ja"));
 }
 
-TEST_CASE("korean: normalize strips vowel diacritics keeps tense unreleased") {
+TEST_CASE("korean: normalize strips all combining marks including tense and unreleased") {
   using moonshine_tts::KoreanRuleG2p;
-  // ha̠ + k̚ + k͈jo — NFD has combining on first vowel; keep ̚ (U+031A) and ͈ (U+0348).
+  // ha̠ + k̚ + k͈jo — NFD has combining on first vowel; all MN chars stripped (U+0320, U+031A, U+0348).
   const std::string in =
       "ha"
       "\xCC\xA0"
@@ -42,7 +42,7 @@ TEST_CASE("korean: normalize strips vowel diacritics keeps tense unreleased") {
       "k"
       "\xCD\x88"
       "jo";
-  CHECK(KoreanRuleG2p::normalize_korean_ipa(in) == "hak\xCC\x9Ak\xCD\x88jo");
+  CHECK(KoreanRuleG2p::normalize_korean_ipa(in) == "hakkjo");  // all combining marks stripped
   CHECK(KoreanRuleG2p::normalize_korean_ipa("ku\xC5\x8Bmu\xC9\xAD") == "ku\xC5\x8Bmu\xC9\xAB");  // ɭ → ɫ
 }
 
@@ -90,8 +90,8 @@ TEST_CASE("korean: G2P examples with data/ko/dict.tsv") {
   // ˈ = U+02C8 (CB 88), ɫ = U+026B (C9 AB), ɾ = U+027E (C9 BE)
   CHECK(g.text_to_ipa("\xEB\x8B\xAD\xEC\x9D\xB4") == "\xCB\x88""da\xC9\xABki");        // 닭이 → ˈdaɫki
   CHECK(g.text_to_ipa("\xEB\x8B\xAB\xEB\x8A\x94") == "\xCB\x88""dann\xC9\xAF""n");     // 닫는 → ˈdannɯn
-  CHECK(g.text_to_ipa("007") == "\xCB\x88j\xCA\x8C\xC5\x8Bj\xCA\x8C\xC5\x8Bt\xC9\x95i\xC9\xAB");  // ˈjʌŋjʌŋtɕiɫ
-  CHECK(g.text_to_ipa("3.14") == "\xCB\x88""samt\xC9\x95\xCA\x8Cmi\xC9\xAB""sa");
+  CHECK(g.text_to_ipa("007") == "\xCB\x88j\xCA\x8C\xC5\x8Bj\xCA\x8C\xC5\x8Bt\xCA\x83hi\xC9\xAB");  // ˈjʌŋjʌŋtʃhiɫ
+  CHECK(g.text_to_ipa("3.14") == "\xCB\x88""samt\xCA\x83\xCA\x8Cmi\xC9\xABs\xC9\x90");  // ˈsamtʃʌmiɫsɐ
   moonshine_tts::KoreanRuleG2p::Options no_dig;
   no_dig.expand_cardinal_digits = false;
   moonshine_tts::KoreanRuleG2p g2(dict, no_dig);
