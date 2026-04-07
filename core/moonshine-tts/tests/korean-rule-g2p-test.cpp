@@ -91,7 +91,7 @@ TEST_CASE("korean: G2P examples with data/ko/dict.tsv") {
   CHECK(g.text_to_ipa("\xEB\x8B\xAD\xEC\x9D\xB4") == "\xCB\x88""da\xC9\xABki");        // 닭이 → ˈdaɫki
   CHECK(g.text_to_ipa("\xEB\x8B\xAB\xEB\x8A\x94") == "\xCB\x88""dann\xC9\xAF""n");     // 닫는 → ˈdannɯn
   CHECK(g.text_to_ipa("007") == "\xCB\x88j\xCA\x8C\xC5\x8Bj\xCA\x8C\xC5\x8Bt\xCA\x83hi\xC9\xAB");  // ˈjʌŋjʌŋtʃhiɫ
-  CHECK(g.text_to_ipa("3.14") == "\xCB\x88""samt\xCA\x83\xCA\x8Cmi\xC9\xABs\xC9\x90");  // ˈsamtʃʌmiɫsɐ
+  CHECK(g.text_to_ipa("3.14") == "\xCB\x88""samd\xCA\x91\xCA\x8Cmi\xC9\xABs\xC9\x90");  // ˈsamdʑʌmiɫsɐ (voiced ㅈ after m)
   moonshine_tts::KoreanRuleG2p::Options no_dig;
   no_dig.expand_cardinal_digits = false;
   moonshine_tts::KoreanRuleG2p g2(dict, no_dig);
