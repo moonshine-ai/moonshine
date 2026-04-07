@@ -16,6 +16,7 @@ target_include_directories(moonshine_tts_utf8proc PUBLIC
   ${_MOONSHINE_CORE_ROOT}/third-party/utf8proc
 )
 target_compile_definitions(moonshine_tts_utf8proc PRIVATE UTF8PROC_EXPORTS PUBLIC UTF8PROC_STATIC)
+set_target_properties(moonshine_tts_utf8proc PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 enable_testing()
 
@@ -67,6 +68,7 @@ target_include_directories(moonshine_tts_core PRIVATE
   ${_MOONSHINE_CORE_ROOT}/moonshine-utils
 )
 target_link_libraries(moonshine_tts_core PUBLIC moonshine_tts_utf8proc moonshine-utils)
+set_target_properties(moonshine_tts_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_executable(piper_ipa_normalize_cli tools/piper-ipa-normalize-cli.cpp)
 target_link_libraries(piper_ipa_normalize_cli PRIVATE moonshine_tts_core)
@@ -158,6 +160,7 @@ if(MOONSHINE_TTS_BUILD_ONNX)
     src/piper-voice-catalog.cpp
   )
   target_link_libraries(moonshine_tts_ort PUBLIC moonshine_tts_core)
+  set_target_properties(moonshine_tts_ort PROPERTIES POSITION_INDEPENDENT_CODE ON)
   moonshine_tts_link_onnxruntime(moonshine_tts_ort)
 
   add_executable(moonshine_tts tools/moonshine-tts-cli.cpp)

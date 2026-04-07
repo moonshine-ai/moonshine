@@ -10,6 +10,11 @@ By default the script downloads **WikiText-2** (``wikitext-2-raw-v1``) for Engli
 **Wikimedia Wikipedia** snapshots (``wikimedia/wikipedia``, config ``20231101.<lang>``), because
 WikiText-2 is English-only on Hugging Face.
 
+For **German** (``de`` / ``de_de``), Wikipedia sampling **ranks** paragraph candidates toward narrative
+prose: corporate and regulatory leads (GmbH, Verordnung, “steht für …”, many initialisms) get a
+lower priority than story-like lines. Delete ``scripts/data/wiki-text/de_de.txt`` (or ``de.txt``)
+to re-download after changing this logic.
+
 With no arguments, the script evaluates **all** TTS languages from the native catalog, refreshes
 per-language ``wiki-text/*.txt`` from Hugging Face (unless ``--no-wiki-download``), scores **10 lines**
 per language by default (override with ``--max-lines-per-lang``), and writes JSON to
@@ -27,6 +32,9 @@ uses the repo lexicon unless you pass ``--no-tts-root-overlay``.
 
 Progress and per-language detail go to stderr; one tab-separated summary line per language is printed
 to stdout (Moonshine internal G2P vs ``pip install kokoro`` vs ``pip install piper-tts`` CER columns).
+After those lines, stdout prints a blank line and a GitHub-flavored markdown table of Moonshine vs
+reference CER (reference = minimum of pip Kokoro and pip Piper averages when both are present;
+otherwise the single available upstream average).
 
 **Three synthesis tracks:** (1) Moonshine native ``TextToSpeech`` (internal G2P + Kokoro or Piper ONNX
 as bundled). (2) **hexgrad/kokoro** ``KPipeline`` from PyPI (misaki + espeak-ng G2P inside the
@@ -517,6 +525,53 @@ def fetch_lines_wikitext2(*, target_lines: int, seed: int) -> Tuple[List[str], s
     return lines, meta
 
 
+# German Wikipedia train shards skew toward organization / law leads; deprioritize for TTS eval lines.
+_GER_WIKI_CORPORATE_RE = re.compile(
+    r"(?i)\b("
+    r"gmbh|gmbh\s*&|\bAG\b|\bSE\b|\bKG\b|ohg|e\.\s*v\.|ug\s*\(|"
+    r"aktiengesellschaft|gesellschaft\s+mit\s+beschränkter|"
+    r"holding|konzern|muttergesellschaft|tochtergesellschaft|"
+    r"unternehmensgruppe|kapitalgesellschaft|joint\s+venture"
+    r")\b"
+)
+_GER_WIKI_REGULATORY_RE = re.compile(
+    r"(?i)\b("
+    r"verordnung|richtlinie\s*\d|eu[-\s]*\d{4}|bundesanzeiger|handelsregister|"
+    r"§\s*\d|paragraph|solvabilität"
+    r")\b"
+)
+_GER_WIKI_DEFINITION_RE = re.compile(
+    r"(?i)\b("
+    r"steht\s+(?:dafür\s+)?(?:für|als)|\babkürzung\b|"
+    r"\bbezeichnet\b|\boffizieller\s+name\b|\bkurz\s+auch\b"
+    r")\b"
+)
+
+
+def _prefers_natural_wikipedia_prose_for_tag(tag: Optional[str]) -> bool:
+    if not tag:
+        return False
+    t = normalize_moonshine_language_tag(tag)
+    return t in ("de", "de_de", "german")
+
+
+def _german_wikipedia_lead_penalty(line: str) -> int:
+    """Higher → more like a corporate / legal / definition lead (sample these later)."""
+    p = 0
+    if _GER_WIKI_CORPORATE_RE.search(line):
+        p += 8
+    if _GER_WIKI_REGULATORY_RE.search(line):
+        p += 5
+    if _GER_WIKI_DEFINITION_RE.search(line):
+        p += 5
+    caps = len(re.findall(r"\b[A-ZÄÖÜ]{2,6}\b", line))
+    if caps > 5:
+        p += min(10, (caps - 5) * 2)
+    if line.count("/") >= 3:
+        p += 2
+    return p
+
+
 def fetch_lines_wikipedia(
     wiki_lang: str,
     *,
@@ -536,6 +591,9 @@ def fetch_lines_wikipedia(
     rng = random.Random(seed)
     candidates: List[str] = []
     chunk_max = _wiki_max_graphemes_for_moonshine_tag(moonshine_tag)
+    natural_de = _prefers_natural_wikipedia_prose_for_tag(moonshine_tag)
+    # German: collect more chunks so ranking can surface narrative lines past corporate-heavy leads.
+    collect_factor = 18 if natural_de else 6
     it = iter(ds)
     skip = rng.randint(0, 80)
     for _ in range(skip):
@@ -545,7 +603,7 @@ def fetch_lines_wikipedia(
             break
     articles = 0
     max_articles = 4000
-    while len(candidates) < target_lines * 6 and articles < max_articles:
+    while len(candidates) < target_lines * collect_factor and articles < max_articles:
         try:
             article = next(it)
         except StopIteration:
@@ -557,9 +615,22 @@ def fetch_lines_wikipedia(
                 para, max_chars=chunk_max
             ):
                 candidates.append(cand)
-    rng.shuffle(candidates)
-    lines = candidates[:target_lines]
-    meta = f"wikimedia/wikipedia ({config})"
+    if natural_de:
+        buckets: Dict[int, List[str]] = {}
+        for cand in candidates:
+            pen = _german_wikipedia_lead_penalty(cand)
+            buckets.setdefault(pen, []).append(cand)
+        ordered: List[str] = []
+        for pen in sorted(buckets):
+            tier = buckets[pen]
+            rng.shuffle(tier)
+            ordered.extend(tier)
+        lines = ordered[:target_lines]
+        meta = f"wikimedia/wikipedia ({config}; de ranked toward narrative prose)"
+    else:
+        rng.shuffle(candidates)
+        lines = candidates[:target_lines]
+        meta = f"wikimedia/wikipedia ({config})"
     return lines, meta
 
 
@@ -1345,6 +1416,64 @@ def _fmt_metric(x: Optional[float]) -> str:
     return f"{x:.6f}" if x is not None else "n/a"
 
 
+def _fmt_cer_percent(x: Optional[float]) -> str:
+    """Format CER as a percentage for markdown tables (jiwer CER is a 0–1 ratio)."""
+    if x is None:
+        return "n/a"
+    return f"{100.0 * float(x):.1f}%"
+
+
+def _reference_cer_from_upstream_averages(
+    kokoro: Optional[float],
+    piper: Optional[float],
+) -> Optional[float]:
+    """
+    Reference CER: lowest of Kokoro and Piper when both are present; otherwise whichever upstream
+    average exists.
+    """
+    present = [v for v in (kokoro, piper) if v is not None]
+    if not present:
+        return None
+    return float(min(present))
+
+
+def format_cer_summary_markdown_table(
+    languages_report: Dict[str, Any],
+) -> str:
+    """
+    GitHub-flavored markdown table: Language, Moonshine CER, Reference CER (min Kokoro/Piper).
+    Skips entries that only contain an ``error`` key.
+    """
+    rows: List[Tuple[str, str, str]] = []
+    for lang in sorted(languages_report.keys()):
+        entry = languages_report[lang]
+        if not isinstance(entry, dict) or entry.get("error"):
+            continue
+        am = entry.get("average_cer_moonshine_internal_g2p")
+        ak = entry.get("average_cer_upstream_kokoro_python")
+        ap = entry.get("average_cer_upstream_piper_python")
+        ref = _reference_cer_from_upstream_averages(
+            ak if isinstance(ak, (int, float)) else None,
+            ap if isinstance(ap, (int, float)) else None,
+        )
+        rows.append(
+            (
+                lang,
+                _fmt_cer_percent(am if isinstance(am, (int, float)) else None),
+                _fmt_cer_percent(ref),
+            )
+        )
+    if not rows:
+        return ""
+    lines = [
+        "| Language | Moonshine CER | Reference CER |",
+        "| --- | --- | --- |",
+    ]
+    for lang, moon_pct, ref_pct in rows:
+        lines.append(f"| {lang} | {moon_pct} | {ref_pct} |")
+    return "\n".join(lines) + "\n"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -1710,6 +1839,9 @@ def main() -> int:
     args.json_out.parent.mkdir(parents=True, exist_ok=True)
     args.json_out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\nWrote JSON report to {args.json_out}", file=sys.stderr)
+    md_table = format_cer_summary_markdown_table(report["languages"])
+    if md_table:
+        print("\n" + md_table, flush=True)
     return 0
 
 

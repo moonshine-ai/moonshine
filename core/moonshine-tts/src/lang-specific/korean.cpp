@@ -287,7 +287,7 @@ std::string ipa_onset(int cho, bool tense, bool aspirate) {
     ip = "t\xCD\x88";
     break;
   case kChoR:
-    ip = "l";
+    ip = "\xC9\xBE";  // ɾ
     break;
   case kChoM:
     ip = "m";
@@ -353,8 +353,8 @@ std::string ipa_onset(int cho, bool tense, bool aspirate) {
 
 std::string ipa_nucleus(int jung) {
   static const char* const vmap[] = {
-      "a",   "ɛ",   "ja",  "jɛ",  "ʌ",   "e",   "jʌ",  "je",  "o",   "wa",  "wɛ",  "ø",
-      "jo",  "u",   "wʌ",  "we",  "ɥi",  "ju",  "ɯ",   "ɰi",  "i",
+      "a",   "\xC9\x9B",   "ja",  "j\xC9\x9B",  "\xCA\x8C",   "e",   "j\xCA\x8C",  "je",  "o",   "wa",  "w\xC9\x9B",  "\xC3\xB8",
+      "jo",  "u",   "w\xCA\x8C",  "we",  "wi",  "ju",  "\xC9\xAF",   "\xC9\xAFj",  "i",
   };
   if (jung < 0 || jung > 20) {
     return "ə";
@@ -367,31 +367,31 @@ std::string ipa_coda_simple(int jong) {
     return "";
   }
   if (jong == 1 || jong == 2 || jong == 24) {
-    return "k\xCC\x9A";
+    return "q";
   }
   if (jong == 7 || jong == 25 || jong == 19 || jong == 20 || jong == 22 || jong == 23) {
-    return "t\xCC\x9A";
+    return "t-";
   }
   if (jong == 17 || jong == 26 || jong == 18) {
-    return "p\xCC\x9A";
+    return "p-";
   }
   if (jong == 4) {
     return "n";
   }
   if (jong == 8) {
-    return "l";
+    return "\xC9\xAB";  // ɫ
   }
   if (jong == 16) {
     return "m";
   }
   if (jong == kJongNgCoda) {
-    return "ŋ";
+    return "\xC5\x8B";  // ŋ
   }
   if (jong == 27) {
-    return "t\xCC\x9A";
+    return "t-";
   }
   if (jong == 3) {
-    return "k\xCC\x9A";
+    return "q";
   }
   if (jong == 5 || jong == 6) {
     return "n";
@@ -450,14 +450,6 @@ std::string syllables_to_ipa(const std::vector<Syllable>& syls, std::string_view
       }
     }
 
-    if (s.jung == 20 && (cho == kChoS || cho == kChoSs)) {
-      if (onset_ipa == "s\xCD\x88" || cho == kChoSs) {
-        onset_ipa = "\xC9\x95\xCD\x88";
-      } else {
-        onset_ipa = "\xC9\x95";
-      }
-    }
-
     const std::string nucleus = ipa_nucleus(s.jung);
 
     std::string coda_ipa;
@@ -509,9 +501,6 @@ std::string KoreanRuleG2p::normalize_korean_ipa(std::string ipa) {
     return ipa;
   }
   std::string t = strip_mn_after_nfd(ipa);
-  replace_all(t, "\xCB\x88", "");
-  replace_all(t, "\xCB\x8C", "");
-  replace_all(t, "\xCB\x90", "");
   const std::string tie = "\xCD\xA1";
   replace_all(t, "t" + tie + "\xC9\x95\xCA\xB0", "t\xC9\x95\xCA\xB0");
   replace_all(t, "t" + tie + "\xC9\x95", "t\xC9\x95");
@@ -526,8 +515,7 @@ std::string KoreanRuleG2p::normalize_korean_ipa(std::string ipa) {
   replace_all(t, "k" + tie + "x", "k\xCA\xB0");
   replace_all(t, "\xC9\x95\xCA\xB0", "\xC9\x95");
   replace_all(t, "\xCA\x83\xCA\xB0", "\xC9\x95");
-  replace_all(t, "\xC9\xAD", "l");
-  replace_all(t, "\xC9\xBE", "l");
+  replace_all(t, "\xC9\xAD", "\xC9\xAB");  // ɭ → ɫ
   replace_all(t, "\xCE\xB2", "b");
   replace_all(t, "\xC9\xA6", "h");
   replace_all(t, "\xC3\xA7", "h");
@@ -633,6 +621,14 @@ std::string KoreanRuleG2p::text_to_ipa(std::string text,
   if (raw.empty()) {
     return "";
   }
+  // Prefix IPA with primary stress ˈ (U+02C8, UTF-8 CB 88) if not already stressed.
+  // This matches the eSpeak-ng convention used to train the Piper vocoder.
+  auto add_word_stress = [](std::string ipa) -> std::string {
+    if (ipa.size() >= 2 && ipa.compare(0, 2, "\xCB\x88") == 0) return ipa;  // already ˈ
+    if (ipa.size() >= 2 && ipa.compare(0, 2, "\xCB\x8C") == 0) return ipa;  // already ˌ
+    return "\xCB\x88" + ipa;
+  };
+
   std::vector<std::string> ipa_words;
   std::istringstream iss(raw);
   std::string w;
@@ -642,7 +638,7 @@ std::string KoreanRuleG2p::text_to_ipa(std::string text,
         for (const std::string& frag : *frags) {
           const std::string ipa = g2p_single_fragment(frag);
           if (!ipa.empty()) {
-            ipa_words.push_back(ipa);
+            ipa_words.push_back(add_word_stress(ipa));
           }
         }
         continue;
@@ -654,9 +650,9 @@ std::string KoreanRuleG2p::text_to_ipa(std::string text,
     }
     const auto it = lexicon_.find(h);
     if (it != lexicon_.end()) {
-      ipa_words.push_back(it->second);
+      ipa_words.push_back(add_word_stress(it->second));
     } else {
-      ipa_words.push_back(g2p_hangul_rules_only(h));
+      ipa_words.push_back(add_word_stress(g2p_hangul_rules_only(h)));
     }
   }
   std::string out;

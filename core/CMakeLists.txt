@@ -101,6 +101,16 @@ target_include_directories(moonshine PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/third-party/utf-8/
 )
 
+# Extra static archives merged into moonshine.framework (iOS / Swift xcframework).
+set(_MOONSHINE_FRAMEWORK_MERGE_TTS_ARCHIVES "")
+if(MOONSHINE_TTS_BUILD_ONNX)
+  list(APPEND _MOONSHINE_FRAMEWORK_MERGE_TTS_ARCHIVES
+    "$<TARGET_FILE:moonshine_tts_utf8proc>"
+    "$<TARGET_FILE:moonshine_tts_core>"
+    "$<TARGET_FILE:moonshine_tts_ort>"
+  )
+endif()
+
 if (IOS OR MOONSHINE_BUILD_SWIFT)
     target_link_libraries(moonshine PUBLIC
         bin-tokenizer
@@ -133,8 +143,8 @@ if (IOS OR MOONSHINE_BUILD_SWIFT)
     )
     # For static frameworks, merge all static dependencies into a single library
     # This is required because static libraries don't automatically include their dependencies
-    # We need to merge: moonshine-utils, onnxruntime, ort-utils, bin-tokenizer, and moonshine
-    # Note: Order matters - dependencies first, then the main library
+    # We merge: moonshine-utils, onnxruntime, ort-utils, bin-tokenizer, optional moonshine-tts
+    # archives, then moonshine. Order matters — dependencies first, then the main library.
     add_custom_command(TARGET moonshine POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "Merging static libraries into framework..."
         COMMAND libtool -static -o "$<TARGET_FILE:moonshine>.merged"
@@ -142,6 +152,7 @@ if (IOS OR MOONSHINE_BUILD_SWIFT)
             "${ONNXRUNTIME_LIB_PATH}"
             "$<TARGET_FILE:ort-utils>"
             "$<TARGET_FILE:bin-tokenizer>"
+            ${_MOONSHINE_FRAMEWORK_MERGE_TTS_ARCHIVES}
             "$<TARGET_FILE:moonshine>"
         COMMAND ${CMAKE_COMMAND} -E remove "$<TARGET_FILE:moonshine>"
         COMMAND ${CMAKE_COMMAND} -E rename "$<TARGET_FILE:moonshine>.merged" "$<TARGET_FILE:moonshine>"
@@ -168,7 +179,7 @@ else()
     )
 endif()
 
-if(MOONSHINE_TTS_BUILD_ONNX AND NOT (IOS OR MOONSHINE_BUILD_SWIFT))
+if(MOONSHINE_TTS_BUILD_ONNX)
     target_link_libraries(moonshine PRIVATE moonshine_tts_ort)
     target_include_directories(moonshine PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/moonshine-tts/src

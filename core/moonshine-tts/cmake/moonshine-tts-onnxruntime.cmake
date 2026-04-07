@@ -83,6 +83,14 @@ endif()
 function(moonshine_tts_link_onnxruntime target_name)
   target_include_directories(${target_name} SYSTEM PUBLIC "${MOONSHINE_TTS_ORT_INCLUDE}")
   target_link_libraries(${target_name} PUBLIC "${MOONSHINE_TTS_ORT_LIB}")
+  # Static ORT on Apple (iOS / Swift xcframework slice) ships CoreML-related objects that
+  # reference CoreFoundation and Foundation; the linker does not pull them in implicitly.
+  if(APPLE AND MOONSHINE_TTS_ORT_LIB MATCHES "\\.a$")
+    target_link_libraries(${target_name} PUBLIC
+      "-framework CoreFoundation"
+      "-framework Foundation"
+    )
+  endif()
   if(UNIX AND NOT APPLE AND NOT ANDROID)
     target_link_libraries(${target_name} PUBLIC pthread dl)
   endif()

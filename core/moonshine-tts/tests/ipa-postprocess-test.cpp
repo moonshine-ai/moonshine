@@ -39,6 +39,15 @@ TEST_CASE("normalize_g2p_ipa_for_piper_engines") {
   CHECK(normalize_g2p_ipa_for_piper_engines("\xC9\x99") == "\xC9\x99");
 }
 
+TEST_CASE("repair_ascii_c_combining_cedilla_to_ccedilla_utf8") {
+  std::string s = std::string("\xc9\xaa" "c") + "\xcd\xa7" + " am";  // ɪç am (NFD-style c+cedilla)
+  repair_ascii_c_combining_cedilla_to_ccedilla_utf8(s);
+  CHECK(s == std::string("\xc9\xaa\xc3\xa7 am"));  // ɪç am
+  std::string t = "\xc3\xa7";                       // already ç
+  repair_ascii_c_combining_cedilla_to_ccedilla_utf8(t);
+  CHECK(t == "\xc3\xa7");
+}
+
 TEST_CASE("normalize_g2p_ipa_for_piper NFC plus shared rules") {
   const std::string hello_world_in =
       "h\xC9\x99l\xCB\x88o\xCA\x8A w\xCB\x88" + std::string("\xC9\x9D", 2) + "ld";
@@ -111,4 +120,29 @@ TEST_CASE("normalize_russian_ipa_piper_style") {
         std::string("\xcb\x88") + "y");
   CHECK(normalize_russian_ipa_piper_style(std::string("\xca\x8c") + acute + "ka") ==
         std::string("\xcb\x88" "aka"));
+}
+
+TEST_CASE("normalize_german_ipa_piper_style") {
+  static const std::string kBar("\xcd\xa1");
+  // Tie-bar affricates → digraphs (matches Piper / espeak tokenization).
+  CHECK(normalize_german_ipa_piper_style(std::string("mat") + kBar + "s" + "a") == "matsa");
+  CHECK(normalize_german_ipa_piper_style(std::string("abˌt") + kBar + "\xca\x83" + "ɛkə") ==
+        std::string("abˌt") + "\xca\x83" + "ɛkə");
+  // ɐ̯ → ɾ; ʁ → ɾ.
+  CHECK(normalize_german_ipa_piper_style(std::string("jaː\xc9\x90\xcc\xaf")) ==
+        std::string("jaː\xc9\xbe"));
+  CHECK(normalize_german_ipa_piper_style(std::string("f\xca\x81" "ɔ")) ==
+        std::string("f\xc9\xbe" "ɔ"));
+  // Abbreviation ``.:`` before a word (no double space).
+  CHECK(normalize_german_ipa_piper_style(
+            std::string("\xcb\x88\xc9\x9b\xc5\x8b" "l.\x3a t")) ==  // ˈɛŋl.: t
+        std::string("\xcb\x88\xc9\x9b\xc5\x8b" "l. t"));
+}
+
+TEST_CASE("normalize_g2p_ipa_for_piper German applies piper-style pass") {
+  static const std::string kBar("\xcd\xa1");
+  const std::string in = std::string("t") + kBar + "s";
+  const std::string out = normalize_g2p_ipa_for_piper(in, "de");
+  CHECK(out == "ts");
+  CHECK(normalize_g2p_ipa_for_piper(in, "de_de") == out);
 }

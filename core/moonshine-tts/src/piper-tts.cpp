@@ -224,10 +224,12 @@ void append_phoneme_ids(const std::unordered_map<std::string, std::vector<int64_
 
 std::vector<int64_t> ipa_utf8_to_piper_ids(const std::string& ipa_nfc,
                                            const std::unordered_map<std::string, std::vector<int64_t>>& id_map) {
+  std::string ipa = ipa_nfc;
+  repair_ascii_c_combining_cedilla_to_ccedilla_utf8(ipa);
   std::vector<int64_t> ids;
   append_phoneme_ids(id_map, "^", ids);
   append_phoneme_ids(id_map, "_", ids);
-  for (const std::string& ch : utf8_split_codepoints(ipa_nfc)) {
+  for (const std::string& ch : utf8_split_codepoints(ipa)) {
     if (py_isspace_utf8_ch(ch)) {
       append_phoneme_ids(id_map, " ", ids);
       continue;

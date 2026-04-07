@@ -18,7 +18,7 @@ struct G2pWordLog;
 class KoreanRuleG2p : public RuleBasedG2p {
  public:
   struct Options {
-    std::string syllable_sep{"."};
+    std::string syllable_sep{""};
     bool expand_cardinal_digits = true;
   };
 
