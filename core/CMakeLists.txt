@@ -182,6 +182,15 @@ else()
     target_compile_definitions(moonshine PRIVATE MOONSHINE_C_API_MOONSHINE_TTS=0)
 endif()
 
+# macOS shared lib: replace linker ad-hoc signature with a full codesign pass. Linker-signed
+# libmoonshine.dylib can trigger AMFI "CODESIGNING Invalid Page" when dlopen'd from e.g. Homebrew Python.
+if(APPLE AND NOT IOS AND NOT MOONSHINE_BUILD_SWIFT)
+    add_custom_command(TARGET moonshine POST_BUILD
+        COMMAND /usr/bin/codesign --force --sign - "$<TARGET_FILE:moonshine>"
+        COMMENT "Ad-hoc codesign libmoonshine.dylib for stable dlopen on macOS"
+    )
+endif()
+
 add_executable(moonshine-c-api-test moonshine-c-api-test.cpp)
 set_target_properties(moonshine-c-api-test PROPERTIES
     CXX_STANDARD 20

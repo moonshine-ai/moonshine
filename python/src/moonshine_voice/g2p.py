@@ -1,5 +1,7 @@
 """Grapheme-to-phoneme (IPA) via the Moonshine C API."""
 
+import argparse
+import sys
 from pathlib import Path
 from typing import Dict, Optional, Union
 
@@ -111,3 +113,48 @@ class GraphemeToPhonemizer:
             self.close()
         except Exception:
             pass
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Print IPA for text using Moonshine G2P (downloads assets by default).",
+    )
+    parser.add_argument(
+        "-l",
+        "--language",
+        required=True,
+        help="Moonshine language tag (e.g. en_us, ar_msa, cmn_hans_cn)",
+    )
+    parser.add_argument(
+        "--text",
+        help="Input text to convert (quote if it contains spaces)",
+    )
+    parser.add_argument(
+        "--asset-root",
+        type=Path,
+        default=None,
+        help="Cache directory for G2P assets (default: Moonshine download cache)",
+    )
+    parser.add_argument(
+        "--no-download",
+        action="store_true",
+        help="Use only existing files under --asset-root (no network)",
+    )
+    args = parser.parse_args()
+
+    try:
+        with GraphemeToPhonemizer(
+            args.language,
+            asset_root=args.asset_root,
+            download=not args.no_download,
+        ) as g2p:
+            ipa = g2p.to_ipa(args.text)
+    except MoonshineError as e:
+        print(str(e), file=sys.stderr)
+        raise SystemExit(1) from e
+
+    print(ipa)
+
+
+if __name__ == "__main__":
+    main()
