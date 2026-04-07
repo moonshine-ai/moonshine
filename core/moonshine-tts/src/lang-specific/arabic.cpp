@@ -4,6 +4,7 @@
 #include "moonshine-g2p-options.h"
 #include "utf8-utils.h"
 
+#include <algorithm>
 #include <cctype>
 #include <fstream>
 #include <istream>
@@ -84,6 +85,11 @@ std::unordered_map<std::string, std::string> load_lex_first_tsv(const std::files
   return load_lex_first_tsv_stream(in);
 }
 
+std::string strip_lex_ipa_segment_dots(std::string ipa) {
+  ipa.erase(std::remove(ipa.begin(), ipa.end(), '.'), ipa.end());
+  return ipa;
+}
+
 }  // namespace
 
 ArabicRuleG2p::ArabicRuleG2p(std::filesystem::path onnx_model_dir, std::filesystem::path dict_tsv,
@@ -142,7 +148,7 @@ std::string ArabicRuleG2p::g2p_word(std::string_view word_utf8) {
   const std::string key = arabic_msa_strip_diacritics_utf8(w);
   const auto it = lex_.find(key);
   if (it != lex_.end()) {
-    return it->second;
+    return strip_lex_ipa_segment_dots(it->second);
   }
   const std::string diac = diac_->diacritize(w);
   const std::string filled = arabic_msa_apply_onnx_partial_postprocess_utf8(diac);

@@ -307,7 +307,7 @@ std::string gem_ipa(const std::string& onset) {
       static_cast<unsigned char>(onset[1]) == 0x94u) {
     return onset;
   }
-  return onset + "." + onset;
+  return onset + onset;
 }
 
 std::string diac_word_to_ipa_u32(const std::u32string& word) {
@@ -373,7 +373,7 @@ std::string diac_word_to_ipa_u32(const std::u32string& word) {
     }
     std::string seg = (sh && !onset.empty()) ? gem_ipa(onset) : onset;
     if (!v.empty()) {
-      parts.push_back(seg.empty() ? v : (seg + "." + v));
+      parts.push_back(seg.empty() ? v : (seg + v));
     } else if (sukun && !seg.empty()) {
       parts.push_back(seg);
     } else if (!seg.empty()) {
@@ -381,24 +381,8 @@ std::string diac_word_to_ipa_u32(const std::u32string& word) {
     }
   }
   std::string out;
-  for (std::size_t i = 0; i < parts.size(); ++i) {
-    if (i > 0) {
-      out.push_back('.');
-    }
-    out += parts[i];
-  }
-  for (;;) {
-    auto p = out.find("..");
-    if (p == std::string::npos) {
-      break;
-    }
-    out.replace(p, 2, ".");
-  }
-  while (!out.empty() && out.front() == '.') {
-    out.erase(0, 1);
-  }
-  while (!out.empty() && out.back() == '.') {
-    out.pop_back();
+  for (const std::string& p : parts) {
+    out += p;
   }
   return out;
 }
@@ -436,21 +420,9 @@ std::string arabic_msa_word_to_ipa_with_assimilation_utf8(std::string_view fille
     std::string stem_ipa = diac_word_to_ipa_u32(stem);
     if (stem_ipa.rfind(onset, 0) == 0) {
       stem_ipa = stem_ipa.substr(onset.size());
-      while (!stem_ipa.empty() && stem_ipa.front() == '.') {
-        stem_ipa.erase(0, 1);
-      }
     }
     std::string gem = gem_ipa(onset);
-    while (!stem_ipa.empty() && stem_ipa.back() == '.') {
-      stem_ipa.pop_back();
-    }
-    std::string out = stem_ipa.empty() ? ("a" + gem) : ("a" + gem + "." + stem_ipa);
-    while (!out.empty() && out.front() == '.') {
-      out.erase(0, 1);
-    }
-    while (!out.empty() && out.back() == '.') {
-      out.pop_back();
-    }
+    std::string out = stem_ipa.empty() ? ("a" + gem) : ("a" + gem + stem_ipa);
     return out;
   }
   return diac_word_to_ipa_u32(w);
