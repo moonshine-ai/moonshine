@@ -1,5 +1,6 @@
 #include "german.h"
 #include "g2p-word-log.h"
+#include "ipa-postprocess.h"
 #include "ipa-symbols.h"
 #include "utf8-utils.h"
 
@@ -1042,12 +1043,12 @@ std::string GermanRuleG2p::finalize_ipa(std::string ipa) const {
   if (!options_.with_stress) {
     erase_utf8_substr(ipa, kPrimaryStressUtf8);
     erase_utf8_substr(ipa, kSecondaryStressUtf8);
-    return ipa;
+    return normalize_german_ipa_piper_style(std::move(ipa));
   }
   if (options_.vocoder_stress) {
-    return normalize_ipa_stress_for_vocoder(std::move(ipa));
+    ipa = normalize_ipa_stress_for_vocoder(std::move(ipa));
   }
-  return ipa;
+  return normalize_german_ipa_piper_style(std::move(ipa));
 }
 
 std::string GermanRuleG2p::lookup_or_rules(const std::string& raw_word) const {

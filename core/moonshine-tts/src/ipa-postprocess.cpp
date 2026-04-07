@@ -67,6 +67,32 @@ void apply_korean_post_normalize_ipa(std::string& s) {
   }
 }
 
+// U+0361 COMBINING DOUBLE INVERTED BREVE between consonants (narrow IPA tie bar) → espeak digraph.
+void apply_german_ipa_piper_style(std::string& s) {
+  static const std::string kBar("\xcd\xa1");
+  static const std::vector<std::pair<std::string, std::string>> kAffricates = {
+      {std::string("t") + kBar + "\xca\x83", std::string("t") + "\xca\x83"},  // t͡ʃ → tʃ
+      {std::string("t") + kBar + "s", "ts"},                                  // t͡s → ts
+      {std::string("d") + kBar + "\xca\x92", std::string("d") + "\xca\x92"},  // d͡ʒ → dʒ
+      {std::string("d") + kBar + "z", "dz"},                                  // d͡z → dz
+      {std::string("p") + kBar + "f", "pf"},                                  // p͡f → pf
+  };
+  for (const auto& pr : kAffricates) {
+    replace_utf8_all(s, pr.first, pr.second);
+  }
+  // Non-syllabic turned-a (common for post-vocalic /ɐ/ in German narrow IPA) → alveolar tap like Piper.
+  static const std::string kTurnedACombBreve("\xc9\x90\xcc\xaf");  // ɐ + U+032F
+  static const std::string kAlveolarTap("\xc9\xbe");               // ɾ
+  replace_utf8_all(s, kTurnedACombBreve, kAlveolarTap);
+  // Uvular fricative/approximant ʁ (U+0281) → ɾ for Piper/de voice inventory overlap.
+  static const std::string kUvuR("\xca\x81");
+  replace_utf8_all(s, kUvuR, kAlveolarTap);
+  // Abbreviation ``.:`` before the next IPA run (e.g. ``engl.: foo``). Prefer ``.: `` → ``. `` to
+  // avoid a double space when the colon was already followed by a separator.
+  replace_utf8_all(s, ".\x3a ", ". ");
+  replace_utf8_all(s, ".\x3a", ". ");
+}
+
 void apply_lang_specific_replacements(std::string& s, std::string_view piper_lang_key) {
   // Mirror ``piper_ipa_normalization.LANG_SPECIFIC_G2P_TO_PIPER_REPLACEMENTS`` (ordered; longest first per language).
   // Adjacent string literals: avoid ``\x..`` swallowing following hex letters (e.g. ``\xb0a``).
@@ -299,8 +325,27 @@ void apply_russian_ipa_piper_style(std::string& s) {
 
 }  // namespace
 
+void repair_ascii_c_combining_cedilla_to_ccedilla_utf8(std::string& s) {
+  static const std::string kAsciiCPlusCombCedilla = std::string("c") + "\xcd\xa7";  // c + U+0327
+  static const std::string kPrecomposedCcedilla("\xc3\xa7");                      // ç U+00E7
+  size_t pos = 0;
+  while ((pos = s.find(kAsciiCPlusCombCedilla, pos)) != std::string::npos) {
+    s.replace(pos, kAsciiCPlusCombCedilla.size(), kPrecomposedCcedilla);
+    pos += kPrecomposedCcedilla.size();
+  }
+}
+
 std::string normalize_russian_ipa_piper_style(std::string ipa) {
   apply_russian_ipa_piper_style(ipa);
+  return ipa;
+}
+
+std::string normalize_german_ipa_piper_style(std::string ipa) {
+  {
+    std::string nfc = utf8_nfc_copy(ipa);
+    ipa.swap(nfc);
+  }
+  apply_german_ipa_piper_style(ipa);
   return ipa;
 }
 
@@ -320,6 +365,13 @@ std::string normalize_g2p_ipa_for_piper(std::string_view ipa_utf8, std::string_v
   std::string s = utf8_nfc_copy(ipa_utf8);
   apply_shared_g2p_to_piper_replacements(s);
   apply_lang_specific_replacements(s, piper_lang_key);
+  std::string_view eff = piper_lang_key;
+  if (eff == "de_de" || eff == "german") {
+    eff = "de";
+  }
+  if (eff == "de") {
+    apply_german_ipa_piper_style(s);
+  }
   return s;
 }
 

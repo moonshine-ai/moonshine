@@ -424,7 +424,27 @@ In the cloud this isn't as much of an issue, as many uses of espeak-ng can be im
 
 To allow wider usage, we developed our own "grapheme to phoneme" module that performs a similar role, but has been written from scratch. You'll find the implementation in [core/moonshine-tts](core/moonshine-tts) and it's released under the same MIT License as the rest of this code base.
 
-Every language requires a different process to convert its written form into speech, and often it varies by dialect too. This is why espeak-ng is so widely used, it has had years of work put into it to encode linguistic knowledge into a complex set of rules, many of which are heuristics that require a lot of testing to get right. The Moonshine Voice G2P engine is still new, and will need similar tuning to handle all of the variations across languages, but I'm hoping the initial implementation is a good start and will benefit from community feedback and contributions over time.
+Every language requires a different process to convert its written form into speech, and often it varies by dialect too. This is why espeak-ng is so widely used, it has had years of work put into it to encode linguistic knowledge into a complex set of rules, many of which are heuristics that require a lot of testing to get right. The Moonshine Voice G2P engine is still new, and will need similar tuning to handle all of the variations across languages, but I'm hoping the initial implementation is a good start and will benefit from community feedback and contributions over time. Here are the current results for intelligibility across languages, using [scripts/tts_g2p_intelligibility.py](scripts/tts_g2p_intelligibility.py):
+
+| Language | Moonshine CER | Reference CER |
+| --- | --- | --- |
+| ar_msa | 20.8% | 15.3% |
+| de_de | 18.3% | 9.2% |
+| en_us | 12.6% | 9.8% |
+| es_ar | 7.9% | 10.6% |
+| es_es | 4.2% | 4.5% |
+| es_mx | 3.2% | 2.6% |
+| fr_fr | 14.8% | 9.4% |
+| hi_in | 26.5% | 15.9% |
+| it_it | 24.2% | 11.4% |
+| ko_kr | 71.5% | 18.6% |
+| nl_nl | 15.9% | 3.3% |
+| pt_br | 19.7% | 4.9% |
+| pt_pt | 43.8% | 24.6% |
+| ru_ru | 16.9% | 5.0% |
+| tr_tr | 8.9% | 7.9% |
+| uk_ua | 27.7% | 15.6% |
+| vi_vn | 79.0% | 36.5% |
 
 If you want access to just the grapheme to phoneme capability, without the speech synthesis, you can all it directly:
 
