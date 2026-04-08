@@ -827,15 +827,15 @@ struct KokoroTtsEngine {
   std::vector<float> synthesize(std::string_view text) {
     const std::string ipa = g2p_->text_to_ipa(text, nullptr);
     if (trim_ascii_ws_copy(ipa).empty()) {
-      throw std::runtime_error("MoonshineTTS: G2P returned empty IPA");
+      return {};
     }
     std::string phonemes = normalize_ipa_to_kokoro(ipa, kokoro_lang_, vocab_keys_);
     if (phonemes.empty()) {
-      throw std::runtime_error("MoonshineTTS: empty phoneme string after Kokoro vocabulary filter");
+      return {};
     }
     const std::vector<std::string> chunks = chunk_phonemes(phonemes);
     if (chunks.empty()) {
-      throw std::runtime_error("MoonshineTTS: no phoneme chunks");
+      return {};
     }
     std::vector<float> wave_all;
     wave_all.reserve(chunks.size() * 8192);

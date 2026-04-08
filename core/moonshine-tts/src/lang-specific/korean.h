@@ -20,6 +20,7 @@ class KoreanRuleG2p : public RuleBasedG2p {
   struct Options {
     std::string syllable_sep{""};
     bool expand_cardinal_digits = true;
+    bool log_g2p = true;  // log grapheme→IPA mappings to stderr via LOGF
   };
 
   explicit KoreanRuleG2p(std::filesystem::path dict_tsv);
@@ -33,8 +34,10 @@ class KoreanRuleG2p : public RuleBasedG2p {
   const std::string& dialect_id() const { return dialect_id_; }
 
   /// Map lexicon-style IPA to the broad inventory used by rule output (same as Python
-  /// ``normalize_korean_ipa``).
-  static std::string normalize_korean_ipa(std::string ipa);
+  /// ``normalize_korean_ipa``).  When ``voice_lenis`` is true (default, used for lexicon
+  /// entries), k/t/p are converted to voiced ɡ/d/b.  When false (rule-based output),
+  /// voicing is skipped because ``syllables_to_ipa`` already produces the correct forms.
+  static std::string normalize_korean_ipa(std::string ipa, bool voice_lenis = true);
 
   std::string text_to_ipa(std::string text,
                           std::vector<G2pWordLog>* per_word_log = nullptr) override;

@@ -36,13 +36,20 @@ inline void erase_utf8_substr(std::string& s, std::string_view sub) {
 }
 
 /// Trim ASCII whitespace only (same policy as legacy ``trim_copy_sv`` helpers in language files).
+/// IMPORTANT: uses an explicit ASCII-only check — ``std::isspace(0xA0)`` returns true on macOS
+/// (Latin-1 non-breaking space), which breaks UTF-8 strings whose last byte happens to be 0xA0
+/// (e.g. Hangul 고 = EA B3 A0, combining marks like U+0320 = CC A0).
+inline bool is_ascii_whitespace(unsigned char c) {
+  return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
+}
+
 inline std::string trim_ascii_ws_copy(std::string_view s) {
   size_t a = 0;
   size_t b = s.size();
-  while (a < b && std::isspace(static_cast<unsigned char>(s[a])) != 0) {
+  while (a < b && is_ascii_whitespace(static_cast<unsigned char>(s[a]))) {
     ++a;
   }
-  while (b > a && std::isspace(static_cast<unsigned char>(s[b - 1])) != 0) {
+  while (b > a && is_ascii_whitespace(static_cast<unsigned char>(s[b - 1]))) {
     --b;
   }
   return std::string(s.substr(a, b - a));

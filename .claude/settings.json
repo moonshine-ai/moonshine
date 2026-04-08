@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xxd)",
+      "Bash(./korean_rule_g2p_test -tc=\"korean: normalize*\" -s)",
+      "Bash(python3 -c \"from moonshine_voice.download import normalize_moonshine_language_tag; print\\(repr\\(normalize_moonshine_language_tag\\('ko'\\)\\)\\)\")",
+      "Bash(python3 -c ':*)"
+    ]
+  }
+}

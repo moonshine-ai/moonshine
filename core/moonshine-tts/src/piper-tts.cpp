@@ -609,18 +609,18 @@ struct PiperTTS::Impl {
   std::vector<float> synthesize(std::string_view text) {
     const std::string ipa = g2p_->text_to_ipa(text, nullptr);
     if (trim_ascii_ws_copy(ipa).empty()) {
-      throw std::runtime_error("PiperTTS: G2P returned empty IPA");
+      return {};
     }
     const std::string trimmed_ipa = trim_ascii_ws_copy(ipa);
     const std::string ipa_for_piper =
         coerce_unknown_ipa_chars_to_piper_inventory(
             normalize_g2p_ipa_for_piper(trimmed_ipa, piper_ipa_lang_key_), phoneme_map_keys_, true);
     if (trim_ascii_ws_copy(ipa_for_piper).empty()) {
-      throw std::runtime_error("PiperTTS: empty phoneme string after G2P normalization");
+      return {};
     }
     std::vector<int64_t> ids = ipa_utf8_to_piper_ids(ipa_for_piper, phoneme_id_map_);
     if (ids.size() < 3) {
-      throw std::runtime_error("PiperTTS: no phoneme ids after IPA map filter");
+      return {};
     }
     return run_ort_from_phoneme_ids(ids);
   }

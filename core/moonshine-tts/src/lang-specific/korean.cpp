@@ -2,6 +2,7 @@
 #include "korean-numbers.h"
 #include "g2p-word-log.h"
 #include "utf8-utils.h"
+#include "debug-utils.h"
 
 #include <cctype>
 #include <cstdlib>
@@ -163,6 +164,15 @@ std::optional<std::pair<int, int>> jong_split_for_linking(int jong) {
   }
 }
 
+// Sonorant codas: nasals (ㄴ,ㅁ,ŋ) and liquids (ㄹ and ㄹ-clusters).
+// After these, lenis ㅈ voices to dʑ (same as after vowels).
+bool is_sonorant_jong(int jong) {
+  if (jong == 4 || jong == 5 || jong == 6) return true;   // ㄴ-type (ㄴ, ㄵ, ㄶ)
+  if (jong >= 8 && jong <= 16) return true;                // ㄹ/ㄹ-clusters (8-15) and ㅁ (16)
+  if (jong == kJongNgCoda) return true;                    // ŋ (21)
+  return false;
+}
+
 bool jong_triggers_tense(int jong) {
   switch (jong) {
   case 1:
@@ -278,7 +288,7 @@ std::string ipa_onset(int cho, bool tense, bool aspirate) {
   std::string ip;
   switch (cho) {
   case kChoK:
-    ip = "k";
+    ip = "\xC9\xA1";  // ɡ — lenis ㄱ always voiced (Piper convention for Korean ㄱ)
     break;
   case kChoKk:
     ip = "k";  // tense ㄲ: ͈ stripped → plain k
@@ -299,7 +309,7 @@ std::string ipa_onset(int cho, bool tense, bool aspirate) {
     ip = "m";
     break;
   case kChoP:
-    ip = "p";
+    ip = "b";  // lenis ㅂ always voiced (Piper convention for Korean ㅂ)
     break;
   case kChoPp:
     ip = "p";  // tense ㅃ: ͈ stripped → plain p
@@ -311,7 +321,7 @@ std::string ipa_onset(int cho, bool tense, bool aspirate) {
     ip = "s";  // tense ㅆ: ͈ stripped → plain s
     break;
   case kChoC:
-    ip = "t\xC9\x95";  // tɕ (alveolo-palatal, eSpeak style for lenis ㅈ)
+    ip = "t\xC9\x95";  // tɕ — lenis ㅈ default voiceless (Piper word-initial convention)
     break;
   case kChoCc:
     ip = "t\xC9\x95";  // tɕ (tense ㅉ, tense mark stripped)
@@ -341,6 +351,7 @@ std::string ipa_onset(int cho, bool tense, bool aspirate) {
     }
   }
   if (aspirate) {
+    // Aspiration from ㅎ+lenis → voiceless aspirated (override the voiced defaults)
     if (cho == kChoK) return "kh";
     if (cho == kChoT) return "th";
     if (cho == kChoP) return "ph";
@@ -364,14 +375,14 @@ std::string ipa_coda_simple(int jong) {
   if (jong == 0) {
     return "";
   }
-  if (jong == 1 || jong == 2 || jong == 24) {
-    return "q";
+  if (jong == 1 || jong == 2 || jong == 3 || jong == 24) {
+    return "q";  // ㄱ-type unreleased coda (Piper ko_KR vocoder uses q for this)
   }
-  if (jong == 7 || jong == 25 || jong == 19 || jong == 20 || jong == 22 || jong == 23) {
-    return "t-";
+  if (jong == 7 || jong == 25 || jong == 19 || jong == 20 || jong == 22 || jong == 23 || jong == 27) {
+    return "t-";  // ㄷ-type unreleased coda (Piper uses t- with hyphen)
   }
   if (jong == 17 || jong == 26 || jong == 18) {
-    return "p-";
+    return "p-";  // ㅂ-type unreleased coda (Piper uses p- with hyphen)
   }
   if (jong == 4) {
     return "n";
@@ -385,17 +396,11 @@ std::string ipa_coda_simple(int jong) {
   if (jong == kJongNgCoda) {
     return "\xC5\x8B";  // ŋ
   }
-  if (jong == 27) {
-    return "t-";
-  }
-  if (jong == 3) {
-    return "q";
-  }
   if (jong == 5 || jong == 6) {
     return "n";
   }
   if (jong >= 9 && jong <= 15) {
-    return "l";
+    return "\xC9\xAB";  // ɫ — complex ㄹ-cluster codas (ㄺ ㄻ ㄼ ㄽ ㄾ ㄿ ㅀ)
   }
   return "";
 }
@@ -439,31 +444,24 @@ std::string syllables_to_ipa(const std::vector<Syllable>& syls, std::string_view
       const bool tense_after =
           prev != nullptr && jong_triggers_tense(prev->jong) &&
           (cho == kChoK || cho == kChoT || cho == kChoP || cho == kChoS || cho == kChoC);
-      // Voiced allophones: ㄱ→ɡ, ㅂ→b, ㅈ→dʑ between voiced sounds (vowels, nasals, liquids).
-      const bool voiced_context =
-          i > 0 && prev != nullptr &&
-          (prev->jong == 0 ||           // after vowel (no coda)
-           prev->jong == 4 ||           // after n
-           prev->jong == 8 ||           // after ɫ
-           prev->jong == 16 ||          // after m
-           prev->jong == kJongNgCoda);  // after ŋ
       if (after_h) {
         onset_ipa = ipa_onset(cho, false, true);
       } else if (tense_after) {
         onset_ipa = ipa_onset(cho, true, false);
-      } else if (voiced_context && cho == kChoK) {
-        onset_ipa = "\xC9\xA1";  // ɡ
-      } else if (voiced_context && cho == kChoP) {
-        onset_ipa = "b";
-      } else if (voiced_context && cho == kChoC) {
+      } else if (cho == kChoC && prev != nullptr &&
+                 (prev->jong == 0 || is_sonorant_jong(prev->jong))) {
+        // Intervocalic / post-sonorant voicing: lenis ㅈ → dʑ (voiced).
+        // After vowel (jong==0) or sonorant coda (ㄴ,ㄹ,ㅁ,ŋ), Korean ㅈ voices.
+        // Word-initially (prev==nullptr) it stays voiceless tɕ (the ipa_onset default).
+        // Note: ㄱ and ㅂ stay voiced (ɡ/b) everywhere — Piper convention.
         onset_ipa = "d\xCA\x91";  // dʑ
       } else {
         onset_ipa = ipa_onset(cho, false, false);
       }
     }
 
-    // Unstressed ㅏ (jung==0) in non-initial syllables reduces to ɐ (U+0250).
-    const std::string nucleus = (i > 0 && s.jung == 0) ? "\xC9\x90" : ipa_nucleus(s.jung);
+    // ㅏ (jung==0) → ɐ (U+0250) in all positions (Piper ko_KR vocoder convention).
+    const std::string nucleus = (s.jung == 0) ? "\xC9\x90" : ipa_nucleus(s.jung);
 
     // Embed stress marker immediately before the nucleus vowel (eSpeak-ng Piper convention).
     // Primary stress ˈ (U+02C8) on syllable 0; secondary stress ˌ (U+02CC) on syllables 2,4,6…
@@ -542,12 +540,28 @@ std::string g2p_hangul_rules_only_inner(std::string_view hangul, std::string_vie
 
 }  // namespace
 
-std::string KoreanRuleG2p::normalize_korean_ipa(std::string ipa) {
+std::string KoreanRuleG2p::normalize_korean_ipa(std::string ipa, bool voice_lenis) {
   ipa = trim_ascii_ws_copy(ipa);
   if (ipa.empty()) {
     return ipa;
   }
-  std::string t = strip_mn_after_nfd(ipa);
+  // Preserve tense (fortis) consonants BEFORE strip_mn removes their diacritic (U+0348 ͈).
+  // After stripping, remaining plain k/t/p are lenis → will be voiced to ɡ/d/b at the end.
+  // Tense ㄲ(k͈) ㄸ(t͈) ㅃ(p͈) ㅆ(s͈) stay voiceless; sentinels protect them through the pipeline.
+  std::string pre = ipa;
+  const std::string tense_dia = "\xCD\x88";  // U+0348 COMBINING DOUBLE VERTICAL LINE BELOW
+  replace_all(pre, "k" + tense_dia, "\x01K");
+  replace_all(pre, "t" + tense_dia, "\x01T");
+  replace_all(pre, "p" + tense_dia, "\x01P");
+  replace_all(pre, "s" + tense_dia, "\x01S");
+  // Preserve unreleased stops (coda position): k̚ t̚ p̚ should stay voiceless.
+  // Use \x03 + uppercase so the lowercase k/t/p voicing pass won't match them.
+  const std::string unrel_dia = "\xCC\x9A";  // U+031A COMBINING LEFT ANGLE ABOVE (unreleased)
+  replace_all(pre, "k" + unrel_dia, "\x03K");
+  replace_all(pre, "t" + unrel_dia, "\x03T");
+  replace_all(pre, "p" + unrel_dia, "\x03P");
+
+  std::string t = strip_mn_after_nfd(pre);
   // Normalize tie-bar affricates.
   // ㅊ (aspirated): postalveolar tʃh (eSpeak convention).
   // ㅈ (lenis unvoiced): alveolo-palatal tɕ; (voiced): dʑ — preserved as-is.
@@ -563,7 +577,10 @@ std::string KoreanRuleG2p::normalize_korean_ipa(std::string ipa) {
   replace_all(t, "k" + tie + "x",                 "kh");           // k͡x  → kh
   // Aspiration: sʰ → s; bare ɕʰ → tʃh; remaining ʰ → ASCII h
   replace_all(t, "s\xCA\xB0",         "s");          // sʰ → s (eSpeak treats ㅅ as plain s)
-  replace_all(t, "\xC9\x95\xCA\xB0",  "t\xCA\x83h"); // ɕʰ → tʃh
+  // After strip_mn_after_nfd strips the tie in t͡ɕʰ → tɕʰ, the tɕ prefix must be consumed
+  // together with ʰ, otherwise the standalone ɕʰ rule below leaves an orphan leading 't'.
+  replace_all(t, "t\xC9\x95\xCA\xB0", "t\xCA\x83h"); // tɕʰ (tie-stripped) → tʃh  (must precede ɕʰ rule)
+  replace_all(t, "\xC9\x95\xCA\xB0",  "t\xCA\x83h"); // ɕʰ → tʃh (standalone, e.g. from lexicon)
   replace_all(t, "\xCA\x83\xCA\xB0",  "t\xCA\x83h"); // ʃʰ → tʃh
   replace_all(t, "\xCA\xB0",          "h");           // ʰ  → h (kh, th, ph etc.)
   // tɕh (from ɕʰ after ʰ→h — shouldn't remain, but guard) → tʃh
@@ -576,6 +593,57 @@ std::string KoreanRuleG2p::normalize_korean_ipa(std::string ipa) {
   replace_all(t, "\xC3\xA7",  "h");          // ç → h
   // ɡ (U+0261) preserved: vocoder trained on eSpeak which uses ɡ for voiced ㄱ
   replace_all(t, "\xC9\x9F",  "t\xCA\x83");  // ɟ → tʃ
+  replace_all(t, "\xCA\x9D",  "j");           // ʝ → j (voiced palatal fricative not in Piper inventory)
+  replace_all(t, "\xC9\xB8",  "h");           // ɸ → h (voiceless bilabial fricative not in vocoder)
+  replace_all(t, "\xC3\xB8",  "we");          // ø → we (front rounded vowel not in Piper inventory)
+  replace_all(t, "\xC9\x98",  "\xCA\x8C");    // ɘ → ʌ (close-mid central → open-mid back)
+  replace_all(t, "c",         "t\xC9\x95");   // plain 'c' → tɕ (palatal stop not in Piper inventory)
+  // Strip U+FFFD replacement characters that can arise from malformed lexicon normalization.
+  replace_all(t, "\xEF\xBF\xBD", "");         // U+FFFD → remove
+  // Strip length mark ː — Piper vocoder doesn't distinguish vowel length.
+  replace_all(t, "\xCB\x90", "");             // ː → remove
+  // Korean ㅏ: Piper ko_KR vocoder uses ɐ (near-open central) rather than a (open front).
+  // This must run AFTER all other replacements to avoid mangling multi-byte sequences.
+  replace_all(t, "a", "\xC9\x90");            // a → ɐ
+
+  if (voice_lenis) {
+    // Voice lenis stops: k→ɡ, p→b, t→d for LEXICON entries only.
+    // Rule-based output already has correct voicing from syllables_to_ipa, so this
+    // pass is skipped when voice_lenis=false to avoid converting tense k/t/p to voiced.
+    // Must protect aspirated kh/ph/th first, then convert, then restore.
+    replace_all(t, "kh",                 "\x02KH");
+    replace_all(t, "ph",                 "\x02PH");
+    replace_all(t, "th",                 "\x02TH");
+    replace_all(t, "t\xCA\x83",         "\x02TC");    // tʃ (postalveolar affricate)
+    replace_all(t, "t\xC9\x95",         "\x02TJ");    // tɕ (alveolo-palatal affricate)
+    replace_all(t, "t-",                 "\x02TD");    // t- (unreleased coda)
+    replace_all(t, "ts",                 "\x02TS");    // ts (alveolar affricate)
+    replace_all(t, "p-",                 "\x02PD");    // p- (unreleased coda)
+    // Convert remaining voiceless lenis → voiced
+    replace_all(t, "k", "\xC9\xA1");    // k → ɡ
+    replace_all(t, "p", "b");           // p → b
+    replace_all(t, "t", "d");           // t → d
+    // Restore protected sequences
+    replace_all(t, "\x02KH", "kh");
+    replace_all(t, "\x02PH", "ph");
+    replace_all(t, "\x02TH", "th");
+    replace_all(t, "\x02TC", "t\xCA\x83");
+    replace_all(t, "\x02TJ", "t\xC9\x95");
+    replace_all(t, "\x02TD", "t-");
+    replace_all(t, "\x02TS", "ts");
+    replace_all(t, "\x02PD", "p-");
+  }
+
+  // Restore tense sentinels to voiceless (tense stays voiceless in Piper).
+  replace_all(t, "\x01K", "k");
+  replace_all(t, "\x01T", "t");
+  replace_all(t, "\x01P", "p");
+  replace_all(t, "\x01S", "s");
+  // Restore unreleased coda sentinels (stay voiceless).
+  replace_all(t, "\x03K", "k");
+  replace_all(t, "\x03T", "t");
+  replace_all(t, "\x03P", "p");
+
   return t;
 }
 
@@ -599,8 +667,11 @@ std::string KoreanRuleG2p::g2p_hangul_rules_only(std::string_view hangul) const 
   if (hangul.empty()) {
     return "";
   }
+  // voice_lenis=false: rule-based output already has correct voicing from syllables_to_ipa;
+  // skip the k→ɡ/p→b/t→d pass that would incorrectly voice tense consonants.
   return normalize_korean_ipa(
-      g2p_hangul_rules_only_inner(hangul, options_.syllable_sep));
+      g2p_hangul_rules_only_inner(hangul, options_.syllable_sep),
+      /*voice_lenis=*/false);
 }
 
 std::string KoreanRuleG2p::g2p_single_fragment(std::string_view frag) const {
@@ -676,13 +747,51 @@ std::string KoreanRuleG2p::text_to_ipa(std::string text,
   if (raw.empty()) {
     return "";
   }
-  // Ensure IPA has a stress marker. Rule-based output embeds ˈ/ˌ within syllables; lexicon
-  // entries that already start with a marker are returned as-is. Any entry without any stress
-  // marker (rare) gets ˈ prepended as a fallback.
+  // Ensure IPA has a stress marker positioned after the onset, before the first vowel nucleus
+  // (Piper ko_KR vocoder convention: ɡˈɯ not ˈɡɯ or ˈkɯ).
+  // Rule-based output already embeds ˈ/ˌ within syllables at the correct position.
+  // Lexicon entries may have ˈ at position 0 (before onset) — reposition if so.
   auto add_word_stress = [](std::string ipa) -> std::string {
-    if (ipa.find("\xCB\x88") != std::string::npos) return ipa;  // already has ˈ
-    if (ipa.find("\xCB\x8C") != std::string::npos) return ipa;  // already has ˌ
-    return "\xCB\x88" + ipa;  // fallback: prepend primary stress
+    if (ipa.empty()) return ipa;
+    const bool has_primary = (ipa.find("\xCB\x88") != std::string::npos);
+    const bool has_secondary = (ipa.find("\xCB\x8C") != std::string::npos);
+    // If stress is already present but NOT at position 0, it's already correctly positioned
+    // (e.g. from rule-based output like "dˈɛhɐn").
+    if (has_primary && ipa.substr(0, 2) != "\xCB\x88") return ipa;
+    if (has_secondary && !has_primary) return ipa;
+    // Strip leading ˈ if present (we'll re-insert it at the right position).
+    std::string s = ipa;
+    if (s.size() >= 2 && s[0] == '\xCB' && s[1] == '\x88') {
+      s = s.substr(2);
+    }
+    if (s.empty()) return ipa;
+    // Find the first vowel-like character to insert ˈ before it.
+    // Vowels in our inventory: a ɐ ɛ e ɯ ʌ o u i ɔ w j (w/j are glides that start diphthongs).
+    for (size_t p = 0; p < s.size(); ) {
+      unsigned char c = static_cast<unsigned char>(s[p]);
+      // Single-byte ASCII vowels/glides
+      if (c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u' || c == 'w' || c == 'j') {
+        s.insert(p, "\xCB\x88");  // insert ˈ
+        return s;
+      }
+      // Two-byte UTF-8 IPA vowels: ɐ(C9 90) ɛ(C9 9B) ɯ(C9 AF) ʌ(CA 8C) ɔ(C9 94)
+      if (c >= 0xC0 && c < 0xE0 && p + 1 < s.size()) {
+        unsigned char c2 = static_cast<unsigned char>(s[p + 1]);
+        if ((c == 0xC9 && (c2 == 0x90 || c2 == 0x9B || c2 == 0xAF || c2 == 0x94)) ||
+            (c == 0xCA && c2 == 0x8C)) {
+          s.insert(p, "\xCB\x88");
+          return s;
+        }
+        p += 2;
+        continue;
+      }
+      // Multi-byte: skip
+      if (c >= 0xE0 && c < 0xF0) { p += 3; continue; }
+      if (c >= 0xF0) { p += 4; continue; }
+      p += 1;
+    }
+    // No vowel found — just prepend
+    return "\xCB\x88" + s;
   };
 
   // Pre-tokenize: replace brackets/parens with spaces to prevent adjacent Korean words from
@@ -697,6 +806,13 @@ std::string KoreanRuleG2p::text_to_ipa(std::string text,
     }
   }
 
+  const bool do_log = options_.log_g2p;
+  auto log_mapping = [&](const std::string& grapheme, const std::string& ipa, const char* path) {
+    if (do_log) {
+      LOGF("ko g2p [%s] %s -> %s", path, grapheme.c_str(), ipa.c_str());
+    }
+  };
+
   std::vector<std::string> ipa_words;
   std::istringstream iss(tokenizable);
   std::string w;
@@ -706,7 +822,9 @@ std::string KoreanRuleG2p::text_to_ipa(std::string text,
         for (const std::string& frag : *frags) {
           const std::string ipa = g2p_single_fragment(frag);
           if (!ipa.empty()) {
-            ipa_words.push_back(add_word_stress(ipa));
+            const std::string stressed = add_word_stress(ipa);
+            log_mapping(w + " -> " + frag, stressed, "numeral");
+            ipa_words.push_back(stressed);
           }
         }
         continue;
@@ -747,7 +865,11 @@ std::string KoreanRuleG2p::text_to_ipa(std::string text,
                 speech_units.back() += hangul_tail;  // attach 년/월/일 to last unit
                 for (const auto& unit : speech_units) {
                   const std::string ipa = g2p_single_fragment(unit);
-                  if (!ipa.empty()) ipa_words.push_back(add_word_stress(ipa));
+                  if (!ipa.empty()) {
+                    const std::string stressed = add_word_stress(ipa);
+                    log_mapping(w + " -> " + unit, stressed, "mixed-num+hangul");
+                    ipa_words.push_back(stressed);
+                  }
                 }
                 continue;
               }
@@ -760,7 +882,11 @@ std::string KoreanRuleG2p::text_to_ipa(std::string text,
             for (const auto& frag : *num_frags) combined += frag;
             combined += hangul_tail;
             const std::string ipa = g2p_single_fragment(combined);
-            if (!ipa.empty()) ipa_words.push_back(add_word_stress(ipa));
+            if (!ipa.empty()) {
+              const std::string stressed = add_word_stress(ipa);
+              log_mapping(w + " -> " + combined, stressed, "mixed-num+hangul-fallback");
+              ipa_words.push_back(stressed);
+            }
             continue;
           }
         }
@@ -768,14 +894,25 @@ std::string KoreanRuleG2p::text_to_ipa(std::string text,
     }
     const std::string h = extract_hangul(w);
     if (h.empty()) {
+      if (do_log) {
+        LOGF("ko g2p [skipped] %s -> (no Hangul)", w.c_str());
+      }
       continue;
     }
     const auto it = lexicon_.find(h);
     if (it != lexicon_.end()) {
-      if (!it->second.empty()) ipa_words.push_back(add_word_stress(it->second));
+      if (!it->second.empty()) {
+        const std::string stressed = add_word_stress(it->second);
+        log_mapping(h, stressed, "lexicon");
+        ipa_words.push_back(stressed);
+      }
     } else {
       const std::string ipa = g2p_hangul_rules_only(h);
-      if (!ipa.empty()) ipa_words.push_back(add_word_stress(ipa));
+      if (!ipa.empty()) {
+        const std::string stressed = add_word_stress(ipa);
+        log_mapping(h, stressed, "rules");
+        ipa_words.push_back(stressed);
+      }
     }
   }
   std::string out;
