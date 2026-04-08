@@ -98,6 +98,24 @@ from moonshine_voice.tts import TextToSpeech
 
 WHISPER_TARGET_SR = 16000
 
+
+def levenshtein_distance(s: str, t: str) -> int:
+    """Character-level Levenshtein (edit) distance between two strings."""
+    n, m = len(s), len(t)
+    if n == 0:
+        return m
+    if m == 0:
+        return n
+    # Single-row DP
+    prev = list(range(m + 1))
+    for i in range(1, n + 1):
+        curr = [i] + [0] * m
+        for j in range(1, m + 1):
+            cost = 0 if s[i - 1] == t[j - 1] else 1
+            curr[j] = min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost)
+        prev = curr
+    return prev[m]
+
 # Moonshine TTS tag → Whisper ``language`` argument (ISO-639-1 where applicable)
 _MOONSHINE_TO_WHISPER: Dict[str, str] = {
     "en_us": "en",
@@ -1135,6 +1153,8 @@ class LineResult:
     cer_moonshine: Optional[float] = None
     cer_upstream_kokoro: Optional[float] = None
     cer_upstream_piper: Optional[float] = None
+    phoneme_levenshtein_vs_kokoro: Optional[int] = None
+    phoneme_levenshtein_vs_piper: Optional[int] = None
     wav_path_moonshine: Optional[str] = None
     wav_path_upstream_kokoro: Optional[str] = None
     wav_path_upstream_piper: Optional[str] = None
@@ -1374,6 +1394,13 @@ def run_language(
         if cup is not None:
             sum_up.append(float(cup))
 
+        lev_kokoro: Optional[int] = None
+        lev_piper: Optional[int] = None
+        if moon_ipa and uk_ph:
+            lev_kokoro = levenshtein_distance(moon_ipa, uk_ph)
+        if moon_ipa and up_ph:
+            lev_piper = levenshtein_distance(moon_ipa, up_ph)
+
         line_results.append(
             LineResult(
                 ground_truth=text,
@@ -1386,6 +1413,8 @@ def run_language(
                 cer_moonshine=cm,
                 cer_upstream_kokoro=cuk,
                 cer_upstream_piper=cup,
+                phoneme_levenshtein_vs_kokoro=lev_kokoro,
+                phoneme_levenshtein_vs_piper=lev_piper,
                 wav_path_moonshine=wav_path_m,
                 wav_path_upstream_kokoro=wav_path_uk,
                 wav_path_upstream_piper=wav_path_up,
@@ -1394,6 +1423,9 @@ def run_language(
 
     g2p.close()
     tts_moonshine.close()
+
+    lev_kokoro_vals = [r.phoneme_levenshtein_vs_kokoro for r in line_results if r.phoneme_levenshtein_vs_kokoro is not None]
+    lev_piper_vals = [r.phoneme_levenshtein_vs_piper for r in line_results if r.phoneme_levenshtein_vs_piper is not None]
 
     summary = {
         "language": lang,
@@ -1410,6 +1442,8 @@ def run_language(
         "average_cer_moonshine_internal_g2p": float(np.mean(sum_m)) if sum_m else None,
         "average_cer_upstream_kokoro_python": float(np.mean(sum_uk)) if sum_uk else None,
         "average_cer_upstream_piper_python": float(np.mean(sum_up)) if sum_up else None,
+        "average_phoneme_levenshtein_vs_kokoro": float(np.mean(lev_kokoro_vals)) if lev_kokoro_vals else None,
+        "average_phoneme_levenshtein_vs_piper": float(np.mean(lev_piper_vals)) if lev_piper_vals else None,
         "tts_data_root": str(tts_data_root.resolve()) if tts_data_root is not None else None,
         "tts_root_overlay_files": overlay_n,
         "tts_wav_cache_skip_read": bool(tts_skip_wav_cache_read),
@@ -1429,6 +1463,8 @@ def line_result_to_dict(r: LineResult) -> Dict[str, Any]:
         "character_error_rate_moonshine_internal_g2p": r.cer_moonshine,
         "character_error_rate_upstream_kokoro_python": r.cer_upstream_kokoro,
         "character_error_rate_upstream_piper_python": r.cer_upstream_piper,
+        "phoneme_levenshtein_vs_kokoro": r.phoneme_levenshtein_vs_kokoro,
+        "phoneme_levenshtein_vs_piper": r.phoneme_levenshtein_vs_piper,
         "wav_path_moonshine_internal_g2p": r.wav_path_moonshine,
         "wav_path_upstream_kokoro_python": r.wav_path_upstream_kokoro,
         "wav_path_upstream_piper_python": r.wav_path_upstream_piper,
@@ -1631,6 +1667,15 @@ def main() -> int:
         help="Override Whisper language code (empty → derive from Moonshine tag)",
     )
     parser.add_argument(
+        "--per-word",
+        action="store_true",
+        help=(
+            "Split each input sentence into individual words (at whitespace boundaries) "
+            "and run TTS + Whisper on each word separately. Useful for identifying which "
+            "specific words produce high CER."
+        ),
+    )
+    parser.add_argument(
         "--json-out",
         type=Path,
         default=_DEFAULT_JSON_REPORT,
@@ -1700,8 +1745,17 @@ def main() -> int:
             print(f"wiki-text file not found: {path}", file=sys.stderr)
             return 2
         all_sections = load_wiki_texts(path)
+        # If the file has no section headers (plain line list) and exactly one language was
+        # requested, treat the whole file as lines for that language.
+        if not all_sections and len(want_langs) >= 1:
+            # Plain text file with no [section] headers: assign all lines to each requested language.
+            raw_lines = _read_nonempty_lines(path.read_text(encoding="utf-8"))
+            if raw_lines:
+                for lang in want_langs:
+                    all_sections[lang] = normalize_eval_lines(raw_lines, lang=lang)
+                    wiki_corpora[lang] = f"plain text file {path}"
         for k in all_sections:
-            wiki_corpora[k] = f"sectioned file {path}"
+            wiki_corpora.setdefault(k, f"sectioned file {path}")
         if args.languages.strip():
             sections = {k: v for k, v in all_sections.items() if k in want_langs}
             missing = want_langs - set(sections.keys())
@@ -1762,6 +1816,7 @@ def main() -> int:
         "tts_wav_cache_dir": str(tts_wav_cache_dir) if tts_wav_cache_dir is not None else None,
         "tts_wav_cache_skip_read": bool(tts_wav_cache_dir is not None and args.no_cache),
         "tts_root": str(tts_data_root) if tts_data_root is not None else None,
+        "per_word": bool(args.per_word),
         "tts_root_overlay_disabled": bool(args.no_tts_root_overlay),
         "wiki_text_corpus_by_language": {
             lang: wiki_corpora.get(lang, "unknown") for lang in sorted(sections.keys())
@@ -1775,10 +1830,27 @@ def main() -> int:
             lines = loaded[: args.max_lines_per_lang]
         else:
             lines = loaded
+        if args.per_word:
+            words: List[str] = []
+            for sentence in lines:
+                for w in sentence.split():
+                    w = w.strip()
+                    if w:
+                        words.append(w)
+            # Deduplicate while preserving order so each unique word is evaluated once.
+            seen: set[str] = set()
+            unique_words: List[str] = []
+            for w in words:
+                if w not in seen:
+                    seen.add(w)
+                    unique_words.append(w)
+            lines = unique_words
         whisper_lang = (
             args.whisper_language.strip() or moonshine_tag_to_whisper_language(lang) or None
         )
-        if len(lines) != len(loaded):
+        if args.per_word:
+            line_note = f"{len(lines)} unique words from {len(loaded)} loaded lines"
+        elif len(lines) != len(loaded):
             line_note = f"{len(lines)} of {len(loaded)} loaded lines"
         else:
             line_note = f"{len(lines)} lines"
