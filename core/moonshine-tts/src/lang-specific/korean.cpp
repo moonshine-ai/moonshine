@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <istream>
+#include <limits>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -258,8 +259,14 @@ void apply_linking(std::vector<Syllable>& syls) {
 
 void apply_lateralization(std::vector<Syllable>& syls) {
   for (std::size_t i = 0; i + 1 < syls.size(); ++i) {
+    // ㄴ-coda before ㄹ-onset → lateralize coda to ɫ (유음화 rule).
     if (syls[i].jong == 4 && syls[i + 1].cho == kChoR) {
       syls[i].jong = 8;
+    }
+    // ɫ-coda + ɾ-onset → drop ɾ onset (유음화: long lateral, Piper style).
+    // e.g. 질량 ɫ+ɾ → ɫ (no onset), 가로질러 ɫ+ɾ → ɫ+vowel
+    if (syls[i].jong == 8 && syls[i + 1].cho == kChoR) {
+      syls[i + 1].cho = kIdxO;
     }
   }
 }
@@ -458,6 +465,15 @@ std::string syllables_to_ipa(const std::vector<Syllable>& syls, std::string_view
     // Unstressed ㅏ (jung==0) in non-initial syllables reduces to ɐ (U+0250).
     const std::string nucleus = (i > 0 && s.jung == 0) ? "\xC9\x90" : ipa_nucleus(s.jung);
 
+    // Embed stress marker immediately before the nucleus vowel (eSpeak-ng Piper convention).
+    // Primary stress ˈ (U+02C8) on syllable 0; secondary stress ˌ (U+02CC) on syllables 2,4,6…
+    std::string stress;
+    if (i == 0) {
+      stress = "\xCB\x88";  // ˈ primary
+    } else if (i % 2 == 0 && syls.size() >= 3) {
+      stress = "\xCB\x8C";  // ˌ secondary (even syllables in words with 3+ syllables)
+    }
+
     std::string coda_ipa;
     if (s.jong != 0) {
       const bool h_lost_before_asp =
@@ -481,9 +497,34 @@ std::string syllables_to_ipa(const std::vector<Syllable>& syls, std::string_view
     if (!pieces_joined.empty()) {
       pieces_joined += syllable_sep;
     }
-    pieces_joined += onset_ipa + nucleus + coda_ipa;
+    pieces_joined += onset_ipa + stress + nucleus + coda_ipa;
   }
   return pieces_joined;
+}
+
+// Split n into natural Korean speech units for TTS (千/百/나머지 boundaries).
+// e.g. 1986 → ["천","구백","팔십육"],  2002 → ["이천","이"],  7 → ["칠"].
+std::vector<std::string> sino_cardinal_speech_units(std::uint64_t n) {
+  if (n == 0) return {"영"};
+  if (n >= 100000000ULL) {
+    return {int_to_sino_korean_hangul(n)};  // 억+ too complex, single unit
+  }
+  std::vector<std::string> units;
+  if (n >= 10000ULL) {
+    const std::uint64_t man = n / 10000ULL;
+    units.push_back(int_to_sino_korean_hangul(man * 10000ULL));  // 만 group
+    n %= 10000ULL;
+    if (n == 0) return units;
+  }
+  const unsigned v = static_cast<unsigned>(n);
+  const unsigned q = v / 1000U;
+  const unsigned r = v % 1000U;
+  const unsigned b = r / 100U;
+  const unsigned r2 = r % 100U;
+  if (q > 0) units.push_back(int_to_sino_korean_hangul(static_cast<std::uint64_t>(q) * 1000ULL));
+  if (b > 0) units.push_back(int_to_sino_korean_hangul(static_cast<std::uint64_t>(b) * 100ULL));
+  if (r2 > 0) units.push_back(int_to_sino_korean_hangul(static_cast<std::uint64_t>(r2)));
+  return units;
 }
 
 std::string g2p_hangul_rules_only_inner(std::string_view hangul, std::string_view syllable_sep) {
@@ -528,6 +569,7 @@ std::string KoreanRuleG2p::normalize_korean_ipa(std::string ipa) {
   // tɕh (from ɕʰ after ʰ→h — shouldn't remain, but guard) → tʃh
   replace_all(t, "t\xC9\x95h",        "t\xCA\x83h"); // tɕh → tʃh (bare aspirated affricate)
   replace_all(t, "\xC9\xAD",  "\xC9\xAB");  // ɭ → ɫ
+  replace_all(t, "\xC9\xB0",  "\xC9\xAF");  // ɰ → ɯ (velar approximant not in vocoder map)
   replace_all(t, "\xC9\xB2",  "n");          // ɲ → n
   replace_all(t, "\xCE\xB2",  "b");
   replace_all(t, "\xC9\xA6",  "h");          // ɦ → h
@@ -634,16 +676,29 @@ std::string KoreanRuleG2p::text_to_ipa(std::string text,
   if (raw.empty()) {
     return "";
   }
-  // Prefix IPA with primary stress ˈ (U+02C8, UTF-8 CB 88) if not already stressed.
-  // This matches the eSpeak-ng convention used to train the Piper vocoder.
+  // Ensure IPA has a stress marker. Rule-based output embeds ˈ/ˌ within syllables; lexicon
+  // entries that already start with a marker are returned as-is. Any entry without any stress
+  // marker (rare) gets ˈ prepended as a fallback.
   auto add_word_stress = [](std::string ipa) -> std::string {
-    if (ipa.size() >= 2 && ipa.compare(0, 2, "\xCB\x88") == 0) return ipa;  // already ˈ
-    if (ipa.size() >= 2 && ipa.compare(0, 2, "\xCB\x8C") == 0) return ipa;  // already ˌ
-    return "\xCB\x88" + ipa;
+    if (ipa.find("\xCB\x88") != std::string::npos) return ipa;  // already has ˈ
+    if (ipa.find("\xCB\x8C") != std::string::npos) return ipa;  // already has ˌ
+    return "\xCB\x88" + ipa;  // fallback: prepend primary stress
   };
 
+  // Pre-tokenize: replace brackets/parens with spaces to prevent adjacent Korean words from
+  // merging. e.g. "파동함수(켓)에" → "파동함수 켓 에", "(大韓)은" → " 大韓 은".
+  std::string tokenizable;
+  tokenizable.reserve(raw.size());
+  for (unsigned char c : raw) {
+    if (c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}') {
+      tokenizable += ' ';
+    } else {
+      tokenizable += static_cast<char>(c);
+    }
+  }
+
   std::vector<std::string> ipa_words;
-  std::istringstream iss(raw);
+  std::istringstream iss(tokenizable);
   std::string w;
   while (iss >> w) {
     if (options_.expand_cardinal_digits) {
@@ -658,8 +713,7 @@ std::string KoreanRuleG2p::text_to_ipa(std::string text,
       }
     }
     // Handle mixed numeric+Hangul tokens such as "1986년", "7월", "3일", "8개월".
-    // Split leading ASCII digits from the Hangul suffix, expand the number, then G2P the combined
-    // Hangul string (e.g. "1986년" → "천구백팔십육년").
+    // Split into natural speech units: 1986 → ["천","구백","팔십육"] + "년" on last unit.
     if (options_.expand_cardinal_digits) {
       size_t num_end = 0;
       bool has_digit = false;
@@ -670,9 +724,37 @@ std::string KoreanRuleG2p::text_to_ipa(std::string text,
         else { break; }
       }
       if (has_digit && num_end < w.size()) {
-        const std::string num_sv(w, 0, num_end);
         const std::string hangul_tail = extract_hangul(std::string_view(w).substr(num_end));
         if (!hangul_tail.empty()) {
+          // Parse as simple non-negative integer for speech-unit splitting.
+          bool is_simple = true;
+          for (size_t k = 0; k < num_end; ++k) {
+            if (w[k] < '0' || w[k] > '9') { is_simple = false; break; }
+          }
+          if (is_simple) {
+            std::uint64_t n = 0;
+            bool overflow = false;
+            for (size_t k = 0; k < num_end; ++k) {
+              const std::uint64_t d = static_cast<std::uint64_t>(w[k] - '0');
+              if (n > (std::numeric_limits<std::uint64_t>::max() - d) / 10ULL) {
+                overflow = true; break;
+              }
+              n = n * 10ULL + d;
+            }
+            if (!overflow) {
+              auto speech_units = sino_cardinal_speech_units(n);
+              if (!speech_units.empty()) {
+                speech_units.back() += hangul_tail;  // attach 년/월/일 to last unit
+                for (const auto& unit : speech_units) {
+                  const std::string ipa = g2p_single_fragment(unit);
+                  if (!ipa.empty()) ipa_words.push_back(add_word_stress(ipa));
+                }
+                continue;
+              }
+            }
+          }
+          // Fallback for comma-separated or out-of-range numbers.
+          const std::string num_sv(w, 0, num_end);
           if (const auto num_frags = korean_reading_fragments_from_ascii_numeral_token(num_sv)) {
             std::string combined;
             for (const auto& frag : *num_frags) combined += frag;
@@ -690,9 +772,10 @@ std::string KoreanRuleG2p::text_to_ipa(std::string text,
     }
     const auto it = lexicon_.find(h);
     if (it != lexicon_.end()) {
-      ipa_words.push_back(add_word_stress(it->second));
+      if (!it->second.empty()) ipa_words.push_back(add_word_stress(it->second));
     } else {
-      ipa_words.push_back(add_word_stress(g2p_hangul_rules_only(h)));
+      const std::string ipa = g2p_hangul_rules_only(h);
+      if (!ipa.empty()) ipa_words.push_back(add_word_stress(ipa));
     }
   }
   std::string out;
