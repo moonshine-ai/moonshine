@@ -126,6 +126,7 @@ struct TranscriberOptions {
   bool return_audio_data = true;
   bool log_output_text = false;
   bool word_timestamps = false;
+  bool use_nnapi = false;
 };
 
 class Transcriber {

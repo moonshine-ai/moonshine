@@ -1,5 +1,9 @@
 #include "moonshine-model.h"
 
+#if defined(ANDROID)
+#include "nnapi_provider_factory.h"
+#endif
+
 #include <fcntl.h>
 
 #include <cassert>
@@ -79,7 +83,8 @@ int set_model_options_from_arch(MoonshineModel *model, int32_t model_arch) {
 }
 }  // namespace
 
-MoonshineModel::MoonshineModel(bool log_ort_run, float max_tokens_per_second)
+MoonshineModel::MoonshineModel(bool log_ort_run, float max_tokens_per_second,
+                               bool use_nnapi)
     : encoder_session(nullptr),
       decoder_session(nullptr),
       tokenizer(nullptr),
@@ -115,6 +120,20 @@ MoonshineModel::MoonshineModel(bool log_ort_run, float max_tokens_per_second)
                 ort_api->AddSessionConfigEntry(
                     ort_session_options, "session.disable_prepacking", "1"));
   LOG_ORT_ERROR(ort_api, ort_api->DisableCpuMemArena(ort_session_options));
+
+#if defined(ANDROID)
+  if (use_nnapi) {
+    uint32_t nnapi_flags = NNAPI_FLAG_CPU_DISABLED;
+    OrtStatus *status = OrtSessionOptionsAppendExecutionProvider_Nnapi(
+        ort_session_options, nnapi_flags);
+    if (status != nullptr) {
+      fprintf(stderr, "Warning: NNAPI EP not available, falling back to CPU\n");
+      ort_api->ReleaseStatus(status);
+    }
+  }
+#else
+  (void)use_nnapi;
+#endif
 }
 
 MoonshineModel::~MoonshineModel() {

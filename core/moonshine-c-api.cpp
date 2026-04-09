@@ -120,6 +120,8 @@ void parse_transcriber_options(const moonshine_option_t *in_options,
       out_options.log_output_text = bool_from_string(in_option.value);
     } else if (option_name == "word_timestamps") {
       out_options.word_timestamps = bool_from_string(in_option.value);
+    } else if (option_name == "use_nnapi") {
+      out_options.use_nnapi = bool_from_string(in_option.value);
     } else {
       throw std::runtime_error("Unknown transcriber option: '" +
                                std::string(in_option.name) + "'");

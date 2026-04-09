@@ -1,5 +1,9 @@
 #include "moonshine-streaming-model.h"
 
+#if defined(ANDROID)
+#include "nnapi_provider_factory.h"
+#endif
+
 #include <fcntl.h>
 
 #include <cassert>
@@ -143,7 +147,8 @@ void MoonshineStreamingState::reset(const MoonshineStreamingConfig &cfg) {
  * ============================================================================
  */
 
-MoonshineStreamingModel::MoonshineStreamingModel(bool log_ort_run)
+MoonshineStreamingModel::MoonshineStreamingModel(bool log_ort_run,
+                                                   bool use_nnapi)
     : frontend_session(nullptr),
       encoder_session(nullptr),
       adapter_session(nullptr),
@@ -163,6 +168,20 @@ MoonshineStreamingModel::MoonshineStreamingModel(bool log_ort_run)
   LOG_ORT_ERROR(ort_api, ort_api->CreateSessionOptions(&ort_session_options));
   LOG_ORT_ERROR(ort_api, ort_api->SetSessionGraphOptimizationLevel(
                              ort_session_options, ORT_ENABLE_ALL));
+
+#if defined(ANDROID)
+  if (use_nnapi) {
+    uint32_t nnapi_flags = NNAPI_FLAG_CPU_DISABLED;
+    OrtStatus *status = OrtSessionOptionsAppendExecutionProvider_Nnapi(
+        ort_session_options, nnapi_flags);
+    if (status != nullptr) {
+      fprintf(stderr, "Warning: NNAPI EP not available, falling back to CPU\n");
+      ort_api->ReleaseStatus(status);
+    }
+  }
+#else
+  (void)use_nnapi;
+#endif
 
   memset(&config, 0, sizeof(config));
 }
