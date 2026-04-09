@@ -9,6 +9,7 @@ KNOWN_FILES=(
 	./core/CMakeLists.txt
 	./python/pyproject.toml
 	./python/setup.py
+	./python/src/moonshine_voice/__init__.py
 	./build.gradle.kts
 	./examples/macos/BasicTranscription/BasicTranscription.xcodeproj/project.pbxproj
 	./examples/macos/BasicTranscription/Package.swift
