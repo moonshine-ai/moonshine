@@ -278,4 +278,14 @@ TEST_CASE("moonshine-cpp-test") {
     REQUIRE(listener.started_count == listener.completed_count);
     REQUIRE(listener.updated_count >= listener.started_count);
   }
+  SUBCASE("g2p") {
+    std::string text = "Hello! This is a test of the Moonshine text to speech.";
+    std::string root_model_path = "../core/moonshine-tts/data/";
+    moonshine::GraphemeToPhonemizer g2p("en_us",
+                                       {
+                                         {"g2p_root", root_model_path.c_str()},
+                                       });
+    std::string ipa = g2p.toIpa(text);
+    REQUIRE(ipa.size() > 10);
+  }
 }

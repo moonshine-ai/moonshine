@@ -56,6 +56,8 @@ namespace moonshine {
 class Transcriber;
 class Stream;
 class TranscriptEventListener;
+class TextToSpeech;
+class GraphemeToPhonemizer;
 
 /* ------------------------------ ENUMS -------------------------------- */
 
@@ -534,6 +536,184 @@ class Transcriber {
   friend class Stream;
 };
 
+/* --------------------------- TTS DATA STRUCTURES --------------------------- */
+
+/// Result of a text-to-speech synthesis operation
+struct TtsSynthesisResult {
+  /// PCM audio samples (float, approximately -1.0 to 1.0)
+  std::vector<float> samples;
+  /// Sample rate in Hz
+  int32_t sampleRateHz;
+
+  TtsSynthesisResult() : sampleRateHz(0) {}
+  TtsSynthesisResult(std::vector<float> samples, int32_t sampleRateHz)
+      : samples(std::move(samples)), sampleRateHz(sampleRateHz) {}
+};
+
+/* ----------------------------- TEXT TO SPEECH ------------------------------- */
+
+/// Text-to-speech synthesizer
+///
+/// Wraps the Moonshine TTS C API with RAII resource management.
+///
+/// Example usage:
+/// ```cpp
+/// #include "moonshine-cpp.h"
+/// #include <iostream>
+///
+/// int main() {
+///     std::vector<moonshine_option_t> options = {
+///         {"g2p_root", "/path/to/assets"},
+///         {"voice", "kokoro_af_heart"},
+///     };
+///     moonshine::TextToSpeech tts("en_us", options);
+///     auto result = tts.synthesize("Hello world!");
+///     std::cout << "Got " << result.samples.size() << " samples at "
+///               << result.sampleRateHz << " Hz" << std::endl;
+///     return 0;
+/// }
+/// ```
+class TextToSpeech {
+ public:
+  /// Create a TTS synthesizer from files on disk
+  /// @param language Language tag (e.g., "en_us", "de", "fr")
+  /// @param options Configuration options (voice, g2p_root, speed, etc.)
+  /// @throws MoonshineException if creation fails
+  TextToSpeech(const std::string &language,
+               const std::vector<moonshine_option_t> &options = {});
+
+  /// Destructor - automatically frees resources
+  ~TextToSpeech();
+
+  /// Move constructor
+  TextToSpeech(TextToSpeech &&other);
+
+  /// Move assignment
+  TextToSpeech &operator=(TextToSpeech &&other);
+
+  // Delete copy constructor and assignment
+  TextToSpeech(const TextToSpeech &) = delete;
+  TextToSpeech &operator=(const TextToSpeech &) = delete;
+
+  /// Synthesize text to speech audio
+  /// @param text The text to synthesize
+  /// @param options Per-call options (e.g., speed), or empty to use defaults
+  /// @return TtsSynthesisResult containing PCM samples and sample rate
+  /// @throws MoonshineException if synthesis fails
+  TtsSynthesisResult synthesize(
+      const std::string &text,
+      const std::vector<moonshine_option_t> &options = {});
+
+  /// Free the synthesizer resources
+  void close();
+
+  /// Get the language tag
+  const std::string &getLanguage() const { return language_; }
+
+  /// Get the synthesizer handle (for internal use)
+  int32_t getHandle() const { return handle_; }
+
+  /// Get available TTS voices for one or more languages
+  /// @param languages Comma-separated language tags (empty for all)
+  /// @param options Configuration options (g2p_root for accurate availability)
+  /// @return JSON string mapping language tags to voice arrays
+  /// @throws MoonshineException on failure
+  static std::string getVoices(
+      const std::string &languages,
+      const std::vector<moonshine_option_t> &options = {});
+
+  /// Get TTS asset dependency keys for one or more languages
+  /// @param languages Comma-separated language tags (empty for all)
+  /// @param options Configuration options (voice, g2p_root, etc.)
+  /// @return JSON array string of asset keys
+  /// @throws MoonshineException on failure
+  static std::string getDependencies(
+      const std::string &languages,
+      const std::vector<moonshine_option_t> &options = {});
+
+ private:
+  int32_t handle_;
+  std::string language_;
+
+  void checkError(int32_t error) const;
+};
+
+/* ------------------------- GRAPHEME TO PHONEMIZER -------------------------- */
+
+/// Grapheme-to-phoneme converter
+///
+/// Converts text to IPA (International Phonetic Alphabet) phonemes.
+///
+/// Example usage:
+/// ```cpp
+/// #include "moonshine-cpp.h"
+/// #include <iostream>
+///
+/// int main() {
+///     std::vector<moonshine_option_t> options = {
+///         {"g2p_root", "/path/to/assets"},
+///     };
+///     moonshine::GraphemeToPhonemizer g2p("en_us", options);
+///     std::string ipa = g2p.toIpa("Hello world!");
+///     std::cout << "IPA: " << ipa << std::endl;
+///     return 0;
+/// }
+/// ```
+class GraphemeToPhonemizer {
+ public:
+  /// Create a grapheme-to-phonemizer from files on disk
+  /// @param language Language tag (e.g., "en_us", "de", "fr")
+  /// @param options Configuration options (g2p_root, etc.)
+  /// @throws MoonshineException if creation fails
+  GraphemeToPhonemizer(const std::string &language,
+                       const std::vector<moonshine_option_t> &options = {});
+
+  /// Destructor - automatically frees resources
+  ~GraphemeToPhonemizer();
+
+  /// Move constructor
+  GraphemeToPhonemizer(GraphemeToPhonemizer &&other);
+
+  /// Move assignment
+  GraphemeToPhonemizer &operator=(GraphemeToPhonemizer &&other);
+
+  // Delete copy constructor and assignment
+  GraphemeToPhonemizer(const GraphemeToPhonemizer &) = delete;
+  GraphemeToPhonemizer &operator=(const GraphemeToPhonemizer &) = delete;
+
+  /// Convert text to IPA phonemes
+  /// @param text The text to convert
+  /// @param options Per-call options, or empty to use defaults
+  /// @return IPA phoneme string
+  /// @throws MoonshineException if conversion fails
+  std::string toIpa(const std::string &text,
+                    const std::vector<moonshine_option_t> &options = {});
+
+  /// Free the phonemizer resources
+  void close();
+
+  /// Get the language tag
+  const std::string &getLanguage() const { return language_; }
+
+  /// Get the phonemizer handle (for internal use)
+  int32_t getHandle() const { return handle_; }
+
+  /// Get G2P asset dependency keys for one or more languages
+  /// @param languages Comma-separated language tags (empty for all)
+  /// @param options Configuration options
+  /// @return Comma-separated list of asset keys
+  /// @throws MoonshineException on failure
+  static std::string getDependencies(
+      const std::string &languages,
+      const std::vector<moonshine_option_t> &options = {});
+
+ private:
+  int32_t handle_;
+  std::string language_;
+
+  void checkError(int32_t error) const;
+};
+
 /* ------------------------------ IMPLEMENTATION
  * -------------------------------- */
 
@@ -912,6 +1092,192 @@ inline void Transcriber::checkError(int32_t error) const {
 }
 
 inline void Stream::checkError(int32_t error) const {
+  if (error < 0) {
+    const char *errorStr = moonshine_error_to_string(error);
+    std::string message = errorStr ? std::string(errorStr) : "Unknown error";
+    throw MoonshineException(message);
+  }
+}
+
+// TextToSpeech implementation
+inline TextToSpeech::TextToSpeech(
+    const std::string &language,
+    const std::vector<moonshine_option_t> &options)
+    : handle_(-1), language_(language) {
+  handle_ = moonshine_create_tts_synthesizer_from_files(
+      language.c_str(), nullptr, 0, options.empty() ? nullptr : options.data(),
+      options.size(), MOONSHINE_HEADER_VERSION);
+  checkError(handle_);
+}
+
+inline TextToSpeech::~TextToSpeech() { close(); }
+
+inline TextToSpeech::TextToSpeech(TextToSpeech &&other)
+    : handle_(other.handle_), language_(std::move(other.language_)) {
+  other.handle_ = -1;
+}
+
+inline TextToSpeech &TextToSpeech::operator=(TextToSpeech &&other) {
+  if (this != &other) {
+    close();
+    handle_ = other.handle_;
+    language_ = std::move(other.language_);
+    other.handle_ = -1;
+  }
+  return *this;
+}
+
+inline TtsSynthesisResult TextToSpeech::synthesize(
+    const std::string &text,
+    const std::vector<moonshine_option_t> &options) {
+  if (handle_ < 0) {
+    throw MoonshineException("TextToSpeech is not initialized");
+  }
+  float *out_audio = nullptr;
+  uint64_t out_size = 0;
+  int32_t out_sample_rate = 0;
+  checkError(moonshine_text_to_speech(
+      handle_, text.c_str(), options.empty() ? nullptr : options.data(),
+      options.size(), &out_audio, &out_size, &out_sample_rate));
+  TtsSynthesisResult result;
+  if (out_audio && out_size > 0) {
+    result.samples.assign(out_audio, out_audio + out_size);
+    std::free(out_audio);
+  }
+  result.sampleRateHz = out_sample_rate;
+  return result;
+}
+
+inline void TextToSpeech::close() {
+  if (handle_ >= 0) {
+    moonshine_free_tts_synthesizer(handle_);
+    handle_ = -1;
+  }
+}
+
+inline std::string TextToSpeech::getVoices(
+    const std::string &languages,
+    const std::vector<moonshine_option_t> &options) {
+  char *out_json = nullptr;
+  int32_t err = moonshine_get_tts_voices(
+      languages.c_str(), options.empty() ? nullptr : options.data(),
+      options.size(), &out_json);
+  if (err < 0) {
+    const char *errorStr = moonshine_error_to_string(err);
+    throw MoonshineException(errorStr ? std::string(errorStr)
+                                      : "Unknown error");
+  }
+  std::string result;
+  if (out_json) {
+    result = std::string(out_json);
+    std::free(out_json);
+  }
+  return result;
+}
+
+inline std::string TextToSpeech::getDependencies(
+    const std::string &languages,
+    const std::vector<moonshine_option_t> &options) {
+  char *out_json = nullptr;
+  int32_t err = moonshine_get_tts_dependencies(
+      languages.c_str(), options.empty() ? nullptr : options.data(),
+      options.size(), &out_json);
+  if (err < 0) {
+    const char *errorStr = moonshine_error_to_string(err);
+    throw MoonshineException(errorStr ? std::string(errorStr)
+                                      : "Unknown error");
+  }
+  std::string result;
+  if (out_json) {
+    result = std::string(out_json);
+    std::free(out_json);
+  }
+  return result;
+}
+
+inline void TextToSpeech::checkError(int32_t error) const {
+  if (error < 0) {
+    const char *errorStr = moonshine_error_to_string(error);
+    std::string message = errorStr ? std::string(errorStr) : "Unknown error";
+    throw MoonshineException(message);
+  }
+}
+
+// GraphemeToPhonemizer implementation
+inline GraphemeToPhonemizer::GraphemeToPhonemizer(
+    const std::string &language,
+    const std::vector<moonshine_option_t> &options)
+    : handle_(-1), language_(language) {
+  handle_ = moonshine_create_grapheme_to_phonemizer_from_files(
+      language.c_str(), nullptr, 0, options.empty() ? nullptr : options.data(),
+      options.size(), MOONSHINE_HEADER_VERSION);
+  checkError(handle_);
+}
+
+inline GraphemeToPhonemizer::~GraphemeToPhonemizer() { close(); }
+
+inline GraphemeToPhonemizer::GraphemeToPhonemizer(
+    GraphemeToPhonemizer &&other)
+    : handle_(other.handle_), language_(std::move(other.language_)) {
+  other.handle_ = -1;
+}
+
+inline GraphemeToPhonemizer &GraphemeToPhonemizer::operator=(
+    GraphemeToPhonemizer &&other) {
+  if (this != &other) {
+    close();
+    handle_ = other.handle_;
+    language_ = std::move(other.language_);
+    other.handle_ = -1;
+  }
+  return *this;
+}
+
+inline std::string GraphemeToPhonemizer::toIpa(
+    const std::string &text,
+    const std::vector<moonshine_option_t> &options) {
+  if (handle_ < 0) {
+    throw MoonshineException("GraphemeToPhonemizer is not initialized");
+  }
+  const char *out_phonemes = nullptr;
+  uint64_t out_count = 0;
+  checkError(moonshine_text_to_phonemes(
+      handle_, text.c_str(), options.empty() ? nullptr : options.data(),
+      options.size(), &out_phonemes, &out_count));
+  if (out_phonemes && out_count > 0) {
+    return std::string(out_phonemes, out_count);
+  }
+  return std::string();
+}
+
+inline void GraphemeToPhonemizer::close() {
+  if (handle_ >= 0) {
+    moonshine_free_grapheme_to_phonemizer(handle_);
+    handle_ = -1;
+  }
+}
+
+inline std::string GraphemeToPhonemizer::getDependencies(
+    const std::string &languages,
+    const std::vector<moonshine_option_t> &options) {
+  char *out_deps = nullptr;
+  int32_t err = moonshine_get_g2p_dependencies(
+      languages.c_str(), options.empty() ? nullptr : options.data(),
+      options.size(), &out_deps);
+  if (err < 0) {
+    const char *errorStr = moonshine_error_to_string(err);
+    throw MoonshineException(errorStr ? std::string(errorStr)
+                                      : "Unknown error");
+  }
+  std::string result;
+  if (out_deps) {
+    result = std::string(out_deps);
+    std::free(out_deps);
+  }
+  return result;
+}
+
+inline void GraphemeToPhonemizer::checkError(int32_t error) const {
   if (error < 0) {
     const char *errorStr = moonshine_error_to_string(error);
     std::string message = errorStr ? std::string(errorStr) : "Unknown error";

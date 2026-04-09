@@ -1,5 +1,6 @@
 #include "piper-tts.h"
 
+#include "debug-utils.h"
 #include "piper-voice-catalog.h"
 #include "g2p-path.h"
 #include "ort-onnx-external-data.h"
@@ -178,6 +179,8 @@ std::filesystem::path pick_onnx_path(const std::filesystem::path& voices_dir, st
     if (std::filesystem::is_regular_file(cand)) {
       return cand;
     }
+    LOGF("Requested Piper voice '%s' not found at '%s', falling back to '%s'",
+         std::string(requested).c_str(), cand.c_str(), std::string(default_basename).c_str());
   }
   const auto d = voices_dir / std::string(default_basename);
   if (std::filesystem::is_regular_file(d)) {
@@ -194,6 +197,18 @@ std::filesystem::path pick_onnx_path(const std::filesystem::path& voices_dir, st
     }
   }
   std::sort(models.begin(), models.end());
+  if (!requested.empty()) {
+    std::string available;
+    for (const auto& m : models) {
+      if (!available.empty()) available += ", ";
+      available += m.stem().string();
+    }
+    if (available.empty()) {
+      LOG("  Available Piper voices: (none)");
+    } else {
+      LOGF("  Available Piper voices: %s", available.c_str());
+    }
+  }
   if (models.empty()) {
     throw std::runtime_error("PiperTTS: no *.onnx in " + voices_dir.string());
   }

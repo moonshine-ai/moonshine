@@ -1485,7 +1485,7 @@ int32_t moonshine_text_to_phonemes(int32_t grapheme_to_phonemizer_handle,
     }
     std::memcpy(buf, ipa.c_str(), ipa.size() + 1);
     *out_phonemes = buf;
-    *out_phonemes_count = 1;
+    *out_phonemes_count = ipa.size();
   } catch (const std::exception &e) {
     LOGF("Failed to convert text to phonemes: %s", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
