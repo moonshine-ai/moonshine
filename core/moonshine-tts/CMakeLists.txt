@@ -163,6 +163,9 @@ if(MOONSHINE_TTS_BUILD_ONNX)
     src/piper-voice-catalog.cpp
   )
   target_link_libraries(moonshine_tts_ort PUBLIC moonshine_tts_core)
+  target_include_directories(moonshine_tts_ort PRIVATE
+    ${_MOONSHINE_CORE_ROOT}/moonshine-utils
+  )
   set_target_properties(moonshine_tts_ort PROPERTIES POSITION_INDEPENDENT_CODE ON)
   if(MSVC)
     target_compile_options(moonshine_tts_ort PRIVATE /utf-8)

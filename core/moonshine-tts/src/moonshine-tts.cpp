@@ -1,5 +1,6 @@
 #include "moonshine-tts.h"
 
+#include "debug-utils.h"
 #include "moonshine-asset-catalog.h"
 #include "g2p-path.h"
 #include "moonshine-g2p.h"
@@ -270,6 +271,18 @@ bool kokoro_voice_asset_exists(const std::string& voice_id, const std::filesyste
   return std::filesystem::is_regular_file(voice_path(voice_id));
 }
 
+// Kokoro-82M voice ids (hexgrad/Kokoro-82M VOICES.md). Bundles may ship a subset; availability is per asset.
+static const char* const kKokoroVoiceCatalog[] = {
+    "af_alloy",   "af_aoede",   "af_bella",   "af_heart",   "af_jessica", "af_kore",    "af_nicole",
+    "af_nova",    "af_river",   "af_sarah",   "af_sky",     "am_adam",    "am_echo",    "am_eric",
+    "am_fenrir",  "am_liam",    "am_michael", "am_onyx",    "am_puck",    "am_santa",   "bf_alice",
+    "bf_emma",    "bf_isabella", "bf_lily",   "bm_daniel",  "bm_fable",   "bm_george",  "bm_lewis",
+    "ef_dora",    "em_alex",    "em_santa",   "ff_siwis",   "hf_alpha",   "hf_beta",    "hm_omega",
+    "hm_psi",     "if_sara",    "im_nicola",  "jf_alpha",   "jf_gongitsune", "jf_nezumi", "jf_tebukuro",
+    "jm_kumo",    "pf_dora",    "pm_alex",    "pm_santa",   "zf_xiaobei", "zf_xiaoni",  "zf_xiaoxiao",
+    "zf_xiaoyi",  "zm_yunjian", "zm_yunxi",   "zm_yunxia",  "zm_yunyang",
+};
+
 std::string select_voice_id(char kokoro_lang, std::string_view requested, std::string_view default_voice,
                             const std::filesystem::path& voices_dir, const FileInformationMap* tts_files,
                             const std::filesystem::path& g2p_root) {
@@ -278,10 +291,31 @@ std::string select_voice_id(char kokoro_lang, std::string_view requested, std::s
       voice_prefix_ok(kokoro_lang, v)) {
     return v;
   }
+  auto log_available_kokoro_voices = [&]() {
+    std::string available;
+    for (const char* vid : kKokoroVoiceCatalog) {
+      if (voice_prefix_ok(kokoro_lang, vid) &&
+          kokoro_voice_asset_exists(vid, voices_dir, tts_files, g2p_root)) {
+        if (!available.empty()) available += ", ";
+        available += vid;
+      }
+    }
+    if (available.empty()) {
+      LOG("  Available Kokoro voices for this language: (none)");
+    } else {
+      LOGF("  Available Kokoro voices for this language: %s", available.c_str());
+    }
+  };
   if (!voice_prefix_ok(kokoro_lang, v)) {
+    LOGF("Requested Kokoro voice '%s' has wrong prefix for language '%c', falling back to '%s'",
+         v.c_str(), kokoro_lang, std::string(default_voice).c_str());
+    log_available_kokoro_voices();
     v = std::string(default_voice);
   }
   if (!kokoro_voice_asset_exists(v, voices_dir, tts_files, g2p_root)) {
+    LOGF("Requested Kokoro voice '%s' not found, falling back to '%s'",
+         v.c_str(), std::string(default_voice).c_str());
+    log_available_kokoro_voices();
     v = std::string(default_voice);
   }
   return v;
@@ -552,18 +586,6 @@ std::vector<std::string> kokoro_vocoder_dependency_keys_with_options(std::string
   return {std::string(kTtsKokoroModelOnnxKey), std::string(kTtsKokoroConfigJsonKey),
           std::string("kokoro/voices/") + vid + ".kokorovoice"};
 }
-
-// Kokoro-82M voice ids (hexgrad/Kokoro-82M VOICES.md). Bundles may ship a subset; availability is per asset.
-static const char* const kKokoroVoiceCatalog[] = {
-    "af_alloy",   "af_aoede",   "af_bella",   "af_heart",   "af_jessica", "af_kore",    "af_nicole",
-    "af_nova",    "af_river",   "af_sarah",   "af_sky",     "am_adam",    "am_echo",    "am_eric",
-    "am_fenrir",  "am_liam",    "am_michael", "am_onyx",    "am_puck",    "am_santa",   "bf_alice",
-    "bf_emma",    "bf_isabella", "bf_lily",   "bm_daniel",  "bm_fable",   "bm_george",  "bm_lewis",
-    "ef_dora",    "em_alex",    "em_santa",   "ff_siwis",   "hf_alpha",   "hf_beta",    "hm_omega",
-    "hm_psi",     "if_sara",    "im_nicola",  "jf_alpha",   "jf_gongitsune", "jf_nezumi", "jf_tebukuro",
-    "jm_kumo",    "pf_dora",    "pm_alex",    "pm_santa",   "zf_xiaobei", "zf_xiaoni",  "zf_xiaoxiao",
-    "zf_xiaoyi",  "zm_yunjian", "zm_yunxi",   "zm_yunxia",  "zm_yunyang",
-};
 
 std::vector<std::pair<std::string, bool>> list_kokoro_voices_with_availability(const std::string& lk,
                                                                                const MoonshineTTSOptions& opt) {

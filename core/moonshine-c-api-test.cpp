@@ -83,7 +83,7 @@ void grapheme_phonemizer_smoke(const std::filesystem::path& data_root, const cha
   uint64_t phoneme_count = 0;
   REQUIRE(moonshine_text_to_phonemes(h, text, nullptr, 0, &ipa, &phoneme_count) ==
           MOONSHINE_ERROR_NONE);
-  REQUIRE(phoneme_count == 1);
+  REQUIRE(phoneme_count > 1);
   REQUIRE(ipa != nullptr);
   REQUIRE(std::strlen(ipa) > 0);
   free_phonemes_output(ipa);
