@@ -21,6 +21,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 	else
 		cp ${CORE_DIR}/third-party/onnxruntime/lib/macos/x86_64/libonnxruntime*.dylib ${PYTHON_DIR}/src/moonshine_voice/
 	fi
+	codesign --force --sign - ${PYTHON_DIR}/src/moonshine_voice/libmoonshine.dylib
 elif grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null || grep -q "BCM2" /proc/cpuinfo 2>/dev/null; then
 	cp ${CORE_DIR}/third-party/onnxruntime/lib/linux/aarch64/libonnxruntime*.so* ${PYTHON_DIR}/src/moonshine_voice/
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then

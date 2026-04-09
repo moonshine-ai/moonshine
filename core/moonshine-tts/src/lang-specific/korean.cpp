@@ -291,7 +291,7 @@ std::string ipa_onset(int cho, bool tense, bool aspirate) {
     ip = "\xC9\xA1";  // ɡ — lenis ㄱ always voiced (Piper convention for Korean ㄱ)
     break;
   case kChoKk:
-    ip = "k";  // tense ㄲ: ͈ stripped → plain k
+    ip = "q-";  // tense ㄲ: Piper uses q- (unreleased + fortis marker)
     break;
   case kChoN:
     ip = "n";
@@ -300,7 +300,7 @@ std::string ipa_onset(int cho, bool tense, bool aspirate) {
     ip = "d";
     break;
   case kChoTt:
-    ip = "t";  // tense ㄸ: ͈ stripped → plain t
+    ip = "t-";  // tense ㄸ: Piper uses t- (fortis marker)
     break;
   case kChoR:
     ip = "\xC9\xBE";  // ɾ
@@ -309,16 +309,16 @@ std::string ipa_onset(int cho, bool tense, bool aspirate) {
     ip = "m";
     break;
   case kChoP:
-    ip = "b";  // lenis ㅂ always voiced (Piper convention for Korean ㅂ)
+    ip = "p";  // lenis ㅂ default voiceless (word-initial); voiced b in intervocalic context
     break;
   case kChoPp:
-    ip = "p";  // tense ㅃ: ͈ stripped → plain p
+    ip = "p-";  // tense ㅃ: Piper uses p- (fortis marker)
     break;
   case kChoS:
     ip = "s";
     break;
   case kChoSs:
-    ip = "s";  // tense ㅆ: ͈ stripped → plain s
+    ip = "s-";  // tense ㅆ: Piper uses s- (fortis marker)
     break;
   case kChoC:
     ip = "t\xC9\x95";  // tɕ — lenis ㅈ default voiceless (Piper word-initial convention)
@@ -448,13 +448,21 @@ std::string syllables_to_ipa(const std::vector<Syllable>& syls, std::string_view
         onset_ipa = ipa_onset(cho, false, true);
       } else if (tense_after) {
         onset_ipa = ipa_onset(cho, true, false);
-      } else if (cho == kChoC && prev != nullptr &&
+      } else if (prev != nullptr &&
                  (prev->jong == 0 || is_sonorant_jong(prev->jong))) {
-        // Intervocalic / post-sonorant voicing: lenis ㅈ → dʑ (voiced).
-        // After vowel (jong==0) or sonorant coda (ㄴ,ㄹ,ㅁ,ŋ), Korean ㅈ voices.
-        // Word-initially (prev==nullptr) it stays voiceless tɕ (the ipa_onset default).
-        // Note: ㄱ and ㅂ stay voiced (ɡ/b) everywhere — Piper convention.
-        onset_ipa = "d\xCA\x91";  // dʑ
+        // Intervocalic / post-sonorant allophony (Piper convention):
+        //   ㅈ → dʑ (voiced affricate)
+        //   ㄱ → q  (Piper uses q for non-initial ㄱ, ɡ only word-initially)
+        //   ㅂ → b  (voiced only intervocalically; voiceless p word-initially)
+        if (cho == kChoC) {
+          onset_ipa = "d\xCA\x91";  // dʑ
+        } else if (cho == kChoK) {
+          onset_ipa = "q";           // Piper convention: intervocalic ㄱ = q
+        } else if (cho == kChoP) {
+          onset_ipa = "b";           // Piper convention: intervocalic ㅂ = b
+        } else {
+          onset_ipa = ipa_onset(cho, false, false);
+        }
       } else {
         onset_ipa = ipa_onset(cho, false, false);
       }
@@ -495,7 +503,18 @@ std::string syllables_to_ipa(const std::vector<Syllable>& syls, std::string_view
     if (!pieces_joined.empty()) {
       pieces_joined += syllable_sep;
     }
-    pieces_joined += onset_ipa + stress + nucleus + coda_ipa;
+    // Piper convention: stress marker sits immediately before the vowel nucleus,
+    // AFTER any glide (w/j). So "ˈwa" becomes "wˈa", "ˈjʌ" becomes "jˈʌ".
+    if (!stress.empty() && !nucleus.empty() &&
+        (nucleus[0] == 'w' || nucleus[0] == 'j') && nucleus.size() > 1) {
+      pieces_joined += onset_ipa;
+      pieces_joined += nucleus[0];  // glide first
+      pieces_joined += stress;      // then stress marker
+      pieces_joined += nucleus.substr(1);  // then vowel
+      pieces_joined += coda_ipa;
+    } else {
+      pieces_joined += onset_ipa + stress + nucleus + coda_ipa;
+    }
   }
   return pieces_joined;
 }
@@ -765,12 +784,13 @@ std::string KoreanRuleG2p::text_to_ipa(std::string text,
       s = s.substr(2);
     }
     if (s.empty()) return ipa;
-    // Find the first vowel-like character to insert ˈ before it.
-    // Vowels in our inventory: a ɐ ɛ e ɯ ʌ o u i ɔ w j (w/j are glides that start diphthongs).
+    // Find the first vowel nucleus to insert ˈ before it.
+    // Piper convention: ˈ goes AFTER glides (w/j), directly before the vowel.
+    // So "wɐ" → "wˈɐ", "jʌ" → "jˈʌ", not "ˈwɐ" or "ˈjʌ".
     for (size_t p = 0; p < s.size(); ) {
       unsigned char c = static_cast<unsigned char>(s[p]);
-      // Single-byte ASCII vowels/glides
-      if (c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u' || c == 'w' || c == 'j') {
+      // Single-byte ASCII vowels (NOT w/j — those are glides, skip past them)
+      if (c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u') {
         s.insert(p, "\xCB\x88");  // insert ˈ
         return s;
       }

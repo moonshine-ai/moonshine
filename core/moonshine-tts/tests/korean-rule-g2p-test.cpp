@@ -97,11 +97,11 @@ TEST_CASE("korean: G2P examples with data/ko/dict.tsv") {
   moonshine_tts::KoreanRuleG2p g(dict);
   // ˈ = U+02C8 (CB 88), ɫ = U+026B (C9 AB), ɾ = U+027E (C9 BE), ɐ = U+0250 (C9 90)
   // Stress ˈ is repositioned after onset, before nucleus; a→ɐ for Korean ㅏ.
-  CHECK(g.text_to_ipa("\xEB\x8B\xAD\xEC\x9D\xB4") == "d\xCB\x88\xC9\x90\xC9\xABki");  // 닭이 → dˈɐɫki (lexicon)
+  CHECK(g.text_to_ipa("\xEB\x8B\xAD\xEC\x9D\xB4") == "d\xCB\x88\xC9\x90\xC9\xABqi");  // 닭이 → dˈɐɫqi (linked ㄱ onset after vowel → q)
   CHECK(g.text_to_ipa("\xEB\x8B\xAB\xEB\x8A\x94") == "d\xCB\x88\xC9\x90nn\xC9\xAF""n");   // 닫는 → dˈɐnnɯn (lexicon)
-  // 007 → 영영칠 (rule-based 3 syls): syl0 ˈ before nucleus, syl2 ˌ before nucleus
-  // 영(i=0): null onset + ˈ + jʌ + ŋ; 영(i=1): null + jʌ + ŋ; 칠(i=2): tʃh + ˌ + i + ɫ
-  CHECK(g.text_to_ipa("007") == "j\xCB\x88\xCA\x8C\xC5\x8Bj\xCA\x8C\xC5\x8Bt\xCA\x83\xCB\x8Ci\xC9\xAB");
+  // 007 → 영영칠 (rule-based 3 syls): syl0 ˈ after j glide, syl2 ˌ before nucleus
+  // 영(i=0): null onset + j + ˈ + ʌ + ŋ; 영(i=1): null + jʌ + ŋ; 칠(i=2): tʃh + ˌ + i + ɫ
+  CHECK(g.text_to_ipa("007") == "j\xCB\x88\xCA\x8C\xC5\x8Bj\xCA\x8C\xC5\x8Bt\xCA\x83h\xCB\x8Ci\xC9\xAB");
   // 3.14 → 삼점일사 (rule-based 4 syls): sˈɐm + dʑʌm + ˌiɫ + sɐ (a→ɐ for ㅏ)
   CHECK(g.text_to_ipa("3.14") == "s\xCB\x88\xC9\x90md\xCA\x91\xCA\x8Cm\xCB\x8Ci\xC9\xABs\xC9\x90");
   moonshine_tts::KoreanRuleG2p::Options no_dig;

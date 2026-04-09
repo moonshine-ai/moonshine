@@ -4,7 +4,14 @@
       "Bash(xxd)",
       "Bash(./korean_rule_g2p_test -tc=\"korean: normalize*\" -s)",
       "Bash(python3 -c \"from moonshine_voice.download import normalize_moonshine_language_tag; print\\(repr\\(normalize_moonshine_language_tag\\('ko'\\)\\)\\)\")",
-      "Bash(python3 -c ':*)"
+      "Bash(python3 -c ':*)",
+      "Bash(python scripts/tts_g2p_intelligibility.py --wiki-text scripts/data/wiki-text/ko_conversational.txt --no-cache --languages ko --max-lines-per-lang 20 --per-word)",
+      "Read(//Users/petewarden/projects/moonshine/**)",
+      "Bash(python scripts/compare_ko_phonemes.py)",
+      "Bash(bash scripts/build-pip.sh)",
+      "Bash(pip install:*)",
+      "Bash(python -c ':*)",
+      "Bash(python scripts/analyze_ko_stress.py)"
     ]
   }
 }
