@@ -11,7 +11,22 @@
       "Bash(bash scripts/build-pip.sh)",
       "Bash(pip install:*)",
       "Bash(python -c ':*)",
-      "Bash(python scripts/analyze_ko_stress.py)"
+      "Bash(python scripts/analyze_ko_stress.py)",
+      "Bash(grep -E \"\\\\.h$|\\\\.cpp$\")",
+      "Bash(xargs ls:*)",
+      "Bash(grep -l \"struct TtsSynthesisResult\\\\|class TtsSynthesisResult\" /Users/petewarden/projects/moonshine/core/*.h /Users/petewarden/projects/moonshine/core/*.cpp)",
+      "Bash(swift build:*)",
+      "Bash(swift test:*)",
+      "Bash(swift run:*)",
+      "Bash(xcodegen generate:*)",
+      "Bash(xcodebuild -project TextToSpeech.xcodeproj -scheme TextToSpeech -configuration Debug build)",
+      "Bash(/Users/petewarden/Library/Developer/Xcode/DerivedData/TextToSpeech-fiblywzjemdgkveenhhywvdvutec/Build/Products/Debug/TextToSpeech --list-devices)",
+      "Bash(/Users/petewarden/Library/Developer/Xcode/DerivedData/TextToSpeech-fiblywzjemdgkveenhhywvdvutec/Build/Products/Debug/TextToSpeech -r /Users/petewarden/projects/moonshine/core/moonshine-tts/data -t \"Xcode build works!\")",
+      "Bash(/Users/petewarden/Library/Developer/Xcode/DerivedData/TextToSpeech-fiblywzjemdgkveenhhywvdvutec/Build/Products/Debug/TextToSpeech -t \"Auto detect works!\")",
+      "Bash(grep -v \"^\\\\.$\")",
+      "Bash(ln -s ../../../core/moonshine-tts/data tts-data)",
+      "Bash(xcodebuild -project TextToSpeech.xcodeproj -scheme TextToSpeech -configuration Debug -destination 'generic/platform=iOS Simulator' build)",
+      "Bash(xcodebuild -project TextToSpeech.xcodeproj -scheme TextToSpeech -configuration Debug -destination 'generic/platform=iOS' build)"
     ]
   }
 }

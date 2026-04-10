@@ -277,6 +277,226 @@ internal final class MoonshineAPI: @unchecked Sendable {
 
         return Transcript(lines: lines)
     }
+
+    // MARK: - Text to Speech
+
+    /// Create a TTS synthesizer from files on disk.
+    func createTtsSynthesizerFromFiles(
+        language: String,
+        options: [TranscriberOption]? = nil,
+        moonshineVersion: Int32 = 20000
+    ) throws -> Int32 {
+        let langCString = language.cString(using: .utf8)!
+
+        var handle: Int32
+
+        if let options = options, !options.isEmpty {
+            let nameCStrings = options.map { $0.name.cString(using: .utf8)! }
+            let valueCStrings = options.map { $0.value.cString(using: .utf8)! }
+
+            let optionStructs = (0..<options.count).map { i -> moonshine_option_t in
+                return moonshine_option_t(
+                    name: nameCStrings[i].withUnsafeBufferPointer { $0.baseAddress },
+                    value: valueCStrings[i].withUnsafeBufferPointer { $0.baseAddress }
+                )
+            }
+
+            handle = withExtendedLifetime((nameCStrings, valueCStrings, optionStructs)) {
+                optionStructs.withUnsafeBufferPointer { buffer in
+                    moonshine_create_tts_synthesizer_from_files(
+                        langCString,
+                        nil,
+                        0,
+                        buffer.baseAddress,
+                        UInt64(options.count),
+                        moonshineVersion
+                    )
+                }
+            }
+        } else {
+            handle = moonshine_create_tts_synthesizer_from_files(
+                langCString,
+                nil,
+                0,
+                nil,
+                0,
+                moonshineVersion
+            )
+        }
+
+        if handle < 0 {
+            let errorString = errorToString(handle)
+            throw MoonshineError.custom(
+                message: "Failed to create TTS synthesizer: \(errorString)", code: handle)
+        }
+
+        return handle
+    }
+
+    /// Synthesize text to speech, returning PCM float samples and sample rate.
+    func textToSpeech(
+        ttsHandle: Int32,
+        text: String,
+        options: [TranscriberOption]? = nil
+    ) throws -> TtsSynthesisResult {
+        let textCString = text.cString(using: .utf8)!
+        var outAudioData: UnsafeMutablePointer<Float>? = nil
+        var outAudioDataSize: UInt64 = 0
+        var outSampleRate: Int32 = 0
+
+        let error: Int32
+
+        if let options = options, !options.isEmpty {
+            let nameCStrings = options.map { $0.name.cString(using: .utf8)! }
+            let valueCStrings = options.map { $0.value.cString(using: .utf8)! }
+
+            let optionStructs = (0..<options.count).map { i -> moonshine_option_t in
+                return moonshine_option_t(
+                    name: nameCStrings[i].withUnsafeBufferPointer { $0.baseAddress },
+                    value: valueCStrings[i].withUnsafeBufferPointer { $0.baseAddress }
+                )
+            }
+
+            error = withExtendedLifetime((nameCStrings, valueCStrings, optionStructs)) {
+                optionStructs.withUnsafeBufferPointer { buffer in
+                    moonshine_text_to_speech(
+                        ttsHandle,
+                        textCString,
+                        buffer.baseAddress,
+                        UInt64(options.count),
+                        &outAudioData,
+                        &outAudioDataSize,
+                        &outSampleRate
+                    )
+                }
+            }
+        } else {
+            error = moonshine_text_to_speech(
+                ttsHandle,
+                textCString,
+                nil,
+                0,
+                &outAudioData,
+                &outAudioDataSize,
+                &outSampleRate
+            )
+        }
+
+        try checkError(error)
+
+        var samples: [Float] = []
+        if let audioPtr = outAudioData, outAudioDataSize > 0 {
+            samples = Array(UnsafeBufferPointer(start: audioPtr, count: Int(outAudioDataSize)))
+            free(outAudioData)
+        }
+
+        return TtsSynthesisResult(samples: samples, sampleRateHz: outSampleRate)
+    }
+
+    /// Free a TTS synthesizer handle.
+    func freeTtsSynthesizer(_ handle: Int32) {
+        moonshine_free_tts_synthesizer(handle)
+    }
+
+    /// Get TTS voices JSON for the given languages.
+    func getTtsVoices(
+        languages: String,
+        options: [TranscriberOption]? = nil
+    ) throws -> String {
+        let langCString = languages.cString(using: .utf8)!
+        var outJson: UnsafeMutablePointer<CChar>? = nil
+
+        let error: Int32
+
+        if let options = options, !options.isEmpty {
+            let nameCStrings = options.map { $0.name.cString(using: .utf8)! }
+            let valueCStrings = options.map { $0.value.cString(using: .utf8)! }
+
+            let optionStructs = (0..<options.count).map { i -> moonshine_option_t in
+                return moonshine_option_t(
+                    name: nameCStrings[i].withUnsafeBufferPointer { $0.baseAddress },
+                    value: valueCStrings[i].withUnsafeBufferPointer { $0.baseAddress }
+                )
+            }
+
+            error = withExtendedLifetime((nameCStrings, valueCStrings, optionStructs)) {
+                optionStructs.withUnsafeBufferPointer { buffer in
+                    moonshine_get_tts_voices(
+                        langCString,
+                        buffer.baseAddress,
+                        UInt64(options.count),
+                        &outJson
+                    )
+                }
+            }
+        } else {
+            error = moonshine_get_tts_voices(
+                langCString,
+                nil,
+                0,
+                &outJson
+            )
+        }
+
+        try checkError(error)
+
+        guard let jsonPtr = outJson else {
+            return "{}"
+        }
+        let result = String(cString: jsonPtr)
+        free(outJson)
+        return result
+    }
+
+    /// Get TTS dependencies JSON for the given languages.
+    func getTtsDependencies(
+        languages: String,
+        options: [TranscriberOption]? = nil
+    ) throws -> String {
+        let langCString = languages.cString(using: .utf8)!
+        var outJson: UnsafeMutablePointer<CChar>? = nil
+
+        let error: Int32
+
+        if let options = options, !options.isEmpty {
+            let nameCStrings = options.map { $0.name.cString(using: .utf8)! }
+            let valueCStrings = options.map { $0.value.cString(using: .utf8)! }
+
+            let optionStructs = (0..<options.count).map { i -> moonshine_option_t in
+                return moonshine_option_t(
+                    name: nameCStrings[i].withUnsafeBufferPointer { $0.baseAddress },
+                    value: valueCStrings[i].withUnsafeBufferPointer { $0.baseAddress }
+                )
+            }
+
+            error = withExtendedLifetime((nameCStrings, valueCStrings, optionStructs)) {
+                optionStructs.withUnsafeBufferPointer { buffer in
+                    moonshine_get_tts_dependencies(
+                        langCString,
+                        buffer.baseAddress,
+                        UInt64(options.count),
+                        &outJson
+                    )
+                }
+            }
+        } else {
+            error = moonshine_get_tts_dependencies(
+                langCString,
+                nil,
+                0,
+                &outJson
+            )
+        }
+
+        try checkError(error)
+
+        guard let jsonPtr = outJson else {
+            return "[]"
+        }
+        let result = String(cString: jsonPtr)
+        free(outJson)
+        return result
+    }
 }
 
 /// Transcriber option for advanced configuration.

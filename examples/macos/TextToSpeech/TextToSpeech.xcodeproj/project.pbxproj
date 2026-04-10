@@ -3,94 +3,98 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
-		45505035DE2510.536A310D4 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8A5E552E56AC2B8EDE068B3 /* main.swift */; };
+		5A9B8CA4FAE872C0C8C137F8 /* MoonshineVoice in Frameworks */ = {isa = PBXBuildFile; productRef = 9728F0933E5CE981035C7885 /* MoonshineVoice */; };
+		60D04E12364324C73C028A29 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE838FC6EB48CA53408DC556 /* main.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		5BB2C0F05E65996AD61BB563 /* MicTranscription */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = text; path = MicTranscription; sourceTree = BUILT_PRODUCTS_DIR; };
-		F8A5E552E56AC2B8EDE068B3 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		2FD3C51B11D1077071E6E153 /* swift */ = {isa = PBXFileReference; lastKnownFileType = folder; name = swift; path = ../../../swift; sourceTree = SOURCE_ROOT; };
+		51EE2CA85E2FDB2E60E66596 /* TextToSpeech */ = {isa = PBXFileReference; includeInIndex = 0; path = TextToSpeech; sourceTree = BUILT_PRODUCTS_DIR; };
+		CE838FC6EB48CA53408DC556 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		B0E9FC6A9CDC860353851556 /* Frameworks */ = {
+		BB2E72EFEDB4DC355D8524B8 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5A9B8CA4FAE872C0C8C137F8 /* MoonshineVoice in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		0B110F2F5E40F3928EEFDC69 /* Packages */ = {
+		58E6812FCC0F2704949FE958 /* Packages */ = {
 			isa = PBXGroup;
 			children = (
+				2FD3C51B11D1077071E6E153 /* swift */,
 			);
 			name = Packages;
 			sourceTree = "<group>";
 		};
-		5F93CCE2310DF20089E6C01A /* Products */ = {
+		8E66FDB8CF7708312299EDDE /* TextToSpeech */ = {
 			isa = PBXGroup;
 			children = (
-				5BB2C0F05E65996AD61BB563 /* MicTranscription */,
+				CE838FC6EB48CA53408DC556 /* main.swift */,
+			);
+			name = TextToSpeech;
+			path = Sources/TextToSpeech;
+			sourceTree = "<group>";
+		};
+		A2A30ACA12B2E39DF77BA3D7 = {
+			isa = PBXGroup;
+			children = (
+				58E6812FCC0F2704949FE958 /* Packages */,
+				8E66FDB8CF7708312299EDDE /* TextToSpeech */,
+				EB5BD497CCA563EA7AF74EE7 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		EB5BD497CCA563EA7AF74EE7 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				51EE2CA85E2FDB2E60E66596 /* TextToSpeech */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		7EEA7A59511F12BB6EA396A3 /* MicTranscription */ = {
-			isa = PBXGroup;
-			children = (
-				F8A5E552E56AC2B8EDE068B3 /* main.swift */,
-			);
-			name = MicTranscription;
-			path = Sources/MicTranscription;
-			sourceTree = "<group>";
-		};
-		B8B49A6A12013730B0F6054E = {
-			isa = PBXGroup;
-			children = (
-				7EEA7A59511F12BB6EA396A3 /* MicTranscription */,
-				0B110F2F5E40F3928EEFDC69 /* Packages */,
-				5F93CCE2310DF20089E6C01A /* Products */,
-			);
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		AEC9D6327F59C52D0627B805 /* MicTranscription */ = {
+		42C4CAB4CE4A5E836100E2A3 /* TextToSpeech */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 7B713F5454E265C62AD032FE /* Build configuration list for PBXNativeTarget "MicTranscription" */;
+			buildConfigurationList = B7E976F54DF1F5322A541186 /* Build configuration list for PBXNativeTarget "TextToSpeech" */;
 			buildPhases = (
-				ABBBEF3A1627101EDF1CF8A0 /* Sources */,
-				B0E9FC6A9CDC860353851556 /* Frameworks */,
+				A0BE2DE06D40D5F6B3EF9A09 /* Sources */,
+				BB2E72EFEDB4DC355D8524B8 /* Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
-			name = MicTranscription;
+			name = TextToSpeech;
 			packageProductDependencies = (
-				7F7B03E1028EB5161964044D /* MoonshineVoice */,
+				9728F0933E5CE981035C7885 /* MoonshineVoice */,
 			);
-			productName = MicTranscription;
-			productReference = 5BB2C0F05E65996AD61BB563 /* MicTranscription */;
+			productName = TextToSpeech;
+			productReference = 51EE2CA85E2FDB2E60E66596 /* TextToSpeech */;
 			productType = "com.apple.product-type.tool";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		7DFF98CC662DE3DB440C0B0E /* Project object */ = {
+		C55C1A7EE6460D415CB594E5 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1500;
 			};
-			buildConfigurationList = 1C8F432409B555C4E3C0C7C1 /* Build configuration list for PBXProject "MicTranscription" */;
+			buildConfigurationList = 28172641A3DADB3BC4F959E3 /* Build configuration list for PBXProject "TextToSpeech" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -98,32 +102,63 @@
 				Base,
 				en,
 			);
-			mainGroup = B8B49A6A12013730B0F6054E;
+			mainGroup = A2A30ACA12B2E39DF77BA3D7;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				E68EFCE52E5CBD663A132D80 /* XCRemoteSwiftPackageReference "moonshine-swift" */,
+				6AB35A28DE3E33B40136D3D3 /* XCLocalSwiftPackageReference "../../../swift" */,
 			);
+			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				AEC9D6327F59C52D0627B805 /* MicTranscription */,
+				42C4CAB4CE4A5E836100E2A3 /* TextToSpeech */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXSourcesBuildPhase section */
-		ABBBEF3A1627101EDF1CF8A0 /* Sources */ = {
+		A0BE2DE06D40D5F6B3EF9A09 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				45505035DE2510.536A310D4 /* main.swift in Sources */,
+				60D04E12364324C73C028A29 /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		6453A8621730B768147B7042 /* Release */ = {
+		1B8566F265D852FD02DB7944 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.moonshine.TextToSpeech;
+				PRODUCT_NAME = TextToSpeech;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		7921193439C260FE6E845D6E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.moonshine.TextToSpeech;
+				PRODUCT_NAME = TextToSpeech;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		849E7681A9CD499D5ADEA1BC /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -179,37 +214,7 @@
 			};
 			name = Release;
 		};
-		ABE0F209FB523797D8A49155 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				COMBINE_HIDPI_IMAGES = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.moonshine.MicTranscription;
-				PRODUCT_NAME = MicTranscription;
-				SDKROOT = macosx;
-				SWIFT_VERSION = 6.0;
-			};
-			name = Release;
-		};
-		D15635028FF2AFC95E44E652 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				COMBINE_HIDPI_IMAGES = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.moonshine.MicTranscription;
-				PRODUCT_NAME = MicTranscription;
-				SDKROOT = macosx;
-				SWIFT_VERSION = 6.0;
-			};
-			name = Debug;
-		};
-		DB8B60644138BAEE309938F0 /* Debug */ = {
+		A6B497095C3ACFA4B91A522F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -275,44 +280,39 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		1C8F432409B555C4E3C0C7C1 /* Build configuration list for PBXProject "MicTranscription" */ = {
+		28172641A3DADB3BC4F959E3 /* Build configuration list for PBXProject "TextToSpeech" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				DB8B60644138BAEE309938F0 /* Debug */,
-				6453A8621730B768147B7042 /* Release */,
+				A6B497095C3ACFA4B91A522F /* Debug */,
+				849E7681A9CD499D5ADEA1BC /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		7B713F5454E265C62AD032FE /* Build configuration list for PBXNativeTarget "MicTranscription" */ = {
+		B7E976F54DF1F5322A541186 /* Build configuration list for PBXNativeTarget "TextToSpeech" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				D15635028FF2AFC95E44E652 /* Debug */,
-				ABE0F209FB523797D8A49155 /* Release */,
+				1B8566F265D852FD02DB7944 /* Debug */,
+				7921193439C260FE6E845D6E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		E68EFCE52E5CBD663A132D80 /* XCRemoteSwiftPackageReference "moonshine-swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/moonshine-ai/moonshine-swift.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.0.53;
-			};
+/* Begin XCLocalSwiftPackageReference section */
+		6AB35A28DE3E33B40136D3D3 /* XCLocalSwiftPackageReference "../../../swift" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../../swift;
 		};
-/* End XCRemoteSwiftPackageReference section */
+/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		7F7B03E1028EB5161964044D /* MoonshineVoice */ = {
+		9728F0933E5CE981035C7885 /* MoonshineVoice */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E68EFCE52E5CBD663A132D80 /* XCRemoteSwiftPackageReference "moonshine-swift" */;
 			productName = MoonshineVoice;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
-	rootObject = 7DFF98CC662DE3DB440C0B0E /* Project object */;
+	rootObject = C55C1A7EE6460D415CB594E5 /* Project object */;
 }

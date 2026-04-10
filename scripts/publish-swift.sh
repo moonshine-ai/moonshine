@@ -1,7 +1,7 @@
 #!/bin/bash -ex
 
 FRAMEWORK_NAME="Moonshine"
-VERSION="0.0.52"
+VERSION="0.0.53"
 REPO="moonshine-ai/moonshine-swift"
 
 # Check that the XCFramework exists
@@ -37,9 +37,17 @@ git add Package.swift Sources Tests .gitignore
 git commit -a -m "Release v$VERSION"
 git push origin main
 
+# Remove the tag if it already exists
+if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+    git tag -d "v$VERSION"
+    git push --delete origin "v$VERSION" || true
+fi
+
 git tag v$VERSION && git push --tags
 
-gh release create v$VERSION $ZIP_NAME \
-	--repo $REPO \
-	--title v$VERSION \
-	--notes v$VERSION
+if ! gh release view v$VERSION >/dev/null 2>&1; then
+	gh release create v$VERSION $ZIP_NAME \
+		--repo $REPO \
+		--title v$VERSION \
+		--notes v$VERSION
+fi

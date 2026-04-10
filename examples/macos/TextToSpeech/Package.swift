@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "BasicTranscription",
+    name: "TextToSpeech",
     platforms: [.macOS(.v13)],
     dependencies: [
         // Uncomment this back in when you want to use the locally-built Swift package.
@@ -11,7 +11,7 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "BasicTranscription",
+            name: "TextToSpeech",
             dependencies: [
                 // Uncomment this back in when you want to use the locally-built Swift package.
                 // .product(name: "MoonshineVoice", package: "swift")

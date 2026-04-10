@@ -14,11 +14,14 @@ KNOWN_FILES=(
 	./examples/macos/BasicTranscription/Package.swift
 	./examples/macos/MicTranscription/MicTranscription.xcodeproj/project.pbxproj
 	./examples/macos/MicTranscription/Package.swift
+	./examples/macos/TextToSpeech/Package.swift
 	./examples/ios/Transcriber/Transcriber.xcodeproj/project.pbxproj
 	./examples/android/Transcriber/gradle/libs.versions.toml
 	./scripts/publish-swift.sh
 	./scripts/publish-binary.sh
 	./scripts/publish-binary.bat
+	./examples/c++/download-library.sh
+	./examples/c++/README.md
 )
 
 ACTUAL_FILES=()
@@ -44,6 +47,7 @@ done < <(grep -rlI \
   --exclude=speaker-embedding-model-data.cpp \
   --exclude=moonshine-cpp-test.cpp \
   --exclude=.env \
+  --exclude=icon_mic.xml \
   "$OLD_VERSION" .)
 for FILE in "${ACTUAL_FILES[@]}"; do
 	echo "Checking file '$FILE'"
