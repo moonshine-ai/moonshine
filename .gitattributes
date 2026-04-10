@@ -14,3 +14,11 @@ core/moonshine-tts/data/**/*.onnx filter=lfs diff=lfs merge=lfs -text
 core/moonshine-tts/data/**/*.onnx.data filter=lfs diff=lfs merge=lfs -text
 # Documentation under data/ stays plain text (later rule wins).
 core/moonshine-tts/data/**/*.md -filter -diff -merge text
+
+# Bundled TTS assets in example apps (same file types as core/moonshine-tts/data/).
+examples/**/tts-data/**/*.tsv filter=lfs diff=lfs merge=lfs -text
+examples/**/tts-data/**/*.txt filter=lfs diff=lfs merge=lfs -text
+examples/**/tts-data/**/*.json filter=lfs diff=lfs merge=lfs -text
+examples/**/tts-data/**/*.csv filter=lfs diff=lfs merge=lfs -text
+examples/**/tts-data/**/*.onnx filter=lfs diff=lfs merge=lfs -text
+examples/**/tts-data/**/*.kokorovoice filter=lfs diff=lfs merge=lfs -text
