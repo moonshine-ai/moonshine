@@ -122,7 +122,7 @@ def main() -> None:
     parser.add_argument(
         "-l",
         "--language",
-        required=True,
+        default="en_us",
         help="Moonshine language tag (e.g. en_us, ar_msa, cmn_hans_cn)",
     )
     parser.add_argument(

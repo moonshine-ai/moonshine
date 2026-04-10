@@ -390,6 +390,12 @@ if __name__ == "__main__":
         help="sounddevice output device (index or name substring)",
     )
     parser.add_argument(
+        "--asset-root",
+        default=None,
+        metavar="PATH",
+        help="Path to the asset root directory (default: auto-detect)",
+    )
+    parser.add_argument(
         "--options",
         action="append",
         default=[],
@@ -398,7 +404,12 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    extra: Optional[Dict[str, Union[str, int, float, bool]]] = None
+    if args.asset_root is None:
+        args.asset_root = tts_asset_cache_path(None)
+
+    extra: Optional[Dict[str, Union[str, int, float, bool]]] = {
+        "g2p_root": str(args.asset_root),
+    }
     if args.options:
         try:
             extra = _parse_options_cli(args.options)

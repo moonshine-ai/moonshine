@@ -323,9 +323,9 @@ std::string select_voice_id(char kokoro_lang, std::string_view requested, std::s
 
 void apply_diphthong_map(std::string& s, char kokoro_lang) {
   static const std::array<std::pair<const char*, const char*>, 12> kAll{{
-      {"t\u0361\u0283", "\u0287"},  // t͡ʃ → ʧ
+      {"t\u0361\u0283", "\u02A7"},  // t͡ʃ → ʧ (U+02A7)
       {"d\u0361\u0292", "\u02A4"},  // d͡ʒ → ʤ (U+02A4)
-      {"t\u0283", "\u0287"},
+      {"t\u0283", "\u02A7"},
       {"d\u0292", "\u02A4"},
       {"e\u026a", "A"},
       {"a\u026a", "I"},
