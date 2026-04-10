@@ -104,7 +104,6 @@
 			mainGroup = A10001082F0762A100CE654A;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				A10001102F0762A200CE654D /* XCLocalSwiftPackageReference "../../../swift" */,
 				59FFEF2B2F88ED8600133A1F /* XCRemoteSwiftPackageReference "moonshine-swift" */,
 			);
 			preferredProjectObjectVersion = 77;

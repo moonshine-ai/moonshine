@@ -776,9 +776,23 @@ def download_tts_assets(
         options=options,
         root_path=root,
     )
+    # Only include the voice in dependency resolution when the catalog recognises it,
+    # so we never attempt to download a non-existent voice file (HTTP 404).
+    download_voice = voice
+    if voice is not None:
+        try:
+            by_avail = list_tts_voices(lang_tag, voice=voice, options=options, root_path=root)
+            want = _tts_voice_want_aliases(voice)
+            known = {_normalize_tts_voice_stem(v) for v in by_avail["present"]} | {
+                _normalize_tts_voice_stem(v) for v in by_avail["downloadable"]
+            }
+            if not (want & known):
+                download_voice = None
+        except MoonshineTtsLanguageError:
+            download_voice = None
     keys = list_tts_dependency_keys(
         lang_tag,
-        voice=voice,
+        voice=download_voice,
         options=options,
     )
     for key in keys:
