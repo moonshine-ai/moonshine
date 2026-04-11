@@ -349,6 +349,258 @@ std::string normalize_german_ipa_piper_style(std::string ipa) {
   return ipa;
 }
 
+// True for IPA vowel codepoints used in Mandarin (after mapping).
+bool is_cmn_vowel_cp(char32_t cp) {
+  switch (cp) {
+    case U'a': case U'e': case U'i': case U'o': case U'u': case U'y':
+    case U'\u0259':  // ə
+    case U'\u0251':  // ɑ
+    case U'\u025B':  // ɛ
+    case U'\u00E6':  // æ
+    case U'\u025A':  // ɚ
+    case U'\u025C':  // ɜ (tone-2 marker, but also vowel-like)
+      return true;
+    default:
+      return false;
+  }
+}
+
+// True for espeak-ng Mandarin tone markers (single characters placed in syllables).
+bool is_cmn_tone_marker(char32_t cp) {
+  // Digits 1-5 and ɜ (U+025C, espeak tone 2).
+  return (cp >= U'1' && cp <= U'5') || cp == U'\u025C';
+}
+
+std::string normalize_chinese_ipa_piper_style(std::string ipa) {
+  {
+    std::string nfc = utf8_nfc_copy(ipa);
+    ipa.swap(nfc);
+  }
+
+  // ── Phase 1a: Chao tone letters → multi-digit intermediates ──
+  // Longest sequences first to avoid partial matches.
+  replace_utf8_all(ipa, "\xcb\xa8\xcb\xa9\xcb\xa6", "214");  // ˨˩˦ → 214 (Tone 3)
+  replace_utf8_all(ipa, "\xcb\xa5\xcb\xa5", "55");            // ˥˥  → 55  (Tone 1)
+  replace_utf8_all(ipa, "\xcb\xa7\xcb\xa5", "35");            // ˧˥  → 35  (Tone 2)
+  replace_utf8_all(ipa, "\xcb\xa5\xcb\xa9", "51");            // ˥˩  → 51  (Tone 4)
+  replace_utf8_all(ipa, "\xcb\xa9\xcb\xa9", "11");            // ˩˩  → 11
+  replace_utf8_all(ipa, "\xcb\xa5\xcb\xa7", "53");            // ˥˧  → 53
+  replace_utf8_all(ipa, "\xcb\xa7\xcb\xa9", "31");            // ˧˩  → 31
+  replace_utf8_all(ipa, "\xcb\xa8\xcb\xa5", "25");            // ˨˥  → 25
+  replace_utf8_all(ipa, "\xcb\xa5", "5");                     // ˥ → 5
+  replace_utf8_all(ipa, "\xcb\xa6", "4");                     // ˦ → 4
+  replace_utf8_all(ipa, "\xcb\xa7", "3");                     // ˧ → 3
+  replace_utf8_all(ipa, "\xcb\xa8", "2");                     // ˨ → 2
+  replace_utf8_all(ipa, "\xcb\xa9", "1");                     // ˩ → 1
+
+  // ── Phase 1b: Segment-level consonant/vowel replacements ──
+  // Order matters: longest/most-specific first.
+
+  // Retroflexes: ʈʂʰ → ts.h, ʈʂ → ts., ʂ → s.  (longest first)
+  replace_utf8_all(ipa, "\xca\x88\xca\x82\xca\xb0", "ts.h");  // ʈʂʰ → ts.h
+  replace_utf8_all(ipa, "\xca\x88\xca\x82", "ts.");            // ʈʂ  → ts.
+  replace_utf8_all(ipa, "\xca\x82", "s.");                     // ʂ   → s.
+
+  // Aspiration: ʰ → h  (after retroflex rules consumed ʰ in ʈʂʰ)
+  replace_utf8_all(ipa, "\xca\xb0", "h");  // ʰ (U+02B0) → h
+
+  // Velar→uvular fricative: x → χ
+  replace_utf8_all(ipa, "x", "\xcf\x87");  // x → χ (U+03C7)
+
+  // Rhotacized vowels: ɻ → ɚ first, then context-specific ɚ rules.
+  replace_utf8_all(ipa, "\xc9\xbb", "\xc9\x9a");  // ɻ (U+027B) → ɚ (U+025A)
+  replace_utf8_all(ipa, "a\xc9\x9a", "\xc9\x99r");  // aɚ → ər  (二/儿/耳)
+  replace_utf8_all(ipa, "\xc9\x9a", "i.");             // ɚ → i.  (知/吃/是/日 syllabic)
+
+  // Apical vowels: ɯ → ɨ → i̪
+  replace_utf8_all(ipa, "\xc9\xaf", "\xc9\xa8");  // ɯ (U+026F) → ɨ (U+0268)
+  replace_utf8_all(ipa, "\xc9\xa8", "i\xcc\xaa");  // ɨ → i̪ (i + U+032A dental)
+
+  // Near-close vowels → close equivalents.
+  replace_utf8_all(ipa, "\xc9\xaa", "i");  // ɪ (U+026A) → i
+  replace_utf8_all(ipa, "\xca\x8a", "u");  // ʊ (U+028A) → u
+
+  // ü-finals: ɥœn → yæn (before ɥœ → yɛ, longest first)
+  replace_utf8_all(ipa, "\xc9\xa5\xc5\x93n", "y\xc3\xa6n");  // ɥœn → yæn
+  replace_utf8_all(ipa, "\xc9\xa5\xc5\x93", "y\xc9\x9b");    // ɥœ  → yɛ
+
+  // Mid vowel: ɤŋ → əŋ (before standalone ɤ → o-)
+  replace_utf8_all(ipa, "\xc9\xa4\xc5\x8b", "\xc9\x99\xc5\x8b");  // ɤŋ → əŋ
+  replace_utf8_all(ipa, "\xc9\xa4", "o-");  // ɤ → o-
+
+  // -ong final: uŋ → onɡ  (ɡ = U+0261, not ASCII g)
+  replace_utf8_all(ipa, "u\xc5\x8b", "on\xc9\xa1");  // uŋ → onɡ
+
+  // -uo final: uɔ → uo
+  replace_utf8_all(ipa, "u\xc9\x94", "uo");  // uɔ → uo
+
+  // Tie-bar affricates → digraphs.
+  static const std::string kBar("\xcd\xa1");  // U+0361
+  replace_utf8_all(ipa, std::string("t") + kBar + "\xc9\x95", std::string("t\xc9\x95"));  // t͡ɕ → tɕ
+  replace_utf8_all(ipa, std::string("t") + kBar + "s", "ts");
+  replace_utf8_all(ipa, std::string("d") + kBar + "z", "dz");
+
+  // ── Phase 2: Multi-digit tones → espeak single-char tones ──
+  // Longest first: 214 before 21, 51, 55, 35, 11, then standalone 3.
+  replace_utf8_all(ipa, "214", "2");
+  replace_utf8_all(ipa, "55", "5");
+  replace_utf8_all(ipa, "35", "\xc9\x9c");  // 35 → ɜ (U+025C)
+  replace_utf8_all(ipa, "51", "5");
+  replace_utf8_all(ipa, "53", "5");
+  replace_utf8_all(ipa, "11", "1");
+  replace_utf8_all(ipa, "31", "2");
+  replace_utf8_all(ipa, "25", "\xc9\x9c");  // 25 → ɜ (rising variant)
+
+  // Neutral tone: standalone '3' that survived the above passes → '1'.
+  // At this point '3' only remains from the neutral-tone Chao ˧ mapping.
+  // Safe to replace globally since other '3's were consumed in multi-digit sequences.
+  replace_utf8_all(ipa, "3", "1");
+
+  // ── Phase 3: Tone digit repositioning ──
+  // espeak places tone digits BEFORE final nasals in -an/-ang/-en/-eng finals:
+  //   pɑŋ5 → pɑ5ŋ,  pan5 → pa5n,  pən2 → pə2n
+  // But NOT before -onɡ (tˈonɡ5 stays as-is) or -ər (ˈər5 stays).
+  // Process: scan for [nasal][tone] at syllable boundaries and swap.
+  {
+    static const std::string kEng("\xc5\x8b");  // ŋ (2 bytes)
+    // Swap n+tone: look for 'n' followed by a tone marker at end-of-syllable or before space.
+    for (size_t p = 0; p + 1 < ipa.size(); ++p) {
+      if (ipa[p] != 'n') {
+        continue;
+      }
+      // Check the character after 'n' is a tone digit (ASCII 1-5) or ɜ.
+      char32_t next_cp = 0;
+      size_t next_len = 0;
+      if (!utf8_decode_at(ipa, p + 1, next_cp, next_len)) {
+        continue;
+      }
+      if (!is_cmn_tone_marker(next_cp)) {
+        continue;
+      }
+      // Make sure 'n' is actually a final nasal (preceded by a vowel), not part of onset.
+      // Check that the character before 'n' is a vowel.
+      if (p == 0) {
+        continue;
+      }
+      // Walk back one codepoint.
+      size_t prev_start = p;
+      do {
+        --prev_start;
+      } while (prev_start > 0 && (static_cast<unsigned char>(ipa[prev_start]) & 0xC0) == 0x80);
+      char32_t prev_cp = 0;
+      size_t prev_len = 0;
+      if (!utf8_decode_at(ipa, prev_start, prev_cp, prev_len)) {
+        continue;
+      }
+      if (!is_cmn_vowel_cp(prev_cp)) {
+        continue;
+      }
+      // Also verify this 'n' is not followed by 'ɡ' (which would be -onɡ, don't reposition).
+      const size_t after_tone = p + 1 + next_len;
+      if (after_tone + 1 < ipa.size() && ipa[after_tone] == '\xc9' && ipa[after_tone + 1] == '\xa1') {
+        continue;  // Skip -onɡ
+      }
+      // Swap: move the tone string before 'n'.
+      const std::string tone_str = ipa.substr(p + 1, next_len);
+      ipa.replace(p, 1 + next_len, tone_str + "n");
+      p += tone_str.size();  // advance past the inserted tone+n
+    }
+    // Swap ŋ+tone: ŋ is 2 bytes (\xc5\x8b).
+    for (size_t p = 0; p + kEng.size() < ipa.size(); ++p) {
+      if (ipa.compare(p, kEng.size(), kEng) != 0) {
+        continue;
+      }
+      char32_t next_cp = 0;
+      size_t next_len = 0;
+      if (!utf8_decode_at(ipa, p + kEng.size(), next_cp, next_len)) {
+        continue;
+      }
+      if (!is_cmn_tone_marker(next_cp)) {
+        continue;
+      }
+      // Check preceded by vowel.
+      if (p == 0) {
+        continue;
+      }
+      size_t prev_start = p;
+      do {
+        --prev_start;
+      } while (prev_start > 0 && (static_cast<unsigned char>(ipa[prev_start]) & 0xC0) == 0x80);
+      char32_t prev_cp = 0;
+      size_t prev_len = 0;
+      if (!utf8_decode_at(ipa, prev_start, prev_cp, prev_len)) {
+        continue;
+      }
+      if (!is_cmn_vowel_cp(prev_cp)) {
+        continue;
+      }
+      const std::string tone_str = ipa.substr(p + kEng.size(), next_len);
+      ipa.replace(p, kEng.size() + next_len, tone_str + kEng);
+      p += tone_str.size() + kEng.size();
+    }
+  }
+
+  // ── Phase 4: Stress mark insertion ──
+  // espeak places ˈ before the vowel nucleus on every non-neutral syllable.
+  // Neutral tone uses '1' with no stress mark.
+  {
+    static const std::string kStress("\xcb\x88");  // ˈ (U+02C8)
+    std::string out;
+    out.reserve(ipa.size() + 32);
+    size_t seg_start = 0;
+    while (seg_start <= ipa.size()) {
+      size_t seg_end = ipa.find(' ', seg_start);
+      if (seg_end == std::string::npos) {
+        seg_end = ipa.size();
+      }
+      const std::string syll = ipa.substr(seg_start, seg_end - seg_start);
+      if (!out.empty()) {
+        out.push_back(' ');
+      }
+      // Check if this syllable has a non-neutral tone (any tone marker other than '1').
+      bool has_non_neutral_tone = false;
+      for (size_t i = 0; i < syll.size();) {
+        char32_t cp = 0;
+        size_t adv = 0;
+        if (!utf8_decode_at(syll, i, cp, adv)) {
+          ++i;
+          continue;
+        }
+        if (is_cmn_tone_marker(cp) && cp != U'1') {
+          has_non_neutral_tone = true;
+          break;
+        }
+        i += adv;
+      }
+      if (has_non_neutral_tone) {
+        // Find first vowel and insert ˈ before it.
+        bool inserted = false;
+        for (size_t i = 0; i < syll.size();) {
+          char32_t cp = 0;
+          size_t adv = 0;
+          if (!utf8_decode_at(syll, i, cp, adv)) {
+            out.push_back(syll[i]);
+            ++i;
+            continue;
+          }
+          if (!inserted && is_cmn_vowel_cp(cp)) {
+            out += kStress;
+            inserted = true;
+          }
+          out.append(syll, i, adv);
+          i += adv;
+        }
+      } else {
+        out += syll;
+      }
+      seg_start = seg_end + 1;
+    }
+    ipa = std::move(out);
+  }
+
+  return ipa;
+}
+
 std::string utf8_nfc_copy(std::string_view s) {
   const std::string tmp(s);
   utf8proc_uint8_t* p =
@@ -371,6 +623,9 @@ std::string normalize_g2p_ipa_for_piper(std::string_view ipa_utf8, std::string_v
   }
   if (eff == "de") {
     apply_german_ipa_piper_style(s);
+  }
+  if (eff == "zh" || eff == "zh_hans" || eff == "zh_cn" || eff == "zt") {
+    s = normalize_chinese_ipa_piper_style(std::move(s));
   }
   return s;
 }

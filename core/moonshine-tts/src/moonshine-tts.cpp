@@ -350,6 +350,80 @@ void apply_diphthong_map(std::string& s, char kokoro_lang) {
   }
 }
 
+// Mandarin Chinese IPA normalization for Kokoro: Chao tone letters → arrow contour symbols,
+// consonant mappings to Kokoro's inventory (ꭧ for retroflex, ʦ for dental affricate, ʨ for palatal),
+// tone repositioning before final nasals. Must run before the generic vocab-filter pass.
+void apply_chinese_kokoro_normalization(std::string& ipa) {
+  // ── Consonant mappings (longest first) ──
+  // Retroflex affricates: ʈʂʰ → ꭧʰ, ʈʂ → ꭧ  (ꭧ = U+AB67, \xea\xad\xa7)
+  replace_utf8(ipa, "\xca\x88\xca\x82\xca\xb0", "\xea\xad\xa7\xca\xb0");  // ʈʂʰ → ꭧʰ
+  replace_utf8(ipa, "\xca\x88\xca\x82", "\xea\xad\xa7");                    // ʈʂ → ꭧ
+
+  // Palatal affricates: tɕʰ → ʨʰ, tɕ → ʨ  (ʨ = U+02A8, \xca\xa8)
+  replace_utf8(ipa, "t\xc9\x95\xca\xb0", "\xca\xa8\xca\xb0");  // tɕʰ → ʨʰ
+  replace_utf8(ipa, "t\xc9\x95", "\xca\xa8");                    // tɕ → ʨ
+
+  // Dental affricates: tsʰ → ʦʰ, ts → ʦ  (ʦ = U+02A6, \xca\xa6)
+  replace_utf8(ipa, "ts\xca\xb0", "\xca\xa6\xca\xb0");  // tsʰ → ʦʰ
+  replace_utf8(ipa, "ts", "\xca\xa6");                    // ts → ʦ
+
+  // Tie-bar removal (if present): t͡ɕ, t͡s, d͡z
+  replace_utf8(ipa, "t\xcd\xa1\xc9\x95", "\xca\xa8");  // t͡ɕ → ʨ
+  replace_utf8(ipa, "t\xcd\xa1s", "\xca\xa6");          // t͡s → ʦ
+
+  // ── Vowel/rhoticity mappings ──
+  // er/erhua: aɻ → ɚ  (before generic ɻ → ɻ, which is already in Kokoro vocab)
+  replace_utf8(ipa, "a\xc9\xbb", "\xc9\x9a");  // aɻ → ɚ
+
+  // Apical vowel after sibilants: ɯ → ɨ
+  replace_utf8(ipa, "\xc9\xaf", "\xc9\xa8");  // ɯ → ɨ
+
+  // -uo final: uɔ → wo (Kokoro uses 'wo' not 'uɔ')
+  replace_utf8(ipa, "u\xc9\x94", "wo");  // uɔ → wo
+
+  // -eng: ɤŋ → əŋ
+  replace_utf8(ipa, "\xc9\xa4\xc5\x8b", "\xc9\x99\xc5\x8b");  // ɤŋ → əŋ
+
+  // ── Chao tone letters → Kokoro arrow symbols ──
+  // Multi-letter sequences first (longest first).
+  // → = U+2192 (\xe2\x86\x92), ↗ = U+2197 (\xe2\x86\x97), ↓ = U+2193 (\xe2\x86\x93), ↘ = U+2198 (\xe2\x86\x98)
+  replace_utf8(ipa, "\xcb\xa8\xcb\xa9\xcb\xa6", "\xe2\x86\x93");  // ˨˩˦ (Tone 3) → ↓
+  replace_utf8(ipa, "\xcb\xa5\xcb\xa5", "\xe2\x86\x92");           // ˥˥  (Tone 1) → →
+  replace_utf8(ipa, "\xcb\xa7\xcb\xa5", "\xe2\x86\x97");           // ˧˥  (Tone 2) → ↗
+  replace_utf8(ipa, "\xcb\xa5\xcb\xa9", "\xe2\x86\x98");           // ˥˩  (Tone 4) → ↘
+  replace_utf8(ipa, "\xcb\xa9\xcb\xa9", "\xe2\x86\x93");           // ˩˩ → ↓
+  replace_utf8(ipa, "\xcb\xa5\xcb\xa7", "\xe2\x86\x98");           // ˥˧ → ↘
+  replace_utf8(ipa, "\xcb\xa7\xcb\xa9", "\xe2\x86\x93");           // ˧˩ → ↓
+  replace_utf8(ipa, "\xcb\xa8\xcb\xa5", "\xe2\x86\x97");           // ˨˥ → ↗
+  // Single remaining tone letters.
+  replace_utf8(ipa, "\xcb\xa5", "\xe2\x86\x92");  // ˥ → →
+  replace_utf8(ipa, "\xcb\xa6", "\xe2\x86\x92");  // ˦ → →
+  replace_utf8(ipa, "\xcb\xa7", "");               // ˧ (neutral) → drop
+  replace_utf8(ipa, "\xcb\xa8", "\xe2\x86\x93");  // ˨ → ↓
+  replace_utf8(ipa, "\xcb\xa9", "\xe2\x86\x93");  // ˩ → ↓
+
+  // ── Tone repositioning: move tone arrow before final nasals ──
+  // Kokoro expects tones between the vowel and final nasal: pa→ŋ, pə↓n
+  // Our G2P puts tones after the syllable: pɑŋ˥˥ → pɑŋ→ (after arrow conversion)
+  // Need to swap: [nasal][arrow] → [arrow][nasal]
+  static const std::string kArrows[] = {
+      "\xe2\x86\x92", "\xe2\x86\x97", "\xe2\x86\x93", "\xe2\x86\x98"};
+  for (const std::string& arrow : kArrows) {
+    // Swap n + arrow → arrow + n
+    {
+      const std::string from = "n" + arrow;
+      const std::string to = arrow + "n";
+      replace_utf8(ipa, from, to);
+    }
+    // Swap ŋ + arrow → arrow + ŋ
+    {
+      const std::string from = "\xc5\x8b" + arrow;  // ŋ + arrow
+      const std::string to = arrow + "\xc5\x8b";    // arrow + ŋ
+      replace_utf8(ipa, from, to);
+    }
+  }
+}
+
 std::string normalize_ipa_to_kokoro(std::string ipa, char kokoro_lang,
                                     const std::unordered_set<std::string>& vocab_keys) {
   ipa = utf8_nfc(trim_ascii_ws_copy(ipa));
@@ -358,6 +432,9 @@ std::string normalize_ipa_to_kokoro(std::string ipa, char kokoro_lang,
     replace_utf8(ipa, ".", "");
     replace_utf8(ipa, "t\u032a", "t");  // t̪
     replace_utf8(ipa, "d\u032a", "d");  // d̪
+  }
+  if (kokoro_lang == 'z') {
+    apply_chinese_kokoro_normalization(ipa);
   }
   std::string kept;
   for (const std::string& ch : utf8_split_codepoints(ipa)) {

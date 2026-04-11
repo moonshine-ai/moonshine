@@ -301,7 +301,18 @@ std::u32string normalization_ref_u32(const std::u32string& text_u32, const Basic
   if (cfg.tokenize_chinese_chars) {
     t = tokenize_chinese_chars_u32(t);
   }
-  return u32_nfc(t);
+  t = u32_nfc(t);
+  // Mirror the lowercasing / accent-stripping that basic_tokenize_u32 applies to each token,
+  // so that align_basic_tokens_u32 can match the lowered tokens against this reference.
+  if (cfg.do_lower_case) {
+    t = to_lower_u32(t);
+    if (!cfg.strip_accents.has_value() || *cfg.strip_accents) {
+      t = strip_mn_nfd(t);
+    }
+  } else if (cfg.strip_accents.value_or(false)) {
+    t = strip_mn_nfd(t);
+  }
+  return t;
 }
 
 std::vector<std::u32string> basic_tokenize_u32(const std::u32string& original_text_u32,
