@@ -146,3 +146,138 @@ TEST_CASE("normalize_g2p_ipa_for_piper German applies piper-style pass") {
   CHECK(out == "ts");
   CHECK(normalize_g2p_ipa_for_piper(in, "de_de") == out);
 }
+
+TEST_CASE("normalize_chinese_ipa_piper_style full pipeline single syllables") {
+  // 妈 ma˥˥ → mˈa5  (Tone 1: stress before vowel, 55→5)
+  CHECK(normalize_chinese_ipa_piper_style(std::string("ma\xcb\xa5\xcb\xa5")) ==
+        std::string("m\xcb\x88" "a5"));  // mˈa5
+
+  // 麻 ma˧˥ → mˈaɜ  (Tone 2: 35 → ɜ)
+  CHECK(normalize_chinese_ipa_piper_style(std::string("ma\xcb\xa7\xcb\xa5")) ==
+        std::string("m\xcb\x88" "a\xc9\x9c"));  // mˈaɜ
+
+  // 马 ma˨˩˦ → mˈa2  (Tone 3: 214 → 2)
+  CHECK(normalize_chinese_ipa_piper_style(std::string("ma\xcb\xa8\xcb\xa9\xcb\xa6")) ==
+        std::string("m\xcb\x88" "a2"));  // mˈa2
+
+  // 骂 ma˥˩ → mˈa5  (Tone 4: 51 → 5)
+  CHECK(normalize_chinese_ipa_piper_style(std::string("ma\xcb\xa5\xcb\xa9")) ==
+        std::string("m\xcb\x88" "a5"));  // mˈa5
+
+  // 吗 ma˧ → ma1  (Neutral: 3 → 1, no stress)
+  CHECK(normalize_chinese_ipa_piper_style(std::string("ma\xcb\xa7")) == "ma1");
+}
+
+TEST_CASE("normalize_chinese_ipa_piper_style retroflexes") {
+  // 知 ʈʂɚ˥˥ → ts.ˈi.5
+  CHECK(normalize_chinese_ipa_piper_style(
+      std::string("\xca\x88\xca\x82\xc9\x9a\xcb\xa5\xcb\xa5")) ==
+      std::string("ts.\xcb\x88i.5"));  // ts.ˈi.5
+
+  // 是 ʂɚ˥˩ → s.ˈi.5
+  CHECK(normalize_chinese_ipa_piper_style(
+      std::string("\xca\x82\xc9\x9a\xcb\xa5\xcb\xa9")) ==
+      std::string("s.\xcb\x88i.5"));  // s.ˈi.5
+
+  // 出 ʈʂʰu˥˥ → ts.hˈu5
+  CHECK(normalize_chinese_ipa_piper_style(
+      std::string("\xca\x88\xca\x82\xca\xb0u\xcb\xa5\xcb\xa5")) ==
+      std::string("ts.h\xcb\x88u5"));  // ts.hˈu5
+}
+
+TEST_CASE("normalize_chinese_ipa_piper_style dental sibilants") {
+  // 资 tsɯ˥˥ → tsˈi̪5
+  CHECK(normalize_chinese_ipa_piper_style(
+      std::string("ts\xc9\xaf\xcb\xa5\xcb\xa5")) ==
+      std::string("ts\xcb\x88i\xcc\xaa" "5"));  // tsˈi̪5
+}
+
+TEST_CASE("normalize_chinese_ipa_piper_style velar fricative") {
+  // 哈 xa˥˥ → χˈa5
+  CHECK(normalize_chinese_ipa_piper_style(
+      std::string("xa\xcb\xa5\xcb\xa5")) ==
+      std::string("\xcf\x87\xcb\x88" "a5"));  // χˈa5
+}
+
+TEST_CASE("normalize_chinese_ipa_piper_style er/erhua") {
+  // 二 aɻ˥˩ → ˈər5  (aɚ → ər after ɻ→ɚ)
+  CHECK(normalize_chinese_ipa_piper_style(
+      std::string("a\xc9\xbb\xcb\xa5\xcb\xa9")) ==
+      std::string("\xcb\x88\xc9\x99r5"));  // ˈər5
+}
+
+TEST_CASE("normalize_chinese_ipa_piper_style mid vowel") {
+  // 歌 kɤ˥˥ → kˈo-5  (ɤ → o-)
+  CHECK(normalize_chinese_ipa_piper_style(
+      std::string("k\xc9\xa4\xcb\xa5\xcb\xa5")) ==
+      std::string("k\xcb\x88o-5"));  // kˈo-5
+
+  // 崩 pɤŋ˥˥ → pˈə5ŋ  (ɤŋ → əŋ, tone before nasal)
+  CHECK(normalize_chinese_ipa_piper_style(
+      std::string("p\xc9\xa4\xc5\x8b\xcb\xa5\xcb\xa5")) ==
+      std::string("p\xcb\x88\xc9\x99" "5\xc5\x8b"));  // pˈə5ŋ
+}
+
+TEST_CASE("normalize_chinese_ipa_piper_style -ong and -uo finals") {
+  // 东 tʊŋ˥˥ → tˈonɡ5  (ʊ→u, uŋ→onɡ)
+  CHECK(normalize_chinese_ipa_piper_style(
+      std::string("t\xca\x8a\xc5\x8b\xcb\xa5\xcb\xa5")) ==
+      std::string("t\xcb\x88on\xc9\xa1" "5"));  // tˈonɡ5
+
+  // 多 tuɔ˥˥ → tˈuo5  (uɔ → uo)
+  CHECK(normalize_chinese_ipa_piper_style(
+      std::string("tu\xc9\x94\xcb\xa5\xcb\xa5")) ==
+      std::string("t\xcb\x88uo5"));  // tˈuo5
+}
+
+TEST_CASE("normalize_chinese_ipa_piper_style ü-finals") {
+  // 月 ɥœ˥˩ → ˈyɛ5  (ɥœ → yɛ; stress before y which is a vowel)
+  // espeak has jˈyɛ5 — the leading j is a remaining gap.
+  CHECK(normalize_chinese_ipa_piper_style(
+      std::string("\xc9\xa5\xc5\x93\xcb\xa5\xcb\xa9")) ==
+      std::string("\xcb\x88y\xc9\x9b" "5"));  // ˈyɛ5
+
+  // 元 ɥœn˧˥ → ˈyæɜn  (ɥœn → yæn, tone 2 → ɜ, tone before n)
+  CHECK(normalize_chinese_ipa_piper_style(
+      std::string("\xc9\xa5\xc5\x93n\xcb\xa7\xcb\xa5")) ==
+      std::string("\xcb\x88y\xc3\xa6\xc9\x9cn"));  // ˈyæɜn
+}
+
+TEST_CASE("normalize_chinese_ipa_piper_style tone repositioning before nasals") {
+  // 班 pan˥˥ → pˈa5n  (tone digit moves before final n)
+  CHECK(normalize_chinese_ipa_piper_style(
+      std::string("pan\xcb\xa5\xcb\xa5")) ==
+      std::string("p\xcb\x88" "a5n"));  // pˈa5n
+
+  // 帮 pɑŋ˥˥ → pˈɑ5ŋ  (tone digit moves before final ŋ)
+  CHECK(normalize_chinese_ipa_piper_style(
+      std::string("p\xc9\x91\xc5\x8b\xcb\xa5\xcb\xa5")) ==
+      std::string("p\xcb\x88\xc9\x91" "5\xc5\x8b"));  // pˈɑ5ŋ
+
+  // 本 pən˨˩˦ → pˈə2n  (tone 3 → 2, before final n)
+  CHECK(normalize_chinese_ipa_piper_style(
+      std::string("p\xc9\x99n\xcb\xa8\xcb\xa9\xcb\xa6")) ==
+      std::string("p\xcb\x88\xc9\x99" "2n"));  // pˈə2n
+}
+
+TEST_CASE("normalize_chinese_ipa_piper_style aspiration") {
+  // 怕 pʰa˥˩ → phˈa5  (ʰ → h)
+  CHECK(normalize_chinese_ipa_piper_style(
+      std::string("p\xca\xb0" "a\xcb\xa5\xcb\xa9")) ==
+      std::string("ph\xcb\x88" "a5"));  // phˈa5
+
+  // 七 tɕʰi˥˥ → tɕhˈi5
+  CHECK(normalize_chinese_ipa_piper_style(
+      std::string("t\xc9\x95\xca\xb0i\xcb\xa5\xcb\xa5")) ==
+      std::string("t\xc9\x95h\xcb\x88i5"));  // tɕhˈi5
+}
+
+TEST_CASE("normalize_g2p_ipa_for_piper Chinese wired up for zh keys") {
+  // 妈 ma˥˥ → mˈa5 via the zh path
+  const std::string ma_in("ma\xcb\xa5\xcb\xa5");
+  const std::string expected("m\xcb\x88" "a5");
+  CHECK(normalize_g2p_ipa_for_piper(ma_in, "zh") == expected);
+  CHECK(normalize_g2p_ipa_for_piper(ma_in, "zh_hans") == expected);
+  CHECK(normalize_g2p_ipa_for_piper(ma_in, "zh_cn") == expected);
+  CHECK(normalize_g2p_ipa_for_piper(ma_in, "zt") == expected);
+}

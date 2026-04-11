@@ -445,6 +445,7 @@ Every language requires a different process to convert its written form into spe
 | tr_tr | 8.9% | 7.9% |
 | uk_ua | 27.7% | 15.6% |
 | vi_vn | 79.0% | 36.5% |
+| zh_hans | 37.8% | 32.6% |
 
 If you want access to just the grapheme to phoneme capability, without the speech synthesis, you can all it directly:
 

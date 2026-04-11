@@ -27,6 +27,11 @@ std::string normalize_russian_ipa_piper_style(std::string ipa);
 /// word-boundary spacing before the next phoneme run).
 std::string normalize_german_ipa_piper_style(std::string ipa);
 
+/// Rewrite Mandarin Chinese IPA from Moonshine lexicon G2P (academic IPA with Chao tone letters)
+/// toward Piper / espeak-ng-style strings: Chao tone letters (˥˦˧˨˩) → numeric digits; tie-bar
+/// affricates → digraphs; ɻ→ɚ; ɯ→ɨ; ɪ→i; ʊ→u.
+std::string normalize_chinese_ipa_piper_style(std::string ipa);
+
 /// NFC, then shared + per-language substring replacements (``piper_lang_key`` matches Python
 /// ``piper_ipa_normalization.normalize_g2p_ipa_for_piper``, e.g. ``en_us``, ``de``, ``es_mx``).
 std::string normalize_g2p_ipa_for_piper(std::string_view ipa_utf8, std::string_view piper_lang_key);
