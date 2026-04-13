@@ -65,6 +65,7 @@ const std::vector<std::string>& piper_bundled_voice_stems_for_data_subdir(const 
         "en_US-ryan-high",
         "en_US-ryan-low",
         "en_US-ryan-medium",
+        "en_US-saikat",
         "en_US-sam-medium",
     };
     m["es_ar"] = std::vector<std::string>{
