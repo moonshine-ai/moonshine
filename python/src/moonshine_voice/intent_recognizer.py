@@ -62,7 +62,7 @@ class IntentRecognizer(TranscriptEventListener):
         model_path: str,
         model_arch: EmbeddingModelArch = EmbeddingModelArch.GEMMA_300M,
         model_variant: str = "fp32",
-        threshold: float = 0.7,
+        threshold: float = 0.8,
     ):
         """
         Initialize an intent recognizer.
@@ -76,7 +76,7 @@ class IntentRecognizer(TranscriptEventListener):
                           or "q4f16". Default is "q4" for efficiency.
             threshold: The minimum similarity threshold used by process_utterance
                       and by get_closest_intents when no per-call threshold is
-                      passed (default 0.7, range 0.0-1.0). Filtering is applied in
+                      passed (default 0.8, range 0.0-1.0). Filtering is applied in
                       the native ``moonshine_get_closest_intents`` call, not at
                       construction.
         """
@@ -412,8 +412,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--threshold",
         type=float,
-        default=0.6,
-        help="Similarity threshold for intent matching (default: 0.6)",
+        default=0.8,
+        help="Similarity threshold for intent matching (default: 0.8)",
     )
     parser.add_argument(
         "--intents",

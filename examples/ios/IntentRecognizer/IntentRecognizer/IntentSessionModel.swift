@@ -24,9 +24,16 @@ private let defaultIntentPhrases: [String] = [
 
 final class IntentSessionModel: ObservableObject {
     @Published var phrases: [IntentPhraseRow]
-    @Published var threshold: Double = 0.3
+    /// Minimum cosine similarity for an intent to count (same as Python `tolerance_threshold` / `--threshold`). **Lower = more permissive**; **0** keeps any score ≥ 0, so the closest phrase almost always matches.
+    @Published var threshold: Double = 0.8
+    /// Minimum similarity value passed into the last completed-line scoring call (verifies the slider is applied).
+    @Published var lastScoredMinimumSimilarity: Double?
+    /// Best intent’s similarity on the last completed line (after the minimum filter).
+    @Published var lastTopMatchSimilarity: Float?
     @Published var highlightedPhraseIDs: Set<UUID> = []
     @Published var statusMessage: String = ""
+    /// Partial or final text for the current transcript line while the mic is on.
+    @Published var liveTranscriptLine: String = ""
     @Published var isListening: Bool = false
     @Published var isEngineReady: Bool = false
 
@@ -113,9 +120,7 @@ final class IntentSessionModel: ObservableObject {
         guard isEngineReady else { return }
         do {
             try reapplyRegisteredIntents()
-            if isListening {
-                statusMessage = "Listening…"
-            } else if !statusMessage.contains("Missing") {
+            if !isListening, !statusMessage.contains("Missing") {
                 statusMessage = "Intents updated."
             }
         } catch {
@@ -141,11 +146,17 @@ final class IntentSessionModel: ObservableObject {
             if isListening {
                 try mic.stop()
                 isListening = false
+                liveTranscriptLine = ""
+                lastScoredMinimumSimilarity = nil
+                lastTopMatchSimilarity = nil
                 statusMessage = "Stopped."
             } else {
+                liveTranscriptLine = ""
+                statusMessage = ""
+                lastScoredMinimumSimilarity = nil
+                lastTopMatchSimilarity = nil
                 try mic.start()
                 isListening = true
-                statusMessage = "Listening…"
             }
         } catch {
             statusMessage = "Microphone error: \(error.localizedDescription)"
@@ -158,16 +169,32 @@ final class IntentSessionModel: ObservableObject {
         let utterance = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !utterance.isEmpty, let intentRecognizer else { return }
 
-        let t = Float(threshold)
+        let minimumSimilarity = Float(threshold)
+        lastScoredMinimumSimilarity = threshold
+
         let matches: [IntentMatch]
         do {
-            matches = try intentRecognizer.getClosestIntents(utterance: utterance, toleranceThreshold: t)
+            matches = try intentRecognizer.getClosestIntents(
+                utterance: utterance,
+                toleranceThreshold: minimumSimilarity
+            )
         } catch {
             statusMessage = "Intent match error: \(error.localizedDescription)"
             return
         }
 
-        guard let top = matches.first else { return }
+        guard let top = matches.first else {
+            lastTopMatchSimilarity = nil
+            return
+        }
+
+        // Belt-and-suspenders: only treat as a match if score meets the current minimum (native layer should already enforce this).
+        if top.similarity + 1e-5 < minimumSimilarity {
+            lastTopMatchSimilarity = top.similarity
+            return
+        }
+
+        lastTopMatchSimilarity = top.similarity
 
         if let row = phrases.first(where: {
             $0.text.trimmingCharacters(in: .whitespacesAndNewlines) == top.canonicalPhrase
@@ -181,7 +208,29 @@ final class IntentSessionModel: ObservableObject {
         guard let mic, isListening else { return }
         try? mic.stop()
         isListening = false
+        liveTranscriptLine = ""
+        lastScoredMinimumSimilarity = nil
+        lastTopMatchSimilarity = nil
         statusMessage = "Paused (app in background)."
+    }
+
+    @MainActor
+    func handleTranscriptLineStarted(_ text: String) {
+        liveTranscriptLine = text
+        if statusMessage.contains("Intent match error") {
+            statusMessage = ""
+        }
+    }
+
+    @MainActor
+    func handleTranscriptLineTextChanged(_ text: String) {
+        liveTranscriptLine = text
+    }
+
+    @MainActor
+    func handleTranscriptLineCompleted(_ text: String) {
+        liveTranscriptLine = text
+        handleCompletedTranscriptLine(text)
     }
 
     @MainActor

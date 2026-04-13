@@ -32,7 +32,7 @@ struct IntentRecognizerOptions {
   std::string model_variant = "q4";
 
   // Minimum similarity threshold to trigger an intent (0.0-1.0)
-  float threshold = 0.7f;
+  float threshold = 0.8f;
 };
 
 /**
