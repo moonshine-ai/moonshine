@@ -17,7 +17,7 @@ static const std::string EMBEDDING_MODEL_DIR = "embeddinggemma-300m-ONNX";
 /**
  * Helper function to create IntentRecognizerOptions with default model path.
  */
-IntentRecognizerOptions make_options(float threshold = 0.7f) {
+IntentRecognizerOptions make_options(float threshold = 0.8f) {
   IntentRecognizerOptions options;
   options.model_path = EMBEDDING_MODEL_DIR;
   options.model_arch = EmbeddingModelArch::GEMMA_300M;

@@ -49,6 +49,9 @@ done < <(grep -rlI \
   --exclude=.env \
   --exclude=icon_mic.xml \
   --exclude=en_US-saikat.onnx.json \
+  --exclude=portuguese-rules.cpp \
+  --exclude=*.bin \
+  --exclude=zh_hans.txt \
   "$OLD_VERSION" .)
 for FILE in "${ACTUAL_FILES[@]}"; do
 	echo "Checking file '$FILE'"
