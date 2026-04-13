@@ -790,10 +790,14 @@ def download_tts_assets(
                 download_voice = None
         except MoonshineTtsLanguageError:
             download_voice = None
+    dep_opts = _merge_tts_query_options(options, voice=download_voice)
+    if not _options_specify_asset_root(dep_opts):
+        dep_opts = dict(dep_opts)
+        dep_opts["g2p_root"] = str(root)
     keys = list_tts_dependency_keys(
         lang_tag,
         voice=download_voice,
-        options=options,
+        options=dep_opts,
     )
     for key in keys:
         if not is_downloadable_tts_asset_key(key):
