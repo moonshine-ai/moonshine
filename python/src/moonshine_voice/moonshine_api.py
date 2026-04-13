@@ -121,14 +121,13 @@ class TranscriberOptionC(ctypes.Structure):
 MoonshineOptionC = TranscriberOptionC
 
 
-# C type for moonshine_intent_callback (intent recognizer).
-MoonshineIntentCallback = ctypes.CFUNCTYPE(
-    None,
-    ctypes.c_void_p,
-    ctypes.c_char_p,
-    ctypes.c_char_p,
-    ctypes.c_float,
-)
+class MoonshineIntentMatchC(ctypes.Structure):
+    """C struct moonshine_intent_match_t (intent recognizer)."""
+
+    _fields_ = [
+        ("canonical_phrase", ctypes.c_char_p),
+        ("similarity", ctypes.c_float),
+    ]
 
 
 class ModelArch(IntEnum):
@@ -602,7 +601,6 @@ class _MoonshineLib:
             ctypes.c_char_p,
             ctypes.c_uint32,
             ctypes.c_char_p,
-            ctypes.c_float,
         ]
 
         lib.moonshine_free_intent_recognizer.restype = None
@@ -612,8 +610,6 @@ class _MoonshineLib:
         lib.moonshine_register_intent.argtypes = [
             ctypes.c_int32,
             ctypes.c_char_p,
-            MoonshineIntentCallback,
-            ctypes.c_void_p,
         ]
 
         lib.moonshine_unregister_intent.restype = ctypes.c_int32
@@ -622,20 +618,20 @@ class _MoonshineLib:
             ctypes.c_char_p,
         ]
 
-        lib.moonshine_process_utterance.restype = ctypes.c_int32
-        lib.moonshine_process_utterance.argtypes = [
+        lib.moonshine_get_closest_intents.restype = ctypes.c_int32
+        lib.moonshine_get_closest_intents.argtypes = [
             ctypes.c_int32,
             ctypes.c_char_p,
-        ]
-
-        lib.moonshine_set_intent_threshold.restype = ctypes.c_int32
-        lib.moonshine_set_intent_threshold.argtypes = [
-            ctypes.c_int32,
             ctypes.c_float,
+            ctypes.POINTER(ctypes.POINTER(MoonshineIntentMatchC)),
+            ctypes.POINTER(ctypes.c_uint64),
         ]
 
-        lib.moonshine_get_intent_threshold.restype = ctypes.c_float
-        lib.moonshine_get_intent_threshold.argtypes = [ctypes.c_int32]
+        lib.moonshine_free_intent_matches.restype = None
+        lib.moonshine_free_intent_matches.argtypes = [
+            ctypes.POINTER(MoonshineIntentMatchC),
+            ctypes.c_uint64,
+        ]
 
         lib.moonshine_get_intent_count.restype = ctypes.c_int32
         lib.moonshine_get_intent_count.argtypes = [ctypes.c_int32]

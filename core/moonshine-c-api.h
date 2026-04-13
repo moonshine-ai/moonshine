@@ -508,16 +508,14 @@ MOONSHINE_EXPORT int32_t moonshine_transcribe_stream(
 /* Supported embedding model architectures for intent recognition.           */
 #define MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M (0)
 
-/* Callback function type for intent handlers. The callback receives:
-   - user_data: The user data pointer passed to moonshine_register_intent.
-   - trigger_phrase: The trigger phrase that matched.
-   - utterance: The utterance that was recognized.
-   - similarity: The similarity score between 0 and 1.
-*/
-typedef void (*moonshine_intent_callback)(void *user_data,
-                                          const char *trigger_phrase,
-                                          const char *utterance,
-                                          float similarity);
+/* Maximum number of intent matches returned by moonshine_get_closest_intents. */
+#define MOONSHINE_INTENT_MAX_MATCHES (6)
+
+/* One ranked intent match from moonshine_get_closest_intents. */
+struct moonshine_intent_match_t {
+  char *canonical_phrase;
+  float similarity;
+};
 
 /* Creates an intent recognizer from files on disk.
 
@@ -530,8 +528,8 @@ typedef void (*moonshine_intent_callback)(void *user_data,
    `model_variant` specifies which model variant to load: "fp32", "fp16", "q8",
    "q4", or "q4f16". Pass NULL to use the default "q4" variant.
 
-   `threshold` is the minimum similarity score required to trigger an intent
-   (default 0.7, range 0.0-1.0).
+   Similarity filtering is done per call in moonshine_get_closest_intents via
+   `tolerance_threshold`, not at construction time.
 
    Returns a non-negative handle on success, or a negative error code on
    failure. The error code can be converted to a human-readable string using
@@ -539,46 +537,50 @@ typedef void (*moonshine_intent_callback)(void *user_data,
 */
 MOONSHINE_EXPORT int32_t
 moonshine_create_intent_recognizer(const char *model_path, uint32_t model_arch,
-                                   const char *model_variant, float threshold);
+                                   const char *model_variant);
 
 /* Frees an intent recognizer and all its resources. */
 MOONSHINE_EXPORT void moonshine_free_intent_recognizer(
     int32_t intent_recognizer_handle);
 
-/* Registers an intent with a trigger phrase and callback. When an utterance
-   is processed that is similar enough to the trigger phrase (above the
-   threshold), the callback will be invoked.
+/* Registers a canonical intent phrase (no callback).
 
    Returns zero on success, or a non-zero error code on failure.
 */
 MOONSHINE_EXPORT int32_t moonshine_register_intent(
-    int32_t intent_recognizer_handle, const char *trigger_phrase,
-    moonshine_intent_callback callback, void *user_data);
+    int32_t intent_recognizer_handle, const char *canonical_phrase);
 
-/* Unregisters an intent by its trigger phrase.
+/* Unregisters an intent by its canonical phrase.
    Returns zero on success, or a non-zero error code on failure.
 */
 MOONSHINE_EXPORT int32_t moonshine_unregister_intent(
-    int32_t intent_recognizer_handle, const char *trigger_phrase);
+    int32_t intent_recognizer_handle, const char *canonical_phrase);
 
-/* Processes an utterance and invokes the callback of the most similar intent
-   if the similarity exceeds the threshold.
-   Returns 1 if an intent was recognized, 0 if not, or a negative error code.
-*/
-MOONSHINE_EXPORT int32_t moonshine_process_utterance(
-    int32_t intent_recognizer_handle, const char *utterance);
+/* Synchronously ranks registered intents against `utterance`.
 
-/* Sets the similarity threshold for the intent recognizer.
-   Returns zero on success, or a non-zero error code on failure.
-*/
-MOONSHINE_EXPORT int32_t moonshine_set_intent_threshold(
-    int32_t intent_recognizer_handle, float threshold);
+   `tolerance_threshold` is the minimum similarity (0.0–1.0, inclusive) for a
+   candidate to appear in the results.
 
-/* Gets the current similarity threshold for the intent recognizer.
-   Returns the threshold on success (>= 0), or a negative error code on failure.
+   On success, returns MOONSHINE_ERROR_NONE, sets `*out_count` to the number
+   of matches (0 to MOONSHINE_INTENT_MAX_MATCHES), and sets `*out_matches` to a
+   heap-allocated array sorted by descending similarity. Each
+   `canonical_phrase` is a separate heap allocation. When `*out_count` is zero,
+   `*out_matches` is set to NULL.
+
+   On failure, returns a non-zero error code and sets `*out_matches` to NULL and
+   `*out_count` to zero.
+
+   Release results with moonshine_free_intent_matches.
 */
-MOONSHINE_EXPORT float moonshine_get_intent_threshold(
-    int32_t intent_recognizer_handle);
+MOONSHINE_EXPORT int32_t moonshine_get_closest_intents(
+    int32_t intent_recognizer_handle, const char *utterance,
+    float tolerance_threshold, struct moonshine_intent_match_t **out_matches,
+    uint64_t *out_count);
+
+/* Frees an array returned by moonshine_get_closest_intents (safe on NULL /
+   zero count). */
+MOONSHINE_EXPORT void moonshine_free_intent_matches(
+    struct moonshine_intent_match_t *matches, uint64_t count);
 
 /* Gets the number of registered intents.
    Returns the count on success (>= 0), or a negative error code on failure.

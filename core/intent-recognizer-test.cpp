@@ -100,6 +100,28 @@ TEST_CASE("intent-recognizer unit tests") {
     CHECK(matched == false);
     CHECK(callback_triggered == false);
   }
+
+  SUBCASE("rank_intents sorts by similarity descending and respects max") {
+    recognizer.register_intent("turn on the lights",
+                               [](const std::string &, float) {});
+    recognizer.register_intent("turn off the lights",
+                               [](const std::string &, float) {});
+    recognizer.register_intent("what is the weather",
+                               [](const std::string &, float) {});
+
+    CHECK(recognizer.rank_intents("", 0.0f, 6).empty());
+
+    auto ranked = recognizer.rank_intents("turn on the lights", 0.0f, 6);
+    CHECK(ranked.size() <= 6);
+    CHECK(ranked.size() >= 1);
+    CHECK(ranked[0].first == "turn on the lights");
+    for (size_t i = 1; i < ranked.size(); ++i) {
+      CHECK(ranked[i - 1].second >= ranked[i].second);
+    }
+
+    auto strict = recognizer.rank_intents("completely unrelated text", 0.99f, 6);
+    CHECK(strict.empty());
+  }
 }
 
 TEST_CASE("intent-recognizer with transcript") {
