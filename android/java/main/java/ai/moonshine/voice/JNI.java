@@ -15,6 +15,9 @@ public class JNI {
 
     public static final int MOONSHINE_FLAG_FORCE_UPDATE = 1 << 0;
 
+    /** Embedding model architecture for intent recognition (Gemma 300M). */
+    public static final int MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M = 0;
+
     /** Pass to TTS/G2P create calls; must match native {@code moonshine-c-api.h}. */
     public static final int MOONSHINE_HEADER_VERSION = 20000;
 
@@ -50,6 +53,25 @@ public class JNI {
 
     public static native Transcript moonshineTranscribeStream(int transcriber_handle,
             int stream_handle, int flags);
+
+    public static native int moonshineCreateIntentRecognizer(String model_path,
+            int embedding_model_arch, String model_variant);
+
+    public static native void moonshineFreeIntentRecognizer(int intent_recognizer_handle);
+
+    public static native int moonshineRegisterIntent(int intent_recognizer_handle,
+            String canonical_phrase);
+
+    public static native int moonshineUnregisterIntent(int intent_recognizer_handle,
+            String canonical_phrase);
+
+    /** Returns null on failure. */
+    public static native IntentMatch[] moonshineGetClosestIntents(
+            int intent_recognizer_handle, String utterance, float tolerance_threshold);
+
+    public static native int moonshineGetIntentCount(int intent_recognizer_handle);
+
+    public static native int moonshineClearIntents(int intent_recognizer_handle);
 
     public static native int moonshineCreateTtsSynthesizerFromFiles(String language,
             String[] filenames, TranscriberOption[] options);

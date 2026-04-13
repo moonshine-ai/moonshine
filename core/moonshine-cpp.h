@@ -58,6 +58,7 @@ class Stream;
 class TranscriptEventListener;
 class TextToSpeech;
 class GraphemeToPhonemizer;
+class IntentRecognizer;
 
 /* ------------------------------ ENUMS -------------------------------- */
 
@@ -69,6 +70,11 @@ enum class ModelArch {
   BASE_STREAMING = MOONSHINE_MODEL_ARCH_BASE_STREAMING,
   SMALL_STREAMING = MOONSHINE_MODEL_ARCH_SMALL_STREAMING,
   MEDIUM_STREAMING = MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING,
+};
+
+/// Embedding model architectures for intent recognition (C API constants).
+enum class EmbeddingModelArch : uint32_t {
+  GEMMA_300M = MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M,
 };
 
 /* --------------------------- DATA STRUCTURES ----------------------------- */
@@ -714,6 +720,63 @@ class GraphemeToPhonemizer {
   void checkError(int32_t error) const;
 };
 
+/* ------------------------------ INTENT RECOGNIZER ------------------------- */
+
+/// One ranked intent from ``IntentRecognizer::getClosestIntents``.
+struct IntentMatch {
+  std::string canonicalPhrase;
+  float similarity{0.0f};
+
+  IntentMatch() = default;
+  IntentMatch(std::string phrase, float sim)
+      : canonicalPhrase(std::move(phrase)), similarity(sim) {}
+};
+
+/// Intent recognizer wrapping the Moonshine intent C API (synchronous ranking).
+class IntentRecognizer {
+ public:
+  /// Load an embedding model from disk.
+  /// @throws MoonshineException if the model cannot be loaded
+  IntentRecognizer(const std::string &model_path, EmbeddingModelArch arch,
+                     const std::string &model_variant = "q4");
+
+  ~IntentRecognizer();
+
+  IntentRecognizer(IntentRecognizer &&other) noexcept;
+  IntentRecognizer &operator=(IntentRecognizer &&other) noexcept;
+
+  IntentRecognizer(const IntentRecognizer &) = delete;
+  IntentRecognizer &operator=(const IntentRecognizer &) = delete;
+
+  /// Register a canonical phrase to match against.
+  /// @throws MoonshineException on failure
+  void registerIntent(const std::string &canonical_phrase);
+
+  /// Remove a phrase. Returns false if it was not registered.
+  bool unregisterIntent(const std::string &canonical_phrase);
+
+  /// Rank registered intents by similarity (see ``moonshine_get_closest_intents``).
+  std::vector<IntentMatch> getClosestIntents(const std::string &utterance,
+                                             float tolerance_threshold);
+
+  /// Number of registered intents.
+  /// @throws MoonshineException on invalid handle
+  int32_t intentCount() const;
+
+  /// Remove all intents.
+  /// @throws MoonshineException on failure
+  void clearIntents();
+
+  void close();
+
+  int32_t getHandle() const { return handle_; }
+
+ private:
+  int32_t handle_;
+
+  void checkError(int32_t error) const;
+};
+
 /* ------------------------------ IMPLEMENTATION
  * -------------------------------- */
 
@@ -1278,6 +1341,105 @@ inline std::string GraphemeToPhonemizer::getDependencies(
 }
 
 inline void GraphemeToPhonemizer::checkError(int32_t error) const {
+  if (error < 0) {
+    const char *errorStr = moonshine_error_to_string(error);
+    std::string message = errorStr ? std::string(errorStr) : "Unknown error";
+    throw MoonshineException(message);
+  }
+}
+
+inline IntentRecognizer::IntentRecognizer(const std::string &model_path,
+                                           EmbeddingModelArch arch,
+                                           const std::string &model_variant)
+    : handle_(-1) {
+  handle_ = moonshine_create_intent_recognizer(
+      model_path.c_str(), static_cast<uint32_t>(arch), model_variant.c_str());
+  checkError(handle_);
+}
+
+inline IntentRecognizer::~IntentRecognizer() { close(); }
+
+inline IntentRecognizer::IntentRecognizer(IntentRecognizer &&other) noexcept
+    : handle_(other.handle_) {
+  other.handle_ = -1;
+}
+
+inline IntentRecognizer &IntentRecognizer::operator=(
+    IntentRecognizer &&other) noexcept {
+  if (this != &other) {
+    close();
+    handle_ = other.handle_;
+    other.handle_ = -1;
+  }
+  return *this;
+}
+
+inline void IntentRecognizer::registerIntent(
+    const std::string &canonical_phrase) {
+  checkError(
+      moonshine_register_intent(handle_, canonical_phrase.c_str()));
+}
+
+inline bool IntentRecognizer::unregisterIntent(
+    const std::string &canonical_phrase) {
+  int32_t err =
+      moonshine_unregister_intent(handle_, canonical_phrase.c_str());
+  if (err == MOONSHINE_ERROR_NONE) {
+    return true;
+  }
+  if (err == MOONSHINE_ERROR_INVALID_ARGUMENT) {
+    return false;
+  }
+  checkError(err);
+  return false;
+}
+
+inline std::vector<IntentMatch> IntentRecognizer::getClosestIntents(
+    const std::string &utterance, float tolerance_threshold) {
+  std::vector<IntentMatch> out;
+  moonshine_intent_match_t *matches = nullptr;
+  uint64_t count = 0;
+  int32_t err = moonshine_get_closest_intents(
+      handle_, utterance.c_str(), tolerance_threshold, &matches, &count);
+  if (err != MOONSHINE_ERROR_NONE) {
+    if (matches != nullptr) {
+      moonshine_free_intent_matches(matches, count);
+    }
+    checkError(err);
+    return out;
+  }
+  out.reserve(static_cast<size_t>(count));
+  for (uint64_t i = 0; i < count; ++i) {
+    const char *ph = matches[i].canonical_phrase;
+    out.emplace_back(ph ? std::string(ph) : std::string(),
+                     matches[i].similarity);
+  }
+  moonshine_free_intent_matches(matches, count);
+  return out;
+}
+
+inline int32_t IntentRecognizer::intentCount() const {
+  int32_t n = moonshine_get_intent_count(handle_);
+  if (n < 0) {
+    const char *errorStr = moonshine_error_to_string(n);
+    throw MoonshineException(errorStr ? std::string(errorStr)
+                                      : "Unknown error");
+  }
+  return n;
+}
+
+inline void IntentRecognizer::clearIntents() {
+  checkError(moonshine_clear_intents(handle_));
+}
+
+inline void IntentRecognizer::close() {
+  if (handle_ >= 0) {
+    moonshine_free_intent_recognizer(handle_);
+    handle_ = -1;
+  }
+}
+
+inline void IntentRecognizer::checkError(int32_t error) const {
   if (error < 0) {
     const char *errorStr = moonshine_error_to_string(error);
     std::string message = errorStr ? std::string(errorStr) : "Unknown error";

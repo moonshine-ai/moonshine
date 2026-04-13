@@ -497,6 +497,99 @@ internal final class MoonshineAPI: @unchecked Sendable {
         free(outJson)
         return result
     }
+
+    // MARK: - Intent recognition
+
+    func createIntentRecognizer(
+        modelPath: String,
+        embeddingModelArch: UInt32,
+        modelVariant: String = "q4"
+    ) throws -> Int32 {
+        let pathC = modelPath.cString(using: .utf8)!
+        let variantC = modelVariant.cString(using: .utf8)!
+        let handle = moonshine_create_intent_recognizer(
+            pathC, embeddingModelArch, variantC)
+        if handle < 0 {
+            throw MoonshineError.custom(
+                message: "Failed to create intent recognizer: \(errorToString(handle))",
+                code: handle)
+        }
+        return handle
+    }
+
+    func freeIntentRecognizer(_ handle: Int32) {
+        moonshine_free_intent_recognizer(handle)
+    }
+
+    func registerIntentRecognizerIntent(handle: Int32, canonicalPhrase: String) throws {
+        let phraseC = canonicalPhrase.cString(using: .utf8)!
+        try checkError(moonshine_register_intent(handle, phraseC))
+    }
+
+    /// - Returns: `true` if an intent was removed, `false` if the phrase was not registered.
+    func unregisterIntentRecognizerIntent(handle: Int32, canonicalPhrase: String) throws -> Bool {
+        let phraseC = canonicalPhrase.cString(using: .utf8)!
+        let err = moonshine_unregister_intent(handle, phraseC)
+        if err == 0 {
+            return true
+        }
+        if err == -3 {
+            return false
+        }
+        try checkError(err)
+        return false
+    }
+
+    func getClosestIntents(
+        intentRecognizerHandle: Int32,
+        utterance: String,
+        toleranceThreshold: Float
+    ) throws -> [(canonicalPhrase: String, similarity: Float)] {
+        var matchesPtr: UnsafeMutablePointer<moonshine_intent_match_t>? = nil
+        var count: UInt64 = 0
+        let err: Int32 = utterance.withCString { utterC in
+            withUnsafeMutablePointer(to: &matchesPtr) { matchesPP in
+                withUnsafeMutablePointer(to: &count) { countP in
+                    moonshine_get_closest_intents(
+                        intentRecognizerHandle,
+                        utterC,
+                        toleranceThreshold,
+                        matchesPP,
+                        countP
+                    )
+                }
+            }
+        }
+        try checkError(err)
+        let n = Int(count)
+        var out: [(canonicalPhrase: String, similarity: Float)] = []
+        if let base = matchesPtr, n > 0 {
+            for i in 0..<n {
+                let row = base[i]
+                let phrase: String
+                if let p = row.canonical_phrase {
+                    phrase = String(cString: p)
+                } else {
+                    phrase = ""
+                }
+                out.append((phrase, row.similarity))
+            }
+        }
+        moonshine_free_intent_matches(matchesPtr, count)
+        return out
+    }
+
+    func getIntentRecognizerIntentCount(handle: Int32) throws -> Int32 {
+        let n = moonshine_get_intent_count(handle)
+        if n < 0 {
+            try checkError(n)
+        }
+        return n
+    }
+
+    func clearIntentRecognizerIntents(handle: Int32) throws {
+        try checkError(moonshine_clear_intents(handle))
+    }
 }
 
 /// Transcriber option for advanced configuration.
