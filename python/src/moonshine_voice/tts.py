@@ -407,12 +407,11 @@ if __name__ == "__main__":
     if args.asset_root is None:
         args.asset_root = tts_asset_cache_path(None)
 
-    extra: Optional[Dict[str, Union[str, int, float, bool]]] = {
-        "g2p_root": str(args.asset_root),
-    }
+    extra: Dict[str, Union[str, int, float, bool]] = {"g2p_root": str(args.asset_root)}
     if args.options:
         try:
-            extra = _parse_options_cli(args.options)
+            for k, v in _parse_options_cli(args.options).items():
+                extra[k] = v
         except ValueError as e:
             print(e, file=sys.stderr)
             sys.exit(2)
