@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		45505035DE2510.536A310D4 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8A5E552E56AC2B8EDE068B3 /* main.swift */; };
+		45505035DE2510.546A310D4 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8A5E552E56AC2B8EDE068B3 /* main.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -16,7 +16,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		B0E9FC6A9CDC860353851556 /* Frameworks */ = {
+		B0E9FC6A9CDC860.54851556 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -67,7 +67,7 @@
 			buildConfigurationList = 7B713F5454E265C62AD032FE /* Build configuration list for PBXNativeTarget "MicTranscription" */;
 			buildPhases = (
 				ABBBEF3A1627101EDF1CF8A0 /* Sources */,
-				B0E9FC6A9CDC860353851556 /* Frameworks */,
+				B0E9FC6A9CDC860.54851556 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -116,7 +116,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				45505035DE2510.536A310D4 /* main.swift in Sources */,
+				45505035DE2510.546A310D4 /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -301,7 +301,7 @@
 			repositoryURL = "https://github.com/moonshine-ai/moonshine-swift.git";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 0.0.53;
+				minimumVersion = 0.0.54;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

@@ -48,6 +48,7 @@ done < <(grep -rlI \
   --exclude=moonshine-cpp-test.cpp \
   --exclude=.env \
   --exclude=icon_mic.xml \
+  --exclude=en_US-saikat.onnx.json \
   "$OLD_VERSION" .)
 for FILE in "${ACTUAL_FILES[@]}"; do
 	echo "Checking file '$FILE'"
