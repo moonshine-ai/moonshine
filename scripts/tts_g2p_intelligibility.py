@@ -978,6 +978,19 @@ def overlay_repo_tts_data_into_asset_root(
 _UPSTREAM_KOKORO_SAMPLE_RATE_HZ = 24000
 _UPSTREAM_KOKORO_REPO_ID = "hexgrad/Kokoro-82M"
 
+# misaki/cutlet ``_romaji_word`` does ``assert not surface.isdigit()``; Sudachi can surface
+# Arabic numerals as digit-only tokens. CJK ideographic digits are not ``str.isdigit()``.
+_KOKORO_JA_MISAKI_DIGIT_TRANSLATION = str.maketrans(
+    "0123456789０１２３４５６７８９",
+    "〇一二三四五六七八九〇一二三四五六七八九",
+)
+
+
+def _kokoro_ja_text_for_misaki_cutlet(text: str) -> str:
+    if not text:
+        return text
+    return text.translate(_KOKORO_JA_MISAKI_DIGIT_TRANSLATION)
+
 
 def moonshine_kokoro_catalog_voice_to_package_voice(catalog_id: str) -> str:
     s = catalog_id.strip()
@@ -1092,8 +1105,12 @@ def synthesize_upstream_kokoro_package(
     pipeline: Any,
     text: str,
     voice: str,
+    *,
+    kokoro_lang_code: Optional[str] = None,
 ) -> Tuple[Optional[List[float]], int, Optional[str]]:
     """hexgrad/kokoro ``KPipeline`` (misaki + espeak-ng G2P inside the package)."""
+    if kokoro_lang_code == "j":
+        text = _kokoro_ja_text_for_misaki_cutlet(text)
     aud_parts: List[np.ndarray] = []
     phone_parts: List[str] = []
     for result in pipeline(text, voice=voice, split_pattern=None):
@@ -1344,7 +1361,10 @@ def run_language(
                 samps, sr_k, uk_ph = cached_uk
             else:
                 samps, sr_k, uk_ph = synthesize_upstream_kokoro_package(
-                    upstream_k_pipe, text, upstream_k_pkg_voice
+                    upstream_k_pipe,
+                    text,
+                    upstream_k_pkg_voice,
+                    kokoro_lang_code=kokoro_lang,
                 )
                 if samps is not None:
                     _write_tts_wav_cache(
