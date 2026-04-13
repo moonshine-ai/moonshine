@@ -6,6 +6,7 @@
 
 #include <nlohmann/json.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <array>
@@ -596,6 +597,74 @@ std::unordered_map<std::string, int64_t> load_vocab_txt_string(std::string_view 
   return load_vocab_txt_stream(in);
 }
 
+bool cjk_tokpos_preferred_chunk_break_cp(char32_t c) {
+  switch (c) {
+    case U' ':
+    case U'\n':
+    case U'\r':
+    case U'\t':
+    case U'。':
+    case U'．':
+    case U'！':
+    case U'？':
+    case U'?':
+    case U'…':
+    case U'、':
+    case U'，':
+    case U',':
+    case U'.':
+    case U';':
+    case U':':
+    case U'|':
+    case U'）':
+    case U'」':
+    case U'』':
+    case U'】':
+    case U'｝':
+    case U')':
+    case U']':
+    case U'}':
+      return true;
+    default:
+      return false;
+  }
+}
+
+template <typename EncodeFn>
+std::size_t cjk_tokpos_chunk_exclusive_end(const std::u32string& full, std::size_t cp_start,
+                                           std::int64_t max_seq_len, EncodeFn&& encode_chunk) {
+  if (cp_start >= full.size()) {
+    return cp_start;
+  }
+  std::size_t lo = cp_start + 1;
+  std::size_t hi = full.size();
+  std::size_t best_excl = cp_start;
+  while (lo <= hi) {
+    const std::size_t mid = lo + (hi - lo) / 2;
+    const EncodedWp enc = encode_chunk(full.substr(cp_start, mid - cp_start));
+    const std::int64_t T = static_cast<std::int64_t>(enc.input_ids.size());
+    if (T <= max_seq_len) {
+      best_excl = mid;
+      lo = mid + 1;
+    } else {
+      if (mid == cp_start + 1) {
+        best_excl = mid;
+        break;
+      }
+      hi = mid - 1;
+    }
+  }
+  if (best_excl <= cp_start) {
+    best_excl = std::min(cp_start + 1, full.size());
+  }
+  for (std::size_t k = best_excl; k > cp_start + 1; --k) {
+    if (cjk_tokpos_preferred_chunk_break_cp(full[k - 1])) {
+      return k;
+    }
+  }
+  return best_excl;
+}
+
 }  // namespace
 
 std::filesystem::path default_chinese_tok_pos_model_dir(const std::filesystem::path& g2p_data_root) {
@@ -682,105 +751,119 @@ std::vector<std::pair<std::string, std::string>> ChineseTokPosOnnx::annotate(std
   const std::string cls_utf8 = cfg.at("cls_token").get<std::string>();
   const std::string sep_utf8 = cfg.at("sep_token").get<std::string>();
 
-  const std::u32string text_u32 = utf8_to_u32(trimmed);
-  EncodedWp enc = encode_bert_wordpiece(text_u32, vocab, bcfg, unk_utf8, cls_utf8, sep_utf8);
-
-  const int64_t T = static_cast<int64_t>(enc.input_ids.size());
-  if (T > max_sequence_length_) {
-    throw std::runtime_error("ChineseTokPosOnnx: sequence length > max_sequence_length not supported");
-  }
-
-  std::vector<int64_t> ids = enc.input_ids;
-  std::vector<int64_t> mask(static_cast<size_t>(T), 1);
-  for (int64_t i = 0; i < T; ++i) {
-    if (ids[static_cast<size_t>(i)] == pad_id_) {
-      mask[static_cast<size_t>(i)] = 0;
-    }
-  }
-
-  const std::array<int64_t, 2> shape{1, T};
-  std::vector<Ort::Value> inputs;
-  inputs.push_back(Ort::Value::CreateTensor<int64_t>(
-      mem_, ids.data(), ids.size(), shape.data(), shape.size()));
-  inputs.push_back(Ort::Value::CreateTensor<int64_t>(
-      mem_, mask.data(), mask.size(), shape.data(), shape.size()));
-
-  const char* in_names[] = {"input_ids", "attention_mask"};
-  const char* out_names[] = {logits_output_name_.c_str()};
-  auto outputs = session_->Run(Ort::RunOptions{nullptr}, in_names, inputs.data(), inputs.size(),
-                               out_names, 1);
-  const float* logits = outputs[0].GetTensorData<float>();
-  const auto info = outputs[0].GetTensorTypeAndShapeInfo();
-  const auto oshape = info.GetShape();
-  if (oshape.size() != 3 || oshape[0] != 1 || oshape[1] != T) {
-    throw std::runtime_error("ChineseTokPosOnnx: unexpected logits shape");
-  }
-  const int64_t num_labels = oshape[2];
-  if (num_labels != static_cast<int64_t>(id2label_.size())) {
-    throw std::runtime_error("ChineseTokPosOnnx: logits last dim != id2label size");
-  }
-
-  std::vector<std::pair<std::string, std::string>> pairs;
-  const std::u32string& ref = enc.ref_u32;
-  std::vector<std::pair<int, int>> cur_spans;
-  std::string cur_tag;
-
-  auto flush = [&]() {
-    if (cur_spans.empty()) {
-      cur_tag.clear();
-      return;
-    }
-    std::string surf;
-    for (const auto& sp : cur_spans) {
-      surf += u32_to_utf8(ref.substr(static_cast<std::size_t>(sp.first),
-                                     static_cast<std::size_t>(sp.second - sp.first)));
-    }
-    pairs.emplace_back(std::move(surf), cur_tag.empty() ? std::string("X") : cur_tag);
-    cur_spans.clear();
-    cur_tag.clear();
+  const std::u32string full_u32 = utf8_to_u32(trimmed);
+  auto encode_chunk = [&](const std::u32string& chunk_u32) {
+    return encode_bert_wordpiece(chunk_u32, vocab, bcfg, unk_utf8, cls_utf8, sep_utf8);
   };
 
-  for (int64_t ti = 0; ti < T; ++ti) {
-    if (ti == 0 || ti == T - 1) {
-      flush();
-      continue;
+  std::vector<std::pair<std::string, std::string>> all_pairs;
+  std::size_t cp_start = 0;
+  while (cp_start < full_u32.size()) {
+    const std::size_t cp_end = cjk_tokpos_chunk_exclusive_end(
+        full_u32, cp_start, static_cast<std::int64_t>(max_sequence_length_), encode_chunk);
+    if (cp_end <= cp_start) {
+      break;
     }
-    const int s = enc.offsets_cp[static_cast<std::size_t>(ti)].first;
-    const int e = enc.offsets_cp[static_cast<std::size_t>(ti)].second;
-    int best = 0;
-    const std::size_t base = static_cast<std::size_t>(ti) * static_cast<std::size_t>(num_labels);
-    float best_v = logits[base];
-    for (int64_t j = 1; j < num_labels; ++j) {
-      const float v = logits[base + static_cast<std::size_t>(j)];
-      if (v > best_v) {
-        best_v = v;
-        best = static_cast<int>(j);
+    EncodedWp enc =
+        encode_bert_wordpiece(full_u32.substr(cp_start, cp_end - cp_start), vocab, bcfg, unk_utf8,
+                              cls_utf8, sep_utf8);
+
+    const int64_t T = static_cast<int64_t>(enc.input_ids.size());
+    std::vector<int64_t> ids = enc.input_ids;
+    std::vector<int64_t> mask(static_cast<size_t>(T), 1);
+    for (int64_t i = 0; i < T; ++i) {
+      if (ids[static_cast<size_t>(i)] == pad_id_) {
+        mask[static_cast<size_t>(i)] = 0;
       }
     }
-    const std::string& lab = id2label_[static_cast<std::size_t>(best)];
-    if (lab.size() >= 2 && lab.compare(0, 2, "B-") == 0) {
-      flush();
-      cur_tag = lab.substr(2);
-      cur_spans.push_back({s, e});
-    } else if (lab.size() >= 2 && lab.compare(0, 2, "I-") == 0) {
-      const std::string suf = lab.substr(2);
+
+    const std::array<int64_t, 2> shape{1, T};
+    std::vector<Ort::Value> inputs;
+    inputs.push_back(Ort::Value::CreateTensor<int64_t>(
+        mem_, ids.data(), ids.size(), shape.data(), shape.size()));
+    inputs.push_back(Ort::Value::CreateTensor<int64_t>(
+        mem_, mask.data(), mask.size(), shape.data(), shape.size()));
+
+    const char* in_names[] = {"input_ids", "attention_mask"};
+    const char* out_names[] = {logits_output_name_.c_str()};
+    auto outputs = session_->Run(Ort::RunOptions{nullptr}, in_names, inputs.data(), inputs.size(),
+                                 out_names, 1);
+    const float* logits = outputs[0].GetTensorData<float>();
+    const auto info = outputs[0].GetTensorTypeAndShapeInfo();
+    const auto oshape = info.GetShape();
+    if (oshape.size() != 3 || oshape[0] != 1 || oshape[1] != T) {
+      throw std::runtime_error("ChineseTokPosOnnx: unexpected logits shape");
+    }
+    const int64_t num_labels = oshape[2];
+    if (num_labels != static_cast<int64_t>(id2label_.size())) {
+      throw std::runtime_error("ChineseTokPosOnnx: logits last dim != id2label size");
+    }
+
+    std::vector<std::pair<std::string, std::string>> chunk_pairs;
+    const std::u32string& ref = enc.ref_u32;
+    std::vector<std::pair<int, int>> cur_spans;
+    std::string cur_tag;
+
+    auto flush = [&]() {
       if (cur_spans.empty()) {
-        cur_tag = suf;
-        cur_spans.push_back({s, e});
-      } else {
-        cur_spans.push_back({s, e});
-        if (cur_tag.empty()) {
-          cur_tag = suf;
+        cur_tag.clear();
+        return;
+      }
+      std::string surf;
+      for (const auto& sp : cur_spans) {
+        surf += u32_to_utf8(ref.substr(static_cast<std::size_t>(sp.first),
+                                       static_cast<std::size_t>(sp.second - sp.first)));
+      }
+      chunk_pairs.emplace_back(std::move(surf), cur_tag.empty() ? std::string("X") : cur_tag);
+      cur_spans.clear();
+      cur_tag.clear();
+    };
+
+    for (int64_t ti = 0; ti < T; ++ti) {
+      if (ti == 0 || ti == T - 1) {
+        flush();
+        continue;
+      }
+      const int s = enc.offsets_cp[static_cast<std::size_t>(ti)].first;
+      const int e = enc.offsets_cp[static_cast<std::size_t>(ti)].second;
+      int best = 0;
+      const std::size_t base = static_cast<std::size_t>(ti) * static_cast<std::size_t>(num_labels);
+      float best_v = logits[base];
+      for (int64_t j = 1; j < num_labels; ++j) {
+        const float v = logits[base + static_cast<std::size_t>(j)];
+        if (v > best_v) {
+          best_v = v;
+          best = static_cast<int>(j);
         }
       }
-    } else {
-      flush();
-      pairs.emplace_back(
-          u32_to_utf8(ref.substr(static_cast<std::size_t>(s), static_cast<std::size_t>(e - s))), lab);
+      const std::string& lab = id2label_[static_cast<std::size_t>(best)];
+      if (lab.size() >= 2 && lab.compare(0, 2, "B-") == 0) {
+        flush();
+        cur_tag = lab.substr(2);
+        cur_spans.push_back({s, e});
+      } else if (lab.size() >= 2 && lab.compare(0, 2, "I-") == 0) {
+        const std::string suf = lab.substr(2);
+        if (cur_spans.empty()) {
+          cur_tag = suf;
+          cur_spans.push_back({s, e});
+        } else {
+          cur_spans.push_back({s, e});
+          if (cur_tag.empty()) {
+            cur_tag = suf;
+          }
+        }
+      } else {
+        flush();
+        chunk_pairs.emplace_back(
+            u32_to_utf8(ref.substr(static_cast<std::size_t>(s), static_cast<std::size_t>(e - s))),
+            lab);
+      }
     }
+    flush();
+    all_pairs.insert(all_pairs.end(), chunk_pairs.begin(), chunk_pairs.end());
+    cp_start = cp_end;
   }
-  flush();
-  return pairs;
+  return all_pairs;
 }
 
 }  // namespace moonshine_tts

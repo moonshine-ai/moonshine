@@ -437,6 +437,7 @@ Every language requires a different process to convert its written form into spe
 | fr_fr | 14.8% | 9.4% |
 | hi_in | 26.5% | 15.9% |
 | it_it | 24.2% | 11.4% |
+| ja_jp | 38.1% | 16.8% |
 | ko_kr | 25.0% | 18.6% |
 | nl_nl | 15.9% | 3.3% |
 | pt_br | 19.7% | 4.9% |

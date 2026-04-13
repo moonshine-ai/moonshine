@@ -6,6 +6,7 @@
 
 #include <nlohmann/json.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <array>
@@ -613,6 +614,74 @@ std::unordered_map<std::string, int64_t> load_vocab_txt_string(std::string_view 
   return load_vocab_txt_stream(in);
 }
 
+bool cjk_tokpos_preferred_chunk_break_cp(char32_t c) {
+  switch (c) {
+    case U' ':
+    case U'\n':
+    case U'\r':
+    case U'\t':
+    case U'。':
+    case U'．':
+    case U'！':
+    case U'？':
+    case U'?':
+    case U'…':
+    case U'、':
+    case U'，':
+    case U',':
+    case U'.':
+    case U';':
+    case U':':
+    case U'|':
+    case U'）':
+    case U'」':
+    case U'』':
+    case U'】':
+    case U'｝':
+    case U')':
+    case U']':
+    case U'}':
+      return true;
+    default:
+      return false;
+  }
+}
+
+template <typename EncodeFn>
+std::size_t cjk_tokpos_chunk_exclusive_end(const std::u32string& full, std::size_t cp_start,
+                                           std::int64_t max_seq_len, EncodeFn&& encode_chunk) {
+  if (cp_start >= full.size()) {
+    return cp_start;
+  }
+  std::size_t lo = cp_start + 1;
+  std::size_t hi = full.size();
+  std::size_t best_excl = cp_start;
+  while (lo <= hi) {
+    const std::size_t mid = lo + (hi - lo) / 2;
+    const EncodedWp enc = encode_chunk(full.substr(cp_start, mid - cp_start));
+    const std::int64_t T = static_cast<std::int64_t>(enc.input_ids.size());
+    if (T <= max_seq_len) {
+      best_excl = mid;
+      lo = mid + 1;
+    } else {
+      if (mid == cp_start + 1) {
+        best_excl = mid;
+        break;
+      }
+      hi = mid - 1;
+    }
+  }
+  if (best_excl <= cp_start) {
+    best_excl = std::min(cp_start + 1, full.size());
+  }
+  for (std::size_t k = best_excl; k > cp_start + 1; --k) {
+    if (cjk_tokpos_preferred_chunk_break_cp(full[k - 1])) {
+      return k;
+    }
+  }
+  return best_excl;
+}
+
 }  // namespace
 
 std::filesystem::path default_japanese_tok_pos_model_dir(const std::filesystem::path& g2p_data_root) {
@@ -699,78 +768,89 @@ std::vector<std::pair<std::string, std::string>> JapaneseTokPosOnnx::annotate(st
   const std::string cls_utf8 = cfg.at("cls_token").get<std::string>();
   const std::string sep_utf8 = cfg.at("sep_token").get<std::string>();
 
-  const std::u32string text_u32 = utf8_to_u32(trimmed);
-  EncodedWp enc = encode_bert_wordpiece(text_u32, vocab, bcfg, unk_utf8, cls_utf8, sep_utf8);
+  const std::u32string full_u32 = utf8_to_u32(trimmed);
+  auto encode_chunk = [&](const std::u32string& chunk_u32) {
+    return encode_bert_wordpiece(chunk_u32, vocab, bcfg, unk_utf8, cls_utf8, sep_utf8);
+  };
 
-  const int64_t T = static_cast<int64_t>(enc.input_ids.size());
-  if (T > max_sequence_length_) {
-    throw std::runtime_error("JapaneseTokPosOnnx: sequence length > max_sequence_length not supported");
-  }
-
-  std::vector<int64_t> ids = enc.input_ids;
-  std::vector<int64_t> mask(static_cast<size_t>(T), 1);
-  for (int64_t i = 0; i < T; ++i) {
-    if (ids[static_cast<size_t>(i)] == pad_id_) {
-      mask[static_cast<size_t>(i)] = 0;
+  std::vector<std::pair<std::string, std::string>> all_pairs;
+  std::size_t cp_start = 0;
+  while (cp_start < full_u32.size()) {
+    const std::size_t cp_end = cjk_tokpos_chunk_exclusive_end(
+        full_u32, cp_start, static_cast<std::int64_t>(max_sequence_length_), encode_chunk);
+    if (cp_end <= cp_start) {
+      break;
     }
-  }
+    EncodedWp enc =
+        encode_bert_wordpiece(full_u32.substr(cp_start, cp_end - cp_start), vocab, bcfg, unk_utf8,
+                              cls_utf8, sep_utf8);
 
-  const std::array<int64_t, 2> shape{1, T};
-  std::vector<Ort::Value> inputs;
-  inputs.push_back(Ort::Value::CreateTensor<int64_t>(
-      mem_, ids.data(), ids.size(), shape.data(), shape.size()));
-  inputs.push_back(Ort::Value::CreateTensor<int64_t>(
-      mem_, mask.data(), mask.size(), shape.data(), shape.size()));
-
-  const char* in_names[] = {"input_ids", "attention_mask"};
-  const char* out_names[] = {logits_output_name_.c_str()};
-  auto outputs = session_->Run(Ort::RunOptions{nullptr}, in_names, inputs.data(), inputs.size(),
-                               out_names, 1);
-  const float* logits = outputs[0].GetTensorData<float>();
-  const auto info = outputs[0].GetTensorTypeAndShapeInfo();
-  const auto oshape = info.GetShape();
-  if (oshape.size() != 3 || oshape[0] != 1 || oshape[1] != T) {
-    throw std::runtime_error("JapaneseTokPosOnnx: unexpected logits shape");
-  }
-  const int64_t num_labels = oshape[2];
-  if (num_labels != static_cast<int64_t>(id2label_.size())) {
-    throw std::runtime_error("JapaneseTokPosOnnx: logits last dim != id2label size");
-  }
-
-  std::vector<std::pair<std::string, std::string>> pairs;
-  for (const std::vector<int>& g : enc.word_groups) {
-    if (g.empty()) {
-      continue;
+    const int64_t T = static_cast<int64_t>(enc.input_ids.size());
+    std::vector<int64_t> ids = enc.input_ids;
+    std::vector<int64_t> mask(static_cast<size_t>(T), 1);
+    for (int64_t i = 0; i < T; ++i) {
+      if (ids[static_cast<size_t>(i)] == pad_id_) {
+        mask[static_cast<size_t>(i)] = 0;
+      }
     }
-    std::vector<double> pooled(static_cast<size_t>(num_labels), 0.0);
-    for (int ti : g) {
-      if (ti < 0 || static_cast<int64_t>(ti) >= T) {
+
+    const std::array<int64_t, 2> shape{1, T};
+    std::vector<Ort::Value> inputs;
+    inputs.push_back(Ort::Value::CreateTensor<int64_t>(
+        mem_, ids.data(), ids.size(), shape.data(), shape.size()));
+    inputs.push_back(Ort::Value::CreateTensor<int64_t>(
+        mem_, mask.data(), mask.size(), shape.data(), shape.size()));
+
+    const char* in_names[] = {"input_ids", "attention_mask"};
+    const char* out_names[] = {logits_output_name_.c_str()};
+    auto outputs = session_->Run(Ort::RunOptions{nullptr}, in_names, inputs.data(), inputs.size(),
+                                 out_names, 1);
+    const float* logits = outputs[0].GetTensorData<float>();
+    const auto info = outputs[0].GetTensorTypeAndShapeInfo();
+    const auto oshape = info.GetShape();
+    if (oshape.size() != 3 || oshape[0] != 1 || oshape[1] != T) {
+      throw std::runtime_error("JapaneseTokPosOnnx: unexpected logits shape");
+    }
+    const int64_t num_labels = oshape[2];
+    if (num_labels != static_cast<int64_t>(id2label_.size())) {
+      throw std::runtime_error("JapaneseTokPosOnnx: logits last dim != id2label size");
+    }
+
+    for (const std::vector<int>& g : enc.word_groups) {
+      if (g.empty()) {
         continue;
       }
-      const std::size_t base = static_cast<std::size_t>(ti) * static_cast<std::size_t>(num_labels);
-      for (int64_t j = 0; j < num_labels; ++j) {
-        pooled[static_cast<size_t>(j)] += static_cast<double>(logits[base + static_cast<size_t>(j)]);
+      std::vector<double> pooled(static_cast<size_t>(num_labels), 0.0);
+      for (int ti : g) {
+        if (ti < 0 || static_cast<int64_t>(ti) >= T) {
+          continue;
+        }
+        const std::size_t base = static_cast<std::size_t>(ti) * static_cast<std::size_t>(num_labels);
+        for (int64_t j = 0; j < num_labels; ++j) {
+          pooled[static_cast<size_t>(j)] += static_cast<double>(logits[base + static_cast<size_t>(j)]);
+        }
       }
-    }
-    const double denom = static_cast<double>(g.size());
-    int best = 0;
-    double best_v = pooled[0] / denom;
-    for (int64_t j = 1; j < num_labels; ++j) {
-      const double v = pooled[static_cast<size_t>(j)] / denom;
-      if (v > best_v) {
-        best_v = v;
-        best = static_cast<int>(j);
+      const double denom = static_cast<double>(g.size());
+      int best = 0;
+      double best_v = pooled[0] / denom;
+      for (int64_t j = 1; j < num_labels; ++j) {
+        const double v = pooled[static_cast<size_t>(j)] / denom;
+        if (v > best_v) {
+          best_v = v;
+          best = static_cast<int>(j);
+        }
       }
+      const std::string& raw_label = id2label_[static_cast<size_t>(best)];
+      const std::string upos = morph_label_to_upos(raw_label);
+      const int st = enc.offsets_cp[static_cast<size_t>(g.front())].first;
+      const int en = enc.offsets_cp[static_cast<size_t>(g.back())].second;
+      std::u32string surf_u = enc.ref_u32.substr(static_cast<std::size_t>(st),
+                                                 static_cast<std::size_t>(en - st));
+      all_pairs.emplace_back(u32_to_utf8(surf_u), upos);
     }
-    const std::string& raw_label = id2label_[static_cast<size_t>(best)];
-    const std::string upos = morph_label_to_upos(raw_label);
-    const int st = enc.offsets_cp[static_cast<size_t>(g.front())].first;
-    const int en = enc.offsets_cp[static_cast<size_t>(g.back())].second;
-    std::u32string surf_u = enc.ref_u32.substr(static_cast<std::size_t>(st),
-                                               static_cast<std::size_t>(en - st));
-    pairs.emplace_back(u32_to_utf8(surf_u), upos);
+    cp_start = cp_end;
   }
-  return pairs;
+  return all_pairs;
 }
 
 }  // namespace moonshine_tts
