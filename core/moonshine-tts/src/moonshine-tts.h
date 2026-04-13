@@ -94,6 +94,12 @@ class MoonshineTTS {
 
   std::vector<float> synthesize(std::string_view text);
 
+  /// Synthesize with per-call option overrides (same key names as ``MoonshineTTSOptions::parse_options``).
+  /// Currently only ``speed`` is applied at synthesis time; other entries are ignored.
+  std::vector<float> synthesize(
+      std::string_view text,
+      const std::vector<std::pair<std::string, std::string>>& option_overrides);
+
  private:
   struct Impl;
   std::unique_ptr<Impl> impl_;

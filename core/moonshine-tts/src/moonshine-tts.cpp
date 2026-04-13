@@ -6,6 +6,7 @@
 #include "moonshine-g2p.h"
 #include "ort-onnx-external-data.h"
 #include "piper-tts.h"
+#include "string-utils.h"
 #include "utf8-utils.h"
 
 #include <onnxruntime_cxx_api.h>
@@ -24,8 +25,11 @@ extern "C" {
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <mutex>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -53,6 +57,18 @@ void replace_utf8(std::string& s, std::string_view old_s, std::string_view new_s
     s.replace(pos, old_s.size(), new_s);
     pos += new_s.size();
   }
+}
+
+std::optional<double> parse_speed_override_from_pairs(
+    const std::vector<std::pair<std::string, std::string>>& pairs) {
+  std::optional<double> out;
+  for (const auto& e : pairs) {
+    const std::string key = replace_all(to_lowercase(e.first), "-", "_");
+    if (key == "speed") {
+      out = static_cast<double>(float_from_string(trim(e.second).c_str()));
+    }
+  }
+  return out;
 }
 
 bool py_isspace_utf8_ch(std::string_view ch) {
@@ -814,6 +830,15 @@ struct KokoroTtsEngine {
     speed_elem_type_ = static_cast<ONNXTensorElementDataType>(tinfo.GetElementType());
   }
 
+  double speed() const { return speed_; }
+
+  void set_speed(double s) {
+    if (!(s > 0.0) || !std::isfinite(s)) {
+      throw std::runtime_error("MoonshineTTS: speed must be a positive finite number");
+    }
+    speed_ = s;
+  }
+
   explicit KokoroTtsEngine(std::string_view language, MoonshineTTSOptions opt) {
     if (!(opt.speed > 0.0) || !std::isfinite(opt.speed)) {
       throw std::runtime_error("MoonshineTTS: speed must be a positive finite number");
@@ -1002,6 +1027,7 @@ struct KokoroTtsEngine {
 struct MoonshineTTS::Impl {
   std::unique_ptr<KokoroTtsEngine> kokoro_;
   std::unique_ptr<PiperTTS> piper_;
+  std::mutex synth_mu_;
 
   explicit Impl(std::string_view language, const MoonshineTTSOptions& opt_in) {
     MoonshineTTSOptions opt = opt_in;
@@ -1040,11 +1066,44 @@ struct MoonshineTTS::Impl {
     }
   }
 
-  std::vector<float> synthesize(std::string_view text) {
+  std::vector<float> synthesize_unlocked(std::string_view text) {
     if (kokoro_) {
       return kokoro_->synthesize(text);
     }
     return piper_->synthesize(text);
+  }
+
+  std::vector<float> synthesize(std::string_view text) {
+    std::lock_guard<std::mutex> lock(synth_mu_);
+    return synthesize_unlocked(text);
+  }
+
+  std::vector<float> synthesize_with_speed_override(std::string_view text, double speed) {
+    std::lock_guard<std::mutex> lock(synth_mu_);
+    double prev = 0.0;
+    if (kokoro_) {
+      prev = kokoro_->speed();
+      kokoro_->set_speed(speed);
+    } else {
+      prev = piper_->speed();
+      piper_->set_speed(speed);
+    }
+    try {
+      std::vector<float> wave = synthesize_unlocked(text);
+      if (kokoro_) {
+        kokoro_->set_speed(prev);
+      } else {
+        piper_->set_speed(prev);
+      }
+      return wave;
+    } catch (...) {
+      if (kokoro_) {
+        kokoro_->set_speed(prev);
+      } else {
+        piper_->set_speed(prev);
+      }
+      throw;
+    }
   }
 };
 
@@ -1057,6 +1116,19 @@ MoonshineTTS::MoonshineTTS(MoonshineTTS&&) noexcept = default;
 MoonshineTTS& MoonshineTTS::operator=(MoonshineTTS&&) noexcept = default;
 
 std::vector<float> MoonshineTTS::synthesize(std::string_view text) { return impl_->synthesize(text); }
+
+std::vector<float> MoonshineTTS::synthesize(
+    std::string_view text,
+    const std::vector<std::pair<std::string, std::string>>& option_overrides) {
+  if (option_overrides.empty()) {
+    return synthesize(text);
+  }
+  const std::optional<double> sp = parse_speed_override_from_pairs(option_overrides);
+  if (!sp.has_value()) {
+    return synthesize(text);
+  }
+  return impl_->synthesize_with_speed_override(text, *sp);
+}
 
 void write_wav_mono_pcm16(const std::filesystem::path& path, const std::vector<float>& samples) {
   // parent_path() is empty for plain filenames like "out.wav"; create_directories("") throws on some libstdc++.

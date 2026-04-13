@@ -813,7 +813,19 @@ int32_t moonshine_text_to_speech(int32_t tts_synthesizer_handle,
   try {
     moonshine_tts::MoonshineTTS *synth =
         text_to_speech_synthesizer_map[tts_synthesizer_handle];
-    const std::vector<float> wave = synth->synthesize(text);
+    std::vector<std::pair<std::string, std::string>> tts_pairs;
+    if (options != nullptr && options_count > 0) {
+      tts_pairs.reserve(static_cast<size_t>(options_count));
+      for (uint64_t i = 0; i < options_count; i++) {
+        const moonshine_option_t &option = options[i];
+        const std::string name = option.name != nullptr ? std::string(option.name) : std::string();
+        const std::string value =
+            option.value != nullptr ? std::string(option.value) : std::string();
+        tts_pairs.emplace_back(std::move(name), std::move(value));
+      }
+    }
+    const std::vector<float> wave = tts_pairs.empty() ? synth->synthesize(text)
+                                                       : synth->synthesize(text, tts_pairs);
     *out_sample_rate = moonshine_tts::MoonshineTTS::kSampleRateHz;
     *out_audio_data_size = wave.size();
     *out_audio_data = nullptr;
