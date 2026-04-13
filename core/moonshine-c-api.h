@@ -699,6 +699,12 @@ MOONSHINE_EXPORT int32_t moonshine_get_tts_voices(
     uint64_t options_count, char **out_voices_json);
 
 /* Synthesizes text to speech.
+   ``options`` / ``options_count``: optional per-call overrides using the same
+   ``name`` / ``value`` convention as the synthesizer constructor. Currently only
+   ``speed`` is honored for the duration of this call (Kokoro ONNX input and Piper
+   length scale); other entries are ignored. Pass NULL / 0 to use the synthesizer
+   default speed from construction.
+
    Returns zero on success, or a non-zero error code on failure.
 */
 MOONSHINE_EXPORT int32_t moonshine_text_to_speech(

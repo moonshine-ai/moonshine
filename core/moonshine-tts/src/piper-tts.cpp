@@ -656,6 +656,8 @@ void PiperTTS::set_lang(std::string_view lang_cli) { impl_->set_lang(std::string
 
 void PiperTTS::set_speed(double speed) { impl_->set_speed(speed); }
 
+double PiperTTS::speed() const { return impl_->speed_; }
+
 void PiperTTS::set_onnx_model(std::string_view basename_or_stem) { impl_->set_onnx_model(basename_or_stem); }
 
 std::vector<float> PiperTTS::synthesize(std::string_view text) { return impl_->synthesize(text); }

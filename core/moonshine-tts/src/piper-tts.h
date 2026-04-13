@@ -61,6 +61,7 @@ class PiperTTS {
 
   void set_lang(std::string_view lang_cli);
   void set_speed(double speed);
+  double speed() const;
   /// Basename or stem of an ``.onnx`` under ``voices_dir``.
   void set_onnx_model(std::string_view basename_or_stem);
 

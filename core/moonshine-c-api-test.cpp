@@ -454,6 +454,52 @@ TEST_CASE("moonshine-test-v2") {
             MOONSHINE_HEADER_VERSION);
     REQUIRE(tts_synthesizer_handle >= 0);
   }
+  SUBCASE("tts-synthesizer-per-call-speed-kokoro") {
+    const auto data_root = find_moonshine_tts_data_dir();
+    if (!data_root) {
+      MESSAGE("skip: moonshine-tts data directory not found");
+      return;
+    }
+    const std::string model_root_str = data_root->string();
+    const moonshine_option_t create_opts[] = {
+        {"model_root", model_root_str.c_str()},
+        {"lang", "en_us"},
+        {"voice", "kokoro_af_heart"},
+        {"speed", "1.0"},
+    };
+    const int32_t h = moonshine_create_tts_synthesizer_from_files(
+        "en_us", nullptr, 0, create_opts,
+        static_cast<uint64_t>(sizeof(create_opts) / sizeof(create_opts[0])),
+        MOONSHINE_HEADER_VERSION);
+    REQUIRE(h >= 0);
+    const char* text = "Hello world. Testing per-call speed through the C API.";
+    float* a0 = nullptr;
+    uint64_t n0 = 0;
+    int32_t sr0 = 0;
+    REQUIRE(moonshine_text_to_speech(h, text, nullptr, 0, &a0, &n0, &sr0) == MOONSHINE_ERROR_NONE);
+    REQUIRE(n0 > 2000);
+    REQUIRE(a0 != nullptr);
+    std::free(a0);
+    const moonshine_option_t fast_opts[] = {{"speed", "2.0"}};
+    float* a1 = nullptr;
+    uint64_t n1 = 0;
+    int32_t sr1 = 0;
+    REQUIRE(moonshine_text_to_speech(h, text, fast_opts,
+                                     static_cast<uint64_t>(sizeof(fast_opts) / sizeof(fast_opts[0])),
+                                     &a1, &n1, &sr1) == MOONSHINE_ERROR_NONE);
+    REQUIRE(a1 != nullptr);
+    CHECK(n1 < n0);
+    std::free(a1);
+    float* a2 = nullptr;
+    uint64_t n2 = 0;
+    int32_t sr2 = 0;
+    REQUIRE(moonshine_text_to_speech(h, text, nullptr, 0, &a2, &n2, &sr2) == MOONSHINE_ERROR_NONE);
+    CHECK(n2 == n0);
+    if (a2 != nullptr) {
+      std::free(a2);
+    }
+    moonshine_free_tts_synthesizer(h);
+  }
   SUBCASE("tts-piper-german-from-memory") {
     const std::filesystem::path voices_dir = find_de_piper_voices_dir();
     if (voices_dir.empty()) {
