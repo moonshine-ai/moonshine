@@ -879,4 +879,23 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     CHECK(json.find("\"state\":\"found\"") != std::string::npos);
     std::free(out);
   }
+
+  SUBCASE("tts-voices-piper-en_us-includes-saikat-stem") {
+    const auto data_root = find_moonshine_tts_data_dir();
+    if (!data_root) {
+      MESSAGE("skip: moonshine-tts data directory not found");
+      return;
+    }
+    const std::string g2p_root_str = data_root->string();
+    const moonshine_option_t opts[] = {
+        {"g2p_root", g2p_root_str.c_str()},
+    };
+    char* out = nullptr;
+    REQUIRE(moonshine_get_tts_voices("en_us", opts, 1, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string json(out);
+    CHECK(json.find("\"piper_en_US-saikat\"") != std::string::npos);
+    CHECK(json.find("\"state\":\"found\"") != std::string::npos);
+    std::free(out);
+  }
 }
