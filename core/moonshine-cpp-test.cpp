@@ -288,4 +288,29 @@ TEST_CASE("moonshine-cpp-test") {
     std::string ipa = g2p.toIpa(text);
     REQUIRE(ipa.size() > 10);
   }
+  SUBCASE("intent recognizer invalid model path throws") {
+    REQUIRE_THROWS_AS((void)moonshine::IntentRecognizer(
+                          "/nonexistent/moonshine/embedding/model",
+                          moonshine::EmbeddingModelArch::GEMMA_300M),
+                      moonshine::MoonshineException);
+  }
+  SUBCASE("intent recognizer closest intents when embedding model present") {
+    const std::string dir = "embeddinggemma-300m-ONNX";
+    if (!file_exists(dir + "/model.onnx")) {
+      return;
+    }
+    moonshine::IntentRecognizer recognizer(
+        dir, moonshine::EmbeddingModelArch::GEMMA_300M);
+    REQUIRE(recognizer.intentCount() == 0);
+    recognizer.registerIntent("turn on the lights");
+    REQUIRE(recognizer.intentCount() == 1);
+    auto ranked =
+        recognizer.getClosestIntents("turn on the lights", 0.0f);
+    REQUIRE(ranked.size() >= 1);
+    REQUIRE(ranked[0].canonicalPhrase == "turn on the lights");
+    REQUIRE_FALSE(recognizer.unregisterIntent("unknown phrase"));
+    REQUIRE(recognizer.unregisterIntent("turn on the lights"));
+    REQUIRE(recognizer.intentCount() == 0);
+    recognizer.clearIntents();
+  }
 }

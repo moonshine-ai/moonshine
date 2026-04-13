@@ -1017,3 +1017,141 @@ Java_ai_moonshine_voice_JNI_moonshineTextToPhonemes(
   }
 }
 
+extern "C" JNIEXPORT jint JNICALL
+Java_ai_moonshine_voice_JNI_moonshineCreateIntentRecognizer(
+    JNIEnv *env, jobject /* this */, jstring model_path,
+    jint embedding_arch, jstring model_variant) {
+  try {
+    if (model_path == nullptr) {
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
+    }
+    const char *path_ptr = env->GetStringUTFChars(model_path, nullptr);
+    const char *var_ptr = nullptr;
+    if (model_variant != nullptr) {
+      var_ptr = env->GetStringUTFChars(model_variant, nullptr);
+    }
+    const int32_t handle = moonshine_create_intent_recognizer(
+        path_ptr, static_cast<uint32_t>(embedding_arch),
+        var_ptr != nullptr ? var_ptr : "q4");
+    env->ReleaseStringUTFChars(model_path, path_ptr);
+    if (model_variant != nullptr && var_ptr != nullptr) {
+      env->ReleaseStringUTFChars(model_variant, var_ptr);
+    }
+    return handle;
+  } catch (const std::exception &e) {
+    LOGE("moonshineCreateIntentRecognizer: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_ai_moonshine_voice_JNI_moonshineFreeIntentRecognizer(
+    JNIEnv * /* env */, jobject /* this */, jint intent_handle) {
+  moonshine_free_intent_recognizer(intent_handle);
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_ai_moonshine_voice_JNI_moonshineRegisterIntent(JNIEnv *env, jobject /* this */,
+                                                    jint intent_handle,
+                                                    jstring canonical_phrase) {
+  try {
+    if (canonical_phrase == nullptr) {
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
+    }
+    const char *phrase = env->GetStringUTFChars(canonical_phrase, nullptr);
+    const int32_t err = moonshine_register_intent(intent_handle, phrase);
+    env->ReleaseStringUTFChars(canonical_phrase, phrase);
+    return err;
+  } catch (const std::exception &e) {
+    LOGE("moonshineRegisterIntent: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_ai_moonshine_voice_JNI_moonshineUnregisterIntent(
+    JNIEnv *env, jobject /* this */, jint intent_handle,
+    jstring canonical_phrase) {
+  try {
+    if (canonical_phrase == nullptr) {
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
+    }
+    const char *phrase = env->GetStringUTFChars(canonical_phrase, nullptr);
+    const int32_t err = moonshine_unregister_intent(intent_handle, phrase);
+    env->ReleaseStringUTFChars(canonical_phrase, phrase);
+    return err;
+  } catch (const std::exception &e) {
+    LOGE("moonshineUnregisterIntent: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+extern "C" JNIEXPORT jobjectArray JNICALL
+Java_ai_moonshine_voice_JNI_moonshineGetClosestIntents(
+    JNIEnv *env, jobject /* this */, jint intent_handle, jstring utterance,
+    jfloat tolerance) {
+  try {
+    if (utterance == nullptr) {
+      return nullptr;
+    }
+    const char *utter = env->GetStringUTFChars(utterance, nullptr);
+    moonshine_intent_match_t *matches = nullptr;
+    uint64_t count = 0;
+    const int32_t err = moonshine_get_closest_intents(
+        intent_handle, utter, tolerance, &matches, &count);
+    env->ReleaseStringUTFChars(utterance, utter);
+    if (err != MOONSHINE_ERROR_NONE) {
+      if (matches != nullptr) {
+        moonshine_free_intent_matches(matches, count);
+      }
+      return nullptr;
+    }
+
+    jclass match_class = get_class(env, "ai/moonshine/voice/IntentMatch");
+    jmethodID ctor =
+        get_method(env, match_class, "<init>", "(Ljava/lang/String;F)V");
+    const jsize n = static_cast<jsize>(count);
+    jobjectArray arr = env->NewObjectArray(n, match_class, nullptr);
+    if (arr == nullptr) {
+      moonshine_free_intent_matches(matches, count);
+      env->DeleteLocalRef(match_class);
+      return nullptr;
+    }
+    for (jsize i = 0; i < n; ++i) {
+      const char *ph =
+          matches[i].canonical_phrase ? matches[i].canonical_phrase : "";
+      jstring jphrase = env->NewStringUTF(ph);
+      jobject obj =
+          env->NewObject(match_class, ctor, jphrase, matches[i].similarity);
+      env->DeleteLocalRef(jphrase);
+      env->SetObjectArrayElement(arr, i, obj);
+      env->DeleteLocalRef(obj);
+    }
+    moonshine_free_intent_matches(matches, count);
+    env->DeleteLocalRef(match_class);
+    return arr;
+  } catch (const std::exception &e) {
+    LOGE("moonshineGetClosestIntents: %s\n", e.what());
+    return nullptr;
+  }
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_ai_moonshine_voice_JNI_moonshineGetIntentCount(JNIEnv * /* env */,
+                                                    jobject /* this */,
+                                                    jint intent_handle) {
+  return moonshine_get_intent_count(intent_handle);
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_ai_moonshine_voice_JNI_moonshineClearIntents(JNIEnv * /* env */,
+                                                jobject /* this */,
+                                                jint intent_handle) {
+  try {
+    return moonshine_clear_intents(intent_handle);
+  } catch (const std::exception &e) {
+    LOGE("moonshineClearIntents: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
