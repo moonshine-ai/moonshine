@@ -22,3 +22,8 @@ examples/**/tts-data/**/*.json filter=lfs diff=lfs merge=lfs -text
 examples/**/tts-data/**/*.csv filter=lfs diff=lfs merge=lfs -text
 examples/**/tts-data/**/*.onnx filter=lfs diff=lfs merge=lfs -text
 examples/**/tts-data/**/*.kokorovoice filter=lfs diff=lfs merge=lfs -text
+
+# IntentRecognizer example (ASR + embedding weights; *.ort covered globally above).
+examples/ios/IntentRecognizer/moonshine-models/**/*.onnx filter=lfs diff=lfs merge=lfs -text
+examples/ios/IntentRecognizer/moonshine-models/**/*.onnx_data filter=lfs diff=lfs merge=lfs -text
+examples/ios/IntentRecognizer/moonshine-models/**/tokenizer.bin filter=lfs diff=lfs merge=lfs -text
