@@ -89,6 +89,38 @@ bool IntentRecognizer::process_utterance(const std::string &utterance) {
   return false;
 }
 
+std::vector<std::pair<std::string, float>> IntentRecognizer::rank_intents(
+    const std::string &utterance, float threshold, size_t max_results) {
+  std::vector<std::pair<std::string, float>> ranked;
+  if (utterance.empty() || max_results == 0) {
+    return ranked;
+  }
+
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (intents_.empty()) {
+    return ranked;
+  }
+
+  std::vector<float> utterance_embedding =
+      embedding_model_->get_embeddings(utterance);
+
+  ranked.reserve(intents_.size());
+  for (const auto &intent : intents_) {
+    float similarity =
+        embedding_model_->get_similarity(utterance_embedding, intent.embedding);
+    if (similarity >= threshold) {
+      ranked.emplace_back(intent.trigger_phrase, similarity);
+    }
+  }
+
+  std::sort(ranked.begin(), ranked.end(),
+             [](const auto &a, const auto &b) { return a.second > b.second; });
+  if (ranked.size() > max_results) {
+    ranked.resize(max_results);
+  }
+  return ranked;
+}
+
 void IntentRecognizer::process_transcript(
     const struct transcript_t *transcript) {
   if (transcript == nullptr || transcript->lines == nullptr) {

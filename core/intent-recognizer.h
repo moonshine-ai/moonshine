@@ -5,6 +5,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "embedding-model.h"
@@ -94,6 +95,17 @@ class IntentRecognizer {
    * otherwise.
    */
   bool process_utterance(const std::string &utterance);
+
+  /**
+   * Rank registered intents by semantic similarity to an utterance.
+   * @param utterance The text to match (empty yields no results).
+   * @param threshold Minimum similarity (inclusive) for a candidate to be kept.
+   * @param max_results Maximum number of matches to return (e.g. 6).
+   * @return Matches with trigger phrase and score, sorted by similarity
+   * descending.
+   */
+  std::vector<std::pair<std::string, float>> rank_intents(
+      const std::string &utterance, float threshold, size_t max_results);
 
   /**
    * Process a transcript from the transcriber.
