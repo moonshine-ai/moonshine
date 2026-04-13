@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Moonshine Intent</string>
+    <string name="listen">Listen</string>
+    <string name="stop">Stop</string>
+    <string name="add_phrase">Add phrase</string>
+    <string name="intent_threshold">Intent threshold (minimum similarity)</string>
+    <string name="live_line">Current line</string>
+    <string name="remove_phrase">Remove phrase</string>
+</resources>
