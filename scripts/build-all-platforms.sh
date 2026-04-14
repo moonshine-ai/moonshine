@@ -1,5 +1,20 @@
 #! /bin/bash -ex
 
+# Expected to be run on macOS.
+#
+# Usage:
+#   ./scripts/build-all-platforms.sh
+#
+# Environment:
+#   LINUX_CLOUD_HOST - SSH host for Linux cloud
+#   WINDOWS_CLOUD_USER - SSH user for Windows cloud
+#   WINDOWS_CLOUD_HOST - SSH host for Windows cloud
+
+if [[ "$OSTYPE" != "darwin"* ]]; then
+    echo "This script is expected to be run on macOS."
+    exit 1
+fi
+
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR=$(dirname $SCRIPTS_DIR)
 
@@ -17,6 +32,7 @@ scripts/publish-android.sh
 scripts/build-pip.sh upload
 scripts/build-pip-docker.sh
 scripts/publish-binary.sh upload
+scripts/publish-examples.sh
 
 ssh ${LINUX_CLOUD_HOST} 'cd moonshine \
   && git pull origin main \
