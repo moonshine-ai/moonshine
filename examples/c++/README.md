@@ -12,7 +12,7 @@ For example, on MacOS you can download and extract the library with:
 
 ```bash
 cd examples/c++
-curl -O -L https://github.com/moonshine-ai/moonshine/releases/download/v0.0.55/moonshine-voice-macos-arm64.tar.gz
+curl -O -L https://github.com/moonshine-ai/moonshine/releases/download/v0.0.56/moonshine-voice-macos-arm64.tar.gz
 tar xzf moonshine-voice-macos-arm64.tar.gz 
 ```
 

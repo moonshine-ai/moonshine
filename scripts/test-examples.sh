@@ -15,7 +15,7 @@
 #   ANDROID_HOME or ANDROID_SDK_ROOT — required for Android (unless SKIP_ANDROID=1)
 #   GITHUB_TOKEN — optional; avoids anonymous rate limits on api.github.com if needed
 #   SKIP_ANDROID=1 / SKIP_IOS=1 — skip that platform
-#   TEST_EXAMPLES_TAG — same as --tag when --tag is omitted (e.g. v0.0.55)
+#   TEST_EXAMPLES_TAG — same as --tag when --tag is omitted (e.g. v0.0.56)
 #   TEST_EXAMPLES_USE_LOCAL=1 — same as --local-examples
 #
 # Defaults:
