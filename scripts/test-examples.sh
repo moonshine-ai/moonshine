@@ -20,7 +20,9 @@
 #
 # Defaults:
 #   --repo moonshine-ai/moonshine
-#   Archives: ios-examples.tar.gz, android-examples.tar.gz (see README "Getting Started")
+#   Archives: one asset per example app, named <platform>-<project>.tar.gz
+#   (e.g. android-Transcriber.tar.gz, ios-IntentRecognizer.tar.gz). Names are
+#   resolved from this repo's examples/android and examples/ios directories.
 
 set -euo pipefail
 
@@ -38,8 +40,9 @@ Usage:
   test-examples.sh [--repo OWNER/REPO] [--tag vX.Y.Z] [--workdir DIR] [--keep-workdir]
   test-examples.sh --local-examples [--workdir DIR] [--keep-workdir]
 
-Default mode: downloads ios-examples.tar.gz and android-examples.tar.gz from
-GitHub Releases, extracts them, and runs standalone builds:
+Default mode: downloads each published example archive for Android and iOS
+from GitHub Releases (see header comment for naming), merges them under one
+tree per platform, and runs standalone builds:
   Android: every directory containing ./gradlew → ./gradlew assembleDebug
   macOS:   every *.xcodeproj → xcodebuild (iOS Simulator, no code signing)
 
@@ -163,6 +166,32 @@ extract_tgz() {
 	mkdir -p "${dest}"
 	log "extracting ${filename} → ${dest}"
 	tar -xzf "${WORKDIR}/${filename}" -C "${dest}"
+}
+
+# List immediate child directories of examples/<platform>/ (used to know which
+# release assets to download: <platform>-<dirname>.tar.gz).
+list_example_project_names() {
+	local platform="$1"
+	local src="${REPO_ROOT}/examples/${platform}"
+	[[ -d "${src}" ]] || die "missing directory: ${src}"
+	find "${src}" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | LC_ALL=C sort
+}
+
+# Download every <platform>-<project>.tar.gz for that platform and extract into
+# dest_root (same layout as the old monolithic *-examples.tar.gz).
+download_platform_example_archives() {
+	local platform="$1"
+	local dest_root="$2"
+	local name
+
+	mkdir -p "${dest_root}"
+	while IFS= read -r name; do
+		[[ -z "${name}" ]] && continue
+		local archive="${platform}-${name}.tar.gz"
+		download_one "${archive}"
+		extract_tgz "${archive}" "${dest_root}"
+		rm -f "${WORKDIR}/${archive}"
+	done < <(list_example_project_names "${platform}")
 }
 
 # Copy examples/android and examples/ios from the repository (parent of scripts/)
@@ -298,10 +327,8 @@ main() {
 	if [[ "${USE_LOCAL_EXAMPLES}" -eq 1 ]]; then
 		copy_local_example_trees "${android_root}" "${ios_root}"
 	else
-		download_one "ios-examples.tar.gz"
-		download_one "android-examples.tar.gz"
-		extract_tgz "ios-examples.tar.gz" "${ios_root}"
-		extract_tgz "android-examples.tar.gz" "${android_root}"
+		download_platform_example_archives "android" "${android_root}"
+		download_platform_example_archives "ios" "${ios_root}"
 	fi
 
 	run_android_builds "${android_root}"
