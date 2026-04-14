@@ -156,7 +156,7 @@ MoonshineG2P::MoonshineG2P(std::string dialect_id, MoonshineG2POptions options) 
 
   throw std::runtime_error(
       "MoonshineG2P: unsupported dialect \"" + trimmed +
-      "\". Only rule-based locales are supported (e.g. en_us, es-MX, de, fr, nl, it, ru, zh, ko, vi, ja, ar, pt_br, tr, uk, hi); "
+      "\". Only rule-based locales are supported (e.g. en_us, en_gb, es-MX, de, fr, nl, it, ru, zh, ko, vi, ja, ar, pt_br, tr, uk, hi); "
       "see dialect_uses_rule_based_g2p() and rule_based_g2p_dialect_catalog().");
 }
 

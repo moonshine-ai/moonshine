@@ -26,11 +26,13 @@ class EnglishRuleG2p : public RuleBasedG2p {
  public:
   EnglishRuleG2p(std::filesystem::path dict_tsv, std::optional<std::filesystem::path> oov_onnx,
                  bool use_cuda = false,
-                 std::optional<EnglishOnnxAuxMemory> oov_from_memory = std::nullopt);
+                 std::optional<EnglishOnnxAuxMemory> oov_from_memory = std::nullopt,
+                 bool prefer_british_heteronyms = false);
   /// Lexicon as UTF-8; OOV ONNX may be on-disk or in-memory.
   EnglishRuleG2p(std::string dict_tsv_utf8, std::optional<std::filesystem::path> oov_onnx,
                  bool use_cuda = false,
-                 std::optional<EnglishOnnxAuxMemory> oov_from_memory = std::nullopt);
+                 std::optional<EnglishOnnxAuxMemory> oov_from_memory = std::nullopt,
+                 bool prefer_british_heteronyms = false);
   ~EnglishRuleG2p() override;
 
   EnglishRuleG2p(EnglishRuleG2p&&) noexcept;
@@ -47,10 +49,16 @@ class EnglishRuleG2p : public RuleBasedG2p {
  private:
   struct Impl;
   std::unique_ptr<Impl> impl_;
+  bool prefer_british_heteronyms_{false};
 };
 
-/// True for ``en_us``, ``en-us``, ``en``, ``english`` (case-insensitive).
+/// True for US English (``en_us``, ``en-us``, ``en``, ``english``) and British aliases
+/// (``en_gb``, ``en-gb``, ``british``), case-insensitive after ``normalize_rule_based_dialect_cli_key``.
 bool dialect_resolves_to_english_rules(std::string_view dialect_id);
+
+/// True when the normalized dialect should use the British English G2P tag (``en_gb``) while sharing
+/// the same CMUdict + OOV stack as US English. Does not include ``uk`` (reserved for Ukrainian ``uk``).
+bool dialect_is_british_english_variant(std::string_view dialect_id);
 
 }  // namespace moonshine_tts
 

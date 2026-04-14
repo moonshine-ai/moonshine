@@ -244,16 +244,17 @@ std::optional<RuleBasedG2pInstance> try_english(std::string_view trimmed,
   }
 
   RuleBasedG2pInstance out;
-  out.canonical_dialect_id = "en_us";
+  out.canonical_dialect_id = dialect_is_british_english_variant(trimmed) ? "en_gb" : "en_us";
   out.kind = RuleBasedG2pKind::English;
 
+  const bool prefer_british = dialect_is_british_english_variant(trimmed);
   if (dict_from_files) {
     std::string dict_utf8 = options.read_utf8_asset(kG2pEnglishDictKey);
     out.engine = std::make_unique<EnglishRuleG2p>(std::move(dict_utf8), oov_onnx, options.use_cuda,
-                                                  oov_mem);
+                                                  oov_mem, prefer_british);
   } else {
     out.engine =
-        std::make_unique<EnglishRuleG2p>(dict_tsv, oov_onnx, options.use_cuda, oov_mem);
+        std::make_unique<EnglishRuleG2p>(dict_tsv, oov_onnx, options.use_cuda, oov_mem, prefer_british);
   }
   return out;
 }
