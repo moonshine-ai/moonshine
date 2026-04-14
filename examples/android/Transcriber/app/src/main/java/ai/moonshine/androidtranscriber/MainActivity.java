@@ -1,138 +1,143 @@
 package ai.moonshine.androidtranscriber;
 
-import ai.moonshine.androidtranscriber.databinding.ActivityMainBinding;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.os.Bundle;
+import android.widget.TextView;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 import ai.moonshine.voice.JNI;
 import ai.moonshine.voice.MicTranscriber;
 import ai.moonshine.voice.TranscriptEvent;
 import ai.moonshine.voice.TranscriptEventListener;
 
-import android.animation.ObjectAnimator;
-import android.animation.ValueAnimator;
-import android.content.pm.PackageManager;
-import android.os.Bundle;
-import android.text.TextUtils;
-import android.util.Log;
-import android.view.Menu;
-import android.view.MenuItem;
-import android.view.View;
-import android.view.inputmethod.EditorInfo;
-import android.widget.EditText;
-import android.widget.TextView;
-
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.navigation.NavController;
-import androidx.navigation.Navigation;
-import androidx.navigation.ui.AppBarConfiguration;
-import androidx.navigation.ui.NavigationUI;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
-import java.util.ArrayList;
-import java.util.List;
-
+/**
+ * Minimal microphone transcription sample. Bundles {@code base-en} under {@code assets/base-en/}
+ * (release packaging). {@link MicTranscriber} has a no-arg constructor; pass {@code this} only to
+ * {@link MicTranscriber#loadFromAssets(AppCompatActivity, String, int)}.
+ */
 public class MainActivity extends AppCompatActivity {
 
-  private AppBarConfiguration appBarConfiguration;
-  private ActivityMainBinding binding;
-  private RecyclerView messagesRecyclerView;
-  private TextLineAdapter adapter;
-  private FloatingActionButton fab;
-  private TextView fabPressMessage;
+    private MicTranscriber transcriber;
+    private TextView statusText;
+    private TextView transcriptText;
+    private boolean listening;
+    private boolean pendingStartAfterPermission;
 
-  private MicTranscriber transcriber;
-  private boolean isTranscribing = false;
-
-  @Override
-  protected void onCreate(Bundle savedInstanceState) {
-    super.onCreate(savedInstanceState);
-
-    binding = ActivityMainBinding.inflate(getLayoutInflater());
-    setContentView(binding.getRoot());
-
-    messagesRecyclerView = findViewById(R.id.messagesRecyclerView);
-    adapter = new TextLineAdapter();
-    messagesRecyclerView.setLayoutManager(new LinearLayoutManager(this));
-    messagesRecyclerView.setAdapter(adapter);
-
-    transcriber = new MicTranscriber(this);
-    transcriber.loadFromAssets(this, "base-en", JNI.MOONSHINE_MODEL_ARCH_BASE);
-    transcriber.addListener(
-        event -> event.accept(new TranscriptEventListener() {
-          @Override
-          public void onLineStarted(TranscriptEvent.LineStarted e) {
-            runOnUiThread(() -> {
-              adapter.addLine("...");
-              messagesRecyclerView.smoothScrollToPosition(
-                  adapter.getItemCount() - 1);
+    private final ActivityResultLauncher<String> micPermissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
+                if (!Boolean.TRUE.equals(granted) || transcriber == null) {
+                    pendingStartAfterPermission = false;
+                    statusText.setText("Microphone permission is required.");
+                    return;
+                }
+                transcriber.onMicPermissionGranted();
+                if (pendingStartAfterPermission) {
+                    pendingStartAfterPermission = false;
+                    try {
+                        transcriber.start();
+                        listening = true;
+                        statusText.setText("Listening…");
+                    } catch (RuntimeException e) {
+                        statusText.setText("Start failed: " + e.getMessage());
+                    }
+                }
             });
-          }
-          @Override
-          public void onLineTextChanged(TranscriptEvent.LineTextChanged e) {
-            runOnUiThread(() -> {
-              adapter.updateLastLine(e.line.text);
-              messagesRecyclerView.smoothScrollToPosition(
-                  adapter.getItemCount() - 1);
-            });
-          }
-          @Override
-          public void onLineCompleted(TranscriptEvent.LineCompleted e) {
-            runOnUiThread(() -> {
-              adapter.updateLastLine(e.line.text);
-              messagesRecyclerView.smoothScrollToPosition(
-                  adapter.getItemCount() - 1);
-            });
-          }
-        }));
 
-    // Request microphone permissions if not already granted
-    if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
-        PackageManager.PERMISSION_GRANTED) {
-      transcriber.onMicPermissionGranted();
-    } else {
-      requestPermissions(
-          new String[] {android.Manifest.permission.RECORD_AUDIO},
-          1 // Request code
-      );
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        statusText = findViewById(R.id.statusText);
+        transcriptText = findViewById(R.id.transcriptText);
+
+        try {
+            transcriber = new MicTranscriber();
+            transcriber.addListener(
+                    event ->
+                            event.accept(
+                                    new TranscriptEventListener() {
+                                        @Override
+                                        public void onLineTextChanged(
+                                                @NonNull TranscriptEvent.LineTextChanged e) {
+                                            runOnUiThread(
+                                                    () ->
+                                                            transcriptText.setText(
+                                                                    e.line.text != null
+                                                                            ? e.line.text
+                                                                            : ""));
+                                        }
+
+                                        @Override
+                                        public void onLineCompleted(
+                                                @NonNull TranscriptEvent.LineCompleted e) {
+                                            runOnUiThread(
+                                                    () ->
+                                                            transcriptText.append(
+                                                                    (e.line.text != null ? e.line.text : "")
+                                                                            + "\n"));
+                                        }
+                                    }));
+            transcriber.loadFromAssets(this, "base-en", JNI.MOONSHINE_MODEL_ARCH_BASE);
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                    == PackageManager.PERMISSION_GRANTED) {
+                transcriber.onMicPermissionGranted();
+            }
+            statusText.setText("Ready. Tap Start to transcribe from the microphone.");
+        } catch (RuntimeException e) {
+            statusText.setText("Failed to load models: " + e.getMessage());
+            transcriber = null;
+        }
+
+        findViewById(R.id.startButton)
+                .setOnClickListener(
+                        v -> {
+                            if (transcriber == null) {
+                                return;
+                            }
+                            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                                    != PackageManager.PERMISSION_GRANTED) {
+                                pendingStartAfterPermission = true;
+                                micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO);
+                                return;
+                            }
+                            transcriber.onMicPermissionGranted();
+                            try {
+                                transcriber.start();
+                                listening = true;
+                                statusText.setText("Listening…");
+                            } catch (RuntimeException e) {
+                                statusText.setText("Start failed: " + e.getMessage());
+                            }
+                        });
+
+        findViewById(R.id.stopButton)
+                .setOnClickListener(
+                        v -> {
+                            if (transcriber == null || !listening) {
+                                return;
+                            }
+                            try {
+                                transcriber.stop();
+                            } catch (RuntimeException ignored) {
+                            }
+                            listening = false;
+                            statusText.setText("Stopped.");
+                        });
     }
 
-    fab = findViewById(R.id.fab);
-    fab.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
-        android.graphics.Color.parseColor("#ffffff")));
-    fab.setOnClickListener(v -> {
-      fabPressMessage.setVisibility(View.GONE);
-      if (isTranscribing) {
-        transcriber.stop();
-        isTranscribing = false;
-        fab.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
-            android.graphics.Color.parseColor("#ffffff")));
-      } else {
-        transcriber.start();
-        isTranscribing = true;
-        fab.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
-            android.graphics.Color.parseColor("#aaaaff")));
-      }
-    });
-    fabPressMessage = findViewById(R.id.fabPressMessage);
-    ObjectAnimator animator =
-        ObjectAnimator.ofFloat(fabPressMessage, "translationY", -30f, -70f);
-    animator.setDuration(1000);
-    animator.setRepeatCount(ValueAnimator.INFINITE);
-    animator.setRepeatMode(ValueAnimator.REVERSE);
-    animator.start();
-  }
-
-  @Override
-  public void onRequestPermissionsResult(int requestCode,
-                                         @NonNull String[] permissions,
-                                         @NonNull int[] grantResults) {
-    super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-    if (requestCode == 1) {
-      if (grantResults.length > 0 &&
-          grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-        transcriber.onMicPermissionGranted();
-      }
+    @Override
+    protected void onDestroy() {
+        if (transcriber != null) {
+            try {
+                transcriber.stop();
+            } catch (RuntimeException ignored) {
+            }
+        }
+        super.onDestroy();
     }
-  }
 }
