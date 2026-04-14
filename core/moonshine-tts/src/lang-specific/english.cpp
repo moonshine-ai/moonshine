@@ -8,6 +8,7 @@
 #include "text-normalize.h"
 #include "utf8-utils.h"
 
+#include <algorithm>
 #include <cctype>
 #include <filesystem>
 #include <nlohmann/json.h>
@@ -32,12 +33,53 @@ void append_log(std::vector<G2pWordLog>* out, G2pWordLog entry) {
   }
 }
 
+/// CMU-style heteronyms such as ``tomato`` include both US (stressed ``eɪ``) and UK (stressed ``ɑ``)
+/// readings. Lexicographic IPA sort is not locale-aware; pick explicitly by dialect.
+std::string pick_english_heteronym_ipa(std::vector<std::string> alts, bool prefer_british) {
+  if (alts.empty()) {
+    return {};
+  }
+  if (alts.size() == 1) {
+    return alts[0];
+  }
+  std::sort(alts.begin(), alts.end());
+  const auto has_stressed_ei = [](const std::string& s) {
+    return s.find("ˈeɪ") != std::string::npos;
+  };
+  const auto has_stressed_open_back = [](const std::string& s) {
+    return s.find("ˈɑ") != std::string::npos && s.find("ˈeɪ") == std::string::npos;
+  };
+  bool any_us = false;
+  bool any_uk = false;
+  for (const std::string& s : alts) {
+    if (has_stressed_ei(s)) {
+      any_us = true;
+    }
+    if (has_stressed_open_back(s)) {
+      any_uk = true;
+    }
+  }
+  if (any_us && any_uk) {
+    for (const std::string& s : alts) {
+      if (prefer_british) {
+        if (has_stressed_open_back(s)) {
+          return s;
+        }
+      } else if (has_stressed_ei(s)) {
+        return s;
+      }
+    }
+  }
+  return alts[0];
+}
+
 }  // namespace
 
 EnglishRuleG2p::EnglishRuleG2p(std::filesystem::path dict_tsv,
                                std::optional<std::filesystem::path> oov_onnx, bool use_cuda,
-                               std::optional<EnglishOnnxAuxMemory> oov_from_memory)
-    : impl_(std::make_unique<Impl>()) {
+                               std::optional<EnglishOnnxAuxMemory> oov_from_memory,
+                               bool prefer_british_heteronyms)
+    : impl_(std::make_unique<Impl>()), prefer_british_heteronyms_(prefer_british_heteronyms) {
   if (!std::filesystem::is_regular_file(dict_tsv)) {
     throw std::runtime_error("English G2P: dictionary not found at " + dict_tsv.generic_string());
   }
@@ -54,8 +96,9 @@ EnglishRuleG2p::EnglishRuleG2p(std::filesystem::path dict_tsv,
 }
 
 EnglishRuleG2p::EnglishRuleG2p(std::string dict_tsv_utf8, std::optional<std::filesystem::path> oov_onnx,
-                               bool use_cuda, std::optional<EnglishOnnxAuxMemory> oov_from_memory)
-    : impl_(std::make_unique<Impl>()) {
+                               bool use_cuda, std::optional<EnglishOnnxAuxMemory> oov_from_memory,
+                               bool prefer_british_heteronyms)
+    : impl_(std::make_unique<Impl>()), prefer_british_heteronyms_(prefer_british_heteronyms) {
   if (dict_tsv_utf8.empty()) {
     throw std::runtime_error("English G2P: empty dictionary buffer");
   }
@@ -77,7 +120,7 @@ EnglishRuleG2p& EnglishRuleG2p::operator=(EnglishRuleG2p&&) noexcept = default;
 
 std::vector<std::string> EnglishRuleG2p::dialect_ids() {
   return dedupe_dialect_ids_preserve_first(
-      {"en_us", "en-US", "en-us", "english", "en"});
+      {"en_us", "en-US", "en-us", "english", "en", "en_gb", "en-GB", "en-gb", "british"});
 }
 
 std::string EnglishRuleG2p::text_to_ipa(std::string text, std::vector<G2pWordLog>* per_word_log) {
@@ -147,10 +190,10 @@ std::string EnglishRuleG2p::text_to_ipa(std::string text, std::vector<G2pWordLog
                  G2pWordLog{token, gkey, G2pWordPath::kDictUnambiguous, alts[0]});
       parts.push_back(alts[0]);
     } else {
-      std::sort(alts.begin(), alts.end());
+      const std::string chosen = pick_english_heteronym_ipa(std::move(alts), prefer_british_heteronyms_);
       append_log(per_word_log,
-                 G2pWordLog{token, gkey, G2pWordPath::kDictFirstAlternativeNoHeteronymModel, alts[0]});
-      parts.push_back(alts[0]);
+                 G2pWordLog{token, gkey, G2pWordPath::kDictFirstAlternativeNoHeteronymModel, chosen});
+      parts.push_back(chosen);
     }
   }
 
@@ -164,10 +207,18 @@ std::string EnglishRuleG2p::text_to_ipa(std::string text, std::vector<G2pWordLog
   return out.str();
 }
 
+bool dialect_is_british_english_variant(std::string_view dialect_id) {
+  const std::string s = normalize_rule_based_dialect_cli_key(dialect_id);
+  return s == "en-gb" || s == "british";
+}
+
 bool dialect_resolves_to_english_rules(std::string_view dialect_id) {
   const std::string s = normalize_rule_based_dialect_cli_key(dialect_id);
   if (s.empty()) {
     return false;
+  }
+  if (dialect_is_british_english_variant(s)) {
+    return true;
   }
   return s == "en-us" || s == "english" || s == "en";
 }

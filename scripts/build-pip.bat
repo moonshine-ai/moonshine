@@ -75,7 +75,7 @@ if exist "wheelhouse" rmdir /s /q "wheelhouse"
 mkdir "dist" 2>nul
 mkdir "wheelhouse" 2>nul
 
-uv run setup.py bdist_wheel
+uv build --wheel --out-dir dist
 if errorlevel 1 exit /b 1
 
 REM Upload to PyPI if "upload" argument is provided

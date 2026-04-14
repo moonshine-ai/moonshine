@@ -139,7 +139,7 @@ const LangProfile* lookup_lang_profile(std::string_view key) {
       {"en_us", {'a', "af_heart", "en_us"}},
       {"en", {'a', "af_heart", "en_us"}},
       // UK Kokoro voice uses the same English rule + ONNX G2P assets as US (``en_us`` under g2p_root).
-      {"en_gb", {'b', "bf_emma", "en_us"}},
+      {"en_gb", {'b', "bf_emma", "en_gb"}},
       // Spanish G2P must be a concrete dialect id (same default as spanish_rule_g2p.text_to_ipa).
       {"es", {'e', "ef_dora", "es-MX"}},
       {"fr", {'f', "ff_siwis", "fr"}},
@@ -302,11 +302,9 @@ static const char* const kKokoroVoiceCatalog[] = {
 std::string select_voice_id(char kokoro_lang, std::string_view requested, std::string_view default_voice,
                             const std::filesystem::path& voices_dir, const FileInformationMap* tts_files,
                             const std::filesystem::path& g2p_root) {
-  std::string v = requested.empty() ? std::string(default_voice) : std::string(requested);
-  if (!requested.empty() && kokoro_voice_asset_exists(v, voices_dir, tts_files, g2p_root) &&
-      voice_prefix_ok(kokoro_lang, v)) {
-    return v;
-  }
+  const auto exists = [&](const std::string& id) {
+    return kokoro_voice_asset_exists(id, voices_dir, tts_files, g2p_root);
+  };
   auto log_available_kokoro_voices = [&]() {
     std::string available;
     for (const char* vid : kKokoroVoiceCatalog) {
@@ -322,19 +320,48 @@ std::string select_voice_id(char kokoro_lang, std::string_view requested, std::s
       LOGF("  Available Kokoro voices for this language: %s", available.c_str());
     }
   };
-  if (!voice_prefix_ok(kokoro_lang, v)) {
-    LOGF("Requested Kokoro voice '%s' has wrong prefix for language '%c', falling back to '%s'",
-         v.c_str(), kokoro_lang, std::string(default_voice).c_str());
+
+  if (!requested.empty()) {
+    const std::string req(requested);
+    if (voice_prefix_ok(kokoro_lang, req) && exists(req)) {
+      return req;
+    }
+    if (!voice_prefix_ok(kokoro_lang, req)) {
+      LOGF("Requested Kokoro voice '%s' has wrong prefix for language '%c'",
+           req.c_str(), kokoro_lang);
+    } else {
+      LOGF("Requested Kokoro voice '%s' not found", req.c_str());
+    }
     log_available_kokoro_voices();
-    v = std::string(default_voice);
   }
-  if (!kokoro_voice_asset_exists(v, voices_dir, tts_files, g2p_root)) {
-    LOGF("Requested Kokoro voice '%s' not found, falling back to '%s'",
-         v.c_str(), std::string(default_voice).c_str());
-    log_available_kokoro_voices();
-    v = std::string(default_voice);
+
+  const std::string def(default_voice);
+  if (voice_prefix_ok(kokoro_lang, def) && exists(def)) {
+    return def;
   }
-  return v;
+
+  for (const char* vid : kKokoroVoiceCatalog) {
+    if (!voice_prefix_ok(kokoro_lang, vid)) {
+      continue;
+    }
+    const std::string cand(vid);
+    if (!exists(cand)) {
+      continue;
+    }
+    if (cand != def) {
+      LOGF("Default Kokoro voice '%s' not found; using '%s' instead", def.c_str(), cand.c_str());
+    }
+    return cand;
+  }
+
+  // No matching files on disk: return a valid-prefix id for dependency prefetch, else the default.
+  if (!requested.empty()) {
+    const std::string req(requested);
+    if (voice_prefix_ok(kokoro_lang, req)) {
+      return req;
+    }
+  }
+  return def;
 }
 
 void apply_diphthong_map(std::string& s, char kokoro_lang) {
