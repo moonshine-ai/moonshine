@@ -1,7 +1,7 @@
 #!/bin/bash -ex
 
 FRAMEWORK_NAME="Moonshine"
-VERSION="0.0.55"
+VERSION="0.0.56"
 REPO="moonshine-ai/moonshine-swift"
 
 # Check that the XCFramework exists

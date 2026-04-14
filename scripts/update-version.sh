@@ -17,9 +17,12 @@ KNOWN_FILES=(
 	./examples/macos/TextToSpeech/Package.swift
 	./examples/ios/Transcriber/Transcriber.xcodeproj/project.pbxproj
 	./examples/android/Transcriber/gradle/libs.versions.toml
+	./examples/android/IntentRecognizer/gradle/libs.versions.toml
 	./scripts/publish-swift.sh
 	./scripts/publish-binary.sh
 	./scripts/publish-binary.bat
+	./scripts/publish-examples.sh
+	./scripts/test-examples.sh
 	./examples/c++/download-library.sh
 	./examples/c++/README.md
 )

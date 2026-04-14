@@ -1,5 +1,7 @@
 #!/usr/bin/env bash -ex
 
+VERSION="0.0.56"
+
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR="$(dirname "${SCRIPTS_DIR}")"
 
