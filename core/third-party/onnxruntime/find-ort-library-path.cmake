@@ -15,7 +15,14 @@ if (ANDROID)
     set(ONNXRUNTIME_LIB_PATH "${CMAKE_CURRENT_LIST_DIR}/lib/android/${ONNXRUNTIME_ABI_DIR}/libonnxruntime.so"  CACHE INTERNAL "")
 elseif(IOS OR MOONSHINE_BUILD_SWIFT)
     if (MOONSHINE_BUILD_SWIFT)
-        set(ONNXRUNTIME_LIB_PATH "${CMAKE_CURRENT_LIST_DIR}/lib/macos/arm64/libonnxruntime.a" CACHE INTERNAL "")
+        # Pick the arch-appropriate static libonnxruntime.a. build-swift.sh drives
+        # macOS builds per-arch (CMAKE_OSX_ARCHITECTURES set to a single arch) and
+        # lipos the resulting libmoonshine.a archives together at the end.
+        if(CMAKE_OSX_ARCHITECTURES STREQUAL "x86_64")
+            set(ONNXRUNTIME_LIB_PATH "${CMAKE_CURRENT_LIST_DIR}/lib/macos/x86_64/libonnxruntime.a" CACHE INTERNAL "")
+        else()
+            set(ONNXRUNTIME_LIB_PATH "${CMAKE_CURRENT_LIST_DIR}/lib/macos/arm64/libonnxruntime.a" CACHE INTERNAL "")
+        endif()
     elseif (CMAKE_OSX_SYSROOT STREQUAL "iphonesimulator")
         set(ONNXRUNTIME_LIB_PATH "${CMAKE_CURRENT_LIST_DIR}/lib/ios/simulator/libonnxruntime.a" CACHE INTERNAL "")
     else()
