@@ -1,7 +1,7 @@
 #ifndef INTENT_RECOGNIZER_H
 #define INTENT_RECOGNIZER_H
 
-#include <functional>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "embedding-model.h"
-#include "transcriber.h"
 
 /**
  * Supported embedding model architectures.
@@ -30,33 +29,21 @@ struct IntentRecognizerOptions {
 
   // Model variant: "fp32", "fp16", "q8", "q4", or "q4f16"
   std::string model_variant = "q4";
-
-  // Minimum similarity threshold to trigger an intent (0.0-1.0)
-  float threshold = 0.8f;
 };
 
 /**
- * Callback function type for intent handlers.
- * The callback receives the matched utterance and the similarity score.
- */
-using IntentCallback =
-    std::function<void(const std::string &utterance, float similarity)>;
-
-/**
- * Represents a registered intent with its trigger phrase, embedding, and
- * callback.
+ * Represents a registered intent with its trigger phrase and embedding.
  */
 struct Intent {
   std::string trigger_phrase;
   std::vector<float> embedding;
-  IntentCallback callback;
+  int32_t priority = 0;
 };
 
 /**
- * IntentRecognizer allows users to bind trigger phrases to callback functions.
- * When an utterance is received, it compares the utterance against all
- * registered trigger phrases and invokes the callback of the most similar one
- * if the similarity exceeds a threshold.
+ * IntentRecognizer matches utterances against registered canonical phrases
+ * using semantic similarity. Use rank_intents() or the C API
+ * moonshine_get_closest_intents() to retrieve ranked matches.
  */
 class IntentRecognizer {
  public:
@@ -73,12 +60,22 @@ class IntentRecognizer {
   ~IntentRecognizer();
 
   /**
-   * Register an intent with a trigger phrase and callback.
-   * @param trigger_phrase The phrase that triggers this intent.
-   * @param callback The function to call when this intent is recognized.
+   * Register an intent with a trigger phrase.
+   * @param trigger_phrase The canonical phrase for this intent.
+   */
+  void register_intent(const std::string &trigger_phrase);
+
+  /**
+   * Register an intent with an optional pre-computed embedding and priority.
+   * @param trigger_phrase The canonical phrase for this intent.
+   * @param embedding Optional pre-computed embedding (NULL to auto-compute).
+   * @param embedding_size Number of floats in the embedding array.
+   * @param priority Higher priority intents rank above lower priority ones
+   *                 within the tolerance threshold, even if similarity is lower.
    */
   void register_intent(const std::string &trigger_phrase,
-                       IntentCallback callback);
+                       const float *embedding, uint64_t embedding_size,
+                       int32_t priority);
 
   /**
    * Remove a registered intent.
@@ -88,43 +85,15 @@ class IntentRecognizer {
   bool unregister_intent(const std::string &trigger_phrase);
 
   /**
-   * Process an utterance and invoke the callback of the most similar intent
-   * if the similarity exceeds the threshold.
-   * @param utterance The utterance to process.
-   * @return True if an intent was recognized and callback invoked, false
-   * otherwise.
-   */
-  bool process_utterance(const std::string &utterance);
-
-  /**
    * Rank registered intents by semantic similarity to an utterance.
    * @param utterance The text to match (empty yields no results).
    * @param threshold Minimum similarity (inclusive) for a candidate to be kept.
    * @param max_results Maximum number of matches to return (e.g. 6).
-   * @return Matches with trigger phrase and score, sorted by similarity
-   * descending.
+   * @return Matches with trigger phrase and score, sorted by priority
+   *         descending then similarity descending.
    */
   std::vector<std::pair<std::string, float>> rank_intents(
       const std::string &utterance, float threshold, size_t max_results);
-
-  /**
-   * Process a transcript from the transcriber.
-   * This will process all complete lines that haven't been processed yet.
-   * @param transcript The transcript to process.
-   */
-  void process_transcript(const struct transcript_t *transcript);
-
-  /**
-   * Set the similarity threshold.
-   * @param threshold The new threshold value (should be between 0 and 1).
-   */
-  void set_threshold(float threshold);
-
-  /**
-   * Get the current similarity threshold.
-   * @return The current threshold value.
-   */
-  float get_threshold() const;
 
   /**
    * Get the number of registered intents.
@@ -138,35 +107,22 @@ class IntentRecognizer {
   void clear_intents();
 
   /**
-   * Get the associated transcriber, if any.
-   * @return Pointer to the transcriber, or nullptr if none.
+   * Calculate the embedding for a given sentence using the loaded model.
+   * @param sentence The input text.
+   * @return The embedding vector.
    */
-  Transcriber *get_transcriber() const;
+  std::vector<float> calculate_embedding(const std::string &sentence) const;
 
   /**
-   * Set the associated transcriber.
-   * @param transcriber The transcriber to use for processing transcripts.
+   * Get the embedding dimension of the loaded model.
+   * @return The number of floats per embedding.
    */
-  void set_transcriber(Transcriber *transcriber);
+  size_t get_embedding_size() const;
 
  private:
   std::unique_ptr<EmbeddingModel> embedding_model_;
-  Transcriber *transcriber_;
-  float threshold_;
   std::vector<Intent> intents_;
   mutable std::mutex mutex_;
-
-  // Track which transcript lines have been processed
-  std::vector<uint64_t> processed_line_ids_;
-
-  /**
-   * Find the best matching intent for an utterance.
-   * @param utterance The utterance to match.
-   * @param out_similarity Output parameter for the similarity score.
-   * @return Pointer to the best matching intent, or nullptr if none found.
-   */
-  const Intent *find_best_intent(const std::string &utterance,
-                                 float &out_similarity);
 };
 
 #endif  // INTENT_RECOGNIZER_H

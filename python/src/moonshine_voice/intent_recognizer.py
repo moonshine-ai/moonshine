@@ -126,6 +126,9 @@ class IntentRecognizer(TranscriptEventListener):
         lib.moonshine_register_intent.argtypes = [
             ctypes.c_int32,  # intent_recognizer_handle
             ctypes.c_char_p,  # canonical_phrase
+            ctypes.POINTER(ctypes.c_float),  # embedding (nullable)
+            ctypes.c_uint64,  # embedding_size
+            ctypes.c_int32,  # priority
         ]
 
         # Unregister intent
@@ -158,6 +161,22 @@ class IntentRecognizer(TranscriptEventListener):
         lib.moonshine_clear_intents.restype = ctypes.c_int32
         lib.moonshine_clear_intents.argtypes = [ctypes.c_int32]
 
+        # Calculate intent embedding
+        lib.moonshine_calculate_intent_embedding.restype = ctypes.c_int32
+        lib.moonshine_calculate_intent_embedding.argtypes = [
+            ctypes.c_int32,  # intent_recognizer_handle
+            ctypes.c_char_p,  # sentence
+            ctypes.POINTER(ctypes.POINTER(ctypes.c_float)),  # out_embedding
+            ctypes.POINTER(ctypes.c_uint64),  # out_embedding_size
+            ctypes.c_char_p,  # model_name (nullable)
+        ]
+
+        # Free intent embedding
+        lib.moonshine_free_intent_embedding.restype = None
+        lib.moonshine_free_intent_embedding.argtypes = [
+            ctypes.POINTER(ctypes.c_float),
+        ]
+
     def __enter__(self):
         """Context manager entry."""
         return self
@@ -178,28 +197,46 @@ class IntentRecognizer(TranscriptEventListener):
         if hasattr(self, "_handle"):
             self.close()
 
-    def register_intent(self, trigger_phrase: str, handler: IntentHandler) -> None:
+    def register_intent(
+        self,
+        trigger_phrase: str,
+        handler: Optional[IntentHandler] = None,
+        *,
+        embedding: Optional[List[float]] = None,
+        priority: int = 0,
+    ) -> None:
         """
-        Register an intent with a canonical phrase and handler.
-
-        When an utterance is processed that is similar enough to the phrase
-        (above the recognizer threshold), the handler will be invoked for the
-        single best match.
+        Register an intent with a canonical phrase.
 
         Args:
-            trigger_phrase: The canonical phrase for this intent (C API:
-                ``canonical_phrase``).
-            handler: A callable that takes (canonical_phrase, utterance, similarity)
-                    and handles the recognized intent.
+            trigger_phrase: The canonical phrase for this intent.
+            handler: Optional callable ``(canonical_phrase, utterance, similarity) -> None``
+                invoked by :meth:`process_utterance` for the best match.
+            embedding: Optional pre-computed embedding vector. When *None* the
+                native library computes the embedding from *trigger_phrase*.
+            priority: Higher-priority intents rank above lower-priority ones in
+                :meth:`get_closest_intents`, even when their similarity score
+                is lower. Defaults to ``0``.
         """
         if self._handle is None:
             raise MoonshineError("Intent recognizer is not initialized")
 
-        # Store the Python handler
-        self._handlers[trigger_phrase] = handler
+        if handler is not None:
+            self._handlers[trigger_phrase] = handler
 
         trigger_bytes = trigger_phrase.encode("utf-8")
-        error = self._lib.moonshine_register_intent(self._handle, trigger_bytes)
+
+        if embedding is not None:
+            c_arr = (ctypes.c_float * len(embedding))(*embedding)
+            c_ptr = ctypes.cast(c_arr, ctypes.POINTER(ctypes.c_float))
+            c_size = ctypes.c_uint64(len(embedding))
+        else:
+            c_ptr = None
+            c_size = ctypes.c_uint64(0)
+
+        error = self._lib.moonshine_register_intent(
+            self._handle, trigger_bytes, c_ptr, c_size, ctypes.c_int32(priority)
+        )
         check_error(error)
 
     def unregister_intent(self, trigger_phrase: str) -> bool:
@@ -333,6 +370,42 @@ class IntentRecognizer(TranscriptEventListener):
         error = self._lib.moonshine_clear_intents(self._handle)
         check_error(error)
         self._handlers.clear()
+
+    def calculate_embedding(
+        self, sentence: str, *, model_name: Optional[str] = None
+    ) -> List[float]:
+        """
+        Calculate the embedding vector for a sentence.
+
+        This is useful for pre-computing embeddings that can later be passed to
+        :meth:`register_intent` via the *embedding* parameter.
+
+        Args:
+            sentence: The input text to embed.
+            model_name: Reserved for future use; currently ignored by the native
+                library. Pass *None*.
+
+        Returns:
+            A list of floats representing the embedding vector.
+        """
+        if self._handle is None:
+            raise MoonshineError("Intent recognizer is not initialized")
+
+        out_ptr = ctypes.POINTER(ctypes.c_float)()
+        out_size = ctypes.c_uint64(0)
+        model_bytes = model_name.encode("utf-8") if model_name else None
+        error = self._lib.moonshine_calculate_intent_embedding(
+            self._handle,
+            sentence.encode("utf-8"),
+            ctypes.byref(out_ptr),
+            ctypes.byref(out_size),
+            model_bytes,
+        )
+        check_error(error)
+        n = int(out_size.value)
+        result = [float(out_ptr[i]) for i in range(n)]
+        self._lib.moonshine_free_intent_embedding(out_ptr)
+        return result
 
     def set_on_intent(self, callback: Optional[Callable[[IntentMatch], None]]) -> None:
         """
