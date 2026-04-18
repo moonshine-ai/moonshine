@@ -60,7 +60,7 @@ public class JNI {
     public static native void moonshineFreeIntentRecognizer(int intent_recognizer_handle);
 
     public static native int moonshineRegisterIntent(int intent_recognizer_handle,
-            String canonical_phrase);
+            String canonical_phrase, float[] embedding, int priority);
 
     public static native int moonshineUnregisterIntent(int intent_recognizer_handle,
             String canonical_phrase);
@@ -72,6 +72,10 @@ public class JNI {
     public static native int moonshineGetIntentCount(int intent_recognizer_handle);
 
     public static native int moonshineClearIntents(int intent_recognizer_handle);
+
+    /** Returns null on failure. */
+    public static native float[] moonshineCalculateIntentEmbedding(
+            int intent_recognizer_handle, String sentence);
 
     public static native int moonshineCreateTtsSynthesizerFromFiles(String language,
             String[] filenames, TranscriberOption[] options);

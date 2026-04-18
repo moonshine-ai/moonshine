@@ -774,6 +774,14 @@ class IntentRecognizer {
   /// @throws MoonshineException on failure
   void clearIntents();
 
+  /// Calculate the embedding vector for a sentence.
+  /// @param sentence The input text to embed.
+  /// @param model_name Reserved for future use; pass nullptr.
+  /// @return The embedding vector.
+  /// @throws MoonshineException on failure
+  std::vector<float> calculateEmbedding(const std::string &sentence,
+                                        const char *model_name = nullptr);
+
   void close();
 
   int32_t getHandle() const { return handle_; }
@@ -1438,6 +1446,20 @@ inline int32_t IntentRecognizer::intentCount() const {
 
 inline void IntentRecognizer::clearIntents() {
   checkError(moonshine_clear_intents(handle_));
+}
+
+inline std::vector<float> IntentRecognizer::calculateEmbedding(
+    const std::string &sentence, const char *model_name) {
+  float *out_embedding = nullptr;
+  uint64_t out_size = 0;
+  checkError(moonshine_calculate_intent_embedding(
+      handle_, sentence.c_str(), &out_embedding, &out_size, model_name));
+  std::vector<float> result;
+  if (out_embedding != nullptr && out_size > 0) {
+    result.assign(out_embedding, out_embedding + out_size);
+    moonshine_free_intent_embedding(out_embedding);
+  }
+  return result;
 }
 
 inline void IntentRecognizer::close() {

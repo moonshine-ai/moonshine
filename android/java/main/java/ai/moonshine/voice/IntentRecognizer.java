@@ -46,11 +46,37 @@ public class IntentRecognizer {
   }
 
   public void registerIntent(String canonicalPhrase) {
+    registerIntent(canonicalPhrase, null, 0);
+  }
+
+  /**
+   * Register a canonical phrase with optional pre-computed embedding and priority.
+   *
+   * @param canonicalPhrase the phrase to register
+   * @param embedding       optional pre-computed embedding (null to auto-compute)
+   * @param priority        higher-priority intents rank above lower-priority ones
+   */
+  public void registerIntent(String canonicalPhrase, float[] embedding, int priority) {
     checkHandle();
-    int err = JNI.moonshineRegisterIntent(handle, canonicalPhrase);
+    int err = JNI.moonshineRegisterIntent(handle, canonicalPhrase, embedding, priority);
     if (err != JNI.MOONSHINE_ERROR_NONE) {
       throw new RuntimeException("moonshineRegisterIntent failed: " + err);
     }
+  }
+
+  /**
+   * Calculate the embedding vector for a sentence.
+   *
+   * @param sentence the input text to embed
+   * @return the embedding vector, or null on failure
+   */
+  public float[] calculateEmbedding(String sentence) {
+    checkHandle();
+    float[] result = JNI.moonshineCalculateIntentEmbedding(handle, sentence);
+    if (result == null) {
+      throw new RuntimeException("moonshineCalculateIntentEmbedding failed");
+    }
+    return result;
   }
 
   /** @return true if the phrase was removed */

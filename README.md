@@ -353,7 +353,7 @@ intent_recognizer = IntentRecognizer(
 )
 ```
 
-Next we tell the recognizer what kinds of phrases to listen out for, and what to do when there's a match.
+Next we tell the recognizer what kinds of phrases to listen out for, and what to do when there's a match. You can optionally pass a pre-computed embedding and/or a priority to `register_intent()`, but in the simplest case you just supply a phrase and a handler:
 
 ```python
 def on_intent_triggered_on(trigger: str, utterance: str, similarity: float):
@@ -361,6 +361,13 @@ def on_intent_triggered_on(trigger: str, utterance: str, similarity: float):
 
 for intent in intents:
     intent_recognizer.register_intent(intent, on_intent_triggered_on)
+```
+
+If you need to pre-compute an embedding (for example, to store it in a database or share it between sessions), use `calculate_embedding()`:
+
+```python
+embedding = intent_recognizer.calculate_embedding("turn on the lights")
+intent_recognizer.register_intent("turn on the lights", handler, embedding=embedding, priority=1)
 ```
 
 The recognizer supports the transcript event listener interface, so the final stage is adding it as a listener to the `MicTranscriber`.
@@ -822,11 +829,12 @@ Contains information about a change to the transcript. It has four subclasses, w
 
 #### IntentMatch
 
-This event is sent to any listeners you have registered when an `IntentRecognizer` finds a match to a command you've specified.
+A dataclass representing a matched intent, returned by `get_closest_intents()` and passed to `set_on_intent()` callbacks.
 
-- `trigger_phrase`: The string representing the canonical command, exactly as you registered it with the recognizer.
+- `canonical_phrase`: The string representing the canonical command, exactly as you registered it with the recognizer.
 - `utterance`: The text of the utterance that triggered the match.
 - `similarity`: A float value that reflects how confident the recognizer is that the utterance has the same meaning as the command, with zero being the least confident and one the most.
+- `trigger_phrase`: Read-only alias for `canonical_phrase` (backward compatibility).
 
 #### TtsVoiceEntry
 
@@ -914,12 +922,23 @@ A specialized kind of event listener that you add as a listener to a `Transcribe
   - `model_arch`: An `EmbeddingModelArch`, obtained from the `download_embedding_model()` function.
   - `model_variant`: The precision to run the model at. "q4" is recommended.
   - `threshold`: How close an utterance has to be to the target sentence to trigger an event.
-- <a id="intentrecognizer-register-intent"></a>`register_intent()`: Asks the recognizer to look for utterances that match a given command, and call back into the application when one is found.
+- <a id="intentrecognizer-register-intent"></a>`register_intent()`: Registers a canonical phrase for the recognizer to match against, with optional pre-computed embedding and priority.
   - `trigger_phrase`: The canonical command sentence to match against.
-  - `handler`: A callable function or object that contains code you want to trigger when the command is recognized.
-- <a id="intentrecognizer-unregister-intent"></a>`unregister_intent()`: Removes an intent handler from the event callback process.
-  - `handler`: A handler that had previously been registered with the recognizer.
-- <a id="intentrecognizer-clear-intents"></a>`clear_intents()`: Removes all intent listeners from the recognizer.
+  - `handler`: *(optional)* A callable `(canonical_phrase, utterance, similarity) -> None` invoked by `process_utterance()` for the best match.
+  - `embedding`: *(optional, keyword-only)* A list of floats representing a pre-computed embedding. When `None` (the default) the native library computes the embedding from `trigger_phrase` automatically. Use `calculate_embedding()` to pre-compute embeddings.
+  - `priority`: *(optional, keyword-only)* An integer priority. Higher-priority intents rank above lower-priority ones in `get_closest_intents()`, even when their similarity score is lower. Defaults to `0`.
+- <a id="intentrecognizer-unregister-intent"></a>`unregister_intent()`: Removes an intent from the recognizer.
+  - `trigger_phrase`: The trigger phrase of the intent to remove.
+- <a id="intentrecognizer-calculate-embedding"></a>`calculate_embedding()`: Computes the embedding vector for a sentence. This is useful for pre-computing embeddings that can later be passed to `register_intent()` via the `embedding` parameter, or for storing embeddings externally.
+  - `sentence`: The input text to embed.
+  - `model_name`: *(optional, keyword-only)* Reserved for future use; pass `None`.
+  - **Returns**: A list of floats representing the embedding vector.
+- <a id="intentrecognizer-get-closest-intents"></a>`get_closest_intents()`: Returns registered intents ranked by similarity to an utterance.
+  - `utterance`: The spoken text to match against registered intents.
+  - `tolerance_threshold`: *(optional)* Minimum similarity threshold. Uses the instance `threshold` when not provided.
+  - **Returns**: A list of `IntentMatch` objects sorted by priority (descending), then similarity (descending).
+- <a id="intentrecognizer-intent-count"></a>`intent_count()`: Returns the number of registered intents.
+- <a id="intentrecognizer-clear-intents"></a>`clear_intents()`: Removes all registered intents from the recognizer.
 - <a id="intentrecognizer-set-on-intent"></a>`set_on_intent()`: Sets a callable that is called when any registered action is triggered, not just a single command as for `register_intent()`.
 
 #### TextToSpeech
