@@ -521,9 +521,12 @@ internal final class MoonshineAPI: @unchecked Sendable {
         moonshine_free_intent_recognizer(handle)
     }
 
-    func registerIntentRecognizerIntent(handle: Int32, canonicalPhrase: String) throws {
+    func registerIntentRecognizerIntent(handle: Int32, canonicalPhrase: String,
+                                        embedding: UnsafeMutablePointer<Float>? = nil,
+                                        embeddingSize: UInt64 = 0,
+                                        priority: Int32 = 0) throws {
         let phraseC = canonicalPhrase.cString(using: .utf8)!
-        try checkError(moonshine_register_intent(handle, phraseC))
+        try checkError(moonshine_register_intent(handle, phraseC, embedding, embeddingSize, priority))
     }
 
     /// - Returns: `true` if an intent was removed, `false` if the phrase was not registered.

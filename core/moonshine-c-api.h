@@ -508,7 +508,8 @@ MOONSHINE_EXPORT int32_t moonshine_transcribe_stream(
 /* Supported embedding model architectures for intent recognition.           */
 #define MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M (0)
 
-/* Maximum number of intent matches returned by moonshine_get_closest_intents. */
+/* Maximum number of intent matches returned by moonshine_get_closest_intents.
+ */
 #define MOONSHINE_INTENT_MAX_MATCHES (6)
 
 /* One ranked intent match from moonshine_get_closest_intents. */
@@ -535,9 +536,8 @@ struct moonshine_intent_match_t {
    failure. The error code can be converted to a human-readable string using
    moonshine_error_to_string.
 */
-MOONSHINE_EXPORT int32_t
-moonshine_create_intent_recognizer(const char *model_path, uint32_t model_arch,
-                                   const char *model_variant);
+MOONSHINE_EXPORT int32_t moonshine_create_intent_recognizer(
+    const char *model_path, uint32_t model_arch, const char *model_variant);
 
 /* Frees an intent recognizer and all its resources. */
 MOONSHINE_EXPORT void moonshine_free_intent_recognizer(
@@ -545,10 +545,18 @@ MOONSHINE_EXPORT void moonshine_free_intent_recognizer(
 
 /* Registers a canonical intent phrase (no callback).
 
+   `embedding` is an optional pointer to an array of floats of size
+   `embedding_size`. If `embedding` is NULL, the embedding is calculated for the
+   canonical phrase.
+   `priority` affects how intents are ranked. If a higher priority intent is
+   within the tolerance threshold, it will be ranked above lower priority
+   intents, even if their similarity is higher.
+
    Returns zero on success, or a non-zero error code on failure.
 */
 MOONSHINE_EXPORT int32_t moonshine_register_intent(
-    int32_t intent_recognizer_handle, const char *canonical_phrase);
+    int32_t intent_recognizer_handle, const char *canonical_phrase,
+    float *embedding, uint64_t embedding_size, int32_t priority);
 
 /* Unregisters an intent by its canonical phrase.
    Returns zero on success, or a non-zero error code on failure.
@@ -594,15 +602,34 @@ moonshine_get_intent_count(int32_t intent_recognizer_handle);
 MOONSHINE_EXPORT int32_t
 moonshine_clear_intents(int32_t intent_recognizer_handle);
 
+/* Calculates the intent embedding for a given sentence.
+
+   On success, ``*out_embedding`` is set to a heap-allocated array of floats and
+   ``*out_embedding_size`` is set to the number of elements. Release the array
+   with ``moonshine_free_intent_embedding``.
+
+   Returns zero on success, or a non-zero error code on failure.
+*/
+MOONSHINE_EXPORT int32_t moonshine_calculate_intent_embedding(
+    int32_t intent_recognizer_handle, const char *sentence,
+    float **out_embedding, uint64_t *out_embedding_size,
+    const char *model_name);
+
+/* Frees an intent embedding returned by moonshine_calculate_intent_embedding.
+ */
+MOONSHINE_EXPORT void moonshine_free_intent_embedding(float *embedding);
+
 /* ------------------------------ TEXT TO SPEECH ------------------------- */
 
 /* Creates a text to speech synthesizer from files on disk.
    Returns a non-negative handle on success, or a non-zero error code on
    failure. The error code can be converted to a human-readable string using
    moonshine_error_to_string.
-   Pass option ``voice`` as ``kokoro_<id>`` or ``piper_<stem>`` to select the vocoder, or as a bare
-   Kokoro id / Piper stem when using the default auto choice (and other TTS paths via ``moonshine_option_t``
-   as documented for ``MoonshineTTSOptions``). ``engine`` / ``vocoder_engine`` options are ignored.
+   Pass option ``voice`` as ``kokoro_<id>`` or ``piper_<stem>`` to select the
+   vocoder, or as a bare Kokoro id / Piper stem when using the default auto
+   choice (and other TTS paths via ``moonshine_option_t`` as documented for
+   ``MoonshineTTSOptions``). ``engine`` / ``vocoder_engine`` options are
+   ignored.
 */
 MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_files(
     const char *language, const char **filenames, uint64_t filenames_count,
@@ -648,9 +675,9 @@ MOONSHINE_EXPORT void moonshine_free_tts_synthesizer(
    grapheme phonemizer / G2P
    (``g2p_root``, ``spanish_narrow_obstruents``, ``oov_onnx_override``, …).
    TTS-only keys
-   (``voice``, deprecated ``vocoder_engine`` / ``engine``, Piper/Kokoro paths) are ignored here.
-   Non-empty values for in-memory override keys add those canonical key names to
-   the list. On success, writes a comma-separated list to
+   (``voice``, deprecated ``vocoder_engine`` / ``engine``, Piper/Kokoro paths)
+   are ignored here. Non-empty values for in-memory override keys add those
+   canonical key names to the list. On success, writes a comma-separated list to
    ``*out_dependencies_json`` and returns
    ``MOONSHINE_ERROR_NONE``. The buffer is allocated with ``malloc``; release
    with ``free``. On failure (e.g. unknown language token), logs and returns a
@@ -666,9 +693,11 @@ MOONSHINE_EXPORT int32_t moonshine_get_g2p_dependencies(
    ``languages`` is comma-separated; empty or NULL means all known languages.
    ``options`` / ``options_count``: same entries as
    ``moonshine_create_tts_synthesizer_from_files``
-   (``voice`` with optional ``kokoro_`` / ``piper_`` prefix, ``g2p_root``, ``piper_onnx``,
-   ``kokoro_model``, …; ``vocoder_engine`` / ``engine`` are ignored). Vocoder keys follow Kokoro vs Piper selection and the
-   requested ``voice`` like ``MoonshineTTS``. On success,
+   (``voice`` with optional ``kokoro_`` / ``piper_`` prefix, ``g2p_root``,
+   ``piper_onnx``,
+   ``kokoro_model``, …; ``vocoder_engine`` / ``engine`` are ignored). Vocoder
+   keys follow Kokoro vs Piper selection and the requested ``voice`` like
+   ``MoonshineTTS``. On success,
    ``*out_dependencies_json`` is a NUL-terminated JSON array; free with
    ``free``.
 */
@@ -681,20 +710,24 @@ MOONSHINE_EXPORT int32_t moonshine_get_tts_dependencies(
    languages (same tag set as G2P dependencies) that have a resolved TTS layout.
    ``options`` / ``options_count``: same entries as
    ``moonshine_create_tts_synthesizer_from_files``
-   (``voice`` prefix selects vocoder for listing; ``vocoder_engine`` / ``engine`` are ignored;
-   Piper/Kokoro path overrides). For accurate ``found`` / ``missing``, set an asset root with
-   ``g2p_root`` or the aliases ``path_root``, ``tts_root``, or ``model_root`` (see
-   ``MoonshineTTSOptions::parse_options``). If none are set, the implementation uses the process
-   current working directory. Language bindings typically default this to their download/cache
-   directory. The ``voice`` option does not filter the list.
+   (``voice`` prefix selects vocoder for listing; ``vocoder_engine`` /
+   ``engine`` are ignored; Piper/Kokoro path overrides). For accurate ``found``
+   / ``missing``, set an asset root with
+   ``g2p_root`` or the aliases ``path_root``, ``tts_root``, or ``model_root``
+   (see
+   ``MoonshineTTSOptions::parse_options``). If none are set, the implementation
+   uses the process current working directory. Language bindings typically
+   default this to their download/cache directory. The ``voice`` option does not
+   filter the list.
 
    On success, ``*out_voices_json`` is a NUL-terminated JSON object mapping each
    language tag to a JSON array of objects ``{"id":"<voice>","state":"found"}``
-   or ``{"id":"<voice>","state":"missing"}``. Voice ids are prefixed with ``kokoro_`` or ``piper_``. Kokoro uses the upstream
-   Kokoro-82M voice id catalog plus any extra ``*.kokorovoice`` in the bundle;
-   Piper lists the language default ONNX stem plus any ``*.onnx`` in the
-   resolved voices directory. ``found`` means the asset is on disk or supplied
-   via the in-memory file map like ``MoonshineTTS``. Free with ``free``.
+   or ``{"id":"<voice>","state":"missing"}``. Voice ids are prefixed with
+   ``kokoro_`` or ``piper_``. Kokoro uses the upstream Kokoro-82M voice id
+   catalog plus any extra ``*.kokorovoice`` in the bundle; Piper lists the
+   language default ONNX stem plus any ``*.onnx`` in the resolved voices
+   directory. ``found`` means the asset is on disk or supplied via the in-memory
+   file map like ``MoonshineTTS``. Free with ``free``.
 */
 MOONSHINE_EXPORT int32_t moonshine_get_tts_voices(
     const char *languages, const struct moonshine_option_t *options,
@@ -702,10 +735,11 @@ MOONSHINE_EXPORT int32_t moonshine_get_tts_voices(
 
 /* Synthesizes text to speech.
    ``options`` / ``options_count``: optional per-call overrides using the same
-   ``name`` / ``value`` convention as the synthesizer constructor. Currently only
-   ``speed`` is honored for the duration of this call (Kokoro ONNX input and Piper
-   length scale); other entries are ignored. Pass NULL / 0 to use the synthesizer
-   default speed from construction.
+   ``name`` / ``value`` convention as the synthesizer constructor. Currently
+   only
+   ``speed`` is honored for the duration of this call (Kokoro ONNX input and
+   Piper length scale); other entries are ignored. Pass NULL / 0 to use the
+   synthesizer default speed from construction.
 
    Returns zero on success, or a non-zero error code on failure.
 */

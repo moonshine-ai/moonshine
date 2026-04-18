@@ -1059,7 +1059,8 @@ Java_ai_moonshine_voice_JNI_moonshineRegisterIntent(JNIEnv *env, jobject /* this
       return MOONSHINE_ERROR_INVALID_ARGUMENT;
     }
     const char *phrase = env->GetStringUTFChars(canonical_phrase, nullptr);
-    const int32_t err = moonshine_register_intent(intent_handle, phrase);
+    const int32_t err = moonshine_register_intent(intent_handle, phrase,
+                                                   nullptr, 0, 0);
     env->ReleaseStringUTFChars(canonical_phrase, phrase);
     return err;
   } catch (const std::exception &e) {

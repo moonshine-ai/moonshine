@@ -52,7 +52,6 @@ SOFTWARE.
 
 #include "bin-tokenizer.h"
 #include "debug-utils.h"
-#include "gemma-embedding-model.h"
 #include "intent-recognizer.h"
 #include "moonshine-model.h"
 #include "moonshine-ort-allocator.h"
@@ -478,10 +477,15 @@ void moonshine_free_intent_recognizer(int32_t intent_recognizer_handle) {
 }
 
 int32_t moonshine_register_intent(int32_t intent_recognizer_handle,
-                                  const char *canonical_phrase) {
+                                  const char *canonical_phrase,
+                                  float *embedding, uint64_t embedding_size,
+                                  int32_t priority) {
   if (log_api_calls) {
-    LOGF("moonshine_register_intent(handle=%d, canonical_phrase=%s)",
-         intent_recognizer_handle, canonical_phrase);
+    LOGF(
+        "moonshine_register_intent(handle=%d, canonical_phrase=%s, "
+        "embedding=%p, embedding_size=%" PRIu64 ", priority=%d)",
+        intent_recognizer_handle, canonical_phrase,
+        static_cast<void *>(embedding), embedding_size, priority);
   }
   CHECK_INTENT_RECOGNIZER_HANDLE(intent_recognizer_handle);
   if (canonical_phrase == nullptr) {
@@ -490,8 +494,7 @@ int32_t moonshine_register_intent(int32_t intent_recognizer_handle,
   }
   try {
     intent_recognizer_map[intent_recognizer_handle]->register_intent(
-        canonical_phrase,
-        [](const std::string & /*utterance*/, float /*similarity*/) {});
+        canonical_phrase, embedding, embedding_size, priority);
   } catch (const std::exception &e) {
     LOGF("Failed to register intent: %s", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
@@ -618,6 +621,50 @@ int32_t moonshine_clear_intents(int32_t intent_recognizer_handle) {
     return MOONSHINE_ERROR_UNKNOWN;
   }
   return MOONSHINE_ERROR_NONE;
+}
+
+int32_t moonshine_calculate_intent_embedding(
+    int32_t intent_recognizer_handle, const char *sentence,
+    float **out_embedding, uint64_t *out_embedding_size,
+    const char *model_name) {
+  (void)model_name;
+  if (log_api_calls) {
+    LOGF(
+        "moonshine_calculate_intent_embedding(handle=%d, sentence=%s, "
+        "out_embedding=%p, out_embedding_size=%p, model_name=%s)",
+        intent_recognizer_handle, sentence ? sentence : "(null)",
+        static_cast<void *>(out_embedding),
+        static_cast<void *>(out_embedding_size),
+        model_name ? model_name : "(null)");
+  }
+  if (sentence == nullptr || out_embedding == nullptr ||
+      out_embedding_size == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  *out_embedding = nullptr;
+  *out_embedding_size = 0;
+  CHECK_INTENT_RECOGNIZER_HANDLE(intent_recognizer_handle);
+  try {
+    std::vector<float> emb =
+        intent_recognizer_map[intent_recognizer_handle]->calculate_embedding(
+            sentence);
+    const uint64_t n = static_cast<uint64_t>(emb.size());
+    auto *buf = static_cast<float *>(std::malloc(n * sizeof(float)));
+    if (buf == nullptr) {
+      return MOONSHINE_ERROR_UNKNOWN;
+    }
+    std::memcpy(buf, emb.data(), n * sizeof(float));
+    *out_embedding = buf;
+    *out_embedding_size = n;
+  } catch (const std::exception &e) {
+    LOGF("Failed to calculate intent embedding: %s", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+  return MOONSHINE_ERROR_NONE;
+}
+
+void moonshine_free_intent_embedding(float *embedding) {
+  std::free(embedding);
 }
 
 /* ------------------------------ TEXT TO SPEECH ------------------------- */

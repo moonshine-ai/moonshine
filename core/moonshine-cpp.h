@@ -749,8 +749,15 @@ class IntentRecognizer {
   IntentRecognizer &operator=(const IntentRecognizer &) = delete;
 
   /// Register a canonical phrase to match against.
+  /// @param canonical_phrase The phrase to register.
+  /// @param embedding Optional pre-computed embedding (nullptr to auto-compute).
+  /// @param embedding_size Number of floats in the embedding array.
+  /// @param priority Higher priority intents rank above lower ones.
   /// @throws MoonshineException on failure
-  void registerIntent(const std::string &canonical_phrase);
+  void registerIntent(const std::string &canonical_phrase,
+                      float *embedding = nullptr,
+                      uint64_t embedding_size = 0,
+                      int32_t priority = 0);
 
   /// Remove a phrase. Returns false if it was not registered.
   bool unregisterIntent(const std::string &canonical_phrase);
@@ -1375,9 +1382,10 @@ inline IntentRecognizer &IntentRecognizer::operator=(
 }
 
 inline void IntentRecognizer::registerIntent(
-    const std::string &canonical_phrase) {
-  checkError(
-      moonshine_register_intent(handle_, canonical_phrase.c_str()));
+    const std::string &canonical_phrase, float *embedding,
+    uint64_t embedding_size, int32_t priority) {
+  checkError(moonshine_register_intent(handle_, canonical_phrase.c_str(),
+                                       embedding, embedding_size, priority));
 }
 
 inline bool IntentRecognizer::unregisterIntent(
