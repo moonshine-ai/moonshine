@@ -60,7 +60,7 @@ mavenPublishing {
     publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
     signAllPublications()
     
-    coordinates("ai.moonshine", "moonshine-voice", "0.0.56")
+    coordinates("ai.moonshine", "moonshine-voice", "0.0.57")
 
     pom {
         name.set("Moonshine Voice")
