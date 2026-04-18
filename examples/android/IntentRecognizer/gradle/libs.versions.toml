@@ -3,7 +3,7 @@ agp = "8.13.2"
 kotlin = "2.1.10"
 appcompat = "1.6.1"
 material = "1.10.0"
-moonshineVoice = "0.0.56"
+moonshineVoice = "0.0.57"
 
 [libraries]
 appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
