@@ -40,8 +40,39 @@ public final class IntentRecognizer: @unchecked Sendable {
         }
     }
 
-    public func registerIntent(canonicalPhrase: String) throws {
-        try api.registerIntentRecognizerIntent(handle: handle, canonicalPhrase: canonicalPhrase)
+    /// Register a canonical phrase to match against.
+    /// - Parameters:
+    ///   - canonicalPhrase: The phrase to register.
+    ///   - embedding: Optional pre-computed embedding. Pass `nil` to auto-compute.
+    ///   - priority: Higher-priority intents rank above lower-priority ones.
+    public func registerIntent(
+        canonicalPhrase: String,
+        embedding: [Float]? = nil,
+        priority: Int32 = 0
+    ) throws {
+        if let emb = embedding {
+            var mutable = emb
+            try mutable.withUnsafeMutableBufferPointer { buf in
+                try api.registerIntentRecognizerIntent(
+                    handle: handle,
+                    canonicalPhrase: canonicalPhrase,
+                    embedding: buf.baseAddress,
+                    embeddingSize: UInt64(emb.count),
+                    priority: priority)
+            }
+        } else {
+            try api.registerIntentRecognizerIntent(
+                handle: handle,
+                canonicalPhrase: canonicalPhrase,
+                priority: priority)
+        }
+    }
+
+    /// Calculate the embedding vector for a sentence.
+    /// - Parameter sentence: The input text to embed.
+    /// - Returns: The embedding vector.
+    public func calculateEmbedding(sentence: String) throws -> [Float] {
+        try api.calculateIntentEmbedding(handle: handle, sentence: sentence)
     }
 
     /// - Returns: `true` if the phrase was removed, `false` if it was not registered.

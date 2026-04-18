@@ -593,6 +593,30 @@ internal final class MoonshineAPI: @unchecked Sendable {
     func clearIntentRecognizerIntents(handle: Int32) throws {
         try checkError(moonshine_clear_intents(handle))
     }
+
+    func calculateIntentEmbedding(handle: Int32, sentence: String) throws -> [Float] {
+        var outPtr: UnsafeMutablePointer<Float>? = nil
+        var outSize: UInt64 = 0
+        let err: Int32 = sentence.withCString { sentenceC in
+            withUnsafeMutablePointer(to: &outPtr) { embPP in
+                withUnsafeMutablePointer(to: &outSize) { sizeP in
+                    moonshine_calculate_intent_embedding(
+                        handle, sentenceC, embPP, sizeP, nil)
+                }
+            }
+        }
+        try checkError(err)
+        let n = Int(outSize)
+        var result = [Float]()
+        if let base = outPtr, n > 0 {
+            result.reserveCapacity(n)
+            for i in 0..<n {
+                result.append(base[i])
+            }
+            moonshine_free_intent_embedding(base)
+        }
+        return result
+    }
 }
 
 /// Transcriber option for advanced configuration.

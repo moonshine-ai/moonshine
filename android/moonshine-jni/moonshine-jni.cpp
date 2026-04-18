@@ -1053,14 +1053,25 @@ Java_ai_moonshine_voice_JNI_moonshineFreeIntentRecognizer(
 extern "C" JNIEXPORT jint JNICALL
 Java_ai_moonshine_voice_JNI_moonshineRegisterIntent(JNIEnv *env, jobject /* this */,
                                                     jint intent_handle,
-                                                    jstring canonical_phrase) {
+                                                    jstring canonical_phrase,
+                                                    jfloatArray embedding,
+                                                    jint priority) {
   try {
     if (canonical_phrase == nullptr) {
       return MOONSHINE_ERROR_INVALID_ARGUMENT;
     }
     const char *phrase = env->GetStringUTFChars(canonical_phrase, nullptr);
+    float *emb_ptr = nullptr;
+    uint64_t emb_size = 0;
+    if (embedding != nullptr) {
+      emb_ptr = env->GetFloatArrayElements(embedding, nullptr);
+      emb_size = static_cast<uint64_t>(env->GetArrayLength(embedding));
+    }
     const int32_t err = moonshine_register_intent(intent_handle, phrase,
-                                                   nullptr, 0, 0);
+                                                   emb_ptr, emb_size, priority);
+    if (emb_ptr != nullptr) {
+      env->ReleaseFloatArrayElements(embedding, emb_ptr, JNI_ABORT);
+    }
     env->ReleaseStringUTFChars(canonical_phrase, phrase);
     return err;
   } catch (const std::exception &e) {
@@ -1153,6 +1164,36 @@ Java_ai_moonshine_voice_JNI_moonshineClearIntents(JNIEnv * /* env */,
   } catch (const std::exception &e) {
     LOGE("moonshineClearIntents: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_ai_moonshine_voice_JNI_moonshineCalculateIntentEmbedding(
+    JNIEnv *env, jobject /* this */, jint intent_handle, jstring sentence) {
+  try {
+    if (sentence == nullptr) {
+      return nullptr;
+    }
+    const char *sent = env->GetStringUTFChars(sentence, nullptr);
+    float *out_embedding = nullptr;
+    uint64_t out_size = 0;
+    const int32_t err = moonshine_calculate_intent_embedding(
+        intent_handle, sent, &out_embedding, &out_size, nullptr);
+    env->ReleaseStringUTFChars(sentence, sent);
+    if (err != MOONSHINE_ERROR_NONE || out_embedding == nullptr) {
+      moonshine_free_intent_embedding(out_embedding);
+      return nullptr;
+    }
+    const jsize n = static_cast<jsize>(out_size);
+    jfloatArray result = env->NewFloatArray(n);
+    if (result != nullptr) {
+      env->SetFloatArrayRegion(result, 0, n, out_embedding);
+    }
+    moonshine_free_intent_embedding(out_embedding);
+    return result;
+  } catch (const std::exception &e) {
+    LOGE("moonshineCalculateIntentEmbedding: %s\n", e.what());
+    return nullptr;
   }
 }
 
