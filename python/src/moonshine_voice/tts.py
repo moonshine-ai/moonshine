@@ -134,7 +134,8 @@ class TextToSpeech:
             voice = vs if vs else None
         self._voice = voice
         if download:
-            validate_root = tts_asset_cache_path(Path(asset_root) if asset_root is not None else None)
+            validate_root = tts_asset_cache_path(
+                Path(asset_root) if asset_root is not None else None)
         else:
             if asset_root is None:
                 raise MoonshineError(
@@ -154,7 +155,8 @@ class TextToSpeech:
                 self._language,
                 voice=voice,
                 options=self._extra_options,
-                cache_root=Path(asset_root) if asset_root is not None else None,
+                cache_root=Path(
+                    asset_root) if asset_root is not None else None,
             )
         else:
             self._asset_root = validate_root
@@ -184,14 +186,17 @@ class TextToSpeech:
         if handle < 0:
             msg = self._lib.moonshine_error_to_string(handle)
             raise MoonshineError(
-                msg.decode("utf-8") if msg else f"Failed to create TTS synthesizer ({handle})"
+                msg.decode(
+                    "utf-8") if msg else f"Failed to create TTS synthesizer ({handle})"
             )
         self._handle = handle
-        self._say_device_cache: Optional[Tuple[Tuple[Any, ...], Optional[int]]] = None
+        self._say_device_cache: Optional[Tuple[Tuple[Any, ...],
+                                               Optional[int]]] = None
         self._say_settings_ok: Optional[Tuple[Tuple[Any, ...], int]] = None
 
     def _c_options_for_create(self) -> Dict[str, Union[str, int, float, bool]]:
-        merged: Dict[str, Union[str, int, float, bool]] = dict(self._extra_options)
+        merged: Dict[str, Union[str, int, float, bool]] = dict(
+            self._extra_options)
         merged["g2p_root"] = str(self._asset_root)
         if self._voice is not None:
             merged["voice"] = self._voice
@@ -208,15 +213,30 @@ class TextToSpeech:
     def synthesize(
         self,
         text: str,
+        *,
+        speed: Optional[float] = None,
+        volume: Optional[float] = None,
         options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
     ) -> Tuple[List[float], int]:
         """Synthesize ``text`` to PCM float samples ``(-1..1)`` and sample rate in Hz."""
+
+        if options is None:
+            options = {}
+
+        if speed is not None:
+            options["speed"] = str(speed)
+
+        # if volume is not None:
+        #     options["volume"] = str(volume)
+
         return moonshine_text_to_speech_samples(self._handle, text, options)
 
     def say(
         self,
         text: str,
         *,
+        speed: Optional[float] = None,
+        volume: Optional[float] = None,
         device: Optional[Union[int, str]] = None,
         options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
     ) -> None:
@@ -250,13 +270,15 @@ class TextToSpeech:
             resolved = _say_resolve_output_index(
                 spec_key,
                 outs,
-                device_label_for_errors=name_label or str(device) if device is not None else "",
+                device_label_for_errors=name_label or str(
+                    device) if device is not None else "",
             )
             self._say_device_cache = (spec_key, resolved)
             self._say_settings_ok = None
 
         resolved = self._say_device_cache[1]
-        samples, sr = self.synthesize(text, options)
+        samples, sr = self.synthesize(
+            text, speed=speed, volume=volume, options=options)
         sample_rate = int(sr)
 
         settings_key = (spec_key, sample_rate)
@@ -407,7 +429,8 @@ if __name__ == "__main__":
     if args.asset_root is None:
         args.asset_root = tts_asset_cache_path(None)
 
-    extra: Dict[str, Union[str, int, float, bool]] = {"g2p_root": str(args.asset_root)}
+    extra: Dict[str, Union[str, int, float, bool]] = {
+        "g2p_root": str(args.asset_root)}
     if args.options:
         try:
             for k, v in _parse_options_cli(args.options).items():

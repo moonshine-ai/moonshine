@@ -824,6 +824,7 @@ struct KokoroTtsEngine {
   /// Hugging Face ``onnx-community/Kokoro-82M-v1.0-ONNX`` quantized graph names the style vector ``style``;
   /// local torch exports use ``ref_s``.
   std::string style_input_name_ = "ref_s";
+  bool log_profiling_ = false;
 
   ~KokoroTtsEngine() {
     for (auto& e : tts_files_.entries) {
@@ -867,6 +868,8 @@ struct KokoroTtsEngine {
   }
 
   explicit KokoroTtsEngine(std::string_view language, MoonshineTTSOptions opt) {
+    log_profiling_ = opt.log_profiling;
+    TIMER_START_IF(log_profiling_, kokoro_engine_init);
     if (!(opt.speed > 0.0) || !std::isfinite(opt.speed)) {
       throw std::runtime_error("MoonshineTTS: speed must be a positive finite number");
     }
@@ -879,6 +882,9 @@ struct KokoroTtsEngine {
     config_path_ = resolve_path_under_root(root, tts_map_path(tts_files_, kTtsKokoroConfigJsonKey));
     voices_dir_ = model_path_.parent_path() / "voices";
 
+    LOGF_IF(log_profiling_, "KokoroTtsEngine: model='%s', config='%s'",
+            model_path_.c_str(), config_path_.c_str());
+
     const auto mit = tts_files_.entries.find(std::string(kTtsKokoroModelOnnxKey));
     const auto cit = tts_files_.entries.find(std::string(kTtsKokoroConfigJsonKey));
     if (mit == tts_files_.entries.end() || cit == tts_files_.entries.end()) {
@@ -886,12 +892,10 @@ struct KokoroTtsEngine {
     }
     FileInformation& model_fi = mit->second;
     FileInformation& cfg_fi = cit->second;
-    // FileInformation::load opens `path` as-is; resolve against g2p_root here so defaults like
-    // ``kokoro/config.json`` work when the process cwd is not the bundle (model_path_/config_path_
-    // already use resolve_path_under_root).
     model_fi.path = model_path_;
     cfg_fi.path = config_path_;
 
+    TIMER_START_IF(log_profiling_, kokoro_load_config);
     const uint8_t* cfg_buf = nullptr;
     size_t cfg_len = 0;
     cfg_fi.load(&cfg_buf, &cfg_len);
@@ -913,7 +917,10 @@ struct KokoroTtsEngine {
       }
     }
     cfg_fi.free();
+    LOGF_IF(log_profiling_, "KokoroTtsEngine: loaded vocab with %zu tokens", vocab_.size());
+    TIMER_END_IF(log_profiling_, kokoro_load_config);
 
+    TIMER_START_IF(log_profiling_, kokoro_load_onnx);
     const uint8_t* onnx_buf = nullptr;
     size_t onnx_len = 0;
     model_fi.load(&onnx_buf, &onnx_len);
@@ -926,6 +933,8 @@ struct KokoroTtsEngine {
                                                                kTtsKokoroModelOnnxKey);
     session_ = Ort::Session(env_, onnx_buf, onnx_len, session_opts);
     model_fi.free();
+    LOGF_IF(log_profiling_, "KokoroTtsEngine: ONNX model loaded (%zu bytes)", onnx_len);
+    TIMER_END_IF(log_profiling_, kokoro_load_onnx);
 
     detect_kokoro_style_input_name();
     detect_speed_input_element_type();
@@ -933,10 +942,26 @@ struct KokoroTtsEngine {
     resolve_lang_for_kokoro(lk, g2p_opt_, profile_, g2p_dialect_, opt.voice);
     maybe_align_en_profile_for_kokoro_voice(opt.voice, profile_, g2p_dialect_);
     kokoro_lang_ = profile_.kokoro_lang;
+
+    LOGF_IF(log_profiling_, "KokoroTtsEngine: language='%.*s', g2p_dialect='%s', kokoro_lang='%c'",
+            (int)std::string_view(language).size(), std::string_view(language).data(),
+            g2p_dialect_.c_str(), kokoro_lang_);
+
+    TIMER_START_IF(log_profiling_, kokoro_g2p_init);
     g2p_ = std::make_unique<MoonshineG2P>(g2p_dialect_, g2p_opt_);
+    TIMER_END_IF(log_profiling_, kokoro_g2p_init);
+
     voice_id_ = select_voice_id(kokoro_lang_, opt.voice, profile_.default_voice, voices_dir_, &tts_files_,
                                 g2p_opt_.g2p_root);
+    LOGF_IF(log_profiling_, "KokoroTtsEngine: voice='%s', speed=%.2f",
+            voice_id_.c_str(), speed_);
+
+    TIMER_START_IF(log_profiling_, kokoro_load_voice);
     reload_voice_tensor();
+    LOGF_IF(log_profiling_, "KokoroTtsEngine: voice tensor %ux%u", voice_rows_, voice_cols_);
+    TIMER_END_IF(log_profiling_, kokoro_load_voice);
+
+    TIMER_END_IF(log_profiling_, kokoro_engine_init);
   }
 
   void reload_voice_tensor() {
@@ -976,11 +1001,18 @@ struct KokoroTtsEngine {
   }
 
   std::vector<float> synthesize(std::string_view text) {
+    TIMER_START_IF(log_profiling_, kokoro_synthesize);
+
+    TIMER_START_IF(log_profiling_, kokoro_g2p);
     const std::string ipa = g2p_->text_to_ipa(text, nullptr);
+    TIMER_END_IF(log_profiling_, kokoro_g2p);
     if (trim_ascii_ws_copy(ipa).empty()) {
       return {};
     }
+
+    TIMER_START_IF(log_profiling_, kokoro_normalize_ipa);
     std::string phonemes = normalize_ipa_to_kokoro(ipa, kokoro_lang_, vocab_keys_);
+    TIMER_END_IF(log_profiling_, kokoro_normalize_ipa);
     if (phonemes.empty()) {
       return {};
     }
@@ -988,13 +1020,20 @@ struct KokoroTtsEngine {
     if (chunks.empty()) {
       return {};
     }
+    LOGF_IF(log_profiling_, "KokoroTtsEngine::synthesize: %zu phoneme chunk(s), "
+            "phonemes='%.*s'%s",
+            chunks.size(),
+            (int)std::min(phonemes.size(), (size_t)300), phonemes.c_str(),
+            phonemes.size() > 300 ? "..." : "");
+
     std::vector<float> wave_all;
     wave_all.reserve(chunks.size() * 8192);
 
     const char* in_names[3] = {"input_ids", style_input_name_.c_str(), "speed"};
     static const char* out_names[] = {"waveform"};
 
-    for (const std::string& piece : chunks) {
+    for (size_t ci = 0; ci < chunks.size(); ++ci) {
+      const std::string& piece = chunks[ci];
       if (trim_ascii_ws_copy(piece).empty()) {
         continue;
       }
@@ -1002,6 +1041,9 @@ struct KokoroTtsEngine {
       if (ids.size() > 512) {
         throw std::runtime_error("MoonshineTTS: phoneme token sequence too long for Kokoro (>512)");
       }
+      LOGF_IF(log_profiling_, "KokoroTtsEngine::synthesize: chunk %zu/%zu, %zu tokens",
+              ci + 1, chunks.size(), ids.size());
+
       const int64_t ntok = static_cast<int64_t>(ids.size());
       const std::array<int64_t, 2> shape_ids{1, ntok};
 
@@ -1034,8 +1076,11 @@ struct KokoroTtsEngine {
             Ort::Value::CreateTensor<double>(mem_, &speed_val, 1, nullptr, 0));
       }
 
+      TIMER_START_IF(log_profiling_, kokoro_onnx_run);
       Ort::RunOptions run_opts{nullptr};
       auto outputs = session_.Run(run_opts, in_names, inputs.data(), inputs.size(), out_names, 1);
+      TIMER_END_IF(log_profiling_, kokoro_onnx_run);
+
       const Ort::Value& wav = outputs[0];
       const auto ti = wav.GetTensorTypeAndShapeInfo();
       const size_t n_el = ti.GetElementCount();
@@ -1046,7 +1091,15 @@ struct KokoroTtsEngine {
       for (size_t i = 0; i < n_el; ++i) {
         wave_all.push_back(wptr[i]);
       }
+      LOGF_IF(log_profiling_, "KokoroTtsEngine::synthesize: chunk %zu produced %zu samples",
+              ci + 1, n_el);
     }
+
+    LOGF_IF(log_profiling_, "KokoroTtsEngine::synthesize: total %zu samples (%.2fs at %dHz)",
+            wave_all.size(),
+            static_cast<double>(wave_all.size()) / MoonshineTTS::kSampleRateHz,
+            MoonshineTTS::kSampleRateHz);
+    TIMER_END_IF(log_profiling_, kokoro_synthesize);
     return wave_all;
   }
 };
@@ -1055,9 +1108,12 @@ struct MoonshineTTS::Impl {
   std::unique_ptr<KokoroTtsEngine> kokoro_;
   std::unique_ptr<PiperTTS> piper_;
   std::mutex synth_mu_;
+  bool log_profiling_ = false;
 
   explicit Impl(std::string_view language, const MoonshineTTSOptions& opt_in) {
     MoonshineTTSOptions opt = opt_in;
+    log_profiling_ = opt.log_profiling;
+    TIMER_START_IF(log_profiling_, tts_init);
     for (const moonshine_tts::FileInformation& fi : opt.file_information) {
       const std::string map_key = fi.path.generic_string();
       if (map_key.empty()) {
@@ -1075,6 +1131,9 @@ struct MoonshineTTS::Impl {
     if (opt.g2p_options.g2p_root.empty()) {
       opt.g2p_options.g2p_root = std::filesystem::current_path();
     }
+    if (log_profiling_) {
+      opt.g2p_options.log_profiling = true;
+    }
     opt.apply_voice_engine_prefix();
     std::string eng = ascii_lowercase_copy(trim_ascii_ws_copy(opt.vocoder_engine));
     if (eng.empty()) {
@@ -1086,18 +1145,35 @@ struct MoonshineTTS::Impl {
     }
     const bool kokoro_ok = kokoro_tts_lang_supported_inner(language, opt.g2p_options);
     const bool use_kokoro = (eng == "kokoro") || (eng == "auto" && kokoro_ok);
+
+    LOGF_IF(log_profiling_, "MoonshineTTS: language='%.*s', vocoder_engine='%s' (resolved=%s), voice='%s'",
+            (int)std::string_view(language).size(), std::string_view(language).data(),
+            opt_in.vocoder_engine.c_str(),
+            use_kokoro ? "kokoro" : "piper",
+            opt.voice.c_str());
+
     if (use_kokoro) {
       kokoro_ = std::make_unique<KokoroTtsEngine>(language, std::move(opt));
     } else {
+      TIMER_START_IF(log_profiling_, piper_init);
       piper_ = std::make_unique<PiperTTS>(make_piper_options(language, opt));
+      TIMER_END_IF(log_profiling_, piper_init);
     }
+    TIMER_END_IF(log_profiling_, tts_init);
   }
 
   std::vector<float> synthesize_unlocked(std::string_view text) {
     if (kokoro_) {
       return kokoro_->synthesize(text);
     }
-    return piper_->synthesize(text);
+    TIMER_START_IF(log_profiling_, piper_synthesize);
+    auto result = piper_->synthesize(text);
+    LOGF_IF(log_profiling_, "PiperTTS::synthesize: %zu samples (%.2fs at %dHz)",
+            result.size(),
+            static_cast<double>(result.size()) / MoonshineTTS::kSampleRateHz,
+            MoonshineTTS::kSampleRateHz);
+    TIMER_END_IF(log_profiling_, piper_synthesize);
+    return result;
   }
 
   std::vector<float> synthesize(std::string_view text) {

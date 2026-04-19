@@ -94,6 +94,7 @@ bool is_known_g2p_option(std::string_view key) {
       "oov_onnx_override",
       "oov_onnx_config",
       "allow_builtin_g2p_data",
+      "log_profiling",
   };
   return kKnown.find(std::string(key)) != kKnown.end();
 }
@@ -301,6 +302,8 @@ void MoonshineG2POptions::parse_options(
     } else if (key == "allow_builtin_g2p_data") {
       // Deprecated: cwd / multi-path fallbacks were removed; value ignored.
       (void)v;
+    } else if (key == "log_profiling") {
+      log_profiling = bool_from_string(v);
     } else {
       throw std::logic_error("MoonshineG2POptions::parse_options: unhandled option '" + name + "'");
     }

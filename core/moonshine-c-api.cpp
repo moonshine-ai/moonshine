@@ -27,7 +27,6 @@ SOFTWARE.
 #include <fcntl.h>
 
 #include <algorithm>
-#include <filesystem>
 #include <array>
 #include <cassert>
 #include <cctype>
@@ -39,31 +38,31 @@ SOFTWARE.
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
-#include <optional>
 #include <cstdlib>
 #include <cstring>
 #include <cstring>  // For strerror
+#include <filesystem>
 #include <map>
 #include <mutex>
 #include <numeric>
+#include <optional>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "bin-tokenizer.h"
 #include "debug-utils.h"
 #include "intent-recognizer.h"
+#include "moonshine-asset-catalog.h"
+#include "moonshine-g2p.h"
 #include "moonshine-model.h"
 #include "moonshine-ort-allocator.h"
 #include "moonshine-tensor-view.h"
+#include "moonshine-tts.h"
 #include "ort-utils.h"
 #include "string-utils.h"
 #include "transcriber.h"
-#include "moonshine-asset-catalog.h"
-#include "moonshine-g2p.h"
-#include "moonshine-tts.h"
-
-#include <unordered_set>
 
 // Defined as a macro to ensure we get meaningful line numbers in the error
 // message.
@@ -77,51 +76,78 @@ SOFTWARE.
 
 namespace {
 
+typedef std::pair<std::string, std::string> OptionPair;
+typedef std::vector<OptionPair> OptionVector;
+
+OptionVector parse_option_vector(const moonshine_option_t *options,
+                                 uint64_t options_count) {
+  OptionVector option_vector;
+  option_vector.reserve(options_count);
+  for (uint64_t i = 0; i < options_count; i++) {
+    const moonshine_option_t &option = options[i];
+    std::string option_name = to_lowercase(option.name);
+    option_vector.emplace_back(option_name, option.value);
+  }
+  return option_vector;
+}
+
 bool log_api_calls = false;
 
-void parse_transcriber_options(const moonshine_option_t *in_options,
-                               uint64_t in_options_count,
+// Handles common options that are not specific to any particular API.
+OptionVector parse_common_options(const OptionVector &options) {
+  OptionVector uncommon_options;
+  for (const auto &option : options) {
+    if (option.first == "log_api_calls") {
+      log_api_calls = bool_from_string(option.second);
+    } else {
+      uncommon_options.push_back(option);
+    }
+  }
+  return uncommon_options;
+}
+
+void parse_transcriber_options(const OptionVector &options,
                                TranscriberOptions &out_options) {
-  for (uint64_t i = 0; i < in_options_count; i++) {
-    const moonshine_option_t &in_option = in_options[i];
-    std::string option_name = to_lowercase(in_option.name);
+  for (const auto &option : options) {
+    const std::string &option_name = option.first;
+    const std::string &option_value = option.second;
     if (option_name == "skip_transcription") {
       out_options.model_source = TranscriberOptions::ModelSource::NONE;
     } else if (option_name == "transcription_interval") {
-      out_options.transcription_interval = float_from_string(in_option.value);
-    } else if (option_name == "vad_threshold") {
-      out_options.vad_threshold = float_from_string(in_option.value);
+      out_options.transcription_interval = float_from_string(option_value);
+    } else if (option.first == "vad_threshold") {
+      out_options.vad_threshold = float_from_string(option_value);
     } else if (option_name == "save_input_wav_path") {
-      out_options.save_input_wav_path = std::string(in_option.value);
+      out_options.save_input_wav_path = std::string(option_value);
     } else if (option_name == "log_api_calls") {
-      log_api_calls = bool_from_string(in_option.value);
+      log_api_calls = bool_from_string(option_value);
     } else if (option_name == "log_ort_run") {
-      out_options.log_ort_run = bool_from_string(in_option.value);
+      out_options.log_ort_run = bool_from_string(option_value);
     } else if (option_name == "vad_window_duration") {
-      out_options.vad_window_duration = float_from_string(in_option.value);
+      out_options.vad_window_duration = float_from_string(option_value);
     } else if (option_name == "vad_hop_size") {
-      out_options.vad_hop_size = int32_from_string(in_option.value);
+      out_options.vad_hop_size = int32_from_string(option_value);
     } else if (option_name == "vad_look_behind_sample_count") {
       out_options.vad_look_behind_sample_count =
-          size_t_from_string(in_option.value);
+          size_t_from_string(option.second);
     } else if (option_name == "vad_max_segment_duration") {
-      out_options.vad_max_segment_duration = float_from_string(in_option.value);
+      out_options.vad_max_segment_duration = float_from_string(option_value);
     } else if (option_name == "max_tokens_per_second") {
-      out_options.max_tokens_per_second = float_from_string(in_option.value);
+      out_options.max_tokens_per_second = float_from_string(option_value);
     } else if (option_name == "identify_speakers") {
-      out_options.identify_speakers = bool_from_string(in_option.value);
+      out_options.identify_speakers = bool_from_string(option_value);
     } else if (option_name == "speaker_id_cluster_threshold") {
       out_options.speaker_id_cluster_threshold =
-          float_from_string(in_option.value);
+          float_from_string(option_value);
     } else if (option_name == "return_audio_data") {
-      out_options.return_audio_data = bool_from_string(in_option.value);
+      out_options.return_audio_data = bool_from_string(option_value);
     } else if (option_name == "log_output_text") {
-      out_options.log_output_text = bool_from_string(in_option.value);
+      out_options.log_output_text = bool_from_string(option_value);
     } else if (option_name == "word_timestamps") {
-      out_options.word_timestamps = bool_from_string(in_option.value);
+      out_options.word_timestamps = bool_from_string(option_value);
     } else {
-      throw std::runtime_error("Unknown transcriber option: '" +
-                               std::string(in_option.name) + "'");
+      throw std::runtime_error("Unknown transcriber option: '" + option_name +
+                               "', value=" + option_value);
     }
   }
 }
@@ -171,6 +197,8 @@ extern "C" const char *moonshine_error_to_string(int32_t error) {
 extern "C" int32_t moonshine_load_transcriber_from_files(
     const char *path, uint32_t model_arch, const moonshine_option_t *options,
     uint64_t options_count, int32_t moonshine_version) {
+  OptionVector option_vector = parse_option_vector(options, options_count);
+  OptionVector uncommon_options = parse_common_options(option_vector);
   if (log_api_calls) {
     LOGF(
         "moonshine_load_transcriber_from_files(path=%s, model_arch=%d, "
@@ -187,7 +215,7 @@ extern "C" int32_t moonshine_load_transcriber_from_files(
     transcriber_options.model_source = TranscriberOptions::ModelSource::FILES;
     transcriber_options.model_path = path;
     transcriber_options.model_arch = model_arch;
-    parse_transcriber_options(options, options_count, transcriber_options);
+    parse_transcriber_options(uncommon_options, transcriber_options);
     transcriber = new Transcriber(transcriber_options);
   } catch (const std::exception &e) {
     LOGF("Failed to load transcriber: %s\n", e.what());
@@ -203,6 +231,8 @@ int32_t moonshine_load_transcriber_from_memory(
     const uint8_t *tokenizer_data, size_t tokenizer_data_size,
     uint32_t model_arch, const moonshine_option_t *options,
     uint64_t options_count, int32_t moonshine_version) {
+  OptionVector option_vector = parse_option_vector(options, options_count);
+  OptionVector uncommon_options = parse_common_options(option_vector);
   if (log_api_calls) {
     LOGF(
         "moonshine_load_transcriber_from_memory(encoder_model_data=%p, "
@@ -231,7 +261,7 @@ int32_t moonshine_load_transcriber_from_memory(
     transcriber_options.tokenizer_data = tokenizer_data;
     transcriber_options.tokenizer_data_size = tokenizer_data_size;
     transcriber_options.model_arch = model_arch;
-    parse_transcriber_options(options, options_count, transcriber_options);
+    parse_transcriber_options(uncommon_options, transcriber_options);
     transcriber = new Transcriber(transcriber_options);
   } catch (const std::exception &e) {
     LOGF("Failed to load transcriber: %s\n", e.what());
@@ -533,10 +563,9 @@ int32_t moonshine_get_closest_intents(int32_t intent_recognizer_handle,
                                       moonshine_intent_match_t **out_matches,
                                       uint64_t *out_count) {
   if (log_api_calls) {
-    LOGF(
-        "moonshine_get_closest_intents(handle=%d, utterance=%s, tolerance=%f)",
-        intent_recognizer_handle, utterance ? utterance : "(null)",
-        tolerance_threshold);
+    LOGF("moonshine_get_closest_intents(handle=%d, utterance=%s, tolerance=%f)",
+         intent_recognizer_handle, utterance ? utterance : "(null)",
+         tolerance_threshold);
   }
   if (out_matches == nullptr || out_count == nullptr) {
     LOGF("%s",
@@ -623,10 +652,11 @@ int32_t moonshine_clear_intents(int32_t intent_recognizer_handle) {
   return MOONSHINE_ERROR_NONE;
 }
 
-int32_t moonshine_calculate_intent_embedding(
-    int32_t intent_recognizer_handle, const char *sentence,
-    float **out_embedding, uint64_t *out_embedding_size,
-    const char *model_name) {
+int32_t moonshine_calculate_intent_embedding(int32_t intent_recognizer_handle,
+                                             const char *sentence,
+                                             float **out_embedding,
+                                             uint64_t *out_embedding_size,
+                                             const char *model_name) {
   (void)model_name;
   if (log_api_calls) {
     LOGF(
@@ -663,9 +693,7 @@ int32_t moonshine_calculate_intent_embedding(
   return MOONSHINE_ERROR_NONE;
 }
 
-void moonshine_free_intent_embedding(float *embedding) {
-  std::free(embedding);
-}
+void moonshine_free_intent_embedding(float *embedding) { std::free(embedding); }
 
 /* ------------------------------ TEXT TO SPEECH ------------------------- */
 
@@ -675,34 +703,31 @@ std::mutex text_to_speech_synthesizer_map_mutex;
 std::map<int32_t, moonshine_tts::MoonshineTTS *> text_to_speech_synthesizer_map;
 int32_t next_text_to_speech_synthesizer_handle = 0;
 
-int32_t allocate_text_to_speech_synthesizer_handle(moonshine_tts::MoonshineTTS *synthesizer) {
+int32_t allocate_text_to_speech_synthesizer_handle(
+    moonshine_tts::MoonshineTTS *synthesizer) {
   std::lock_guard<std::mutex> lock(text_to_speech_synthesizer_map_mutex);
   int32_t handle = next_text_to_speech_synthesizer_handle++;
   text_to_speech_synthesizer_map[handle] = synthesizer;
   return handle;
 }
 
-void parse_tts_options(const moonshine_option_t *in_options,
-                       uint64_t in_options_count,
+void parse_tts_options(const OptionVector &options,
                        moonshine_tts::MoonshineTTSOptions &out_options,
-                       std::string &cli_language_out, bool &language_was_set_out) {
-  std::vector<std::pair<std::string, std::string>> options;
-  for (uint64_t i = 0; i < in_options_count; i++) {
-    const moonshine_option_t &option = in_options[i];
-    options.push_back(std::make_pair(option.name, option.value));
-  }
+                       std::string &cli_language_out,
+                       bool &language_was_set_out) {
   language_was_set_out = false;
   out_options.parse_options(options, &cli_language_out, &language_was_set_out);
 }
 
-#define CHECK_TTS_SYNTHESIZER_HANDLE(synth_handle)                                          \
-  do {                                                                                      \
-    if ((synth_handle) < 0 ||                                                               \
-        !text_to_speech_synthesizer_map.contains((synth_handle))) {                       \
-      LOGF("Moonshine text to speech synthesizer handle is invalid: handle %d",           \
-           (int)(synth_handle));                                                            \
-      return MOONSHINE_ERROR_INVALID_HANDLE;                                                \
-    }                                                                                       \
+#define CHECK_TTS_SYNTHESIZER_HANDLE(synth_handle)                             \
+  do {                                                                         \
+    if ((synth_handle) < 0 ||                                                  \
+        !text_to_speech_synthesizer_map.contains((synth_handle))) {            \
+      LOGF(                                                                    \
+          "Moonshine text to speech synthesizer handle is invalid: handle %d", \
+          (int)(synth_handle));                                                \
+      return MOONSHINE_ERROR_INVALID_HANDLE;                                   \
+    }                                                                          \
   } while (0)
 
 }  // namespace
@@ -713,6 +738,8 @@ int32_t moonshine_create_tts_synthesizer_from_files(
     int32_t moonshine_version) {
   (void)filenames;
   (void)filenames_count;
+  OptionVector option_vector = parse_option_vector(options, options_count);
+  OptionVector uncommon_options = parse_common_options(option_vector);
   if (log_api_calls) {
     LOGF(
         "moonshine_create_tts_synthesizer_from_files(language=%s, "
@@ -722,14 +749,19 @@ int32_t moonshine_create_tts_synthesizer_from_files(
         static_cast<unsigned long long>(filenames_count),
         static_cast<const void *>(options),
         static_cast<unsigned long long>(options_count), moonshine_version);
+    for (uint64_t i = 0; i < options_count; i++) {
+      const moonshine_option_t &option = options[i];
+      LOGF("  option[%" PRIu64 "] = %s=%s", i, option.name, option.value);
+    }
   }
   moonshine_tts::MoonshineTTSOptions tts_options;
   std::string lang_from_options;
   bool lang_from_options_set = false;
-  parse_tts_options(options, options_count, tts_options, lang_from_options,
+  parse_tts_options(uncommon_options, tts_options, lang_from_options,
                     lang_from_options_set);
-  std::string lang =
-      (language != nullptr && language[0] != '\0') ? std::string(language) : std::string("en_us");
+  std::string lang = (language != nullptr && language[0] != '\0')
+                         ? std::string(language)
+                         : std::string("en_us");
   if (lang_from_options_set) {
     lang = std::move(lang_from_options);
   }
@@ -748,6 +780,8 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
     const struct moonshine_option_t *options, uint64_t options_count,
     int32_t moonshine_version) {
   (void)moonshine_version;
+  OptionVector option_vector = parse_option_vector(options, options_count);
+  OptionVector uncommon_options = parse_common_options(option_vector);
   if (filenames_count > 0) {
     if (filenames == nullptr || memory == nullptr || memory_sizes == nullptr) {
       return MOONSHINE_ERROR_INVALID_ARGUMENT;
@@ -755,7 +789,8 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
   }
   if (log_api_calls) {
     LOGF(
-        "moonshine_create_tts_synthesizer_from_memory(language=%s, filenames=%p, "
+        "moonshine_create_tts_synthesizer_from_memory(language=%s, "
+        "filenames=%p, "
         "filenames_count=%llu, memory=%p, memory_sizes=%p, options=%p, "
         "options_count=%llu, moonshine_version=%d)",
         language, reinterpret_cast<const void *>(filenames),
@@ -764,6 +799,10 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
         reinterpret_cast<const void *>(memory_sizes),
         static_cast<const void *>(options),
         static_cast<unsigned long long>(options_count), moonshine_version);
+    for (uint64_t i = 0; i < options_count; i++) {
+      const moonshine_option_t &option = options[i];
+      LOGF("  option[%" PRIu64 "] = %s=%s", i, option.name, option.value);
+    }
   }
   try {
     moonshine_tts::MoonshineTTSOptions tts_options;
@@ -775,7 +814,7 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
       const bool is_tts_only =
           (key.size() >= 7 && key.compare(0, 7, "kokoro/") == 0) ||
           (key.size() >= 6 && key.compare(0, 6, "piper/") == 0);
-      moonshine_tts::FileInformationMap& dest =
+      moonshine_tts::FileInformationMap &dest =
           is_tts_only ? tts_options.files : tts_options.g2p_options.files;
       if (memory[i] != nullptr && memory_sizes[i] > 0) {
         dest.set_memory(key, memory[i], static_cast<size_t>(memory_sizes[i]));
@@ -784,16 +823,19 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
       }
     }
     {
-      // Legacy callers used in-memory key ``kokoro/model.ort``. Canonical key is ``kokoro/model.onnx``.
-      moonshine_tts::FileInformationMap& tf = tts_options.files;
+      // Legacy callers used in-memory key ``kokoro/model.ort``. Canonical key
+      // is ``kokoro/model.onnx``.
+      moonshine_tts::FileInformationMap &tf = tts_options.files;
       const std::string canon_k{moonshine_tts::kTtsKokoroModelOnnxKey};
       const auto canon_it = tf.entries.find(canon_k);
-      const bool canon_ok = canon_it != tf.entries.end() && canon_it->second.memory != nullptr &&
+      const bool canon_ok = canon_it != tf.entries.end() &&
+                            canon_it->second.memory != nullptr &&
                             canon_it->second.memory_size > 0;
       if (!canon_ok) {
         const auto leg = tf.entries.find("kokoro/model.ort");
-        if (leg != tf.entries.end() && leg->second.memory != nullptr && leg->second.memory_size > 0) {
-          const moonshine_tts::FileInformation& src = leg->second;
+        if (leg != tf.entries.end() && leg->second.memory != nullptr &&
+            leg->second.memory_size > 0) {
+          const moonshine_tts::FileInformation &src = leg->second;
           tf.entries[canon_k] = moonshine_tts::FileInformation{
               std::filesystem::path(canon_k), src.memory, src.memory_size};
         }
@@ -801,10 +843,11 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
     }
     std::string lang_from_options;
     bool lang_from_options_set = false;
-    parse_tts_options(options, options_count, tts_options, lang_from_options,
+    parse_tts_options(uncommon_options, tts_options, lang_from_options,
                       lang_from_options_set);
-    std::string lang =
-        (language != nullptr && language[0] != '\0') ? std::string(language) : std::string("en_us");
+    std::string lang = (language != nullptr && language[0] != '\0')
+                           ? std::string(language)
+                           : std::string("en_us");
     if (lang_from_options_set) {
       lang = std::move(lang_from_options);
     }
@@ -850,6 +893,10 @@ int32_t moonshine_text_to_speech(int32_t tts_synthesizer_handle,
         static_cast<void *>(out_audio_data),
         static_cast<void *>(out_audio_data_size),
         static_cast<void *>(out_sample_rate));
+    for (uint64_t i = 0; i < options_count; i++) {
+      const moonshine_option_t &option = options[i];
+      LOGF("  option[%" PRIu64 "] = %s=%s", i, option.name, option.value);
+    }
   }
   CHECK_TTS_SYNTHESIZER_HANDLE(tts_synthesizer_handle);
   try {
@@ -860,19 +907,22 @@ int32_t moonshine_text_to_speech(int32_t tts_synthesizer_handle,
       tts_pairs.reserve(static_cast<size_t>(options_count));
       for (uint64_t i = 0; i < options_count; i++) {
         const moonshine_option_t &option = options[i];
-        const std::string name = option.name != nullptr ? std::string(option.name) : std::string();
+        const std::string name =
+            option.name != nullptr ? std::string(option.name) : std::string();
         const std::string value =
             option.value != nullptr ? std::string(option.value) : std::string();
         tts_pairs.emplace_back(std::move(name), std::move(value));
       }
     }
-    const std::vector<float> wave = tts_pairs.empty() ? synth->synthesize(text)
-                                                       : synth->synthesize(text, tts_pairs);
+    const std::vector<float> wave = tts_pairs.empty()
+                                        ? synth->synthesize(text)
+                                        : synth->synthesize(text, tts_pairs);
     *out_sample_rate = moonshine_tts::MoonshineTTS::kSampleRateHz;
     *out_audio_data_size = wave.size();
     *out_audio_data = nullptr;
     if (!wave.empty()) {
-      *out_audio_data = static_cast<float *>(std::malloc(wave.size() * sizeof(float)));
+      *out_audio_data =
+          static_cast<float *>(std::malloc(wave.size() * sizeof(float)));
       if (*out_audio_data == nullptr) {
         return MOONSHINE_ERROR_UNKNOWN;
       }
@@ -902,7 +952,8 @@ std::vector<std::string> split_comma_nonempty_language_tokens(const char *s) {
     return parts;
   }
   std::string cur;
-  for (const unsigned char *p = reinterpret_cast<const unsigned char *>(s); *p != '\0'; ++p) {
+  for (const unsigned char *p = reinterpret_cast<const unsigned char *>(s);
+       *p != '\0'; ++p) {
     if (*p == ',') {
       const std::string t = trim(cur);
       if (!t.empty()) {
@@ -920,7 +971,8 @@ std::vector<std::string> split_comma_nonempty_language_tokens(const char *s) {
   return parts;
 }
 
-void append_unique_in_order(std::vector<std::string> &acc, const std::vector<std::string> &more) {
+void append_unique_in_order(std::vector<std::string> &acc,
+                            const std::vector<std::string> &more) {
   std::unordered_set<std::string> seen(acc.begin(), acc.end());
   for (const std::string &x : more) {
     if (seen.insert(x).second) {
@@ -958,7 +1010,8 @@ std::string json_utf8_string_literal(const std::string &s) {
       default:
         if (c < 0x20U) {
           char buf[7];
-          std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned int>(c));
+          std::snprintf(buf, sizeof(buf), "\\u%04x",
+                        static_cast<unsigned int>(c));
           r += buf;
         } else {
           r += static_cast<char>(c);
@@ -983,7 +1036,8 @@ std::string json_flat_string_array(const std::vector<std::string> &items) {
   return o;
 }
 
-std::string json_tts_voice_entry(const moonshine_tts::MoonshineTtsVoiceAvailability &v) {
+std::string json_tts_voice_entry(
+    const moonshine_tts::MoonshineTtsVoiceAvailability &v) {
   std::string o = "{\"id\":";
   o += json_utf8_string_literal(v.id);
   o += ",\"state\":";
@@ -992,7 +1046,8 @@ std::string json_tts_voice_entry(const moonshine_tts::MoonshineTtsVoiceAvailabil
   return o;
 }
 
-std::string json_tts_voices_lang_array(const std::vector<moonshine_tts::MoonshineTtsVoiceAvailability> &voices) {
+std::string json_tts_voices_lang_array(
+    const std::vector<moonshine_tts::MoonshineTtsVoiceAvailability> &voices) {
   std::string o;
   o.push_back('[');
   for (size_t i = 0; i < voices.size(); ++i) {
@@ -1006,7 +1061,9 @@ std::string json_tts_voices_lang_array(const std::vector<moonshine_tts::Moonshin
 }
 
 std::string json_tts_voices_root_object(
-    const std::vector<std::pair<std::string, std::vector<moonshine_tts::MoonshineTtsVoiceAvailability>>> &rows) {
+    const std::vector<std::pair<
+        std::string, std::vector<moonshine_tts::MoonshineTtsVoiceAvailability>>>
+        &rows) {
   std::string o;
   o.push_back('{');
   for (size_t i = 0; i < rows.size(); ++i) {
@@ -1021,8 +1078,9 @@ std::string json_tts_voices_root_object(
   return o;
 }
 
-void apply_g2p_dependency_query_c_options(const moonshine_option_t *options, uint64_t options_count,
-                                           moonshine_tts::MoonshineG2POptions &g2p_options) {
+void apply_g2p_dependency_query_c_options(
+    const moonshine_option_t *options, uint64_t options_count,
+    moonshine_tts::MoonshineG2POptions &g2p_options) {
   if (options == nullptr || options_count == 0) {
     return;
   }
@@ -1030,8 +1088,10 @@ void apply_g2p_dependency_query_c_options(const moonshine_option_t *options, uin
   g2p_pairs.reserve(options_count);
   for (uint64_t i = 0; i < options_count; i++) {
     const moonshine_option_t &option = options[i];
-    const std::string name = option.name != nullptr ? std::string(option.name) : std::string();
-    const std::string value = option.value != nullptr ? std::string(option.value) : std::string();
+    const std::string name =
+        option.name != nullptr ? std::string(option.name) : std::string();
+    const std::string value =
+        option.value != nullptr ? std::string(option.value) : std::string();
     const std::string key = replace_all(to_lowercase(name), "-", "_");
     if (key == "tts_root" || key == "path_root" || key == "model_root") {
       const std::string t = trim(value);
@@ -1046,14 +1106,18 @@ void apply_g2p_dependency_query_c_options(const moonshine_option_t *options, uin
       (void)value;
     } else if (key == "log_api_calls") {
       log_api_calls = bool_from_string(value.c_str());
-    } else if (key == "voice" || key == "speed" || key == "vocoder_engine" || key == "engine" ||
-               key == "output" || key == "o" || key == "piper_normalize_audio" ||
-               key == "piper_output_volume" || key == "kokoro_dir" || key == "kokoro_model" ||
-               key == "kokoro_model_onnx" || key == "kokoro_config" || key == "kokoro_config_json" ||
-               key == "piper_onnx" || key == "piper_model_onnx" || key == "piper_onnx_json" ||
-               key == "piper_model_json" || key == "piper_onnx_config" || key == "piper_voices_dir" ||
-               key == "voices_dir" || key == "piper_voices_json_dir" || key == "voices_json_dir" ||
-               key == "piper_noise_scale" || key == "piper_noise_scale_override" || key == "piper_noise_w" ||
+    } else if (key == "voice" || key == "speed" || key == "vocoder_engine" ||
+               key == "engine" || key == "output" || key == "o" ||
+               key == "piper_normalize_audio" || key == "piper_output_volume" ||
+               key == "kokoro_dir" || key == "kokoro_model" ||
+               key == "kokoro_model_onnx" || key == "kokoro_config" ||
+               key == "kokoro_config_json" || key == "piper_onnx" ||
+               key == "piper_model_onnx" || key == "piper_onnx_json" ||
+               key == "piper_model_json" || key == "piper_onnx_config" ||
+               key == "piper_voices_dir" || key == "voices_dir" ||
+               key == "piper_voices_json_dir" || key == "voices_json_dir" ||
+               key == "piper_noise_scale" ||
+               key == "piper_noise_scale_override" || key == "piper_noise_w" ||
                key == "piper_noise_w_override") {
       continue;
     } else {
@@ -1063,9 +1127,9 @@ void apply_g2p_dependency_query_c_options(const moonshine_option_t *options, uin
   g2p_options.parse_options(g2p_pairs);
 }
 
-void append_g2p_explicit_override_keys_from_c_options(const moonshine_option_t *options,
-                                                      uint64_t options_count,
-                                                      std::vector<std::string> &keys) {
+void append_g2p_explicit_override_keys_from_c_options(
+    const moonshine_option_t *options, uint64_t options_count,
+    std::vector<std::string> &keys) {
   if (options == nullptr || options_count == 0) {
     return;
   }
@@ -1077,21 +1141,27 @@ void append_g2p_explicit_override_keys_from_c_options(const moonshine_option_t *
     if (v.empty()) {
       continue;
     }
-    const std::string key = replace_all(to_lowercase(std::string(options[i].name)), "-", "_");
+    const std::string key =
+        replace_all(to_lowercase(std::string(options[i].name)), "-", "_");
     if (key == "oov_onnx_override") {
-      append_unique_in_order(keys, {std::string(moonshine_tts::kG2pOovOnnxOverrideKey)});
+      append_unique_in_order(
+          keys, {std::string(moonshine_tts::kG2pOovOnnxOverrideKey)});
     } else if (key == "oov_onnx_config") {
-      append_unique_in_order(keys, {std::string(moonshine_tts::kG2pOovOnnxConfigOverrideKey)});
+      append_unique_in_order(
+          keys, {std::string(moonshine_tts::kG2pOovOnnxConfigOverrideKey)});
     } else if (key == "portuguese_dict_path") {
-      append_unique_in_order(keys, {std::string(moonshine_tts::kG2pPortugueseDictOverrideKey)});
+      append_unique_in_order(
+          keys, {std::string(moonshine_tts::kG2pPortugueseDictOverrideKey)});
     }
   }
 }
 
 }  // namespace
 
-int32_t moonshine_get_g2p_dependencies(const char *languages, const moonshine_option_t *options,
-                                       uint64_t options_count, char **out_dependencies_json) {
+int32_t moonshine_get_g2p_dependencies(const char *languages,
+                                       const moonshine_option_t *options,
+                                       uint64_t options_count,
+                                       char **out_dependencies_json) {
   if (out_dependencies_json == nullptr) {
     return MOONSHINE_ERROR_INVALID_ARGUMENT;
   }
@@ -1109,24 +1179,30 @@ int32_t moonshine_get_g2p_dependencies(const char *languages, const moonshine_op
     (void)g2p_opts;
     std::vector<std::string> keys;
     if (all_langs) {
-      keys = moonshine_tts::moonshine_asset_catalog_all_g2p_dependency_keys_union();
+      keys = moonshine_tts::
+          moonshine_asset_catalog_all_g2p_dependency_keys_union();
     } else {
-      const std::vector<std::string> parts = split_comma_nonempty_language_tokens(languages);
+      const std::vector<std::string> parts =
+          split_comma_nonempty_language_tokens(languages);
       if (parts.empty()) {
-        keys = moonshine_tts::moonshine_asset_catalog_all_g2p_dependency_keys_union();
+        keys = moonshine_tts::
+            moonshine_asset_catalog_all_g2p_dependency_keys_union();
       } else {
         for (const std::string &part : parts) {
           const std::optional<std::vector<std::string>> chunk =
               moonshine_tts::moonshine_asset_catalog_g2p_dependency_keys(part);
           if (!chunk.has_value()) {
-            LOGF("moonshine_get_g2p_dependencies: unsupported language \"%s\"\n", part.c_str());
+            LOGF(
+                "moonshine_get_g2p_dependencies: unsupported language \"%s\"\n",
+                part.c_str());
             return MOONSHINE_ERROR_INVALID_ARGUMENT;
           }
           append_unique_in_order(keys, *chunk);
         }
       }
     }
-    append_g2p_explicit_override_keys_from_c_options(options, options_count, keys);
+    append_g2p_explicit_override_keys_from_c_options(options, options_count,
+                                                     keys);
     std::string joined;
     for (size_t i = 0; i < keys.size(); ++i) {
       if (i > 0) {
@@ -1146,13 +1222,28 @@ int32_t moonshine_get_g2p_dependencies(const char *languages, const moonshine_op
   }
 }
 
-int32_t moonshine_get_tts_dependencies(const char *languages, const moonshine_option_t *options,
-                                       uint64_t options_count, char **out_dependencies_json) {
+int32_t moonshine_get_tts_dependencies(const char *languages,
+                                       const moonshine_option_t *options,
+                                       uint64_t options_count,
+                                       char **out_dependencies_json) {
   if (out_dependencies_json == nullptr) {
     return MOONSHINE_ERROR_INVALID_ARGUMENT;
   }
   if (options_count > 0 && options == nullptr) {
     return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  OptionVector option_vector = parse_option_vector(options, options_count);
+  OptionVector uncommon_options = parse_common_options(option_vector);
+  if (log_api_calls) {
+    LOGF(
+        "moonshine_get_tts_dependencies(languages=%s, options=%p, "
+        "options_count=%llu, out_dependencies_json=%p)",
+        languages, reinterpret_cast<const void *>(options), options_count,
+        reinterpret_cast<const void *>(out_dependencies_json));
+    for (uint64_t i = 0; i < options_count; i++) {
+      const moonshine_option_t &option = options[i];
+      LOGF("  option[%" PRIu64 "] = %s=%s", i, option.name, option.value);
+    }
   }
   *out_dependencies_json = nullptr;
   const bool all_langs = (languages == nullptr || languages[0] == '\0');
@@ -1160,42 +1251,54 @@ int32_t moonshine_get_tts_dependencies(const char *languages, const moonshine_op
     moonshine_tts::MoonshineTTSOptions tts_opt;
     std::string cli_lang;
     bool lang_set = false;
-    parse_tts_options(options, options_count, tts_opt, cli_lang, lang_set);
+    parse_tts_options(uncommon_options, tts_opt, cli_lang, lang_set);
     if (tts_opt.g2p_options.g2p_root.empty()) {
       tts_opt.g2p_options.g2p_root = std::filesystem::current_path();
     }
     std::vector<std::string> merged;
     if (all_langs) {
-      merged = moonshine_tts::moonshine_asset_catalog_all_g2p_dependency_keys_union();
+      merged = moonshine_tts::
+          moonshine_asset_catalog_all_g2p_dependency_keys_union();
       const std::vector<std::string> tags =
           moonshine_tts::moonshine_asset_catalog_all_registered_language_tags();
       for (const std::string &tag : tags) {
         append_unique_in_order(
-            merged, moonshine_tts::moonshine_catalog_tts_vocoder_only_dependency_keys(tag, tts_opt));
+            merged,
+            moonshine_tts::moonshine_catalog_tts_vocoder_only_dependency_keys(
+                tag, tts_opt));
       }
     } else {
-      const std::vector<std::string> parts = split_comma_nonempty_language_tokens(languages);
+      const std::vector<std::string> parts =
+          split_comma_nonempty_language_tokens(languages);
       if (parts.empty()) {
-        merged = moonshine_tts::moonshine_asset_catalog_all_g2p_dependency_keys_union();
-        const std::vector<std::string> tags =
-            moonshine_tts::moonshine_asset_catalog_all_registered_language_tags();
+        merged = moonshine_tts::
+            moonshine_asset_catalog_all_g2p_dependency_keys_union();
+        const std::vector<std::string> tags = moonshine_tts::
+            moonshine_asset_catalog_all_registered_language_tags();
         for (const std::string &tag : tags) {
           append_unique_in_order(
-              merged, moonshine_tts::moonshine_catalog_tts_vocoder_only_dependency_keys(tag, tts_opt));
+              merged,
+              moonshine_tts::moonshine_catalog_tts_vocoder_only_dependency_keys(
+                  tag, tts_opt));
         }
       } else {
         for (const std::string &part : parts) {
           const std::optional<std::vector<std::string>> g2p =
               moonshine_tts::moonshine_asset_catalog_g2p_dependency_keys(part);
           if (!g2p.has_value()) {
-            LOGF("moonshine_get_tts_dependencies: unsupported language \"%s\"\n", part.c_str());
+            LOGF(
+                "moonshine_get_tts_dependencies: unsupported language \"%s\"\n",
+                part.c_str());
             return MOONSHINE_ERROR_INVALID_ARGUMENT;
           }
           const std::vector<std::string> voc =
-              moonshine_tts::moonshine_catalog_tts_vocoder_only_dependency_keys(part, tts_opt);
+              moonshine_tts::moonshine_catalog_tts_vocoder_only_dependency_keys(
+                  part, tts_opt);
           if (voc.empty()) {
-            LOGF("moonshine_get_tts_dependencies: no TTS layout for \"%s\" (voice prefix / paths?)\n",
-                 part.c_str());
+            LOGF(
+                "moonshine_get_tts_dependencies: no TTS layout for \"%s\" "
+                "(voice prefix / paths?)\n",
+                part.c_str());
             return MOONSHINE_ERROR_INVALID_ARGUMENT;
           }
           append_unique_in_order(merged, *g2p);
@@ -1216,8 +1319,10 @@ int32_t moonshine_get_tts_dependencies(const char *languages, const moonshine_op
   }
 }
 
-int32_t moonshine_get_tts_voices(const char *languages, const moonshine_option_t *options,
-                                 uint64_t options_count, char **out_voices_json) {
+int32_t moonshine_get_tts_voices(const char *languages,
+                                 const moonshine_option_t *options,
+                                 uint64_t options_count,
+                                 char **out_voices_json) {
   if (out_voices_json == nullptr) {
     return MOONSHINE_ERROR_INVALID_ARGUMENT;
   }
@@ -1227,44 +1332,53 @@ int32_t moonshine_get_tts_voices(const char *languages, const moonshine_option_t
   *out_voices_json = nullptr;
   const bool all_langs = (languages == nullptr || languages[0] == '\0');
   try {
+    OptionVector option_vector = parse_option_vector(options, options_count);
+    OptionVector uncommon_options = parse_common_options(option_vector);
     moonshine_tts::MoonshineTTSOptions tts_opt;
     std::string cli_lang;
     bool lang_set = false;
-    parse_tts_options(options, options_count, tts_opt, cli_lang, lang_set);
+    parse_tts_options(uncommon_options, tts_opt, cli_lang, lang_set);
     if (tts_opt.g2p_options.g2p_root.empty()) {
       tts_opt.g2p_options.g2p_root = std::filesystem::current_path();
     }
     (void)lang_set;
     (void)cli_lang;
 
-    std::vector<std::pair<std::string, std::vector<moonshine_tts::MoonshineTtsVoiceAvailability>>> rows;
+    std::vector<std::pair<
+        std::string, std::vector<moonshine_tts::MoonshineTtsVoiceAvailability>>>
+        rows;
 
     if (all_langs) {
       const std::vector<std::string> tags =
           moonshine_tts::moonshine_asset_catalog_all_registered_language_tags();
       for (const std::string &tag : tags) {
         const std::vector<std::string> voc =
-            moonshine_tts::moonshine_catalog_tts_vocoder_only_dependency_keys(tag, tts_opt);
+            moonshine_tts::moonshine_catalog_tts_vocoder_only_dependency_keys(
+                tag, tts_opt);
         if (voc.empty()) {
           continue;
         }
         std::vector<moonshine_tts::MoonshineTtsVoiceAvailability> voices =
-            moonshine_tts::moonshine_list_tts_voices_with_availability(tag, tts_opt);
+            moonshine_tts::moonshine_list_tts_voices_with_availability(tag,
+                                                                       tts_opt);
         rows.emplace_back(tag, std::move(voices));
       }
     } else {
-      const std::vector<std::string> parts = split_comma_nonempty_language_tokens(languages);
+      const std::vector<std::string> parts =
+          split_comma_nonempty_language_tokens(languages);
       if (parts.empty()) {
-        const std::vector<std::string> tags =
-            moonshine_tts::moonshine_asset_catalog_all_registered_language_tags();
+        const std::vector<std::string> tags = moonshine_tts::
+            moonshine_asset_catalog_all_registered_language_tags();
         for (const std::string &tag : tags) {
           const std::vector<std::string> voc =
-              moonshine_tts::moonshine_catalog_tts_vocoder_only_dependency_keys(tag, tts_opt);
+              moonshine_tts::moonshine_catalog_tts_vocoder_only_dependency_keys(
+                  tag, tts_opt);
           if (voc.empty()) {
             continue;
           }
           std::vector<moonshine_tts::MoonshineTtsVoiceAvailability> voices =
-              moonshine_tts::moonshine_list_tts_voices_with_availability(tag, tts_opt);
+              moonshine_tts::moonshine_list_tts_voices_with_availability(
+                  tag, tts_opt);
           rows.emplace_back(tag, std::move(voices));
         }
       } else {
@@ -1272,18 +1386,23 @@ int32_t moonshine_get_tts_voices(const char *languages, const moonshine_option_t
           const std::optional<std::vector<std::string>> g2p =
               moonshine_tts::moonshine_asset_catalog_g2p_dependency_keys(part);
           if (!g2p.has_value()) {
-            LOGF("moonshine_get_tts_voices: unsupported language \"%s\"\n", part.c_str());
-            return MOONSHINE_ERROR_INVALID_ARGUMENT;
-          }
-          const std::vector<std::string> voc =
-              moonshine_tts::moonshine_catalog_tts_vocoder_only_dependency_keys(part, tts_opt);
-          if (voc.empty()) {
-            LOGF("moonshine_get_tts_voices: no TTS layout for \"%s\" (voice prefix / paths?)\n",
+            LOGF("moonshine_get_tts_voices: unsupported language \"%s\"\n",
                  part.c_str());
             return MOONSHINE_ERROR_INVALID_ARGUMENT;
           }
+          const std::vector<std::string> voc =
+              moonshine_tts::moonshine_catalog_tts_vocoder_only_dependency_keys(
+                  part, tts_opt);
+          if (voc.empty()) {
+            LOGF(
+                "moonshine_get_tts_voices: no TTS layout for \"%s\" (voice "
+                "prefix / paths?)\n",
+                part.c_str());
+            return MOONSHINE_ERROR_INVALID_ARGUMENT;
+          }
           std::vector<moonshine_tts::MoonshineTtsVoiceAvailability> voices =
-              moonshine_tts::moonshine_list_tts_voices_with_availability(part, tts_opt);
+              moonshine_tts::moonshine_list_tts_voices_with_availability(
+                  part, tts_opt);
           rows.emplace_back(part, std::move(voices));
         }
       }
@@ -1317,19 +1436,20 @@ int32_t allocate_grapheme_phonemizer_handle(moonshine_tts::MoonshineG2P *g2p) {
   return handle;
 }
 
-void parse_grapheme_phonemizer_options(const moonshine_option_t *in_options,
-                                     uint64_t in_options_count,
-                                     moonshine_tts::MoonshineG2POptions &g2p_options,
-                                     std::string &cli_language_out,
-                                     bool &language_was_set_out) {
+void parse_grapheme_phonemizer_options(
+    const moonshine_option_t *in_options, uint64_t in_options_count,
+    moonshine_tts::MoonshineG2POptions &g2p_options,
+    std::string &cli_language_out, bool &language_was_set_out) {
   language_was_set_out = false;
   cli_language_out.clear();
   std::vector<std::pair<std::string, std::string>> g2p_pairs;
   g2p_pairs.reserve(in_options_count);
   for (uint64_t i = 0; i < in_options_count; i++) {
     const moonshine_option_t &option = in_options[i];
-    const std::string name = option.name != nullptr ? std::string(option.name) : std::string();
-    const std::string value = option.value != nullptr ? std::string(option.value) : std::string();
+    const std::string name =
+        option.name != nullptr ? std::string(option.name) : std::string();
+    const std::string value =
+        option.value != nullptr ? std::string(option.value) : std::string();
     const std::string key = replace_all(to_lowercase(name), "-", "_");
     if (key == "tts_root" || key == "path_root" || key == "model_root") {
       const std::string t = trim(value);
@@ -1353,18 +1473,20 @@ void parse_grapheme_phonemizer_options(const moonshine_option_t *in_options,
   g2p_options.parse_options(g2p_pairs);
 }
 
-void finalize_g2p_options_for_phonemizer_create(moonshine_tts::MoonshineG2POptions &g2p_opt) {
+void finalize_g2p_options_for_phonemizer_create(
+    moonshine_tts::MoonshineG2POptions &g2p_opt) {
   if (g2p_opt.g2p_root.empty()) {
     g2p_opt.g2p_root = std::filesystem::current_path();
   }
 }
 
-#define CHECK_GRAPHEME_PHONEMIZER_HANDLE(g2p_handle)                                          \
-  do {                                                                                        \
-    if ((g2p_handle) < 0 || !grapheme_phonemizer_map.contains((g2p_handle))) {                 \
-      LOGF("Moonshine grapheme phonemizer handle is invalid: handle %d", (int)(g2p_handle)); \
-      return MOONSHINE_ERROR_INVALID_HANDLE;                                                  \
-    }                                                                                         \
+#define CHECK_GRAPHEME_PHONEMIZER_HANDLE(g2p_handle)                           \
+  do {                                                                         \
+    if ((g2p_handle) < 0 || !grapheme_phonemizer_map.contains((g2p_handle))) { \
+      LOGF("Moonshine grapheme phonemizer handle is invalid: handle %d",       \
+           (int)(g2p_handle));                                                 \
+      return MOONSHINE_ERROR_INVALID_HANDLE;                                   \
+    }                                                                          \
   } while (0)
 
 }  // namespace
@@ -1390,17 +1512,22 @@ int32_t moonshine_create_grapheme_to_phonemizer_from_files(
         "moonshine_create_grapheme_to_phonemizer_from_files(language=%s, "
         "filenames=%p, filenames_count=%llu, options=%p, options_count=%llu, "
         "moonshine_version=%d)",
-        language != nullptr ? language : "", reinterpret_cast<const void *>(filenames),
+        language != nullptr ? language : "",
+        reinterpret_cast<const void *>(filenames),
         static_cast<unsigned long long>(filenames_count),
         static_cast<const void *>(options),
         static_cast<unsigned long long>(options_count), moonshine_version);
+    for (uint64_t i = 0; i < options_count; i++) {
+      const moonshine_option_t &option = options[i];
+      LOGF("  option[%" PRIu64 "] = %s=%s", i, option.name, option.value);
+    }
   }
   moonshine_tts::MoonshineG2POptions g2p_options;
   std::string lang_from_options;
   bool lang_from_options_set = false;
   try {
-    parse_grapheme_phonemizer_options(options, options_count, g2p_options, lang_from_options,
-                                      lang_from_options_set);
+    parse_grapheme_phonemizer_options(options, options_count, g2p_options,
+                                      lang_from_options, lang_from_options_set);
     for (uint64_t i = 0; i < filenames_count; ++i) {
       if (filenames[i] == nullptr) {
         return MOONSHINE_ERROR_INVALID_ARGUMENT;
@@ -1409,8 +1536,9 @@ int32_t moonshine_create_grapheme_to_phonemizer_from_files(
       g2p_options.files.set_path(key, std::filesystem::path(key));
     }
     finalize_g2p_options_for_phonemizer_create(g2p_options);
-    std::string lang = (language != nullptr && language[0] != '\0') ? std::string(language)
-                                                                     : std::string("en_us");
+    std::string lang = (language != nullptr && language[0] != '\0')
+                           ? std::string(language)
+                           : std::string("en_us");
     if (lang_from_options_set) {
       lang = std::move(lang_from_options);
     }
@@ -1443,14 +1571,21 @@ int32_t moonshine_create_grapheme_to_phonemizer_from_memory(
   }
   if (log_api_calls) {
     LOGF(
-        "moonshine_create_grapheme_to_phonemizer_from_memory(language=%s, filenames=%p, "
+        "moonshine_create_grapheme_to_phonemizer_from_memory(language=%s, "
+        "filenames=%p, "
         "filenames_count=%llu, memory=%p, memory_sizes=%p, options=%p, "
         "options_count=%llu, moonshine_version=%d)",
-        language != nullptr ? language : "", reinterpret_cast<const void *>(filenames),
+        language != nullptr ? language : "",
+        reinterpret_cast<const void *>(filenames),
         static_cast<unsigned long long>(filenames_count),
-        reinterpret_cast<const void *>(memory), reinterpret_cast<const void *>(memory_sizes),
+        reinterpret_cast<const void *>(memory),
+        reinterpret_cast<const void *>(memory_sizes),
         static_cast<const void *>(options),
         static_cast<unsigned long long>(options_count), moonshine_version);
+    for (uint64_t i = 0; i < options_count; i++) {
+      const moonshine_option_t &option = options[i];
+      LOGF("  option[%" PRIu64 "] = %s=%s", i, option.name, option.value);
+    }
   }
   try {
     moonshine_tts::MoonshineG2POptions g2p_options;
@@ -1460,18 +1595,20 @@ int32_t moonshine_create_grapheme_to_phonemizer_from_memory(
       }
       const std::string key(filenames[i]);
       if (memory[i] != nullptr && memory_sizes[i] > 0) {
-        g2p_options.files.set_memory(key, memory[i], static_cast<size_t>(memory_sizes[i]));
+        g2p_options.files.set_memory(key, memory[i],
+                                     static_cast<size_t>(memory_sizes[i]));
       } else {
         g2p_options.files.set_path(key, std::filesystem::path(key));
       }
     }
     std::string lang_from_options;
     bool lang_from_options_set = false;
-    parse_grapheme_phonemizer_options(options, options_count, g2p_options, lang_from_options,
-                                      lang_from_options_set);
+    parse_grapheme_phonemizer_options(options, options_count, g2p_options,
+                                      lang_from_options, lang_from_options_set);
     finalize_g2p_options_for_phonemizer_create(g2p_options);
-    std::string lang = (language != nullptr && language[0] != '\0') ? std::string(language)
-                                                                     : std::string("en_us");
+    std::string lang = (language != nullptr && language[0] != '\0')
+                           ? std::string(language)
+                           : std::string("en_us");
     if (lang_from_options_set) {
       lang = std::move(lang_from_options);
     }
@@ -1517,10 +1654,16 @@ int32_t moonshine_text_to_phonemes(int32_t grapheme_to_phonemizer_handle,
         "options_count=%llu, out_phonemes=%p, out_phonemes_count=%p)",
         grapheme_to_phonemizer_handle, text != nullptr ? text : "",
         static_cast<const void *>(options),
-        static_cast<unsigned long long>(options_count), static_cast<void *>(out_phonemes),
+        static_cast<unsigned long long>(options_count),
+        static_cast<void *>(out_phonemes),
         static_cast<void *>(out_phonemes_count));
+    for (uint64_t i = 0; i < options_count; i++) {
+      const moonshine_option_t &option = options[i];
+      LOGF("  option[%" PRIu64 "] = %s=%s", i, option.name, option.value);
+    }
   }
-  if (text == nullptr || out_phonemes == nullptr || out_phonemes_count == nullptr) {
+  if (text == nullptr || out_phonemes == nullptr ||
+      out_phonemes_count == nullptr) {
     return MOONSHINE_ERROR_INVALID_ARGUMENT;
   }
   CHECK_GRAPHEME_PHONEMIZER_HANDLE(grapheme_to_phonemizer_handle);
