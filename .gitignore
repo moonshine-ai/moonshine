@@ -49,3 +49,8 @@ output.wav
 text-to-speech
 transcriber
 build-*/
+core/build/
+core/bin-tokenizer/build/
+core/moonshine-tts/build/
+core/moonshine-utils/build/
+core/ort-utils/build/
