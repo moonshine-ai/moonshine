@@ -74,6 +74,7 @@ void grapheme_phonemizer_smoke(const std::filesystem::path& data_root, const cha
   const std::string g2p_root_str = data_root.string();
   const moonshine_option_t opts[] = {
       {"g2p_root", g2p_root_str.c_str()},
+      {"log_profiling", "true"},
   };
   const uint64_t n_opt = sizeof(opts) / sizeof(opts[0]);
   int32_t h = moonshine_create_grapheme_to_phonemizer_from_files(language, nullptr, 0, opts, n_opt,
@@ -446,6 +447,7 @@ TEST_CASE("moonshine-test-v2") {
         {"voice", "kokoro_af_heart"},
         {"speed", "1.0"},
         {"output", "out.wav"},
+        {"log_profiling", "true"},
     };
     const uint64_t options_count = sizeof(options) / sizeof(options[0]);
     int32_t tts_synthesizer_handle =

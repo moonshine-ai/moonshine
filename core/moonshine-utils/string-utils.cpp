@@ -91,24 +91,29 @@ std::string to_lowercase(const std::string &str) {
 
 bool bool_from_string(const char *input) {
   if (input == nullptr) {
-    throw std::runtime_error("Input is null");
+    throw std::runtime_error("Invalid boolean string: nullptr");
   }
+  return bool_from_string(std::string(input));
+}
+
+bool bool_from_string(const std::string &input) {
   const std::string input_string = to_lowercase(input);
   if (input_string == "true" || input_string == "1") {
     return true;
-  }
-  if (input_string == "false" || input_string == "0") {
+  } else if (input_string == "false" || input_string == "0") {
     return false;
   }
-  throw std::runtime_error("Invalid boolean string: '" + std::string(input) +
-                           "'");
-  return false;
+  throw std::runtime_error("Invalid boolean string: '" + input + "'");
 }
 
 float float_from_string(const char *input) {
   if (input == nullptr) {
-    throw std::runtime_error("Input is null");
+    throw std::runtime_error("Invalid float string: nullptr");
   }
+  return float_from_string(std::string(input));
+}
+
+float float_from_string(const std::string &input) {
   float result = 0.0f;
   try {
     result = std::stof(input);
@@ -121,28 +126,36 @@ float float_from_string(const char *input) {
 
 int32_t int32_from_string(const char *input) {
   if (input == nullptr) {
-    throw std::runtime_error("Input is null");
+    throw std::runtime_error("Invalid int32_t string: nullptr");
   }
+  return int32_from_string(std::string(input));
+}
+
+int32_t int32_from_string(const std::string &input) {
   int32_t result = 0;
   try {
     result = std::stoi(input, nullptr, 10);
   } catch (const std::exception &e) {
-    throw std::runtime_error("Invalid int32_t string: '" + std::string(input) +
-                             "': " + e.what());
+    throw std::runtime_error("Invalid int32_t string: '" + input + "': " +
+                             e.what());
   }
   return result;
 }
 
 size_t size_t_from_string(const char *input) {
   if (input == nullptr) {
-    throw std::runtime_error("Input is null");
+    throw std::runtime_error("Invalid size_t string: nullptr");
   }
+  return size_t_from_string(std::string(input));
+}
+
+size_t size_t_from_string(const std::string &input) {
   size_t result = 0;
   try {
     result = std::stoul(input, nullptr, 10);
   } catch (const std::exception &e) {
-    throw std::runtime_error("Invalid size_t string: '" + std::string(input) +
-                             "': " + e.what());
+    throw std::runtime_error("Invalid size_t string: '" + input + "': " +
+                             e.what());
   }
   return result;
 }

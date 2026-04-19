@@ -152,6 +152,9 @@ struct MoonshineG2POptions {
   /// ``read_binary_asset`` interpreted as UTF-8 bytes (no BOM handling).
   std::string read_utf8_asset(std::string_view canonical_key) const;
 
+  // Whether to log profiling information to the console.
+  bool log_profiling = false;
+
   void parse_options(const std::vector<std::pair<std::string, std::string>>& options);
 };
 

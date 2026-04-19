@@ -106,6 +106,7 @@ class MoonshineG2P {
   std::string dialect_id_;
   std::unique_ptr<RuleBasedG2p> rules_;
   std::optional<RuleBasedG2pKind> rule_backend_;
+  bool log_profiling_ = false;
 };
 
 }  // namespace moonshine_tts

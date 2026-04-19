@@ -5,8 +5,8 @@
 #include <cstring>
 #include <sstream>
 #include <string>
-#include <vector>
 #include <thread>
+#include <vector>
 
 #if defined(ANDROID)
 #include <android/asset_manager.h>
@@ -41,6 +41,16 @@ static inline const char *_moonshine_filename_without_path(const char *path) {
   } while (0)
 #endif
 #define LOG(x) LOGF("%s", (x))
+
+#define LOG_IF(condition, x) \
+  if (condition) {           \
+    LOG(x);                  \
+  }
+
+#define LOGF_IF(condition, format, ...) \
+  if (condition) {                      \
+    LOGF(format, __VA_ARGS__);          \
+  }
 
 #define RETURN_ON_ERROR(error)  \
   do {                          \
@@ -95,9 +105,21 @@ static inline const char *_moonshine_filename_without_path(const char *path) {
       std::chrono::duration_cast<std::chrono::milliseconds>(x##_timer_end -   \
                                                             x##_timer_start); \
   LOGF(#x " took %lld milliseconds", (long long)x##_timer_duration.count());
+
+// Always declares the timer variable so TIMER_END_IF can reference it.
+// The cost of high_resolution_clock::now() is negligible (~20ns).
+#define TIMER_START_IF(condition, x) \
+  auto x##_timer_start = std::chrono::high_resolution_clock::now();
+
+#define TIMER_END_IF(condition, x) \
+  if (condition) {                 \
+    TIMER_END(x);                  \
+  }
 #else
 #define TIMER_START(x)
 #define TIMER_END(x)
+#define TIMER_START_IF(condition, x)
+#define TIMER_END_IF(condition, x)
 #endif
 
 #ifdef DEBUG_ALLOC_ENABLED

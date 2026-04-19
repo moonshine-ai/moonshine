@@ -25,7 +25,7 @@ if [ -f "${REPO_ROOT_DIR}/.env" ]; then
 fi
 
 cd ${REPO_ROOT_DIR}
-scripts/run-core-tests.sh
+scripts/test-core.sh
 scripts/build-swift.sh
 scripts/publish-swift.sh
 scripts/publish-android.sh
@@ -36,18 +36,18 @@ scripts/publish-examples.sh
 
 ssh ${LINUX_CLOUD_HOST} 'cd moonshine \
   && git pull origin main \
-  && scripts/run-core-tests.sh \
+  && scripts/test-core.sh \
   && scripts/publish-binary.sh upload' || exit 1
 
 ssh -p ${RPI_CLOUD_PORT} ${RPI_CLOUD_HOST} 'cd moonshine \
   && git pull origin main \
-  && scripts/run-core-tests.sh \
+  && scripts/test-core.sh \
   && scripts/build-pip.sh upload \
   && scripts/publish-binary.sh upload' || exit 1
 
 ssh ${WINDOWS_CLOUD_USER}@${WINDOWS_CLOUD_HOST} 'cd moonshine `
   ; git pull origin main `
-  ; scripts/run-core-tests.bat `
+  ; scripts/test-core.bat `
   ; scripts/publish-binary.bat upload `
   ; scripts/build-pip.bat upload' \
   || exit 1

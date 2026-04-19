@@ -139,6 +139,8 @@ void MoonshineTTSOptions::parse_options(
       const std::string t = trim(value);
       piper_noise_w_override =
           t.empty() ? std::nullopt : std::optional<float>(float_from_string(t.c_str()));
+    } else if (key == "log_profiling") {
+      log_profiling = bool_from_string(value.c_str());
     } else {
       g2p_pairs.push_back(entry);
     }

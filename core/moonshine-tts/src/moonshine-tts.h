@@ -59,6 +59,9 @@ struct MoonshineTTSOptions {
   /// Relative or absolute path from ``files`` for key *k*, else ``std::filesystem::path(k)``.
   std::filesystem::path tts_relative_path(std::string_view canonical_key) const;
 
+  // Whether to log profiling information to the console.
+  bool log_profiling = false;
+
   /// Parses ``key=value``-style entries. G2P-specific keys are forwarded to ``g2p_options``.
   ///
   /// If ``cli_language`` is null and an entry names ``lang`` or ``language``, throws.
