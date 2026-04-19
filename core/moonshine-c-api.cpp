@@ -743,12 +743,12 @@ int32_t moonshine_create_tts_synthesizer_from_files(
   if (log_api_calls) {
     LOGF(
         "moonshine_create_tts_synthesizer_from_files(language=%s, "
-        "filenames=%p, filenames_count=%llu, options=%p, options_count=%llu, "
+        "filenames=%p, filenames_count=%" PRIu64 ", options=%p, options_count=%" PRIu64 ", "
         "moonshine_version=%d)",
         language, reinterpret_cast<const void *>(filenames),
-        static_cast<unsigned long long>(filenames_count),
+        filenames_count,
         static_cast<const void *>(options),
-        static_cast<unsigned long long>(options_count), moonshine_version);
+        options_count, moonshine_version);
     for (uint64_t i = 0; i < options_count; i++) {
       const moonshine_option_t &option = options[i];
       LOGF("  option[%" PRIu64 "] = %s=%s", i, option.name, option.value);
@@ -791,14 +791,14 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
     LOGF(
         "moonshine_create_tts_synthesizer_from_memory(language=%s, "
         "filenames=%p, "
-        "filenames_count=%llu, memory=%p, memory_sizes=%p, options=%p, "
-        "options_count=%llu, moonshine_version=%d)",
+        "filenames_count=%" PRIu64 ", memory=%p, memory_sizes=%p, options=%p, "
+        "options_count=%" PRIu64 ", moonshine_version=%d)",
         language, reinterpret_cast<const void *>(filenames),
-        static_cast<unsigned long long>(filenames_count),
+        filenames_count,
         reinterpret_cast<const void *>(memory),
         reinterpret_cast<const void *>(memory_sizes),
         static_cast<const void *>(options),
-        static_cast<unsigned long long>(options_count), moonshine_version);
+        options_count, moonshine_version);
     for (uint64_t i = 0; i < options_count; i++) {
       const moonshine_option_t &option = options[i];
       LOGF("  option[%" PRIu64 "] = %s=%s", i, option.name, option.value);
@@ -886,10 +886,10 @@ int32_t moonshine_text_to_speech(int32_t tts_synthesizer_handle,
   if (log_api_calls) {
     LOGF(
         "moonshine_text_to_speech(handle=%d, text=%s, options=%p, "
-        "options_count=%llu, out_audio_data=%p, out_audio_data_size=%p, "
+        "options_count=%" PRIu64 ", out_audio_data=%p, out_audio_data_size=%p, "
         "out_sample_rate=%p)",
         tts_synthesizer_handle, text, static_cast<const void *>(options),
-        static_cast<unsigned long long>(options_count),
+        options_count,
         static_cast<void *>(out_audio_data),
         static_cast<void *>(out_audio_data_size),
         static_cast<void *>(out_sample_rate));
@@ -1237,7 +1237,7 @@ int32_t moonshine_get_tts_dependencies(const char *languages,
   if (log_api_calls) {
     LOGF(
         "moonshine_get_tts_dependencies(languages=%s, options=%p, "
-        "options_count=%llu, out_dependencies_json=%p)",
+        "options_count=%" PRIu64 ", out_dependencies_json=%p)",
         languages, reinterpret_cast<const void *>(options), options_count,
         reinterpret_cast<const void *>(out_dependencies_json));
     for (uint64_t i = 0; i < options_count; i++) {
@@ -1510,13 +1510,13 @@ int32_t moonshine_create_grapheme_to_phonemizer_from_files(
   if (log_api_calls) {
     LOGF(
         "moonshine_create_grapheme_to_phonemizer_from_files(language=%s, "
-        "filenames=%p, filenames_count=%llu, options=%p, options_count=%llu, "
+        "filenames=%p, filenames_count=%" PRIu64 ", options=%p, options_count=%" PRIu64 ", "
         "moonshine_version=%d)",
         language != nullptr ? language : "",
         reinterpret_cast<const void *>(filenames),
-        static_cast<unsigned long long>(filenames_count),
+        filenames_count,
         static_cast<const void *>(options),
-        static_cast<unsigned long long>(options_count), moonshine_version);
+        options_count, moonshine_version);
     for (uint64_t i = 0; i < options_count; i++) {
       const moonshine_option_t &option = options[i];
       LOGF("  option[%" PRIu64 "] = %s=%s", i, option.name, option.value);
@@ -1573,15 +1573,15 @@ int32_t moonshine_create_grapheme_to_phonemizer_from_memory(
     LOGF(
         "moonshine_create_grapheme_to_phonemizer_from_memory(language=%s, "
         "filenames=%p, "
-        "filenames_count=%llu, memory=%p, memory_sizes=%p, options=%p, "
-        "options_count=%llu, moonshine_version=%d)",
+        "filenames_count=%" PRIu64 ", memory=%p, memory_sizes=%p, options=%p, "
+        "options_count=%" PRIu64 ", moonshine_version=%d)",
         language != nullptr ? language : "",
         reinterpret_cast<const void *>(filenames),
-        static_cast<unsigned long long>(filenames_count),
+        filenames_count,
         reinterpret_cast<const void *>(memory),
         reinterpret_cast<const void *>(memory_sizes),
         static_cast<const void *>(options),
-        static_cast<unsigned long long>(options_count), moonshine_version);
+        options_count, moonshine_version);
     for (uint64_t i = 0; i < options_count; i++) {
       const moonshine_option_t &option = options[i];
       LOGF("  option[%" PRIu64 "] = %s=%s", i, option.name, option.value);
@@ -1651,10 +1651,10 @@ int32_t moonshine_text_to_phonemes(int32_t grapheme_to_phonemizer_handle,
   if (log_api_calls) {
     LOGF(
         "moonshine_text_to_phonemes(handle=%d, text=%s, options=%p, "
-        "options_count=%llu, out_phonemes=%p, out_phonemes_count=%p)",
+        "options_count=%" PRIu64 ", out_phonemes=%p, out_phonemes_count=%p)",
         grapheme_to_phonemizer_handle, text != nullptr ? text : "",
         static_cast<const void *>(options),
-        static_cast<unsigned long long>(options_count),
+        options_count,
         static_cast<void *>(out_phonemes),
         static_cast<void *>(out_phonemes_count));
     for (uint64_t i = 0; i < options_count; i++) {
