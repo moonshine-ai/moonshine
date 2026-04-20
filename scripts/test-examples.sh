@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env bash -ex
 # Verify iOS and Android examples build standalone: either from GitHub Release
 # archives (default) or from a temporary copy of examples/android and examples/ios
 # (--local-examples).
