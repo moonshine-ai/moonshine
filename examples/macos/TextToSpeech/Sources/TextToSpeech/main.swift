@@ -335,7 +335,8 @@ func main() {
             }
 
             print("Synthesizing and playing: \"\(args.text)\"")
-            try tts.say(args.text, device: deviceID, options: synthOptions)
+            tts.say(args.text, device: deviceID, options: synthOptions)
+            tts.wait()
             print("Playback complete.")
         } catch {
             fputs("Error: \(error)\n", stderr)
