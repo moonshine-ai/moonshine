@@ -620,7 +620,7 @@ internal final class MoonshineAPI: @unchecked Sendable {
 }
 
 /// Transcriber option for advanced configuration.
-public struct TranscriberOption {
+public struct TranscriberOption: Sendable {
     public let name: String
     public let value: String
 

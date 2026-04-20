@@ -24,7 +24,7 @@ public typealias AudioDeviceID = UInt32
 /// tts.stop()   // cancel all pending + halt playback
 /// tts.close()
 /// ```
-public class TextToSpeech {
+public class TextToSpeech: @unchecked Sendable {
     private let api: MoonshineAPI
     private var handle: Int32
     private let _language: String
