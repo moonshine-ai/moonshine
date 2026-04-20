@@ -67,6 +67,7 @@ __version__ = "0.1.0"
 _transcriber_imported = False
 _mic_transcriber_imported = False
 _intent_recognizer_imported = False
+_alphanumeric_listener_imported = False
 _tts_imported = False
 _g2p_imported = False
 
@@ -74,7 +75,7 @@ _g2p_imported = False
 def __getattr__(name):
     """Lazy import for transcriber, mic_transcriber, and intent_recognizer modules."""
     global _transcriber_imported, _mic_transcriber_imported, _intent_recognizer_imported
-    global _tts_imported, _g2p_imported
+    global _alphanumeric_listener_imported, _tts_imported, _g2p_imported
 
     # Lazy import transcriber module
     if name in (
@@ -154,6 +155,21 @@ def __getattr__(name):
             _intent_recognizer_imported = True
         return globals()[name]
 
+    # Lazy import alphanumeric_listener module
+    if name in ("AlphanumericListener", "AlphanumericEvent", "AlphanumericEventType"):
+        if not _alphanumeric_listener_imported:
+            from moonshine_voice.alphanumeric_listener import (
+                AlphanumericListener,
+                AlphanumericEvent,
+                AlphanumericEventType,
+            )
+
+            globals()["AlphanumericListener"] = AlphanumericListener
+            globals()["AlphanumericEvent"] = AlphanumericEvent
+            globals()["AlphanumericEventType"] = AlphanumericEventType
+            _alphanumeric_listener_imported = True
+        return globals()[name]
+
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -215,4 +231,8 @@ __all__ = [
     "validate_tts_language",
     "validate_tts_voice_downloaded",
     "ensure_tts_voice_downloaded",
+    # Alphanumeric listener
+    "AlphanumericListener",
+    "AlphanumericEvent",
+    "AlphanumericEventType",
 ]
