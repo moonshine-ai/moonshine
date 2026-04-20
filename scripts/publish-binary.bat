@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 
-set VERSION=0.0.58
+set VERSION=0.0.59
 set REPO=moonshine-ai/moonshine
 
 REM Get the directory where this script is located

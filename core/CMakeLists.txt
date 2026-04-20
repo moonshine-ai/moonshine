@@ -6,7 +6,7 @@ enable_testing()
 
 set(CMAKE_CXX_STANDARD 20)
 
-set(MOONSHINE_VERSION "0.0.58")
+set(MOONSHINE_VERSION "0.0.59")
 
 # Ensure the standard is strictly enforced (optional, but recommended)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
