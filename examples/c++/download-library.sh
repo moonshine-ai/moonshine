@@ -18,7 +18,7 @@ fi
 
 # Download the library for the current platform
 rm -rf moonshine-voice-${PLATFORM}
-curl -O -L https://github.com/moonshine-ai/moonshine/releases/download/v0.0.58/moonshine-voice-${PLATFORM}.tar.gz
+curl -O -L https://github.com/moonshine-ai/moonshine/releases/download/v0.0.59/moonshine-voice-${PLATFORM}.tar.gz
 tar xzf moonshine-voice-${PLATFORM}.tar.gz
 rm moonshine-voice-${PLATFORM}.tar.gz
 
