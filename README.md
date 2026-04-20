@@ -481,30 +481,28 @@ g2p.to_ipa("Hello world")
 The [`examples`](examples/) folder has code samples organized by platform. We use the usual tooling per stack (Android Studio and Gradle, Xcode and Swift on Apple platforms, Visual Studio on Windows). [GitHub Releases](https://github.com/moonshine-ai/moonshine/releases/latest) currently ship the downloadable assets below (example trees are mostly named **`{platform}-{Project}.tar.gz`**; Windows and C++ also include prebuilt native library bundles).
 
 - **[Android](examples/android/)**
-  - [IntentRecognizer](examples/android/IntentRecognizer/) — [`android-IntentRecognizer.tar.gz`](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-IntentRecognizer.tar.gz)
-  - [Transcriber](examples/android/Transcriber/) — [`android-Transcriber.tar.gz`](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-Transcriber.tar.gz)
-- **[Portable C++](examples/c++/)** (see [`README.md`](examples/c++/README.md); build from this repository)
+  - [IntentRecognizer](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-IntentRecognizer.tar.gz)
+  - [Transcriber](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-Transcriber.tar.gz)
+- **[Portable C++](examples/c++/README.md)**
   - [`transcriber.cpp`](examples/c++/transcriber.cpp)
   - [`text-to-speech.cpp`](examples/c++/text-to-speech.cpp)
-  - [moonshine-voice-macos-arm64](examples/c++/moonshine-voice-macos-arm64/) — [`c++-moonshine-voice-macos-arm64.tar.gz`](https://github.com/moonshine-ai/moonshine/releases/latest/download/c++-moonshine-voice-macos-arm64.tar.gz)
 - **[iOS](examples/ios/)**
-  - [IntentRecognizer](examples/ios/IntentRecognizer/) — [`ios-IntentRecognizer.tar.gz`](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-IntentRecognizer.tar.gz)
-  - [TextToSpeech](examples/ios/TextToSpeech/) — [`ios-TextToSpeech.tar.gz`](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-TextToSpeech.tar.gz)
-  - [Transcriber](examples/ios/Transcriber/) — [`ios-Transcriber.tar.gz`](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-Transcriber.tar.gz)
+  - [IntentRecognizer](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-IntentRecognizer.tar.gz)
+  - [TextToSpeech](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-TextToSpeech.tar.gz)
+  - [Transcriber](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-Transcriber.tar.gz)
 - **[MacOS](examples/macos/)**
-  - [BasicTranscription](examples/macos/BasicTranscription/) — [`macos-BasicTranscription.tar.gz`](https://github.com/moonshine-ai/moonshine/releases/latest/download/macos-BasicTranscription.tar.gz)
-  - [MicTranscription](examples/macos/MicTranscription/) — [`macos-MicTranscription.tar.gz`](https://github.com/moonshine-ai/moonshine/releases/latest/download/macos-MicTranscription.tar.gz)
-  - [TextToSpeech](examples/macos/TextToSpeech/) — [`macos-TextToSpeech.tar.gz`](https://github.com/moonshine-ai/moonshine/releases/latest/download/macos-TextToSpeech.tar.gz)
+  - [BasicTranscription](https://github.com/moonshine-ai/moonshine/releases/latest/download/macos-BasicTranscription.tar.gz)
+  - [MicTranscription](https://github.com/moonshine-ai/moonshine/releases/latest/download/macos-MicTranscription.tar.gz)
+  - [TextToSpeech](https://github.com/moonshine-ai/moonshine/releases/latest/download/macos-TextToSpeech.tar.gz)
 - **[Windows](examples/windows/)**
-  - Prebuilt headers, import libraries, and ONNX Runtime for the [C++ CLI sample](examples/windows/cli-transcriber/) — [`moonshine-voice-windows-x86_64.tar.gz`](https://github.com/moonshine-ai/moonshine/releases/latest/download/moonshine-voice-windows-x86_64.tar.gz) (extract beside the project or use [`download-lib.bat`](examples/windows/cli-transcriber/download-lib.bat))
-  - [cli-transcriber](examples/windows/cli-transcriber/) — [`windows-cli-transcriber.tar.gz`](https://github.com/moonshine-ai/moonshine/releases/latest/download/windows-cli-transcriber.tar.gz)
-- **[Python](examples/python/)** (install [`moonshine-voice`](https://pypi.org/project/moonshine-voice/) from PyPI; scripts are meant to be run from a checkout of this repo)
+  - [cli-transcriber](https://github.com/moonshine-ai/moonshine/releases/latest/download/windows-cli-transcriber.tar.gz)
+- **[Python](examples/python/)**
   - [`basic_transcription.py`](examples/python/basic_transcription.py)
   - [`mic_transcription.py`](examples/python/mic_transcription.py)
   - [`intent_recognition.py`](examples/python/intent_recognition.py)
-  - [ollama-voice](examples/python/ollama-voice/) — [`python-ollama-voice.tar.gz`](https://github.com/moonshine-ai/moonshine/releases/latest/download/python-ollama-voice.tar.gz)
+  - [`ollama-voice/ollama_voice.py`](examples/python/ollama-voice/ollama_voice.py )
 - **[Raspberry Pi](examples/raspberry-pi/)**
-  - [my-dalek](examples/raspberry-pi/my-dalek/) — [`raspberry-pi-my-dalek.tar.gz`](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz)
+  - [my-dalek](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz)
 
 The examples usually include one minimal project that just creates a transcriber and then feeds it data from a WAV file, and another that's pulling audio from a microphone using the platform's default framework for accessing audio devices. For Android, [`examples/android/IntentRecognizer`](examples/android/IntentRecognizer/) is a self-contained Gradle project you can copy out of the tree: it depends on **`ai.moonshine:moonshine-voice:0.0.59`** from Maven Central (includes `IntentRecognizer`) and bundles **small English streaming** ASR plus **embeddinggemma-300m** under `app/src/main/assets/` (Git LFS). Streaming weights are mirrored from assets to internal storage at runtime, then loaded with `MicTranscriber.loadFromFiles` and `MOONSHINE_MODEL_ARCH_SMALL_STREAMING`.
 
