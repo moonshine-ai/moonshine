@@ -12,14 +12,16 @@ public typealias AudioDeviceID = UInt32
 ///
 /// Provide a `g2pRoot` directory containing G2P and vocoder assets. Use
 /// ``synthesize(text:options:)`` to get raw PCM samples, or ``say(_:device:options:)``
-/// to synthesize and play audio directly.
+/// to queue text for synthesis and playback.
 ///
 /// Usage:
 /// ```swift
 /// let tts = try TextToSpeech(language: "en_us", g2pRoot: "/path/to/assets")
 /// let result = try tts.synthesize(text: "Hello world!")
-/// // or play directly:
-/// try tts.say("Hello world!")
+/// // or play directly (returns immediately):
+/// tts.say("Hello world!")
+/// tts.wait()   // block until done
+/// tts.stop()   // cancel all pending + halt playback
 /// tts.close()
 /// ```
 public class TextToSpeech {
@@ -34,6 +36,21 @@ public class TextToSpeech {
     private var sayCachedDeviceID: AudioDeviceID?
     #endif
     private var sayCachedSampleRate: Int32 = 0
+
+    // Queue infrastructure: two serial GCD queues form a pipeline.
+    // synthQueue synthesizes the next utterance while playbackQueue plays the current one.
+    private let synthQueue = DispatchQueue(label: "ai.moonshine.tts.synth")
+    private let playbackQueue = DispatchQueue(label: "ai.moonshine.tts.play")
+    private let stateLock = NSLock()
+    private var stopGeneration: UInt64 = 0
+    private let pendingCondition = NSCondition()
+    private var pendingCount = 0
+
+    private struct PlayItem {
+        let samples: [Float]
+        let sampleRate: Int32
+        let deviceID: AudioDeviceID?
+    }
 
     /// Moonshine header version constant.
     public static let moonshineHeaderVersion: Int32 = 20000
@@ -95,93 +112,221 @@ public class TextToSpeech {
         )
     }
 
-    /// Synthesize text and play it on the default audio output device, blocking
-    /// until playback finishes.
+    // MARK: - Queued say / stop / wait / isTalking
+
+    /// Queue ``text`` for synthesis and playback, returning immediately.
+    ///
+    /// ``text`` may be a single string or an array. An array is equivalent to calling
+    /// ``say`` once per element in order. Utterances are played in order; synthesis of the
+    /// next utterance is pipelined with playback of the current one. Call ``stop()`` to
+    /// cancel all pending utterances and halt the currently-playing audio.
     ///
     /// - Parameters:
-    ///   - text: The text to speak.
+    ///   - text: The text to speak (single string).
     ///   - options: Optional per-call synthesis options (e.g. `speed`).
-    /// - Throws: `MoonshineError` if synthesis fails.
     public func say(
         _ text: String,
         options: [TranscriberOption]? = nil
-    ) throws {
-        try sayInternal(text, deviceID: nil, options: options)
+    ) {
+        enqueueSay(text: text, deviceID: nil, options: options)
+    }
+
+    /// Queue each string for synthesis and playback, returning immediately.
+    ///
+    /// - Parameters:
+    ///   - texts: An array of strings to speak in order.
+    ///   - options: Optional per-call synthesis options.
+    public func say(
+        _ texts: [String],
+        options: [TranscriberOption]? = nil
+    ) {
+        for text in texts {
+            enqueueSay(text: text, deviceID: nil, options: options)
+        }
     }
 
     #if os(macOS)
-    /// Synthesize text and play it on a specific audio output device, blocking
-    /// until playback finishes.
+    /// Queue ``text`` for synthesis and playback on a specific device, returning immediately.
     ///
     /// - Parameters:
     ///   - text: The text to speak.
     ///   - device: An `AudioDeviceID` to route output to, or `nil` for the
     ///     system default output device.
-    ///   - options: Optional per-call synthesis options (e.g. `speed`).
-    /// - Throws: `MoonshineError` if synthesis fails.
+    ///   - options: Optional per-call synthesis options.
     public func say(
         _ text: String,
         device: AudioDeviceID?,
         options: [TranscriberOption]? = nil
-    ) throws {
-        try sayInternal(text, deviceID: device, options: options)
+    ) {
+        enqueueSay(text: text, deviceID: device, options: options)
+    }
+
+    /// Queue each string for synthesis and playback on a specific device, returning immediately.
+    ///
+    /// - Parameters:
+    ///   - texts: An array of strings to speak in order.
+    ///   - device: An `AudioDeviceID` to route output to, or `nil` for the
+    ///     system default output device.
+    ///   - options: Optional per-call synthesis options.
+    public func say(
+        _ texts: [String],
+        device: AudioDeviceID?,
+        options: [TranscriberOption]? = nil
+    ) {
+        for text in texts {
+            enqueueSay(text: text, deviceID: device, options: options)
+        }
     }
     #endif
 
-    private func sayInternal(
-        _ text: String,
-        deviceID: AudioDeviceID?,
-        options: [TranscriberOption]?
-    ) throws {
-        let result = try synthesize(text: text, options: options)
-        let samples = result.samples
-        let sampleRate = result.sampleRateHz
-
-        guard sampleRate > 0 else {
-            throw MoonshineError.custom(
-                message: "Invalid TTS sample rate: \(sampleRate)", code: -1)
+    /// Block until all queued utterances have been synthesized and played.
+    public func wait() {
+        pendingCondition.lock()
+        while pendingCount > 0 {
+            pendingCondition.wait()
         }
-        guard !samples.isEmpty else {
+        pendingCondition.unlock()
+    }
+
+    /// Clear the utterance queue and stop any audio currently playing.
+    ///
+    /// Returns once all pending utterances are discarded and the active playback (if any)
+    /// has been halted. It is safe to call ``say`` again afterwards.
+    public func stop() {
+        stateLock.lock()
+        stopGeneration += 1
+        stateLock.unlock()
+
+        sayLock.lock()
+        sayPlayerNode?.stop()
+        sayLock.unlock()
+    }
+
+    /// Returns `true` if utterances are queued, being synthesized, or currently playing.
+    public func isTalking() -> Bool {
+        pendingCondition.lock()
+        let count = pendingCount
+        pendingCondition.unlock()
+        return count > 0
+    }
+
+    // MARK: - Queue internals
+
+    private func enqueueSay(text: String, deviceID: AudioDeviceID?, options: [TranscriberOption]?) {
+        pendingCondition.lock()
+        pendingCount += 1
+        pendingCondition.unlock()
+
+        stateLock.lock()
+        let gen = stopGeneration
+        stateLock.unlock()
+
+        synthQueue.async { [self] in
+            guard self.isGenerationCurrent(gen) else {
+                self.decrementPending()
+                return
+            }
+
+            guard let result = try? self.synthesize(text: text, options: options),
+                  result.sampleRateHz > 0,
+                  !result.samples.isEmpty else {
+                self.decrementPending()
+                return
+            }
+
+            guard self.isGenerationCurrent(gen) else {
+                self.decrementPending()
+                return
+            }
+
+            let item = PlayItem(
+                samples: result.samples,
+                sampleRate: result.sampleRateHz,
+                deviceID: deviceID
+            )
+
+            self.playbackQueue.async { [self] in
+                defer { self.decrementPending() }
+                guard self.isGenerationCurrent(gen) else { return }
+                self.playOneItem(item, generation: gen)
+            }
+        }
+    }
+
+    private func isGenerationCurrent(_ gen: UInt64) -> Bool {
+        stateLock.lock()
+        let current = stopGeneration
+        stateLock.unlock()
+        return current == gen
+    }
+
+    private func decrementPending() {
+        pendingCondition.lock()
+        pendingCount -= 1
+        if pendingCount <= 0 {
+            pendingCount = 0
+            pendingCondition.broadcast()
+        }
+        pendingCondition.unlock()
+    }
+
+    private func playOneItem(_ item: PlayItem, generation gen: UInt64) {
+        let semaphore: DispatchSemaphore
+
+        sayLock.lock()
+        do {
+            _ = try obtainEngine(sampleRate: item.sampleRate, device: item.deviceID)
+        } catch {
+            sayLock.unlock()
+            return
+        }
+        guard let playerNode = sayPlayerNode else {
+            sayLock.unlock()
             return
         }
 
-        sayLock.lock()
-        defer { sayLock.unlock() }
-
-        _ = try obtainEngine(sampleRate: sampleRate, device: deviceID)
-        let playerNode = sayPlayerNode!
-
         let format = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
-            sampleRate: Double(sampleRate),
+            sampleRate: Double(item.sampleRate),
             channels: 1,
             interleaved: false
         )!
 
         guard let buffer = AVAudioPCMBuffer(
             pcmFormat: format,
-            frameCapacity: AVAudioFrameCount(samples.count)
+            frameCapacity: AVAudioFrameCount(item.samples.count)
         ) else {
-            throw MoonshineError.custom(
-                message: "Failed to create audio buffer", code: -1)
+            sayLock.unlock()
+            return
         }
-        buffer.frameLength = AVAudioFrameCount(samples.count)
+        buffer.frameLength = AVAudioFrameCount(item.samples.count)
 
         let channelData = buffer.floatChannelData!
-        samples.withUnsafeBufferPointer { src in
-            channelData[0].update(from: src.baseAddress!, count: samples.count)
+        item.samples.withUnsafeBufferPointer { src in
+            channelData[0].update(from: src.baseAddress!, count: item.samples.count)
         }
 
-        let semaphore = DispatchSemaphore(value: 0)
-
+        semaphore = DispatchSemaphore(value: 0)
         playerNode.stop()
         playerNode.scheduleBuffer(buffer) {
             semaphore.signal()
         }
         playerNode.play()
+        sayLock.unlock()
 
-        semaphore.wait()
+        while true {
+            let result = semaphore.wait(timeout: .now() + 0.05)
+            if result == .success { break }
+            if !isGenerationCurrent(gen) {
+                sayLock.lock()
+                sayPlayerNode?.stop()
+                sayLock.unlock()
+                return
+            }
+        }
     }
+
+    // MARK: - Static helpers
 
     /// Get TTS voice availability as a JSON string for the given languages.
     ///
@@ -220,6 +365,10 @@ public class TextToSpeech {
 
     /// Release all resources held by this synthesizer.
     public func close() {
+        stateLock.lock()
+        stopGeneration += 1
+        stateLock.unlock()
+
         sayLock.lock()
         releaseEngine()
         sayLock.unlock()

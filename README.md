@@ -391,6 +391,14 @@ from moonshine_voice import TextToSpeech
 
 tts = TextToSpeech("fr")
 tts.say("Bonjour, mon ami")
+tts.wait()  # block until playback finishes
+```
+
+`say()` returns immediately and queues the text for background synthesis and playback. Calling `say()` multiple times queues each utterance in order, and the next utterance is pre-synthesized while the current one plays. You can also pass a list of strings, cancel everything with `stop()`, or poll with `is_talking()`:
+
+```python
+tts.say(["One.", "Two.", "Three."])
+tts.stop()  # cancel remaining utterances and halt playback
 ```
 
 If you're on a machine without an audio output, or want to do further processing, you can retrieve the audio samples using the `synthesize()` method:
@@ -945,6 +953,8 @@ A specialized kind of event listener that you add as a listener to a `Transcribe
 
 On-device text-to-speech using the Moonshine native stack (Kokoro and Piper vocoders plus per-language G2P assets). Required files are resolved from the CDN unless you pass `download=False` and supply a populated tree. Invalid language tags raise `MoonshineTtsLanguageError`; missing or unknown voices raise `MoonshineTtsVoiceError`. Playback failures from `say()` raise `MoonshineAudioOutputError` with a list of output devices when enumeration succeeds.
 
+`say()` is non-blocking and queued: each call returns immediately and utterances are played back in order by a background pipeline. A dedicated synthesis thread pre-synthesizes the next utterance while the current one is playing, minimizing the gap between consecutive utterances. Use `stop()` to cancel all pending speech, `wait()` to block until everything has been played, and `is_talking()` to poll playback state. The same API shape is available across Python, Swift, and Android (Java).
+
 Use `list_tts_languages()`, `list_tts_voices()`, and `get_tts_voice_catalog()` to discover supported tags and voices. Asset layout and licenses are summarized in [`core/moonshine-tts/data/README.md`](core/moonshine-tts/data/README.md); see also [Downloading Models](#text-to-speech-models).
 
 - <a id="texttospeech-init"></a>`__init__()`: Creates a synthesizer and optionally downloads dependencies into the package cache (or a custom root).
@@ -963,12 +973,18 @@ Use `list_tts_languages()`, `list_tts_voices()`, and `get_tts_voice_catalog()` t
   - `options`: Optional extra native options for this call only (merged with the constructor’s `options` semantics on the C side as documented there).
   - Returns a tuple `(samples, sample_rate)` where `samples` is a list of 32-bit floats in roughly the −1.0…1.0 range and `sample_rate` is the output sample rate in Hz.
 
-- <a id="texttospeech-say"></a>`say()`: Calls `synthesize()` and plays the result on the default or selected output device using PortAudio via the `sounddevice` package (requires `pip install numpy sounddevice`).
-  - `text`: String to speak.
-  - `device`: `None` for the host default output, an integer PortAudio output device index, a decimal string index, or a case-insensitive substring of a device name.
+- <a id="texttospeech-say"></a>`say()`: Queues text for synthesis and playback, returning immediately. A background synthesis thread converts text to audio, then hands it to a playback thread that plays it on the selected output device. Synthesis of the next utterance overlaps with playback of the current one. Requires `pip install numpy sounddevice` on Python.
+  - `text`: A string or a list of strings to speak. A list is equivalent to calling `say()` once per element in order.
+  - `device`: (Python/Swift-macOS) `None` for the host default output, an integer PortAudio output device index, a decimal string index, or a case-insensitive substring of a device name. On Android, pass a `Context` (required) and optionally an `AudioDeviceInfo`.
   - `options`: Optional per-call native options, passed through to synthesis unchanged.
 
-- <a id="texttospeech-close"></a>`close()`: Releases the native synthesizer handle. Called automatically when using a `with TextToSpeech(...) as tts:` block or on garbage collection.
+- <a id="texttospeech-stop"></a>`stop()`: Clears the utterance queue and stops any audio currently playing. Returns once all pending utterances are discarded and active playback has been halted. It is safe to call `say()` again afterwards.
+
+- <a id="texttospeech-wait"></a>`wait()`: Blocks the calling thread until every queued utterance has been synthesized and played to completion. Named `waitUntilDone()` on Android.
+
+- <a id="texttospeech-is-talking"></a>`is_talking()`: Returns `True` if utterances are still queued, being synthesized, or currently playing. Named `isTalking()` on Swift and Android.
+
+- <a id="texttospeech-close"></a>`close()`: Stops any in-progress playback, discards pending utterances, and releases the native synthesizer handle. Called automatically when using a `with TextToSpeech(...) as tts:` block or on garbage collection.
 
 <a id="texttospeech-options"></a>**Common `options` keys (TTS):** These mirror `MoonshineTTSOptions` in the C++ layer. Values are strings in the underlying API; the Python binding accepts bools and numbers where noted.
 

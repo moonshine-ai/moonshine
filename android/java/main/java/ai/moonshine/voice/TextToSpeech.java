@@ -11,6 +11,10 @@ import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * On-device text-to-speech via the Moonshine native API (Kokoro / Piper under a {@code g2p_root} tree).
@@ -18,6 +22,11 @@ import java.util.List;
  * <p>This mirrors the Python {@code moonshine_voice.TextToSpeech} surface for create / {@link #synthesize}
  * / {@link #close}, without any automatic asset download. Populate {@code g2p_root} on disk (or use
  * {@link #fromMemory}) before calling.
+ *
+ * <p>{@link #say} queues text for background synthesis and playback and returns immediately.
+ * Synthesis of the next utterance is pipelined with playback of the current one. Use {@link #stop()}
+ * to cancel pending utterances and halt playback, {@link #waitUntilDone()} to block until all
+ * queued utterances finish, and {@link #isTalking()} to poll the current state.
  */
 public class TextToSpeech {
     private int handle = -1;
@@ -29,6 +38,52 @@ public class TextToSpeech {
     private int sayCachedSampleRateHz;
     @Nullable
     private AudioTrack sayCachedTrack;
+
+    // -- Queue infrastructure ------------------------------------------------
+
+    private static final Object SHUTDOWN_SENTINEL = new Object();
+
+    private static class SayRequest {
+        final String text;
+        final Context appContext;
+        @Nullable final AudioDeviceInfo outputDevice;
+        @Nullable final List<TranscriberOption> options;
+
+        SayRequest(String text, Context appContext, @Nullable AudioDeviceInfo outputDevice,
+                   @Nullable List<TranscriberOption> options) {
+            this.text = text;
+            this.appContext = appContext;
+            this.outputDevice = outputDevice;
+            this.options = options;
+        }
+    }
+
+    private static class PlayItem {
+        final float[] samples;
+        final int sampleRate;
+        final Context appContext;
+        @Nullable final AudioDeviceInfo outputDevice;
+
+        PlayItem(float[] samples, int sampleRate, Context appContext,
+                 @Nullable AudioDeviceInfo outputDevice) {
+            this.samples = samples;
+            this.sampleRate = sampleRate;
+            this.appContext = appContext;
+            this.outputDevice = outputDevice;
+        }
+    }
+
+    @SuppressWarnings("rawtypes")
+    private final LinkedBlockingQueue sayQueue = new LinkedBlockingQueue();
+    @SuppressWarnings("rawtypes")
+    private final ArrayBlockingQueue playQueue = new ArrayBlockingQueue(1);
+    private volatile boolean stopRequested = false;
+    @Nullable private Thread synthThread;
+    @Nullable private Thread playThread;
+    private final Object workerLock = new Object();
+
+    private final AtomicInteger pendingCount = new AtomicInteger(0);
+    private final Object pendingLock = new Object();
 
     /**
      * Load TTS from files on disk (optional {@code filenames} keys; same semantics as the C API).
@@ -144,12 +199,14 @@ public class TextToSpeech {
         return synthesize(text, null);
     }
 
+    // -- Queued say / stop / wait / isTalking --------------------------------
+
     /**
-     * Synthesizes {@code text} and plays mono float PCM on the default audio output, blocking until
-     * playback finishes.
+     * Queue {@code text} for synthesis and playback, returning immediately.
      *
-     * <p>Uses {@link Context#getApplicationContext()} internally. Call from a background thread if
-     * utterances are long to avoid janking the UI.
+     * <p>Utterances are played in order. Synthesis of the next utterance is pipelined with playback
+     * of the current one so there is minimal gap between consecutive utterances. Call {@link #stop()}
+     * to cancel all pending utterances and halt the currently-playing audio.
      */
     public void say(Context context, String text) {
         say(context, text, null, null);
@@ -164,29 +221,267 @@ public class TextToSpeech {
     }
 
     /**
-     * Synthesizes with optional native options, then plays through {@code outputDevice} or the default
-     * route. Reuses a single {@link AudioTrack} when {@code outputDevice} and sample rate match the
-     * previous call so routing and buffer sizing are not recomputed each time.
+     * Queue {@code text} for synthesis and playback with options, returning immediately.
      */
+    @SuppressWarnings("unchecked")
     public void say(Context context, String text, @Nullable AudioDeviceInfo outputDevice,
             @Nullable List<TranscriberOption> synthesizeOptions) {
         if (context == null) {
             throw new IllegalArgumentException("context is required");
         }
         Context appContext = context.getApplicationContext();
-        TtsSynthesisResult result = synthesize(text, synthesizeOptions);
-        float[] samples = result.samples != null ? result.samples : new float[0];
-        int sampleRate = result.sampleRateHz;
-        if (sampleRate <= 0) {
-            throw new RuntimeException("Invalid TTS sample rate: " + sampleRate);
+        pendingCount.incrementAndGet();
+        sayQueue.add(new SayRequest(text, appContext, outputDevice, synthesizeOptions));
+        ensureWorkers();
+    }
+
+    /**
+     * Queue each string for synthesis and playback, returning immediately.
+     *
+     * <p>Equivalent to calling {@link #say(Context, String)} once per element in order.
+     */
+    public void say(Context context, String[] texts) {
+        say(context, texts, null, null);
+    }
+
+    /**
+     * Queue each string for synthesis and playback with options, returning immediately.
+     */
+    public void say(Context context, String[] texts, @Nullable AudioDeviceInfo outputDevice,
+            @Nullable List<TranscriberOption> synthesizeOptions) {
+        if (context == null) {
+            throw new IllegalArgumentException("context is required");
         }
-        int wantDeviceId = outputDevice != null ? outputDevice.getId() : -1;
-        synchronized (sayLock) {
-            AudioTrack track =
-                    obtainSayTrackLocked(appContext, wantDeviceId, outputDevice, sampleRate);
-            playPcmFloatBlocking(track, samples);
+        if (texts == null) return;
+        Context appContext = context.getApplicationContext();
+        for (String text : texts) {
+            pendingCount.incrementAndGet();
+            //noinspection unchecked
+            sayQueue.add(new SayRequest(text, appContext, outputDevice, synthesizeOptions));
+        }
+        ensureWorkers();
+    }
+
+    /**
+     * Block until all queued utterances have been synthesized and played.
+     */
+    public void waitUntilDone() {
+        synchronized (pendingLock) {
+            while (pendingCount.get() > 0) {
+                try {
+                    pendingLock.wait(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
         }
     }
+
+    /**
+     * Clear the utterance queue and stop any audio currently playing.
+     *
+     * <p>Returns once all pending utterances are discarded and the active playback (if any)
+     * has been halted. It is safe to call {@link #say} again afterwards.
+     */
+    public void stop() {
+        stopRequested = true;
+
+        drainQueue(sayQueue);
+        drainQueue(playQueue);
+
+        synchronized (sayLock) {
+            if (sayCachedTrack != null) {
+                try {
+                    sayCachedTrack.stop();
+                    sayCachedTrack.flush();
+                } catch (Exception ignored) {
+                }
+            }
+        }
+
+        joinWorkers();
+    }
+
+    /**
+     * Returns {@code true} if utterances are queued, being synthesized, or currently playing.
+     */
+    public boolean isTalking() {
+        return pendingCount.get() > 0;
+    }
+
+    // -- Worker threads ------------------------------------------------------
+
+    private void ensureWorkers() {
+        synchronized (workerLock) {
+            boolean alive = synthThread != null && synthThread.isAlive()
+                    && playThread != null && playThread.isAlive();
+            if (alive) return;
+
+            stopRequested = false;
+
+            synthThread = new Thread(this::synthWorker, "moonshine-tts-synth");
+            synthThread.setDaemon(true);
+            synthThread.start();
+
+            playThread = new Thread(this::playWorker, "moonshine-tts-play");
+            playThread.setDaemon(true);
+            playThread.start();
+        }
+    }
+
+    private void synthWorker() {
+        while (!stopRequested) {
+            Object raw;
+            try {
+                raw = sayQueue.poll(100, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                break;
+            }
+            if (raw == null) continue;
+            if (raw == SHUTDOWN_SENTINEL) break;
+            if (stopRequested) {
+                decrementPending();
+                break;
+            }
+
+            SayRequest req = (SayRequest) raw;
+            try {
+                TtsSynthesisResult result = synthesize(req.text, req.options);
+                float[] samples = result.samples != null ? result.samples : new float[0];
+                int sampleRate = result.sampleRateHz;
+                if (sampleRate <= 0 || samples.length == 0) {
+                    decrementPending();
+                    continue;
+                }
+                if (stopRequested) {
+                    decrementPending();
+                    break;
+                }
+                PlayItem item = new PlayItem(samples, sampleRate, req.appContext, req.outputDevice);
+                //noinspection unchecked
+                while (!stopRequested) {
+                    if (playQueue.offer(item, 100, TimeUnit.MILLISECONDS)) break;
+                }
+                if (stopRequested) {
+                    decrementPending();
+                    break;
+                }
+            } catch (Exception e) {
+                decrementPending();
+            }
+        }
+    }
+
+    private void playWorker() {
+        while (!stopRequested) {
+            Object raw;
+            try {
+                raw = playQueue.poll(100, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                break;
+            }
+            if (raw == null) continue;
+            if (raw == SHUTDOWN_SENTINEL) break;
+            if (stopRequested) {
+                decrementPending();
+                break;
+            }
+
+            PlayItem item = (PlayItem) raw;
+            try {
+                playOneItem(item);
+            } catch (Exception ignored) {
+            } finally {
+                decrementPending();
+            }
+        }
+    }
+
+    private void playOneItem(PlayItem item) {
+        int wantDeviceId = item.outputDevice != null ? item.outputDevice.getId() : -1;
+        synchronized (sayLock) {
+            if (stopRequested) return;
+            AudioTrack track = obtainSayTrackLocked(item.appContext, wantDeviceId,
+                    item.outputDevice, item.sampleRate);
+            playPcmFloat(track, item.samples);
+        }
+    }
+
+    private void playPcmFloat(AudioTrack track, float[] samples) {
+        if (track.getState() != AudioTrack.STATE_INITIALIZED) {
+            throw new RuntimeException("AudioTrack is not initialized");
+        }
+        track.stop();
+        track.flush();
+        if (samples.length == 0) return;
+
+        track.play();
+        int offset = 0;
+        while (offset < samples.length && !stopRequested) {
+            int wrote = track.write(samples, offset, samples.length - offset,
+                    AudioTrack.WRITE_BLOCKING);
+            if (wrote <= 0) {
+                track.stop();
+                throw new RuntimeException("AudioTrack.write failed: " + wrote);
+            }
+            offset += wrote;
+        }
+        if (stopRequested) {
+            track.stop();
+            return;
+        }
+        final int totalFrames = samples.length;
+        final long deadline = System.nanoTime() + 60_000_000_000L;
+        while (System.nanoTime() < deadline && !stopRequested) {
+            int head = track.getPlaybackHeadPosition();
+            if (head >= totalFrames - 1) break;
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                track.stop();
+                return;
+            }
+        }
+        track.stop();
+    }
+
+    private void decrementPending() {
+        if (pendingCount.decrementAndGet() <= 0) {
+            pendingCount.set(0);
+            synchronized (pendingLock) {
+                pendingLock.notifyAll();
+            }
+        }
+    }
+
+    @SuppressWarnings("rawtypes")
+    private static void drainQueue(java.util.concurrent.BlockingQueue queue) {
+        while (queue.poll() != null) { /* discard */ }
+    }
+
+    private void joinWorkers() {
+        Thread st, pt;
+        synchronized (workerLock) {
+            st = synthThread;
+            pt = playThread;
+        }
+        try {
+            if (st != null && st.isAlive()) st.join(2000);
+        } catch (InterruptedException ignored) {
+        }
+        try {
+            if (pt != null && pt.isAlive()) pt.join(2000);
+        } catch (InterruptedException ignored) {
+        }
+        synchronized (workerLock) {
+            synthThread = null;
+            playThread = null;
+        }
+    }
+
+    // -- Audio track management ----------------------------------------------
 
     /**
      * Lists output devices suitable for {@link #say(Context, String, AudioDeviceInfo)} (e.g. speaker,
@@ -244,43 +539,6 @@ public class TextToSpeech {
         return track;
     }
 
-    private static void playPcmFloatBlocking(AudioTrack track, float[] samples) {
-        if (track.getState() != AudioTrack.STATE_INITIALIZED) {
-            throw new RuntimeException("AudioTrack is not initialized");
-        }
-        track.stop();
-        track.flush();
-        if (samples.length == 0) {
-            return;
-        }
-        track.play();
-        int offset = 0;
-        while (offset < samples.length) {
-            int wrote = track.write(samples, offset, samples.length - offset, AudioTrack.WRITE_BLOCKING);
-            if (wrote <= 0) {
-                track.stop();
-                throw new RuntimeException("AudioTrack.write failed: " + wrote);
-            }
-            offset += wrote;
-        }
-        final int totalFrames = samples.length;
-        final long deadline = System.nanoTime() + 60_000_000_000L;
-        while (System.nanoTime() < deadline) {
-            int head = track.getPlaybackHeadPosition();
-            if (head >= totalFrames - 1) {
-                break;
-            }
-            try {
-                Thread.sleep(5);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                track.stop();
-                throw new RuntimeException(e);
-            }
-        }
-        track.stop();
-    }
-
     private void releaseSayTrackLocked() {
         if (sayCachedTrack != null) {
             try {
@@ -295,6 +553,11 @@ public class TextToSpeech {
     }
 
     public void close() {
+        stopRequested = true;
+        drainQueue(sayQueue);
+        drainQueue(playQueue);
+        joinWorkers();
+
         synchronized (sayLock) {
             releaseSayTrackLocked();
         }

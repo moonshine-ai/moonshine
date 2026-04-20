@@ -173,8 +173,9 @@ final class TextToSpeechTests: XCTestCase {
         defer { tts.close() }
 
         // This will play audio on the default device; mainly tests that it
-        // doesn't crash or throw.
-        try tts.say("Hello from Swift TTS.")
+        // doesn't crash.
+        tts.say("Hello from Swift TTS.")
+        tts.wait()
     }
 
     func testSayMultipleCalls() throws {
@@ -183,9 +184,10 @@ final class TextToSpeechTests: XCTestCase {
         defer { tts.close() }
 
         // Verify the engine caching works across repeated calls.
-        try tts.say("First.")
-        try tts.say("Second.")
-        try tts.say("Third.")
+        tts.say("First.")
+        tts.say("Second.")
+        tts.say("Third.")
+        tts.wait()
     }
 
     // MARK: - Static Query Tests

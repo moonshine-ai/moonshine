@@ -91,18 +91,11 @@ class TTSModel: ObservableObject {
         isSpeaking = true
         // Run synthesis + playback off the main thread
         let currentTts = tts
+        currentTts.say(text)
         Task.detached { [weak self] in
-            defer {
-                Task { @MainActor [weak self] in
-                    self?.isSpeaking = false
-                }
-            }
-            do {
-                try currentTts.say(text)
-            } catch {
-                Task { @MainActor [weak self] in
-                    self?.errorMessage = "Playback failed: \(error.localizedDescription)"
-                }
+            currentTts.wait()
+            Task { @MainActor [weak self] in
+                self?.isSpeaking = false
             }
         }
     }
