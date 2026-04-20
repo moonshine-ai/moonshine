@@ -225,7 +225,7 @@ extern "C" int32_t moonshine_load_transcriber_from_files(
   return transcriber_handle;
 }
 
-int32_t moonshine_load_transcriber_from_memory(
+extern "C" int32_t moonshine_load_transcriber_from_memory(
     const uint8_t *encoder_model_data, size_t encoder_model_data_size,
     const uint8_t *decoder_model_data, size_t decoder_model_data_size,
     const uint8_t *tokenizer_data, size_t tokenizer_data_size,
@@ -271,7 +271,7 @@ int32_t moonshine_load_transcriber_from_memory(
   return transcriber_handle;
 }
 
-void moonshine_free_transcriber(int32_t transcriber_handle) {
+extern "C" void moonshine_free_transcriber(int32_t transcriber_handle) {
   if (log_api_calls) {
     LOGF("moonshine_free_transcriber(transcriber_handle=%d)",
          transcriber_handle);
@@ -279,7 +279,7 @@ void moonshine_free_transcriber(int32_t transcriber_handle) {
   free_transcriber_handle(transcriber_handle);
 }
 
-int32_t moonshine_transcribe_without_streaming(
+extern "C" int32_t moonshine_transcribe_without_streaming(
     int32_t transcriber_handle, float *audio_data, uint64_t audio_length,
     int32_t sample_rate, uint32_t flags, struct transcript_t **out_transcript) {
   if (log_api_calls) {
@@ -302,7 +302,7 @@ int32_t moonshine_transcribe_without_streaming(
   return MOONSHINE_ERROR_NONE;
 }
 
-int32_t moonshine_create_stream(int32_t transcriber_handle, uint32_t flags) {
+extern "C" int32_t moonshine_create_stream(int32_t transcriber_handle, uint32_t flags) {
   if (log_api_calls) {
     LOGF("moonshine_create_stream(transcriber_handle=%d, flags=%d)",
          transcriber_handle, flags);
@@ -316,7 +316,7 @@ int32_t moonshine_create_stream(int32_t transcriber_handle, uint32_t flags) {
   }
 }
 
-int moonshine_free_stream(int32_t transcriber_handle, int32_t stream_handle) {
+extern "C" int32_t moonshine_free_stream(int32_t transcriber_handle, int32_t stream_handle) {
   if (log_api_calls) {
     LOGF("moonshine_free_stream(transcriber_handle=%d, stream_handle=%d)",
          transcriber_handle, stream_handle);
@@ -331,7 +331,7 @@ int moonshine_free_stream(int32_t transcriber_handle, int32_t stream_handle) {
   return MOONSHINE_ERROR_NONE;
 }
 
-int32_t moonshine_start_stream(int32_t transcriber_handle,
+extern "C" int32_t moonshine_start_stream(int32_t transcriber_handle,
                                int32_t stream_handle) {
   if (log_api_calls) {
     LOGF("moonshine_start_stream(transcriber_handle=%d, stream_handle=%d)",
@@ -347,7 +347,7 @@ int32_t moonshine_start_stream(int32_t transcriber_handle,
   return MOONSHINE_ERROR_NONE;
 }
 
-int32_t moonshine_stop_stream(int32_t transcriber_handle,
+extern "C" int32_t moonshine_stop_stream(int32_t transcriber_handle,
                               int32_t stream_handle) {
   if (log_api_calls) {
     LOGF("moonshine_stop_stream(transcriber_handle=%d, stream_handle=%d)",
@@ -363,7 +363,7 @@ int32_t moonshine_stop_stream(int32_t transcriber_handle,
   return MOONSHINE_ERROR_NONE;
 }
 
-const char *moonshine_transcript_to_string(
+extern "C" const char *moonshine_transcript_to_string(
     const struct transcript_t *transcript) {
   if (log_api_calls) {
     LOGF("moonshine_transcript_to_string(transcript=%p)", (void *)(transcript));
@@ -373,7 +373,7 @@ const char *moonshine_transcript_to_string(
   return description.c_str();
 }
 
-int32_t moonshine_transcribe_add_audio_to_stream(int32_t transcriber_handle,
+extern "C" int32_t moonshine_transcribe_add_audio_to_stream(int32_t transcriber_handle,
                                                  int32_t stream_handle,
                                                  const float *new_audio_data,
                                                  uint64_t audio_length,
@@ -399,7 +399,7 @@ int32_t moonshine_transcribe_add_audio_to_stream(int32_t transcriber_handle,
   return MOONSHINE_ERROR_NONE;
 }
 
-int32_t moonshine_transcribe_stream(int32_t transcriber_handle,
+extern "C" int32_t moonshine_transcribe_stream(int32_t transcriber_handle,
                                     int32_t stream_handle, uint32_t flags,
                                     struct transcript_t **out_transcript) {
   if (log_api_calls) {
@@ -464,7 +464,7 @@ char *duplicate_c_string(const char *s) {
 
 }  // namespace
 
-int32_t moonshine_create_intent_recognizer(const char *model_path,
+extern "C" int32_t moonshine_create_intent_recognizer(const char *model_path,
                                            uint32_t model_arch,
                                            const char *model_variant) {
   if (log_api_calls) {
@@ -495,7 +495,7 @@ int32_t moonshine_create_intent_recognizer(const char *model_path,
   return allocate_intent_recognizer_handle(recognizer);
 }
 
-void moonshine_free_intent_recognizer(int32_t intent_recognizer_handle) {
+extern "C" void moonshine_free_intent_recognizer(int32_t intent_recognizer_handle) {
   if (log_api_calls) {
     LOGF("moonshine_free_intent_recognizer(handle=%d)",
          intent_recognizer_handle);
@@ -506,7 +506,7 @@ void moonshine_free_intent_recognizer(int32_t intent_recognizer_handle) {
   }
 }
 
-int32_t moonshine_register_intent(int32_t intent_recognizer_handle,
+extern "C" int32_t moonshine_register_intent(int32_t intent_recognizer_handle,
                                   const char *canonical_phrase,
                                   float *embedding, uint64_t embedding_size,
                                   int32_t priority) {
@@ -532,7 +532,7 @@ int32_t moonshine_register_intent(int32_t intent_recognizer_handle,
   return MOONSHINE_ERROR_NONE;
 }
 
-int32_t moonshine_unregister_intent(int32_t intent_recognizer_handle,
+extern "C" int32_t moonshine_unregister_intent(int32_t intent_recognizer_handle,
                                     const char *canonical_phrase) {
   if (log_api_calls) {
     LOGF("moonshine_unregister_intent(handle=%d, canonical_phrase=%s)",
@@ -557,7 +557,7 @@ int32_t moonshine_unregister_intent(int32_t intent_recognizer_handle,
   return MOONSHINE_ERROR_NONE;
 }
 
-int32_t moonshine_get_closest_intents(int32_t intent_recognizer_handle,
+extern "C" int32_t moonshine_get_closest_intents(int32_t intent_recognizer_handle,
                                       const char *utterance,
                                       float tolerance_threshold,
                                       moonshine_intent_match_t **out_matches,
@@ -615,7 +615,7 @@ int32_t moonshine_get_closest_intents(int32_t intent_recognizer_handle,
   return MOONSHINE_ERROR_NONE;
 }
 
-void moonshine_free_intent_matches(moonshine_intent_match_t *matches,
+extern "C" void moonshine_free_intent_matches(moonshine_intent_match_t *matches,
                                    uint64_t count) {
   if (matches == nullptr) {
     return;
@@ -626,7 +626,7 @@ void moonshine_free_intent_matches(moonshine_intent_match_t *matches,
   std::free(matches);
 }
 
-int32_t moonshine_get_intent_count(int32_t intent_recognizer_handle) {
+extern "C" int32_t moonshine_get_intent_count(int32_t intent_recognizer_handle) {
   if (log_api_calls) {
     LOGF("moonshine_get_intent_count(handle=%d)", intent_recognizer_handle);
   }
@@ -638,7 +638,7 @@ int32_t moonshine_get_intent_count(int32_t intent_recognizer_handle) {
       intent_recognizer_map[intent_recognizer_handle]->get_intent_count());
 }
 
-int32_t moonshine_clear_intents(int32_t intent_recognizer_handle) {
+extern "C" int32_t moonshine_clear_intents(int32_t intent_recognizer_handle) {
   if (log_api_calls) {
     LOGF("moonshine_clear_intents(handle=%d)", intent_recognizer_handle);
   }
@@ -652,11 +652,10 @@ int32_t moonshine_clear_intents(int32_t intent_recognizer_handle) {
   return MOONSHINE_ERROR_NONE;
 }
 
-int32_t moonshine_calculate_intent_embedding(int32_t intent_recognizer_handle,
-                                             const char *sentence,
-                                             float **out_embedding,
-                                             uint64_t *out_embedding_size,
-                                             const char *model_name) {
+extern "C" int32_t moonshine_calculate_intent_embedding(
+    int32_t intent_recognizer_handle, const char *sentence,
+    float **out_embedding, uint64_t *out_embedding_size,
+    const char *model_name) {
   (void)model_name;
   if (log_api_calls) {
     LOGF(
@@ -693,7 +692,9 @@ int32_t moonshine_calculate_intent_embedding(int32_t intent_recognizer_handle,
   return MOONSHINE_ERROR_NONE;
 }
 
-void moonshine_free_intent_embedding(float *embedding) { std::free(embedding); }
+extern "C" void moonshine_free_intent_embedding(float *embedding) {
+  std::free(embedding);
+}
 
 /* ------------------------------ TEXT TO SPEECH ------------------------- */
 
@@ -732,7 +733,7 @@ void parse_tts_options(const OptionVector &options,
 
 }  // namespace
 
-int32_t moonshine_create_tts_synthesizer_from_files(
+extern "C" int32_t moonshine_create_tts_synthesizer_from_files(
     const char *language, const char **filenames, uint64_t filenames_count,
     const struct moonshine_option_t *options, uint64_t options_count,
     int32_t moonshine_version) {
@@ -862,7 +863,7 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
 /* Releases the resources used by a text to speech synthesizer.
  Returns zero on success, or a non-zero error code on failure.
 */
-void moonshine_free_tts_synthesizer(int32_t tts_synthesizer_handle) {
+extern "C" void moonshine_free_tts_synthesizer(int32_t tts_synthesizer_handle) {
   if (log_api_calls) {
     LOGF("moonshine_free_tts_synthesizer(handle=%d)", tts_synthesizer_handle);
   }
@@ -877,7 +878,7 @@ void moonshine_free_tts_synthesizer(int32_t tts_synthesizer_handle) {
 /* Synthesizes text to speech.
  Returns zero on success, or a non-zero error code on failure.
 */
-int32_t moonshine_text_to_speech(int32_t tts_synthesizer_handle,
+extern "C" int32_t moonshine_text_to_speech(int32_t tts_synthesizer_handle,
                                  const char *text,
                                  const struct moonshine_option_t *options,
                                  uint64_t options_count, float **out_audio_data,
@@ -1158,10 +1159,8 @@ void append_g2p_explicit_override_keys_from_c_options(
 
 }  // namespace
 
-int32_t moonshine_get_g2p_dependencies(const char *languages,
-                                       const moonshine_option_t *options,
-                                       uint64_t options_count,
-                                       char **out_dependencies_json) {
+extern "C" int32_t moonshine_get_g2p_dependencies(const char *languages, const moonshine_option_t *options,
+                                       uint64_t options_count, char **out_dependencies_json) {
   if (out_dependencies_json == nullptr) {
     return MOONSHINE_ERROR_INVALID_ARGUMENT;
   }
@@ -1222,10 +1221,8 @@ int32_t moonshine_get_g2p_dependencies(const char *languages,
   }
 }
 
-int32_t moonshine_get_tts_dependencies(const char *languages,
-                                       const moonshine_option_t *options,
-                                       uint64_t options_count,
-                                       char **out_dependencies_json) {
+extern "C" int32_t moonshine_get_tts_dependencies(const char *languages, const moonshine_option_t *options,
+                                       uint64_t options_count, char **out_dependencies_json) {
   if (out_dependencies_json == nullptr) {
     return MOONSHINE_ERROR_INVALID_ARGUMENT;
   }
@@ -1319,10 +1316,8 @@ int32_t moonshine_get_tts_dependencies(const char *languages,
   }
 }
 
-int32_t moonshine_get_tts_voices(const char *languages,
-                                 const moonshine_option_t *options,
-                                 uint64_t options_count,
-                                 char **out_voices_json) {
+extern "C" int32_t moonshine_get_tts_voices(const char *languages, const moonshine_option_t *options,
+                                 uint64_t options_count, char **out_voices_json) {
   if (out_voices_json == nullptr) {
     return MOONSHINE_ERROR_INVALID_ARGUMENT;
   }
@@ -1496,7 +1491,7 @@ void finalize_g2p_options_for_phonemizer_create(
  failure. The error code can be converted to a human-readable string using
  moonshine_error_to_string.
 */
-int32_t moonshine_create_grapheme_to_phonemizer_from_files(
+extern "C" int32_t moonshine_create_grapheme_to_phonemizer_from_files(
     const char *language, const char **filenames, uint64_t filenames_count,
     const struct moonshine_option_t *options, uint64_t options_count,
     int32_t moonshine_version) {
@@ -1555,7 +1550,7 @@ int32_t moonshine_create_grapheme_to_phonemizer_from_files(
  failure. The error code can be converted to a human-readable string using
  moonshine_error_to_string.
 */
-int32_t moonshine_create_grapheme_to_phonemizer_from_memory(
+extern "C" int32_t moonshine_create_grapheme_to_phonemizer_from_memory(
     const char *language, const char **filenames,
     const uint64_t filenames_count, const uint8_t **memory,
     const uint64_t *memory_sizes, const struct moonshine_option_t *options,
@@ -1623,7 +1618,7 @@ int32_t moonshine_create_grapheme_to_phonemizer_from_memory(
 /* Releases the resources used by a grapheme to phonemizer.
  Returns zero on success, or a non-zero error code on failure.
 */
-void moonshine_free_grapheme_to_phonemizer(
+extern "C" void moonshine_free_grapheme_to_phonemizer(
     int32_t grapheme_to_phonemizer_handle) {
   if (log_api_calls) {
     LOGF("moonshine_free_grapheme_to_phonemizer(handle=%d)",
@@ -1640,7 +1635,7 @@ void moonshine_free_grapheme_to_phonemizer(
 /* Converts a text into the equivalent International Phonetic Alphabet (IPA)
  phonemes. Returns zero on success, or a non-zero error code on failure.
 */
-int32_t moonshine_text_to_phonemes(int32_t grapheme_to_phonemizer_handle,
+extern "C" int32_t moonshine_text_to_phonemes(int32_t grapheme_to_phonemizer_handle,
                                    const char *text,
                                    const struct moonshine_option_t *options,
                                    uint64_t options_count,
