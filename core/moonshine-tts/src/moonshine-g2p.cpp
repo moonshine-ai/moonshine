@@ -1,4 +1,5 @@
 #include "moonshine-g2p.h"
+#include "debug-utils.h"
 #include "rule-based-g2p-factory.h"
 #include "rule-based-g2p.h"
 #include "dutch.h"
@@ -59,6 +60,28 @@ std::string normalize_spanish_dialect_cli_key(std::string_view raw) {
     }
   }
   return s;
+}
+
+const char* rule_backend_name(RuleBasedG2pKind k) {
+  switch (k) {
+    case RuleBasedG2pKind::English:    return "English";
+    case RuleBasedG2pKind::Spanish:    return "Spanish";
+    case RuleBasedG2pKind::German:     return "German";
+    case RuleBasedG2pKind::French:     return "French";
+    case RuleBasedG2pKind::Dutch:      return "Dutch";
+    case RuleBasedG2pKind::Italian:    return "Italian";
+    case RuleBasedG2pKind::Russian:    return "Russian";
+    case RuleBasedG2pKind::Chinese:    return "Chinese";
+    case RuleBasedG2pKind::Korean:     return "Korean";
+    case RuleBasedG2pKind::Vietnamese: return "Vietnamese";
+    case RuleBasedG2pKind::Japanese:   return "Japanese";
+    case RuleBasedG2pKind::Arabic:     return "Arabic";
+    case RuleBasedG2pKind::Portuguese: return "Portuguese";
+    case RuleBasedG2pKind::Turkish:    return "Turkish";
+    case RuleBasedG2pKind::Ukrainian:  return "Ukrainian";
+    case RuleBasedG2pKind::Hindi:      return "Hindi";
+  }
+  return "Unknown";
 }
 
 }  // namespace
@@ -138,6 +161,8 @@ MoonshineG2P::MoonshineG2P(MoonshineG2P&&) noexcept = default;
 MoonshineG2P& MoonshineG2P::operator=(MoonshineG2P&&) noexcept = default;
 
 MoonshineG2P::MoonshineG2P(std::string dialect_id, MoonshineG2POptions options) {
+  log_profiling_ = options.log_profiling;
+  TIMER_START_IF(log_profiling_, g2p_init);
   const std::string trimmed = trim_copy(dialect_id);
   if (trimmed.empty()) {
     throw std::invalid_argument("empty dialect id");
@@ -151,6 +176,9 @@ MoonshineG2P::MoonshineG2P(std::string dialect_id, MoonshineG2POptions options) 
     dialect_id_ = std::move(rb->canonical_dialect_id);
     rules_ = std::move(rb->engine);
     rule_backend_ = rb->kind;
+    LOGF_IF(log_profiling_, "MoonshineG2P: dialect='%s', rule backend=%s",
+            dialect_id_.c_str(), rule_backend_name(rb->kind));
+    TIMER_END_IF(log_profiling_, g2p_init);
     return;
   }
 
@@ -161,8 +189,17 @@ MoonshineG2P::MoonshineG2P(std::string dialect_id, MoonshineG2POptions options) 
 }
 
 std::string MoonshineG2P::text_to_ipa(std::string_view text, std::vector<G2pWordLog>* per_word_log) {
+  TIMER_START_IF(log_profiling_, g2p_text_to_ipa);
   if (rules_) {
-    return rules_->text_to_ipa(std::string(text), per_word_log);
+    std::string result = rules_->text_to_ipa(std::string(text), per_word_log);
+    LOGF_IF(log_profiling_, "MoonshineG2P: text_to_ipa input='%.*s'%s",
+            (int)std::min(text.size(), (size_t)200), text.data(),
+            text.size() > 200 ? "..." : "");
+    LOGF_IF(log_profiling_, "MoonshineG2P: text_to_ipa IPA output='%.*s'%s",
+            (int)std::min(result.size(), (size_t)500), result.c_str(),
+            result.size() > 500 ? "..." : "");
+    TIMER_END_IF(log_profiling_, g2p_text_to_ipa);
+    return result;
   }
   throw std::logic_error("MoonshineG2P: no backend initialized");
 }

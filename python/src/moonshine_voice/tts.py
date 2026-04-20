@@ -1,6 +1,9 @@
 """Text-to-speech via the Moonshine C API."""
 
+import queue
+import threading
 import wave
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -17,6 +20,27 @@ from moonshine_voice.moonshine_api import (
     moonshine_options_array,
     moonshine_text_to_speech_samples,
 )
+
+
+@dataclass
+class _SayRequest:
+    """Queued utterance for the background synthesis worker."""
+    text: str
+    speed: Optional[float]
+    volume: Optional[float]
+    device: Optional[Union[int, str]]
+    options: Optional[Dict[str, Union[str, int, float, bool]]]
+
+
+@dataclass
+class _PlayItem:
+    """Synthesized audio ready for the playback worker."""
+    data: Any  # numpy float32 array
+    sample_rate: int
+    device: Optional[Union[int, str]]
+
+
+_SHUTDOWN_SENTINEL = object()
 
 
 def _import_say_audio_deps():
@@ -134,7 +158,8 @@ class TextToSpeech:
             voice = vs if vs else None
         self._voice = voice
         if download:
-            validate_root = tts_asset_cache_path(Path(asset_root) if asset_root is not None else None)
+            validate_root = tts_asset_cache_path(
+                Path(asset_root) if asset_root is not None else None)
         else:
             if asset_root is None:
                 raise MoonshineError(
@@ -154,7 +179,8 @@ class TextToSpeech:
                 self._language,
                 voice=voice,
                 options=self._extra_options,
-                cache_root=Path(asset_root) if asset_root is not None else None,
+                cache_root=Path(
+                    asset_root) if asset_root is not None else None,
             )
         else:
             self._asset_root = validate_root
@@ -184,14 +210,24 @@ class TextToSpeech:
         if handle < 0:
             msg = self._lib.moonshine_error_to_string(handle)
             raise MoonshineError(
-                msg.decode("utf-8") if msg else f"Failed to create TTS synthesizer ({handle})"
+                msg.decode(
+                    "utf-8") if msg else f"Failed to create TTS synthesizer ({handle})"
             )
         self._handle = handle
-        self._say_device_cache: Optional[Tuple[Tuple[Any, ...], Optional[int]]] = None
+        self._say_device_cache: Optional[Tuple[Tuple[Any, ...],
+                                               Optional[int]]] = None
         self._say_settings_ok: Optional[Tuple[Tuple[Any, ...], int]] = None
 
+        self._say_queue: queue.Queue = queue.Queue()
+        self._play_queue: queue.Queue = queue.Queue(maxsize=1)
+        self._say_stop_event = threading.Event()
+        self._synth_thread: Optional[threading.Thread] = None
+        self._play_thread: Optional[threading.Thread] = None
+        self._say_lock = threading.Lock()
+
     def _c_options_for_create(self) -> Dict[str, Union[str, int, float, bool]]:
-        merged: Dict[str, Union[str, int, float, bool]] = dict(self._extra_options)
+        merged: Dict[str, Union[str, int, float, bool]] = dict(
+            self._extra_options)
         merged["g2p_root"] = str(self._asset_root)
         if self._voice is not None:
             merged["voice"] = self._voice
@@ -208,35 +244,147 @@ class TextToSpeech:
     def synthesize(
         self,
         text: str,
+        *,
+        speed: Optional[float] = None,
+        volume: Optional[float] = None,
         options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
     ) -> Tuple[List[float], int]:
         """Synthesize ``text`` to PCM float samples ``(-1..1)`` and sample rate in Hz."""
+
+        if options is None:
+            options = {}
+
+        if speed is not None:
+            options["speed"] = str(speed)
+
+        # if volume is not None:
+        #     options["volume"] = str(volume)
+
         return moonshine_text_to_speech_samples(self._handle, text, options)
 
     def say(
         self,
-        text: str,
+        text: Union[str, List[str]],
         *,
+        speed: Optional[float] = None,
+        volume: Optional[float] = None,
         device: Optional[Union[int, str]] = None,
         options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
     ) -> None:
         """
-        Synthesize ``text`` and play it on an audio output device via ``sounddevice``.
+        Queue ``text`` for synthesis and playback, returning immediately.
+
+        ``text`` may be a single string or a list of strings. A list is equivalent to calling
+        ``say`` once per element in order.
+
+        Utterances are played in order. Synthesis of the next utterance is pipelined with playback
+        of the current one so there is minimal gap between consecutive utterances. Call `stop` to
+        cancel all pending utterances and halt the currently-playing audio.
 
         Uses `synthesize` for audio generation; ``options`` is passed through unchanged.
 
         ``device`` may be ``None`` (host default output), a PortAudio device index, a decimal string
         index, or a substring of the device name (case-insensitive). If there are no output devices,
-        the index is invalid, or no name matches, raises `MoonshineAudioOutputError` with a list of
-        available devices. Device resolution and successful `check_output_settings` results are
-        cached per ``device`` argument and sample rate so repeated calls avoid re-querying hardware.
+        the index is invalid, or no name matches, the error is raised on the calling thread before
+        the utterance is enqueued.
         """
-        np, sd = _import_say_audio_deps()
-        spec_key = _say_device_spec_key(device)
-        if isinstance(device, str):
-            name_label = device.strip()
-        elif device is not None:
-            name_label = str(device)
+        _import_say_audio_deps()
+
+        texts = text if isinstance(text, list) else [text]
+        for t in texts:
+            self._say_queue.put(_SayRequest(
+                text=t,
+                speed=speed,
+                volume=volume,
+                device=device,
+                options=options,
+            ))
+        self._ensure_say_workers()
+
+    def _ensure_say_workers(self) -> None:
+        with self._say_lock:
+            alive = (
+                self._synth_thread is not None and self._synth_thread.is_alive()
+                and self._play_thread is not None and self._play_thread.is_alive()
+            )
+            if alive:
+                return
+            self._say_stop_event.clear()
+            st = threading.Thread(target=self._synth_worker, daemon=True)
+            pt = threading.Thread(target=self._play_worker, daemon=True)
+            st.start()
+            pt.start()
+            self._synth_thread = st
+            self._play_thread = pt
+
+    # -- synthesis thread ----------------------------------------------------
+
+    def _synth_worker(self) -> None:
+        np, _ = _import_say_audio_deps()
+
+        while not self._say_stop_event.is_set():
+            try:
+                req = self._say_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+
+            if req is _SHUTDOWN_SENTINEL:
+                self._say_queue.task_done()
+                break
+
+            if self._say_stop_event.is_set():
+                self._say_queue.task_done()
+                break
+
+            try:
+                item = self._synthesize_one(req, np)
+                if not self._say_stop_event.is_set():
+                    self._play_queue.put(item)
+            except Exception:
+                pass
+            finally:
+                self._say_queue.task_done()
+
+    def _synthesize_one(self, req: _SayRequest, np: Any) -> _PlayItem:
+        """Synthesize a single utterance into a _PlayItem (runs on synthesis thread)."""
+        samples, sr = self.synthesize(
+            req.text, speed=req.speed, volume=req.volume, options=req.options)
+        data = np.asarray(samples, dtype=np.float32)
+        return _PlayItem(data=data, sample_rate=int(sr), device=req.device)
+
+    # -- playback thread -----------------------------------------------------
+
+    def _play_worker(self) -> None:
+        _, sd = _import_say_audio_deps()
+
+        while not self._say_stop_event.is_set():
+            try:
+                item = self._play_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+
+            if item is _SHUTDOWN_SENTINEL:
+                self._play_queue.task_done()
+                break
+
+            if self._say_stop_event.is_set():
+                self._play_queue.task_done()
+                break
+
+            try:
+                self._play_one(item, sd)
+            except Exception:
+                pass
+            finally:
+                self._play_queue.task_done()
+
+    def _play_one(self, item: _PlayItem, sd: Any) -> None:
+        """Resolve the device and play a single synthesized utterance (runs on playback thread)."""
+        spec_key = _say_device_spec_key(item.device)
+        if isinstance(item.device, str):
+            name_label = item.device.strip()
+        elif item.device is not None:
+            name_label = str(item.device)
         else:
             name_label = ""
 
@@ -250,20 +398,22 @@ class TextToSpeech:
             resolved = _say_resolve_output_index(
                 spec_key,
                 outs,
-                device_label_for_errors=name_label or str(device) if device is not None else "",
+                device_label_for_errors=name_label or str(
+                    item.device) if item.device is not None else "",
             )
             self._say_device_cache = (spec_key, resolved)
             self._say_settings_ok = None
 
         resolved = self._say_device_cache[1]
-        samples, sr = self.synthesize(text, options)
-        sample_rate = int(sr)
 
-        settings_key = (spec_key, sample_rate)
+        if self._say_stop_event.is_set():
+            return
+
+        settings_key = (spec_key, item.sample_rate)
         if self._say_settings_ok != settings_key:
             try:
                 sd.check_output_settings(
-                    samplerate=sample_rate,
+                    samplerate=item.sample_rate,
                     channels=1,
                     dtype="float32",
                     device=resolved,
@@ -271,15 +421,21 @@ class TextToSpeech:
             except (sd.PortAudioError, OSError, ValueError) as e:
                 outs = _say_enumerate_output_devices(sd)
                 raise MoonshineAudioOutputError(
-                    f"Audio output cannot play {sample_rate} Hz mono float32 on the selected device: {e}",
+                    f"Audio output cannot play {item.sample_rate} Hz mono float32 on the selected device: {e}",
                     available_outputs=_say_device_lines(outs),
                 ) from e
             self._say_settings_ok = settings_key
 
-        data = np.asarray(samples, dtype=np.float32)
+        if self._say_stop_event.is_set():
+            return
+
         try:
-            sd.play(data, sample_rate, device=resolved)
-            sd.wait()
+            sd.play(item.data, item.sample_rate, device=resolved)
+            while sd.get_stream().active:
+                if self._say_stop_event.is_set():
+                    sd.stop()
+                    return
+                self._say_stop_event.wait(timeout=0.05)
         except (sd.PortAudioError, OSError, ValueError) as e:
             outs = _say_enumerate_output_devices(sd)
             raise MoonshineAudioOutputError(
@@ -287,7 +443,75 @@ class TextToSpeech:
                 available_outputs=_say_device_lines(outs),
             ) from e
 
+    def is_talking(self) -> bool:
+        """Return ``True`` if utterances are queued, being synthesized, or currently playing."""
+        if not self._say_queue.empty() or not self._play_queue.empty():
+            return True
+        try:
+            _, sd = _import_say_audio_deps()
+            stream = sd.get_stream()
+            if stream is not None and stream.active:
+                return True
+        except Exception:
+            pass
+        return False
+
+    def wait(self) -> None:
+        """Block until all queued utterances have been synthesized and played."""
+        self._say_queue.join()
+        self._play_queue.join()
+
+    def stop(self) -> None:
+        """Clear the utterance queue and stop any audio currently playing.
+
+        Returns once all pending utterances are discarded and the active playback (if any) has
+        been halted. It is safe to call `say` again afterwards.
+        """
+        self._say_stop_event.set()
+
+        for q in (self._say_queue, self._play_queue):
+            while True:
+                try:
+                    q.get_nowait()
+                    q.task_done()
+                except queue.Empty:
+                    break
+
+        _, sd = _import_say_audio_deps()
+        try:
+            sd.stop()
+        except Exception:
+            pass
+
+        for thread in (self._synth_thread, self._play_thread):
+            if thread is not None and thread.is_alive():
+                thread.join(timeout=2.0)
+        self._synth_thread = None
+        self._play_thread = None
+
     def close(self) -> None:
+        if getattr(self, "_say_queue", None) is not None:
+            self._say_stop_event.set()
+
+            for q in (self._say_queue, self._play_queue):
+                while True:
+                    try:
+                        q.get_nowait()
+                        q.task_done()
+                    except queue.Empty:
+                        break
+
+            try:
+                _, sd = _import_say_audio_deps()
+                sd.stop()
+            except Exception:
+                pass
+
+            for thread in (self._synth_thread, self._play_thread):
+                if thread is not None and thread.is_alive():
+                    thread.join(timeout=2.0)
+            self._synth_thread = None
+            self._play_thread = None
         self._say_device_cache = None
         self._say_settings_ok = None
         if getattr(self, "_handle", None) is not None:
@@ -407,7 +631,8 @@ if __name__ == "__main__":
     if args.asset_root is None:
         args.asset_root = tts_asset_cache_path(None)
 
-    extra: Dict[str, Union[str, int, float, bool]] = {"g2p_root": str(args.asset_root)}
+    extra: Dict[str, Union[str, int, float, bool]] = {
+        "g2p_root": str(args.asset_root)}
     if args.options:
         try:
             for k, v in _parse_options_cli(args.options).items():
@@ -432,6 +657,7 @@ if __name__ == "__main__":
                     dev = t if t else None
                 try:
                     tts.say(args.text, device=dev, options=extra)
+                    tts.wait()
                 except MoonshineError as play_err:
                     fallback_path = Path("out.wav")
                     print(

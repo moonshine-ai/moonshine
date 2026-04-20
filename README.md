@@ -566,7 +566,7 @@ cmake ..
 cmake --build .
 ```
 
-After that completes you should have a set of binary executables you can run on your own system. These executables are all unit tests, and expect to be run from the `test-assets` folder. You can run the build and test process in one step using the [`scripts/run-core-tests.sh`](scripts/run-core-tests.sh), or [`scripts/run-core-tests.bat`](scripts/run-core-tests.bat) for Windows. All tests should compile and run without any errors.
+After that completes you should have a set of binary executables you can run on your own system. These executables are all unit tests, and expect to be run from the `test-assets` folder. You can run the build and test process in one step using the [`scripts/test-core.sh`](scripts/test-core.sh), or [`scripts/test-core.bat`](scripts/test-core.bat) for Windows. All tests should compile and run without any errors.
 
 #### Language Bindings
 
