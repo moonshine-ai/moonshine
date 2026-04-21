@@ -482,6 +482,7 @@ The [`examples`](examples/) folder has code samples organized by platform. We us
 
 - **[Android](examples/android/)**
   - [IntentRecognizer](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-IntentRecognizer.tar.gz)
+  - [TextToSpeech](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-TextToSpeech.tar.gz) — [`examples/android/TextToSpeech/`](examples/android/TextToSpeech/)
   - [Transcriber](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-Transcriber.tar.gz)
 - **[Portable C++](examples/c++/README.md)**
   - [`transcriber.cpp`](examples/c++/transcriber.cpp)
@@ -504,7 +505,7 @@ The [`examples`](examples/) folder has code samples organized by platform. We us
 - **[Raspberry Pi](examples/raspberry-pi/)**
   - [my-dalek](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz)
 
-The examples usually include one minimal project that just creates a transcriber and then feeds it data from a WAV file, and another that's pulling audio from a microphone using the platform's default framework for accessing audio devices. For Android, [`examples/android/IntentRecognizer`](examples/android/IntentRecognizer/) is a self-contained Gradle project you can copy out of the tree: it depends on **`ai.moonshine:moonshine-voice:0.0.59`** from Maven Central (includes `IntentRecognizer`) and bundles **small English streaming** ASR plus **embeddinggemma-300m** under `app/src/main/assets/` (Git LFS). Streaming weights are mirrored from assets to internal storage at runtime, then loaded with `MicTranscriber.loadFromFiles` and `MOONSHINE_MODEL_ARCH_SMALL_STREAMING`.
+The examples usually include one minimal project that just creates a transcriber and then feeds it data from a WAV file, and another that's pulling audio from a microphone using the platform's default framework for accessing audio devices. For Android, [`examples/android/IntentRecognizer`](examples/android/IntentRecognizer/) is a self-contained Gradle project you can copy out of the tree: it depends on **`ai.moonshine:moonshine-voice:0.0.59`** from Maven Central (includes `IntentRecognizer`) and bundles **small English streaming** ASR plus **embeddinggemma-300m** under `app/src/main/assets/` (Git LFS). Streaming weights are mirrored from assets to internal storage at runtime, then loaded with `MicTranscriber.loadFromFiles` and `MOONSHINE_MODEL_ARCH_SMALL_STREAMING`. [`examples/android/TextToSpeech`](examples/android/TextToSpeech/) is the same style of Gradle sample for on-device TTS: it uses the `TextToSpeech` class from **`moonshine-voice`**, with the **Kokoro** asset tree under `app/src/main/assets/tts-data/` (Git LFS, same layout as the iOS TextToSpeech example).
 
 ### Adding the Library to your own App
 
@@ -524,7 +525,7 @@ For reference purposes you can find Xcode projects with these changes applied in
 
 On Android we publish [the package to Maven](https://mvnrepository.com/artifact/ai.moonshine/moonshine-voice). To include it in your project using Android Studio and Gradle, first add the version number you want to the `gradle/libs.versions.toml` file by inserting a line in the `[versions]` section, for example `moonshineVoice = "0.0.59"`. Then in the `[libraries]` part, add a reference to the package: `moonshine-voice = { group = "ai.moonshine", name = "moonshine-voice", version.ref = "moonshineVoice" }`.
 
-Finally, in your `app/build.gradle.kts` add the library to the `dependencies` list: `implementation(libs.moonshine.voice)`. The [`examples/android/IntentRecognizer`](examples/android/IntentRecognizer/) sample uses the same coordinates (`moonshineVoice = "0.0.59"` in its catalog).
+Finally, in your `app/build.gradle.kts` add the library to the `dependencies` list: `implementation(libs.moonshine.voice)`. The [`examples/android/IntentRecognizer`](examples/android/IntentRecognizer/) and [`examples/android/TextToSpeech`](examples/android/TextToSpeech/) samples use the same coordinates (`moonshineVoice = "0.0.59"` in their catalogs).
 
 #### Windows/C++
 

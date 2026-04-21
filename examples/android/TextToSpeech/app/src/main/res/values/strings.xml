@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Moonshine TTS</string>
+    <string name="speak">Speak</string>
+    <string name="speaking">Speaking…</string>
+    <string name="language_label">Language</string>
+    <string name="voice_label">Voice</string>
+    <string name="hint_enter_text">Enter text to speak…</string>
+    <string name="initializing">Initializing TTS…</string>
+</resources>
