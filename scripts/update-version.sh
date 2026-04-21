@@ -18,6 +18,7 @@ KNOWN_FILES=(
 	./examples/ios/Transcriber/Transcriber.xcodeproj/project.pbxproj
 	./examples/android/Transcriber/gradle/libs.versions.toml
 	./examples/android/IntentRecognizer/gradle/libs.versions.toml
+	./examples/android/TextToSpeech/gradle/libs.versions.toml
 	./scripts/publish-swift.sh
 	./scripts/publish-binary.sh
 	./scripts/publish-binary.bat
