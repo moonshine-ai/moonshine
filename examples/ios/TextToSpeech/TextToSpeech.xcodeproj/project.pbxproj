@@ -336,20 +336,13 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		A10001102F0762A200CE654D /* XCLocalSwiftPackageReference "../../../swift" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = ../../../swift;
-		};
-/* End XCLocalSwiftPackageReference section */
-
 /* Begin XCRemoteSwiftPackageReference section */
 		59FFEF2B2F88ED8600133A1F /* XCRemoteSwiftPackageReference "moonshine-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/moonshine-ai/moonshine-swift.git";
 			requirement = {
 				kind = exactVersion;
-				version = "0.0.59";
+				version = 0.0.59;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
