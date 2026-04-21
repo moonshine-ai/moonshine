@@ -6,6 +6,7 @@ import android.media.AudioDeviceInfo;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioTrack;
+import android.util.Log;
 
 import androidx.annotation.Nullable;
 
@@ -523,13 +524,7 @@ public class TextToSpeech {
         if (minBufBytes <= 0) {
             throw new RuntimeException("AudioTrack.getMinBufferSize failed for sampleRate=" + sampleRateHz);
         }
-        AudioTrack track = new AudioTrack.Builder()
-                .setContext(appContext)
-                .setAudioAttributes(attrs)
-                .setAudioFormat(format)
-                .setBufferSizeInBytes(minBufBytes)
-                .setTransferMode(AudioTrack.MODE_STREAM)
-                .build();
+        AudioTrack track = buildAudioTrack(appContext, attrs, format, minBufBytes);
         if (outputDevice != null) {
             track.setPreferredDevice(outputDevice);
         }
@@ -537,6 +532,58 @@ public class TextToSpeech {
         sayCachedDeviceId = wantDeviceId;
         sayCachedSampleRateHz = sampleRateHz;
         return track;
+    }
+
+    /**
+     * Builds an {@link AudioTrack}, first trying with {@link AudioTrack.Builder#setContext(Context)}
+     * and falling back to a builder without a context on failure.
+     *
+     * <p>Some Android 15 (API 35) configurations (notably the emulator) fail
+     * {@code AudioFlinger::createTrack} with {@code NPC::validateUidPackagePair: uid not found}
+     * when a Context is supplied, leaving the returned track uninitialized. Retrying without
+     * {@code setContext} sidesteps that UID validation path.
+     */
+    private static AudioTrack buildAudioTrack(Context appContext, AudioAttributes attrs,
+            AudioFormat format, int minBufBytes) {
+        try {
+            AudioTrack track = new AudioTrack.Builder()
+                    .setContext(appContext)
+                    .setAudioAttributes(attrs)
+                    .setAudioFormat(format)
+                    .setBufferSizeInBytes(minBufBytes)
+                    .setTransferMode(AudioTrack.MODE_STREAM)
+                    .build();
+            if (track.getState() == AudioTrack.STATE_INITIALIZED) {
+                return track;
+            }
+            Log.w("MoonshineTTS",
+                    "AudioTrack.Builder(setContext) produced uninitialized track"
+                            + " (state=" + track.getState() + "); retrying without setContext");
+            try {
+                track.release();
+            } catch (Exception ignored) {
+            }
+        } catch (Exception e) {
+            Log.w("MoonshineTTS",
+                    "AudioTrack.Builder(setContext) threw; retrying without setContext: "
+                            + e.getMessage());
+        }
+        AudioTrack fallback = new AudioTrack.Builder()
+                .setAudioAttributes(attrs)
+                .setAudioFormat(format)
+                .setBufferSizeInBytes(minBufBytes)
+                .setTransferMode(AudioTrack.MODE_STREAM)
+                .build();
+        if (fallback.getState() != AudioTrack.STATE_INITIALIZED) {
+            int state = fallback.getState();
+            try {
+                fallback.release();
+            } catch (Exception ignored) {
+            }
+            throw new RuntimeException(
+                    "AudioTrack failed to initialize (state=" + state + ")");
+        }
+        return fallback;
     }
 
     private void releaseSayTrackLocked() {
