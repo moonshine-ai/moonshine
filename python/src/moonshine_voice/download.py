@@ -654,6 +654,45 @@ def validate_tts_voice_downloaded(
     )
 
 
+def validate_tts_voice_known(
+    language: str,
+    voice: str,
+    *,
+    options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
+    root_path: Optional[Path] = None,
+    g2p_root: Optional[Path] = None,
+) -> None:
+    """
+    Ensure ``voice`` appears in the native TTS catalog for ``language``.
+
+    Unlike `validate_tts_voice_downloaded`, the voice does not have to be on disk: either
+    ``present`` (downloaded) or ``downloadable`` (listed by the catalog but not yet fetched)
+    is accepted. This is intended for fail-fast validation before `download_tts_assets`,
+    which would otherwise ask the CDN for a voice file that does not exist (HTTP 404).
+
+    Raises `MoonshineTtsVoiceError` with present voices as ``alternatives`` and catalog
+    ``missing`` voices as ``alternatives_available_for_download`` when ``voice`` is unknown.
+    """
+    lang_tag = normalize_moonshine_language_tag(language)
+    want_aliases = _tts_voice_want_aliases(voice)
+    qopts: Dict[str, Union[str, int, float, bool]] = dict(options) if options else {}
+    qopts.pop("voice", None)
+    by_avail = list_tts_voices(
+        lang_tag, options=qopts, root_path=root_path, g2p_root=g2p_root
+    )
+    known_norm = {_normalize_tts_voice_stem(v) for v in by_avail["present"]} | {
+        _normalize_tts_voice_stem(v) for v in by_avail["downloadable"]
+    }
+    if want_aliases & known_norm:
+        return
+    raise MoonshineTtsVoiceError(
+        voice,
+        lang_tag,
+        sorted(by_avail["present"]),
+        alternatives_available_for_download=sorted(by_avail["downloadable"]),
+    )
+
+
 def ensure_tts_voice_downloaded(
     language: str,
     voice: str,

@@ -21,9 +21,9 @@ Usage::
 """
 
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional
 
 from moonshine_voice.transcriber import (
     TranscriptEvent,
@@ -41,6 +41,7 @@ class AlphanumericEventType(Enum):
     UNDO = auto()
     CLEAR = auto()
     STOPPED = auto()
+    NONE = auto()
 
 
 @dataclass
@@ -63,12 +64,36 @@ class AlphanumericEvent:
     text: str
 
 
+@dataclass
+class AlphanumericMatch:
+    """Pure classification result produced by :class:`AlphanumericMatcher`.
+
+    Has a ``type`` (one of :class:`AlphanumericEventType`, with ``NONE``
+    meaning "unrecognized") and an optional resolved ``character``.
+    """
+
+    type: AlphanumericEventType
+    character: Optional[str] = None
+
+    @property
+    def is_character(self) -> bool:
+        return self.type is AlphanumericEventType.CHARACTER
+
+    @property
+    def is_terminator(self) -> bool:
+        return self.type is AlphanumericEventType.STOPPED
+
+    @property
+    def is_recognized(self) -> bool:
+        return self.type is not AlphanumericEventType.NONE
+
+
 # ---------------------------------------------------------------------------
 # Vocabulary tables
 # ---------------------------------------------------------------------------
 
 _LETTER_WORDS: Dict[str, str] = {
-    "a": "a", "ay": "a",
+    "a": "a", "ay": "a", "hey": "a", "aye": "a",
     "b": "b", "bee": "b",
     "c": "c", "see": "c", "sea": "c",
     "d": "d", "dee": "d",
@@ -78,14 +103,14 @@ _LETTER_WORDS: Dict[str, str] = {
     "h": "h", "aitch": "h",
     "i": "i", "eye": "i",
     "j": "j", "jay": "j",
-    "k": "k", "kay": "k",
+    "k": "k", "kay": "k", "okay": "k", "ok": "k",
     "l": "l", "el": "l", "ell": "l",
     "m": "m", "em": "m",
-    "n": "n", "en": "n",
+    "n": "n", "en": "n", "and": "n",
     "o": "o", "oh": "o",
     "p": "p", "pee": "p",
     "q": "q", "queue": "q", "cue": "q",
-    "r": "r", "are": "r", "ar": "r",
+    "r": "r", "are": "r", "ar": "r", "ah": "r", "Uh-huh": "r", "Aww": "r",
     "s": "s", "es": "s", "ess": "s",
     "t": "t", "tee": "t",
     "u": "u", "you": "u",
@@ -171,6 +196,79 @@ _STOP_WORDS = frozenset({
 })
 
 
+# ---------------------------------------------------------------------------
+# Spoken-form tables – character -> TTS-friendly phrase.
+#
+# These are the *output* side of the alphanumeric vocabulary: given a
+# resolved character, what phrase should a TTS engine pronounce so the
+# user hears it unambiguously?  We pick phonetic / full-word variants
+# consistent with the spelling-alphabet names used for input recognition
+# (``"aitch"``/``"haitch"`` for "h", ``"hash"`` for "#", ``"one"`` for
+# "1", etc.).  Upper-case letters get a ``"capital "`` prefix applied at
+# lookup time rather than duplicated in the table.
+#
+# Both :func:`spoken_form` (used by :class:`AlphanumericListener`'s TTS
+# repeat-back) and :func:`moonshine_voice.dialog_flow.spell_out` consume
+# these, so there's exactly one place the forms are defined.
+# ---------------------------------------------------------------------------
+
+_SPELL_OUT_LETTERS: Dict[str, str] = {
+    "a": "ay", "b": "bee", "c": "see", "d": "dee", "e": "ee",
+    "f": "eff", "g": "gee", "h": "haitch", "i": "eye", "j": "jay",
+    "k": "kay", "l": "el", "m": "em", "n": "en", "o": "oh",
+    "p": "pee", "q": "queue", "r": "ar", "s": "ess", "t": "tee",
+    "u": "you", "v": "vee", "w": "double you", "x": "ex", "y": "why",
+    "z": "zee",
+}
+
+_SPELL_OUT_DIGITS: Dict[str, str] = {
+    "0": "zero", "1": "one", "2": "two", "3": "three", "4": "four",
+    "5": "five", "6": "six", "7": "seven", "8": "eight", "9": "nine",
+}
+
+_SPELL_OUT_SYMBOLS: Dict[str, str] = {
+    ".": "period", ",": "comma", ":": "colon", ";": "semicolon",
+    "!": "exclamation mark", "?": "question mark",
+    "(": "open parenthesis", ")": "close parenthesis",
+    "[": "open bracket", "]": "close bracket",
+    "{": "open brace", "}": "close brace",
+    "@": "at sign", "#": "hash", "$": "dollar", "%": "percent",
+    "^": "caret", "&": "ampersand", "*": "asterisk",
+    "-": "hyphen", "_": "underscore", "+": "plus", "=": "equals",
+    "|": "pipe", "\\": "backslash", "/": "slash",
+    "~": "tilde", "`": "backtick",
+    "'": "apostrophe", '"': "quote",
+    " ": "space",
+}
+
+
+def spoken_form(char: str) -> str:
+    """Return a TTS-friendly phrase for a single character.
+
+    * Letters use their spelling-alphabet sounds – ``"h"`` → ``"haitch"``,
+      ``"w"`` → ``"double you"``.
+    * Upper-case letters are prefixed with ``"capital "`` –
+      ``"H"`` → ``"capital haitch"``.
+    * Digits become their word form – ``"1"`` → ``"one"``.
+    * Common symbols use their spoken name – ``"#"`` → ``"hash"``,
+      ``"@"`` → ``"at sign"``, ``" "`` → ``"space"``.
+    * Anything else (unknown char, empty string, multi-char input) is
+      returned unchanged so callers never lose information silently.
+    """
+    if not isinstance(char, str) or len(char) != 1:
+        return char
+    if char.isalpha():
+        token = _SPELL_OUT_LETTERS.get(char.lower(), char.lower())
+        if char.isupper():
+            token = f"capital {token}"
+        return token
+    if char in _SPELL_OUT_DIGITS:
+        return _SPELL_OUT_DIGITS[char]
+    if char in _SPELL_OUT_SYMBOLS:
+        return _SPELL_OUT_SYMBOLS[char]
+    return char
+
+
 def _build_lookup() -> Dict[str, str]:
     """Merge all character vocabularies into a single lookup table."""
     lookup: Dict[str, str] = {}
@@ -178,6 +276,20 @@ def _build_lookup() -> Dict[str, str]:
     lookup.update(_DIGIT_WORDS)
     lookup.update(_LETTER_WORDS)
     return lookup
+
+
+# Precomputed once at import time so every ``AlphanumericMatcher`` with the
+# default vocabulary can reuse the same table instead of rebuilding it per
+# instance.  ``AlphanumericMatcher`` only copies this dict when a caller
+# supplies ``custom_words``.
+_DEFAULT_LOOKUP: Dict[str, str] = _build_lookup()
+
+# ``classify()`` matches upper-case modifier phrases by longest-prefix first
+# (so ``"upper case"`` wins over ``"upper"``).  Sorting on every call is pure
+# waste; do it once at import.
+_UPPER_MODIFIERS_BY_LEN: tuple = tuple(
+    sorted(_UPPER_MODIFIERS, key=len, reverse=True)
+)
 
 
 # ---------------------------------------------------------------------------
@@ -289,13 +401,176 @@ def _parse_number_words(text: str) -> Optional[int]:
     return result
 
 
+class AlphanumericMatcher:
+    """Stateless classifier for spelled letter / digit / command utterances.
+
+    Exposes the "does this utterance match?" half of the alphanumeric
+    vocabulary as a pure function, without any of the listener or
+    buffer-management machinery.  This is useful for dialog flows that
+    want to reuse the same vocabulary for ``ask(mode=SPELLED)`` or
+    ``ask(mode=DIGITS)`` prompts without pulling in the whole event
+    listener.
+
+    The same recognition rules apply as for :class:`AlphanumericListener`:
+    letters, digits, number words 10-1000, upper-case modifiers, special
+    characters, and the undo / clear / stop command vocabularies.
+
+    Parameters
+    ----------
+    custom_words:
+        Optional dict mapping spoken forms to output characters.  Takes
+        highest priority and overrides built-in mappings.
+    accept_letters:
+        If ``False``, utterances that resolve to an alphabetic character
+        are reported as ``NONE`` (useful for digit-only modes).
+    accept_digits:
+        If ``False``, utterances that resolve to a digit character are
+        reported as ``NONE`` (useful for letter-only modes).
+    accept_specials:
+        If ``False``, utterances that resolve to a special character
+        (``@``, ``#``, …) are reported as ``NONE``.
+    """
+
+    def __init__(
+        self,
+        *,
+        custom_words: Optional[Dict[str, str]] = None,
+        accept_letters: bool = True,
+        accept_digits: bool = True,
+        accept_specials: bool = True,
+    ):
+        if custom_words:
+            # Only pay the copy cost when the caller actually needs to
+            # override the built-in vocabulary.
+            lookup = dict(_DEFAULT_LOOKUP)
+            for spoken, char in custom_words.items():
+                lookup[spoken.lower().strip()] = char
+            self._lookup = lookup
+        else:
+            # Share the module-level precomputed table – read-only in
+            # practice, and lets every matcher (plus the DialogFlow
+            # cache) use the same dict without rebuilding it.
+            self._lookup = _DEFAULT_LOOKUP
+        self._accept_letters = accept_letters
+        self._accept_digits = accept_digits
+        self._accept_specials = accept_specials
+
+    # -- Public API --------------------------------------------------------
+
+    def classify(self, raw_text: Optional[str]) -> AlphanumericMatch:
+        """Classify a single utterance into an :class:`AlphanumericMatch`."""
+
+        if raw_text is None:
+            return AlphanumericMatch(AlphanumericEventType.NONE)
+        text = raw_text.strip().lower()
+        if not text:
+            return AlphanumericMatch(AlphanumericEventType.NONE)
+        text = self._strip_trailing_punctuation(text)
+
+        if text in _STOP_WORDS:
+            return AlphanumericMatch(AlphanumericEventType.STOPPED)
+        if text in _CLEAR_WORDS:
+            return AlphanumericMatch(AlphanumericEventType.CLEAR)
+        if text in _UNDO_WORDS:
+            return AlphanumericMatch(AlphanumericEventType.UNDO)
+
+        make_upper = False
+        for mod in _UPPER_MODIFIERS_BY_LEN:
+            if text.startswith(mod + " "):
+                text = text[len(mod):].strip()
+                make_upper = True
+                break
+            if text == mod:
+                return AlphanumericMatch(AlphanumericEventType.NONE)
+
+        char = self._resolve(text)
+        if char is None:
+            return AlphanumericMatch(AlphanumericEventType.NONE)
+
+        if not self._char_accepted(char):
+            return AlphanumericMatch(AlphanumericEventType.NONE)
+
+        if make_upper:
+            char = char.upper()
+        return AlphanumericMatch(AlphanumericEventType.CHARACTER, character=char)
+
+    def classify_sequence(self, raw_text: Optional[str]) -> List[AlphanumericMatch]:
+        """Classify a potentially multi-token utterance.
+
+        First tries to classify the utterance as a whole; if that returns
+        ``NONE`` and the utterance contains multiple tokens, falls back to
+        classifying each token individually (so ``"h o m e"`` resolves to
+        four ``CHARACTER`` events).  The returned list preserves order and
+        stops after the first ``STOPPED`` match.
+        """
+
+        whole = self.classify(raw_text)
+        if whole.is_recognized:
+            return [whole]
+
+        if not raw_text:
+            return [AlphanumericMatch(AlphanumericEventType.NONE)]
+
+        tokens = raw_text.replace("-", " ").split()
+        if len(tokens) <= 1:
+            return [AlphanumericMatch(AlphanumericEventType.NONE)]
+
+        results: List[AlphanumericMatch] = []
+        for tok in tokens:
+            m = self.classify(tok)
+            results.append(m)
+            if m.type is AlphanumericEventType.STOPPED:
+                break
+        return results
+
+    # -- Internals ---------------------------------------------------------
+
+    def _resolve(self, text: str) -> Optional[str]:
+        if text in self._lookup:
+            return self._lookup[text]
+        num = _parse_number_words(text)
+        if num is not None:
+            return str(num)
+        if text.isdigit():
+            return text
+        if len(text) == 1 and text.isprintable():
+            return text
+        return None
+
+    def _char_accepted(self, char: str) -> bool:
+        if not char:
+            return False
+        if char.isdigit():
+            return self._accept_digits
+        if char.isalpha():
+            return self._accept_letters
+        return self._accept_specials
+
+    @staticmethod
+    def _strip_trailing_punctuation(text: str) -> str:
+        while text and text[-1] in (".", ",", "!", "?"):
+            text = text[:-1]
+        return text.strip()
+
+
+# Convenience pre-configured matchers.
+def letters_only_matcher(**kwargs) -> AlphanumericMatcher:
+    return AlphanumericMatcher(accept_digits=False, accept_specials=False, **kwargs)
+
+
+def digits_only_matcher(**kwargs) -> AlphanumericMatcher:
+    return AlphanumericMatcher(accept_letters=False, accept_specials=False, **kwargs)
+
+
 class AlphanumericListener:
     """Listens for single-character dictation and assembles the result.
 
     This is a callable listener — pass it directly to
     ``transcriber.add_listener()`` or ``stream.add_listener()``.  It
     receives raw :class:`TranscriptEvent` objects and internally filters
-    for the events it cares about.
+    for the events it cares about.  All utterance-level recognition is
+    delegated to :class:`AlphanumericMatcher`; this class only adds the
+    listener plumbing (buffer, undo/clear/stop state, event dispatch).
 
     A single *callback* is invoked every time something meaningful
     happens.  The callback receives an :class:`AlphanumericEvent` whose
@@ -306,22 +581,7 @@ class AlphanumericListener:
     * ``CLEAR``     — the buffer was wiped.
     * ``STOPPED``   — the user said "stop" / "done" / "finish" / etc.
 
-    Recognised spoken forms include:
-
-    * **Letters** — ``"a"``–``"z"`` plus phonetic alternatives
-      (``"ay"``, ``"bee"``, ``"see"``, …).
-    * **Digits** — ``"zero"``–``"nine"`` (and homophones like
-      ``"won"``/``"to"``/``"for"``/``"ate"``).
-    * **Numbers 10–1000** — ``"ten"``, ``"twenty one"``,
-      ``"three hundred and forty five"``, ``"one thousand"``, etc.
-    * **Upper-case modifiers** — prefix a letter with ``"upper case"`` /
-      ``"capital"`` / ``"cap"`` / ``"shift"`` to get upper-case.
-    * **Special characters** — ``"dollar sign"``, ``"hash"``,
-      ``"asterisk"``, ``"at sign"``, ``"exclamation mark"``, etc.
-    * **Undo** — ``"undo"`` / ``"delete"`` / ``"backspace"``.
-    * **Clear** — ``"clear"`` / ``"reset"`` / ``"start over"``.
-    * **Stop** — ``"stop"`` / ``"end"`` / ``"finish"`` / ``"done"`` /
-      ``"complete"`` / ``"submit"`` / ``"confirm"`` / ``"enter"``.
+    See :class:`AlphanumericMatcher` for the full vocabulary.
 
     Parameters
     ----------
@@ -336,8 +596,29 @@ class AlphanumericListener:
     custom_words:
         Optional dict mapping spoken forms to output characters.
         Takes highest priority and overrides built-in mappings.
+    matcher:
+        Optional pre-built :class:`AlphanumericMatcher`.  When provided,
+        ``custom_words`` is ignored and the matcher is used as-is.
+    tts:
+        Optional text-to-speech backend.  When provided:
+
+        * Each ``CHARACTER`` event triggers a ``tts.say(phrase)`` call
+          where ``phrase`` is the output of :func:`spoken_form` (e.g.
+          ``"haitch"`` for ``"h"``, ``"capital ay"`` for ``"A"``,
+          ``"one"`` for ``"1"``, ``"hash"`` for ``"#"``).
+        * Each utterance the matcher *doesn't* recognise triggers a
+          ``tts.play_error()`` call (a short two-tone beep), so the
+          user hears audible feedback that their last word was
+          ignored instead of waiting in silence.
+
+        The backend needs to expose ``say(text: str) -> None`` for the
+        per-character repeat-back; ``play_error()`` is called only if
+        the backend actually defines it (so simple stubs stay usable).
+        Exceptions from either call are swallowed (and logged under
+        ``debug=True``) so a flaky TTS can't break the listener.
     debug:
-        If ``True``, unrecognised utterances are logged to stderr.
+        If ``True``, unrecognised utterances and TTS errors are logged
+        to stderr.
     """
 
     def __init__(
@@ -346,19 +627,18 @@ class AlphanumericListener:
         *,
         use_line_completed: bool = True,
         custom_words: Optional[Dict[str, str]] = None,
+        matcher: Optional[AlphanumericMatcher] = None,
+        tts: Optional[Any] = None,
         debug: bool = False,
     ):
         self._callback = callback
         self._use_line_completed = use_line_completed
         self._debug = debug
+        self._tts = tts
         self._buffer: List[str] = []
         self._processed_line_ids: set = set()
         self._stopped = False
-
-        self._lookup = _build_lookup()
-        if custom_words:
-            for spoken, char in custom_words.items():
-                self._lookup[spoken.lower().strip()] = char
+        self._matcher = matcher or AlphanumericMatcher(custom_words=custom_words)
 
     # -- Callable interface (receives TranscriptEvent from Stream._emit) -----
 
@@ -381,6 +661,11 @@ class AlphanumericListener:
     def stopped(self) -> bool:
         """Whether a stop command has been received."""
         return self._stopped
+
+    @property
+    def matcher(self) -> AlphanumericMatcher:
+        """The underlying :class:`AlphanumericMatcher`."""
+        return self._matcher
 
     def clear(self) -> None:
         """Programmatically clear the buffer."""
@@ -412,15 +697,8 @@ class AlphanumericListener:
             return
         self._processed_line_ids.add(line_id)
 
-        if raw_text is None:
-            return
-        text = raw_text.strip().lower()
-        if not text:
-            return
-
-        text = self._strip_trailing_punctuation(text)
-
-        if text in _STOP_WORDS:
+        match = self._matcher.classify(raw_text)
+        if match.type is AlphanumericEventType.STOPPED:
             self._stopped = True
             self._callback(AlphanumericEvent(
                 type=AlphanumericEventType.STOPPED,
@@ -429,66 +707,66 @@ class AlphanumericListener:
             ))
             return
 
-        if text in _CLEAR_WORDS:
+        if match.type is AlphanumericEventType.CLEAR:
             self.clear()
             return
 
-        if text in _UNDO_WORDS:
+        if match.type is AlphanumericEventType.UNDO:
             self.undo()
             return
 
-        make_upper = False
-        for mod in sorted(_UPPER_MODIFIERS, key=len, reverse=True):
-            if text.startswith(mod + " "):
-                text = text[len(mod):].strip()
-                make_upper = True
-                break
-            if text == mod:
-                if self._debug:
-                    print(f"[debug] bare modifier ignored: {raw_text!r}",
-                          file=sys.stderr)
-                return
-
-        char = self._resolve(text)
-        if char is None:
-            if self._debug:
-                print(f"[debug] unrecognised: {raw_text!r}",
-                      file=sys.stderr)
+        if match.type is AlphanumericEventType.CHARACTER and match.character is not None:
+            self._buffer.append(match.character)
+            self._callback(AlphanumericEvent(
+                type=AlphanumericEventType.CHARACTER,
+                character=match.character,
+                text=self.text,
+            ))
+            self._speak_character(match.character)
             return
 
-        if make_upper:
-            char = char.upper()
+        if self._debug:
+            print(f"[debug] unrecognised: {raw_text!r}", file=sys.stderr)
+        self._play_error_feedback()
 
-        self._buffer.append(char)
-        self._callback(AlphanumericEvent(
-            type=AlphanumericEventType.CHARACTER,
-            character=char,
-            text=self.text,
-        ))
+    def _speak_character(self, char: str) -> None:
+        """Speak the TTS phrase for ``char`` if a TTS backend is wired."""
+        if self._tts is None:
+            return
+        phrase = spoken_form(char)
+        try:
+            self._tts.say(phrase)
+        except Exception as e:
+            # A broken TTS must not break character recognition – the
+            # callback has already committed ``char`` to the buffer.
+            if self._debug:
+                print(
+                    f"[debug] tts.say({phrase!r}) failed: {e!r}",
+                    file=sys.stderr,
+                )
 
-    def _resolve(self, text: str) -> Optional[str]:
-        """Try to resolve spoken text to a character or number string."""
-        if text in self._lookup:
-            return self._lookup[text]
+    def _play_error_feedback(self) -> None:
+        """Ask the TTS backend to play its error beep, if it supports one.
 
-        num = _parse_number_words(text)
-        if num is not None:
-            return str(num)
-
-        if text.isdigit():
-            return text
-
-        if len(text) == 1 and text.isprintable():
-            return text
-
-        return None
-
-    @staticmethod
-    def _strip_trailing_punctuation(text: str) -> str:
-        """Remove trailing periods/commas the STT may append."""
-        while text and text[-1] in (".", ",", "!", "?"):
-            text = text[:-1]
-        return text.strip()
+        Called from the unrecognised-utterance branch so the user hears
+        a short audible cue that their last word was ignored.  Tolerates
+        backends that don't implement ``play_error`` (e.g. plain
+        duck-typed stubs that only have ``say``) by checking for the
+        method first.
+        """
+        if self._tts is None:
+            return
+        play_error = getattr(self._tts, "play_error", None)
+        if play_error is None:
+            return
+        try:
+            play_error()
+        except Exception as e:
+            if self._debug:
+                print(
+                    f"[debug] tts.play_error() failed: {e!r}",
+                    file=sys.stderr,
+                )
 
 
 if __name__ == "__main__":

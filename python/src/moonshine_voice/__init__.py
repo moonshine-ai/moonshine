@@ -51,6 +51,7 @@ from moonshine_voice.download import (
     list_tts_voices,
     validate_tts_language,
     validate_tts_voice_downloaded,
+    validate_tts_voice_known,
     ensure_tts_voice_downloaded,
 )
 
@@ -70,12 +71,14 @@ _intent_recognizer_imported = False
 _alphanumeric_listener_imported = False
 _tts_imported = False
 _g2p_imported = False
+_dialog_flow_imported = False
 
 
 def __getattr__(name):
     """Lazy import for transcriber, mic_transcriber, and intent_recognizer modules."""
     global _transcriber_imported, _mic_transcriber_imported, _intent_recognizer_imported
     global _alphanumeric_listener_imported, _tts_imported, _g2p_imported
+    global _dialog_flow_imported
 
     # Lazy import transcriber module
     if name in (
@@ -156,18 +159,112 @@ def __getattr__(name):
         return globals()[name]
 
     # Lazy import alphanumeric_listener module
-    if name in ("AlphanumericListener", "AlphanumericEvent", "AlphanumericEventType"):
+    if name in (
+        "AlphanumericListener",
+        "AlphanumericEvent",
+        "AlphanumericEventType",
+        "AlphanumericMatch",
+        "AlphanumericMatcher",
+        "letters_only_matcher",
+        "digits_only_matcher",
+    ):
         if not _alphanumeric_listener_imported:
             from moonshine_voice.alphanumeric_listener import (
                 AlphanumericListener,
                 AlphanumericEvent,
                 AlphanumericEventType,
+                AlphanumericMatch,
+                AlphanumericMatcher,
+                letters_only_matcher,
+                digits_only_matcher,
             )
 
             globals()["AlphanumericListener"] = AlphanumericListener
             globals()["AlphanumericEvent"] = AlphanumericEvent
             globals()["AlphanumericEventType"] = AlphanumericEventType
+            globals()["AlphanumericMatch"] = AlphanumericMatch
+            globals()["AlphanumericMatcher"] = AlphanumericMatcher
+            globals()["letters_only_matcher"] = letters_only_matcher
+            globals()["digits_only_matcher"] = digits_only_matcher
             _alphanumeric_listener_imported = True
+        return globals()[name]
+
+    # Lazy import cached_embeddings module
+    if name in ("CachedEmbeddings", "default_cached_embeddings_path"):
+        from moonshine_voice.cached_embeddings import (
+            CachedEmbeddings,
+            default_cached_embeddings_path,
+        )
+
+        globals()["CachedEmbeddings"] = CachedEmbeddings
+        globals()["default_cached_embeddings_path"] = default_cached_embeddings_path
+        return globals()[name]
+
+    # Lazy import dialog_flow module
+    if name in (
+        "DialogFlow",
+        "Dialog",
+        "Prompt",
+        "Say",
+        "Ask",
+        "Confirm",
+        "Choose",
+        "DialogError",
+        "DialogCancelled",
+        "DialogRestart",
+        "NoInputError",
+        "NoMatchError",
+        "FREE",
+        "SPELLED",
+        "DIGITS",
+        "PHRASE",
+        "spell_out",
+        "PhraseMatcher",
+        "EmbeddingBackend",
+    ):
+        if not _dialog_flow_imported:
+            from moonshine_voice.dialog_flow import (
+                DialogFlow,
+                Dialog,
+                Prompt,
+                Say,
+                Ask,
+                Confirm,
+                Choose,
+                DialogError,
+                DialogCancelled,
+                DialogRestart,
+                NoInputError,
+                NoMatchError,
+                FREE,
+                SPELLED,
+                DIGITS,
+                PHRASE,
+                spell_out,
+                PhraseMatcher,
+                EmbeddingBackend,
+            )
+
+            globals()["DialogFlow"] = DialogFlow
+            globals()["Dialog"] = Dialog
+            globals()["Prompt"] = Prompt
+            globals()["Say"] = Say
+            globals()["Ask"] = Ask
+            globals()["Confirm"] = Confirm
+            globals()["Choose"] = Choose
+            globals()["DialogError"] = DialogError
+            globals()["DialogCancelled"] = DialogCancelled
+            globals()["DialogRestart"] = DialogRestart
+            globals()["NoInputError"] = NoInputError
+            globals()["NoMatchError"] = NoMatchError
+            globals()["FREE"] = FREE
+            globals()["SPELLED"] = SPELLED
+            globals()["DIGITS"] = DIGITS
+            globals()["PHRASE"] = PHRASE
+            globals()["spell_out"] = spell_out
+            globals()["PhraseMatcher"] = PhraseMatcher
+            globals()["EmbeddingBackend"] = EmbeddingBackend
+            _dialog_flow_imported = True
         return globals()[name]
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
@@ -230,9 +327,37 @@ __all__ = [
     "list_tts_voices",
     "validate_tts_language",
     "validate_tts_voice_downloaded",
+    "validate_tts_voice_known",
     "ensure_tts_voice_downloaded",
-    # Alphanumeric listener
+    # Alphanumeric listener / matcher
     "AlphanumericListener",
     "AlphanumericEvent",
     "AlphanumericEventType",
+    "AlphanumericMatch",
+    "AlphanumericMatcher",
+    "letters_only_matcher",
+    "digits_only_matcher",
+    # Dialog flow
+    "DialogFlow",
+    "Dialog",
+    "Prompt",
+    "Say",
+    "Ask",
+    "Confirm",
+    "Choose",
+    "DialogError",
+    "DialogCancelled",
+    "DialogRestart",
+    "NoInputError",
+    "NoMatchError",
+    "FREE",
+    "SPELLED",
+    "DIGITS",
+    "PHRASE",
+    "spell_out",
+    "PhraseMatcher",
+    "EmbeddingBackend",
+    # Cached embeddings
+    "CachedEmbeddings",
+    "default_cached_embeddings_path",
 ]

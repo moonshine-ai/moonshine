@@ -12,6 +12,7 @@ from moonshine_voice.download import (
     ensure_tts_voice_downloaded,
     tts_asset_cache_path,
     validate_tts_language,
+    validate_tts_voice_known,
 )
 from moonshine_voice.errors import MoonshineAudioOutputError, MoonshineError
 from moonshine_voice.moonshine_api import (
@@ -40,7 +41,60 @@ class _PlayItem:
     device: Optional[Union[int, str]]
 
 
+@dataclass
+class _BeepRequest:
+    """Queued error-beep marker; routed through the say queue so it
+    plays in the same order as any in-flight :meth:`TextToSpeech.say`
+    calls rather than racing ahead on the play queue."""
+    device: Optional[Union[int, str]]
+
+
 _SHUTDOWN_SENTINEL = object()
+
+# Sample rate used for synthetically generated beeps.  22.05 kHz matches
+# the typical TTS output rate and is plenty for a short sine tone.
+_BEEP_SAMPLE_RATE = 22050
+
+# Cache of generated beep waveforms keyed by sample rate so we only pay
+# the numpy cost once per TextToSpeech lifetime.
+_ERROR_BEEP_CACHE: Dict[int, Any] = {}
+
+
+def _generate_error_beep_samples(np: Any, sample_rate: int) -> Any:
+    """Build a short, two-tone descending beep as float32 mono samples.
+
+    Shape:
+      * 660 Hz for 80 ms (with a 10 ms linear fade in/out to avoid clicks)
+      * 30 ms silence
+      * 440 Hz for 120 ms (same fade envelope)
+
+    Peak amplitude is held to ~0.25 so the beep is audible but not
+    startling next to normal-volume speech.
+    """
+
+    def _tone(freq: float, duration_ms: int) -> Any:
+        n = int(sample_rate * duration_ms / 1000)
+        if n <= 0:
+            return np.zeros(0, dtype=np.float32)
+        t = np.arange(n, dtype=np.float32) / float(sample_rate)
+        wave = (0.25 * np.sin(2.0 * np.pi * freq * t)).astype(np.float32)
+        ramp_n = min(int(sample_rate * 0.010), n // 2)
+        if ramp_n > 0:
+            ramp = np.linspace(0.0, 1.0, ramp_n, dtype=np.float32)
+            wave[:ramp_n] *= ramp
+            wave[-ramp_n:] *= ramp[::-1]
+        return wave
+
+    gap = np.zeros(int(sample_rate * 0.030), dtype=np.float32)
+    return np.concatenate([_tone(660.0, 80), gap, _tone(440.0, 120)])
+
+
+def _get_error_beep_samples(np: Any, sample_rate: int) -> Any:
+    cached = _ERROR_BEEP_CACHE.get(sample_rate)
+    if cached is None:
+        cached = _generate_error_beep_samples(np, sample_rate)
+        _ERROR_BEEP_CACHE[sample_rate] = cached
+    return cached
 
 
 def _import_say_audio_deps():
@@ -153,10 +207,22 @@ class TextToSpeech:
         download: bool = True,
     ):
         self._extra_options = dict(options) if options else {}
+        if voice is None:
+            opt_voice = self._extra_options.get("voice")
+            if isinstance(opt_voice, str):
+                ov = opt_voice.strip()
+                if ov:
+                    voice = ov
         if voice is not None:
             vs = str(voice).strip()
             voice = vs if vs else None
         self._voice = voice
+        # Voice is tracked separately in ``self._voice`` and re-added by
+        # ``_c_options_for_create``; drop it from ``_extra_options`` so the catalog
+        # lookup below (via ``list_tts_voices``) is not biased by a voice we are
+        # still validating, and so downstream dependency resolution in
+        # ``download_tts_assets`` cannot silently request a non-existent voice file.
+        self._extra_options.pop("voice", None)
         if download:
             validate_root = tts_asset_cache_path(
                 Path(asset_root) if asset_root is not None else None)
@@ -173,6 +239,14 @@ class TextToSpeech:
             options=self._extra_options,
             root_path=validate_root,
         )
+
+        if self._voice is not None:
+            validate_tts_voice_known(
+                self._language,
+                self._voice,
+                options=self._extra_options,
+                root_path=validate_root,
+            )
 
         if download:
             self._asset_root = download_tts_assets(
@@ -301,6 +375,28 @@ class TextToSpeech:
             ))
         self._ensure_say_workers()
 
+    def play_error(
+        self,
+        *,
+        device: Optional[Union[int, str]] = None,
+    ) -> None:
+        """Play a short two-tone "error" beep and return immediately.
+
+        The beep is generated synthetically (no text synthesis, no
+        language or voice assets needed) and queued for playback through
+        the same pipeline as :meth:`say` — so if a previous ``say``
+        hasn't finished speaking yet the beep plays right after it,
+        rather than racing ahead.  Use :meth:`wait` / :meth:`is_talking`
+        to track playback.
+
+        ``device`` accepts the same values as :meth:`say` (``None`` =
+        host default, a PortAudio index, a decimal string index, or a
+        case-insensitive device-name substring).
+        """
+        _import_say_audio_deps()
+        self._say_queue.put(_BeepRequest(device=device))
+        self._ensure_say_workers()
+
     def _ensure_say_workers(self) -> None:
         with self._say_lock:
             alive = (
@@ -337,7 +433,14 @@ class TextToSpeech:
                 break
 
             try:
-                item = self._synthesize_one(req, np)
+                if isinstance(req, _BeepRequest):
+                    item = _PlayItem(
+                        data=_get_error_beep_samples(np, _BEEP_SAMPLE_RATE),
+                        sample_rate=_BEEP_SAMPLE_RATE,
+                        device=req.device,
+                    )
+                else:
+                    item = self._synthesize_one(req, np)
                 if not self._say_stop_event.is_set():
                     self._play_queue.put(item)
             except Exception:
