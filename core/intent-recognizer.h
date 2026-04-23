@@ -114,6 +114,15 @@ class IntentRecognizer {
   std::vector<float> calculate_embedding(const std::string &sentence) const;
 
   /**
+   * Compute cosine similarity between two precomputed embeddings.
+   * @param a The first embedding vector.
+   * @param b The second embedding vector.
+   * @return Cosine similarity in [-1, 1].
+   */
+  float calculate_similarity(const std::vector<float> &a,
+                             const std::vector<float> &b) const;
+
+  /**
    * Get the embedding dimension of the loaded model.
    * @return The number of floats per embedding.
    */

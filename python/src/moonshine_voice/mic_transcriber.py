@@ -86,6 +86,18 @@ class MicTranscriber:
     def remove_all_listeners(self):
         self.mic_stream.remove_all_listeners()
 
+    def push_listener(self, listener: Callable[[TranscriptEvent], None]) -> None:
+        """Push a temporary listener, saving the current listeners on a stack."""
+        self.mic_stream.push_listener(listener)
+
+    def pop_listener(self) -> None:
+        """Restore the listeners that were active before the last push."""
+        self.mic_stream.pop_listener()
+
+    def pop_all_listeners(self) -> None:
+        """Unwind the entire listener stack, restoring the original listeners."""
+        self.mic_stream.pop_all_listeners()
+
 
 if __name__ == "__main__":
     import argparse

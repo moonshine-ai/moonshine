@@ -598,6 +598,118 @@ TEST_CASE("C API moonshine_free_intent_embedding") {
   }
 }
 
+TEST_CASE("C API moonshine_calculate_embedding_distance") {
+  if (!embedding_model_available()) {
+    MESSAGE("Skipping tests - embedding model not found at: ",
+            EMBEDDING_MODEL_DIR);
+    return;
+  }
+
+  int32_t handle = moonshine_create_intent_recognizer(
+      EMBEDDING_MODEL_DIR.c_str(), MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M,
+      "q4");
+  REQUIRE(handle >= 0);
+
+  SUBCASE("identical embeddings have similarity ~1.0") {
+    float *emb = nullptr;
+    uint64_t emb_size = 0;
+    int32_t err = moonshine_calculate_intent_embedding(
+        handle, "hello world", &emb, &emb_size, nullptr);
+    REQUIRE(err == MOONSHINE_ERROR_NONE);
+    REQUIRE(emb != nullptr);
+
+    float similarity = 0.0f;
+    err = moonshine_calculate_embedding_distance(handle, emb, emb,
+                                                  emb_size, &similarity);
+    CHECK(err == MOONSHINE_ERROR_NONE);
+    CHECK(similarity > 0.99f);
+    moonshine_free_intent_embedding(emb);
+  }
+
+  SUBCASE("similar sentences have high similarity") {
+    float *emb_a = nullptr;
+    float *emb_b = nullptr;
+    uint64_t size_a = 0, size_b = 0;
+    moonshine_calculate_intent_embedding(handle, "turn on the lights",
+                                         &emb_a, &size_a, nullptr);
+    moonshine_calculate_intent_embedding(handle, "switch on the lamps",
+                                         &emb_b, &size_b, nullptr);
+    REQUIRE(emb_a != nullptr);
+    REQUIRE(emb_b != nullptr);
+    REQUIRE(size_a == size_b);
+
+    float similarity = 0.0f;
+    int32_t err = moonshine_calculate_embedding_distance(
+        handle, emb_a, emb_b, size_a, &similarity);
+    CHECK(err == MOONSHINE_ERROR_NONE);
+    CHECK(similarity > 0.7f);
+    moonshine_free_intent_embedding(emb_a);
+    moonshine_free_intent_embedding(emb_b);
+  }
+
+  SUBCASE("dissimilar sentences have low similarity") {
+    float *emb_a = nullptr;
+    float *emb_b = nullptr;
+    uint64_t size_a = 0, size_b = 0;
+    moonshine_calculate_intent_embedding(handle, "turn on the lights",
+                                         &emb_a, &size_a, nullptr);
+    moonshine_calculate_intent_embedding(handle, "the stock market crashed",
+                                         &emb_b, &size_b, nullptr);
+    REQUIRE(emb_a != nullptr);
+    REQUIRE(emb_b != nullptr);
+    REQUIRE(size_a == size_b);
+
+    float similarity = 0.0f;
+    int32_t err = moonshine_calculate_embedding_distance(
+        handle, emb_a, emb_b, size_a, &similarity);
+    CHECK(err == MOONSHINE_ERROR_NONE);
+    CHECK(similarity < 0.5f);
+    moonshine_free_intent_embedding(emb_a);
+    moonshine_free_intent_embedding(emb_b);
+  }
+
+  SUBCASE("null embedding_a returns error") {
+    float dummy = 1.0f;
+    float similarity = 0.0f;
+    int32_t err = moonshine_calculate_embedding_distance(
+        handle, nullptr, &dummy, 1, &similarity);
+    CHECK(err == MOONSHINE_ERROR_INVALID_ARGUMENT);
+  }
+
+  SUBCASE("null embedding_b returns error") {
+    float dummy = 1.0f;
+    float similarity = 0.0f;
+    int32_t err = moonshine_calculate_embedding_distance(
+        handle, &dummy, nullptr, 1, &similarity);
+    CHECK(err == MOONSHINE_ERROR_INVALID_ARGUMENT);
+  }
+
+  SUBCASE("null out_similarity returns error") {
+    float dummy = 1.0f;
+    int32_t err = moonshine_calculate_embedding_distance(
+        handle, &dummy, &dummy, 1, nullptr);
+    CHECK(err == MOONSHINE_ERROR_INVALID_ARGUMENT);
+  }
+
+  SUBCASE("zero embedding_size returns error") {
+    float dummy = 1.0f;
+    float similarity = 0.0f;
+    int32_t err = moonshine_calculate_embedding_distance(
+        handle, &dummy, &dummy, 0, &similarity);
+    CHECK(err == MOONSHINE_ERROR_INVALID_ARGUMENT);
+  }
+
+  SUBCASE("invalid handle returns error") {
+    float dummy = 1.0f;
+    float similarity = 0.0f;
+    int32_t err = moonshine_calculate_embedding_distance(
+        -1, &dummy, &dummy, 1, &similarity);
+    CHECK(err == MOONSHINE_ERROR_INVALID_HANDLE);
+  }
+
+  moonshine_free_intent_recognizer(handle);
+}
+
 TEST_CASE("C API moonshine_get_closest_intents with priority") {
   if (!embedding_model_available()) {
     MESSAGE("Skipping tests - embedding model not found at: ",
