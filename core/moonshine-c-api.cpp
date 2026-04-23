@@ -695,6 +695,38 @@ int32_t moonshine_calculate_intent_embedding(int32_t intent_recognizer_handle,
 
 void moonshine_free_intent_embedding(float *embedding) { std::free(embedding); }
 
+int32_t moonshine_calculate_embedding_distance(
+    int32_t intent_recognizer_handle, const float *embedding_a,
+    const float *embedding_b, uint64_t embedding_size,
+    float *out_similarity) {
+  if (log_api_calls) {
+    LOGF(
+        "moonshine_calculate_embedding_distance(handle=%d, embedding_a=%p, "
+        "embedding_b=%p, embedding_size=%" PRIu64 ", out_similarity=%p)",
+        intent_recognizer_handle,
+        static_cast<const void *>(embedding_a),
+        static_cast<const void *>(embedding_b),
+        embedding_size,
+        static_cast<void *>(out_similarity));
+  }
+  if (embedding_a == nullptr || embedding_b == nullptr ||
+      out_similarity == nullptr || embedding_size == 0) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  CHECK_INTENT_RECOGNIZER_HANDLE(intent_recognizer_handle);
+  try {
+    std::vector<float> a(embedding_a, embedding_a + embedding_size);
+    std::vector<float> b(embedding_b, embedding_b + embedding_size);
+    *out_similarity =
+        intent_recognizer_map[intent_recognizer_handle]->calculate_similarity(
+            a, b);
+  } catch (const std::exception &e) {
+    LOGF("Failed to calculate embedding distance: %s", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+  return MOONSHINE_ERROR_NONE;
+}
+
 /* ------------------------------ TEXT TO SPEECH ------------------------- */
 
 namespace {

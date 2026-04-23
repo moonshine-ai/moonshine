@@ -307,6 +307,18 @@ class Transcriber:
         """Remove all listeners from the default stream."""
         self.get_default_stream().remove_all_listeners()
 
+    def push_listener(self, listener: Callable[[TranscriptEvent], None]) -> None:
+        """Push a temporary listener on the default stream."""
+        self.get_default_stream().push_listener(listener)
+
+    def pop_listener(self) -> None:
+        """Restore previous listeners on the default stream."""
+        self.get_default_stream().pop_listener()
+
+    def pop_all_listeners(self) -> None:
+        """Unwind the entire listener stack on the default stream."""
+        self.get_default_stream().pop_all_listeners()
+
 
 # Event listener interface
 class TranscriptEventListener(ABC):
@@ -429,6 +441,33 @@ class Stream:
     def remove_all_listeners(self) -> None:
         """Remove all event listeners from the stream."""
         self._listeners.clear()
+
+    def push_listener(self, listener: Callable[[TranscriptEvent], None]) -> None:
+        """Push a temporary listener, saving the current listeners on a stack.
+
+        While the pushed listener is active, only it receives events.
+        Call :meth:`pop_listener` to restore the previous set.
+        """
+        if not hasattr(self, "_listener_stack"):
+            self._listener_stack: List[List[Callable[[TranscriptEvent], None]]] = []
+        self._listener_stack.append(list(self._listeners))
+        self._listeners.clear()
+        self._listeners.append(listener)
+
+    def pop_listener(self) -> None:
+        """Restore the listeners that were active before the last :meth:`push_listener`."""
+        if not hasattr(self, "_listener_stack") or not self._listener_stack:
+            return
+        self._listeners.clear()
+        self._listeners.extend(self._listener_stack.pop())
+
+    def pop_all_listeners(self) -> None:
+        """Unwind the entire listener stack, restoring the original listeners."""
+        if not hasattr(self, "_listener_stack") or not self._listener_stack:
+            return
+        self._listeners.clear()
+        self._listeners.extend(self._listener_stack[0])
+        self._listener_stack.clear()
 
     def _notify_from_transcript(self, transcript: Transcript) -> None:
         """Emit events based on transcript line properties."""

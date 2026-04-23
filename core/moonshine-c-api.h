@@ -619,6 +619,18 @@ MOONSHINE_EXPORT int32_t moonshine_calculate_intent_embedding(
  */
 MOONSHINE_EXPORT void moonshine_free_intent_embedding(float *embedding);
 
+/* Calculates the cosine similarity between two embedding vectors.
+
+   Both ``embedding_a`` and ``embedding_b`` must have ``embedding_size``
+   elements.  The result is written to ``*out_similarity`` and is in the
+   range [-1, 1] (1 = identical, 0 = orthogonal, -1 = opposite).
+
+   Returns zero on success, or a non-zero error code on failure.
+*/
+MOONSHINE_EXPORT int32_t moonshine_calculate_embedding_distance(
+    int32_t intent_recognizer_handle, const float *embedding_a,
+    const float *embedding_b, uint64_t embedding_size, float *out_similarity);
+
 /* ------------------------------ TEXT TO SPEECH ------------------------- */
 
 /* Creates a text to speech synthesizer from files on disk.

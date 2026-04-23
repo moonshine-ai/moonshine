@@ -143,6 +143,12 @@ std::vector<float> IntentRecognizer::calculate_embedding(
   return embedding_model_->get_embeddings(sentence);
 }
 
+float IntentRecognizer::calculate_similarity(
+    const std::vector<float> &a, const std::vector<float> &b) const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return embedding_model_->get_similarity(a, b);
+}
+
 size_t IntentRecognizer::get_embedding_size() const {
   std::lock_guard<std::mutex> lock(mutex_);
   auto probe = embedding_model_->get_embeddings("");

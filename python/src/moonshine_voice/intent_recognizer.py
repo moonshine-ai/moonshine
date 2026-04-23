@@ -177,6 +177,16 @@ class IntentRecognizer(TranscriptEventListener):
             ctypes.POINTER(ctypes.c_float),
         ]
 
+        # Calculate embedding distance (cosine similarity)
+        lib.moonshine_calculate_embedding_distance.restype = ctypes.c_int32
+        lib.moonshine_calculate_embedding_distance.argtypes = [
+            ctypes.c_int32,  # intent_recognizer_handle
+            ctypes.POINTER(ctypes.c_float),  # embedding_a
+            ctypes.POINTER(ctypes.c_float),  # embedding_b
+            ctypes.c_uint64,  # embedding_size
+            ctypes.POINTER(ctypes.c_float),  # out_similarity
+        ]
+
     def __enter__(self):
         """Context manager entry."""
         return self
@@ -406,6 +416,39 @@ class IntentRecognizer(TranscriptEventListener):
         result = [float(out_ptr[i]) for i in range(n)]
         self._lib.moonshine_free_intent_embedding(out_ptr)
         return result
+
+    def distance(
+        self, embedding_a: List[float], embedding_b: List[float]
+    ) -> float:
+        """
+        Compute the cosine similarity between two embedding vectors.
+
+        Args:
+            embedding_a: The first embedding vector.
+            embedding_b: The second embedding vector. Must be the same length
+                as *embedding_a*.
+
+        Returns:
+            Cosine similarity in the range [-1, 1].  1 means identical,
+            0 means orthogonal, -1 means opposite.
+        """
+        if self._handle is None:
+            raise MoonshineError("Intent recognizer is not initialized")
+        if len(embedding_a) != len(embedding_b):
+            raise ValueError(
+                f"Embedding sizes differ: {len(embedding_a)} vs {len(embedding_b)}"
+            )
+
+        n = len(embedding_a)
+        arr_a = (ctypes.c_float * n)(*embedding_a)
+        arr_b = (ctypes.c_float * n)(*embedding_b)
+        out = ctypes.c_float(0.0)
+
+        error = self._lib.moonshine_calculate_embedding_distance(
+            self._handle, arr_a, arr_b, ctypes.c_uint64(n), ctypes.byref(out)
+        )
+        check_error(error)
+        return float(out.value)
 
     def set_on_intent(self, callback: Optional[Callable[[IntentMatch], None]]) -> None:
         """
