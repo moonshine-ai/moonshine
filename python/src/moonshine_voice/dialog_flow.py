@@ -36,7 +36,6 @@ without any audio, TTS, or event loop.
 from __future__ import annotations
 
 import argparse
-import math
 import sys
 import threading
 import time
@@ -208,10 +207,17 @@ class EmbeddingBackend(Protocol):
     """Minimal interface the phrase matcher needs from an embedding source.
 
     :class:`moonshine_voice.IntentRecognizer` satisfies this protocol via
-    its :meth:`calculate_embedding` method.
+    its :meth:`calculate_embedding` and :meth:`distance` methods – the
+    latter is a thin wrapper around the native
+    ``moonshine_calculate_embedding_distance`` C API so scoring happens
+    in C rather than Python.
     """
 
     def calculate_embedding(self, sentence: str) -> Sequence[float]: ...
+
+    def distance(
+        self, embedding_a: Sequence[float], embedding_b: Sequence[float]
+    ) -> float: ...
 
 
 class PhraseMatcher:
@@ -294,30 +300,20 @@ class PhraseMatcher:
         best_sim: float = -1.0
         for key, embeddings in self._phrase_embeddings.items():
             for e in embeddings:
-                sim = _cosine_similarity(u_emb, e)
+                try:
+                    sim = self._backend.distance(u_emb, e)
+                except Exception as exc:
+                    print(
+                        f"PhraseMatcher: distance() failed: {exc}",
+                        file=sys.stderr,
+                    )
+                    return None, 0.0
                 if sim > best_sim:
                     best_sim = sim
                     best_key = key
         if best_key is not None and best_sim >= self._threshold:
             return best_key, best_sim
         return None, max(best_sim, 0.0)
-
-
-def _cosine_similarity(
-    a: Sequence[float], b: Sequence[float]
-) -> float:
-    if not a or not b:
-        return 0.0
-    dot = 0.0
-    na = 0.0
-    nb = 0.0
-    for x, y in zip(a, b):
-        dot += x * y
-        na += x * x
-        nb += y * y
-    if na <= 0.0 or nb <= 0.0:
-        return 0.0
-    return dot / (math.sqrt(na) * math.sqrt(nb))
 
 
 PhraseMatcherFactory = Callable[
