@@ -51,6 +51,10 @@ class _EmbeddingBackend(Protocol):
 
     def calculate_embedding(self, sentence: str) -> Sequence[float]: ...
 
+    def distance(
+        self, embedding_a: Sequence[float], embedding_b: Sequence[float]
+    ) -> float: ...
+
 
 _DEFAULT_TSV_FILENAME = "cached_embeddings.tsv"
 
@@ -187,6 +191,27 @@ class CachedEmbeddings:
         raise KeyError(
             f"CachedEmbeddings: no entry for {sentence!r} and no fallback backend"
         )
+
+    def distance(
+        self,
+        embedding_a: Sequence[float],
+        embedding_b: Sequence[float],
+    ) -> float:
+        """Return the cosine similarity between two embedding vectors.
+
+        The cache itself does not implement similarity scoring – it
+        delegates to the configured ``fallback`` backend (typically an
+        :class:`~moonshine_voice.IntentRecognizer`) so the underlying
+        native ``moonshine_calculate_embedding_distance`` C function is
+        used.  Raises :class:`RuntimeError` when no fallback is
+        configured.
+        """
+        if self._fallback is None:
+            raise RuntimeError(
+                "CachedEmbeddings.distance requires a fallback backend "
+                "that implements distance()"
+            )
+        return float(self._fallback.distance(embedding_a, embedding_b))
 
     # -- I/O ---------------------------------------------------------------
 
