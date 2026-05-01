@@ -33,6 +33,9 @@ from moonshine_voice.alphanumeric_listener import (
     AlphanumericEventType,
     AlphanumericListener,
     AlphanumericMatcher,
+    FusionStrategy,
+    SpellingPrediction,
+    SpellingPredictor,
 )
 from moonshine_voice.moonshine_api import TranscriptLine
 from moonshine_voice.transcriber import LineCompleted
@@ -50,13 +53,26 @@ def folder_name_to_expected_char(name: str, matcher: AlphanumericMatcher) -> str
 
 
 def predict_character(
-    transcriber: Transcriber, audio: np.ndarray, sample_rate: int
-) -> tuple[str | None, str]:
-    """Run transcription and return ``(predicted_char, raw_transcript_text)``.
+    transcriber: Transcriber,
+    audio: np.ndarray,
+    sample_rate: int,
+    spelling_predictor: SpellingPredictor | None = None,
+    fusion_strategy: FusionStrategy | str = FusionStrategy.AUTO,
+) -> tuple[str | None, str, SpellingPrediction | None]:
+    """Run transcription and return predictions for a single clip.
 
-    ``predicted_char`` is the first ``CHARACTER`` event emitted by a fresh
-    :class:`AlphanumericListener` fed with synthesized ``LineCompleted``
-    events, or ``None`` if nothing was recognised.
+    Returns ``(predicted_char, raw_transcript_text, spelling_prediction)``:
+
+    * ``predicted_char`` is the first ``CHARACTER`` event emitted by a
+      fresh :class:`AlphanumericListener` fed with synthesized
+      ``LineCompleted`` events, or ``None`` if nothing was recognised.
+      Whether this is the matcher's character, the SpellingCNN's
+      character, or a fused result depends on ``fusion_strategy``.
+    * ``raw_transcript_text`` is ``" | "``-joined raw STT line text.
+    * ``spelling_prediction`` is the ONNX SpellingCNN's top-1 prediction
+      for the first ``predictor.clip_seconds`` of the *first* line's audio
+      slice (or ``None`` if no predictor was supplied or the listener
+      didn't manage to run inference on this clip).
     """
     transcript = transcriber.transcribe_without_streaming(audio, sample_rate)
 
@@ -65,19 +81,47 @@ def predict_character(
     def on_event(event: AlphanumericEvent) -> None:
         captured.append(event)
 
-    listener = AlphanumericListener(on_event)
+    listener = AlphanumericListener(
+        on_event,
+        spelling_predictor=spelling_predictor,
+        fusion_strategy=fusion_strategy,
+    )
 
     raw_texts: list[str] = []
+    spelling_prediction: SpellingPrediction | None = None
     for idx, line in enumerate(transcript.lines):
         raw_texts.append(line.text)
+
+        # Slice the line's audio span out of the source clip so the
+        # spelling predictor sees only the first second of *this*
+        # utterance. Most clips are single-line so this matches the full
+        # WAV; the slice still does the right thing if Moonshine produces
+        # multiple lines.
+        line_audio: list[float] | None = None
+        if spelling_predictor is not None:
+            start = max(0, int(round(line.start_time * sample_rate)))
+            end = min(len(audio), int(round(
+                (line.start_time + line.duration) * sample_rate
+            )))
+            if end > start:
+                line_audio = audio[start:end].astype(np.float32, copy=False).tolist()
+
         synth_line = TranscriptLine(
             text=line.text,
             start_time=line.start_time,
             duration=line.duration,
             line_id=idx,
             is_complete=True,
+            audio_data=line_audio,
         )
         listener(LineCompleted(line=synth_line, stream_handle=0))
+
+        # The listener overwrites ``last_spelling_prediction`` per
+        # utterance; capture the very first non-None one so the printed
+        # diagnostic always corresponds to the actual spoken character
+        # (extra lines from STT artifacts shouldn't shift it).
+        if spelling_prediction is None and listener.last_spelling_prediction is not None:
+            spelling_prediction = listener.last_spelling_prediction
 
     predicted: str | None = None
     for event in captured:
@@ -85,7 +129,7 @@ def predict_character(
             predicted = event.character
             break
 
-    return predicted, " | ".join(t for t in raw_texts if t)
+    return predicted, " | ".join(t for t in raw_texts if t), spelling_prediction
 
 
 def print_confusion_matrix(
@@ -153,6 +197,33 @@ def main() -> int:
         "--verbose", "-v", action="store_true",
         help="Print per-clip predictions.",
     )
+    parser.add_argument(
+        "--spelling-onnx-path",
+        type=str,
+        default=None,
+        help=(
+            "Optional path to a SpellingCNN ONNX model (e.g. "
+            "../moonshine-spelling/checkpoints/<run>/spelling_cnn.onnx). "
+            "When provided, every completed utterance's first second of "
+            "audio is also classified by the ONNX model and its top-1 "
+            "prediction is printed alongside the verbose per-clip line."
+        ),
+    )
+    parser.add_argument(
+        "--fusion-strategy",
+        type=str,
+        choices=[s.value for s in FusionStrategy],
+        default=FusionStrategy.AUTO.value,
+        help=(
+            "How to combine the matcher's STT-derived character with the "
+            "SpellingCNN's prediction. 'auto' (default) uses 'smart_router' "
+            "when --spelling-onnx-path is set and 'asr_only' otherwise. "
+            "'smart_router' implements the data-driven fusion proven on the "
+            "moonshine-spelling People's Speech eval (trust agreements; "
+            "route digit/letter cross-class disagreements; break "
+            "same-class ties on spelling probability)."
+        ),
+    )
     args = parser.parse_args()
 
     dataset_dir = Path(args.dataset_dir)
@@ -185,6 +256,33 @@ def main() -> int:
         model_path=model_path, model_arch=model_arch, options=options
     )
 
+    spelling_predictor: SpellingPredictor | None = None
+    if args.spelling_onnx_path:
+        print(f"Loading spelling-CNN ONNX model from {args.spelling_onnx_path}")
+        spelling_predictor = SpellingPredictor(args.spelling_onnx_path)
+        print(
+            f"  classes={len(spelling_predictor.classes)}, "
+            f"sample_rate={spelling_predictor.sample_rate}, "
+            f"clip_seconds={spelling_predictor.clip_seconds}"
+        )
+
+    # Resolve the fusion strategy once so we can echo the *effective*
+    # value (collapsing AUTO) rather than just whatever the user passed
+    # on the CLI.
+    requested_strategy = FusionStrategy(args.fusion_strategy)
+    if requested_strategy is FusionStrategy.AUTO:
+        effective_strategy = (
+            FusionStrategy.SMART_ROUTER
+            if spelling_predictor is not None
+            else FusionStrategy.ASR_ONLY
+        )
+    else:
+        effective_strategy = requested_strategy
+    print(
+        f"Fusion strategy: {requested_strategy.value} "
+        f"(effective: {effective_strategy.value})"
+    )
+
     matcher = AlphanumericMatcher()
 
     folders = sorted(p for p in dataset_dir.iterdir() if p.is_dir())
@@ -215,8 +313,12 @@ def main() -> int:
         for wav_path in wav_files:
             audio, sample_rate = load_wav_file(wav_path)
             audio_np = np.asarray(audio, dtype=np.float32)
-            predicted, raw_text = predict_character(
-                transcriber, audio_np, sample_rate
+            predicted, raw_text, spelling_pred = predict_character(
+                transcriber,
+                audio_np,
+                sample_rate,
+                spelling_predictor=spelling_predictor,
+                fusion_strategy=effective_strategy,
             )
 
             total += 1
@@ -246,9 +348,17 @@ def main() -> int:
             if args.verbose:
                 marker = "OK" if predicted == expected else "  "
                 pred_str = predicted if predicted is not None else "<none>"
+                spelling_str = (
+                    f"  [spelling: {spelling_pred}]"
+                    if spelling_pred is not None
+                    else ""
+                )
                 print(
                     f"  [{marker}] {folder.name:>5} -> {pred_str!r}"
-                    f"  (raw: {raw_text!r})  [{wav_path.name}]"
+                    f"  (raw: {raw_text!r})"
+                    f"{spelling_str}"
+                    f"  [{wav_path.name}]",
+                    flush=True
                 )
 
     print()

@@ -167,6 +167,10 @@ def __getattr__(name):
         "AlphanumericMatcher",
         "letters_only_matcher",
         "digits_only_matcher",
+        "SpellingPredictor",
+        "SpellingPrediction",
+        "FusionStrategy",
+        "find_default_spelling_onnx_path",
     ):
         if not _alphanumeric_listener_imported:
             from moonshine_voice.alphanumeric_listener import (
@@ -177,6 +181,10 @@ def __getattr__(name):
                 AlphanumericMatcher,
                 letters_only_matcher,
                 digits_only_matcher,
+                SpellingPredictor,
+                SpellingPrediction,
+                FusionStrategy,
+                find_default_spelling_onnx_path,
             )
 
             globals()["AlphanumericListener"] = AlphanumericListener
@@ -186,6 +194,12 @@ def __getattr__(name):
             globals()["AlphanumericMatcher"] = AlphanumericMatcher
             globals()["letters_only_matcher"] = letters_only_matcher
             globals()["digits_only_matcher"] = digits_only_matcher
+            globals()["SpellingPredictor"] = SpellingPredictor
+            globals()["SpellingPrediction"] = SpellingPrediction
+            globals()["FusionStrategy"] = FusionStrategy
+            globals()["find_default_spelling_onnx_path"] = (
+                find_default_spelling_onnx_path
+            )
             _alphanumeric_listener_imported = True
         return globals()[name]
 
@@ -337,6 +351,10 @@ __all__ = [
     "AlphanumericMatcher",
     "letters_only_matcher",
     "digits_only_matcher",
+    "SpellingPredictor",
+    "SpellingPrediction",
+    "FusionStrategy",
+    "find_default_spelling_onnx_path",
     # Dialog flow
     "DialogFlow",
     "Dialog",
