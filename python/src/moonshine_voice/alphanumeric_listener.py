@@ -124,6 +124,40 @@ _LETTER_WORDS: Dict[str, str] = {
     "x": "x", "ex": "x",
     "y": "y", "why": "y", "wye": "y",
     "z": "z", "zee": "z", "zed": "z", "zet": "z",
+
+    # NATO / ICAO phonetic alphabet. Both common spellings of each
+    # codeword are listed (e.g. "alfa"/"alpha", "juliet"/"juliett",
+    # "whiskey"/"whisky") along with the most likely STT variants for
+    # the hyphenated "x-ray" ("xray", "x ray").  These coexist with the
+    # plain-letter entries above so a speaker can freely mix styles --
+    # "Alpha", "B", "Charlie", "delta" all resolve correctly in the
+    # same utterance stream.
+    "alpha": "a", "alfa": "a",
+    "bravo": "b",
+    "charlie": "c",
+    "delta": "d",
+    "echo": "e",
+    "foxtrot": "f", "fox trot": "f",
+    "golf": "g",
+    "hotel": "h",
+    "india": "i",
+    "juliet": "j", "juliett": "j",
+    "kilo": "k",
+    "lima": "l",
+    "mike": "m",
+    "november": "n",
+    "oscar": "o",
+    "papa": "p",
+    "quebec": "q",
+    "romeo": "r",
+    "sierra": "s",
+    "tango": "t",
+    "uniform": "u",
+    "victor": "v",
+    "whiskey": "w", "whisky": "w",
+    "x-ray": "x", "xray": "x", "x ray": "x",
+    "yankee": "y",
+    "zulu": "z",
 }
 
 _DIGIT_WORDS: Dict[str, str] = {
@@ -613,6 +647,9 @@ class AlphanumericMatcher:
     def _resolve(self, text: str) -> Optional[str]:
         if text in self._lookup:
             return self._lookup[text]
+        spelled = self._resolve_spelled_letter(text)
+        if spelled is not None:
+            return spelled
         num = _parse_number_words(text)
         if num is not None:
             return str(num)
@@ -620,6 +657,59 @@ class AlphanumericMatcher:
             return text
         if len(text) == 1 and text.isprintable():
             return text
+        return None
+
+    def _resolve_spelled_letter(self, text: str) -> Optional[str]:
+        """Recognise speller patterns like ``"A for Alpha"`` / ``"B as in Boy"``.
+
+        The text is split on a small set of connector phrases (``"for"``,
+        ``"as in"``, ``"is for"``, ``"like"``).  We accept the utterance
+        when:
+
+        * The left side resolves through :attr:`_lookup` to a single
+          alphabetic character -- so ``"a"``, ``"bee"``, ``"alpha"``,
+          ``"whiskey"`` are all valid spellers, but ``"one"`` (digit) or
+          ``"hash"`` (special) are not.
+        * The right side is a single word whose first character matches
+          the resolved letter (case-insensitive).  This covers both the
+          NATO codewords (``"A for Alpha"``) and free-form memory aids
+          (``"B as in Boy"``, ``"M for Mary"``) without us having to
+          enumerate every English word.
+
+        Without this pattern handler the matcher's word-by-word fallback
+        would tokenise ``"A for Alpha"`` into ``a`` + ``4`` + ``a``,
+        because ``"for"`` is a registered homophone of ``"four"`` in the
+        digit vocabulary -- so we have to short-circuit the whole-utterance
+        match here.
+
+        Connectors are checked most-specific-first so ``"a is for alpha"``
+        splits on ``"is for"`` before the bare ``"for"`` substring inside
+        it has a chance to match.  When a connector splits the text but
+        the halves don't validate (e.g. ``"a for bravo"``) we ``continue``
+        to try the next connector instead of returning, so an unrelated
+        substring collision can't poison a later valid match.
+        """
+        for connector in (" as in ", " is for ", " like ", " for "):
+            idx = text.find(connector)
+            if idx <= 0:
+                continue
+            left = text[:idx].strip()
+            right = text[idx + len(connector):].strip()
+            if not left or not right:
+                continue
+            left_char = self._lookup.get(left)
+            if (
+                left_char is None
+                or len(left_char) != 1
+                or not left_char.isalpha()
+            ):
+                continue
+            right_words = right.split()
+            if len(right_words) != 1:
+                continue
+            if right_words[0][:1] != left_char.lower():
+                continue
+            return left_char
         return None
 
     def _char_accepted(self, char: str) -> bool:
