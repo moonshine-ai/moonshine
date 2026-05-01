@@ -782,41 +782,68 @@ class SpellingPrediction:
 
 # Environment variable name honoured by :func:`find_default_spelling_onnx_path`
 # -- exported as a constant so callers can document / surface it consistently
-# (e.g. error messages telling the user how to point at their own ONNX).
+# (e.g. error messages telling the user how to point at their own model).
+# Despite the historical ``ONNX`` in the name, the value can point at any
+# file ``onnxruntime`` knows how to load -- ``.onnx`` *or* ``.ort``.
 SPELLING_ONNX_ENV_VAR = "MOONSHINE_SPELLING_ONNX"
 
-# Bundled-asset filename. ``find_default_spelling_onnx_path`` looks for this
-# under the package's ``assets/`` directory; it isn't shipped in the repo by
-# default, but a user (or a CI step) can drop a copy here to make the model
-# discoverable without a sibling repo or environment variable.
-_BUNDLED_SPELLING_ONNX_NAME = "spelling_cnn.onnx"
+# Bundled-asset filenames, in priority order.  ``find_default_spelling_onnx_path``
+# looks for these under the package's ``assets/`` directory; neither is
+# shipped in the repo by default, but a user (or a CI step) can drop a copy
+# here to make the model discoverable without a sibling repo or environment
+# variable.  ``.ort`` is preferred because it loads faster and is what the
+# trainer now exports as the deployable artefact; ``.onnx`` is kept as a
+# fallback for older bundles.
+_BUNDLED_SPELLING_MODEL_NAMES: tuple = ("spelling_cnn.ort", "spelling_cnn.onnx")
 
 # Sibling-repo discovery: when this package is being imported from a source
 # tree that lives next to the ``moonshine-spelling`` repo (the development
 # workflow on the maintainer's machine), look for the most recent training
-# run's ``.onnx`` so ``python -m moonshine_voice.alphanumeric_listener``
-# works out of the box without any setup.
+# run's exported model so ``python -m moonshine_voice.alphanumeric_listener``
+# works out of the box without any setup.  Runs are named
+# ``run_YYYY_MM_DD_HH_MM`` so lexicographic sort by folder name matches
+# chronological order -- "latest" means the highest-sorting folder, not the
+# most-recently-touched file (which can lie when files get rebuilt out of
+# order).
 _SIBLING_REPO_DIRNAME = "moonshine-spelling"
-_SIBLING_REPO_ONNX_GLOB = "checkpoints/run_*/spelling_cnn.onnx"
+_SIBLING_REPO_CHECKPOINTS_SUBDIR = "checkpoints"
+_SIBLING_REPO_RUN_PREFIX = "run_"
+
+# Filenames to look for inside a checkpoint directory.  ``.ort`` is preferred
+# over ``.onnx`` because it's the runtime-optimised format we now ship; the
+# ``.onnx`` is kept as a fallback so older checkpoints still work.
+_CHECKPOINT_MODEL_FILENAMES: tuple = ("spelling_cnn.ort", "spelling_cnn.onnx")
+
+# Sidecar JSON written next to every exported model.  Required for ``.ort``
+# (which doesn't preserve embedded ``custom_metadata_map`` reliably) and
+# preferred over the embedded metadata when both are present, so the source
+# of truth for class labels / sample rate / clip length lives in a single
+# human-readable file the trainer keeps in lock-step with the weights.
+_CHECKPOINT_META_FILENAME = "spelling_cnn_meta.json"
 
 
 def find_default_spelling_onnx_path() -> Optional[str]:
-    """Locate a default :class:`SpellingPredictor` ONNX file.
+    """Locate a default :class:`SpellingPredictor` model file.
 
     Resolution order (first hit wins):
 
     1. ``$MOONSHINE_SPELLING_ONNX`` environment variable -- explicit user
        override, takes precedence over everything else.  Pointed-to file
-       must exist; empty/whitespace values are ignored.
-    2. ``<package>/assets/spelling_cnn.onnx`` -- a bundled copy of the
-       exported SpellingCNN.  Not committed by default (the model lives
-       in the ``moonshine-spelling`` repo) but copying / symlinking it
-       here is the simplest way to ship the predictor with the package.
+       must exist; empty/whitespace values are ignored.  Despite the
+       legacy ``ONNX`` in the name, ``.ort`` is also accepted.
+    2. ``<package>/assets/spelling_cnn.ort`` (or ``.onnx`` as a fallback)
+       -- a bundled copy of the exported SpellingCNN.  Not committed by
+       default (the model lives in the ``moonshine-spelling`` repo) but
+       copying / symlinking it here is the simplest way to ship the
+       predictor with the package.
     3. Sibling ``moonshine-spelling`` repo when this module is being
-       imported from a source checkout: ``../moonshine-spelling/checkpoints/
-       run_*/spelling_cnn.onnx`` resolved relative to the repo root,
-       newest run wins.  This is the maintainer-machine fallback so the
-       CLI works without any configuration.
+       imported from a source checkout: the lexicographically-latest
+       ``../moonshine-spelling/checkpoints/run_*`` folder relative to
+       the workspace root, then ``spelling_cnn.ort`` (preferred) or
+       ``spelling_cnn.onnx`` (fallback) inside it.  Sorting by folder
+       name (rather than file mtime) means "latest" tracks the run
+       timestamp encoded in the directory name even after individual
+       artefacts get rebuilt.
 
     Returns the resolved absolute path as a string, or ``None`` when no
     candidate exists.  This function never raises -- callers can treat a
@@ -836,36 +863,51 @@ def find_default_spelling_onnx_path() -> Optional[str]:
             file=sys.stderr,
         )
 
-    bundled = get_assets_path() / _BUNDLED_SPELLING_ONNX_NAME
-    if bundled.is_file():
-        return str(bundled.resolve())
+    assets_dir = get_assets_path()
+    for filename in _BUNDLED_SPELLING_MODEL_NAMES:
+        bundled = assets_dir / filename
+        if bundled.is_file():
+            return str(bundled.resolve())
 
-    sibling = _find_sibling_spelling_onnx()
+    sibling = _find_sibling_spelling_model()
     if sibling is not None:
         return sibling
 
     return None
 
 
-def _find_sibling_spelling_onnx() -> Optional[str]:
+def _find_sibling_spelling_model() -> Optional[str]:
     """Best-effort lookup of a sibling ``moonshine-spelling`` checkout.
 
     Walks up from this file until we find a directory that has a sibling
     named ``moonshine-spelling`` (the layout the maintainer's dev machine
-    uses).  Returns the path of the most recently modified ``.onnx``
-    matching :data:`_SIBLING_REPO_ONNX_GLOB`, or ``None``.
+    uses).  Picks the lexicographically-latest ``checkpoints/run_*``
+    sub-folder -- training runs are named with sortable
+    ``YYYY_MM_DD_HH_MM`` timestamps, so this corresponds to the most
+    recent run regardless of file mtimes.  Returns the path of the first
+    matching model file inside that run (``.ort`` preferred,
+    ``.onnx`` fallback), or ``None``.
     """
     here = Path(__file__).resolve()
     for ancestor in here.parents:
         sibling_repo = ancestor.parent / _SIBLING_REPO_DIRNAME
         if sibling_repo.is_dir():
-            candidates = sorted(
-                sibling_repo.glob(_SIBLING_REPO_ONNX_GLOB),
-                key=lambda p: p.stat().st_mtime,
+            checkpoints = sibling_repo / _SIBLING_REPO_CHECKPOINTS_SUBDIR
+            if not checkpoints.is_dir():
+                return None
+            run_dirs = sorted(
+                (
+                    p for p in checkpoints.iterdir()
+                    if p.is_dir() and p.name.startswith(_SIBLING_REPO_RUN_PREFIX)
+                ),
+                key=lambda p: p.name,
                 reverse=True,
             )
-            if candidates:
-                return str(candidates[0])
+            for run_dir in run_dirs:
+                for filename in _CHECKPOINT_MODEL_FILENAMES:
+                    candidate = run_dir / filename
+                    if candidate.is_file():
+                        return str(candidate)
             return None
         # Stop walking once we leave a plausible workspace root -- there's
         # no point scanning all the way up to ``/``.
@@ -875,15 +917,26 @@ def _find_sibling_spelling_onnx() -> Optional[str]:
 
 
 class SpellingPredictor:
-    """Runs a SpellingCNN ONNX model on raw 16 kHz waveform clips.
+    """Runs a SpellingCNN model on raw 16 kHz waveform clips.
 
-    Loads an ONNX file exported with ``--mode waveform`` from the
-    ``moonshine-spelling`` repo and exposes a single :meth:`predict`
-    method that takes a numpy waveform and returns the top-1 class plus
-    its probability.  All audio config (sample rate, clip length, class
-    list, input/output tensor names) is read from the ``.onnx``'s embedded
-    custom metadata via ``onnxruntime``'s ``get_modelmeta()`` API – there's
-    no need for the ``onnx`` Python package or a sibling ``.pt`` file.
+    Loads an ``.onnx`` *or* ``.ort`` file exported with ``--mode waveform``
+    from the ``moonshine-spelling`` repo and exposes a single
+    :meth:`predict` method that takes a numpy waveform and returns the
+    top-1 class plus its probability.
+
+    Audio config (sample rate, clip length, class list, input/output
+    tensor names) is loaded from two sources, in priority order:
+
+    1. ``spelling_cnn_meta.json`` sidecar in the same directory as the
+       model file.  This is required for ``.ort`` exports (the runtime
+       format doesn't preserve ``custom_metadata_map`` reliably) and is
+       preferred over the embedded metadata when both are present, so
+       the trainer can ship a single canonical source of truth that
+       stays in lock-step with the weights.
+    2. The model's own ``custom_metadata_map`` via ``onnxruntime``'s
+       ``get_modelmeta()`` API.  Used as a fallback when the sidecar is
+       missing -- e.g. a legacy ``.onnx`` checkpoint that was exported
+       before the sidecar convention.
 
     The dependency on ``onnxruntime`` is lazy: importing this module never
     requires ``onnxruntime``; only constructing a predictor does.
@@ -891,7 +944,9 @@ class SpellingPredictor:
     Parameters
     ----------
     onnx_path:
-        Filesystem path to a ``.onnx`` exported in waveform mode.
+        Filesystem path to a ``.onnx`` or ``.ort`` model exported in
+        waveform mode.  The sidecar ``spelling_cnn_meta.json`` is looked
+        up in the same directory automatically.
     providers:
         Optional list of ONNX Runtime execution providers.  Defaults to
         ``["CPUExecutionProvider"]`` so behaviour is deterministic across
@@ -921,7 +976,14 @@ class SpellingPredictor:
             providers=providers or ["CPUExecutionProvider"],
         )
 
-        meta_map = self._session.get_modelmeta().custom_metadata_map or {}
+        # Sidecar wins on every key it provides; missing keys fall through
+        # to the embedded map so partial sidecars (or legacy .onnx files
+        # with no sidecar at all) still work.
+        embedded_meta = self._session.get_modelmeta().custom_metadata_map or {}
+        sidecar_meta = self._load_sidecar_metadata(onnx_path)
+        meta_map: Dict[str, Any] = dict(embedded_meta)
+        meta_map.update(sidecar_meta)
+
         self._classes: List[str] = self._parse_classes(meta_map.get("classes"))
         self._sample_rate: int = self._safe_int(meta_map.get("sample_rate"), 16000)
         self._clip_seconds: float = self._safe_float(
@@ -943,7 +1005,7 @@ class SpellingPredictor:
 
         if self._mode != "waveform":
             raise ValueError(
-                f"SpellingPredictor only supports waveform-mode ONNX exports; "
+                f"SpellingPredictor only supports waveform-mode model exports; "
                 f"got mode={self._mode!r}. Re-export the model with "
                 "`--mode waveform`."
             )
@@ -1032,8 +1094,40 @@ class SpellingPredictor:
     # -- Internals ---------------------------------------------------------
 
     @staticmethod
-    def _parse_classes(raw: Optional[str]) -> List[str]:
-        if not raw:
+    def _load_sidecar_metadata(model_path: str) -> Dict[str, Any]:
+        """Read a ``spelling_cnn_meta.json`` sibling file if present.
+
+        Returns an empty dict if the sidecar is missing, unreadable, or
+        not a JSON object.  Callers fall back to embedded ONNX metadata
+        in that case so legacy ``.onnx`` checkpoints (exported before
+        the sidecar convention) still work without configuration.
+        """
+        sidecar = Path(model_path).resolve().parent / _CHECKPOINT_META_FILENAME
+        if not sidecar.is_file():
+            return {}
+        try:
+            with sidecar.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        return data
+
+    @staticmethod
+    def _parse_classes(raw: Any) -> List[str]:
+        """Decode the ``classes`` metadata value into a list of class labels.
+
+        Accepts both the embedded form (a JSON-encoded string, because
+        ``custom_metadata_map`` only stores strings) and the sidecar
+        form (a real JSON list), so the same parser works no matter
+        which metadata source supplied the value.
+        """
+        if raw is None or raw == "":
+            return []
+        if isinstance(raw, list):
+            return [c for c in raw if isinstance(c, str)]
+        if not isinstance(raw, str):
             return []
         try:
             data = json.loads(raw)
@@ -1592,10 +1686,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--spelling-onnx-path", type=str, default=None,
         help=(
-            "Path to a SpellingCNN ONNX model. Defaults to "
+            "Path to a SpellingCNN model file (.ort or .onnx). Defaults to "
             "find_default_spelling_onnx_path() (env var "
-            f"${SPELLING_ONNX_ENV_VAR}, then bundled asset, then sibling "
-            "'moonshine-spelling' checkout). Pass a path to override."
+            f"${SPELLING_ONNX_ENV_VAR}, then bundled asset, then the "
+            "lexicographically-latest run_* folder in the sibling "
+            "'moonshine-spelling/checkpoints/' directory). Pass a path "
+            "to override."
         ),
     )
     parser.add_argument(
@@ -1638,10 +1734,13 @@ if __name__ == "__main__":
     else:
         onnx_path = args.spelling_onnx_path or find_default_spelling_onnx_path()
         if onnx_path is None:
+            bundled_hint = " or ".join(
+                f"<assets>/{name}" for name in _BUNDLED_SPELLING_MODEL_NAMES
+            )
             print(
                 "Spelling model: none found. Set "
                 f"${SPELLING_ONNX_ENV_VAR}, drop a copy at "
-                f"<assets>/{_BUNDLED_SPELLING_ONNX_NAME}, or pass "
+                f"{bundled_hint}, or pass "
                 "--spelling-onnx-path. Falling back to ASR-only.",
                 file=sys.stderr,
             )
