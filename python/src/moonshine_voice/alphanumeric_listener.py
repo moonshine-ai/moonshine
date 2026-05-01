@@ -110,7 +110,7 @@ _LETTER_WORDS: Dict[str, str] = {
     "o": "o", "oh": "o",
     "p": "p", "pee": "p",
     "q": "q", "queue": "q", "cue": "q",
-    "r": "r", "are": "r", "ar": "r", "ah": "r", "Uh-huh": "r", "Aww": "r",
+    "r": "r", "are": "r", "ar": "r", "ah": "r", "uh-huh": "r", "aww": "r", "awe": "r",
     "s": "s", "es": "s", "ess": "s",
     "t": "t", "tee": "t",
     "u": "u", "you": "u",
@@ -269,12 +269,49 @@ def spoken_form(char: str) -> str:
     return char
 
 
+# ---------------------------------------------------------------------------
+# Input normalisation
+#
+# STT output is noisy: the same word can come back as ``"aww"``, ``"Aww."``,
+# ``'"Aww,"'`` or ``"\u201cAww.\u201d"`` depending on the model and any
+# downstream cleanup.  Before we look anything up we strip the punctuation
+# and quote characters that aren't part of any vocabulary key, lower-case
+# the result, and collapse runs of whitespace.  The same normalisation is
+# applied to every lookup key / command word at module-init so apostrophe-
+# containing entries like ``"that's it"`` (which becomes ``"thats it"``)
+# still match user utterances such as ``"That's it."``.
+# ---------------------------------------------------------------------------
+
+_NORMALIZE_DROP_CHARS = (
+    ".,!?"            # sentence-ending punctuation Whisper sprinkles in
+    "\"'"             # straight quotes / apostrophes
+    "\u2018\u2019"    # curly single quotes (\u2018 / \u2019)
+    "\u201c\u201d"    # curly double quotes (\u201c / \u201d)
+)
+_NORMALIZE_TRANS = str.maketrans("", "", _NORMALIZE_DROP_CHARS)
+
+
+def _normalize(text: str) -> str:
+    """Return *text* lower-cased with quotes/punctuation removed.
+
+    Characters in :data:`_NORMALIZE_DROP_CHARS` are deleted, the result is
+    lower-cased, and internal runs of whitespace are collapsed to a single
+    space.  Used on both inbound STT text and the vocabulary keys so
+    matching is robust to noisy punctuation while still recognising
+    multi-word phrases like ``"upper case"``.
+    """
+    if not text:
+        return ""
+    cleaned = text.lower().translate(_NORMALIZE_TRANS)
+    return " ".join(cleaned.split())
+
+
 def _build_lookup() -> Dict[str, str]:
     """Merge all character vocabularies into a single lookup table."""
     lookup: Dict[str, str] = {}
-    lookup.update(_SPECIAL_CHAR_WORDS)
-    lookup.update(_DIGIT_WORDS)
-    lookup.update(_LETTER_WORDS)
+    for table in (_SPECIAL_CHAR_WORDS, _DIGIT_WORDS, _LETTER_WORDS):
+        for spoken, char in table.items():
+            lookup[_normalize(spoken)] = char
     return lookup
 
 
@@ -284,11 +321,21 @@ def _build_lookup() -> Dict[str, str]:
 # supplies ``custom_words``.
 _DEFAULT_LOOKUP: Dict[str, str] = _build_lookup()
 
+# Normalised copies of the command vocabularies, used by ``classify`` so the
+# user-facing source above stays readable (``"that's it"``, ``"i'm done"``)
+# while runtime comparisons happen on the apostrophe-stripped forms.
+_UPPER_MODIFIERS_NORM: frozenset = frozenset(
+    _normalize(s) for s in _UPPER_MODIFIERS
+)
+_UNDO_WORDS_NORM: frozenset = frozenset(_normalize(s) for s in _UNDO_WORDS)
+_CLEAR_WORDS_NORM: frozenset = frozenset(_normalize(s) for s in _CLEAR_WORDS)
+_STOP_WORDS_NORM: frozenset = frozenset(_normalize(s) for s in _STOP_WORDS)
+
 # ``classify()`` matches upper-case modifier phrases by longest-prefix first
 # (so ``"upper case"`` wins over ``"upper"``).  Sorting on every call is pure
 # waste; do it once at import.
 _UPPER_MODIFIERS_BY_LEN: tuple = tuple(
-    sorted(_UPPER_MODIFIERS, key=len, reverse=True)
+    sorted(_UPPER_MODIFIERS_NORM, key=len, reverse=True)
 )
 
 
@@ -444,7 +491,9 @@ class AlphanumericMatcher:
             # override the built-in vocabulary.
             lookup = dict(_DEFAULT_LOOKUP)
             for spoken, char in custom_words.items():
-                lookup[spoken.lower().strip()] = char
+                key = _normalize(spoken)
+                if key:
+                    lookup[key] = char
             self._lookup = lookup
         else:
             # Share the module-level precomputed table – read-only in
@@ -462,16 +511,15 @@ class AlphanumericMatcher:
 
         if raw_text is None:
             return AlphanumericMatch(AlphanumericEventType.NONE)
-        text = raw_text.strip().lower()
+        text = _normalize(raw_text)
         if not text:
             return AlphanumericMatch(AlphanumericEventType.NONE)
-        text = self._strip_trailing_punctuation(text)
 
-        if text in _STOP_WORDS:
+        if text in _STOP_WORDS_NORM:
             return AlphanumericMatch(AlphanumericEventType.STOPPED)
-        if text in _CLEAR_WORDS:
+        if text in _CLEAR_WORDS_NORM:
             return AlphanumericMatch(AlphanumericEventType.CLEAR)
-        if text in _UNDO_WORDS:
+        if text in _UNDO_WORDS_NORM:
             return AlphanumericMatch(AlphanumericEventType.UNDO)
 
         make_upper = False
@@ -545,12 +593,6 @@ class AlphanumericMatcher:
         if char.isalpha():
             return self._accept_letters
         return self._accept_specials
-
-    @staticmethod
-    def _strip_trailing_punctuation(text: str) -> str:
-        while text and text[-1] in (".", ",", "!", "?"):
-            text = text[:-1]
-        return text.strip()
 
 
 # Convenience pre-configured matchers.
