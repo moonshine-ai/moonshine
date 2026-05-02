@@ -337,8 +337,8 @@ Java_ai_moonshine_voice_JNI_moonshineLoadTranscriberFromFiles(
 extern "C" JNIEXPORT int JNICALL
 Java_ai_moonshine_voice_JNI_moonshineLoadTranscriberFromMemory(
     JNIEnv *env, jobject /* this */, jbyteArray encoder_model_data,
-    jbyteArray decoder_model_data, jbyteArray tokenizer_data, jint model_arch,
-    jobjectArray joptions) {
+    jbyteArray decoder_model_data, jbyteArray tokenizer_data,
+    jbyteArray spelling_model_data, jint model_arch, jobjectArray joptions) {
   try {
     jclass optionClass = get_class(env, "ai/moonshine/voice/TranscriberOption");
     jfieldID nameField =
@@ -364,14 +364,18 @@ Java_ai_moonshine_voice_JNI_moonshineLoadTranscriberFromMemory(
     const uint8_t *tokenizer_data_ptr =
         (uint8_t *)(env->GetByteArrayElements(tokenizer_data, nullptr));
     size_t tokenizer_data_size = env->GetArrayLength(tokenizer_data);
+    const uint8_t *spelling_model_data_ptr = nullptr;
+    size_t spelling_model_data_size = 0;
+    if (spelling_model_data != nullptr) {
+      spelling_model_data_ptr =
+          (uint8_t *)(env->GetByteArrayElements(spelling_model_data, nullptr));
+      spelling_model_data_size = env->GetArrayLength(spelling_model_data);
+    }
     return moonshine_load_transcriber_from_memory(
         encoder_model_data_ptr, encoder_model_data_size, decoder_model_data_ptr,
         decoder_model_data_size, tokenizer_data_ptr, tokenizer_data_size,
-        // Spelling-model buffer is not yet plumbed through JNI; pass
-        // null so the existing API still compiles. Update when the
-        // Android bindings catch up to the new C signature.
-        /*spelling_model_data=*/nullptr, /*spelling_model_data_size=*/0,
-        model_arch, coptions.data(), coptions.size(), MOONSHINE_HEADER_VERSION);
+        spelling_model_data_ptr, spelling_model_data_size, model_arch,
+        coptions.data(), coptions.size(), MOONSHINE_HEADER_VERSION);
   } catch (const std::exception &e) {
     LOGE("moonshineLoadTranscriberFromMemory: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
@@ -463,7 +467,7 @@ Java_ai_moonshine_voice_JNI_moonshineStopStream(JNIEnv * /* env */,
 extern "C" JNIEXPORT int JNICALL
 Java_ai_moonshine_voice_JNI_moonshineAddAudioToStream(
     JNIEnv *env, jobject /* this */, jint transcriber_handle,
-    jint stream_handle, jfloatArray audio_data, jint sample_rate) {
+    jint stream_handle, jfloatArray audio_data, jint sample_rate, jint flags) {
   try {
     if (audio_data == nullptr) {
       return MOONSHINE_ERROR_INVALID_ARGUMENT;
@@ -472,7 +476,7 @@ Java_ai_moonshine_voice_JNI_moonshineAddAudioToStream(
     size_t audio_data_size = env->GetArrayLength(audio_data);
     return moonshine_transcribe_add_audio_to_stream(
         transcriber_handle, stream_handle, audio_data_ptr, audio_data_size,
-        sample_rate, 0);
+        sample_rate, flags);
   } catch (const std::exception &e) {
     LOGE("moonshineAddAudioToStream: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;

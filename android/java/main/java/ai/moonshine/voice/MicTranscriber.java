@@ -36,6 +36,14 @@ public class MicTranscriber extends Transcriber {
     this.isLoadedSignal.complete(null);
   }
 
+  public void loadFromAssets(AppCompatActivity parentContext,
+                             String modelRootDir, String spellingAssetPath,
+                             int modelArch) {
+    super.loadFromAssets(parentContext, modelRootDir, spellingAssetPath,
+                         modelArch);
+    this.isLoadedSignal.complete(null);
+  }
+
   public void loadFromFiles(String modelRootDir, int modelArch) {
     super.loadFromFiles(modelRootDir, modelArch);
     this.isLoadedSignal.complete(null);
@@ -45,6 +53,14 @@ public class MicTranscriber extends Transcriber {
                              byte[] tokenizerData, int modelArch) {
     super.loadFromMemory(encoderModelData, decoderModelData, tokenizerData,
                          modelArch);
+    this.isLoadedSignal.complete(null);
+  }
+
+  public void loadFromMemory(byte[] encoderModelData, byte[] decoderModelData,
+                             byte[] tokenizerData, byte[] spellingModelData,
+                             int modelArch) {
+    super.loadFromMemory(encoderModelData, decoderModelData, tokenizerData,
+                         spellingModelData, modelArch);
     this.isLoadedSignal.complete(null);
   }
 

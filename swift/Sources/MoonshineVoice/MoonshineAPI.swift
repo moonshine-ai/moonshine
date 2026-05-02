@@ -3,6 +3,12 @@ import Moonshine
 
 public struct TranscribeStreamFlags {
     public static let flagForceUpdate: UInt32 = 1 << 0
+    /// Run the alphanumeric spelling-fusion path on completed lines.
+    /// Requires the transcriber to have been built with a
+    /// ``spelling_model_path`` option (or ``Transcriber.spellingModelPath``);
+    /// without one this flag is a no-op. See
+    /// ``MOONSHINE_FLAG_SPELLING_MODE`` in the C header for details.
+    public static let flagSpellingMode: UInt32 = 1 << 1
 }
 
 /// Internal wrapper for the Moonshine C API.

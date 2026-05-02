@@ -1,6 +1,8 @@
 #include "moonshine-cpp.h"
 
 #include <cinttypes>
+#include <filesystem>
+#include <fstream>
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest.h>
@@ -293,6 +295,91 @@ TEST_CASE("moonshine-cpp-test") {
                           "/nonexistent/moonshine/embedding/model",
                           moonshine::EmbeddingModelArch::GEMMA_300M),
                       moonshine::MoonshineException);
+  }
+  SUBCASE("spelling-mode-replaces-line-text-via-cpp-ctor") {
+    // Mirrors the C-API "spelling-mode-replaces-line-text" subcase but
+    // exercised through the C++ wrapper's options-aware constructor +
+    // ``Transcriber::FLAG_SPELLING_MODE`` flag, so we don't regress the
+    // language binding.
+    std::string spelling_path = "spelling_cnn.ort";
+    std::string wav_path = "alphanumeric/a/petewarden_nohash_0.wav";
+    std::string root_model_path = "tiny-en";
+    if (!file_exists(spelling_path)) {
+      MESSAGE("skip: spelling_cnn.ort not in test-assets");
+      return;
+    }
+    if (!file_exists(wav_path)) {
+      MESSAGE("skip: alphanumeric clip not in test-assets");
+      return;
+    }
+    if (!file_exists(root_model_path + "/encoder_model.ort")) {
+      MESSAGE("skip: tiny-en model not in test-assets");
+      return;
+    }
+    float *wav_data = nullptr;
+    size_t wav_data_size = 0;
+    int32_t wav_sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
+                          &wav_sample_rate));
+    moonshine::Transcriber transcriber(root_model_path,
+                                       moonshine::ModelArch::TINY,
+                                       /*updateInterval=*/0.5,
+                                       spelling_path);
+    moonshine::Transcript transcript = transcriber.transcribeWithoutStreaming(
+        std::vector<float>(wav_data, wav_data + wav_data_size), wav_sample_rate,
+        moonshine::Transcriber::FLAG_SPELLING_MODE);
+    REQUIRE(transcript.lines.size() >= 1);
+    CHECK(transcript.lines[0].text == "a");
+    free(wav_data);
+  }
+  SUBCASE("loadFromMemory-with-spelling-buffer") {
+    // Verifies the static factory signature and end-to-end behaviour:
+    // we slurp the on-disk model + spelling .ort into vectors and hand
+    // them to ``Transcriber::loadFromMemory``. The resulting
+    // transcriber should still resolve the "alpha" clip to ``"a"`` when
+    // ``FLAG_SPELLING_MODE`` is set.
+    std::string root_model_path = "tiny-en";
+    std::string wav_path = "alphanumeric/a/petewarden_nohash_0.wav";
+    std::string spelling_path = "spelling_cnn.ort";
+    if (!file_exists(spelling_path) ||
+        !file_exists(root_model_path + "/encoder_model.ort") ||
+        !file_exists(wav_path)) {
+      MESSAGE("skip: spelling/alphanumeric assets missing");
+      return;
+    }
+    auto slurp = [](const std::string &path) {
+      std::ifstream f(path, std::ios::binary);
+      return std::vector<uint8_t>(
+          (std::istreambuf_iterator<char>(f)),
+          std::istreambuf_iterator<char>());
+    };
+    std::vector<uint8_t> encoder =
+        slurp(root_model_path + "/encoder_model.ort");
+    std::vector<uint8_t> decoder =
+        slurp(root_model_path + "/decoder_model_merged.ort");
+    std::vector<uint8_t> tokenizer = slurp(root_model_path + "/tokenizer.bin");
+    std::vector<uint8_t> spelling = slurp(spelling_path);
+    REQUIRE(encoder.size() > 0);
+    REQUIRE(decoder.size() > 0);
+    REQUIRE(tokenizer.size() > 0);
+    REQUIRE(spelling.size() > 0);
+
+    float *wav_data = nullptr;
+    size_t wav_data_size = 0;
+    int32_t wav_sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
+                          &wav_sample_rate));
+
+    moonshine::Transcriber transcriber = moonshine::Transcriber::loadFromMemory(
+        encoder.data(), encoder.size(), decoder.data(), decoder.size(),
+        tokenizer.data(), tokenizer.size(), moonshine::ModelArch::TINY,
+        /*updateInterval=*/0.5, spelling.data(), spelling.size());
+    moonshine::Transcript transcript = transcriber.transcribeWithoutStreaming(
+        std::vector<float>(wav_data, wav_data + wav_data_size), wav_sample_rate,
+        moonshine::Transcriber::FLAG_SPELLING_MODE);
+    REQUIRE(transcript.lines.size() >= 1);
+    CHECK(transcript.lines[0].text == "a");
+    free(wav_data);
   }
   SUBCASE("intent recognizer closest intents when embedding model present") {
     const std::string dir = "embeddinggemma-300m-ONNX";

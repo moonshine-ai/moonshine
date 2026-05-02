@@ -20,6 +20,14 @@ public class MicTranscriber {
     ///   - channels: Number of audio channels (default: 1)
     ///   - bufferSize: Buffer size in frames (default: 1024)
     ///   - options: Optional transcriber options for advanced configuration
+    ///   - spellingModelPath: Convenience shortcut for the
+    ///     ``"spelling_model_path"`` option used by the alphanumeric
+    ///     spelling-fusion path.
+    ///   - transcribeFlags: Flags applied to every implicit
+    ///     transcription update the underlying stream issues. Pass
+    ///     ``TranscribeStreamFlags.flagSpellingMode`` to enable the
+    ///     C++ spelling-CNN fusion path on live mic audio (requires
+    ///     ``spellingModelPath`` to be set).
     /// - Throws: `MoonshineError` if the transcriber cannot be loaded
     public init(
         modelPath: String,
@@ -28,11 +36,18 @@ public class MicTranscriber {
         sampleRate: Double = 16000,
         channels: Int = 1,
         bufferSize: AVAudioFrameCount = 1024,
-        options: [TranscriberOption]? = nil
+        options: [TranscriberOption]? = nil,
+        spellingModelPath: String? = nil,
+        transcribeFlags: UInt32 = 0
     ) throws {
         self.transcriber = try Transcriber(
-            modelPath: modelPath, modelArch: modelArch, options: options)
-        self.micStream = try transcriber.createStream(updateInterval: updateInterval)
+            modelPath: modelPath,
+            modelArch: modelArch,
+            options: options,
+            spellingModelPath: spellingModelPath)
+        self.micStream = try transcriber.createStream(
+            updateInterval: updateInterval,
+            transcribeFlags: transcribeFlags)
         self.sampleRate = sampleRate
         self.channels = channels
         self.bufferSize = bufferSize

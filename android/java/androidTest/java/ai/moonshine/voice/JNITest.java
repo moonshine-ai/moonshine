@@ -92,7 +92,8 @@ public class JNITest {
         assertTrue(decoderModelData != null);
         assertTrue(tokenizerData != null);
         final int memoryTranscriberHandle = JNI.moonshineLoadTranscriberFromMemory(encoderModelData,
-                decoderModelData, tokenizerData, JNI.MOONSHINE_MODEL_ARCH_TINY, null);
+                decoderModelData, tokenizerData, /*spelling_model_data=*/null,
+                JNI.MOONSHINE_MODEL_ARCH_TINY, null);
         assertTrue(memoryTranscriberHandle >= 0);
         JNI.moonshineFreeTranscriber(memoryTranscriberHandle);
 
@@ -176,7 +177,7 @@ public class JNITest {
         for (int i = 0; i < wavData.data.length; i += chunkSize) {
             float[] audioData = Arrays.copyOfRange(wavData.data, i, i + chunkSize);
             assertTrue(JNI.moonshineAddAudioToStream(transcriberHandle, streamHandle, audioData,
-                    wavData.sampleRate) == JNI.MOONSHINE_ERROR_NONE);
+                    wavData.sampleRate, 0) == JNI.MOONSHINE_ERROR_NONE);
 
             samplesSinceLastTranscription += chunkSize;
             if (samplesSinceLastTranscription < samplesBetweenTranscriptions) {

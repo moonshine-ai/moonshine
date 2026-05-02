@@ -450,6 +450,33 @@ class Transcriber {
   Transcriber(const std::string &modelPath, ModelArch modelArch,
               double updateInterval = 0.5);
 
+  /// Initialize a transcriber from model files on disk with extra
+  /// transcriber options. ``spellingModelPath`` is a convenience
+  /// shortcut for the ``"spelling_model_path"`` option used by the
+  /// alphanumeric spelling-fusion path (see
+  /// ``MOONSHINE_FLAG_SPELLING_MODE``); leave empty to disable.
+  /// ``options`` is forwarded as additional ``moonshine_option_t``
+  /// entries to the C API.
+  /// @throws MoonshineException if the transcriber cannot be loaded
+  Transcriber(
+      const std::string &modelPath, ModelArch modelArch,
+      double updateInterval, const std::string &spellingModelPath,
+      const std::vector<std::pair<std::string, std::string>> &options = {});
+
+  /// Initialize a transcriber from in-memory model buffers. Buffers
+  /// are not copied and must outlive the transcriber.
+  /// ``spellingModelData`` / ``spellingModelDataSize`` are optional;
+  /// pass ``nullptr`` / ``0`` to disable the spelling-fusion path.
+  /// @throws MoonshineException if the transcriber cannot be loaded
+  static Transcriber loadFromMemory(
+      const uint8_t *encoderData, size_t encoderDataSize,
+      const uint8_t *decoderData, size_t decoderDataSize,
+      const uint8_t *tokenizerData, size_t tokenizerDataSize,
+      ModelArch modelArch, double updateInterval = 0.5,
+      const uint8_t *spellingModelData = nullptr,
+      size_t spellingModelDataSize = 0,
+      const std::vector<std::pair<std::string, std::string>> &options = {});
+
   /// Destructor - automatically closes the transcriber
   ~Transcriber();
 
@@ -537,6 +564,13 @@ class Transcriber {
   int32_t getHandle() const { return handle_; }
 
  private:
+  /// Internal constructor used by ``loadFromMemory`` to wrap an
+  /// already-acquired C handle without re-running the from-files load.
+  Transcriber(int32_t handle, ModelArch modelArch, double updateInterval)
+      : handle_(handle),
+        modelArch_(modelArch),
+        updateInterval_(updateInterval) {}
+
   int32_t handle_;
   std::string modelPath_;
   ModelArch modelArch_;
@@ -1038,6 +1072,46 @@ inline void Stream::emitError(const std::string &errorMessage) {
 }
 
 // Transcriber implementation
+namespace detail {
+
+/// Build a contiguous ``moonshine_option_t`` array from a list of
+/// ``(name, value)`` pairs, prepending ``"spelling_model_path"`` when
+/// ``spellingModelPath`` is non-empty. The returned vectors must
+/// outlive the option array (the option struct holds borrowed
+/// pointers).
+struct OptionsBuffer {
+  std::vector<std::string> names;
+  std::vector<std::string> values;
+  std::vector<moonshine_option_t> options;
+};
+
+inline OptionsBuffer buildOptions(
+    const std::string &spellingModelPath,
+    const std::vector<std::pair<std::string, std::string>> &extras) {
+  OptionsBuffer buf;
+  size_t total = extras.size() + (spellingModelPath.empty() ? 0 : 1);
+  buf.names.reserve(total);
+  buf.values.reserve(total);
+  buf.options.reserve(total);
+  if (!spellingModelPath.empty()) {
+    buf.names.emplace_back("spelling_model_path");
+    buf.values.emplace_back(spellingModelPath);
+  }
+  for (const auto &kv : extras) {
+    buf.names.emplace_back(kv.first);
+    buf.values.emplace_back(kv.second);
+  }
+  for (size_t i = 0; i < buf.names.size(); ++i) {
+    moonshine_option_t opt;
+    opt.name = buf.names[i].c_str();
+    opt.value = buf.values[i].c_str();
+    buf.options.push_back(opt);
+  }
+  return buf;
+}
+
+}  // namespace detail
+
 inline Transcriber::Transcriber(const std::string &modelPath,
                                 ModelArch modelArch, double updateInterval)
     : handle_(-1),
@@ -1048,6 +1122,46 @@ inline Transcriber::Transcriber(const std::string &modelPath,
       modelPath.c_str(), static_cast<uint32_t>(modelArch), nullptr, 0,
       MOONSHINE_HEADER_VERSION);
   checkError(handle_);
+}
+
+inline Transcriber::Transcriber(
+    const std::string &modelPath, ModelArch modelArch, double updateInterval,
+    const std::string &spellingModelPath,
+    const std::vector<std::pair<std::string, std::string>> &options)
+    : handle_(-1),
+      modelPath_(modelPath),
+      modelArch_(modelArch),
+      updateInterval_(updateInterval) {
+  detail::OptionsBuffer buf =
+      detail::buildOptions(spellingModelPath, options);
+  handle_ = moonshine_load_transcriber_from_files(
+      modelPath.c_str(), static_cast<uint32_t>(modelArch),
+      buf.options.empty() ? nullptr : buf.options.data(),
+      static_cast<uint64_t>(buf.options.size()), MOONSHINE_HEADER_VERSION);
+  checkError(handle_);
+}
+
+inline Transcriber Transcriber::loadFromMemory(
+    const uint8_t *encoderData, size_t encoderDataSize,
+    const uint8_t *decoderData, size_t decoderDataSize,
+    const uint8_t *tokenizerData, size_t tokenizerDataSize,
+    ModelArch modelArch, double updateInterval,
+    const uint8_t *spellingModelData, size_t spellingModelDataSize,
+    const std::vector<std::pair<std::string, std::string>> &options) {
+  detail::OptionsBuffer buf = detail::buildOptions("", options);
+  int32_t handle = moonshine_load_transcriber_from_memory(
+      encoderData, encoderDataSize, decoderData, decoderDataSize,
+      tokenizerData, tokenizerDataSize, spellingModelData,
+      spellingModelDataSize, static_cast<uint32_t>(modelArch),
+      buf.options.empty() ? nullptr : buf.options.data(),
+      static_cast<uint64_t>(buf.options.size()), MOONSHINE_HEADER_VERSION);
+  if (handle < 0) {
+    const char *msg = moonshine_error_to_string(handle);
+    throw MoonshineException(
+        std::string("Failed to load transcriber from memory: ") +
+        (msg ? msg : "unknown error"));
+  }
+  return Transcriber(handle, modelArch, updateInterval);
 }
 
 inline Transcriber::~Transcriber() { close(); }

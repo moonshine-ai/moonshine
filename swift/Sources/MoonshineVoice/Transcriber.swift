@@ -34,20 +34,33 @@ public class Transcriber {
     ///   - modelPath: Path to the directory containing model files
     ///   - modelArch: Model architecture to use (default: `.base`)
     ///   - options: Optional transcriber options for advanced configuration
+    ///   - spellingModelPath: Convenience shortcut for the
+    ///     ``"spelling_model_path"`` option used by the alphanumeric
+    ///     spelling-fusion path (see
+    ///     ``TranscribeStreamFlags.flagSpellingMode``). When non-nil,
+    ///     a corresponding entry is appended to ``options``.
     /// - Throws: `MoonshineError` if the transcriber cannot be loaded
     public init(
         modelPath: String,
         modelArch: ModelArch = .base,
-        options: [TranscriberOption]? = nil
+        options: [TranscriberOption]? = nil,
+        spellingModelPath: String? = nil
     ) throws {
         self.api = MoonshineAPI.shared
         self.modelPath = modelPath
         self.modelArch = modelArch
 
+        var resolvedOptions = options ?? []
+        if let spellingModelPath = spellingModelPath, !spellingModelPath.isEmpty {
+            resolvedOptions.append(
+                TranscriberOption(name: "spelling_model_path",
+                                  value: spellingModelPath))
+        }
+
         self.handle = try api.loadTranscriberFromFiles(
             path: modelPath,
             modelArch: modelArch,
-            options: options,
+            options: resolvedOptions.isEmpty ? nil : resolvedOptions,
             moonshineVersion: Transcriber.moonshineHeaderVersion
         )
     }
@@ -91,18 +104,25 @@ public class Transcriber {
     /// - Parameters:
     ///   - updateInterval: Interval in seconds between automatic updates (default: 0.5)
     ///   - flags: Flags for stream creation (default: 0)
+    ///   - transcribeFlags: Flags applied to every implicit
+    ///     ``updateTranscription`` call the stream issues from
+    ///     ``addAudio`` / ``stop``. Pass
+    ///     ``TranscribeStreamFlags.flagSpellingMode`` to drive the C++
+    ///     spelling-CNN fusion on live mic audio (default: 0).
     /// - Returns: A `Stream` object for real-time transcription
     /// - Throws: `MoonshineError` if stream creation fails
     public func createStream(
         updateInterval: TimeInterval = 0.5,
-        flags: UInt32 = 0
+        flags: UInt32 = 0,
+        transcribeFlags: UInt32 = 0
     ) throws -> Stream {
         let streamHandle = try api.createStream(transcriberHandle: handle, flags: flags)
         return Stream(
             transcriber: self,
             handle: streamHandle,
             updateInterval: updateInterval,
-            flags: flags
+            flags: flags,
+            transcribeFlags: transcribeFlags
         )
     }
 
