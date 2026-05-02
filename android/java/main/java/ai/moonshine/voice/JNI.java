@@ -14,6 +14,14 @@ public class JNI {
     public static final int MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING = 5;
 
     public static final int MOONSHINE_FLAG_FORCE_UPDATE = 1 << 0;
+    /**
+     * Run the alphanumeric spelling-fusion path on completed lines. Requires
+     * the transcriber to have been built with a {@code spelling_model_path}
+     * option (or a non-null spelling model byte array passed to
+     * {@link #moonshineLoadTranscriberFromMemory}); without one, this flag
+     * is a no-op.
+     */
+    public static final int MOONSHINE_FLAG_SPELLING_MODE = 1 << 1;
 
     /** Embedding model architecture for intent recognition (Gemma 300M). */
     public static final int MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M = 0;
@@ -29,8 +37,17 @@ public class JNI {
 
     public static native int moonshineLoadTranscriberFromFiles(String path, int model_arch, Object[] options);
 
+    /**
+     * Loads a transcriber from in-memory model buffers.
+     *
+     * @param spelling_model_data Optional spelling-CNN {@code .ort} payload; pass
+     *                            {@code null} when not using
+     *                            {@link #MOONSHINE_FLAG_SPELLING_MODE}. When provided,
+     *                            the buffer is referenced (not copied) for the
+     *                            transcriber's lifetime.
+     */
     public static native int moonshineLoadTranscriberFromMemory(byte[] encoder_model_data, byte[] decoder_model_data,
-            byte[] tokenizer_data, int model_arch, Object[] options);
+            byte[] tokenizer_data, byte[] spelling_model_data, int model_arch, Object[] options);
 
     public static native void moonshineFreeTranscriber(int transcriber_handle);
 
@@ -49,7 +66,8 @@ public class JNI {
     public static native int moonshineAddAudioToStream(int transcriber_handle,
             int stream_handle,
             float[] audio_data,
-            int sample_rate);
+            int sample_rate,
+            int flags);
 
     public static native Transcript moonshineTranscribeStream(int transcriber_handle,
             int stream_handle, int flags);

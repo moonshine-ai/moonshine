@@ -274,6 +274,41 @@ final class TranscriberTests: XCTestCase {
         }
     }
 
+    func testSpellingModeApiSurface() throws {
+        // Ensures the new spelling-mode entry points (flag constant,
+        // ``spellingModelPath`` shortcut, ``transcribeFlags`` plumbing)
+        // are reachable from public Swift code. The flag is bit 1 in the
+        // C header (``MOONSHINE_FLAG_SPELLING_MODE``) and must round-trip
+        // through ``createStream`` / ``MicTranscriber``.
+        XCTAssertEqual(TranscribeStreamFlags.flagSpellingMode, 1 << 1)
+        XCTAssertNotEqual(
+            TranscribeStreamFlags.flagSpellingMode,
+            TranscribeStreamFlags.flagForceUpdate)
+
+        let modelPath = try Self.getTinyEnModelPath()
+        // Without a real spelling .ort path this is still a valid load:
+        // the C side just records the option and the flag is a no-op
+        // until a model is bound.
+        let transcriber = try Transcriber(
+            modelPath: modelPath,
+            modelArch: .tiny,
+            spellingModelPath: nil)
+        defer { transcriber.close() }
+
+        let stream = try transcriber.createStream(
+            transcribeFlags: TranscribeStreamFlags.flagSpellingMode)
+        defer { stream.close() }
+        XCTAssertGreaterThanOrEqual(stream.getHandle(), 0)
+
+        // Calling with the spelling flag against an empty audio buffer
+        // should be safe: nothing to transcribe, so it should not throw.
+        let transcript = try transcriber.transcribeWithoutStreaming(
+            audioData: [],
+            sampleRate: 16000,
+            flags: TranscribeStreamFlags.flagSpellingMode)
+        XCTAssertTrue(transcript.lines.isEmpty)
+    }
+
     func testTranscribeWithDebugWAV_twoCities() throws {
         let modelPath = try Self.getTinyEnModelPath()
         let options: [TranscriberOption] = [TranscriberOption(name: "save_input_wav_path", value: "output")]
