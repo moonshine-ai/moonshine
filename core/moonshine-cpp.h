@@ -345,6 +345,11 @@ class Stream {
  public:
   /// Flags for transcription operations
   static const uint32_t FLAG_FORCE_UPDATE = MOONSHINE_FLAG_FORCE_UPDATE;
+  /// When passed to ``updateTranscription``, causes completed lines to
+  /// be replaced with the resolved spelling-fusion character. Has no
+  /// effect unless the underlying transcriber was built with a
+  /// spelling model. See ``MOONSHINE_FLAG_SPELLING_MODE`` for details.
+  static const uint32_t FLAG_SPELLING_MODE = MOONSHINE_FLAG_SPELLING_MODE;
 
   /// Create a stream (internal use)
   Stream(Transcriber *transcriber, double updateInterval = 0.5,
@@ -433,6 +438,8 @@ class Transcriber {
  public:
   /// Flags for transcription operations
   static const uint32_t FLAG_FORCE_UPDATE = MOONSHINE_FLAG_FORCE_UPDATE;
+  /// See ``Stream::FLAG_SPELLING_MODE``.
+  static const uint32_t FLAG_SPELLING_MODE = MOONSHINE_FLAG_SPELLING_MODE;
 
   /// Initialize a transcriber from model files on disk
   /// @param modelPath Path to the directory containing model files

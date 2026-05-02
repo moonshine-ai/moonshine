@@ -16,6 +16,8 @@
 #include "speaker-embedding-model.h"
 #include "speaker-embedding-model-data.h"
 #include "online-clusterer.h"
+#include "spelling-fusion.h"
+#include "spelling-model.h"
 #include "word-alignment.h"
 
 // Whenever this struct is modified, the following files must be updated:
@@ -112,6 +114,15 @@ struct TranscriberOptions {
   size_t decoder_model_data_size = 0;
   const uint8_t *tokenizer_data = nullptr;
   size_t tokenizer_data_size = 0;
+  // Optional ``.ort`` file for the alphanumeric spelling-CNN. Loaded
+  // lazily on first use; both fields can be set independently of
+  // ``model_source`` so callers using ``_from_files`` can still pass an
+  // in-memory spelling model and vice versa. ``spelling_model_path`` is
+  // consulted only when both ``spelling_model_data`` and
+  // ``spelling_model_data_size`` are zero/null.
+  std::string spelling_model_path;
+  const uint8_t *spelling_model_data = nullptr;
+  size_t spelling_model_data_size = 0;
   bool identify_speakers = true;
   float transcription_interval = 0.5f;
   float vad_threshold = 0.5f;  
@@ -144,6 +155,13 @@ class Transcriber {
   SpeakerEmbeddingModel *speaker_embedding_model;
   std::mutex speaker_embedding_model_mutex;
   OnlineClusterer *online_clusterer;
+  // Spelling-mode auxiliaries. Both are constructed lazily: the model
+  // is only spun up when the caller passes a path or buffer, and the
+  // matcher is essentially free (just a couple of static-table view
+  // pointers).
+  SpellingModel *spelling_model = nullptr;
+  std::mutex spelling_model_mutex;
+  SpellingMatcher spelling_matcher;
   uint32_t next_speaker_index = 0;
   std::map<uint64_t, uint32_t> speaker_index_map;
 
@@ -188,7 +206,14 @@ class Transcriber {
  private:
   void update_transcript_from_segments(
       const std::vector<VoiceActivitySegment> &segments,
-      TranscriberStream *stream, struct transcript_t **out_transcript);
+      TranscriberStream *stream, uint32_t flags,
+      struct transcript_t **out_transcript);
+
+  // Apply the alphanumeric-spelling fusion to a single line's text in
+  // place. Returns true iff the fuser produced a CHARACTER result (in
+  // which case ``line.text`` is replaced with the resolved character).
+  // No-op if the spelling model isn't loaded or the line has no text.
+  bool apply_spelling_fusion(TranscriberLine &line);
 
   void load_from_files(const char *model_path, uint32_t model_arch);
   void load_from_memory(const uint8_t *encoder_model_data,

@@ -367,6 +367,10 @@ Java_ai_moonshine_voice_JNI_moonshineLoadTranscriberFromMemory(
     return moonshine_load_transcriber_from_memory(
         encoder_model_data_ptr, encoder_model_data_size, decoder_model_data_ptr,
         decoder_model_data_size, tokenizer_data_ptr, tokenizer_data_size,
+        // Spelling-model buffer is not yet plumbed through JNI; pass
+        // null so the existing API still compiles. Update when the
+        // Android bindings catch up to the new C signature.
+        /*spelling_model_data=*/nullptr, /*spelling_model_data_size=*/0,
         model_arch, coptions.data(), coptions.size(), MOONSHINE_HEADER_VERSION);
   } catch (const std::exception &e) {
     LOGE("moonshineLoadTranscriberFromMemory: %s\n", e.what());

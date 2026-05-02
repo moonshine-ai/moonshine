@@ -25,10 +25,19 @@ class MicTranscriber:
         samplerate: int = 16000,
         channels: int = 1,
         blocksize: int = 1024,
-        options: dict = None
+        options: dict = None,
+        spelling_model_path: str = None,
+        transcribe_flags: int = 0,
     ):
+        # Pass-through convenience: callers that only want spelling-mode
+        # don't need to construct an ``options`` dict themselves.
+        if spelling_model_path is not None:
+            options = dict(options) if options else {}
+            options.setdefault("spelling_model_path", spelling_model_path)
         self.transcriber = Transcriber(model_path, model_arch, options=options)
-        self.mic_stream = self.transcriber.create_stream(update_interval)
+        self.mic_stream = self.transcriber.create_stream(
+            update_interval, transcribe_flags=transcribe_flags,
+        )
         self._should_listen = False
         self._sd_stream = None
         self._device = device

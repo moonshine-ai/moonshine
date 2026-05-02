@@ -139,6 +139,19 @@ MODEL_INFO = {
     },
 }
 
+# Optional alphanumeric spelling model. When present, the C++
+# transcriber can run the spelling-fusion path on completed lines if
+# ``MOONSHINE_FLAG_SPELLING_MODE`` is set. Right now we only ship an
+# English model; other languages get ``None`` from
+# ``get_spelling_model_path`` (and the listener falls back to its
+# Python implementation).
+SPELLING_MODEL_INFO = {
+    "en": {
+        "download_url": "https://download.moonshine.ai/model/spelling-en",
+        "components": ["spelling_cnn.ort", "spelling_cnn_meta.json"],
+    },
+}
+
 # Embedding models are stored separately since they use a different arch enum
 # and have a different component structure (variants like q4, fp32, etc.)
 EMBEDDING_MODEL_INFO = {
@@ -323,6 +336,77 @@ def get_embedding_model(
 # ============================================================================
 
 
+def _spelling_language_key(language: str) -> Optional[str]:
+    """Map a user language tag to the key used in :data:`SPELLING_MODEL_INFO`, or ``None``."""
+    if not isinstance(language, str):
+        return None
+    key = language.strip().lower()
+    if not key:
+        return None
+    if key in SPELLING_MODEL_INFO:
+        return key
+    # Allow values like "english" or "en-us" / "en_US" to map to the "en" entry.
+    short = key.split("-", 1)[0].split("_", 1)[0]
+    if short in SPELLING_MODEL_INFO:
+        return short
+    for code, info in MODEL_INFO.items():
+        if info["english_name"].lower() == key and code in SPELLING_MODEL_INFO:
+            return code
+    return None
+
+
+def _spelling_model_root_path(language_key: str, cache_root: Optional[Path] = None) -> Path:
+    cache_dir = Path(cache_root).resolve() if cache_root is not None else get_cache_dir()
+    info = SPELLING_MODEL_INFO[language_key]
+    folder = info["download_url"].replace("https://", "")
+    return Path(os.path.join(cache_dir, folder))
+
+
+def download_spelling_model_for_language(
+    language: str = "en",
+    *,
+    cache_root: Optional[Path] = None,
+) -> Optional[str]:
+    """
+    Download the alphanumeric spelling model for ``language`` if one is
+    available, and return the path to the ``spelling_cnn.ort`` file.
+
+    Returns ``None`` (without an error) when no spelling model is
+    published for the requested language. Already-downloaded files are
+    left alone, matching :func:`download_model_from_info`.
+    """
+    language_key = _spelling_language_key(language)
+    if language_key is None:
+        return None
+    info = SPELLING_MODEL_INFO[language_key]
+    root = _spelling_model_root_path(language_key, cache_root=cache_root)
+    primary_component: Optional[str] = None
+    for component in info["components"]:
+        component_url = f"{info['download_url']}/{component}"
+        component_path = os.path.join(str(root), component)
+        download_model(component_url, component_path)
+        if primary_component is None and component.endswith(".ort"):
+            primary_component = component
+    if primary_component is None:
+        return None
+    return os.path.join(str(root), primary_component)
+
+
+def get_spelling_model_path(
+    language: str = "en",
+    *,
+    cache_root: Optional[Path] = None,
+) -> Optional[str]:
+    """
+    Return the on-disk path to the spelling model for ``language``.
+
+    Wraps :func:`download_spelling_model_for_language` so callers that
+    just want a path don't have to know the URL layout. Returns
+    ``None`` when no spelling model is published for the language.
+    """
+    return download_spelling_model_for_language(language, cache_root=cache_root)
+
+
 def get_model_for_language(
     wanted_language: str = "en",
     wanted_model_arch: ModelArch = None,
@@ -335,7 +419,20 @@ def get_model_for_language(
             "Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.",
             file=sys.stderr,
         )
-    return download_model_from_info(model_info, cache_root=cache_root)
+    result = download_model_from_info(model_info, cache_root=cache_root)
+    # Best-effort: pre-fetch the alphanumeric spelling model alongside
+    # the transcriber when one is published for this language. Failures
+    # are non-fatal because the spelling path is optional.
+    try:
+        download_spelling_model_for_language(
+            model_info["language"], cache_root=cache_root
+        )
+    except Exception as exc:  # pragma: no cover - best-effort prefetch
+        print(
+            f"Warning: failed to download alphanumeric spelling model: {exc}",
+            file=sys.stderr,
+        )
+    return result
 
 
 def log_model_info(

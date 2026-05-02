@@ -275,8 +275,9 @@ TEST_CASE("moonshine-test-v2") {
     int32_t transcriber_handle = moonshine_load_transcriber_from_memory(
         encoder_model_data.data(), encoder_model_data.size(),
         decoder_model_data.data(), decoder_model_data.size(),
-        tokenizer_data.data(), tokenizer_data.size(), model_arch, options,
-        options_count, MOONSHINE_HEADER_VERSION);
+        tokenizer_data.data(), tokenizer_data.size(),
+        /*spelling_model_data=*/nullptr, /*spelling_model_data_size=*/0,
+        model_arch, options, options_count, MOONSHINE_HEADER_VERSION);
     REQUIRE(transcriber_handle >= 0);
 
     struct transcript_t *transcript = nullptr;
@@ -431,6 +432,79 @@ TEST_CASE("moonshine-test-v2") {
         root_model_path.c_str(), model_arch, options, options_count,
         MOONSHINE_HEADER_VERSION);
     REQUIRE(transcriber_handle < 0);
+  }
+  SUBCASE("spelling-mode-flag-noop-without-model") {
+    // Smoke check: passing MOONSHINE_FLAG_SPELLING_MODE without
+    // configuring a spelling model must not crash and must not affect
+    // the regular transcription output.
+    std::string wav_path = "two_cities.wav";
+    REQUIRE(std::filesystem::exists(wav_path));
+    float *wav_data = nullptr;
+    size_t wav_data_size = 0;
+    int32_t wav_sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
+                          &wav_sample_rate));
+    int32_t model_arch = MOONSHINE_MODEL_ARCH_TINY;
+    std::string root_model_path = "tiny-en";
+    REQUIRE(std::filesystem::exists(root_model_path));
+    int32_t transcriber_handle = moonshine_load_transcriber_from_files(
+        root_model_path.c_str(), model_arch, nullptr, 0,
+        MOONSHINE_HEADER_VERSION);
+    REQUIRE(transcriber_handle >= 0);
+    struct transcript_t *transcript = nullptr;
+    int32_t err = moonshine_transcribe_without_streaming(
+        transcriber_handle, wav_data, wav_data_size, wav_sample_rate,
+        MOONSHINE_FLAG_SPELLING_MODE, &transcript);
+    REQUIRE(err == MOONSHINE_ERROR_NONE);
+    REQUIRE(transcript != nullptr);
+    moonshine_free_transcriber(transcriber_handle);
+    free(wav_data);
+  }
+  SUBCASE("spelling-mode-replaces-line-text") {
+    // End-to-end check: hand the transcriber a spelling .ort and a
+    // single "alpha" recording. With MOONSHINE_FLAG_SPELLING_MODE
+    // set, ``line.text`` for the completed segment must be the
+    // single resolved character, not the raw ASR transcription.
+    std::string spelling_path = "spelling_cnn.ort";
+    if (!std::filesystem::exists(spelling_path)) {
+      MESSAGE("skip: spelling_cnn.ort not in test-assets");
+      return;
+    }
+    std::string wav_path = "alphanumeric/a/petewarden_nohash_0.wav";
+    if (!std::filesystem::exists(wav_path)) {
+      MESSAGE("skip: alphanumeric clip not in test-assets");
+      return;
+    }
+    float *wav_data = nullptr;
+    size_t wav_data_size = 0;
+    int32_t wav_sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
+                          &wav_sample_rate));
+    int32_t model_arch = MOONSHINE_MODEL_ARCH_TINY;
+    std::string root_model_path = "tiny-en";
+    REQUIRE(std::filesystem::exists(root_model_path));
+    const moonshine_option_t options[] = {
+        {"spelling_model_path", spelling_path.c_str()},
+    };
+    const uint64_t options_count = sizeof(options) / sizeof(options[0]);
+    int32_t transcriber_handle = moonshine_load_transcriber_from_files(
+        root_model_path.c_str(), model_arch, options, options_count,
+        MOONSHINE_HEADER_VERSION);
+    REQUIRE(transcriber_handle >= 0);
+    struct transcript_t *transcript = nullptr;
+    int32_t err = moonshine_transcribe_without_streaming(
+        transcriber_handle, wav_data, wav_data_size, wav_sample_rate,
+        MOONSHINE_FLAG_SPELLING_MODE, &transcript);
+    REQUIRE(err == MOONSHINE_ERROR_NONE);
+    REQUIRE(transcript != nullptr);
+    REQUIRE(transcript->line_count >= 1);
+    const transcript_line_t &line = transcript->lines[0];
+    REQUIRE(line.text != nullptr);
+    // We expect the matcher (or fusion) to resolve to "a" given the
+    // recording is the speaker saying the letter "a".
+    CHECK(std::string(line.text) == "a");
+    moonshine_free_transcriber(transcriber_handle);
+    free(wav_data);
   }
   SUBCASE("tts-synthesizer-valid-options") {
     const auto data_root = find_moonshine_tts_data_dir();

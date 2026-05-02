@@ -110,6 +110,20 @@ extern "C" {
 
 /* Flags.                                                                */
 #define MOONSHINE_FLAG_FORCE_UPDATE (1 << 0)
+/* Apply alphanumeric-spelling fusion to every completed line in the
+   returned transcript. The transcriber must have been constructed with
+   a spelling model (either ``spelling_model_path`` in
+   moonshine_load_transcriber_from_files or a non-null
+   ``spelling_model_data`` buffer in
+   moonshine_load_transcriber_from_memory) for this flag to have any
+   effect; if no spelling model is loaded, the flag is ignored.
+
+   When fusion fires for a line, the line's ``text`` field is *replaced*
+   with the resolved single character (e.g. ``"a"`` or ``"$"``). Speech
+   that does not resolve to a character is left unchanged so command
+   words like "stop" / "clear" / "delete" can still be classified by
+   higher-level Python code. */
+#define MOONSHINE_FLAG_SPELLING_MODE (1 << 1)
 
 /* --------------------------- DATA STRUCTURES ----------------------------- */
 
@@ -265,7 +279,12 @@ MOONSHINE_EXPORT const char *moonshine_transcript_to_string(
    example MOONSHINE_MODEL_ARCH_BASE or MOONSHINE_MODEL_ARCH_TINY_STREAMING.
 
    The `options` parameter is used to set any custom options for the
-   transcriber.
+   transcriber. Pass ``"spelling_model_path"`` with a path to a
+   spelling-CNN ``.ort`` file (e.g.
+   ``https://download.moonshine.ai/model/spelling-en/spelling_cnn.ort``)
+   to enable alphanumeric spelling fusion via
+   ``MOONSHINE_FLAG_SPELLING_MODE``; if not set, the spelling model is
+   not loaded and the flag is a no-op.
 
    The `options_count` parameter is the number of options in the options array.
 
@@ -286,12 +305,23 @@ MOONSHINE_EXPORT int32_t moonshine_load_transcriber_from_files(
 /* Loads models from memory. The `encoder_model_data`, `decoder_model_data` and
    `tokenizer_data` parameters are the data arrays for the models in binary
    format, and are expected to be in the same format as the files disk.
+
+   `spelling_model_data` and `spelling_model_data_size` are an optional
+   in-memory ``.ort`` payload for the alphanumeric spelling-CNN. Pass
+   ``NULL`` and ``0`` if you don't want spelling fusion. When provided,
+   the buffer must outlive the transcriber (it is *not* copied) and the
+   transcriber will run spelling fusion whenever
+   ``MOONSHINE_FLAG_SPELLING_MODE`` is passed to
+   ``moonshine_transcribe_stream`` or
+   ``moonshine_transcribe_without_streaming``.
+
    All of the other parameters are the same as for
    moonshine_load_transcriber_from_files.                                    */
 MOONSHINE_EXPORT int32_t moonshine_load_transcriber_from_memory(
     const uint8_t *encoder_model_data, size_t encoder_model_data_size,
     const uint8_t *decoder_model_data, size_t decoder_model_data_size,
     const uint8_t *tokenizer_data, size_t tokenizer_data_size,
+    const uint8_t *spelling_model_data, size_t spelling_model_data_size,
     uint32_t model_arch, const struct moonshine_option_t *options,
     uint64_t options_count, int32_t moonshine_version);
 
