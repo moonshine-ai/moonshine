@@ -2,20 +2,21 @@
 
 Each subfolder of ``test-assets/alphanumeric`` is named after the spoken word
 in its WAV files (``a``, ``b``, ..., ``z``, ``zero``, ``one``, ..., ``nine``).
-For every clip we run :class:`Transcriber.transcribe_without_streaming`,
-synthesize a ``LineCompleted`` event from the resulting line(s), and feed
-that to a fresh :class:`AlphanumericListener`.  The first ``CHARACTER`` event
-emitted by the listener is taken as the prediction.
+For every clip we run :class:`Transcriber.transcribe_without_streaming` (with
+``MOONSHINE_FLAG_SPELLING_MODE`` so the C++ transcriber's spelling-CNN fusion
+runs end-to-end), synthesize a ``LineCompleted`` event from the resulting
+line(s), and feed that to a fresh :class:`AlphanumericListener`. The first
+``CHARACTER`` event emitted by the listener is taken as the prediction.
 
 Usage::
 
     python scripts/eval-alphanumeric.py
     python scripts/eval-alphanumeric.py --dataset-dir test-assets/alphanumeric
+    python scripts/eval-alphanumeric.py --no-spelling-model
     python scripts/eval-alphanumeric.py --verbose
 """
 
 import argparse
-import os
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -25,6 +26,7 @@ import numpy as np
 from moonshine_voice import (
     Transcriber,
     get_model_for_language,
+    get_spelling_model_path,
     load_wav_file,
     string_to_model_arch,
 )
@@ -33,12 +35,9 @@ from moonshine_voice.alphanumeric_listener import (
     AlphanumericEventType,
     AlphanumericListener,
     AlphanumericMatcher,
-    FusionStrategy,
-    SpellingPrediction,
-    SpellingPredictor,
 )
 from moonshine_voice.moonshine_api import TranscriptLine
-from moonshine_voice.transcriber import LineCompleted
+from moonshine_voice.transcriber import LineCompleted, MOONSHINE_FLAG_SPELLING_MODE
 
 
 E_SET = ("b", "c", "d", "e", "g", "p", "t", "v", "z")
@@ -56,72 +55,44 @@ def predict_character(
     transcriber: Transcriber,
     audio: np.ndarray,
     sample_rate: int,
-    spelling_predictor: SpellingPredictor | None = None,
-    fusion_strategy: FusionStrategy | str = FusionStrategy.AUTO,
-) -> tuple[str | None, str, SpellingPrediction | None]:
+    transcribe_flags: int = 0,
+) -> tuple[str | None, str]:
     """Run transcription and return predictions for a single clip.
 
-    Returns ``(predicted_char, raw_transcript_text, spelling_prediction)``:
+    Returns ``(predicted_char, raw_transcript_text)``:
 
     * ``predicted_char`` is the first ``CHARACTER`` event emitted by a
       fresh :class:`AlphanumericListener` fed with synthesized
       ``LineCompleted`` events, or ``None`` if nothing was recognised.
-      Whether this is the matcher's character, the SpellingCNN's
-      character, or a fused result depends on ``fusion_strategy``.
-    * ``raw_transcript_text`` is ``" | "``-joined raw STT line text.
-    * ``spelling_prediction`` is the ONNX SpellingCNN's top-1 prediction
-      for the first ``predictor.clip_seconds`` of the *first* line's audio
-      slice (or ``None`` if no predictor was supplied or the listener
-      didn't manage to run inference on this clip).
+      When ``transcribe_flags`` includes
+      ``MOONSHINE_FLAG_SPELLING_MODE`` the character is the C++ fusion
+      result; otherwise it's the matcher's lexical hit.
+    * ``raw_transcript_text`` is ``" | "``-joined raw STT line text
+      (already the resolved character when fusion is enabled).
     """
-    transcript = transcriber.transcribe_without_streaming(audio, sample_rate)
+    transcript = transcriber.transcribe_without_streaming(
+        audio, sample_rate, flags=transcribe_flags,
+    )
 
     captured: list[AlphanumericEvent] = []
 
     def on_event(event: AlphanumericEvent) -> None:
         captured.append(event)
 
-    listener = AlphanumericListener(
-        on_event,
-        spelling_predictor=spelling_predictor,
-        fusion_strategy=fusion_strategy,
-    )
+    listener = AlphanumericListener(on_event)
 
     raw_texts: list[str] = []
-    spelling_prediction: SpellingPrediction | None = None
     for idx, line in enumerate(transcript.lines):
         raw_texts.append(line.text)
-
-        # Slice the line's audio span out of the source clip so the
-        # spelling predictor sees only the first second of *this*
-        # utterance. Most clips are single-line so this matches the full
-        # WAV; the slice still does the right thing if Moonshine produces
-        # multiple lines.
-        line_audio: list[float] | None = None
-        if spelling_predictor is not None:
-            start = max(0, int(round(line.start_time * sample_rate)))
-            end = min(len(audio), int(round(
-                (line.start_time + line.duration) * sample_rate
-            )))
-            if end > start:
-                line_audio = audio[start:end].astype(np.float32, copy=False).tolist()
-
         synth_line = TranscriptLine(
             text=line.text,
             start_time=line.start_time,
             duration=line.duration,
             line_id=idx,
             is_complete=True,
-            audio_data=line_audio,
+            audio_data=None,
         )
         listener(LineCompleted(line=synth_line, stream_handle=0))
-
-        # The listener overwrites ``last_spelling_prediction`` per
-        # utterance; capture the very first non-None one so the printed
-        # diagnostic always corresponds to the actual spoken character
-        # (extra lines from STT artifacts shouldn't shift it).
-        if spelling_prediction is None and listener.last_spelling_prediction is not None:
-            spelling_prediction = listener.last_spelling_prediction
 
     predicted: str | None = None
     for event in captured:
@@ -129,7 +100,7 @@ def predict_character(
             predicted = event.character
             break
 
-    return predicted, " | ".join(t for t in raw_texts if t), spelling_prediction
+    return predicted, " | ".join(t for t in raw_texts if t)
 
 
 def print_confusion_matrix(
@@ -198,30 +169,20 @@ def main() -> int:
         help="Print per-clip predictions.",
     )
     parser.add_argument(
-        "--spelling-onnx-path",
+        "--spelling-model-path",
         type=str,
         default=None,
         help=(
-            "Optional path to a SpellingCNN ONNX model (e.g. "
-            "../moonshine-spelling/checkpoints/<run>/spelling_cnn.onnx). "
-            "When provided, every completed utterance's first second of "
-            "audio is also classified by the ONNX model and its top-1 "
-            "prediction is printed alongside the verbose per-clip line."
+            "Override the spelling-CNN .ort path passed to the C++ "
+            "transcriber. Defaults to ``get_spelling_model_path(language)``."
         ),
     )
     parser.add_argument(
-        "--fusion-strategy",
-        type=str,
-        choices=[s.value for s in FusionStrategy],
-        default=FusionStrategy.AUTO.value,
+        "--no-spelling-model",
+        action="store_true",
         help=(
-            "How to combine the matcher's STT-derived character with the "
-            "SpellingCNN's prediction. 'auto' (default) uses 'smart_router' "
-            "when --spelling-onnx-path is set and 'asr_only' otherwise. "
-            "'smart_router' implements the data-driven fusion proven on the "
-            "moonshine-spelling People's Speech eval (trust agreements; "
-            "route digit/letter cross-class disagreements; break "
-            "same-class ties on spelling probability)."
+            "Disable the C++ spelling-CNN fusion path entirely. The "
+            "matcher's lexical lookup is then the only signal used."
         ),
     )
     args = parser.parse_args()
@@ -245,42 +206,39 @@ def main() -> int:
             wanted_language=args.language, wanted_model_arch=wanted_arch
         )
 
-    options = {"vad_threshold": 0.0}
+    options: dict[str, str] = {"vad_threshold": "0.0"}
     if args.options:
         for option in args.options.split(","):
             key, value = option.split("=")
             options[key.strip()] = value.strip()
 
+    spelling_model_path: str | None = None
+    if not args.no_spelling_model:
+        spelling_model_path = args.spelling_model_path
+        if spelling_model_path is None:
+            try:
+                spelling_model_path = get_spelling_model_path(args.language)
+            except Exception as e:
+                print(
+                    f"Spelling model lookup failed ({e!r}); continuing "
+                    "without C++ fusion.",
+                    file=sys.stderr,
+                )
+        if spelling_model_path is not None:
+            options["spelling_model_path"] = spelling_model_path
+            print(f"Spelling model: {spelling_model_path}")
+        else:
+            print("Spelling model: <none> (matcher-only)")
+    else:
+        print("Spelling model: disabled (--no-spelling-model)")
+
+    transcribe_flags = (
+        MOONSHINE_FLAG_SPELLING_MODE if spelling_model_path is not None else 0
+    )
+
     print(f"Loading model from {model_path}")
     transcriber = Transcriber(
         model_path=model_path, model_arch=model_arch, options=options
-    )
-
-    spelling_predictor: SpellingPredictor | None = None
-    if args.spelling_onnx_path:
-        print(f"Loading spelling-CNN ONNX model from {args.spelling_onnx_path}")
-        spelling_predictor = SpellingPredictor(args.spelling_onnx_path)
-        print(
-            f"  classes={len(spelling_predictor.classes)}, "
-            f"sample_rate={spelling_predictor.sample_rate}, "
-            f"clip_seconds={spelling_predictor.clip_seconds}"
-        )
-
-    # Resolve the fusion strategy once so we can echo the *effective*
-    # value (collapsing AUTO) rather than just whatever the user passed
-    # on the CLI.
-    requested_strategy = FusionStrategy(args.fusion_strategy)
-    if requested_strategy is FusionStrategy.AUTO:
-        effective_strategy = (
-            FusionStrategy.SMART_ROUTER
-            if spelling_predictor is not None
-            else FusionStrategy.ASR_ONLY
-        )
-    else:
-        effective_strategy = requested_strategy
-    print(
-        f"Fusion strategy: {requested_strategy.value} "
-        f"(effective: {effective_strategy.value})"
     )
 
     matcher = AlphanumericMatcher()
@@ -313,12 +271,11 @@ def main() -> int:
         for wav_path in wav_files:
             audio, sample_rate = load_wav_file(wav_path)
             audio_np = np.asarray(audio, dtype=np.float32)
-            predicted, raw_text, spelling_pred = predict_character(
+            predicted, raw_text = predict_character(
                 transcriber,
                 audio_np,
                 sample_rate,
-                spelling_predictor=spelling_predictor,
-                fusion_strategy=effective_strategy,
+                transcribe_flags=transcribe_flags,
             )
 
             total += 1
@@ -326,15 +283,9 @@ def main() -> int:
 
             if predicted is None:
                 unrecognised += 1
-                bucket = "?"
             elif predicted == expected:
                 correct += 1
                 per_class_correct[expected] += 1
-                bucket = predicted
-            else:
-                bucket = predicted if predicted in e_set_set else (
-                    predicted if len(predicted) == 1 else "other"
-                )
 
             if expected in e_set_set:
                 if predicted is None:
@@ -348,23 +299,21 @@ def main() -> int:
             if args.verbose:
                 marker = "OK" if predicted == expected else "  "
                 pred_str = predicted if predicted is not None else "<none>"
-                spelling_str = (
-                    f"  [spelling: {spelling_pred}]"
-                    if spelling_pred is not None
-                    else ""
-                )
                 print(
                     f"  [{marker}] {folder.name:>5} -> {pred_str!r}"
                     f"  (raw: {raw_text!r})"
-                    f"{spelling_str}"
                     f"  [{wav_path.name}]",
                     flush=True
                 )
 
     print()
     print("=" * 60)
-    print(f"Overall accuracy: {correct}/{total} = {correct / total:.2%}")
-    print(f"Unrecognised:     {unrecognised}/{total} = {unrecognised / total:.2%}")
+    if total:
+        print(f"Overall accuracy: {correct}/{total} = {correct / total:.2%}")
+        print(
+            f"Unrecognised:     {unrecognised}/{total} = "
+            f"{unrecognised / total:.2%}"
+        )
     print()
     print("Per-class accuracy")
     print("------------------")

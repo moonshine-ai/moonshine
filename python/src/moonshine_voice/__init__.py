@@ -28,6 +28,9 @@ from moonshine_voice.download import (
     log_model_info,
     supported_languages,
     supported_languages_friendly,
+    # Spelling model (alphanumeric fusion)
+    download_spelling_model_for_language,
+    get_spelling_model_path,
     # Embedding model functions
     EmbeddingModelArch,
     get_embedding_model,
@@ -167,10 +170,6 @@ def __getattr__(name):
         "AlphanumericMatcher",
         "letters_only_matcher",
         "digits_only_matcher",
-        "SpellingPredictor",
-        "SpellingPrediction",
-        "FusionStrategy",
-        "find_default_spelling_onnx_path",
     ):
         if not _alphanumeric_listener_imported:
             from moonshine_voice.alphanumeric_listener import (
@@ -181,10 +180,6 @@ def __getattr__(name):
                 AlphanumericMatcher,
                 letters_only_matcher,
                 digits_only_matcher,
-                SpellingPredictor,
-                SpellingPrediction,
-                FusionStrategy,
-                find_default_spelling_onnx_path,
             )
 
             globals()["AlphanumericListener"] = AlphanumericListener
@@ -194,12 +189,6 @@ def __getattr__(name):
             globals()["AlphanumericMatcher"] = AlphanumericMatcher
             globals()["letters_only_matcher"] = letters_only_matcher
             globals()["digits_only_matcher"] = digits_only_matcher
-            globals()["SpellingPredictor"] = SpellingPredictor
-            globals()["SpellingPrediction"] = SpellingPrediction
-            globals()["FusionStrategy"] = FusionStrategy
-            globals()["find_default_spelling_onnx_path"] = (
-                find_default_spelling_onnx_path
-            )
             _alphanumeric_listener_imported = True
         return globals()[name]
 
@@ -315,6 +304,8 @@ __all__ = [
     "log_model_info",
     "supported_languages",
     "supported_languages_friendly",
+    "download_spelling_model_for_language",
+    "get_spelling_model_path",
     "model_arch_to_string",
     "string_to_model_arch",
     # Embedding model functions
@@ -351,10 +342,6 @@ __all__ = [
     "AlphanumericMatcher",
     "letters_only_matcher",
     "digits_only_matcher",
-    "SpellingPredictor",
-    "SpellingPrediction",
-    "FusionStrategy",
-    "find_default_spelling_onnx_path",
     # Dialog flow
     "DialogFlow",
     "Dialog",

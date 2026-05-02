@@ -145,6 +145,8 @@ void parse_transcriber_options(const OptionVector &options,
       out_options.log_output_text = bool_from_string(option_value);
     } else if (option_name == "word_timestamps") {
       out_options.word_timestamps = bool_from_string(option_value);
+    } else if (option_name == "spelling_model_path") {
+      out_options.spelling_model_path = option_value;
     } else {
       throw std::runtime_error("Unknown transcriber option: '" + option_name +
                                "', value=" + option_value);
@@ -229,6 +231,7 @@ int32_t moonshine_load_transcriber_from_memory(
     const uint8_t *encoder_model_data, size_t encoder_model_data_size,
     const uint8_t *decoder_model_data, size_t decoder_model_data_size,
     const uint8_t *tokenizer_data, size_t tokenizer_data_size,
+    const uint8_t *spelling_model_data, size_t spelling_model_data_size,
     uint32_t model_arch, const moonshine_option_t *options,
     uint64_t options_count, int32_t moonshine_version) {
   OptionVector option_vector = parse_option_vector(options, options_count);
@@ -238,11 +241,13 @@ int32_t moonshine_load_transcriber_from_memory(
         "moonshine_load_transcriber_from_memory(encoder_model_data=%p, "
         "encoder_model_data_size=%zu, decoder_model_data=%p, "
         "decoder_model_data_size=%zu, tokenizer_data=%p, "
-        "tokenizer_data_size=%zu, model_arch=%d, options=%p, "
+        "tokenizer_data_size=%zu, spelling_model_data=%p, "
+        "spelling_model_data_size=%zu, model_arch=%d, options=%p, "
         "options_count=%" PRIu64 ", moonshine_version=%d)",
         (void *)(encoder_model_data), encoder_model_data_size,
         (void *)(decoder_model_data), decoder_model_data_size,
-        (void *)(tokenizer_data), tokenizer_data_size, model_arch,
+        (void *)(tokenizer_data), tokenizer_data_size,
+        (void *)(spelling_model_data), spelling_model_data_size, model_arch,
         (void *)(options), options_count, moonshine_version);
     for (uint64_t i = 0; i < options_count; i++) {
       const moonshine_option_t &option = options[i];
@@ -260,6 +265,8 @@ int32_t moonshine_load_transcriber_from_memory(
     transcriber_options.decoder_model_data_size = decoder_model_data_size;
     transcriber_options.tokenizer_data = tokenizer_data;
     transcriber_options.tokenizer_data_size = tokenizer_data_size;
+    transcriber_options.spelling_model_data = spelling_model_data;
+    transcriber_options.spelling_model_data_size = spelling_model_data_size;
     transcriber_options.model_arch = model_arch;
     parse_transcriber_options(uncommon_options, transcriber_options);
     transcriber = new Transcriber(transcriber_options);

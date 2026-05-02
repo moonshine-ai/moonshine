@@ -8,6 +8,7 @@
 #include <string>
 
 #include "debug-utils.h"
+#include "moonshine-c-api.h"
 #include "ort-utils.h"
 #include "resampler.h"
 #include "string-utils.h"
@@ -94,6 +95,30 @@ Transcriber::Transcriber(const TranscriberOptions &options)
     this->online_clusterer = new OnlineClusterer(OnlineClustererOptions(
         {.embedding_size = SpeakerEmbeddingModel::embedding_size,
          .threshold = this->options.speaker_id_cluster_threshold}));
+  }
+  // Lazily attach the spelling model when the caller provided one.
+  // We deliberately don't fall back to a built-in: the model weights
+  // are language-specific, so the C API leaves the choice to the
+  // caller (Python downloads it, native callers can ship an .ort).
+  const bool has_spelling_buffer = options.spelling_model_data != nullptr &&
+                                    options.spelling_model_data_size > 0;
+  const bool has_spelling_path = !options.spelling_model_path.empty();
+  if (has_spelling_buffer || has_spelling_path) {
+    this->spelling_model = new SpellingModel(this->options.log_ort_run);
+    int load_error = 0;
+    if (has_spelling_buffer) {
+      load_error = this->spelling_model->load_from_memory(
+          options.spelling_model_data, options.spelling_model_data_size);
+    } else {
+      load_error = this->spelling_model->load(options.spelling_model_path.c_str());
+    }
+    if (load_error != 0) {
+      delete this->spelling_model;
+      this->spelling_model = nullptr;
+      throw std::runtime_error(
+          "Failed to load spelling model. Error code: " +
+          std::to_string(load_error));
+    }
   }
 }
 
@@ -267,6 +292,7 @@ Transcriber::~Transcriber() {
   delete this->streaming_model;
   delete this->speaker_embedding_model;
   delete this->online_clusterer;
+  delete this->spelling_model;
   for (auto &stream : this->streams) {
     delete stream.second;
   }
@@ -277,7 +303,7 @@ Transcriber::~Transcriber() {
 
 void Transcriber::transcribe_without_streaming(
     const float *audio_data, uint64_t audio_length, int32_t sample_rate,
-    uint32_t /*flags*/, struct transcript_t **out_transcript) {
+    uint32_t flags, struct transcript_t **out_transcript) {
   std::lock_guard<std::mutex> lock(this->batch_stream_mutex);
   if (this->batch_stream == nullptr) {
     const int32_t vad_window_size = vad_window_size_from_duration(
@@ -306,7 +332,7 @@ void Transcriber::transcribe_without_streaming(
     segments = *(stream->vad->get_segments());
   }
 
-  this->update_transcript_from_segments(segments, stream, out_transcript);
+  this->update_transcript_from_segments(segments, stream, flags, out_transcript);
 }
 
 int32_t Transcriber::create_stream() {
@@ -429,7 +455,7 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
     segments = *(stream->vad->get_segments());
   }
   stream->clear_new_audio_buffer();
-  this->update_transcript_from_segments(segments, stream, out_transcript);
+  this->update_transcript_from_segments(segments, stream, flags, out_transcript);
 }
 
 std::string Transcriber::transcript_to_string(
@@ -472,9 +498,47 @@ std::string Transcriber::transcript_line_to_string(
   return result;
 }
 
+bool Transcriber::apply_spelling_fusion(TranscriberLine &line) {
+  // Always run the matcher: command words like "stop" / "clear" /
+  // "delete" rely on the matcher even when the .ort model isn't
+  // loaded. The matcher's STOPPED / CLEAR / UNDO results are surfaced
+  // through ``line.text`` only when fusion produces an actual
+  // character; non-character matches leave the original ASR text
+  // intact so higher-level Python code can still classify them.
+  if (line.text == nullptr) return false;
+  const std::string raw_text = *line.text;
+  SpellingMatch match = this->spelling_matcher.classify(raw_text);
+
+  // Only run the spelling-CNN when we have audio (it's a 1-second
+  // 16kHz waveform model, so empty / too-short clips just produce
+  // garbage). The fuser handles a null prediction gracefully.
+  SpellingPrediction prediction;
+  bool have_prediction = false;
+  if (this->spelling_model != nullptr && !line.audio_data.empty()) {
+    std::lock_guard<std::mutex> lock(this->spelling_model_mutex);
+    int err = this->spelling_model->predict(
+        line.audio_data.data(), line.audio_data.size(), INTERNAL_SAMPLE_RATE,
+        &prediction);
+    have_prediction = (err == 0);
+  }
+
+  FusedResult result =
+      fuse_default(raw_text, match,
+                   have_prediction ? &prediction : nullptr,
+                   this->spelling_matcher);
+  if (!result.is_character()) return false;
+
+  delete line.text;
+  line.text = new std::string(result.character);
+  return true;
+}
+
 void Transcriber::update_transcript_from_segments(
     const std::vector<VoiceActivitySegment> &segments,
-    TranscriberStream *stream, struct transcript_t **out_transcript) {
+    TranscriberStream *stream, uint32_t flags,
+    struct transcript_t **out_transcript) {
+  const bool spelling_mode_enabled =
+      (flags & MOONSHINE_FLAG_SPELLING_MODE) != 0;
   stream->transcript_output->clear_update_flags();
 
   for (size_t segment_index = 0; segment_index < segments.size();
@@ -596,7 +660,10 @@ void Transcriber::update_transcript_from_segments(
         (uint32_t)(std::chrono::duration_cast<std::chrono::milliseconds>(
                        end_time - start_time)
                        .count());
-    if (this->options.return_audio_data) {
+    if (this->options.return_audio_data || spelling_mode_enabled) {
+      // Spelling fusion needs the segment audio for the .ort model.
+      // We store it on the line either way; the line is reset before
+      // we hand the transcript back so this doesn't leak per-segment.
       line.audio_data = segment.audio_data;
     }
     if (this->options.identify_speakers && !line.has_speaker_id) {
@@ -625,6 +692,9 @@ void Transcriber::update_transcript_from_segments(
           line.speaker_index = this->speaker_index_map.at(line.speaker_id);
         }
       }
+    }
+    if (spelling_mode_enabled && line.is_complete) {
+      apply_spelling_fusion(line);
     }
     stream->transcript_output->add_or_update_line(line);
   }

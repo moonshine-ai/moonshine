@@ -21,6 +21,12 @@ MOONSHINE_ERROR_INVALID_HANDLE = -2
 MOONSHINE_ERROR_INVALID_ARGUMENT = -3
 
 MOONSHINE_FLAG_FORCE_UPDATE = 1 << 0
+# Mirror of ``MOONSHINE_FLAG_SPELLING_MODE`` from
+# core/moonshine-c-api.h. When set, completed transcript lines are
+# replaced in place with the resolved single-character output of the
+# alphanumeric spelling fuser. Has no effect unless the transcriber was
+# constructed with a spelling model.
+MOONSHINE_FLAG_SPELLING_MODE = 1 << 1
 
 MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M = 0
 
@@ -529,13 +535,16 @@ class _MoonshineLib:
 
         lib.moonshine_load_transcriber_from_memory.restype = ctypes.c_int32
         lib.moonshine_load_transcriber_from_memory.argtypes = [
-            ctypes.POINTER(ctypes.c_uint8),
-            ctypes.c_size_t,
-            ctypes.POINTER(ctypes.c_uint8),
-            ctypes.c_size_t,
-            ctypes.POINTER(ctypes.c_uint8),
-            ctypes.c_size_t,
-            ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_uint8),  # encoder_model_data
+            ctypes.c_size_t,                  # encoder_model_data_size
+            ctypes.POINTER(ctypes.c_uint8),  # decoder_model_data
+            ctypes.c_size_t,                  # decoder_model_data_size
+            ctypes.POINTER(ctypes.c_uint8),  # tokenizer_data
+            ctypes.c_size_t,                  # tokenizer_data_size
+            # Spelling-CNN .ort buffer (NULL/0 to disable spelling mode).
+            ctypes.POINTER(ctypes.c_uint8),  # spelling_model_data
+            ctypes.c_size_t,                  # spelling_model_data_size
+            ctypes.c_uint32,                  # model_arch
             ctypes.POINTER(TranscriberOptionC),
             ctypes.c_uint64,
             ctypes.c_int32,
