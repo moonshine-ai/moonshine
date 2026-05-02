@@ -775,8 +775,6 @@ int32_t moonshine_create_tts_synthesizer_from_files(
     const char *language, const char **filenames, uint64_t filenames_count,
     const struct moonshine_option_t *options, uint64_t options_count,
     int32_t moonshine_version) {
-  (void)filenames;
-  (void)filenames_count;
   OptionVector option_vector = parse_option_vector(options, options_count);
   OptionVector uncommon_options = parse_common_options(option_vector);
   if (log_api_calls) {
