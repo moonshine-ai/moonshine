@@ -34,7 +34,17 @@ pip install moonshine-voice
 python -m moonshine_voice.mic_transcriber --language en
 ```
 
-Listens to the microphone and prints updates to the transcript as they come in.
+Listens to the microphone and prints updates to the transcript as they come in. Use `--final-only` to suppress intermediate updates and only display completed lines:
+
+```bash
+python -m moonshine_voice.mic_transcriber --language en --final-only
+```
+
+To preserve encoder memory and decoder KV caches across segment boundaries (useful for improving coherence in continuous speech):
+
+```bash
+python -m moonshine_voice.transcriber --keep-context path/to/audio.wav
+```
 
 ```bash
 python -m moonshine_voice.intent_recognizer
@@ -62,6 +72,14 @@ cmake ..
 cmake --build .
 ./moonshine-cpp-test
 ```
+
+For a standalone microphone transcriber using ALSA (no Python required):
+
+```bash
+./mic-transcriber --model-path <path> --model-arch <number>
+```
+
+See [Building from Source](#building-from-source) for details.
 
 ### MacOS
 
@@ -395,6 +413,21 @@ The recommended interface to use on Windows is the C++ language binding. This is
 
 The library is designed to help you understand what's going wrong when you hit an issue. If something isn't working as expected, the first place to look is the console for log messages. Whenever there's a failure point or an exception within the core library, you should see a message that adds more information about what went wrong. Your language bindings should also recognize when the core library has returned an error and raise an appropriate exception, but sometimes the logs can be helpful because they contain more details.
 
+#### Decoder File Logging
+
+For deep inspection of the streaming decoder's internal behavior (segment resets, prefix decisions, step-by-step token generation), you can enable file-based logging by setting the `MOONSHINE_LOG=1` environment variable before running any binary that links the core library:
+
+```bash
+# Linux / macOS
+MOONSHINE_LOG=1 ./mic-transcriber --model-path <path> --model-arch <number>
+
+# Windows
+set MOONSHINE_LOG=1
+cli-transcriber.exe --model-path <path> --model-arch <number>
+```
+
+This writes detailed decode traces to `moonshine_decode.log` in the current working directory. The file is line-buffered, so you can `tail -f` it in a separate terminal while the transcriber is running. When the environment variable is not set, **no logging overhead is incurred**.
+
 #### Input Saving
 
 If no errors are being reported but the quality of the transcription isn't what you expect, it's worth ruling out an issue with the audio data that the transcriber is receiving. To make this easier, you can pass in the `save_input_wav_path` option when you create a transcriber. That will save any audio received into .wav files in the folder you specify. Here's a Python example:
@@ -430,6 +463,26 @@ cmake --build .
 ```
 
 After that completes you should have a set of binary executables you can run on your own system. These executables are all unit tests, and expect to be run from the `test-assets` folder. You can run the build and test process in one step using the [`scripts/run-core-tests.sh`](scripts/run-core-tests.sh), or [`scripts/run-core-tests.bat`](scripts/run-core-tests.bat) for Windows. All tests should compile and run without any errors.
+
+On Linux, the build also produces a standalone `mic-transcriber` binary that reads audio directly from an ALSA device (no Python dependency). You can use it as follows:
+
+```bash
+./mic-transcriber \
+  --model-path /path/to/model \
+  --model-arch 0 \
+  --device default \
+  --update-interval 0.5
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-m`, `--model-path` | *(required)* | Path to the model directory |
+| `-a`, `--model-arch` | `0` (TINY) | Architecture: 0=TINY, 1=BASE, 2=SMALL, 3=MEDIUM |
+| `-d`, `--device` | `default` | ALSA device name |
+| `-r`, `--sample-rate` | `16000` | Capture sample rate in Hz |
+| `-u`, `--update-interval` | `0.5` | Seconds between transcript updates |
+
+The binary requires `libasound2` (`apt install libasound2-dev` on Debian/Ubuntu).
 
 #### Language Bindings
 
@@ -665,9 +718,9 @@ Handles the speech to text pipeline.
   - `model_path`: The path to the directory holding the component model files needed for the complete flow. Note that this is a path to the **folder**, not an individual **file**. You can download and get a path to a cached version of the standard models using the [download_model()](#downloading-models) function.
   - `model_arch`: The architecture of the model to load, from the selection defined in `ModelArch`.
   - `update_interval`: By default the transcriber will periodically run text transcription as new audio data is fed, so that update events can be triggered. This value is how often the speech to text model should be run. You can set this to a large duration to suppress updates between a line starting and ending, but because the streaming models do a lot of their work before the final speech to text stage, this may not reduce overall latency by much.
-  - <a id="transcriber-options"></a>`options`: These are flags that affect how the transcription process works inside the library, often enabling performance optimizations or debug logging. They are passed as a dictionary mapping strings to strings, even if the values are to be interpreted as numbers - for example `{"max_tokens_per_second", "15"}`.
+  - <a id="transcriber-options"></a>`options`: These are flags that affect how the transcription process works inside the library, often enabling performance optimizations or debug logging. They are passed as a dictionary mapping strings to strings, even if the values are to be interpreted as numbers - for example `{"max_tokens_per_second": "15"}`.
     - `skip_transcription`: If you only want the voice-activity detection and segmentation, but want to do further processing in your app, you can set this to "true" and then use the `audioData` array in each line.
-    - `max_tokens_per_second`: The models occassionally get caught in an infinite decoder loop, where the same words are repeated over and over again. As a heuristic to catch this we compare the number of tokens in the current run to the duration of the audio, and if there seem to be too many tokens we truncate the decoding. By default this is set to 6.5, but for non-English languages where the models produce a lot more raw tokens per second, you may want to bump this to 13.0.
+    - `max_tokens_per_second`: The models occasionally get caught in an infinite decoder loop, where the same words are repeated over and over again. As a heuristic to catch this we compare the number of tokens in the current run to the duration of the audio, and if there seem to be too many tokens we truncate the decoding. By default this is set to 6.5, but for non-English languages where the models produce a lot more raw tokens per second, you may want to bump this to 13.0.
     - `transcription_interval`: How often to run transcription, in seconds.
     - `vad_threshold`: Controls the sensitivity of the initial voice-activity detection stage that decides how to break raw audio into segments. This defaults to 0.5, with lower values creating longer segments, potentially with more background noise sections, and higher values breaking up speech into smaller chunks, at the risk of losing some actual speech by clipping.
     - `save_input_wav_path`: One of the most common causes of poor transcription quality is incorrect conversion or corruption of the audio that's fed into the pipeline. If you set this option to a folder path, the transcriber will save out exactly what it has received as 16KHz mono WAV files, so you can ensure that your input audio is as you expect.
@@ -679,6 +732,7 @@ Handles the speech to text pipeline.
     - `identify_speakers`: A boolean that controls whether to run the speaker identification stage in the pipeline.
     - `return_audio_data`: By default the transcriber returns the segment of audio data corresponding to a line of text along with the transcription. You can disable this if you want to reduce memory overhead.
     - `log_output_text`: If this is enabled then the results of the speech to text model will be logged to the console.
+    - `keep_context`: When set to `"true"`, the encoder memory and decoder KV caches are preserved across segment boundaries instead of being fully reset after each phrase. A full reset only happens when the memory buffer is full. This can improve transcription coherence across short pauses, at the cost of some additional memory usage. Disabled by default.
 
 - <a id="transcriber-transcribe-without-streaming"></a>`transcribe_without_streaming()`: A convenience function to extract text from a non-live audio source, such as a file. We optimize for streaming use cases, so you're probably better off using libraries that specialize in bulk, batched transcription if you use this a lot and have performance constraints. This will still call any registered event listeners as it processes the lines, so this can be useful to test your application using pre-recorded files, or to easily integrate offline audio sources.
   - `audio_data`: An array of 32-bit float values, representing mono PCM audio between -1.0 and 1.0, to be analyzed for speech.
