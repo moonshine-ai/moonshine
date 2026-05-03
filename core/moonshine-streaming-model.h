@@ -11,7 +11,6 @@
 #include "bin-tokenizer.h"
 #include "moonshine-ort-allocator.h"
 #include "onnxruntime_c_api.h"
-#include "word-alignment.h"
 
 /* Streaming model configuration (matches streaming_config.json) */
 struct MoonshineStreamingConfig {
@@ -67,6 +66,11 @@ struct MoonshineStreamingState {
   bool cross_kv_valid;  // True if k_cross/v_cross are valid for current memory
 
   void reset(const MoonshineStreamingConfig &cfg);
+  // Like reset(), but preserves the last `frames_to_keep` frames of the
+  // encoder memory buffer so the decoder retains recent context (sliding
+  // window KV cache).  Pass 0 to get the same behaviour as reset().
+  void reset_with_memory_window(const MoonshineStreamingConfig &cfg,
+                                int frames_to_keep);
 };
 
 struct MoonshineStreamingModel {
@@ -100,13 +104,6 @@ struct MoonshineStreamingModel {
   std::string last_result;
 
   bool log_ort_run = false;
-
-  // Word timestamp support: collected during decode when decoder has
-  // cross_attentions.* outputs
-  std::vector<float> cross_attention_buffer;
-  int cross_attn_heads = 0;
-  int cross_attn_enc_len = 0;
-  int cross_attn_steps = 0;  // total layer*step entries collected
 
   MoonshineStreamingModel(bool log_ort_run = false);
   ~MoonshineStreamingModel();

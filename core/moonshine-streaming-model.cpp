@@ -138,6 +138,56 @@ void MoonshineStreamingState::reset(const MoonshineStreamingConfig &cfg) {
   cross_kv_valid = false;
 }
 
+void MoonshineStreamingState::reset_with_memory_window(
+    const MoonshineStreamingConfig &cfg, int frames_to_keep) {
+  // Always reset frontend and feature-accumulation state — new audio starts
+  // from scratch regardless of how much memory we keep.
+  sample_buffer.assign(79, 0.0f);
+  sample_len = 0;
+  conv1_buffer.assign(cfg.d_model_frontend * 4, 0.0f);
+  conv2_buffer.assign(cfg.c1 * 4, 0.0f);
+  frame_count = 0;
+
+  accumulated_features.clear();
+  accumulated_feature_count = 0;
+  encoder_frames_emitted = 0;
+
+  // Decoder self-attention KV cache — always reset for a new segment.
+  k_self.clear();
+  v_self.clear();
+  cache_seq_len = 0;
+
+  // Cross-attention KV cache must be recomputed from the (possibly trimmed)
+  // memory, so invalidate it now.
+  k_cross.clear();
+  v_cross.clear();
+  cross_len = 0;
+  cross_kv_valid = false;
+
+  // Sliding-window: keep only the most recent `frames_to_keep` frames of the
+  // encoder memory so the decoder has recent context when it starts decoding
+  // the new segment.
+  if (frames_to_keep <= 0 || memory_len == 0) {
+    memory.clear();
+    memory_len = 0;
+    adapter_pos_offset = 0;
+  } else {
+    int keep = std::min(frames_to_keep, memory_len);
+    int skip = memory_len - keep;
+    if (skip > 0) {
+      // Each memory frame is cfg.decoder_dim floats.
+      int frame_size = cfg.decoder_dim;
+      std::copy(memory.begin() + skip * frame_size,
+                memory.begin() + memory_len * frame_size,
+                memory.begin());
+      memory.resize(keep * frame_size);
+      memory_len = keep;
+    }
+    // Tell the adapter where to append new encoder output.
+    adapter_pos_offset = memory_len;
+  }
+}
+
 /* ============================================================================
  * MoonshineStreamingModel Implementation
  * ============================================================================
@@ -731,8 +781,8 @@ int MoonshineStreamingModel::encode(MoonshineStreamingState *state,
   state->memory_len += new_frames;
   if (log_ort_run) {
     LOGF("streaming encode: memory_len_after=%d", state->memory_len);
-  }
-
+  } 
+      
   // Invalidate cross K/V cache since memory changed
   state->cross_kv_valid = false;
 
@@ -757,25 +807,58 @@ int MoonshineStreamingModel::compute_cross_kv(MoonshineStreamingState *state) {
   }
   if (state->memory_len == 0) {
     LOG("Memory is empty, cannot compute cross K/V\n");
-    return 1;
+    return 1; 
   }
 
-  // Input: memory [1, mem_len, decoder_dim]
-  std::vector<int64_t> memory_shape = {1, state->memory_len,
-                                       config.decoder_dim};
+  const int depth = config.depth;
+  const int nheads = config.nheads;
+  const int head_dim = config.head_dim;
+  const int decoder_dim = config.decoder_dim;
+
+  const int old_len = state->cross_len;
+  const int new_len = state->memory_len;
+  const size_t expected_old_size = static_cast<size_t>(depth) * nheads *
+                                   old_len * head_dim;
+
+  // Fast path: nothing to compute (memory hasn't grown since last compute).
+  // Can happen when the caller invalidates cross_kv_valid as a safety flag
+  // even though memory is unchanged.
+  if (old_len == new_len && old_len > 0 &&
+      state->k_cross.size() == expected_old_size &&
+      state->v_cross.size() == expected_old_size) {
+    state->cross_kv_valid = true;
+    return 0;
+  }
+
+  // Incremental path: we already have valid cross K/V for the first old_len
+  // frames.  Each frame's cross K/V is an independent linear projection of
+  // that frame (cross_kv_session = memory[i] @ W_{k,v}), so the old blocks
+  // remain exactly correct when new frames are appended to memory.  We only
+  // need to run the session on the new frames and splice their per-(depth,
+  // head) blocks onto the end of the existing arrays.
+  const bool incremental =
+      old_len > 0 && old_len < new_len &&
+      state->k_cross.size() == expected_old_size &&
+      state->v_cross.size() == expected_old_size;
+
+  const int input_frames = incremental ? (new_len - old_len) : new_len;
+  float *input_data = incremental
+                          ? state->memory.data() + old_len * decoder_dim
+                          : state->memory.data();
+  const size_t input_bytes =
+      static_cast<size_t>(input_frames) * decoder_dim * sizeof(float);
+
+  std::vector<int64_t> memory_shape = {1, input_frames, decoder_dim};
 
   OrtValue *memory_tensor = nullptr;
   RETURN_ON_ORT_ERROR(
       ort_api, ort_api->CreateTensorWithDataAsOrtValue(
-                   ort_memory_info, state->memory.data(),
-                   state->memory.size() * sizeof(float), memory_shape.data(),
-                   memory_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT,
-                   &memory_tensor));
+                   ort_memory_info, input_data, input_bytes,
+                   memory_shape.data(), memory_shape.size(),
+                   ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &memory_tensor));
 
-  // Run cross_kv session
   const char *input_names[] = {"memory"};
   const char *output_names[] = {"k_cross", "v_cross"};
-
   OrtValue *inputs[] = {memory_tensor};
   OrtValue *outputs[2] = {nullptr, nullptr};
 
@@ -789,7 +872,7 @@ int MoonshineStreamingModel::compute_cross_kv(MoonshineStreamingState *state) {
     return 1;
   }
 
-  // Extract k_cross shape: [depth, 1, nheads, cross_len, head_dim]
+  // Validate output shape: [depth, 1, nheads, input_frames, head_dim].
   OrtTensorTypeAndShapeInfo *k_info = nullptr;
   RETURN_ON_ORT_ERROR(ort_api,
                       ort_api->GetTensorTypeAndShape(outputs[0], &k_info));
@@ -800,20 +883,11 @@ int MoonshineStreamingModel::compute_cross_kv(MoonshineStreamingState *state) {
                       ort_api->GetDimensions(k_info, k_shape.data(), num_dims));
   ort_api->ReleaseTensorTypeAndShapeInfo(k_info);
 
-  if (num_dims != 5) {
-    LOG("Expected 5D cross KV tensor\n");
+  if (num_dims != 5 || static_cast<int>(k_shape[3]) != input_frames) {
+    LOG("Unexpected cross KV tensor shape\n");
     for (int i = 0; i < 2; i++) ort_api->ReleaseValue(outputs[i]);
     return 1;
   }
-
-  int cross_len = static_cast<int>(k_shape[3]);
-  size_t kv_size = static_cast<size_t>(config.depth) * config.nheads *
-                   cross_len * config.head_dim;
-
-  // Copy to state
-  state->k_cross.resize(kv_size);
-  state->v_cross.resize(kv_size);
-  state->cross_len = cross_len;
 
   float *k_data = nullptr;
   float *v_data = nullptr;
@@ -822,11 +896,59 @@ int MoonshineStreamingModel::compute_cross_kv(MoonshineStreamingState *state) {
   RETURN_ON_ORT_ERROR(
       ort_api, ort_api->GetTensorMutableData(outputs[1], (void **)&v_data));
 
-  memcpy(state->k_cross.data(), k_data, kv_size * sizeof(float));
-  memcpy(state->v_cross.data(), v_data, kv_size * sizeof(float));
+  if (incremental) {
+    // Interleave-append per (depth, head) block.  Layout is
+    // [depth, 1, nheads, length, head_dim]: each (d, h) block is a contiguous
+    // run of length * head_dim floats.  The new combined buffer has length
+    // new_len, so we concatenate old[d,h] (old_len * head_dim) with
+    // new[d,h] (input_frames * head_dim) into combined[d,h] (new_len *
+    // head_dim) for every (d, h).
+    const size_t old_block = static_cast<size_t>(old_len) * head_dim;
+    const size_t new_block = static_cast<size_t>(input_frames) * head_dim;
+    const size_t combined_block = old_block + new_block;
+    const size_t total_size =
+        static_cast<size_t>(depth) * nheads * combined_block;
+
+    std::vector<float> k_combined(total_size);
+    std::vector<float> v_combined(total_size);
+
+    for (int d = 0; d < depth; ++d) {
+      for (int h = 0; h < nheads; ++h) {
+        const size_t dh = static_cast<size_t>(d) * nheads + h;
+        const size_t dst_off = dh * combined_block;
+        const size_t old_off = dh * old_block;
+        const size_t new_off = dh * new_block;
+
+        memcpy(k_combined.data() + dst_off,
+               state->k_cross.data() + old_off, old_block * sizeof(float));
+        memcpy(k_combined.data() + dst_off + old_block, k_data + new_off,
+               new_block * sizeof(float));
+
+        memcpy(v_combined.data() + dst_off,
+               state->v_cross.data() + old_off, old_block * sizeof(float));
+        memcpy(v_combined.data() + dst_off + old_block, v_data + new_off,
+               new_block * sizeof(float));
+      }
+    }
+
+    state->k_cross = std::move(k_combined);
+    state->v_cross = std::move(v_combined);
+    LOGF("[CROSS_KV] incremental: old_len=%d, new_frames=%d, total=%d",
+         old_len, input_frames, new_len);
+  } else {
+    // Full compute: replace entirely.
+    const size_t kv_size =
+        static_cast<size_t>(depth) * nheads * input_frames * head_dim;
+    state->k_cross.resize(kv_size);
+    state->v_cross.resize(kv_size);
+    memcpy(state->k_cross.data(), k_data, kv_size * sizeof(float));
+    memcpy(state->v_cross.data(), v_data, kv_size * sizeof(float));
+    LOGF("[CROSS_KV] full: frames=%d", input_frames);
+  }
+
+  state->cross_len = new_len;
   state->cross_kv_valid = true;
 
-  // Release outputs
   for (int i = 0; i < 2; i++) {
     ort_api->ReleaseValue(outputs[i]);
   }
@@ -918,30 +1040,18 @@ int MoonshineStreamingModel::run_decoder_with_cross_kv(
           ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &v_cross_tensor));
 
   // Run decoder_kv session
-  // Build output names dynamically (base 5 + optional cross_attentions)
-  size_t decoder_output_count = 0;
-  RETURN_ON_ORT_ERROR(ort_api, ort_api->SessionGetOutputCount(
-                                   decoder_kv_session, &decoder_output_count));
-
-  std::vector<const char *> output_names_vec;
-  std::vector<char *> output_names_alloc(decoder_output_count);
-  for (size_t i = 0; i < decoder_output_count; i++) {
-    RETURN_ON_ORT_ERROR(ort_api,
-                        ort_api->SessionGetOutputName(
-                            decoder_kv_session, i, &ort_allocator->base,
-                            &output_names_alloc[i]));
-    output_names_vec.push_back(output_names_alloc[i]);
-  }
-
+  // Note: decoder_kv expects cross K/V as "out_k_cross" and "out_v_cross"
+  // inputs
   const char *input_names[] = {"token", "k_self", "v_self", "out_k_cross",
                                "out_v_cross"};
+  const char *output_names[] = {"logits", "out_k_self", "out_v_self"};
+
   OrtValue *inputs[] = {token_tensor, k_self_tensor, v_self_tensor,
                         k_cross_tensor, v_cross_tensor};
-  std::vector<OrtValue *> outputs(decoder_output_count, nullptr);
+  OrtValue *outputs[3] = {nullptr, nullptr, nullptr};
 
-  OrtStatus *status =
-      ORT_RUN(ort_api, decoder_kv_session, input_names, inputs, 5,
-              output_names_vec.data(), decoder_output_count, outputs.data());
+  OrtStatus *status = ORT_RUN(ort_api, decoder_kv_session, input_names, inputs,
+                              5, output_names, 3, outputs);
 
   // Release inputs
   for (int i = 0; i < 5; i++) {
@@ -950,32 +1060,22 @@ int MoonshineStreamingModel::run_decoder_with_cross_kv(
 
   if (status != nullptr) {
     LOG_ORT_ERROR(ort_api, status);
-    for (auto *n : output_names_alloc)
-      ort_allocator->base.Free(&ort_allocator->base, n);
     return 1;
-  }
-
-  // Build name→index map for outputs
-  std::map<std::string, size_t> output_index;
-  for (size_t i = 0; i < decoder_output_count; i++) {
-    output_index[output_names_vec[i]] = i;
   }
 
   // Copy logits [1, token_len, vocab_size]
   float *logits_data = nullptr;
   RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(
-                                   outputs[output_index["logits"]],
-                                   (void **)&logits_data));
+                                   outputs[0], (void **)&logits_data));
 
   size_t total_logits = token_len * config.vocab_size;
   logits_out.resize(total_logits);
   memcpy(logits_out.data(), logits_data, total_logits * sizeof(float));
 
   // Update self-attention KV cache
-  size_t k_idx = output_index["out_k_self"];
   OrtTensorTypeAndShapeInfo *k_info = nullptr;
   RETURN_ON_ORT_ERROR(ort_api,
-                      ort_api->GetTensorTypeAndShape(outputs[k_idx], &k_info));
+                      ort_api->GetTensorTypeAndShape(outputs[1], &k_info));
   size_t num_dims = 0;
   RETURN_ON_ORT_ERROR(ort_api, ort_api->GetDimensionsCount(k_info, &num_dims));
   std::vector<int64_t> k_shape(num_dims);
@@ -992,64 +1092,18 @@ int MoonshineStreamingModel::run_decoder_with_cross_kv(
 
   float *k_out_data = nullptr;
   float *v_out_data = nullptr;
-  RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(
-                                   outputs[k_idx], (void **)&k_out_data));
-  size_t v_idx = output_index["out_v_self"];
-  RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(
-                                   outputs[v_idx], (void **)&v_out_data));
+  RETURN_ON_ORT_ERROR(
+      ort_api, ort_api->GetTensorMutableData(outputs[1], (void **)&k_out_data));
+  RETURN_ON_ORT_ERROR(
+      ort_api, ort_api->GetTensorMutableData(outputs[2], (void **)&v_out_data));
 
   memcpy(state->k_self.data(), k_out_data, new_cache_size * sizeof(float));
   memcpy(state->v_self.data(), v_out_data, new_cache_size * sizeof(float));
   state->cache_seq_len = new_cache_len;
 
-  // Collect cross-attention weights if decoder has them
-  for (int layer = 0; layer < config.depth; layer++) {
-    std::string attn_name = "cross_attentions." + std::to_string(layer);
-    auto it = output_index.find(attn_name);
-    if (it == output_index.end()) break;
-
-    OrtTensorTypeAndShapeInfo *attn_info = nullptr;
-    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorTypeAndShape(
-                                     outputs[it->second], &attn_info));
-    size_t attn_ndims = 0;
-    RETURN_ON_ORT_ERROR(ort_api,
-                        ort_api->GetDimensionsCount(attn_info, &attn_ndims));
-    std::vector<int64_t> attn_shape(attn_ndims);
-    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetDimensions(
-                                     attn_info, attn_shape.data(), attn_ndims));
-    ort_api->ReleaseTensorTypeAndShapeInfo(attn_info);
-
-    // Shape: [batch, heads, seq_len, enc_len] or similar
-    int heads = (attn_ndims >= 2) ? static_cast<int>(attn_shape[1]) : config.nheads;
-    int enc_len = (attn_ndims >= 4) ? static_cast<int>(attn_shape[3])
-                : (attn_ndims >= 3) ? static_cast<int>(attn_shape[2])
-                : state->cross_len;
-
-    float *attn_data = nullptr;
-    RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(
-                                     outputs[it->second], (void **)&attn_data));
-
-    size_t step_size = 1;
-    for (size_t d = 0; d < attn_ndims; d++) step_size *= attn_shape[d];
-
-    size_t old_size = cross_attention_buffer.size();
-    cross_attention_buffer.resize(old_size + step_size);
-    memcpy(cross_attention_buffer.data() + old_size, attn_data,
-           step_size * sizeof(float));
-
-    if (cross_attn_steps == 0) {
-      cross_attn_heads = heads;
-      cross_attn_enc_len = enc_len;
-    }
-    cross_attn_steps++;
-  }
-
   // Release outputs
-  for (size_t i = 0; i < decoder_output_count; i++) {
-    if (outputs[i]) ort_api->ReleaseValue(outputs[i]);
-  }
-  for (auto *n : output_names_alloc) {
-    ort_allocator->base.Free(&ort_allocator->base, n);
+  for (int i = 0; i < 3; i++) {
+    ort_api->ReleaseValue(outputs[i]);
   }
 
   return 0;
