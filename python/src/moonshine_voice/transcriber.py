@@ -14,7 +14,6 @@ from moonshine_voice.moonshine_api import (
     TranscriptLine,
     TranscriptC,
     TranscriberOptionC,
-    WordTiming,
 )
 from moonshine_voice.errors import MoonshineError, check_error
 from moonshine_voice.utils import get_model_path, get_assets_path, load_wav_file
@@ -214,26 +213,6 @@ class Transcriber:
                 ).contents
                 audio_data = list(audio_array)
 
-            # Extract word timestamps if available
-            words = None
-            if line_c.words and line_c.word_count > 0:
-                words = []
-                for j in range(line_c.word_count):
-                    word_c = line_c.words[j]
-                    word_text = ""
-                    if word_c.text:
-                        word_text = ctypes.string_at(word_c.text).decode(
-                            "utf-8", errors="ignore"
-                        )
-                    words.append(
-                        WordTiming(
-                            word=word_text,
-                            start=word_c.start,
-                            end=word_c.end,
-                            confidence=word_c.confidence,
-                        )
-                    )
-
             line = TranscriptLine(
                 text=text,
                 start_time=line_c.start_time,
@@ -248,7 +227,6 @@ class Transcriber:
                 speaker_index=line_c.speaker_index,
                 audio_data=audio_data,
                 last_transcription_latency_ms=line_c.last_transcription_latency_ms,
-                words=words,
             )
             lines.append(line)
 
@@ -537,7 +515,12 @@ if __name__ == "__main__":
         "--no-speaker-ids", action="store_true", help="Don't show speaker IDs"
     )
     parser.add_argument(
-        "--word-timestamps", action="store_true", help="Show word timestamps"
+        "--final-only", action="store_true", help="Only show final completed lines (no intermediate updates)"
+    )
+    parser.add_argument(
+        "--keep-context",
+        action="store_true",
+        help="Keep encoder memory and KV caches across segments (only reset when full)",
     )
     args = parser.parse_args()
 
@@ -561,22 +544,24 @@ if __name__ == "__main__":
         for option in args.options.split(","):
             key, value = option.split("=")
             options[key] = value
-
-    if args.word_timestamps:
-        options["word_timestamps"] = "true"
+    
+    if args.keep_context:
+        options["keep_context"] = "true"
 
     transcriber = Transcriber(
-        model_path=model_path, model_arch=model_arch, options=options
+        model_path=model_path, model_arch=model_arch, options=options if options else None
     )
 
     transcriber.start()
 
     class TestListener(TranscriptEventListener):
         def on_line_started(self, event: LineStarted):
-            if not args.quiet:
+            if not args.quiet and not args.final_only:
                 print(f"Line started: {event.line.text}", file=sys.stderr)
 
         def on_line_text_changed(self, event: LineTextChanged):
+            if args.final_only:
+                return
             if event.line.has_speaker_id and not args.no_speaker_ids:
                 speaker_prefix = f". Speaker #{event.line.speaker_index}"
             else:
@@ -589,12 +574,7 @@ if __name__ == "__main__":
                 speaker_prefix = ""
             else:
                 speaker_prefix = f"Speaker #{event.line.speaker_index}: "
-            if args.word_timestamps:
-                for word in event.line.words:
-                    print(f"  {word.word} [{word.start:.3f}s - {word.end:.3f}s] (conf: {word.confidence:.2f})", file=sys.stderr)
-            else:
-                print(f"{speaker_prefix}{event.line.text}", file=sys.stderr)
-
+            print(f"{speaker_prefix}{event.line.text}")
 
     listener = TestListener()
     transcriber.add_listener(listener)

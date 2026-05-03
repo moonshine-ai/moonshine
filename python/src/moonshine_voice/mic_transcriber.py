@@ -25,7 +25,7 @@ class MicTranscriber:
         samplerate: int = 16000,
         channels: int = 1,
         blocksize: int = 1024,
-        options: dict = None
+        options: dict = None,
     ):
         self.transcriber = Transcriber(model_path, model_arch, options=options)
         self.mic_stream = self.transcriber.create_stream(update_interval)
@@ -107,7 +107,9 @@ if __name__ == "__main__":
         wanted_language=args.language, wanted_model_arch=args.model_arch
     )
 
-    mic_transcriber = MicTranscriber(model_path=model_path, model_arch=model_arch)
+    mic_transcriber = MicTranscriber(
+        model_path=model_path, model_arch=model_arch
+    )
 
     class TerminalListener(TranscriptEventListener):
         def __init__(self):
