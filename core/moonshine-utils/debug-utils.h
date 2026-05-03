@@ -7,6 +7,9 @@
 #include <string>
 #include <vector>
 #include <thread>
+#include <cstdlib>
+#include <cstdio>
+#include <mutex>
 
 #if defined(ANDROID)
 #include <android/asset_manager.h>
@@ -22,6 +25,28 @@ static inline const char *_moonshine_filename_without_path(const char *path) {
 
 #define FILENAME_ONLY (_moonshine_filename_without_path(__FILE__))
 
+// File logging support
+static inline FILE* _moonshine_get_log_file() {
+  static FILE* log_file = nullptr;
+  static std::mutex log_mutex;
+  static bool initialized = false;
+  
+  if (!initialized) {
+    std::lock_guard<std::mutex> lock(log_mutex);
+    if (!initialized) {
+      const char* log_env = std::getenv("MOONSHINE_LOG");
+      if (log_env != nullptr && std::strcmp(log_env, "1") == 0) {
+        log_file = fopen("moonshine_decode.log", "w");
+        if (log_file != nullptr) {
+          setvbuf(log_file, nullptr, _IOLBF, 0);  // Line buffered
+        }
+      }
+      initialized = true;
+    }
+  }
+  return log_file;
+}
+
 #if defined(ANDROID)
 #include <android/log.h>
 #define LOGF(format, ...)                                                  \
@@ -32,12 +57,16 @@ static inline const char *_moonshine_filename_without_path(const char *path) {
 #else
 #define LOGF(format, ...)                                                   \
   do {                                                                      \
-    std::ostringstream oss;                                                 \
-    oss << std::this_thread::get_id();                                      \
-    std::string thread_id_str = oss.str();                                  \
-    fprintf(stderr, "Thread %s:%s:%d:%s(): " format, thread_id_str.c_str(), \
-            FILENAME_ONLY, __LINE__, __func__, __VA_ARGS__);                \
-    fprintf(stderr, "\n");                                                  \
+    FILE* log_file = _moonshine_get_log_file();                            \
+    if (log_file != nullptr) {                                             \
+      std::ostringstream oss;                                              \
+      oss << std::this_thread::get_id();                                   \
+      std::string thread_id_str = oss.str();                               \
+      fprintf(log_file, "Thread %s:%s:%d:%s(): " format,                   \
+              thread_id_str.c_str(), FILENAME_ONLY, __LINE__, __func__,    \
+              __VA_ARGS__);                                                 \
+      fprintf(log_file, "\n");                                             \
+    }                                                                       \
   } while (0)
 #endif
 #define LOG(x) LOGF("%s", (x))
