@@ -8,7 +8,6 @@
 #include <string>
 
 #include "debug-utils.h"
-#include "ort-utils.h"
 #include "resampler.h"
 #include "string-utils.h"
 #include "utf8.h"
@@ -56,7 +55,6 @@ Transcriber::Transcriber(const TranscriberOptions &options)
     : stt_model(nullptr),
       streaming_model(nullptr),
       speaker_embedding_model(nullptr),
-      online_clusterer(nullptr),
       next_speaker_index(0),
       next_stream_id(1) {
   this->options = options;
@@ -131,32 +129,6 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
     }
     const MoonshineStreamingConfig &config = this->streaming_model->config;
     this->streaming_state.reset(config);
-
-    // Load attention-enabled streaming decoder if word timestamps requested
-    if (this->options.word_timestamps) {
-      std::string decoder_attn_path =
-          append_path_component(model_path, "decoder_kv_with_attention.ort");
-      if (std::filesystem::exists(decoder_attn_path)) {
-        // Replace the streaming decoder with the attention-enabled version
-        if (this->streaming_model->decoder_kv_session) {
-          this->streaming_model->ort_api->ReleaseSession(
-              this->streaming_model->decoder_kv_session);
-        }
-        this->streaming_model->decoder_kv_session = nullptr;
-        const char *dec_mmapped = nullptr;
-        size_t dec_mmapped_size = 0;
-        int32_t dec_err = ort_session_from_path(
-            this->streaming_model->ort_api, this->streaming_model->ort_env,
-            this->streaming_model->ort_session_options,
-            decoder_attn_path.c_str(),
-            &this->streaming_model->decoder_kv_session, &dec_mmapped,
-            &dec_mmapped_size);
-        if (dec_err != 0) {
-          LOGF("Warning: Failed to load decoder_kv_with_attention from %s\n",
-               decoder_attn_path.c_str());
-        }
-      }
-    }
   } else {
     // Non-streaming model: expects encoder_model.ort and
     // decoder_model_merged.ort
@@ -187,49 +159,6 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
                                encoder_model_path + ", " + decoder_model_path +
                                ", " + tokenizer_path +
                                ". Error code: " + std::to_string(load_error));
-    }
-
-    // Load word timestamp model if enabled.
-    // Try decoder_with_attention.ort first (single-pass, replaces decoder
-    // with one that outputs cross-attention weights during decoding).
-    // Fall back to alignment_model.ort (two-pass, runs alignment after
-    // transcription using a separate teacher-forced decoder pass).
-    if (this->options.word_timestamps) {
-      std::string decoder_attn_path =
-          append_path_component(model_path, "decoder_with_attention.ort");
-      std::string alignment_path =
-          append_path_component(model_path, "alignment_model.ort");
-
-      if (std::filesystem::exists(decoder_attn_path)) {
-        // Single-pass: replace decoder with attention-enabled version
-        if (this->stt_model->decoder_session) {
-          this->stt_model->ort_api->ReleaseSession(
-              this->stt_model->decoder_session);
-        }
-        this->stt_model->decoder_session = nullptr;
-        const char *dec_mmapped = nullptr;
-        size_t dec_mmapped_size = 0;
-        int32_t dec_err = ort_session_from_path(
-            this->stt_model->ort_api, this->stt_model->ort_env,
-            this->stt_model->ort_session_options,
-            decoder_attn_path.c_str(), &this->stt_model->decoder_session,
-            &dec_mmapped, &dec_mmapped_size);
-        if (dec_err != 0) {
-          LOGF("Warning: Failed to load decoder_with_attention from %s\n",
-               decoder_attn_path.c_str());
-        }
-      } else if (std::filesystem::exists(alignment_path)) {
-        // Two-pass fallback: separate alignment model
-        int32_t align_err =
-            this->stt_model->load_alignment_model(alignment_path.c_str());
-        if (align_err != 0) {
-          LOGF("Warning: Failed to load alignment model from %s\n",
-               alignment_path.c_str());
-        }
-      } else {
-        LOG("Warning: No word timestamp model found, word timestamps "
-            "disabled\n");
-      }
     }
   }
 }
@@ -507,52 +436,6 @@ void Transcriber::update_transcript_from_segments(
       line.text = transcribe_segment_with_streaming_model(
           segment.audio_data.data(), segment.audio_data.size(), line.id,
           segment.is_complete);
-
-      // Compute word timestamps from streaming model's collected attention
-      if (this->options.word_timestamps &&
-          !this->streaming_model->cross_attention_buffer.empty() &&
-          !this->last_streaming_tokens.empty()) {
-        float seg_duration =
-            segment.audio_data.size() / (float)INTERNAL_SAMPLE_RATE;
-        int L = this->streaming_model->config.depth;
-        int total_steps = this->streaming_model->cross_attn_steps / L;
-        int H = this->streaming_model->cross_attn_heads;
-        int E = this->streaming_model->cross_attn_enc_len;
-
-        if (total_steps > 0 && H > 0 && E > 0) {
-          size_t per_layer_step = H * E;
-          std::vector<float> rearranged(L * H * total_steps * E);
-          for (int s = 0; s < total_steps; s++) {
-            for (int l = 0; l < L; l++) {
-              const float *src =
-                  this->streaming_model->cross_attention_buffer.data() +
-                  (s * L + l) * per_layer_step;
-              for (int h = 0; h < H; h++) {
-                float *dst =
-                    rearranged.data() + ((l * H + h) * total_steps + s) * E;
-                memcpy(dst, src + h * E, E * sizeof(float));
-              }
-            }
-          }
-
-          float time_per_frame = seg_duration / static_cast<float>(E);
-          std::vector<TranscriberWord> words =
-              align_words(rearranged.data(), L, H, total_steps, E,
-                          this->last_streaming_tokens, time_per_frame,
-                          this->streaming_model->tokenizer);
-
-          if (!words.empty()) {
-            for (auto &w : words) {
-              w.start += segment.start_time;
-              w.end += segment.start_time;
-            }
-            line.words = std::move(words);
-          }
-        }
-
-        this->streaming_model->cross_attention_buffer.clear();
-        this->streaming_model->cross_attn_steps = 0;
-      }
     } else if (this->stt_model != nullptr) {
       // Use non-streaming model for transcription
       std::lock_guard<std::mutex> lock(this->stt_model_mutex);
@@ -569,23 +452,6 @@ void Transcriber::update_transcript_from_segments(
       }
       // Ensure the output text is valid UTF-8.
       line.text = sanitize_text(out_text);
-
-      // Compute word timestamps (single-pass or alignment model)
-      if (this->options.word_timestamps) {
-        float seg_duration =
-            segment.audio_data.size() / (float)INTERNAL_SAMPLE_RATE;
-        std::vector<TranscriberWord> words;
-        int align_err =
-            this->stt_model->compute_word_timestamps(seg_duration, words);
-        if (align_err == 0 && !words.empty()) {
-          // Offset word times by the segment's start time
-          for (auto &w : words) {
-            w.start += segment.start_time;
-            w.end += segment.start_time;
-          }
-          line.words = std::move(words);
-        }
-      }
     } else {
       // No model available - return audio data and segment info only
       line.text = nullptr;
@@ -645,10 +511,56 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
 
   const MoonshineStreamingConfig &config = this->streaming_model->config;
 
-  // Check if this is a new segment - if so, reset state
+  // Check if this is a new segment
   bool is_new_segment = (segment_id != this->current_streaming_segment_id);
   if (is_new_segment) {
-    this->streaming_state.reset(config);
+    LOGF("[NEW SEGMENT] old_segment_id=%llu, new_segment_id=%llu, "
+         "memory_frames=%d",
+         (unsigned long long)this->current_streaming_segment_id,
+         (unsigned long long)segment_id,
+         this->streaming_state.memory_len);
+
+    if (this->options.keep_context) {
+      // keep_context mode: accumulate encoder memory and KV caches across
+      // segments.  Only do a full reset when memory would exceed the
+      // rolling-window cap of 1500 frames (~30 s of audio at 20 ms/frame).
+      const int max_memory_frames = 1500;
+      if (this->streaming_state.memory_len >= max_memory_frames) {
+        LOGF("[FULL RESET] memory_len=%d >= max_memory_frames=%d, clearing all",
+             this->streaming_state.memory_len, max_memory_frames);
+        this->streaming_state.reset(config);
+        this->sw_current_tokens_.clear();
+        this->sw_current_line_text_.clear();
+        this->sw_decode_prefix_.clear();
+      } else {
+        // Memory NOT full — keep everything: encoder memory, cross-attention
+        // KV, and self-attention KV all persist across segments.  Only
+        // invalidate cross KV so it gets recomputed if new frames are added.
+        // Promote previous segment's final tokens to the fixed prefix used
+        // by every decode within the new segment (teacher forcing).
+        this->sw_decode_prefix_ = this->sw_current_tokens_;
+        LOGF("[CONTINUE] keeping memory_len=%d, no reset, prefix_len=%zu",
+             this->streaming_state.memory_len,
+             this->sw_decode_prefix_.size());
+        this->streaming_state.cross_kv_valid = false;
+      }
+    } else {
+      // Default: full reset on every new segment (original behavior).
+      this->streaming_state.reset(config);
+      this->sw_current_tokens_.clear();
+      this->sw_current_line_text_.clear();
+      this->sw_decode_prefix_.clear();
+      LOGF("%s", "[FULL RESET] new segment, keep_context=off");
+    }
+
+    // A new segment means the prefix content has changed (or was cleared),
+    // so the cached prefix KV state is no longer valid.
+    this->sw_prefix_kv_cached_ = false;
+    this->sw_prefix_k_self_.clear();
+    this->sw_prefix_v_self_.clear();
+    this->sw_prefix_cache_seq_len_ = 0;
+    this->sw_prefix_memory_len_ = 0;
+
     this->current_streaming_segment_id = segment_id;
     this->streaming_samples_processed = 0;
   }
@@ -690,6 +602,17 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
         LOGF("Failed to encode: %d", err);
         throw std::runtime_error("Failed to encode: " + std::to_string(err));
       }
+
+      // New encoder frames invalidate cross-attention KV cache.
+      // The self-attention KV snapshot for the prefix STAYS valid: each
+      // prefix position's k_self/v_self were computed with the encoder
+      // memory available at that time — exactly like committed history in
+      // a single-pass decode.  New encoder frames only affect NEW decoder
+      // positions via their own cross-attention; they don't retroactively
+      // change older positions.
+      if (new_frames > 0) {
+        this->streaming_state.cross_kv_valid = false;
+      }
     }
 
     // Update the count of processed samples with the chunks we've actually
@@ -697,62 +620,151 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
     this->streaming_samples_processed += chunk_count * chunk_size;
   }
 
-  // If no memory accumulated, return empty string
+  // If no memory accumulated yet, nothing to decode.
   if (this->streaming_state.memory_len == 0) {
     return new std::string();
   }
 
-  // Reset decoder state before decoding (we decode from scratch each time
-  // since memory may have changed)
-  this->streaming_model->decoder_reset(&this->streaming_state);
-
-  // Decode to get transcription
-  const float duration_sec = audio_length / (float)INTERNAL_SAMPLE_RATE;
+  // Base max_tokens on total accumulated encoder memory
+  const float decode_duration_sec =
+      static_cast<float>(this->streaming_state.memory_len) * 0.020f;
   const int max_tokens =
-      std::min(static_cast<int>(std::ceil(duration_sec *
+      std::min(static_cast<int>(std::ceil(decode_duration_sec *
                                           this->options.max_tokens_per_second)),
-               256);
-  std::vector<int64_t> tokens;
-  tokens.push_back(config.bos_id);
+               config.max_seq_len);
 
+  // Build the decoder prefix.  sw_decode_prefix_ is FIXED for the whole
+  // segment (only updated at segment boundaries).  When keep_context
+  // preserved memory across a segment boundary, it holds [BOS, content...]
+  // from the previous completed segment; otherwise it's empty.  Using this
+  // as a fixed teacher-forcing prefix prevents the decoder from
+  // re-hallucinating old content (e.g. "KV" vs "KB") while still letting
+  // in-segment decodes freely choose all tokens AFTER the committed prefix.
+  std::vector<int64_t> prefix;
+  if (this->sw_decode_prefix_.empty()) {
+    prefix.push_back(config.bos_id);
+  } else {
+    prefix = this->sw_decode_prefix_;
+  }
+
+  std::vector<int64_t> tokens = prefix;
   std::vector<float> logits(config.vocab_size);
-  int current_token = config.bos_id;
 
+  LOGF("[DECODE START] segment_id=%llu, encoder_frames=%d, max_tokens=%d, "
+       "prefix_len=%zu",
+       (unsigned long long)segment_id, this->streaming_state.memory_len,
+       max_tokens, prefix.size());
+
+  int decode_err = 0;
+  int new_steps = 0;
+  bool used_cached_kv = false;
   {
     std::lock_guard<std::mutex> lock(this->streaming_model_mutex);
 
-    for (int step = 0; step < max_tokens; ++step) {
-      int err = this->streaming_model->decode_step(
-          &this->streaming_state, current_token, logits.data());
-      if (err != 0) {
-        break;
-      }
-
-      // Argmax
-      int next_token = 0;
-      float max_logit = logits[0];
-      for (int i = 1; i < config.vocab_size; ++i) {
-        if (logits[i] > max_logit) {
-          max_logit = logits[i];
-          next_token = i;
+    // Phase 1: set up self-attention KV over the prefix.  Two paths:
+    //   Cached: this segment's prefix was already fed in a previous call.
+    //           Restore k_self/v_self from the snapshot taken right after
+    //           feeding prefix[0..N-2] (cache_seq_len == N-1), then feed
+    //           only the LAST prefix token to produce fresh logits using
+    //           the current (possibly grown) encoder memory.
+    //   Cold:  decoder_reset + feed the whole prefix; snapshot KV after
+    //           feeding prefix[0..N-2] so the next in-segment call can
+    //           take the cached path.
+    // The cache is only safe when encoder memory hasn't grown since the
+    // snapshot.  If it has, self-attention K/V at cached positions reflect
+    // older cross-attention context and would drift the current decode
+    // (observed: "KV cache" decoded as "KB cash").  In that case take the
+    // cold path and re-snapshot under the current memory.
+    const bool cache_usable =
+        this->sw_prefix_kv_cached_ && prefix.size() >= 2 &&
+        this->sw_prefix_memory_len_ == this->streaming_state.memory_len;
+    if (cache_usable) {
+      this->streaming_state.k_self = this->sw_prefix_k_self_;
+      this->streaming_state.v_self = this->sw_prefix_v_self_;
+      this->streaming_state.cache_seq_len = this->sw_prefix_cache_seq_len_;
+      decode_err = this->streaming_model->decode_step(
+          &this->streaming_state, static_cast<int>(prefix.back()),
+          logits.data());
+      used_cached_kv = true;
+    } else {
+      this->streaming_model->decoder_reset(&this->streaming_state);
+      const int save_at = static_cast<int>(prefix.size()) - 2;
+      for (int i = 0; i < static_cast<int>(prefix.size()); ++i) {
+        decode_err = this->streaming_model->decode_step(
+            &this->streaming_state, static_cast<int>(prefix[i]),
+            logits.data());
+        if (decode_err != 0) break;
+        if (i == save_at) {
+          // cache_seq_len is now prefix.size()-1 (i.e. after feeding
+          // prefix[0..N-2]).  Snapshot for reuse on subsequent in-segment
+          // calls — but only when memory_len matches this moment.
+          this->sw_prefix_k_self_ = this->streaming_state.k_self;
+          this->sw_prefix_v_self_ = this->streaming_state.v_self;
+          this->sw_prefix_cache_seq_len_ = this->streaming_state.cache_seq_len;
+          this->sw_prefix_memory_len_ = this->streaming_state.memory_len;
+          this->sw_prefix_kv_cached_ = true;
         }
       }
+    }
 
-      tokens.push_back(next_token);
-      current_token = next_token;
+    // Phase 2: argmax decoding for new tokens beyond the prefix.
+    const int prefix_content_count = static_cast<int>(prefix.size()) - 1;
+    const int max_new = std::max(0, max_tokens - prefix_content_count);
 
-      if (next_token == config.eos_id) break;
+    if (decode_err == 0) {
+      for (int step = 0; step < max_new; ++step) {
+        // Argmax on logits set by the previous decode_step call.
+        int next_token = 0;
+        float max_logit = logits[0];
+        for (int i = 1; i < config.vocab_size; ++i) {
+          if (logits[i] > max_logit) {
+            max_logit = logits[i];
+            next_token = i;
+          }
+        }
+
+        tokens.push_back(next_token);
+        new_steps = step + 1;
+
+        if (next_token == config.eos_id) {
+          LOGF("[DECODE] step=%d, token=%lld (EOS), stopping", step,
+               (long long)next_token);
+          break;
+        }
+
+        // Feed the chosen token to prepare logits for the token after it.
+        decode_err = this->streaming_model->decode_step(
+            &this->streaming_state, next_token, logits.data());
+        if (decode_err != 0) break;
+
+        // Log every 10th token to avoid spam
+        if (step % 10 == 0 || step < 5) {
+          std::string partial_text =
+              this->streaming_model->tokens_to_text(tokens);
+          LOGF("[DECODE] step=%d, token=%lld, partial_text='%s'", step,
+               (long long)next_token, partial_text.c_str());
+        }
+      }
     }
   }
 
-  // Save tokens for word timestamp alignment
-  this->last_streaming_tokens.clear();
-  for (auto t : tokens) {
-    this->last_streaming_tokens.push_back(static_cast<int>(t));
-  }
+  LOGF("[DECODE END] total_tokens=%zu (prefix=%zu, new=%d, kv_cached=%d)",
+       tokens.size(), prefix.size(), new_steps, used_cached_kv ? 1 : 0);
 
-  // Convert tokens to text
-  std::string text = this->streaming_model->tokens_to_text(tokens);
+  // Extract output tokens (skip BOS/EOS)
+  std::vector<int64_t> output_tokens;
+  output_tokens.push_back(config.bos_id);
+  for (size_t i = 0; i < tokens.size(); ++i) {
+    if (tokens[i] == static_cast<int64_t>(config.eos_id)) break;
+    if (tokens[i] == static_cast<int64_t>(config.bos_id)) continue;
+    output_tokens.push_back(tokens[i]);
+  }
+  std::string text = this->streaming_model->tokens_to_text(output_tokens);
+  this->sw_current_tokens_ = output_tokens;
+  this->sw_current_line_text_ = text;
+  LOGF("[OUTPUT] output_tokens=%zu, text='%s'", output_tokens.size(),
+       text.c_str());
+  
   if (this->options.log_output_text) {
     LOGF("Streaming model transcribed text: '%s'", text.c_str());
   }
@@ -844,17 +856,10 @@ TranscriberLine::TranscriberLine(const TranscriberLine &other) {
   this->last_transcription_latency_ms = other.last_transcription_latency_ms;
   this->speaker_id = other.speaker_id;
   this->speaker_index = other.speaker_index;
-  this->words = other.words;
 }
 
 TranscriberLine &TranscriberLine::operator=(const TranscriberLine &other) {
-  if (this == &other) {
-    return *this;
-  }
-  std::string *new_text =
-      other.text == nullptr ? nullptr : new std::string(*other.text);
-  delete this->text;
-  this->text = new_text;
+  this->text = other.text == nullptr ? nullptr : new std::string(*other.text);
   this->audio_data = other.audio_data;
   this->start_time = other.start_time;
   this->duration = other.duration;
@@ -867,7 +872,6 @@ TranscriberLine &TranscriberLine::operator=(const TranscriberLine &other) {
   this->last_transcription_latency_ms = other.last_transcription_latency_ms;
   this->speaker_id = other.speaker_id;
   this->speaker_index = other.speaker_index;
-  this->words = other.words;
   return *this;
 }
 
@@ -907,38 +911,11 @@ void TranscriptStreamOutput::add_or_update_line(TranscriberLine &line) {
 void TranscriptStreamOutput::update_transcript_from_lines() {
   std::lock_guard<std::mutex> lock(this->mutex);
   this->output_lines.clear();
-  this->output_words.clear();
-  this->output_word_texts.clear();
-
-  size_t num_lines = this->ordered_internal_line_ids.size();
-  this->output_words.resize(num_lines);
-  this->output_word_texts.resize(num_lines);
-
-  size_t line_index = 0;
   for (const uint64_t &line_id : this->ordered_internal_line_ids) {
     const TranscriberLine &line = this->internal_lines_map[line_id];
     const bool has_audio_data = line.audio_data.size() > 0;
     const float *audio_data = has_audio_data ? line.audio_data.data() : nullptr;
     const size_t audio_data_count = has_audio_data ? line.audio_data.size() : 0;
-
-    // Build word C structs for this line
-    auto &word_texts = this->output_word_texts[line_index];
-    auto &word_structs = this->output_words[line_index];
-    word_texts.clear();
-    word_structs.clear();
-
-    for (const auto &w : line.words) {
-      word_texts.push_back(w.text);
-    }
-    for (size_t i = 0; i < line.words.size(); i++) {
-      word_structs.push_back({
-          .text = word_texts[i].c_str(),
-          .start = line.words[i].start,
-          .end = line.words[i].end,
-          .confidence = line.words[i].confidence,
-      });
-    }
-
     this->output_lines.push_back({
         .text = line.text == nullptr ? nullptr : line.text->c_str(),
         .audio_data = audio_data,
@@ -954,11 +931,7 @@ void TranscriptStreamOutput::update_transcript_from_lines() {
         .speaker_id = line.speaker_id,
         .speaker_index = line.speaker_index,
         .last_transcription_latency_ms = line.last_transcription_latency_ms,
-        .words = word_structs.empty() ? nullptr : word_structs.data(),
-        .word_count = (uint64_t)word_structs.size(),
     });
-
-    line_index++;
   }
   this->transcript.lines = this->output_lines.data();
   this->transcript.line_count = (uint64_t)(this->output_lines.size());
@@ -1044,7 +1017,7 @@ void TranscriberStream::save_audio_data_to_wav(const float *audio_data,
     std::string wav_path = append_path_component(this->save_input_wav_path,
                                                  this->get_wav_filename());
     // Only log the first time we save a WAV file for a given stream.
-    static std::map<std::string, bool> *saved_wav_paths = nullptr;
+    static std::map<std::string, bool>* saved_wav_paths = nullptr;
     if (saved_wav_paths == nullptr) {
       saved_wav_paths = new std::map<std::string, bool>();
     }

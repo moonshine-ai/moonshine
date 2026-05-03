@@ -16,14 +16,6 @@
 #include "speaker-embedding-model.h"
 #include "speaker-embedding-model-data.h"
 #include "online-clusterer.h"
-#include "word-alignment.h"
-
-// Whenever this struct is modified, the following files must be updated:
-// - python/src/moonshine_voice/moonshine_api.py
-// - core/moonshine-c-api.h
-// - core/moonshine-cpp.h
-// - android/moonshine-jni/moonshine-jni.cpp
-// - swift/Sources/MoonshineVoice/MoonshineAPI.swift
 
 struct TranscriberLine {
   std::string *text = nullptr;
@@ -39,7 +31,6 @@ struct TranscriberLine {
   uint32_t last_transcription_latency_ms;
   uint64_t speaker_id;
   uint32_t speaker_index;
-  std::vector<TranscriberWord> words;
 
   TranscriberLine();
   TranscriberLine(const TranscriberLine &other);
@@ -52,11 +43,6 @@ struct TranscriptStreamOutput {
   std::map<uint64_t, TranscriberLine> internal_lines_map;
   std::vector<uint64_t> ordered_internal_line_ids;
   std::vector<transcript_line_t> output_lines;
-  // Storage for word C structs — one vector per line, kept alive alongside
-  // output_lines so that transcript_line_t.words pointers remain valid.
-  std::vector<std::vector<transcript_word_t>> output_words;
-  // Storage for word text strings (must outlive the transcript_word_t pointers)
-  std::vector<std::vector<std::string>> output_word_texts;
   std::mutex mutex;
 
   struct transcript_t transcript = {.lines = nullptr, .line_count = 0};
@@ -125,7 +111,9 @@ struct TranscriberOptions {
   bool log_ort_run = false;
   bool return_audio_data = true;
   bool log_output_text = false;
-  bool word_timestamps = false;
+  // When true, encoder memory and KV caches persist across segment
+  // boundaries.  A full reset only happens when memory is full.
+  bool keep_context = false;
 };
 
 class Transcriber {
@@ -150,7 +138,29 @@ class Transcriber {
   // Track current segment for incremental processing
   uint64_t current_streaming_segment_id = UINT64_MAX;
   size_t streaming_samples_processed = 0;
-  std::vector<int> last_streaming_tokens;
+
+  // Tokens from the most recent decode of the CURRENT segment.
+  std::vector<int64_t> sw_current_tokens_;
+  // Most recent text output of the CURRENT segment.
+  std::string sw_current_line_text_;
+  // Fixed teacher-forcing prefix for the current segment.  Updated only at
+  // segment boundaries: empty (=> [BOS] prefix) after a full reset, or the
+  // previous segment's output when keep_context preserved memory across
+  // the boundary.  Using a FIXED prefix for all in-segment decodes prevents
+  // committing to unstable tokens from short early partial decodes.
+  std::vector<int64_t> sw_decode_prefix_;
+  // Cached decoder self-attention KV state AFTER feeding all-but-the-last
+  // token of sw_decode_prefix_.  Avoids re-feeding the whole prefix on
+  // every in-segment decode call.  Invalidated on segment boundaries.
+  // Also tracks the encoder memory_len at snapshot time: each layer's
+  // self-attention K/V depends on the residual stream which includes
+  // cross-attention output — so if memory grew since the snapshot, the
+  // cached K/V at those positions is stale and must not be reused.
+  std::vector<float> sw_prefix_k_self_;
+  std::vector<float> sw_prefix_v_self_;
+  int sw_prefix_cache_seq_len_ = 0;
+  int sw_prefix_memory_len_ = 0;
+  bool sw_prefix_kv_cached_ = false;
 
   TranscriberStreamMap streams;
   int32_t next_stream_id;
