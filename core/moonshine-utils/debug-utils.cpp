@@ -106,12 +106,14 @@ bool load_wav_data(const char *path, float **out_float_data,
     std::fprintf(stderr, "fmt chunk too small\n");
     return false;
   }
-  std::fread(&audio_format, sizeof(uint16_t), 1, file);
-  std::fread(&num_channels, sizeof(uint16_t), 1, file);
-  std::fread(&sample_rate, sizeof(uint32_t), 1, file);
-  std::fread(&byte_rate, sizeof(uint32_t), 1, file);
-  std::fread(&block_align, sizeof(uint16_t), 1, file);
-  std::fread(&bits_per_sample, sizeof(uint16_t), 1, file);
+  size_t n_read = 0;
+  n_read += std::fread(&audio_format, sizeof(uint16_t), 1, file);
+  n_read += std::fread(&num_channels, sizeof(uint16_t), 1, file);
+  n_read += std::fread(&sample_rate, sizeof(uint32_t), 1, file);
+  n_read += std::fread(&byte_rate, sizeof(uint32_t), 1, file);
+  n_read += std::fread(&block_align, sizeof(uint16_t), 1, file);
+  n_read += std::fread(&bits_per_sample, sizeof(uint16_t), 1, file);
+  if (n_read != 6) { std::fclose(file); return false; }
   // Skip any extra fmt bytes
   if (chunk_size > 16) std::fseek(file, chunk_size - 16, SEEK_CUR);
 

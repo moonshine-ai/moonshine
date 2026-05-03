@@ -31,11 +31,11 @@ BinTokenizer::BinTokenizer(const char *tokenizer_path,
       byte_count = first_byte;
     } else {
       uint8_t second_byte;
-      std::fread(&second_byte, 1, 1, file);
+      if (std::fread(&second_byte, 1, 1, file) != 1) break;
       byte_count = (second_byte * 128) + first_byte - 128;
     }
     std::vector<uint8_t> bytes(byte_count);
-    std::fread(bytes.data(), 1, byte_count, file);
+    if (std::fread(bytes.data(), 1, byte_count, file) != byte_count) break;
     tokens_to_bytes.push_back(bytes);
   }
   std::fclose(file);
