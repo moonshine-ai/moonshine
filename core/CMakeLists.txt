@@ -4,7 +4,7 @@ project("moonshine")
 
 set(CMAKE_CXX_STANDARD 20)
 
-set(MOONSHINE_VERSION "0.0.51")
+set(MOONSHINE_VERSION "0.0.49")
 
 # Ensure the standard is strictly enforced (optional, but recommended)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -55,7 +55,6 @@ set(MOONSHINE_SRC_FILES
     speaker-embedding-model.cpp
     speaker-embedding-model-data.cpp
     online-clusterer.cpp
-    word-alignment.cpp
 )
 
 # Build as STATIC framework for iOS/Swift (shared frameworks cannot be embedded)
@@ -212,6 +211,15 @@ target_link_libraries(benchmark PRIVATE
     moonshine
 )
 
+add_executable(mic-transcriber mic-transcriber.cpp)
+target_include_directories(mic-transcriber PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}
+)
+target_link_libraries(mic-transcriber PRIVATE
+    moonshine
+    asound
+)
+
 # Windows DLLs don't export all symbols by default and so tests that rely on them
 # are skipped for shared builds.
 if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
@@ -343,34 +351,6 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
             moonshine
         )
     endif()
-
-    add_executable(word-alignment-test word-alignment-test.cpp)
-    set_target_properties(word-alignment-test PROPERTIES
-        CXX_STANDARD 20
-        CXX_STANDARD_REQUIRED YES
-        CXX_EXTENSIONS NO
-    )
-    target_include_directories(word-alignment-test PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}
-        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
-        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
-    )
-    target_link_libraries(word-alignment-test PRIVATE moonshine)
-
-    add_executable(word-alignment-benchmark word-alignment-benchmark.cpp)
-    set_target_properties(word-alignment-benchmark PROPERTIES
-        CXX_STANDARD 20
-        CXX_STANDARD_REQUIRED YES
-        CXX_EXTENSIONS NO
-    )
-    target_include_directories(word-alignment-benchmark PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}
-        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
-        ${CMAKE_CURRENT_LIST_DIR}/ort-utils
-        ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
-        ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
-    )
-    target_link_libraries(word-alignment-benchmark PRIVATE moonshine)
 
     add_executable(intent-recognizer-test intent-recognizer-test.cpp intent-recognizer.cpp gemma-embedding-model.cpp)
     set_target_properties(intent-recognizer-test PROPERTIES
