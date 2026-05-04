@@ -86,6 +86,20 @@ class MicTranscriber:
         self.mic_stream.close()
         self.transcriber.close()
 
+    @property
+    def transcribe_flags(self) -> int:
+        """Flags currently applied to streamed ``update_transcription`` calls."""
+        return self.mic_stream.transcribe_flags
+
+    def set_transcribe_flags(self, flags: int) -> None:
+        """Update the per-update flags on the underlying mic stream.
+
+        Convenience wrapper around :meth:`Stream.set_transcribe_flags`.
+        Lets DialogFlow flip ``MOONSHINE_FLAG_SPELLING_MODE`` on only
+        while a ``SPELLED`` / ``DIGITS`` prompt is in progress.
+        """
+        self.mic_stream.set_transcribe_flags(flags)
+
     def add_listener(self, listener: Callable[[TranscriptEvent], None]) -> None:
         self.mic_stream.add_listener(listener)
 

@@ -274,7 +274,7 @@ _STOP_WORDS = frozenset({
 # ---------------------------------------------------------------------------
 
 _SPELL_OUT_LETTERS: Dict[str, str] = {
-    "a": "ay", "b": "bee", "c": "see", "d": "dee", "e": "ee",
+    "a": "a", "b": "bee", "c": "see", "d": "dee", "e": "ee",
     "f": "eff", "g": "gee", "h": "haitch", "i": "eye", "j": "jay",
     "k": "kay", "l": "el", "m": "em", "n": "en", "o": "oh",
     "p": "pee", "q": "queue", "r": "ar", "s": "ess", "t": "tee",

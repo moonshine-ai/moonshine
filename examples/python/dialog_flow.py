@@ -21,6 +21,8 @@ import sys
 import time
 from typing import Iterable
 
+from typing import Optional
+
 from moonshine_voice import (
     DialogFlow,
     IntentRecognizer,
@@ -30,8 +32,10 @@ from moonshine_voice import (
     TranscriptEventListener,
     get_embedding_model,
     get_model_for_language,
+    get_spelling_model_path,
     spell_out,
 )
+from moonshine_voice.transcriber import MOONSHINE_FLAG_SPELLING_MODE
 
 
 # ---------------------------------------------------------------------------
@@ -143,8 +147,29 @@ def run_live(args: argparse.Namespace) -> None:
         threshold=args.threshold,
     )
 
+    # Pre-fetch the alphanumeric spelling-CNN if one is published for
+    # this language; DialogFlow flips MOONSHINE_FLAG_SPELLING_MODE on
+    # only while the active prompt is in SPELLED / DIGITS mode (so
+    # password / code dictation gets the C++ spelling-fusion path
+    # without perturbing free-form recognition or trigger matching).
     print("Creating microphone transcriber...", file=sys.stderr)
-    mic = MicTranscriber(model_path=model_path, model_arch=model_arch)
+    spelling_model_path: Optional[str] = None
+    try:
+        spelling_model_path = get_spelling_model_path(args.language)
+    except Exception as e:
+        print(
+            f"Spelling model: lookup failed ({e!r}); SPELLED mode will "
+            "fall back to matcher-only classification.",
+            file=sys.stderr,
+        )
+    if spelling_model_path is not None:
+        print(f"Spelling model: loaded {spelling_model_path}.", file=sys.stderr)
+
+    mic = MicTranscriber(
+        model_path=model_path,
+        model_arch=model_arch,
+        spelling_model_path=spelling_model_path,
+    )
 
     tts = None
     if not args.no_tts:
@@ -157,6 +182,10 @@ def run_live(args: argparse.Namespace) -> None:
     def mute(should_mute: bool) -> None:
         # Stop the mic from recording our own speech while we're talking.
         mic._should_listen = not should_mute
+
+    def set_spelling_mode(active: bool) -> None:
+        """Toggle the C++ spelling-CNN fusion path on the live mic stream."""
+        mic.set_transcribe_flags(MOONSHINE_FLAG_SPELLING_MODE if active else 0)
 
     def speak(text: str) -> None:
         """Log every spoken prompt and (optionally) pass it through TTS."""
@@ -172,6 +201,10 @@ def run_live(args: argparse.Namespace) -> None:
         speak_fn=speak,
         intent_recognizer=intent_recognizer,
         mute_fn=mute,
+        spelling_mode_fn=(
+            set_spelling_mode if spelling_model_path is not None else None
+        ),
+        spell_feedback=True,
         debug=getattr(args, "debug", False),
     )
     runner.register_flow("set up wifi", setup_wifi)
