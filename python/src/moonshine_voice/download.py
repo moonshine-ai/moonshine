@@ -995,6 +995,11 @@ if __name__ == "__main__":
         help="Download intent recognition assets (embedding model)",
     )
     parser.add_argument(
+        "--stt",
+        action="store_true",
+        help="Download STT assets (transcription model)",
+    )
+    parser.add_argument(
         "--voice",
         type=str,
         default=None,
@@ -1015,20 +1020,25 @@ if __name__ == "__main__":
 
     dl_root: Optional[Path] = args.root
 
+    if not args.tts and not args.g2p and not args.intent and not args.stt:
+        print("Please specify at least one of the following: --tts, --g2p, --intent, --stt", file=sys.stderr)
+        parser.print_help()
+        sys.exit(1)
+
     if args.tts:
         root = download_tts_assets(
             args.language, voice=args.voice, cache_root=dl_root
         )
         print(f"TTS assets root (use as g2p_root): {root}", file=sys.stderr)
         print(root)
-    elif args.g2p:
+    if args.g2p:
         root = download_g2p_assets(args.language, cache_root=dl_root)
         print(f"G2P assets root (use as g2p_root): {root}", file=sys.stderr)
         print(root)
-    elif args.intent:
+    if args.intent:
         model_path, model_arch = get_embedding_model(cache_root=dl_root)
         print(f"Embedding model path: {model_path}", file=sys.stderr)
         print(model_path)
-    else:
+    if args.stt:
         get_model_for_language(args.language, args.model_arch, cache_root=dl_root)
         log_model_info(args.language, args.model_arch, cache_root=dl_root)

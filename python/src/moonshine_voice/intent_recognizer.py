@@ -59,7 +59,7 @@ class IntentRecognizer(TranscriptEventListener):
 
     def __init__(
         self,
-        model_path: str,
+        model_path: str | Path,
         model_arch: EmbeddingModelArch = EmbeddingModelArch.GEMMA_300M,
         model_variant: str = "fp32",
         threshold: float = 0.8,
@@ -89,7 +89,7 @@ class IntentRecognizer(TranscriptEventListener):
         self._setup_function_signatures()
 
         # Create the intent recognizer
-        model_path_bytes = model_path.encode("utf-8")
+        model_path_bytes = str(model_path).encode("utf-8")
         model_variant_bytes = model_variant.encode("utf-8") if model_variant else None
 
         handle = self._lib.moonshine_create_intent_recognizer(
