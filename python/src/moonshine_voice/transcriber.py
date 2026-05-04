@@ -423,6 +423,21 @@ class Stream:
         check_error(handle)
         self._handle = handle
 
+    @property
+    def transcribe_flags(self) -> int:
+        """Flags currently applied to implicit ``update_transcription`` calls."""
+        return self._transcribe_flags
+
+    def set_transcribe_flags(self, flags: int) -> None:
+        """Update the flags forwarded to implicit ``update_transcription`` calls.
+
+        Use this to dynamically toggle e.g.
+        ``MOONSHINE_FLAG_SPELLING_MODE`` mid-stream (DialogFlow flips it on
+        only for ``SPELLED`` / ``DIGITS`` prompts so the spelling-CNN
+        fusion doesn't perturb free-form recognition).
+        """
+        self._transcribe_flags = int(flags)
+
     def start(self):
         """Start the stream."""
         error = self._lib.moonshine_start_stream(

@@ -61,12 +61,18 @@ from moonshine_voice.alphanumeric_listener import (
     spoken_form,
 )
 from moonshine_voice.cached_embeddings import CachedEmbeddings
-from moonshine_voice.download import get_embedding_model, get_model_for_language
+from moonshine_voice.download import (
+    get_embedding_model,
+    get_model_for_language,
+    get_spelling_model_path,
+)
 from moonshine_voice.intent_recognizer import IntentRecognizer
 from moonshine_voice.mic_transcriber import MicTranscriber
 from moonshine_voice.transcriber import (
+    MOONSHINE_FLAG_SPELLING_MODE,
     Error,
     LineCompleted,
+    LineStarted,
     TranscriptEventListener,
 )
 from moonshine_voice.tts import TextToSpeech, _parse_options_cli
@@ -473,14 +479,58 @@ class DialogFlow(TranscriptEventListener):
         mute_fn: Optional callable ``(should_mute: bool) -> None`` invoked
             before and after each spoken prompt so callers can silence the
             microphone while the assistant is talking.
-        spell_feedback: If ``True``, every character recognised during a
-            ``SPELLED`` / ``DIGITS`` prompt is spoken back to the user
-            using :func:`spoken_form` (``"haitch"`` for ``"h"``,
-            ``"capital ay"`` for ``"A"``, ``"hash"`` for ``"#"``, etc.).
-            Matches the behaviour of ``AlphanumericListener(tts=…)`` but
-            routes through this runner's own ``speak_fn``/``tts`` so the
-            same mic-mute and logging apply.  Off by default so existing
-            callers without a TTS aren't surprised by audible output.
+        spell_feedback: If ``True`` (default), every character recognised
+            during a ``SPELLED`` / ``DIGITS`` prompt is spoken back to
+            the user using :func:`spoken_form` (``"haitch"`` for
+            ``"h"``, ``"capital ay"`` for ``"A"``, ``"hash"`` for
+            ``"#"``, etc.), and "delete" / "backspace" / "undo" /
+            "scratch that" commands are echoed as
+            ``"deleting <character>"`` so the user hears confirmation
+            that the right letter came off the end of the buffer.
+            Matches the behaviour of ``AlphanumericListener(tts=…)``
+            but routes through this runner's own
+            ``speak_fn``/``tts`` so the same mic-mute and logging
+            apply.  Pass ``spell_feedback=False`` to silence the
+            character-by-character echo (e.g. when no TTS is wired
+            up and audible output would just be log spam).
+        spelling_mode_fn: Optional callable
+            ``(active: bool) -> None`` invoked whenever the runner
+            enters or leaves a ``SPELLED`` / ``DIGITS`` prompt.  Wire
+            this to the underlying transcriber's
+            ``set_transcribe_flags`` to flip
+            ``MOONSHINE_FLAG_SPELLING_MODE`` on only while spelled
+            input is expected, so the C++ spelling-CNN fusion path is
+            used for password / code / digit dictation but doesn't
+            perturb free-form recognition or trigger-phrase matching.
+            Pairs with constructing the transcriber with a
+            ``spelling_model_path``; when no model is loaded the flag
+            is a no-op so leaving this ``None`` is also fine.
+        log_io: If ``True``, every utterance the runner receives from
+            the STT and every prompt it asks the TTS to speak is
+            logged to stderr in a clean ``user: …`` / ``assistant: …``
+            format.  Distinct from ``debug``: ``log_io`` is the
+            user-facing dialogue transcript (just inputs and
+            outputs), while ``debug`` is the verbose internal
+            stage-transition trace with timings.  Off by default so
+            existing callers that already format their own
+            transcript via ``speak_fn`` or a transcript listener
+            don't end up with duplicate lines; turn it on for a
+            quick inline trace when you don't care to wire up your
+            own logging.
+        ignore_stt_during_tts: If ``True`` (default), every utterance
+            that arrives while the runner is mid-prompt (i.e. the
+            TTS is actively speaking) is dropped before it can
+            advance the flow, match a global trigger, or fall
+            through to the intent recognizer.  This is a software
+            guard on top of the optional hardware ``mute_fn`` —
+            ``mute_fn`` minimises self-capture but on devices with
+            weak echo cancellation the STT can still latch onto
+            in-flight audio captured just before the mute, or onto
+            speaker bleed that the cancellation didn't fully
+            suppress.  Disable (``False``) only when you have
+            reliable echo cancellation *and* want barge-in: callers
+            still get the utterance via the regular
+            ``TranscriptEventListener`` path.
     """
 
     def __init__(
@@ -491,10 +541,13 @@ class DialogFlow(TranscriptEventListener):
         transcriber: Optional[Any] = None,
         speak_fn: Optional[Callable[[str], None]] = None,
         mute_fn: Optional[Callable[[bool], None]] = None,
+        spelling_mode_fn: Optional[Callable[[bool], None]] = None,
         phrase_matcher_factory: Optional[PhraseMatcherFactory] = None,
         cached_embeddings: Optional[CachedEmbeddings] = None,
         trigger_threshold: float = 0.7,
-        spell_feedback: bool = False,
+        spell_feedback: bool = True,
+        log_io: bool = False,
+        ignore_stt_during_tts: bool = True,
         debug: bool = False,
     ):
         self._tts = tts
@@ -502,8 +555,21 @@ class DialogFlow(TranscriptEventListener):
         self._transcriber = transcriber
         self._speak_fn = speak_fn
         self._mute_fn = mute_fn
+        self._spelling_mode_fn = spelling_mode_fn
+        self._spelling_mode_active = False
         self._trigger_threshold = float(trigger_threshold)
         self._spell_feedback = bool(spell_feedback)
+        self._log_io = bool(log_io)
+        self._ignore_stt_during_tts = bool(ignore_stt_during_tts)
+        self._speaking = False
+        # Transcript line IDs whose ``LineStarted`` event fired while
+        # the assistant was talking; populated in :meth:`on_line_started`
+        # and consumed in :meth:`on_line_completed` to drop self-capture
+        # without making the user wait for an arbitrary post-TTS grace
+        # window.  Protected by ``_lock`` since the listener thread that
+        # delivers transcript events is independent of the thread driving
+        # the flow.
+        self._suspect_line_ids: set = set()
         self._debug = bool(debug)
         self._log_start: Optional[float] = None
         self._log_last: Optional[float] = None
@@ -603,12 +669,64 @@ class DialogFlow(TranscriptEventListener):
 
     # -- TranscriptEventListener implementation -----------------------------
 
+    def on_line_started(self, event: LineStarted) -> None:
+        """Tag any transcript line that opens while we're talking.
+
+        Streaming ASRs commonly finalise a ``LineCompleted`` event
+        several hundred milliseconds *after* the audio that produced
+        it arrived, so a transcript started while the assistant was
+        speaking often only completes once ``_speak`` has already
+        returned.  Decide self-capture status at line-birth instead
+        of completion: if a line was opened during TTS playback we
+        record its ID here, then drop it on completion in
+        :meth:`on_line_completed` regardless of how long the ASR took
+        to finalise it.  Lines that open *after* TTS ends are accepted
+        with no added latency – the user can talk the moment the
+        assistant stops, no grace window required.
+
+        Only takes effect when ``ignore_stt_during_tts`` is on; when
+        it's off (true barge-in mode) we leave the set empty so every
+        line completes through to :meth:`process_utterance`.
+        """
+        if not self._ignore_stt_during_tts or not self._speaking:
+            return
+        line = getattr(event, "line", None)
+        if line is None:
+            return
+        line_id = getattr(line, "line_id", None)
+        if line_id is None:
+            return
+        with self._lock:
+            self._suspect_line_ids.add(line_id)
+        self._log(
+            f"on_line_started: tagging line id={line_id} as self-capture "
+            "(opened during TTS playback)"
+        )
+
     def on_line_completed(self, event: LineCompleted) -> None:
         if not event.line or not event.line.text:
             return
         utterance = event.line.text.strip()
         if not utterance:
             return
+        line_id = getattr(event.line, "line_id", None)
+        if line_id is not None:
+            with self._lock:
+                suspect = line_id in self._suspect_line_ids
+                if suspect:
+                    self._suspect_line_ids.discard(line_id)
+            if suspect:
+                self._log(
+                    f"on_line_completed: dropping line id={line_id} "
+                    f"utterance={_summarise(utterance)!r} (started during TTS)"
+                )
+                if self._log_io:
+                    print(
+                        f"user (ignored, self-capture): {utterance}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                return
         self.process_utterance(utterance)
 
     def on_error(self, event: Error) -> None:
@@ -634,6 +752,28 @@ class DialogFlow(TranscriptEventListener):
             f"process_utterance: begin utterance={_summarise(utterance)!r} "
             f"active={'yes' if self._active is not None else 'no'}"
         )
+        # Drop self-capture / TTS bleed-through.  On devices with weak
+        # echo cancellation the STT can hand us a transcript of our
+        # own speech (or of audio captured a beat before ``mute_fn``
+        # silenced the mic); routing that into the live flow would
+        # reliably trigger bogus retries, false confirmations, and
+        # spurious global triggers.  When ``ignore_stt_during_tts`` is
+        # on we discard the utterance with a debug log line so it can't
+        # advance the flow or match a global trigger.
+        if self._ignore_stt_during_tts and self._speaking:
+            self._log(
+                f"process_utterance: dropping {_summarise(utterance)!r} "
+                "(TTS in progress)"
+            )
+            if self._log_io:
+                print(
+                    f"user (ignored, TTS speaking): {utterance}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            return False
+        if self._log_io:
+            print(f"user: {utterance}", file=sys.stderr, flush=True)
         with self._lock:
             active = self._active
 
@@ -819,6 +959,7 @@ class DialogFlow(TranscriptEventListener):
                 active.current_prompt = prompt
                 active.retry_count = 0
                 active.alpha_session = self._alpha_session_for(prompt)
+                self._set_spelling_mode(self._spelling_mode_for_prompt(prompt))
                 text = getattr(prompt, "prompt", "")
                 if text:
                     self._speak(text)
@@ -868,11 +1009,39 @@ class DialogFlow(TranscriptEventListener):
             active.current_prompt = prompt
             active.retry_count = 0
             active.alpha_session = self._alpha_session_for(prompt)
+            self._set_spelling_mode(self._spelling_mode_for_prompt(prompt))
             text = getattr(prompt, "prompt", "")
             if text:
                 self._speak(text)
         else:
             self._advance(active, value=None)
+
+    def _set_spelling_mode(self, active: bool) -> None:
+        """Toggle ``MOONSHINE_FLAG_SPELLING_MODE`` on the underlying transcriber.
+
+        No-op when no ``spelling_mode_fn`` was provided or the state
+        already matches.  We never let an exception from the user's
+        callback abort the flow – the spelling fuser is an
+        accuracy-only enhancement, not correctness.
+        """
+        if self._spelling_mode_fn is None:
+            return
+        if bool(active) == self._spelling_mode_active:
+            return
+        try:
+            self._spelling_mode_fn(bool(active))
+        except Exception as e:
+            print(
+                f"DialogFlow: spelling_mode_fn({active!r}) failed: {e}",
+                file=sys.stderr,
+            )
+            return
+        self._spelling_mode_active = bool(active)
+        self._log(f"spelling_mode: {'on' if active else 'off'}")
+
+    def _spelling_mode_for_prompt(self, prompt: Prompt) -> bool:
+        """Whether ``prompt`` expects alphanumeric (spelled) input."""
+        return isinstance(prompt, Ask) and prompt.mode in (SPELLED, DIGITS)
 
     def _alpha_session_for(self, prompt: Prompt) -> Optional[_AlphaSession]:
         if not isinstance(prompt, Ask):
@@ -907,6 +1076,10 @@ class DialogFlow(TranscriptEventListener):
         with self._lock:
             if self._active is active:
                 self._active = None
+        # Leave the transcriber in its default (non-spelling) state so
+        # subsequent free-form recognition / trigger matching isn't
+        # perturbed by the spelling-CNN fuser.
+        self._set_spelling_mode(False)
 
     def cancel_active(self) -> bool:
         """Abandon any currently running flow.  Returns ``True`` if there was one."""
@@ -920,6 +1093,34 @@ class DialogFlow(TranscriptEventListener):
             pass
         self._finish_flow(active)
         return True
+
+    def say(self, text: str) -> None:
+        """Speak ``text`` through the configured TTS, outside any flow.
+
+        Public counterpart to flows yielding ``d.say(...)``: lets the
+        application deliver welcome messages, status announcements,
+        error notifications, and the like without first registering a
+        single-shot flow.  Safe to call concurrently with an active
+        flow – it just routes through the same ``_speak`` path the
+        runner uses for in-flow prompts, so:
+
+        * ``mute_fn`` is invoked around playback (if configured) so
+          the mic is silenced while the assistant talks.
+        * ``_speaking`` is set across playback and the
+          ``on_line_started`` hook tags any STT lines that open during
+          this window as self-capture, so they get dropped on
+          completion (when ``ignore_stt_during_tts`` is on).
+        * ``log_io`` emits a clean ``assistant: ...`` line, matching
+          the format used for in-flow speech.
+
+        Blocks until playback finishes – mirrors the behaviour of an
+        in-flow ``Say``.  Empty / ``None`` ``text`` is a no-op.  When
+        no ``speak_fn`` or ``tts`` is configured the text is printed
+        to stdout (same fallback as in-flow ``Say``).
+        """
+        if not text:
+            return
+        self._speak(text)
 
     # -- global handler invocation ------------------------------------------
 
@@ -953,6 +1154,7 @@ class DialogFlow(TranscriptEventListener):
             self._speak(prompt.text)
         elif isinstance(prompt, (Ask, Confirm, Choose)) and active is not None:
             active.current_prompt = prompt
+            self._set_spelling_mode(self._spelling_mode_for_prompt(prompt))
             text = getattr(prompt, "prompt", "")
             if text:
                 self._speak(text)
@@ -1025,9 +1227,12 @@ class DialogFlow(TranscriptEventListener):
                 session.buffer.clear()
                 applied = True
             elif m.type is AlphanumericEventType.UNDO:
-                if session.buffer:
-                    session.buffer.pop()
+                removed: Optional[str] = (
+                    session.buffer.pop() if session.buffer else None
+                )
                 applied = True
+                if self._spell_feedback and removed is not None:
+                    self._speak_undo_feedback(removed)
             elif m.type is AlphanumericEventType.CHARACTER and m.character is not None:
                 session.buffer.append(m.character)
                 applied = True
@@ -1164,6 +1369,8 @@ class DialogFlow(TranscriptEventListener):
         if not text:
             return
         self._log(f"speak: begin text={_summarise(text)!r}")
+        if self._log_io:
+            print(f"assistant: {text}", file=sys.stderr, flush=True)
         muted = False
         if self._mute_fn is not None:
             try:
@@ -1173,6 +1380,12 @@ class DialogFlow(TranscriptEventListener):
             except Exception as e:
                 self._log(f"speak: mute_fn failed: {e!r}")
                 muted = False
+        # Flip the software-side speaking flag before we hand off to
+        # the TTS so any utterance that races in from the STT
+        # listener thread is dropped by ``process_utterance``.  The
+        # ``finally`` clears it even if the TTS raises so we don't
+        # wedge the runner deaf to subsequent input.
+        self._speaking = True
         try:
             if self._speak_fn is not None:
                 self._speak_fn(text)
@@ -1188,6 +1401,7 @@ class DialogFlow(TranscriptEventListener):
             else:
                 print(f"[DialogFlow say] {text}")
         finally:
+            self._speaking = False
             if muted and self._mute_fn is not None:
                 try:
                     self._mute_fn(False)
@@ -1207,6 +1421,24 @@ class DialogFlow(TranscriptEventListener):
         phrase = spoken_form(character)
         self._log(
             f"spell_feedback: say {phrase!r} for character {character!r}"
+        )
+        try:
+            self._speak(phrase)
+        except Exception as e:
+            self._log(f"spell_feedback: speak failed: {e!r}")
+
+    def _speak_undo_feedback(self, character: str) -> None:
+        """Speak ``"deleting <spoken_form(character)>"`` after an UNDO.
+
+        Invoked from :meth:`_interpret_alphanumeric` when a "delete" /
+        "backspace" / "undo" / "scratch that" command pops a character
+        off the in-progress buffer (and ``spell_feedback=True``).  No-op
+        when the buffer was already empty.  Failures are swallowed for
+        the same reason as :meth:`_speak_character_feedback`.
+        """
+        phrase = f"deleting {spoken_form(character)}"
+        self._log(
+            f"spell_feedback: say {phrase!r} for undo of {character!r}"
         )
         try:
             self._speak(phrase)
@@ -1261,23 +1493,53 @@ class _PartialInput(Exception):
     dictation)."""
 
 
-def spell_out(s: str) -> List[str]:
-    """Return ``s`` as a list of TTS-friendly tokens, one per character.
+class _SpelledPhrase(str):
+    """Space-joined spoken-form phrase that also iterates token-by-token.
+
+    A ``str`` so ``f"I heard: {spell_out(password)}"`` interpolates as
+    the natural joined phrase (``"ess ee ay bee"``), but with
+    ``__iter__`` overridden to yield ``["ess", "ee", "ay", "bee"]``.
+    That keeps backwards-compat with the older list-returning
+    :func:`spell_out` API: a caller that wrote
+    ``" ".join(spell_out(password))`` still gets the joined phrase
+    back instead of the character-by-character ``"e s s   e e   a y
+    b e e"`` you'd get from plain ``str`` iteration.
+    """
+
+    __slots__ = ()
+
+    def __iter__(self):  # type: ignore[override]
+        if not self:
+            return iter(())
+        return iter(self.split(" "))
+
+
+def spell_out(s: str) -> _SpelledPhrase:
+    """Return ``s`` as a TTS-friendly spoken-form phrase.
 
     Each character is rendered as a phrase the TTS engine can pronounce
     unambiguously (letters use spelling-alphabet sounds like ``"haitch"``
     for ``"h"``, upper-case letters are prefixed with ``"capital "``,
-    digits become word form, common symbols use their spoken name).
-    The per-character mapping lives in :func:`spoken_form` in
-    ``alphanumeric_listener.py`` so the :class:`AlphanumericListener`'s
-    TTS repeat-back and this function can't drift apart.
+    digits become word form, common symbols use their spoken name) and
+    the per-character phrases are joined with a single space.  The
+    return value is a ``str`` subclass (:class:`_SpelledPhrase`) so it
+    drops cleanly into both an ``f"I heard: {spell_out(password)}"``
+    interpolation *and* a ``" ".join(spell_out(password))`` call —
+    both produce the same joined phrase.  The per-character mapping
+    lives in :func:`spoken_form` in ``alphanumeric_listener.py`` so
+    the :class:`AlphanumericListener`'s TTS repeat-back and this
+    function can't drift apart.
 
-    ``spell_out("Hi#1")`` →
-    ``["capital haitch", "eye", "hash", "one"]``.  Empty strings produce
-    ``[]``.  This is for *speaking* strings back at the user, not for
-    matching their input (that's :class:`AlphanumericMatcher`'s job).
+    ``spell_out("Hi#1")`` renders as ``"capital haitch eye hash
+    one"`` (and iterates as
+    ``["capital", "haitch", "eye", "hash", "one"]``).  Empty strings
+    produce ``""``.  This is for *speaking* strings back at the user,
+    not for matching their input (that's
+    :class:`AlphanumericMatcher`'s job); callers that need the
+    strict per-character list (e.g. for custom pacing between
+    tokens) can use ``[spoken_form(c) for c in s]`` directly.
     """
-    return [spoken_form(c) for c in s]
+    return _SpelledPhrase(" ".join(spoken_form(c) for c in s))
 
 
 def _summarise(text: str, max_len: int = 60) -> str:
@@ -1398,8 +1660,38 @@ if __name__ == "__main__":
         model_variant=args.quantization,
     )
 
+    # Pre-fetch the alphanumeric spelling-CNN if one is published for
+    # this language; DialogFlow flips MOONSHINE_FLAG_SPELLING_MODE on
+    # only while the active prompt is in SPELLED / DIGITS mode (so
+    # password / code dictation gets the C++ spelling-fusion path
+    # without perturbing free-form recognition or trigger matching).
     print("Creating microphone transcriber...", file=sys.stderr)
-    mic = MicTranscriber(model_path=_model_path, model_arch=_model_arch)
+    spelling_model_path: Optional[str] = None
+    try:
+        spelling_model_path = get_spelling_model_path(args.language)
+    except Exception as e:
+        print(
+            f"Spelling model: lookup failed ({e!r}); SPELLED mode will "
+            "fall back to matcher-only classification.",
+            file=sys.stderr,
+        )
+    if spelling_model_path is not None:
+        print(
+            f"Spelling model: loaded {spelling_model_path}.",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"Spelling model: none published for language {args.language!r}; "
+            "SPELLED mode will fall back to matcher-only classification.",
+            file=sys.stderr,
+        )
+
+    mic = MicTranscriber(
+        model_path=_model_path,
+        model_arch=_model_arch,
+        spelling_model_path=spelling_model_path,
+    )
 
     tts: Optional[Any] = None
     if not args.no_tts:
@@ -1412,6 +1704,14 @@ if __name__ == "__main__":
     def mute(should_mute: bool) -> None:
         # Stop the mic from recording our own speech while we're talking.
         mic._should_listen = not should_mute
+
+    def set_spelling_mode(active: bool) -> None:
+        """Toggle the C++ spelling-CNN fusion path on the live mic stream.
+
+        Called by DialogFlow whenever it enters / leaves a SPELLED /
+        DIGITS prompt; a no-op when no spelling model was loaded.
+        """
+        mic.set_transcribe_flags(MOONSHINE_FLAG_SPELLING_MODE if active else 0)
 
     def speak(text: str) -> None:
         """Log every spoken prompt and (optionally) pass it through TTS."""
@@ -1435,6 +1735,9 @@ if __name__ == "__main__":
         speak_fn=speak,
         intent_recognizer=intent_recognizer,
         mute_fn=mute,
+        spelling_mode_fn=(
+            set_spelling_mode if spelling_model_path is not None else None
+        ),
         spell_feedback=True,
         debug=args.debug,
     )
