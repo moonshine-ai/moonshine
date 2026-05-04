@@ -86,7 +86,7 @@ class Transcriber:
 
     def __init__(
         self,
-        model_path: str,
+        model_path: str | Path,
         model_arch: ModelArch = ModelArch.BASE,
         update_interval: float = 0.5,
         options: dict = None,
@@ -124,7 +124,7 @@ class Transcriber:
             merged_options.setdefault("spelling_model_path", spelling_model_path)
 
         # Load the transcriber
-        model_path_bytes = model_path.encode("utf-8")
+        model_path_bytes = str(model_path).encode("utf-8")
         if merged_options:
             options_count = len(merged_options)
             # Create a ctypes array from the options list
