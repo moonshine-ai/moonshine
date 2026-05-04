@@ -26,9 +26,18 @@ class MicTranscriber:
         channels: int = 1,
         blocksize: int = 1024,
         options: dict = None,
+        spelling_model_path: str = None,
+        transcribe_flags: int = 0,
     ):
+        # Pass-through convenience: callers that only want spelling-mode
+        # don't need to construct an ``options`` dict themselves.
+        if spelling_model_path is not None:
+            options = dict(options) if options else {}
+            options.setdefault("spelling_model_path", spelling_model_path)
         self.transcriber = Transcriber(model_path, model_arch, options=options)
-        self.mic_stream = self.transcriber.create_stream(update_interval)
+        self.mic_stream = self.transcriber.create_stream(
+            update_interval, transcribe_flags=transcribe_flags,
+        )
         self._should_listen = False
         self._sd_stream = None
         self._device = device
@@ -77,6 +86,20 @@ class MicTranscriber:
         self.mic_stream.close()
         self.transcriber.close()
 
+    @property
+    def transcribe_flags(self) -> int:
+        """Flags currently applied to streamed ``update_transcription`` calls."""
+        return self.mic_stream.transcribe_flags
+
+    def set_transcribe_flags(self, flags: int) -> None:
+        """Update the per-update flags on the underlying mic stream.
+
+        Convenience wrapper around :meth:`Stream.set_transcribe_flags`.
+        Lets DialogFlow flip ``MOONSHINE_FLAG_SPELLING_MODE`` on only
+        while a ``SPELLED`` / ``DIGITS`` prompt is in progress.
+        """
+        self.mic_stream.set_transcribe_flags(flags)
+
     def add_listener(self, listener: Callable[[TranscriptEvent], None]) -> None:
         self.mic_stream.add_listener(listener)
 
@@ -85,6 +108,18 @@ class MicTranscriber:
 
     def remove_all_listeners(self):
         self.mic_stream.remove_all_listeners()
+
+    def push_listener(self, listener: Callable[[TranscriptEvent], None]) -> None:
+        """Push a temporary listener, saving the current listeners on a stack."""
+        self.mic_stream.push_listener(listener)
+
+    def pop_listener(self) -> None:
+        """Restore the listeners that were active before the last push."""
+        self.mic_stream.pop_listener()
+
+    def pop_all_listeners(self) -> None:
+        """Unwind the entire listener stack, restoring the original listeners."""
+        self.mic_stream.pop_all_listeners()
 
 
 if __name__ == "__main__":

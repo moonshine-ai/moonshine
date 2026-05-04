@@ -65,11 +65,23 @@ class Error:
     line: Optional[TranscriptLine] = None
 
 
+# Module-level mirror of the Transcriber class attributes so callers can
+# write ``from moonshine_voice.transcriber import MOONSHINE_FLAG_SPELLING_MODE``
+# without poking at the class. The class attributes below stay for
+# backwards-compat with existing callers that read them as
+# ``Transcriber.MOONSHINE_FLAG_SPELLING_MODE``.
+MOONSHINE_HEADER_VERSION = 20000
+MOONSHINE_FLAG_FORCE_UPDATE = 1 << 0
+# See ``MOONSHINE_FLAG_SPELLING_MODE`` in core/moonshine-c-api.h.
+MOONSHINE_FLAG_SPELLING_MODE = 1 << 1
+
+
 class Transcriber:
     """Main transcriber class for Moonshine Voice."""
 
-    MOONSHINE_HEADER_VERSION = 20000
-    MOONSHINE_FLAG_FORCE_UPDATE = 1 << 0
+    MOONSHINE_HEADER_VERSION = MOONSHINE_HEADER_VERSION
+    MOONSHINE_FLAG_FORCE_UPDATE = MOONSHINE_FLAG_FORCE_UPDATE
+    MOONSHINE_FLAG_SPELLING_MODE = MOONSHINE_FLAG_SPELLING_MODE
 
     def __init__(
         self,
@@ -77,13 +89,24 @@ class Transcriber:
         model_arch: ModelArch = ModelArch.BASE,
         update_interval: float = 0.5,
         options: dict = None,
+        spelling_model_path: Optional[str] = None,
     ):
         """
         Initialize a transcriber.
 
         Args:
-            model_path: Path to the directory containing model files
-            model_arch: Model architecture to use
+            model_path: Path to the directory containing model files.
+            model_arch: Model architecture to use.
+            update_interval: Default update interval (seconds) used by the
+              streaming convenience APIs.
+            options: Optional dict of advanced C API options (see
+              ``parse_transcriber_options`` in core/moonshine-c-api.cpp).
+            spelling_model_path: Optional path to a ``spelling_cnn.ort``
+              file. When provided, the transcriber will run alphanumeric
+              fusion on completed lines whenever
+              ``MOONSHINE_FLAG_SPELLING_MODE`` is passed to a transcribe
+              call. Equivalent to setting the C option
+              ``"spelling_model_path"`` directly.
         """
         self._lib_wrapper = _MoonshineLib()
         self._lib = self._lib_wrapper.lib
@@ -93,17 +116,23 @@ class Transcriber:
         self._update_interval = update_interval if update_interval is not None else 0.5
         self._default_stream = None
 
+        merged_options = dict(options) if options else {}
+        # Surface the spelling-model kwarg as a C API option string so
+        # callers can also pass it through ``options=`` if they prefer.
+        if spelling_model_path is not None:
+            merged_options.setdefault("spelling_model_path", spelling_model_path)
+
         # Load the transcriber
         model_path_bytes = model_path.encode("utf-8")
-        if options is not None:
-            options_count = len(options)
+        if merged_options:
+            options_count = len(merged_options)
             # Create a ctypes array from the options list
             options_array = (TranscriberOptionC * options_count)(
                 *[
                     TranscriberOptionC(
                         name=name.encode("utf-8"), value=str(value).encode("utf-8")
                     )
-                    for name, value in options.items()
+                    for name, value in merged_options.items()
                 ]
             )
         else:
@@ -236,20 +265,31 @@ class Transcriber:
         """Get the version of the loaded Moonshine library."""
         return self._lib.moonshine_get_version()
 
-    def create_stream(self, update_interval: float = None, flags: int = 0) -> "Stream":
+    def create_stream(
+        self,
+        update_interval: float = None,
+        flags: int = 0,
+        transcribe_flags: int = 0,
+    ) -> "Stream":
         """
         Create a new stream for real-time transcription.
 
         Args:
-            flags: Flags for stream creation (default: 0)
-            update_interval: Interval in seconds between updates (default: 0.5)
+            flags: Flags for stream creation (default: 0).
+            update_interval: Interval in seconds between updates (default: 0.5).
+            transcribe_flags: Flags applied to every implicit
+                ``update_transcription`` call the stream issues from
+                ``add_audio`` / ``stop``.  Pass
+                ``MOONSHINE_FLAG_SPELLING_MODE`` to drive the C++
+                transcriber's spelling-CNN fusion path on live mic
+                audio (default: 0).
 
         Returns:
             Stream object for real-time transcription
         """
         if update_interval is None:
             update_interval = self._update_interval
-        return Stream(self, update_interval, flags)
+        return Stream(self, update_interval, flags, transcribe_flags=transcribe_flags)
 
     def get_default_stream(self) -> "Stream":
         """Get the default stream."""
@@ -284,6 +324,18 @@ class Transcriber:
     def remove_all_listeners(self) -> None:
         """Remove all listeners from the default stream."""
         self.get_default_stream().remove_all_listeners()
+
+    def push_listener(self, listener: Callable[[TranscriptEvent], None]) -> None:
+        """Push a temporary listener on the default stream."""
+        self.get_default_stream().push_listener(listener)
+
+    def pop_listener(self) -> None:
+        """Restore previous listeners on the default stream."""
+        self.get_default_stream().pop_listener()
+
+    def pop_all_listeners(self) -> None:
+        """Unwind the entire listener stack on the default stream."""
+        self.get_default_stream().pop_all_listeners()
 
 
 # Event listener interface
@@ -322,9 +374,21 @@ class Stream:
     """Stream for real-time transcription."""
 
     def __init__(
-        self, transcriber: Transcriber, update_interval: float = 0.5, flags: int = 0
+        self,
+        transcriber: Transcriber,
+        update_interval: float = 0.5,
+        flags: int = 0,
+        *,
+        transcribe_flags: int = 0,
     ):
-        """Initialize a stream."""
+        """Initialize a stream.
+
+        ``transcribe_flags`` are forwarded to every
+        ``update_transcription`` call the stream triggers implicitly
+        (from ``add_audio`` and ``stop``); pass
+        ``MOONSHINE_FLAG_SPELLING_MODE`` to enable the C++
+        spelling-CNN fusion path on streamed audio.
+        """
         self._transcriber = transcriber
         self._lib = transcriber._lib
         self._handle = None
@@ -332,9 +396,25 @@ class Stream:
         self._update_interval = update_interval
         self._stream_time = 0.0
         self._last_update_time = 0.0
+        self._transcribe_flags = int(transcribe_flags)
         handle = self._lib.moonshine_create_stream(transcriber._handle, flags)
         check_error(handle)
         self._handle = handle
+
+    @property
+    def transcribe_flags(self) -> int:
+        """Flags currently applied to implicit ``update_transcription`` calls."""
+        return self._transcribe_flags
+
+    def set_transcribe_flags(self, flags: int) -> None:
+        """Update the flags forwarded to implicit ``update_transcription`` calls.
+
+        Use this to dynamically toggle e.g.
+        ``MOONSHINE_FLAG_SPELLING_MODE`` mid-stream (DialogFlow flips it on
+        only for ``SPELLED`` / ``DIGITS`` prompts so the spelling-CNN
+        fusion doesn't perturb free-form recognition).
+        """
+        self._transcribe_flags = int(flags)
 
     def start(self):
         """Start the stream."""
@@ -351,7 +431,7 @@ class Stream:
         # get the final transcript and emit events.
         try:
             # transcribe() already calls _notify_from_transcript(), so we just call it
-            result = self.update_transcription(0)
+            result = self.update_transcription(self._transcribe_flags)
             return result
         except Exception as e:
             self._emit_error(e)
@@ -370,7 +450,7 @@ class Stream:
         check_error(error)
         self._stream_time += len(audio_data) / sample_rate
         if self._stream_time - self._last_update_time >= self._update_interval:
-            self.update_transcription(0)
+            self.update_transcription(self._transcribe_flags)
             self._last_update_time = self._stream_time
 
     def update_transcription(self, flags: int = 0) -> Transcript:
@@ -407,6 +487,33 @@ class Stream:
     def remove_all_listeners(self) -> None:
         """Remove all event listeners from the stream."""
         self._listeners.clear()
+
+    def push_listener(self, listener: Callable[[TranscriptEvent], None]) -> None:
+        """Push a temporary listener, saving the current listeners on a stack.
+
+        While the pushed listener is active, only it receives events.
+        Call :meth:`pop_listener` to restore the previous set.
+        """
+        if not hasattr(self, "_listener_stack"):
+            self._listener_stack: List[List[Callable[[TranscriptEvent], None]]] = []
+        self._listener_stack.append(list(self._listeners))
+        self._listeners.clear()
+        self._listeners.append(listener)
+
+    def pop_listener(self) -> None:
+        """Restore the listeners that were active before the last :meth:`push_listener`."""
+        if not hasattr(self, "_listener_stack") or not self._listener_stack:
+            return
+        self._listeners.clear()
+        self._listeners.extend(self._listener_stack.pop())
+
+    def pop_all_listeners(self) -> None:
+        """Unwind the entire listener stack, restoring the original listeners."""
+        if not hasattr(self, "_listener_stack") or not self._listener_stack:
+            return
+        self._listeners.clear()
+        self._listeners.extend(self._listener_stack[0])
+        self._listener_stack.clear()
 
     def _notify_from_transcript(self, transcript: Transcript) -> None:
         """Emit events based on transcript line properties."""

@@ -43,3 +43,10 @@ Package.resolved
 /moonshine-eval-detailed-results.xlsx
 /datasets/
 .venv/
+out.wav
+/scripts/data/
+output.wav
+text-to-speech
+transcriber
+build-*/
+/eval-results.txt

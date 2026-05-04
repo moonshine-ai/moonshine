@@ -7,9 +7,9 @@ recognize intents from transcribed speech.
 
 import ctypes
 from dataclasses import dataclass
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, List, Optional
 
-from moonshine_voice.moonshine_api import _MoonshineLib
+from moonshine_voice.moonshine_api import MoonshineIntentMatchC, _MoonshineLib
 from moonshine_voice.errors import MoonshineError, check_error
 from moonshine_voice.transcriber import (
     TranscriptEventListener,
@@ -20,26 +20,22 @@ from moonshine_voice.download import EmbeddingModelArch
 
 
 # Callback type for intent handlers
-# Signature: (trigger_phrase: str, utterance: str, similarity: float) -> None
+# Signature: (canonical_phrase: str, utterance: str, similarity: float) -> None
 IntentHandler = Callable[[str, str, float], None]
-
-# C callback function type
-_INTENT_CALLBACK = ctypes.CFUNCTYPE(
-    None,
-    ctypes.c_void_p,  # user_data
-    ctypes.c_char_p,  # trigger_phrase
-    ctypes.c_char_p,  # utterance
-    ctypes.c_float,  # similarity
-)
 
 
 @dataclass
 class IntentMatch:
     """Represents a matched intent."""
 
-    trigger_phrase: str
+    canonical_phrase: str
     utterance: str
     similarity: float
+
+    @property
+    def trigger_phrase(self) -> str:
+        """Alias for ``canonical_phrase`` (backward compatibility)."""
+        return self.canonical_phrase
 
 
 class IntentRecognizer(TranscriptEventListener):
@@ -51,13 +47,13 @@ class IntentRecognizer(TranscriptEventListener):
 
     Example standalone usage:
         >>> recognizer = IntentRecognizer("path/to/embedding-model")
-        >>> recognizer.register_intent("turn on the lights", lambda t, u, s: print(f"Lights on! ({s:.2f})"))
+        >>> recognizer.register_intent("turn on the lights", lambda c, u, s: print(f"Lights on! ({s:.2f})"))
         >>> recognizer.process_utterance("switch on the lights")
         Lights on! (0.92)
 
     Example as TranscriptEventListener:
         >>> recognizer = IntentRecognizer("path/to/embedding-model")
-        >>> recognizer.register_intent("turn on the lights", lambda t, u, s: print(f"Lights on!"))
+        >>> recognizer.register_intent("turn on the lights", lambda c, u, s: print(f"Lights on!"))
         >>> transcriber.add_listener(recognizer)  # Now intents are recognized automatically
     """
 
@@ -66,7 +62,7 @@ class IntentRecognizer(TranscriptEventListener):
         model_path: str,
         model_arch: EmbeddingModelArch = EmbeddingModelArch.GEMMA_300M,
         model_variant: str = "fp32",
-        threshold: float = 0.7,
+        threshold: float = 0.8,
     ):
         """
         Initialize an intent recognizer.
@@ -78,15 +74,18 @@ class IntentRecognizer(TranscriptEventListener):
                        Currently only GEMMA_300M is supported.
             model_variant: Model variant to load: "fp32", "fp16", "q8", "q4",
                           or "q4f16". Default is "q4" for efficiency.
-            threshold: The minimum similarity threshold to trigger an intent
-                      (default 0.7, range 0.0-1.0).
+            threshold: The minimum similarity threshold used by process_utterance
+                      and by get_closest_intents when no per-call threshold is
+                      passed (default 0.8, range 0.0-1.0). Filtering is applied in
+                      the native ``moonshine_get_closest_intents`` call, not at
+                      construction.
         """
         self._lib_wrapper = _MoonshineLib()
         self._lib = self._lib_wrapper.lib
         self._handle = None
         self._handlers: Dict[str, IntentHandler] = {}
-        self._c_callbacks: Dict[str, _INTENT_CALLBACK] = {}
         self._on_intent_callback: Optional[Callable[[IntentMatch], None]] = None
+        self._threshold = threshold
         self._setup_function_signatures()
 
         # Create the intent recognizer
@@ -97,7 +96,6 @@ class IntentRecognizer(TranscriptEventListener):
             model_path_bytes,
             model_arch.value,
             model_variant_bytes,
-            threshold,
         )
 
         if handle < 0:
@@ -117,7 +115,6 @@ class IntentRecognizer(TranscriptEventListener):
             ctypes.c_char_p,  # model_path
             ctypes.c_uint32,  # model_arch
             ctypes.c_char_p,  # model_variant
-            ctypes.c_float,  # threshold
         ]
 
         # Free intent recognizer
@@ -128,35 +125,33 @@ class IntentRecognizer(TranscriptEventListener):
         lib.moonshine_register_intent.restype = ctypes.c_int32
         lib.moonshine_register_intent.argtypes = [
             ctypes.c_int32,  # intent_recognizer_handle
-            ctypes.c_char_p,  # trigger_phrase
-            _INTENT_CALLBACK,  # callback
-            ctypes.c_void_p,  # user_data
+            ctypes.c_char_p,  # canonical_phrase
+            ctypes.POINTER(ctypes.c_float),  # embedding (nullable)
+            ctypes.c_uint64,  # embedding_size
+            ctypes.c_int32,  # priority
         ]
 
         # Unregister intent
         lib.moonshine_unregister_intent.restype = ctypes.c_int32
         lib.moonshine_unregister_intent.argtypes = [
             ctypes.c_int32,  # intent_recognizer_handle
-            ctypes.c_char_p,  # trigger_phrase
+            ctypes.c_char_p,  # canonical_phrase
         ]
 
-        # Process utterance
-        lib.moonshine_process_utterance.restype = ctypes.c_int32
-        lib.moonshine_process_utterance.argtypes = [
-            ctypes.c_int32,  # intent_recognizer_handle
-            ctypes.c_char_p,  # utterance
+        lib.moonshine_get_closest_intents.restype = ctypes.c_int32
+        lib.moonshine_get_closest_intents.argtypes = [
+            ctypes.c_int32,
+            ctypes.c_char_p,
+            ctypes.c_float,
+            ctypes.POINTER(ctypes.POINTER(MoonshineIntentMatchC)),
+            ctypes.POINTER(ctypes.c_uint64),
         ]
 
-        # Set threshold
-        lib.moonshine_set_intent_threshold.restype = ctypes.c_int32
-        lib.moonshine_set_intent_threshold.argtypes = [
-            ctypes.c_int32,  # intent_recognizer_handle
-            ctypes.c_float,  # threshold
+        lib.moonshine_free_intent_matches.restype = None
+        lib.moonshine_free_intent_matches.argtypes = [
+            ctypes.POINTER(MoonshineIntentMatchC),
+            ctypes.c_uint64,
         ]
-
-        # Get threshold
-        lib.moonshine_get_intent_threshold.restype = ctypes.c_float
-        lib.moonshine_get_intent_threshold.argtypes = [ctypes.c_int32]
 
         # Get intent count
         lib.moonshine_get_intent_count.restype = ctypes.c_int32
@@ -165,6 +160,32 @@ class IntentRecognizer(TranscriptEventListener):
         # Clear intents
         lib.moonshine_clear_intents.restype = ctypes.c_int32
         lib.moonshine_clear_intents.argtypes = [ctypes.c_int32]
+
+        # Calculate intent embedding
+        lib.moonshine_calculate_intent_embedding.restype = ctypes.c_int32
+        lib.moonshine_calculate_intent_embedding.argtypes = [
+            ctypes.c_int32,  # intent_recognizer_handle
+            ctypes.c_char_p,  # sentence
+            ctypes.POINTER(ctypes.POINTER(ctypes.c_float)),  # out_embedding
+            ctypes.POINTER(ctypes.c_uint64),  # out_embedding_size
+            ctypes.c_char_p,  # model_name (nullable)
+        ]
+
+        # Free intent embedding
+        lib.moonshine_free_intent_embedding.restype = None
+        lib.moonshine_free_intent_embedding.argtypes = [
+            ctypes.POINTER(ctypes.c_float),
+        ]
+
+        # Calculate embedding distance (cosine similarity)
+        lib.moonshine_calculate_embedding_distance.restype = ctypes.c_int32
+        lib.moonshine_calculate_embedding_distance.argtypes = [
+            ctypes.c_int32,  # intent_recognizer_handle
+            ctypes.POINTER(ctypes.c_float),  # embedding_a
+            ctypes.POINTER(ctypes.c_float),  # embedding_b
+            ctypes.c_uint64,  # embedding_size
+            ctypes.POINTER(ctypes.c_float),  # out_similarity
+        ]
 
     def __enter__(self):
         """Context manager entry."""
@@ -180,53 +201,51 @@ class IntentRecognizer(TranscriptEventListener):
             self._lib.moonshine_free_intent_recognizer(self._handle)
             self._handle = None
             self._handlers.clear()
-            self._c_callbacks.clear()
 
     def __del__(self):
         """Cleanup on deletion."""
         if hasattr(self, "_handle"):
             self.close()
 
-    def register_intent(self, trigger_phrase: str, handler: IntentHandler) -> None:
+    def register_intent(
+        self,
+        trigger_phrase: str,
+        handler: Optional[IntentHandler] = None,
+        *,
+        embedding: Optional[List[float]] = None,
+        priority: int = 0,
+    ) -> None:
         """
-        Register an intent with a trigger phrase and handler.
-
-        When an utterance is processed that is similar enough to the trigger
-        phrase (above the threshold), the handler will be invoked.
+        Register an intent with a canonical phrase.
 
         Args:
-            trigger_phrase: The phrase that triggers this intent.
-            handler: A callable that takes (trigger_phrase, utterance, similarity)
-                    and handles the recognized intent.
+            trigger_phrase: The canonical phrase for this intent.
+            handler: Optional callable ``(canonical_phrase, utterance, similarity) -> None``
+                invoked by :meth:`process_utterance` for the best match.
+            embedding: Optional pre-computed embedding vector. When *None* the
+                native library computes the embedding from *trigger_phrase*.
+            priority: Higher-priority intents rank above lower-priority ones in
+                :meth:`get_closest_intents`, even when their similarity score
+                is lower. Defaults to ``0``.
         """
         if self._handle is None:
             raise MoonshineError("Intent recognizer is not initialized")
 
-        # Store the Python handler
-        self._handlers[trigger_phrase] = handler
-
-        # Create a C callback that invokes the Python handler
-        def c_callback(user_data, c_trigger, c_utterance, similarity):
-            trigger = c_trigger.decode("utf-8") if c_trigger else ""
-            utterance = c_utterance.decode("utf-8") if c_utterance else ""
-            if trigger in self._handlers:
-                self._handlers[trigger](trigger, utterance, similarity)
-            # Also call the general on_intent callback if set
-            if self._on_intent_callback:
-                match = IntentMatch(
-                    trigger_phrase=trigger,
-                    utterance=utterance,
-                    similarity=similarity,
-                )
-                self._on_intent_callback(match)
-
-        # Keep a reference to prevent garbage collection
-        c_callback_func = _INTENT_CALLBACK(c_callback)
-        self._c_callbacks[trigger_phrase] = c_callback_func
+        if handler is not None:
+            self._handlers[trigger_phrase] = handler
 
         trigger_bytes = trigger_phrase.encode("utf-8")
+
+        if embedding is not None:
+            c_arr = (ctypes.c_float * len(embedding))(*embedding)
+            c_ptr = ctypes.cast(c_arr, ctypes.POINTER(ctypes.c_float))
+            c_size = ctypes.c_uint64(len(embedding))
+        else:
+            c_ptr = None
+            c_size = ctypes.c_uint64(0)
+
         error = self._lib.moonshine_register_intent(
-            self._handle, trigger_bytes, c_callback_func, None
+            self._handle, trigger_bytes, c_ptr, c_size, ctypes.c_int32(priority)
         )
         check_error(error)
 
@@ -248,9 +267,65 @@ class IntentRecognizer(TranscriptEventListener):
 
         if result == 0:
             self._handlers.pop(trigger_phrase, None)
-            self._c_callbacks.pop(trigger_phrase, None)
             return True
         return False
+
+    def get_closest_intents(
+        self,
+        utterance: str,
+        tolerance_threshold: Optional[float] = None,
+    ) -> List[IntentMatch]:
+        """
+        Rank registered intents against ``utterance`` synchronously.
+
+        Returns up to six matches at or above ``tolerance_threshold``, sorted by
+        descending similarity. Pass ``None`` for ``tolerance_threshold`` to use
+        this recognizer's ``threshold`` property.
+
+        The returned list is owned by Python (not backed by native memory).
+        """
+        if self._handle is None:
+            raise MoonshineError("Intent recognizer is not initialized")
+
+        thresh = (
+            float(tolerance_threshold)
+            if tolerance_threshold is not None
+            else self._threshold
+        )
+        utterance_bytes = utterance.encode("utf-8")
+        matches_ptr = ctypes.POINTER(MoonshineIntentMatchC)()
+        count = ctypes.c_uint64(0)
+        err = self._lib.moonshine_get_closest_intents(
+            self._handle,
+            utterance_bytes,
+            ctypes.c_float(thresh),
+            ctypes.byref(matches_ptr),
+            ctypes.byref(count),
+        )
+        if err != 0:
+            check_error(err)
+
+        n = int(count.value)
+        out: List[IntentMatch] = []
+        try:
+            for i in range(n):
+                row = matches_ptr[i]
+                phrase = (
+                    row.canonical_phrase.decode("utf-8")
+                    if row.canonical_phrase
+                    else ""
+                )
+                out.append(
+                    IntentMatch(
+                        canonical_phrase=phrase,
+                        utterance=utterance,
+                        similarity=float(row.similarity),
+                    )
+                )
+        finally:
+            self._lib.moonshine_free_intent_matches(matches_ptr, count.value)
+
+        return out
 
     def process_utterance(self, utterance: str) -> bool:
         """
@@ -265,28 +340,28 @@ class IntentRecognizer(TranscriptEventListener):
         if self._handle is None:
             raise MoonshineError("Intent recognizer is not initialized")
 
-        utterance_bytes = utterance.encode("utf-8")
-        result = self._lib.moonshine_process_utterance(self._handle, utterance_bytes)
+        matches = self.get_closest_intents(utterance, self._threshold)
+        if not matches:
+            return False
 
-        if result < 0:
-            check_error(result)
+        top = matches[0]
+        canonical = top.canonical_phrase
+        if canonical in self._handlers:
+            self._handlers[canonical](canonical, utterance, top.similarity)
+        if self._on_intent_callback:
+            self._on_intent_callback(top)
 
-        return result == 1
+        return True
 
     @property
     def threshold(self) -> float:
-        """Get the current similarity threshold."""
-        if self._handle is None:
-            raise MoonshineError("Intent recognizer is not initialized")
-        return self._lib.moonshine_get_intent_threshold(self._handle)
+        """Minimum similarity used by ``process_utterance`` / default for ``get_closest_intents``."""
+        return self._threshold
 
     @threshold.setter
     def threshold(self, value: float) -> None:
-        """Set the similarity threshold."""
-        if self._handle is None:
-            raise MoonshineError("Intent recognizer is not initialized")
-        error = self._lib.moonshine_set_intent_threshold(self._handle, value)
-        check_error(error)
+        """Set the default similarity threshold (Python-side; passed per call to native code)."""
+        self._threshold = float(value)
 
     @property
     def intent_count(self) -> int:
@@ -305,7 +380,75 @@ class IntentRecognizer(TranscriptEventListener):
         error = self._lib.moonshine_clear_intents(self._handle)
         check_error(error)
         self._handlers.clear()
-        self._c_callbacks.clear()
+
+    def calculate_embedding(
+        self, sentence: str, *, model_name: Optional[str] = None
+    ) -> List[float]:
+        """
+        Calculate the embedding vector for a sentence.
+
+        This is useful for pre-computing embeddings that can later be passed to
+        :meth:`register_intent` via the *embedding* parameter.
+
+        Args:
+            sentence: The input text to embed.
+            model_name: Reserved for future use; currently ignored by the native
+                library. Pass *None*.
+
+        Returns:
+            A list of floats representing the embedding vector.
+        """
+        if self._handle is None:
+            raise MoonshineError("Intent recognizer is not initialized")
+
+        out_ptr = ctypes.POINTER(ctypes.c_float)()
+        out_size = ctypes.c_uint64(0)
+        model_bytes = model_name.encode("utf-8") if model_name else None
+        error = self._lib.moonshine_calculate_intent_embedding(
+            self._handle,
+            sentence.encode("utf-8"),
+            ctypes.byref(out_ptr),
+            ctypes.byref(out_size),
+            model_bytes,
+        )
+        check_error(error)
+        n = int(out_size.value)
+        result = [float(out_ptr[i]) for i in range(n)]
+        self._lib.moonshine_free_intent_embedding(out_ptr)
+        return result
+
+    def distance(
+        self, embedding_a: List[float], embedding_b: List[float]
+    ) -> float:
+        """
+        Compute the cosine similarity between two embedding vectors.
+
+        Args:
+            embedding_a: The first embedding vector.
+            embedding_b: The second embedding vector. Must be the same length
+                as *embedding_a*.
+
+        Returns:
+            Cosine similarity in the range [-1, 1].  1 means identical,
+            0 means orthogonal, -1 means opposite.
+        """
+        if self._handle is None:
+            raise MoonshineError("Intent recognizer is not initialized")
+        if len(embedding_a) != len(embedding_b):
+            raise ValueError(
+                f"Embedding sizes differ: {len(embedding_a)} vs {len(embedding_b)}"
+            )
+
+        n = len(embedding_a)
+        arr_a = (ctypes.c_float * n)(*embedding_a)
+        arr_b = (ctypes.c_float * n)(*embedding_b)
+        out = ctypes.c_float(0.0)
+
+        error = self._lib.moonshine_calculate_embedding_distance(
+            self._handle, arr_a, arr_b, ctypes.c_uint64(n), ctypes.byref(out)
+        )
+        check_error(error)
+        return float(out.value)
 
     def set_on_intent(self, callback: Optional[Callable[[IntentMatch], None]]) -> None:
         """
@@ -385,8 +528,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--threshold",
         type=float,
-        default=0.6,
-        help="Similarity threshold for intent matching (default: 0.6)",
+        default=0.8,
+        help="Similarity threshold for intent matching (default: 0.8)",
     )
     parser.add_argument(
         "--intents",

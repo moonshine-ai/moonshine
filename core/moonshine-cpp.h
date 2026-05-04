@@ -56,6 +56,9 @@ namespace moonshine {
 class Transcriber;
 class Stream;
 class TranscriptEventListener;
+class TextToSpeech;
+class GraphemeToPhonemizer;
+class IntentRecognizer;
 
 /* ------------------------------ ENUMS -------------------------------- */
 
@@ -67,6 +70,11 @@ enum class ModelArch {
   BASE_STREAMING = MOONSHINE_MODEL_ARCH_BASE_STREAMING,
   SMALL_STREAMING = MOONSHINE_MODEL_ARCH_SMALL_STREAMING,
   MEDIUM_STREAMING = MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING,
+};
+
+/// Embedding model architectures for intent recognition (C API constants).
+enum class EmbeddingModelArch : uint32_t {
+  GEMMA_300M = MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M,
 };
 
 /* --------------------------- DATA STRUCTURES ----------------------------- */
@@ -337,6 +345,11 @@ class Stream {
  public:
   /// Flags for transcription operations
   static const uint32_t FLAG_FORCE_UPDATE = MOONSHINE_FLAG_FORCE_UPDATE;
+  /// When passed to ``updateTranscription``, causes completed lines to
+  /// be replaced with the resolved spelling-fusion character. Has no
+  /// effect unless the underlying transcriber was built with a
+  /// spelling model. See ``MOONSHINE_FLAG_SPELLING_MODE`` for details.
+  static const uint32_t FLAG_SPELLING_MODE = MOONSHINE_FLAG_SPELLING_MODE;
 
   /// Create a stream (internal use)
   Stream(Transcriber *transcriber, double updateInterval = 0.5,
@@ -425,6 +438,8 @@ class Transcriber {
  public:
   /// Flags for transcription operations
   static const uint32_t FLAG_FORCE_UPDATE = MOONSHINE_FLAG_FORCE_UPDATE;
+  /// See ``Stream::FLAG_SPELLING_MODE``.
+  static const uint32_t FLAG_SPELLING_MODE = MOONSHINE_FLAG_SPELLING_MODE;
 
   /// Initialize a transcriber from model files on disk
   /// @param modelPath Path to the directory containing model files
@@ -434,6 +449,33 @@ class Transcriber {
   /// @throws MoonshineException if the transcriber cannot be loaded
   Transcriber(const std::string &modelPath, ModelArch modelArch,
               double updateInterval = 0.5);
+
+  /// Initialize a transcriber from model files on disk with extra
+  /// transcriber options. ``spellingModelPath`` is a convenience
+  /// shortcut for the ``"spelling_model_path"`` option used by the
+  /// alphanumeric spelling-fusion path (see
+  /// ``MOONSHINE_FLAG_SPELLING_MODE``); leave empty to disable.
+  /// ``options`` is forwarded as additional ``moonshine_option_t``
+  /// entries to the C API.
+  /// @throws MoonshineException if the transcriber cannot be loaded
+  Transcriber(
+      const std::string &modelPath, ModelArch modelArch,
+      double updateInterval, const std::string &spellingModelPath,
+      const std::vector<std::pair<std::string, std::string>> &options = {});
+
+  /// Initialize a transcriber from in-memory model buffers. Buffers
+  /// are not copied and must outlive the transcriber.
+  /// ``spellingModelData`` / ``spellingModelDataSize`` are optional;
+  /// pass ``nullptr`` / ``0`` to disable the spelling-fusion path.
+  /// @throws MoonshineException if the transcriber cannot be loaded
+  static Transcriber loadFromMemory(
+      const uint8_t *encoderData, size_t encoderDataSize,
+      const uint8_t *decoderData, size_t decoderDataSize,
+      const uint8_t *tokenizerData, size_t tokenizerDataSize,
+      ModelArch modelArch, double updateInterval = 0.5,
+      const uint8_t *spellingModelData = nullptr,
+      size_t spellingModelDataSize = 0,
+      const std::vector<std::pair<std::string, std::string>> &options = {});
 
   /// Destructor - automatically closes the transcriber
   ~Transcriber();
@@ -522,6 +564,13 @@ class Transcriber {
   int32_t getHandle() const { return handle_; }
 
  private:
+  /// Internal constructor used by ``loadFromMemory`` to wrap an
+  /// already-acquired C handle without re-running the from-files load.
+  Transcriber(int32_t handle, ModelArch modelArch, double updateInterval)
+      : handle_(handle),
+        modelArch_(modelArch),
+        updateInterval_(updateInterval) {}
+
   int32_t handle_;
   std::string modelPath_;
   ModelArch modelArch_;
@@ -532,6 +581,256 @@ class Transcriber {
   void checkError(int32_t error) const;
 
   friend class Stream;
+};
+
+/* --------------------------- TTS DATA STRUCTURES --------------------------- */
+
+/// Result of a text-to-speech synthesis operation
+struct TtsSynthesisResult {
+  /// PCM audio samples (float, approximately -1.0 to 1.0)
+  std::vector<float> samples;
+  /// Sample rate in Hz
+  int32_t sampleRateHz;
+
+  TtsSynthesisResult() : sampleRateHz(0) {}
+  TtsSynthesisResult(std::vector<float> samples, int32_t sampleRateHz)
+      : samples(std::move(samples)), sampleRateHz(sampleRateHz) {}
+};
+
+/* ----------------------------- TEXT TO SPEECH ------------------------------- */
+
+/// Text-to-speech synthesizer
+///
+/// Wraps the Moonshine TTS C API with RAII resource management.
+///
+/// Example usage:
+/// ```cpp
+/// #include "moonshine-cpp.h"
+/// #include <iostream>
+///
+/// int main() {
+///     std::vector<moonshine_option_t> options = {
+///         {"g2p_root", "/path/to/assets"},
+///         {"voice", "kokoro_af_heart"},
+///     };
+///     moonshine::TextToSpeech tts("en_us", options);
+///     auto result = tts.synthesize("Hello world!");
+///     std::cout << "Got " << result.samples.size() << " samples at "
+///               << result.sampleRateHz << " Hz" << std::endl;
+///     return 0;
+/// }
+/// ```
+class TextToSpeech {
+ public:
+  /// Create a TTS synthesizer from files on disk
+  /// @param language Language tag (e.g., "en_us", "de", "fr")
+  /// @param options Configuration options (voice, g2p_root, speed, etc.)
+  /// @throws MoonshineException if creation fails
+  TextToSpeech(const std::string &language,
+               const std::vector<moonshine_option_t> &options = {});
+
+  /// Destructor - automatically frees resources
+  ~TextToSpeech();
+
+  /// Move constructor
+  TextToSpeech(TextToSpeech &&other);
+
+  /// Move assignment
+  TextToSpeech &operator=(TextToSpeech &&other);
+
+  // Delete copy constructor and assignment
+  TextToSpeech(const TextToSpeech &) = delete;
+  TextToSpeech &operator=(const TextToSpeech &) = delete;
+
+  /// Synthesize text to speech audio
+  /// @param text The text to synthesize
+  /// @param options Per-call options (e.g., speed), or empty to use defaults
+  /// @return TtsSynthesisResult containing PCM samples and sample rate
+  /// @throws MoonshineException if synthesis fails
+  TtsSynthesisResult synthesize(
+      const std::string &text,
+      const std::vector<moonshine_option_t> &options = {});
+
+  /// Free the synthesizer resources
+  void close();
+
+  /// Get the language tag
+  const std::string &getLanguage() const { return language_; }
+
+  /// Get the synthesizer handle (for internal use)
+  int32_t getHandle() const { return handle_; }
+
+  /// Get available TTS voices for one or more languages
+  /// @param languages Comma-separated language tags (empty for all)
+  /// @param options Configuration options (g2p_root for accurate availability)
+  /// @return JSON string mapping language tags to voice arrays
+  /// @throws MoonshineException on failure
+  static std::string getVoices(
+      const std::string &languages,
+      const std::vector<moonshine_option_t> &options = {});
+
+  /// Get TTS asset dependency keys for one or more languages
+  /// @param languages Comma-separated language tags (empty for all)
+  /// @param options Configuration options (voice, g2p_root, etc.)
+  /// @return JSON array string of asset keys
+  /// @throws MoonshineException on failure
+  static std::string getDependencies(
+      const std::string &languages,
+      const std::vector<moonshine_option_t> &options = {});
+
+ private:
+  int32_t handle_;
+  std::string language_;
+
+  void checkError(int32_t error) const;
+};
+
+/* ------------------------- GRAPHEME TO PHONEMIZER -------------------------- */
+
+/// Grapheme-to-phoneme converter
+///
+/// Converts text to IPA (International Phonetic Alphabet) phonemes.
+///
+/// Example usage:
+/// ```cpp
+/// #include "moonshine-cpp.h"
+/// #include <iostream>
+///
+/// int main() {
+///     std::vector<moonshine_option_t> options = {
+///         {"g2p_root", "/path/to/assets"},
+///     };
+///     moonshine::GraphemeToPhonemizer g2p("en_us", options);
+///     std::string ipa = g2p.toIpa("Hello world!");
+///     std::cout << "IPA: " << ipa << std::endl;
+///     return 0;
+/// }
+/// ```
+class GraphemeToPhonemizer {
+ public:
+  /// Create a grapheme-to-phonemizer from files on disk
+  /// @param language Language tag (e.g., "en_us", "de", "fr")
+  /// @param options Configuration options (g2p_root, etc.)
+  /// @throws MoonshineException if creation fails
+  GraphemeToPhonemizer(const std::string &language,
+                       const std::vector<moonshine_option_t> &options = {});
+
+  /// Destructor - automatically frees resources
+  ~GraphemeToPhonemizer();
+
+  /// Move constructor
+  GraphemeToPhonemizer(GraphemeToPhonemizer &&other);
+
+  /// Move assignment
+  GraphemeToPhonemizer &operator=(GraphemeToPhonemizer &&other);
+
+  // Delete copy constructor and assignment
+  GraphemeToPhonemizer(const GraphemeToPhonemizer &) = delete;
+  GraphemeToPhonemizer &operator=(const GraphemeToPhonemizer &) = delete;
+
+  /// Convert text to IPA phonemes
+  /// @param text The text to convert
+  /// @param options Per-call options, or empty to use defaults
+  /// @return IPA phoneme string
+  /// @throws MoonshineException if conversion fails
+  std::string toIpa(const std::string &text,
+                    const std::vector<moonshine_option_t> &options = {});
+
+  /// Free the phonemizer resources
+  void close();
+
+  /// Get the language tag
+  const std::string &getLanguage() const { return language_; }
+
+  /// Get the phonemizer handle (for internal use)
+  int32_t getHandle() const { return handle_; }
+
+  /// Get G2P asset dependency keys for one or more languages
+  /// @param languages Comma-separated language tags (empty for all)
+  /// @param options Configuration options
+  /// @return Comma-separated list of asset keys
+  /// @throws MoonshineException on failure
+  static std::string getDependencies(
+      const std::string &languages,
+      const std::vector<moonshine_option_t> &options = {});
+
+ private:
+  int32_t handle_;
+  std::string language_;
+
+  void checkError(int32_t error) const;
+};
+
+/* ------------------------------ INTENT RECOGNIZER ------------------------- */
+
+/// One ranked intent from ``IntentRecognizer::getClosestIntents``.
+struct IntentMatch {
+  std::string canonicalPhrase;
+  float similarity{0.0f};
+
+  IntentMatch() = default;
+  IntentMatch(std::string phrase, float sim)
+      : canonicalPhrase(std::move(phrase)), similarity(sim) {}
+};
+
+/// Intent recognizer wrapping the Moonshine intent C API (synchronous ranking).
+class IntentRecognizer {
+ public:
+  /// Load an embedding model from disk.
+  /// @throws MoonshineException if the model cannot be loaded
+  IntentRecognizer(const std::string &model_path, EmbeddingModelArch arch,
+                     const std::string &model_variant = "q4");
+
+  ~IntentRecognizer();
+
+  IntentRecognizer(IntentRecognizer &&other) noexcept;
+  IntentRecognizer &operator=(IntentRecognizer &&other) noexcept;
+
+  IntentRecognizer(const IntentRecognizer &) = delete;
+  IntentRecognizer &operator=(const IntentRecognizer &) = delete;
+
+  /// Register a canonical phrase to match against.
+  /// @param canonical_phrase The phrase to register.
+  /// @param embedding Optional pre-computed embedding (nullptr to auto-compute).
+  /// @param embedding_size Number of floats in the embedding array.
+  /// @param priority Higher priority intents rank above lower ones.
+  /// @throws MoonshineException on failure
+  void registerIntent(const std::string &canonical_phrase,
+                      float *embedding = nullptr,
+                      uint64_t embedding_size = 0,
+                      int32_t priority = 0);
+
+  /// Remove a phrase. Returns false if it was not registered.
+  bool unregisterIntent(const std::string &canonical_phrase);
+
+  /// Rank registered intents by similarity (see ``moonshine_get_closest_intents``).
+  std::vector<IntentMatch> getClosestIntents(const std::string &utterance,
+                                             float tolerance_threshold);
+
+  /// Number of registered intents.
+  /// @throws MoonshineException on invalid handle
+  int32_t intentCount() const;
+
+  /// Remove all intents.
+  /// @throws MoonshineException on failure
+  void clearIntents();
+
+  /// Calculate the embedding vector for a sentence.
+  /// @param sentence The input text to embed.
+  /// @param model_name Reserved for future use; pass nullptr.
+  /// @return The embedding vector.
+  /// @throws MoonshineException on failure
+  std::vector<float> calculateEmbedding(const std::string &sentence,
+                                        const char *model_name = nullptr);
+
+  void close();
+
+  int32_t getHandle() const { return handle_; }
+
+ private:
+  int32_t handle_;
+
+  void checkError(int32_t error) const;
 };
 
 /* ------------------------------ IMPLEMENTATION
@@ -773,6 +1072,46 @@ inline void Stream::emitError(const std::string &errorMessage) {
 }
 
 // Transcriber implementation
+namespace detail {
+
+/// Build a contiguous ``moonshine_option_t`` array from a list of
+/// ``(name, value)`` pairs, prepending ``"spelling_model_path"`` when
+/// ``spellingModelPath`` is non-empty. The returned vectors must
+/// outlive the option array (the option struct holds borrowed
+/// pointers).
+struct OptionsBuffer {
+  std::vector<std::string> names;
+  std::vector<std::string> values;
+  std::vector<moonshine_option_t> options;
+};
+
+inline OptionsBuffer buildOptions(
+    const std::string &spellingModelPath,
+    const std::vector<std::pair<std::string, std::string>> &extras) {
+  OptionsBuffer buf;
+  size_t total = extras.size() + (spellingModelPath.empty() ? 0 : 1);
+  buf.names.reserve(total);
+  buf.values.reserve(total);
+  buf.options.reserve(total);
+  if (!spellingModelPath.empty()) {
+    buf.names.emplace_back("spelling_model_path");
+    buf.values.emplace_back(spellingModelPath);
+  }
+  for (const auto &kv : extras) {
+    buf.names.emplace_back(kv.first);
+    buf.values.emplace_back(kv.second);
+  }
+  for (size_t i = 0; i < buf.names.size(); ++i) {
+    moonshine_option_t opt;
+    opt.name = buf.names[i].c_str();
+    opt.value = buf.values[i].c_str();
+    buf.options.push_back(opt);
+  }
+  return buf;
+}
+
+}  // namespace detail
+
 inline Transcriber::Transcriber(const std::string &modelPath,
                                 ModelArch modelArch, double updateInterval)
     : handle_(-1),
@@ -783,6 +1122,46 @@ inline Transcriber::Transcriber(const std::string &modelPath,
       modelPath.c_str(), static_cast<uint32_t>(modelArch), nullptr, 0,
       MOONSHINE_HEADER_VERSION);
   checkError(handle_);
+}
+
+inline Transcriber::Transcriber(
+    const std::string &modelPath, ModelArch modelArch, double updateInterval,
+    const std::string &spellingModelPath,
+    const std::vector<std::pair<std::string, std::string>> &options)
+    : handle_(-1),
+      modelPath_(modelPath),
+      modelArch_(modelArch),
+      updateInterval_(updateInterval) {
+  detail::OptionsBuffer buf =
+      detail::buildOptions(spellingModelPath, options);
+  handle_ = moonshine_load_transcriber_from_files(
+      modelPath.c_str(), static_cast<uint32_t>(modelArch),
+      buf.options.empty() ? nullptr : buf.options.data(),
+      static_cast<uint64_t>(buf.options.size()), MOONSHINE_HEADER_VERSION);
+  checkError(handle_);
+}
+
+inline Transcriber Transcriber::loadFromMemory(
+    const uint8_t *encoderData, size_t encoderDataSize,
+    const uint8_t *decoderData, size_t decoderDataSize,
+    const uint8_t *tokenizerData, size_t tokenizerDataSize,
+    ModelArch modelArch, double updateInterval,
+    const uint8_t *spellingModelData, size_t spellingModelDataSize,
+    const std::vector<std::pair<std::string, std::string>> &options) {
+  detail::OptionsBuffer buf = detail::buildOptions("", options);
+  int32_t handle = moonshine_load_transcriber_from_memory(
+      encoderData, encoderDataSize, decoderData, decoderDataSize,
+      tokenizerData, tokenizerDataSize, spellingModelData,
+      spellingModelDataSize, static_cast<uint32_t>(modelArch),
+      buf.options.empty() ? nullptr : buf.options.data(),
+      static_cast<uint64_t>(buf.options.size()), MOONSHINE_HEADER_VERSION);
+  if (handle < 0) {
+    const char *msg = moonshine_error_to_string(handle);
+    throw MoonshineException(
+        std::string("Failed to load transcriber from memory: ") +
+        (msg ? msg : "unknown error"));
+  }
+  return Transcriber(handle, modelArch, updateInterval);
 }
 
 inline Transcriber::~Transcriber() { close(); }
@@ -912,6 +1291,306 @@ inline void Transcriber::checkError(int32_t error) const {
 }
 
 inline void Stream::checkError(int32_t error) const {
+  if (error < 0) {
+    const char *errorStr = moonshine_error_to_string(error);
+    std::string message = errorStr ? std::string(errorStr) : "Unknown error";
+    throw MoonshineException(message);
+  }
+}
+
+// TextToSpeech implementation
+inline TextToSpeech::TextToSpeech(
+    const std::string &language,
+    const std::vector<moonshine_option_t> &options)
+    : handle_(-1), language_(language) {
+  handle_ = moonshine_create_tts_synthesizer_from_files(
+      language.c_str(), nullptr, 0, options.empty() ? nullptr : options.data(),
+      options.size(), MOONSHINE_HEADER_VERSION);
+  checkError(handle_);
+}
+
+inline TextToSpeech::~TextToSpeech() { close(); }
+
+inline TextToSpeech::TextToSpeech(TextToSpeech &&other)
+    : handle_(other.handle_), language_(std::move(other.language_)) {
+  other.handle_ = -1;
+}
+
+inline TextToSpeech &TextToSpeech::operator=(TextToSpeech &&other) {
+  if (this != &other) {
+    close();
+    handle_ = other.handle_;
+    language_ = std::move(other.language_);
+    other.handle_ = -1;
+  }
+  return *this;
+}
+
+inline TtsSynthesisResult TextToSpeech::synthesize(
+    const std::string &text,
+    const std::vector<moonshine_option_t> &options) {
+  if (handle_ < 0) {
+    throw MoonshineException("TextToSpeech is not initialized");
+  }
+  float *out_audio = nullptr;
+  uint64_t out_size = 0;
+  int32_t out_sample_rate = 0;
+  checkError(moonshine_text_to_speech(
+      handle_, text.c_str(), options.empty() ? nullptr : options.data(),
+      options.size(), &out_audio, &out_size, &out_sample_rate));
+  TtsSynthesisResult result;
+  if (out_audio && out_size > 0) {
+    result.samples.assign(out_audio, out_audio + out_size);
+    std::free(out_audio);
+  }
+  result.sampleRateHz = out_sample_rate;
+  return result;
+}
+
+inline void TextToSpeech::close() {
+  if (handle_ >= 0) {
+    moonshine_free_tts_synthesizer(handle_);
+    handle_ = -1;
+  }
+}
+
+inline std::string TextToSpeech::getVoices(
+    const std::string &languages,
+    const std::vector<moonshine_option_t> &options) {
+  char *out_json = nullptr;
+  int32_t err = moonshine_get_tts_voices(
+      languages.c_str(), options.empty() ? nullptr : options.data(),
+      options.size(), &out_json);
+  if (err < 0) {
+    const char *errorStr = moonshine_error_to_string(err);
+    throw MoonshineException(errorStr ? std::string(errorStr)
+                                      : "Unknown error");
+  }
+  std::string result;
+  if (out_json) {
+    result = std::string(out_json);
+    std::free(out_json);
+  }
+  return result;
+}
+
+inline std::string TextToSpeech::getDependencies(
+    const std::string &languages,
+    const std::vector<moonshine_option_t> &options) {
+  char *out_json = nullptr;
+  int32_t err = moonshine_get_tts_dependencies(
+      languages.c_str(), options.empty() ? nullptr : options.data(),
+      options.size(), &out_json);
+  if (err < 0) {
+    const char *errorStr = moonshine_error_to_string(err);
+    throw MoonshineException(errorStr ? std::string(errorStr)
+                                      : "Unknown error");
+  }
+  std::string result;
+  if (out_json) {
+    result = std::string(out_json);
+    std::free(out_json);
+  }
+  return result;
+}
+
+inline void TextToSpeech::checkError(int32_t error) const {
+  if (error < 0) {
+    const char *errorStr = moonshine_error_to_string(error);
+    std::string message = errorStr ? std::string(errorStr) : "Unknown error";
+    throw MoonshineException(message);
+  }
+}
+
+// GraphemeToPhonemizer implementation
+inline GraphemeToPhonemizer::GraphemeToPhonemizer(
+    const std::string &language,
+    const std::vector<moonshine_option_t> &options)
+    : handle_(-1), language_(language) {
+  handle_ = moonshine_create_grapheme_to_phonemizer_from_files(
+      language.c_str(), nullptr, 0, options.empty() ? nullptr : options.data(),
+      options.size(), MOONSHINE_HEADER_VERSION);
+  checkError(handle_);
+}
+
+inline GraphemeToPhonemizer::~GraphemeToPhonemizer() { close(); }
+
+inline GraphemeToPhonemizer::GraphemeToPhonemizer(
+    GraphemeToPhonemizer &&other)
+    : handle_(other.handle_), language_(std::move(other.language_)) {
+  other.handle_ = -1;
+}
+
+inline GraphemeToPhonemizer &GraphemeToPhonemizer::operator=(
+    GraphemeToPhonemizer &&other) {
+  if (this != &other) {
+    close();
+    handle_ = other.handle_;
+    language_ = std::move(other.language_);
+    other.handle_ = -1;
+  }
+  return *this;
+}
+
+inline std::string GraphemeToPhonemizer::toIpa(
+    const std::string &text,
+    const std::vector<moonshine_option_t> &options) {
+  if (handle_ < 0) {
+    throw MoonshineException("GraphemeToPhonemizer is not initialized");
+  }
+  const char *out_phonemes = nullptr;
+  uint64_t out_count = 0;
+  checkError(moonshine_text_to_phonemes(
+      handle_, text.c_str(), options.empty() ? nullptr : options.data(),
+      options.size(), &out_phonemes, &out_count));
+  if (out_phonemes && out_count > 0) {
+    return std::string(out_phonemes, out_count);
+  }
+  return std::string();
+}
+
+inline void GraphemeToPhonemizer::close() {
+  if (handle_ >= 0) {
+    moonshine_free_grapheme_to_phonemizer(handle_);
+    handle_ = -1;
+  }
+}
+
+inline std::string GraphemeToPhonemizer::getDependencies(
+    const std::string &languages,
+    const std::vector<moonshine_option_t> &options) {
+  char *out_deps = nullptr;
+  int32_t err = moonshine_get_g2p_dependencies(
+      languages.c_str(), options.empty() ? nullptr : options.data(),
+      options.size(), &out_deps);
+  if (err < 0) {
+    const char *errorStr = moonshine_error_to_string(err);
+    throw MoonshineException(errorStr ? std::string(errorStr)
+                                      : "Unknown error");
+  }
+  std::string result;
+  if (out_deps) {
+    result = std::string(out_deps);
+    std::free(out_deps);
+  }
+  return result;
+}
+
+inline void GraphemeToPhonemizer::checkError(int32_t error) const {
+  if (error < 0) {
+    const char *errorStr = moonshine_error_to_string(error);
+    std::string message = errorStr ? std::string(errorStr) : "Unknown error";
+    throw MoonshineException(message);
+  }
+}
+
+inline IntentRecognizer::IntentRecognizer(const std::string &model_path,
+                                           EmbeddingModelArch arch,
+                                           const std::string &model_variant)
+    : handle_(-1) {
+  handle_ = moonshine_create_intent_recognizer(
+      model_path.c_str(), static_cast<uint32_t>(arch), model_variant.c_str());
+  checkError(handle_);
+}
+
+inline IntentRecognizer::~IntentRecognizer() { close(); }
+
+inline IntentRecognizer::IntentRecognizer(IntentRecognizer &&other) noexcept
+    : handle_(other.handle_) {
+  other.handle_ = -1;
+}
+
+inline IntentRecognizer &IntentRecognizer::operator=(
+    IntentRecognizer &&other) noexcept {
+  if (this != &other) {
+    close();
+    handle_ = other.handle_;
+    other.handle_ = -1;
+  }
+  return *this;
+}
+
+inline void IntentRecognizer::registerIntent(
+    const std::string &canonical_phrase, float *embedding,
+    uint64_t embedding_size, int32_t priority) {
+  checkError(moonshine_register_intent(handle_, canonical_phrase.c_str(),
+                                       embedding, embedding_size, priority));
+}
+
+inline bool IntentRecognizer::unregisterIntent(
+    const std::string &canonical_phrase) {
+  int32_t err =
+      moonshine_unregister_intent(handle_, canonical_phrase.c_str());
+  if (err == MOONSHINE_ERROR_NONE) {
+    return true;
+  }
+  if (err == MOONSHINE_ERROR_INVALID_ARGUMENT) {
+    return false;
+  }
+  checkError(err);
+  return false;
+}
+
+inline std::vector<IntentMatch> IntentRecognizer::getClosestIntents(
+    const std::string &utterance, float tolerance_threshold) {
+  std::vector<IntentMatch> out;
+  moonshine_intent_match_t *matches = nullptr;
+  uint64_t count = 0;
+  int32_t err = moonshine_get_closest_intents(
+      handle_, utterance.c_str(), tolerance_threshold, &matches, &count);
+  if (err != MOONSHINE_ERROR_NONE) {
+    if (matches != nullptr) {
+      moonshine_free_intent_matches(matches, count);
+    }
+    checkError(err);
+    return out;
+  }
+  out.reserve(static_cast<size_t>(count));
+  for (uint64_t i = 0; i < count; ++i) {
+    const char *ph = matches[i].canonical_phrase;
+    out.emplace_back(ph ? std::string(ph) : std::string(),
+                     matches[i].similarity);
+  }
+  moonshine_free_intent_matches(matches, count);
+  return out;
+}
+
+inline int32_t IntentRecognizer::intentCount() const {
+  int32_t n = moonshine_get_intent_count(handle_);
+  if (n < 0) {
+    const char *errorStr = moonshine_error_to_string(n);
+    throw MoonshineException(errorStr ? std::string(errorStr)
+                                      : "Unknown error");
+  }
+  return n;
+}
+
+inline void IntentRecognizer::clearIntents() {
+  checkError(moonshine_clear_intents(handle_));
+}
+
+inline std::vector<float> IntentRecognizer::calculateEmbedding(
+    const std::string &sentence, const char *model_name) {
+  float *out_embedding = nullptr;
+  uint64_t out_size = 0;
+  checkError(moonshine_calculate_intent_embedding(
+      handle_, sentence.c_str(), &out_embedding, &out_size, model_name));
+  std::vector<float> result;
+  if (out_embedding != nullptr && out_size > 0) {
+    result.assign(out_embedding, out_embedding + out_size);
+    moonshine_free_intent_embedding(out_embedding);
+  }
+  return result;
+}
+
+inline void IntentRecognizer::close() {
+  if (handle_ >= 0) {
+    moonshine_free_intent_recognizer(handle_);
+    handle_ = -1;
+  }
+}
+
+inline void IntentRecognizer::checkError(int32_t error) const {
   if (error < 0) {
     const char *errorStr = moonshine_error_to_string(error);
     std::string message = errorStr ? std::string(errorStr) : "Unknown error";

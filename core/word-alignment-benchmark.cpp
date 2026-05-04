@@ -34,7 +34,7 @@ struct BenchResult {
 static BenchResult run_benchmark(const char* model_path, const char* wav_path,
                   bool word_timestamps, int warmup, int runs,
                   int model_arch = MOONSHINE_MODEL_ARCH_TINY) {
-  struct transcriber_option_t options[2];
+  struct moonshine_option_t options[2];
   int opt_count = 1;
   options[0] = {.name = "identify_speakers", .value = "false"};
   if (word_timestamps) {

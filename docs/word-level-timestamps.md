@@ -34,7 +34,7 @@ Pass `word_timestamps=true` as a transcriber option. When disabled (the default)
 ### C API
 
 ```c
-transcriber_option_t options[] = {
+moonshine_option_t options[] = {
     { "word_timestamps", "true" },
 };
 int32_t handle = moonshine_load_transcriber_from_files(

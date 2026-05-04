@@ -4,3 +4,31 @@
 *.a filter=lfs diff=lfs merge=lfs -text
 *.examples/c++/transcriber filter=lfs diff=lfs merge=lfs -text
 core/speaker-embedding-model-data.cpp filter=lfs diff=lfs merge=lfs -text
+
+# moonshine-tts bundled data (same types as moonshine-ai/moonshine-tts; scoped to data/).
+core/moonshine-tts/data/**/*.tsv filter=lfs diff=lfs merge=lfs -text
+core/moonshine-tts/data/**/*.txt filter=lfs diff=lfs merge=lfs -text
+core/moonshine-tts/data/**/*.json filter=lfs diff=lfs merge=lfs -text
+core/moonshine-tts/data/**/*.csv filter=lfs diff=lfs merge=lfs -text
+core/moonshine-tts/data/**/*.onnx filter=lfs diff=lfs merge=lfs -text
+core/moonshine-tts/data/**/*.onnx.data filter=lfs diff=lfs merge=lfs -text
+# Documentation under data/ stays plain text (later rule wins).
+core/moonshine-tts/data/**/*.md -filter -diff -merge text
+
+# Bundled TTS assets in example apps (same file types as core/moonshine-tts/data/).
+examples/**/tts-data/**/*.tsv filter=lfs diff=lfs merge=lfs -text
+examples/**/tts-data/**/*.txt filter=lfs diff=lfs merge=lfs -text
+examples/**/tts-data/**/*.json filter=lfs diff=lfs merge=lfs -text
+examples/**/tts-data/**/*.csv filter=lfs diff=lfs merge=lfs -text
+examples/**/tts-data/**/*.onnx filter=lfs diff=lfs merge=lfs -text
+examples/**/tts-data/**/*.kokorovoice filter=lfs diff=lfs merge=lfs -text
+
+# IntentRecognizer example (ASR + embedding weights; *.ort covered globally above).
+examples/ios/IntentRecognizer/moonshine-models/**/*.onnx filter=lfs diff=lfs merge=lfs -text
+examples/ios/IntentRecognizer/moonshine-models/**/*.onnx_data filter=lfs diff=lfs merge=lfs -text
+examples/ios/IntentRecognizer/moonshine-models/**/tokenizer.bin filter=lfs diff=lfs merge=lfs -text
+
+# Android IntentRecognizer: bundled assets (self-contained example; *.ort global LFS above).
+examples/android/IntentRecognizer/app/src/main/assets/**/*.onnx filter=lfs diff=lfs merge=lfs -text
+examples/android/IntentRecognizer/app/src/main/assets/**/*.onnx_data filter=lfs diff=lfs merge=lfs -text
+examples/android/IntentRecognizer/app/src/main/assets/**/tokenizer.bin filter=lfs diff=lfs merge=lfs -text

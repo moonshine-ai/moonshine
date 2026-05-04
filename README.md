@@ -18,14 +18,16 @@
 
 - Everything runs on-device, so it's fast, private, and you don't need an account, credit card, or API keys.
 - The framework and models are optimized for live streaming applications, offering low latency responses by doing a lot of the work while the user is still talking.
-- All models are based on our [cutting edge research](https://arxiv.org/abs/2602.12241) and trained from scratch, so we can offer [higher accuracy than Whisper Large V3 at the top end](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard), down to tiny 26MB models for constrained deployments.
+- All speech to text models are based on our [cutting edge research](https://arxiv.org/abs/2602.12241) and trained from scratch, so we can offer [higher accuracy than Whisper Large V3 at the top end](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard), down to tiny 26MB models for constrained deployments.
 - It's easy to integrate across platforms, with the same library running on [Python](#python), [iOS](#ios), [Android](#android), [MacOS](#macos), [Linux](#linux), [Windows](#windows), [Raspberry Pis](#raspberry-pi), [IoT devices](https://www.linkedin.com/posts/petewarden_most-of-the-recent-news-about-ai-seems-to-activity-7384664255242932224-v6Mr/), and wearables.
-- Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, speaker identification (diarization) and command recognition, so you don't need to be an expert to build a voice application.
-- It supports multiple languages, including English, Spanish, Mandarin, Japanese, Korean, Vietnamese, Ukrainian, and Arabic.
-
+- Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, text to speech, speaker identification (diarization) and command recognition, so you don't need to be an expert to build a voice application.
+- It supports multiple languages, including English, Spanish, Mandarin, Japanese, Korean, Vietnamese, Ukrainian, and Arabic for STT, and English, Spanish, Arabic, German, French, Hindi, Italian, Japanese, Korean, Dutch, Portuguese, Russian, Turkish, Ukrainian, Vietnamese, and Mandarin for TTS.
+  
 ## Quickstart
 
 [Join our community on Discord to get live support](https://discord.gg/27qp9zSRXF).
+
+Example apps for iOS, Android, macOS, Windows, and Raspberry Pi are published on [GitHub Releases](https://github.com/moonshine-ai/moonshine/releases/latest) as separate archives (mostly **`{platform}-{Project}.tar.gz`**, matching folder names under [`examples/`](examples/); Windows also ships [`moonshine-voice-windows-x86_64.tar.gz`](https://github.com/moonshine-ai/moonshine/releases/latest/download/moonshine-voice-windows-x86_64.tar.gz) for the C++ sample). See the [Examples](#examples) section for the full list of release downloads.
 
 ### Python
 
@@ -52,13 +54,19 @@ python -m moonshine_voice.intent_recognizer
 
 Listens for user-defined action phrases, like "Turn on the lights", using semantic matching so natural language variations are recognized. For more, check out [our "Getting Started" Colab notebook](https://bit.ly/moonshine-colab) and [video](https://www.youtube.com/watch?v=WH-AGvHmtoM).
 
+```bash
+python -m moonshine_voice.tts --language en_us --text "Hello world"
+```
+
+Synthesizes and speaks the text.
+
 ### iOS
 
-Download [github.com/moonshine-ai/moonshine/releases/latest/download/ios-examples.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-examples.tar.gz), extract it, and then open the `Transcriber/Transcriber.xcodeproj` project in Xcode.
+Download [github.com/moonshine-ai/moonshine/releases/latest/download/ios-Transcriber.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-Transcriber.tar.gz), extract it, and then open the `Transcriber/Transcriber.xcodeproj` project in Xcode.
 
 ### Android
 
-Download [github.com/moonshine-ai/moonshine/releases/latest/download/android-examples.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-examples.tar.gz), extract it, and then open the `Transcriber` folder in Android Studio.
+Download [github.com/moonshine-ai/moonshine/releases/latest/download/android-Transcriber.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-Transcriber.tar.gz), extract it, and then open the `Transcriber` folder in Android Studio.
 
 ### Linux
 
@@ -85,11 +93,11 @@ See [Building from Source](#building-from-source) for details.
 
 Moonshine Voice supports both Apple Silicon (arm64) and Intel (x86_64) Macs.
 
-Download [github.com/moonshine-ai/moonshine/releases/latest/download/macos-examples.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/macos-examples.tar.gz), extract it, and then open the `MicTranscription/MicTranscription.xcodeproj` project in Xcode.
+Download [github.com/moonshine-ai/moonshine/releases/latest/download/macos-MicTranscription.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/macos-MicTranscription.tar.gz), extract it, and then open the `MicTranscription/MicTranscription.xcodeproj` project in Xcode.
 
 ### Windows
 
-Download [github.com/moonshine-ai/moonshine/releases/latest/download/windows-examples.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/windows-examples.tar.gz), extract it, and then open the `cli-transcriber\cli-transcriber.vcxproj` project in Visual Studio.
+Download [github.com/moonshine-ai/moonshine/releases/latest/download/windows-cli-transcriber.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/windows-cli-transcriber.tar.gz), extract it, and then open the `cli-transcriber\cli-transcriber.vcxproj` project in Visual Studio.
 
 [Install Moonshine in Python](#python) for model downloading.
 
@@ -113,7 +121,7 @@ You'll need a USB microphone plugged in to get audio input, but the Python pip p
  python -m moonshine_voice.mic_transcriber --language en
 ```
 
-I've recorded [a screencast on YouTube](https://www.youtube.com/watch?v=NNcqx1wFxl0) to help you get started, and you can also download [github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-examples.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-examples.tar.gz) for some fun, Pi-specific examples. [The README](examples/raspberry-pi/my-dalek/README.md) has information about using a virtual environment for the Python install if you don't want to use `--break-system-packages`.
+I've recorded [a screencast on YouTube](https://www.youtube.com/watch?v=NNcqx1wFxl0) to help you get started, and you can also download [github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz) for some fun, Pi-specific examples. [The README](examples/raspberry-pi/my-dalek/README.md) has information about using a virtual environment for the Python install if you don't want to use `--break-system-packages`.
 
 ## When should you choose Moonshine over Whisper?
 
@@ -150,7 +158,7 @@ However we kept encountering applications that needed even lower latencies on ev
 
 - **Flexible input windows**. You can supply any length of audio (though we recommend staying below around 30 seconds) and the model will only spend compute on that input, no zero-padding required. This gives us a significant latency boost.
 - **Caching for streaming**. Our models now support incremental addition of audio over time, and they cache the input encoding and part of the decoder's state so that we're able to skip even more of the compute, driving latency down dramatically.
-- **Language-specific models**. We have gathered data and trained models for multiple languages, including Arabic, Japanese, Korean, Spanish, Ukrainian, Vietnamese, and Chinese. As we discuss in our [Flavors of Moonshine paper](https://arxiv.org/abs/2509.02523), we've found that we can get much higher accuracy for the same size and compute if we restrict a model to focus on just one language, compared to training one model across many.
+- **Language-specific models**. We have gathered data and trained models for multiple languages, including Arabic, Japanese, Korean, Spanish, Ukrainian, Vietnamese, and Chinese. As we discuss in our [Flavors of Moonshine paper](https://arxiv.org/abs/2509.0.553), we've found that we can get much higher accuracy for the same size and compute if we restrict a model to focus on just one language, compared to training one model across many.
 - **Cross-platform library support**. We're building applications ourselves, and needed to be able to deploy these models across Linux, MacOS, Windows, iOS, and Android, as well as use them from languages like Python, Swift, Java, and C++. To support this we architected a portable C++ core library that handles all of the processing, uses OnnxRuntime for good performance across systems, and then built native interfaces for all the required high-level languages. This allows developers to learn one API, and then deploy it almost anywhere they want to run.
 - **Better accuracy than Whisper V3 Large**. On [HuggingFace's OpenASR leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard), our newest streaming model for English, Medium Streaming, achieves a lower word-error rate than the most-accurate Whisper model from OpenAI. This is despite Moonshine's version using 250 million parameters, versus Large v3's 1.5 billion, making it much easier to deploy on the edge.
 
@@ -165,6 +173,8 @@ The Moonshine API is designed to take care of the details around capturing and t
 - [Getting Started with Transcription](#getting-started-with-transcription)
   - [Transcription Event Flow](#transcription-event-flow)
 - [Getting Started with Command Recognition](#getting-started-with-command-recognition)
+- [Getting Started with Text to Speech](#getting-started-with-text-to-speech)
+  - [Converting Graphemes to Phonemes](#converting-graphemes-to-phonemes)
 - [Examples](#examples)
 - [Adding the Library to your own App](#adding-the-library-to-your-own-app)
 - [Python](#python-1)
@@ -180,6 +190,9 @@ The Moonshine API is designed to take care of the details around capturing and t
   - [Language Bindings](#language-bindings)
   - [Porting](#porting)
 - [Downloading Models](#downloading-models)
+  - [Speech to Text Models](#speech-to-text-models)
+  - [Intent Recognition Models](#intent-recognition-models)
+  - [Text to Speech Models](#text-to-speech-models)
 - [Benchmarking](#benchmarking)
 
 ### Architecture
@@ -190,6 +203,7 @@ The basic flow is:
 
 - Create a `Transcriber` or `IntentRecognizer` object, depending on whether you want the text that's spoken, or just to know that a user has requested an action.
 - Attach an `EventListener` that gets called when important things occur, like the end of a phrase or an action being triggered, so your application can respond.
+- Use a `TextToSpeech` object to make it a two-way conversation.
 
 Traditionally, adding a voice interface to an application or product required integrating a lot of different libraries to handle all the processing that's needed to capture audio and turn it into something actionable. The main steps involved are microphone capture, voice activity detection (to break a continuous stream of audio into sections of speech), speech to text, speaker identification, and intent recognition. Each of these steps typically involved a different framework, which greatly increased the complexity of integrating, optimizing, and maintaining these dependencies.
 
@@ -216,6 +230,8 @@ A [**TranscriptEvent**](python/src/moonshine_voice/transcriber.py#L22) contains 
 A [**TranscriptEventListener**](python/src/moonshine_voice/transcriber.py#L266) is a protocol that allows app-defined functions to be called when transcript events happen. This is the main way that most applications interact with the results of the transcription. When live speech is happening, applications usually need to respond or display results as new speech is recognized, and this approach allows you to handle those changes in a similar way to events from traditional user interfaces like touch screen gestures or mouse clicks on buttons.
 
 An [**IntentRecognizer**](python/src/moonshine_voice/intent_recognizer.py#L44) is a type of TranscriptEventListener that allows you to invoke different callback functions when preprogrammed intents are detected. This is useful for building voice command recognition features.
+
+A [**TextToSpeech**](python/src/moonshine_voice/tts.py#L20) object synthesizes audio for playback to the user.
 
 ### Getting Started with Transcription
 
@@ -344,7 +360,7 @@ embedding_model_path, embedding_model_arch = get_embedding_model(
 )
 ```
 
-Once we have the model's location, we create an `IntentRecognizer` using that path. The only other argument is the `threshold` we use for fuzzy matching. It's between 0 and 1, with low numbers producing more matches but at the cost of less accuracy, and vice versa for high values.
+Once we have the model's location, we create an `IntentRecognizer` using that path. The only other argument is the `threshold` we use for fuzzy matching. It's between 0 and 1, with low numbers producing more matches but at the cost of less accuracy, and vice versa for high values. The built-in default is 0.8 (fairly strict); the CLI `--threshold` flag overrides it.
 
 ```python
 intent_recognizer = IntentRecognizer(
@@ -355,7 +371,7 @@ intent_recognizer = IntentRecognizer(
 )
 ```
 
-Next we tell the recognizer what kinds of phrases to listen out for, and what to do when there's a match.
+Next we tell the recognizer what kinds of phrases to listen out for, and what to do when there's a match. You can optionally pass a pre-computed embedding and/or a priority to `register_intent()`, but in the simplest case you just supply a phrase and a handler:
 
 ```python
 def on_intent_triggered_on(trigger: str, utterance: str, similarity: float):
@@ -363,6 +379,13 @@ def on_intent_triggered_on(trigger: str, utterance: str, similarity: float):
 
 for intent in intents:
     intent_recognizer.register_intent(intent, on_intent_triggered_on)
+```
+
+If you need to pre-compute an embedding (for example, to store it in a database or share it between sessions), use `calculate_embedding()`:
+
+```python
+embedding = intent_recognizer.calculate_embedding("turn on the lights")
+intent_recognizer.register_intent("turn on the lights", handler, embedding=embedding, priority=1)
 ```
 
 The recognizer supports the transcript event listener interface, so the final stage is adding it as a listener to the `MicTranscriber`.
@@ -375,11 +398,132 @@ Once you start the transcriber, it will listen out for any variations on the sup
 
 The current intent recognition is designed for full-sentence matching, which works well for straightforward commands, but we will be expanding into more advanced "slot filling" techniques in the future, to handle extracting the quantity from "I want ten bananas" for example.
 
+### Getting Started with Text to Speech
+
+Voice interfaces often need to talk back, and Moonshine's `TextToSpeech` is designed to make that easy, across multiple languages. It's also self-contained, so you can use it independently from the transcription and intent recognition modules.
+
+At its simplest, you can just specify the output language to create a speech synthesizer object and then pass text into it to speak it on the default audio device:
+
+```python
+from moonshine_voice import TextToSpeech
+
+tts = TextToSpeech("fr")
+tts.say("Bonjour, mon ami")
+tts.wait()  # block until playback finishes
+```
+
+`say()` returns immediately and queues the text for background synthesis and playback. Calling `say()` multiple times queues each utterance in order, and the next utterance is pre-synthesized while the current one plays. You can also pass a list of strings, cancel everything with `stop()`, or poll with `is_talking()`:
+
+```python
+tts.say(["One.", "Two.", "Three."])
+tts.stop()  # cancel remaining utterances and halt playback
+```
+
+If you're on a machine without an audio output, or want to do further processing, you can retrieve the audio samples using the `synthesize()` method:
+
+```python
+from moonshine_voice import TextToSpeech
+
+tts = TextToSpeech("en-us")
+audio_data, sample_rate = tts.synthesize("Howdy, partner")
+```
+
+As you can see, text to speech supports multiple languages. To see which are available, run the `list_tts_languages()` function:
+
+```python
+from moonshine_voice import list_tts_languages
+list_tts_languages()
+
+['ar-msa', 'de-de', 'en-gb', 'en-us', 'es-ar', 'es-es', 'es-mx', 'fr-fr', 'hi-in', 'it-it', 'ja-jp', 'ko-kr', 'nl-nl', 'pt-br', 'pt-pt', 'ru-ru', 'tr-tr', 'uk-ua', 'vi-vn', 'zh-hans']
+```
+
+For each language, you can list which voices are available:
+
+```python
+from moonshine_voice import list_tts_voices
+
+list_tts_voices("ru")
+
+{'present': [], 'downloadable': ['piper_ru_RU-denis-medium', 'piper_ru_RU-dmitri-medium', 'piper_ru_RU-irina-medium', 'piper_ru_RU-ruslan-medium']}
+```
+
+If a voice is marked as `downloadable` that means if you pass it in to the `TextToSpeech` constructor then Moonshine will download it to a cache automatically (as long as the `download` argument is its default true) and will be available on your machine with no internet access required for subsequent calls.
+
+#### Converting Graphemes to Phonemes
+
+As you may notice from the voice names, Moonshine Voice uses models from the fantastic [Kokoro](https://github.com/hexgrad/kokoro) and [PiperTTS](https://huggingface.co/rhasspy/piper-voices) projects. You can find full details on all the model and data sources we use for text to speech at [core/moonshine-tts/data/README.md](core/moonshine-tts/data/README.md). 
+
+Given that there are other great TTS projects out there, why does the world need yet another implementation? Moonshine tries to run on as many platforms as possible and supports commercial applications, and both Kokoro and Piper use [espeak-ng](https://github.com/espeak-ng/espeak-ng/) to convert text strings into phonemes, representations of the noises associated with the sentence, in the International Pronunciation Alphabet. Espeak-ng is licensed under the GPL, and while I am a fan of free software, the terms do make it hard to incorporate into applications that don't also release their source code under a similar license.
+
+In the cloud this isn't as much of an issue, as many uses of espeak-ng can be implemented by calling out to an external executable, so the dependency isn't as problematic. This isn't an option on many edge operating systems unfortunately, as the only way to include code on iOS or Android is to link it into the application, which requires open sourcing the calling code.
+
+To allow wider usage, we developed our own "grapheme to phoneme" module that performs a similar role, but has been written from scratch. You'll find the implementation in [core/moonshine-tts](core/moonshine-tts) and it's released under the same MIT License as the rest of this code base.
+
+Every language requires a different process to convert its written form into speech, and often it varies by dialect too. This is why espeak-ng is so widely used, it has had years of work put into it to encode linguistic knowledge into a complex set of rules, many of which are heuristics that require a lot of testing to get right. The Moonshine Voice G2P engine is still new, and will need similar tuning to handle all of the variations across languages, but I'm hoping the initial implementation is a good start and will benefit from community feedback and contributions over time. Here are the current results for intelligibility across languages, using [scripts/tts_g2p_intelligibility.py](scripts/tts_g2p_intelligibility.py):
+
+| Language | Moonshine CER | Reference CER |
+| --- | --- | --- |
+| ar_msa | 20.8% | 15.3% |
+| de_de | 18.3% | 9.2% |
+| en_us | 12.6% | 9.8% |
+| es_ar | 7.9% | 10.6% |
+| es_es | 4.2% | 4.5% |
+| es_mx | 3.2% | 2.6% |
+| fr_fr | 14.8% | 9.4% |
+| hi_in | 26.5% | 15.9% |
+| it_it | 24.2% | 11.4% |
+| ja_jp | 38.1% | 16.8% |
+| ko_kr | 25.0% | 18.6% |
+| nl_nl | 15.9% | 3.3% |
+| pt_br | 19.7% | 4.9% |
+| pt_pt | 43.8% | 24.6% |
+| ru_ru | 16.9% | 5.0% |
+| tr_tr | 8.9% | 7.9% |
+| uk_ua | 27.7% | 15.6% |
+| vi_vn | 79.0% | 36.5% |
+| zh_hans | 37.8% | 32.6% |
+
+If you want access to just the grapheme to phoneme capability, without the speech synthesis, you can all it directly:
+
+```python
+from moonshine_voice import GraphemeToPhonemizer
+
+g2p = GraphemeToPhonemizer("en-us")
+g2p.to_ipa("Hello world")
+
+'həlˈoʊ wˈɝld'
+```
+
 ### Examples
 
-The [`examples`](examples/) folder has code samples organized by platform. We offer these for [Android](examples/android/), [portable C++](examples/c++/), [iOS](examples/ios/), [MacOS](examples/macos/), [Python](examples/python), and [Windows](examples/windows/). We have tried to use the most common build system for each platform, so Android uses Android Studio and Maven, iOS and MacOS use Xcode and Swift, while Windows uses Visual Studio.
+The [`examples`](examples/) folder has code samples organized by platform. We use the usual tooling per stack (Android Studio and Gradle, Xcode and Swift on Apple platforms, Visual Studio on Windows). [GitHub Releases](https://github.com/moonshine-ai/moonshine/releases/latest) currently ship the downloadable assets below (example trees are mostly named **`{platform}-{Project}.tar.gz`**; Windows and C++ also include prebuilt native library bundles).
 
-The examples usually include one minimal project that just creates a transcriber and then feeds it data from a WAV file, and another that's pulling audio from a microphone using the platform's default framework for accessing audio devices.
+- **[Android](examples/android/)**
+  - [IntentRecognizer](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-IntentRecognizer.tar.gz)
+  - [TextToSpeech](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-TextToSpeech.tar.gz) — [`examples/android/TextToSpeech/`](examples/android/TextToSpeech/)
+  - [Transcriber](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-Transcriber.tar.gz)
+- **[Portable C++](examples/c++/README.md)**
+  - [`transcriber.cpp`](examples/c++/transcriber.cpp)
+  - [`text-to-speech.cpp`](examples/c++/text-to-speech.cpp)
+- **[iOS](examples/ios/)**
+  - [IntentRecognizer](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-IntentRecognizer.tar.gz)
+  - [TextToSpeech](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-TextToSpeech.tar.gz)
+  - [Transcriber](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-Transcriber.tar.gz)
+- **[MacOS](examples/macos/)**
+  - [BasicTranscription](https://github.com/moonshine-ai/moonshine/releases/latest/download/macos-BasicTranscription.tar.gz)
+  - [MicTranscription](https://github.com/moonshine-ai/moonshine/releases/latest/download/macos-MicTranscription.tar.gz)
+  - [TextToSpeech](https://github.com/moonshine-ai/moonshine/releases/latest/download/macos-TextToSpeech.tar.gz)
+- **[Windows](examples/windows/)**
+  - [cli-transcriber](https://github.com/moonshine-ai/moonshine/releases/latest/download/windows-cli-transcriber.tar.gz)
+- **[Python](examples/python/)**
+  - [`basic_transcription.py`](examples/python/basic_transcription.py)
+  - [`mic_transcription.py`](examples/python/mic_transcription.py)
+  - [`intent_recognition.py`](examples/python/intent_recognition.py)
+  - [`ollama-voice/ollama_voice.py`](examples/python/ollama-voice/ollama_voice.py )
+- **[Raspberry Pi](examples/raspberry-pi/)**
+  - [my-dalek](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz)
+
+The examples usually include one minimal project that just creates a transcriber and then feeds it data from a WAV file, and another that's pulling audio from a microphone using the platform's default framework for accessing audio devices. For Android, [`examples/android/IntentRecognizer`](examples/android/IntentRecognizer/) is a self-contained Gradle project you can copy out of the tree: it depends on **`ai.moonshine:moonshine-voice:0.0.60`** from Maven Central (includes `IntentRecognizer`) and bundles **small English streaming** ASR plus **embeddinggemma-300m** under `app/src/main/assets/` (Git LFS). Streaming weights are mirrored from assets to internal storage at runtime, then loaded with `MicTranscriber.loadFromFiles` and `MOONSHINE_MODEL_ARCH_SMALL_STREAMING`. [`examples/android/TextToSpeech`](examples/android/TextToSpeech/) is the same style of Gradle sample for on-device TTS: it uses the `TextToSpeech` class from **`moonshine-voice`** and bundles everything the default English voice needs to run fully offline — the **Kokoro** model, the `af_alloy` voice, and the `en_us` G2P + OOV files (`dict_filtered_heteronyms.tsv`, `g2p-config.json`, `oov/model.onnx`, `oov/onnx-config.json`) — under `app/src/main/assets/tts-data/` (Git LFS). Every other voice — the full Kokoro catalog and Piper voices across all supported languages — is resolved from `moonshine_get_tts_dependencies` and downloaded on demand from `https://download.moonshine.ai/tts/` the first time the user picks a voice that needs it, with a small progress indicator while assets are fetched. Downloads are cached under `filesDir`, so subsequent launches reuse them offline. [`examples/ios/TextToSpeech`](examples/ios/TextToSpeech/) follows the same pattern on Apple platforms: the Xcode project pulls **`MoonshineVoice`** from the Swift package and bundles the same Kokoro + `af_alloy` + `en_us` offline set under `tts-data/` (Git LFS). On first launch the bundled tree is staged into `Application Support/tts-data/`, then `TextToSpeech.getDependencies` is used to download any missing files from `https://download.moonshine.ai/tts/`, with a progress indicator in the UI. Switching to a different voice triggers the same on-demand download, and cached files are reused on subsequent launches.
 
 ### Adding the Library to your own App
 
@@ -397,9 +541,9 @@ For reference purposes you can find Xcode projects with these changes applied in
 
 #### Android
 
-On Android we publish [the package to Maven](https://mvnrepository.com/artifact/ai.moonshine/moonshine-voice). To include it in your project using Android Studio and Gradle, first add the version number you want to the `gradle/libs.versions.toml` file by inserting a line in the `[versions]` section, for example `moonshineVoice = "0.0.51"`. Then in the `[libraries]` part, add a reference to the package: `moonshine-voice = { group = "ai.moonshine", name = "moonshine-voice", version.ref = "moonshineVoice" }`.
+On Android we publish [the package to Maven](https://mvnrepository.com/artifact/ai.moonshine/moonshine-voice). To include it in your project using Android Studio and Gradle, first add the version number you want to the `gradle/libs.versions.toml` file by inserting a line in the `[versions]` section, for example `moonshineVoice = "0.0.60"`. Then in the `[libraries]` part, add a reference to the package: `moonshine-voice = { group = "ai.moonshine", name = "moonshine-voice", version.ref = "moonshineVoice" }`.
 
-Finally, in your `app/build.gradle.kts` add the library to the `dependencies` list: `implementation(libs.moonshine.voice)`. You can find a working example of all these changes in [`examples/android/Transcriber`].
+Finally, in your `app/build.gradle.kts` add the library to the `dependencies` list: `implementation(libs.moonshine.voice)`. The [`examples/android/IntentRecognizer`](examples/android/IntentRecognizer/) and [`examples/android/TextToSpeech`](examples/android/TextToSpeech/) samples use the same coordinates (`moonshineVoice = "0.0.60"` in their catalogs).
 
 #### Windows/C++
 
@@ -462,7 +606,7 @@ cmake ..
 cmake --build .
 ```
 
-After that completes you should have a set of binary executables you can run on your own system. These executables are all unit tests, and expect to be run from the `test-assets` folder. You can run the build and test process in one step using the [`scripts/run-core-tests.sh`](scripts/run-core-tests.sh), or [`scripts/run-core-tests.bat`](scripts/run-core-tests.bat) for Windows. All tests should compile and run without any errors.
+After that completes you should have a set of binary executables you can run on your own system. These executables are all unit tests, and expect to be run from the `test-assets` folder. You can run the build and test process in one step using the [`scripts/test-core.sh`](scripts/test-core.sh), or [`scripts/test-core.bat`](scripts/test-core.bat) for Windows. All tests should compile and run without any errors.
 
 On Linux, the build also produces a standalone `mic-transcriber` binary that reads audio directly from an ALSA device (no Python dependency). You can use it as follows:
 
@@ -498,7 +642,9 @@ If you want to call this library from a language we don't support, then you shou
 
 ### Downloading Models
 
-The easiest way to get the model files is using the Python module. After [installing it](#python) run the downloader like this:
+#### Speech to Text Models
+
+The easiest way to get the model files required for transcription is by using the Python download module. After [installing it](#python) run the downloader like this:
 
 ```bash
 python -m moonshine_voice.download --language en
@@ -525,6 +671,43 @@ Downloaded model path: /Users/petewarden/Library/Caches/moonshine_voice/download
 ```
 
 The last two lines tell you which model architecture is being used, and where the model files are on disk. By default it uses your user cache directory, which is `~/Library/Caches/moonshine_voice` on MacOS, but you can use a different location by setting the `MOONSHINE_VOICE_CACHE` environment variable before running the script.
+
+#### Intent Recognition Models
+
+The download module also helps you obtain the assets you need to recognize intent, primarily a sentence embedding model. 
+
+```python
+python -m moonshine_voice.download --intent
+```
+
+```bash
+model_q4.onnx: 100%|███████████████████████████████████████████████| 507k/507k [00:00<00:00, 4.59MB/s]
+model_q4.onnx_data: 100%|██████████████████████████████████████████| 188M/188M [00:06<00:00, 32.6MB/s]
+Embedding model path: /Users/petewarden/Library/Caches/moonshine_voice/download.moonshine.ai/model/embeddinggemma-300m
+/Users/petewarden/Library/Caches/moonshine_voice/download.moonshine.ai/model/embeddinggemma-300m
+```
+
+#### Text to Speech Models
+
+A large variety of models, dictionaries and other files are needed for TTS, and these vary widely by language. You can use the download module to pull down exactly what you need for a particular language, and optionally a voice:
+
+```bash
+python -m moonshine_voice.download --tts --root /tmp/tts-files/
+
+dict_filtered_heteronyms.tsv: 100%|██████████████████████████████| 2.77M/2.77M [00:00<00:00, 15.5MB/s]
+g2p-config.json: 100%|██████████████████████████████████████████████| 60.0/60.0 [00:00<00:00, 160kB/s]
+model.onnx: 100%|████████████████████████████████████████████████| 20.9M/20.9M [00:00<00:00, 37.7MB/s]
+onnx-config.json: 100%|██████████████████████████████████████████| 4.53k/4.53k [00:00<00:00, 11.7MB/s]
+model.onnx: 100%|████████████████████████████████████████████████| 88.1M/88.1M [00:01<00:00, 85.6MB/s]
+config.json: 100%|███████████████████████████████████████████████| 2.30k/2.30k [00:00<00:00, 6.88MB/s]
+af_heart.kokorovoice: 100%|████████████████████████████████████████| 510k/510k [00:00<00:00, 3.82MB/s]
+TTS assets root (use as g2p_root): /private/tmp/tts-files
+/private/tmp/tts-files
+```
+
+The downloaded models are placed in child folders underneath the root folder, and by default the text to speech module expects the files to have the same relative paths so it can find them automatically given only the parent's path. If you do need to move them to different locations, you can supply new paths for each file using the `options` argument to `TextToSpeech`'s constructor, with the usual relative path as the key, and the actual path to the file as the key.
+
+If you have an application that may be stored in an arbitrary location after installation, you can also pass in a `tts_root` value as an option to set the path to the actual root folder of the TTS data at runtime.
 
 ### Benchmarks
 
@@ -611,7 +794,7 @@ Moonshine Voice is based on a family of speech to text models created by the tea
 These research papers are a good resource for understanding the architectures and performance strategies behind the models:
 
 - [**Moonshine: Speech Recognition for Live Transcription and Voice Commands**](https://arxiv.org/abs/2410.15608): Describes the first-generation model architecture, which enabled flexible-duration input windows, improving on Whisper's fixed 30 second requirement.
-- [**Flavors of Moonshine: Tiny Specialized ASR Models for Edge Devices**](https://arxiv.org/abs/2509.02523): How we improved accuracy for non-English languages by training mono-lingual models.
+- [**Flavors of Moonshine: Tiny Specialized ASR Models for Edge Devices**](https://arxiv.org/abs/2509.0.553): How we improved accuracy for non-English languages by training mono-lingual models.
 - [**Moonshine v2: Ergodic Streaming Encoder ASR for Latency-Critical Speech
   Applications**](https://arxiv.org/abs/2602.12241): Introduces our approach to streaming, and the advantages it offers for live voice applications.
 
@@ -661,12 +844,16 @@ This documentation covers the Python API, but the same functions and classes are
   - [Transcript](#transcript)
   - [TranscriptEvent](#transcriptevent)
   - [IntentMatch](#intentmatch)
+  - [TtsVoiceEntry](#ttsvoiceentry)
+  - [TtsVoicesByAvailability](#ttsvoicesbyavailability)
 - [Classes](#classes)
   - [Transcriber](#transcriber)
   - [MicTranscriber](#mictranscriber)
   - [Stream](#stream)
   - [TranscriptEventListener](#transcripteventlistener)
   - [IntentRecognizer](#intentrecognizer)
+  - [TextToSpeech](#texttospeech)
+  - [GraphemeToPhonemizer](#graphemetophonemizer)
 
 ### Data Structures
 
@@ -702,11 +889,26 @@ Contains information about a change to the transcript. It has four subclasses, w
 
 #### IntentMatch
 
-This event is sent to any listeners you have registered when an `IntentRecognizer` finds a match to a command you've specified.
+A dataclass representing a matched intent, returned by `get_closest_intents()` and passed to `set_on_intent()` callbacks.
 
-- `trigger_phrase`: The string representing the canonical command, exactly as you registered it with the recognizer.
+- `canonical_phrase`: The string representing the canonical command, exactly as you registered it with the recognizer.
 - `utterance`: The text of the utterance that triggered the match.
 - `similarity`: A float value that reflects how confident the recognizer is that the utterance has the same meaning as the command, with zero being the least confident and one the most.
+- `trigger_phrase`: Read-only alias for `canonical_phrase` (backward compatibility).
+
+#### TtsVoiceEntry
+
+A single voice row from the native TTS catalog (as returned inside the map from `get_tts_voice_catalog()`).
+
+- `id`: The voice identifier string (often with a `kokoro_` or `piper_` prefix to pin the vocoder).
+- `state`: Either `"found"` (assets present under the resolved asset root) or `"missing"` (listed in the catalog but not on disk yet).
+
+#### TtsVoicesByAvailability
+
+The dictionary shape returned by `list_tts_voices()`.
+
+- `present`: Sorted list of voice ids that are already available under the asset root used for the query.
+- `downloadable`: Sorted list of catalog voice ids that are not on disk yet but can be fetched (for example when constructing `TextToSpeech` with `download=True`).
 
 ### Classes
 
@@ -781,13 +983,92 @@ A specialized kind of event listener that you add as a listener to a `Transcribe
   - `model_arch`: An `EmbeddingModelArch`, obtained from the `download_embedding_model()` function.
   - `model_variant`: The precision to run the model at. "q4" is recommended.
   - `threshold`: How close an utterance has to be to the target sentence to trigger an event.
-- <a id="intentrecognizer-register-intent"></a>`register_intent()`: Asks the recognizer to look for utterances that match a given command, and call back into the application when one is found.
+- <a id="intentrecognizer-register-intent"></a>`register_intent()`: Registers a canonical phrase for the recognizer to match against, with optional pre-computed embedding and priority.
   - `trigger_phrase`: The canonical command sentence to match against.
-  - `handler`: A callable function or object that contains code you want to trigger when the command is recognized.
-- <a id="intentrecognizer-unregister-intent"></a>`unregister_intent()`: Removes an intent handler from the event callback process.
-  - `handler`: A handler that had previously been registered with the recognizer.
-- <a id="intentrecognizer-clear-intents"></a>`clear_intents()`: Removes all intent listeners from the recognizer.
+  - `handler`: *(optional)* A callable `(canonical_phrase, utterance, similarity) -> None` invoked by `process_utterance()` for the best match.
+  - `embedding`: *(optional, keyword-only)* A list of floats representing a pre-computed embedding. When `None` (the default) the native library computes the embedding from `trigger_phrase` automatically. Use `calculate_embedding()` to pre-compute embeddings.
+  - `priority`: *(optional, keyword-only)* An integer priority. Higher-priority intents rank above lower-priority ones in `get_closest_intents()`, even when their similarity score is lower. Defaults to `0`.
+- <a id="intentrecognizer-unregister-intent"></a>`unregister_intent()`: Removes an intent from the recognizer.
+  - `trigger_phrase`: The trigger phrase of the intent to remove.
+- <a id="intentrecognizer-calculate-embedding"></a>`calculate_embedding()`: Computes the embedding vector for a sentence. This is useful for pre-computing embeddings that can later be passed to `register_intent()` via the `embedding` parameter, or for storing embeddings externally.
+  - `sentence`: The input text to embed.
+  - `model_name`: *(optional, keyword-only)* Reserved for future use; pass `None`.
+  - **Returns**: A list of floats representing the embedding vector.
+- <a id="intentrecognizer-get-closest-intents"></a>`get_closest_intents()`: Returns registered intents ranked by similarity to an utterance.
+  - `utterance`: The spoken text to match against registered intents.
+  - `tolerance_threshold`: *(optional)* Minimum similarity threshold. Uses the instance `threshold` when not provided.
+  - **Returns**: A list of `IntentMatch` objects sorted by priority (descending), then similarity (descending).
+- <a id="intentrecognizer-intent-count"></a>`intent_count()`: Returns the number of registered intents.
+- <a id="intentrecognizer-clear-intents"></a>`clear_intents()`: Removes all registered intents from the recognizer.
 - <a id="intentrecognizer-set-on-intent"></a>`set_on_intent()`: Sets a callable that is called when any registered action is triggered, not just a single command as for `register_intent()`.
+
+#### TextToSpeech
+
+On-device text-to-speech using the Moonshine native stack (Kokoro and Piper vocoders plus per-language G2P assets). Required files are resolved from the CDN unless you pass `download=False` and supply a populated tree. Invalid language tags raise `MoonshineTtsLanguageError`; missing or unknown voices raise `MoonshineTtsVoiceError`. Playback failures from `say()` raise `MoonshineAudioOutputError` with a list of output devices when enumeration succeeds.
+
+`say()` is non-blocking and queued: each call returns immediately and utterances are played back in order by a background pipeline. A dedicated synthesis thread pre-synthesizes the next utterance while the current one is playing, minimizing the gap between consecutive utterances. Use `stop()` to cancel all pending speech, `wait()` to block until everything has been played, and `is_talking()` to poll playback state. The same API shape is available across Python, Swift, and Android (Java).
+
+Use `list_tts_languages()`, `list_tts_voices()`, and `get_tts_voice_catalog()` to discover supported tags and voices. Asset layout and licenses are summarized in [`core/moonshine-tts/data/README.md`](core/moonshine-tts/data/README.md); see also [Downloading Models](#text-to-speech-models).
+
+- <a id="texttospeech-init"></a>`__init__()`: Creates a synthesizer and optionally downloads dependencies into the package cache (or a custom root).
+  - `language`: BCP-47-style tag for the speaking locale (for example `en_us`, `de`, `fr`). Aliases such as `en-us` are normalized by the library.
+  - `voice`: Optional voice id. Prefix with `kokoro_` or `piper_` to choose the vocoder (for example `kokoro_af_heart`). When `download` is true, a catalogued voice that is not yet on disk is downloaded automatically.
+  - `options`: Optional mapping of string keys to strings, numbers, or booleans, passed through to the native option parser (see below). The Python binding always sets `g2p_root` to the resolved asset directory; do not rely on overriding that key for a different layout—use `asset_root` / `tts_root`-style options instead.
+  - `asset_root`: Optional directory to use as the TTS cache or as the on-disk asset tree. When `download` is true, downloads go under this root when set; when false, this path must already contain the expected `g2p_root` layout.
+  - `download`: When true (default), missing TTS assets are downloaded from `https://download.moonshine.ai/tts/`. When false, `asset_root` is required and must already contain the files the native layer expects.
+
+- `language`: Read-only property returning the normalized language tag in use.
+
+- `asset_root`: Read-only property returning the `pathlib.Path` directory passed to the native layer as `g2p_root`.
+
+- <a id="texttospeech-synthesize"></a>`synthesize()`: Converts `text` to mono PCM audio.
+  - `text`: UTF-8 string to speak.
+  - `options`: Optional extra native options for this call only (merged with the constructor’s `options` semantics on the C side as documented there).
+  - Returns a tuple `(samples, sample_rate)` where `samples` is a list of 32-bit floats in roughly the −1.0…1.0 range and `sample_rate` is the output sample rate in Hz.
+
+- <a id="texttospeech-say"></a>`say()`: Queues text for synthesis and playback, returning immediately. A background synthesis thread converts text to audio, then hands it to a playback thread that plays it on the selected output device. Synthesis of the next utterance overlaps with playback of the current one. Requires `pip install numpy sounddevice` on Python.
+  - `text`: A string or a list of strings to speak. A list is equivalent to calling `say()` once per element in order.
+  - `device`: (Python/Swift-macOS) `None` for the host default output, an integer PortAudio output device index, a decimal string index, or a case-insensitive substring of a device name. On Android, pass a `Context` (required) and optionally an `AudioDeviceInfo`.
+  - `options`: Optional per-call native options, passed through to synthesis unchanged.
+
+- <a id="texttospeech-stop"></a>`stop()`: Clears the utterance queue and stops any audio currently playing. Returns once all pending utterances are discarded and active playback has been halted. It is safe to call `say()` again afterwards.
+
+- <a id="texttospeech-wait"></a>`wait()`: Blocks the calling thread until every queued utterance has been synthesized and played to completion. Named `waitUntilDone()` on Android.
+
+- <a id="texttospeech-is-talking"></a>`is_talking()`: Returns `True` if utterances are still queued, being synthesized, or currently playing. Named `isTalking()` on Swift and Android.
+
+- <a id="texttospeech-close"></a>`close()`: Stops any in-progress playback, discards pending utterances, and releases the native synthesizer handle. Called automatically when using a `with TextToSpeech(...) as tts:` block or on garbage collection.
+
+<a id="texttospeech-options"></a>**Common `options` keys (TTS):** These mirror `MoonshineTTSOptions` in the C++ layer. Values are strings in the underlying API; the Python binding accepts bools and numbers where noted.
+
+- `tts_root`, `path_root`, `model_root`: Aliases for the asset root directory when you need to override layout discovery (same role as `g2p_root` in the native parser).
+- `voice`: Default voice id if not passed to the constructor (constructor argument wins when both are set in typical use).
+- `speed`: Speaking rate multiplier (floating-point).
+- `kokoro_dir`, `kokoro_model` / `kokoro_model_onnx`, `kokoro_config` / `kokoro_config_json`: Override paths for Kokoro ONNX and config within the asset tree.
+- `piper_onnx` / `piper_model_onnx`, `piper_onnx_json`, `piper_voices_dir` / `voices_dir`, `piper_voices_json_dir` / `voices_json_dir`: Override paths for Piper model, JSON sidecar, and voice directories.
+- `piper_normalize_audio`, `piper_output_volume`, `piper_noise_scale` / `piper_noise_scale_override`, `piper_noise_w` / `piper_noise_w_override`: Piper inference tuning (see native option parsing for types).
+
+Additional keys are forwarded to the G2P option parser (language-specific ONNX overrides, feature flags, and so on).
+
+#### GraphemeToPhonemizer
+
+IPA string generation without speech synthesis. Dependencies are the same CDN lexicon and ONNX bundles as TTS, but restricted to what `moonshine_get_g2p_dependencies` reports for the language. When `download` is true, assets are placed under the package cache or `asset_root`; when false, `asset_root` must already contain those files.
+
+- <a id="graphemetophonemizer-init"></a>`__init__()`: Creates a native G2P handle.
+  - `language`: Locale tag (for example `en_us`, `ja`). Normalized the same way as for TTS.
+  - `options`: Optional mapping passed to the native layer (G2P keys only; the binding sets `g2p_root` automatically).
+  - `asset_root`: Optional cache or pre-populated directory, same semantics as for `TextToSpeech`.
+  - `download`: When true (default), missing G2P assets are downloaded. When false, `asset_root` is required.
+
+- `language`: Read-only normalized tag.
+
+- `asset_root`: Read-only `pathlib.Path` to the directory used as `g2p_root`.
+
+- <a id="graphemetophonemizer-to-ipa"></a>`to_ipa()`: Returns a single IPA string for the input text.
+  - `text`: UTF-8 surface string.
+  - `options`: Optional per-call native G2P options.
+
+- <a id="graphemetophonemizer-close"></a>`close()`: Frees the native handle; also invoked by context manager exit and `__del__`.
 
 ## Support
 
@@ -813,6 +1094,16 @@ We're grateful to:
 - [Viktor Kirilov](https://github.com/onqtam) for [his fantastic DocTest C++ testing framework](https://github.com/doctest/doctest).
 - [Nemanja Trifunovic](https://github.com/nemtrif) for [his very helpful UTF8 CPP library](https://github.com/nemtrif/utfcpp).
 - The [Pyannote team](https://www.pyannote.ai/) for making available their speaker embedding model.
+- The [espeak-ng community](https://github.com/espeak-ng/espeak-ng/), for all of their inspiring work tackling the endless complexities of translating the written word into speech.
+- The [CMU Pronouncing Dictionary](https://github.com/cmusphinx/cmudict) and [eSpeak NG](https://github.com/espeak-ng/espeak-ng) for English G2P lexicon and pronunciation filtering ([`core/moonshine-tts/data/en_us`](core/moonshine-tts/data/en_us)).
+- [open-dict-data/ipa-dict](https://github.com/open-dict-data/ipa-dict) for multilingual IPA lexicon data used across many locales ([`core/moonshine-tts/data`](core/moonshine-tts/data)).
+- [WikiPron](https://github.com/CUNY-CL/wikipron) (CUNY-CL) for Italian, Russian, and European Portuguese pronunciations.
+- [Koichi Yasuoka](https://huggingface.co/KoichiYasuoka) for the Hugging Face models [chinese-roberta-base-upos](https://huggingface.co/KoichiYasuoka/chinese-roberta-base-upos), [roberta-small-japanese-char-luw-upos](https://huggingface.co/KoichiYasuoka/roberta-small-japanese-char-luw-upos), and [roberta-base-korean-morph-upos](https://huggingface.co/KoichiYasuoka/roberta-base-korean-morph-upos).
+- [hexgrad/Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) and [onnx-community/Kokoro-82M-ONNX](https://huggingface.co/onnx-community/Kokoro-82M-ONNX) for Kokoro TTS weights and ONNX ([`core/moonshine-tts/data/kokoro`](core/moonshine-tts/data/kokoro)).
+- [MeloTTS](https://github.com/myshell-ai/MeloTTS) from [MyShell](https://myshell.ai) as reference for Korean Piper voice training ([`core/moonshine-tts/data/ko`](core/moonshine-tts/data/ko)).
+- [English Wiktionary](https://en.wiktionary.org/wiki/Wiktionary:Copyrights) and [hermitdave/FrequencyWords](https://github.com/hermitdave/FrequencyWords) for Hindi lexicon material ([`core/moonshine-tts/data/hi`](core/moonshine-tts/data/hi)).
+- [hbenbel/French-Dictionary](https://github.com/hbenbel/French-Dictionary) for related French liaison lexicon work ([`core/moonshine-tts/data/fr`](core/moonshine-tts/data/fr)).
+- [AbderrahmanSkiredj1/arabertv02_tashkeel_fadel](https://huggingface.co/AbderrahmanSkiredj1/arabertv02_tashkeel_fadel) for Arabic diacritization and [CAMeL Tools](https://camel-tools.readthedocs.io/) for optional Arabic MSA lexicon builds ([`core/moonshine-tts/data/ar_msa`](core/moonshine-tts/data/ar_msa)).
 
 ## License
 
@@ -821,3 +1112,5 @@ This code, apart from the source in `core/third-party`, is licensed under the MI
 The English-language models are also released under the MIT License. Models for other languages are released under the [Moonshine Community License](https://moonshine.ai), which is a non-commercial license.
 
 The code in `core/third-party` is licensed according to the terms of the open source projects it originates from, with details in a LICENSE file in each subfolder.
+
+The text to speech and grapheme to phoneme models and data files are licensed under the terms listed in their readmes and their source repositories. Per-language details and regeneration notes live under [`core/moonshine-tts/data/`](core/moonshine-tts/data/README.md).

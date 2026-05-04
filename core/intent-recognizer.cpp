@@ -1,6 +1,7 @@
 #include "intent-recognizer.h"
 
 #include <algorithm>
+#include <limits>
 #include <stdexcept>
 
 #include "gemma-embedding-model.h"
@@ -28,31 +29,39 @@ std::unique_ptr<EmbeddingModel> create_embedding_model(
 }  // namespace
 
 IntentRecognizer::IntentRecognizer(const IntentRecognizerOptions &options)
-    : embedding_model_(create_embedding_model(options)),
-      transcriber_(nullptr),
-      threshold_(options.threshold) {}
+    : embedding_model_(create_embedding_model(options)) {}
 
 IntentRecognizer::~IntentRecognizer() = default;
 
+void IntentRecognizer::register_intent(const std::string &trigger_phrase) {
+  register_intent(trigger_phrase, nullptr, 0, 0);
+}
+
 void IntentRecognizer::register_intent(const std::string &trigger_phrase,
-                                       IntentCallback callback) {
+                                       const float *embedding,
+                                       uint64_t embedding_size,
+                                       int32_t priority) {
   std::lock_guard<std::mutex> lock(mutex_);
 
-  // Check if intent with this trigger phrase already exists
+  std::vector<float> emb;
+  if (embedding != nullptr && embedding_size > 0) {
+    emb.assign(embedding, embedding + embedding_size);
+  } else {
+    emb = embedding_model_->get_embeddings(trigger_phrase);
+  }
+
   for (auto &intent : intents_) {
     if (intent.trigger_phrase == trigger_phrase) {
-      // Update existing intent
-      intent.callback = callback;
-      intent.embedding = embedding_model_->get_embeddings(trigger_phrase);
+      intent.embedding = std::move(emb);
+      intent.priority = priority;
       return;
     }
   }
 
-  // Add new intent
   Intent intent;
   intent.trigger_phrase = trigger_phrase;
-  intent.callback = callback;
-  intent.embedding = embedding_model_->get_embeddings(trigger_phrase);
+  intent.embedding = std::move(emb);
+  intent.priority = priority;
   intents_.push_back(std::move(intent));
 }
 
@@ -72,63 +81,50 @@ bool IntentRecognizer::unregister_intent(const std::string &trigger_phrase) {
   return false;
 }
 
-bool IntentRecognizer::process_utterance(const std::string &utterance) {
-  if (utterance.empty()) {
-    return false;
+std::vector<std::pair<std::string, float>> IntentRecognizer::rank_intents(
+    const std::string &utterance, float threshold, size_t max_results) {
+  struct RankedEntry {
+    std::string phrase;
+    float similarity;
+    int32_t priority;
+  };
+
+  std::vector<std::pair<std::string, float>> ranked;
+  if (utterance.empty() || max_results == 0) {
+    return ranked;
   }
 
-  float similarity = 0.0f;
-  const Intent *best_intent = find_best_intent(utterance, similarity);
-
-  if (best_intent != nullptr && similarity >= threshold_) {
-    // Invoke the callback
-    best_intent->callback(utterance, similarity);
-    return true;
-  }
-
-  return false;
-}
-
-void IntentRecognizer::process_transcript(
-    const struct transcript_t *transcript) {
-  if (transcript == nullptr || transcript->lines == nullptr) {
-    return;
-  }
-
-  for (size_t i = 0; i < transcript->line_count; ++i) {
-    const transcript_line_t &line = transcript->lines[i];
-
-    // Only process complete lines
-    if (!line.is_complete) {
-      continue;
-    }
-
-    // Check if we've already processed this line
-    auto it = std::find(processed_line_ids_.begin(), processed_line_ids_.end(),
-                        line.id);
-    if (it != processed_line_ids_.end()) {
-      continue;
-    }
-
-    // Process the utterance
-    if (line.text != nullptr) {
-      std::string utterance(line.text);
-      process_utterance(utterance);
-    }
-
-    // Mark as processed
-    processed_line_ids_.push_back(line.id);
-  }
-}
-
-void IntentRecognizer::set_threshold(float threshold) {
   std::lock_guard<std::mutex> lock(mutex_);
-  threshold_ = threshold;
-}
+  if (intents_.empty()) {
+    return ranked;
+  }
 
-float IntentRecognizer::get_threshold() const {
-  std::lock_guard<std::mutex> lock(mutex_);
-  return threshold_;
+  std::vector<float> utterance_embedding =
+      embedding_model_->get_embeddings(utterance);
+
+  std::vector<RankedEntry> entries;
+  entries.reserve(intents_.size());
+  for (const auto &intent : intents_) {
+    float similarity =
+        embedding_model_->get_similarity(utterance_embedding, intent.embedding);
+    if (similarity >= threshold) {
+      entries.push_back({intent.trigger_phrase, similarity, intent.priority});
+    }
+  }
+
+  std::sort(entries.begin(), entries.end(), [](const auto &a, const auto &b) {
+    if (a.priority != b.priority) return a.priority > b.priority;
+    return a.similarity > b.similarity;
+  });
+  if (entries.size() > max_results) {
+    entries.resize(max_results);
+  }
+
+  ranked.reserve(entries.size());
+  for (auto &e : entries) {
+    ranked.emplace_back(std::move(e.phrase), e.similarity);
+  }
+  return ranked;
 }
 
 size_t IntentRecognizer::get_intent_count() const {
@@ -141,38 +137,20 @@ void IntentRecognizer::clear_intents() {
   intents_.clear();
 }
 
-Transcriber *IntentRecognizer::get_transcriber() const { return transcriber_; }
-
-void IntentRecognizer::set_transcriber(Transcriber *transcriber) {
-  transcriber_ = transcriber;
+std::vector<float> IntentRecognizer::calculate_embedding(
+    const std::string &sentence) const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return embedding_model_->get_embeddings(sentence);
 }
 
-const Intent *IntentRecognizer::find_best_intent(const std::string &utterance,
-                                                 float &out_similarity) {
+float IntentRecognizer::calculate_similarity(
+    const std::vector<float> &a, const std::vector<float> &b) const {
   std::lock_guard<std::mutex> lock(mutex_);
+  return embedding_model_->get_similarity(a, b);
+}
 
-  if (intents_.empty()) {
-    out_similarity = 0.0f;
-    return nullptr;
-  }
-
-  // Get embedding for the utterance
-  std::vector<float> utterance_embedding =
-      embedding_model_->get_embeddings(utterance);
-
-  const Intent *best_intent = nullptr;
-  float best_similarity = -1.0f;
-
-  for (const auto &intent : intents_) {
-    float similarity =
-        embedding_model_->get_similarity(utterance_embedding, intent.embedding);
-
-    if (similarity > best_similarity) {
-      best_similarity = similarity;
-      best_intent = &intent;
-    }
-  }
-
-  out_similarity = best_similarity;
-  return best_intent;
+size_t IntentRecognizer::get_embedding_size() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  auto probe = embedding_model_->get_embeddings("");
+  return probe.size();
 }

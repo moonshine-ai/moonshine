@@ -6,22 +6,25 @@ public class Stream {
     private let api: MoonshineAPI
     private let handle: Int32
     private let updateInterval: TimeInterval
-    
+    private let transcribeFlags: UInt32
+
     private var listeners: [ListenerWrapper] = []
     private var streamTime: TimeInterval = 0.0
     private var lastUpdateTime: TimeInterval = 0.0
     private var isActive_: Bool = false
-        
+
     internal init(
         transcriber: Transcriber,
         handle: Int32,
         updateInterval: TimeInterval = 0.5,
-        flags: UInt32 = 0
+        flags: UInt32 = 0,
+        transcribeFlags: UInt32 = 0
     ) {
         self.transcriber = transcriber
         self.api = MoonshineAPI.shared
         self.handle = handle
         self.updateInterval = updateInterval
+        self.transcribeFlags = transcribeFlags
         self.isActive_ = false
     }
     
@@ -41,9 +44,13 @@ public class Stream {
         isActive_ = false
         try api.stopStream(transcriberHandle: transcriber.handle, streamHandle: handle)
         // There may be some audio left in the stream, so we need to transcribe it
-        // to get the final transcript and emit events.
+        // to get the final transcript and emit events. We OR in the
+        // stream's default ``transcribeFlags`` so spelling-mode (when
+        // requested at construction) still runs on the trailing
+        // segment.
         do {
-            try updateTranscription(flags: TranscribeStreamFlags.flagForceUpdate)
+            try updateTranscription(
+                flags: TranscribeStreamFlags.flagForceUpdate | transcribeFlags)
         } catch {
             emitError(error)
         }
@@ -73,7 +80,7 @@ public class Stream {
         
         // Auto-update if enough time has passed
         if streamTime - lastUpdateTime >= updateInterval {
-            try updateTranscription(flags: 0)
+            try updateTranscription(flags: transcribeFlags)
             lastUpdateTime = streamTime
         }
     }

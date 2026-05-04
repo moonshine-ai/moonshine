@@ -1,0 +1,15 @@
+[versions]
+agp = "8.13.2"
+kotlin = "2.1.10"
+appcompat = "1.6.1"
+material = "1.10.0"
+moonshineVoice = "0.0.60"
+
+[libraries]
+appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+moonshine-voice = { group = "ai.moonshine", name = "moonshine-voice", version.ref = "moonshineVoice" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

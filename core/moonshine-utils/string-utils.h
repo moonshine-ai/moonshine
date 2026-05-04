@@ -25,12 +25,16 @@ std::string append_path_component(const std::string &path,
 
 std::string to_lowercase(const std::string &str);
 
+bool bool_from_string(const std::string &input);
 bool bool_from_string(const char *input);
 
+float float_from_string(const std::string &input);
 float float_from_string(const char *input);
 
+int32_t int32_from_string(const std::string &input);
 int32_t int32_from_string(const char *input);
 
+size_t size_t_from_string(const std::string &input);
 size_t size_t_from_string(const char *input);
 
 #endif

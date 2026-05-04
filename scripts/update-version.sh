@@ -14,11 +14,20 @@ KNOWN_FILES=(
 	./examples/macos/BasicTranscription/Package.swift
 	./examples/macos/MicTranscription/MicTranscription.xcodeproj/project.pbxproj
 	./examples/macos/MicTranscription/Package.swift
+	./examples/macos/TextToSpeech/Package.swift
+    ./examples/ios/IntentRecognizer/IntentRecognizer.xcodeproj/project.pbxproj
 	./examples/ios/Transcriber/Transcriber.xcodeproj/project.pbxproj
+	./examples/ios/TextToSpeech/TextToSpeech.xcodeproj/project.pbxproj
 	./examples/android/Transcriber/gradle/libs.versions.toml
+	./examples/android/IntentRecognizer/gradle/libs.versions.toml
+	./examples/android/TextToSpeech/gradle/libs.versions.toml
 	./scripts/publish-swift.sh
 	./scripts/publish-binary.sh
 	./scripts/publish-binary.bat
+	./scripts/publish-examples.sh
+	./scripts/test-examples.sh
+	./examples/c++/download-library.sh
+	./examples/c++/README.md
 )
 
 ACTUAL_FILES=()
@@ -37,6 +46,20 @@ done < <(grep -rlI \
   --exclude=PKG-INFO \
   --exclude=cli-transcriber.sln \
   --exclude=transcriber-test.cpp \
+  --exclude=silero-vad-model-data.h \
+  --exclude=spanish-unicode-tables.cpp \
+  --exclude=russian.cpp \
+  --exclude=arabic-ipa.cpp \
+  --exclude=speaker-embedding-model-data.cpp \
+  --exclude=moonshine-cpp-test.cpp \
+  --exclude=.env \
+  --exclude=icon_mic.xml \
+  --exclude=en_US-saikat.onnx.json \
+  --exclude=portuguese-rules.cpp \
+  --exclude=*.bin \
+  --exclude=zh_hans.txt \
+  --exclude=ipa-postprocess.cpp \
+  --exclude=*.tsv \
   "$OLD_VERSION" .)
 for FILE in "${ACTUAL_FILES[@]}"; do
 	echo "Checking file '$FILE'"

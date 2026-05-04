@@ -1,0 +1,62 @@
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+#include <doctest/doctest.h>
+
+#include "japanese-tok-pos-onnx.h"
+#include "rule-g2p-test-support.h"
+
+namespace r = moonshine_tts::rule_g2p_test;
+
+TEST_CASE("japanese tok pos: single sentence matches reference file") {
+  const auto repo = r::repo_root_from_tests_cpp(__FILE__);
+  const auto model =
+      moonshine_tts::default_japanese_tok_pos_model_dir(r::moonshine_tts_bundled_data_dir_relative());
+  const std::filesystem::path golden = r::tests_data_dir(repo) / "ja" / "tok_pos_sample.txt";
+  if (!std::filesystem::is_regular_file(model / "model.onnx") ||
+      !std::filesystem::is_regular_file(golden)) {
+    return;
+  }
+  const std::string expected = r::load_ref_text_trimmed(golden);
+  moonshine_tts::JapaneseTokPosOnnx pipe(model, false);
+  const auto pairs = pipe.annotate("国境の長いトンネルを抜けると雪国であった。");
+  CHECK(moonshine_tts::JapaneseTokPosOnnx::format_annotated_line(pairs) == expected);
+}
+
+TEST_CASE("japanese tok pos: long input is split and does not exceed model length") {
+  const auto model =
+      moonshine_tts::default_japanese_tok_pos_model_dir(r::moonshine_tts_bundled_data_dir_relative());
+  if (!std::filesystem::is_regular_file(model / "model.onnx") &&
+      !std::filesystem::is_regular_file(model / "model.ort")) {
+    return;
+  }
+  // ja RoBERTa ONNX is shipped with max_sequence_length 128; this text must be chunked.
+  std::string long_text;
+  const std::string unit = "国境の長いトンネルを抜けると雪国であった。";
+  for (int i = 0; i < 80; ++i) {
+    long_text += unit;
+  }
+  moonshine_tts::JapaneseTokPosOnnx pipe(model, false);
+  const auto pairs = pipe.annotate(long_text);
+  CHECK(!pairs.empty());
+}
+
+TEST_CASE("japanese tok pos: first 100 wiki lines match reference when assets and golden exist") {
+  constexpr std::size_t kWikiLines = 100;
+  const auto repo = r::repo_root_from_tests_cpp(__FILE__);
+  const auto model =
+      moonshine_tts::default_japanese_tok_pos_model_dir(r::moonshine_tts_bundled_data_dir_relative());
+  const auto wiki = r::moonshine_tts_bundled_data_dir_relative() / "ja" / "wiki-text.txt";
+  const std::filesystem::path golden = r::tests_data_dir(repo) / "ja" / "tok_pos_wiki_100.txt";
+  if (!std::filesystem::is_regular_file(model / "model.onnx") ||
+      !std::filesystem::is_regular_file(wiki) || !std::filesystem::is_regular_file(golden)) {
+    return;
+  }
+  moonshine_tts::JapaneseTokPosOnnx pipe(model, false);
+  const auto src = r::read_text_first_lines(wiki, kWikiLines);
+  const std::vector<std::string> py = r::ref_lines_prefix(golden, src.size());
+  REQUIRE(py.size() == src.size());
+  for (std::size_t i = 0; i < src.size(); ++i) {
+    INFO("wiki line " << (i + 1));
+    const auto pairs = pipe.annotate(src[i]);
+    CHECK(moonshine_tts::JapaneseTokPosOnnx::format_annotated_line(pairs) == py[i]);
+  }
+}

@@ -30,8 +30,8 @@ parser.add_argument(
 parser.add_argument(
     "--threshold",
     type=float,
-    default=0.6,
-    help="Similarity threshold for intent matching (default: 0.6)",
+    default=0.8,
+    help="Similarity threshold for intent matching (default: 0.8)",
 )
 args = parser.parse_args()
 

@@ -2,9 +2,11 @@ cmake_minimum_required(VERSION 3.22.1)
 
 project("moonshine")
 
+enable_testing()
+
 set(CMAKE_CXX_STANDARD 20)
 
-set(MOONSHINE_VERSION "0.0.49")
+set(MOONSHINE_VERSION "0.0.60")
 
 # Ensure the standard is strictly enforced (optional, but recommended)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -34,6 +36,11 @@ add_subdirectory(
     ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer/build
 )
 
+add_subdirectory(
+    ${CMAKE_CURRENT_LIST_DIR}/moonshine-tts
+    ${CMAKE_CURRENT_LIST_DIR}/moonshine-tts/build
+)
+
 if (ANDROID)
     add_subdirectory(
         ${CMAKE_CURRENT_LIST_DIR}/../android/moonshine-jni
@@ -54,6 +61,9 @@ set(MOONSHINE_SRC_FILES
     intent-recognizer.cpp
     speaker-embedding-model.cpp
     speaker-embedding-model-data.cpp
+    spelling-fusion.cpp
+    spelling-fusion-data.cpp
+    spelling-model.cpp
     online-clusterer.cpp
 )
 
@@ -93,6 +103,16 @@ target_include_directories(moonshine PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/third-party/utf-8/
 )
 
+# Extra static archives merged into moonshine.framework (iOS / Swift xcframework).
+set(_MOONSHINE_FRAMEWORK_MERGE_TTS_ARCHIVES "")
+if(MOONSHINE_TTS_BUILD_ONNX)
+  list(APPEND _MOONSHINE_FRAMEWORK_MERGE_TTS_ARCHIVES
+    "$<TARGET_FILE:moonshine_tts_utf8proc>"
+    "$<TARGET_FILE:moonshine_tts_core>"
+    "$<TARGET_FILE:moonshine_tts_ort>"
+  )
+endif()
+
 if (IOS OR MOONSHINE_BUILD_SWIFT)
     target_link_libraries(moonshine PUBLIC
         bin-tokenizer
@@ -125,8 +145,8 @@ if (IOS OR MOONSHINE_BUILD_SWIFT)
     )
     # For static frameworks, merge all static dependencies into a single library
     # This is required because static libraries don't automatically include their dependencies
-    # We need to merge: moonshine-utils, onnxruntime, ort-utils, bin-tokenizer, and moonshine
-    # Note: Order matters - dependencies first, then the main library
+    # We merge: moonshine-utils, onnxruntime, ort-utils, bin-tokenizer, optional moonshine-tts
+    # archives, then moonshine. Order matters — dependencies first, then the main library.
     add_custom_command(TARGET moonshine POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "Merging static libraries into framework..."
         COMMAND libtool -static -o "$<TARGET_FILE:moonshine>.merged"
@@ -134,6 +154,7 @@ if (IOS OR MOONSHINE_BUILD_SWIFT)
             "${ONNXRUNTIME_LIB_PATH}"
             "$<TARGET_FILE:ort-utils>"
             "$<TARGET_FILE:bin-tokenizer>"
+            ${_MOONSHINE_FRAMEWORK_MERGE_TTS_ARCHIVES}
             "$<TARGET_FILE:moonshine>"
         COMMAND ${CMAKE_COMMAND} -E remove "$<TARGET_FILE:moonshine>"
         COMMAND ${CMAKE_COMMAND} -E rename "$<TARGET_FILE:moonshine>.merged" "$<TARGET_FILE:moonshine>"
@@ -160,6 +181,29 @@ else()
     )
 endif()
 
+if(MOONSHINE_TTS_BUILD_ONNX)
+    target_link_libraries(moonshine PRIVATE moonshine_tts_ort)
+    target_include_directories(moonshine PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-tts/src
+    )
+    target_compile_definitions(moonshine PRIVATE MOONSHINE_C_API_MOONSHINE_TTS=1)
+    moonshine_tts_set_ort_rpath(moonshine)
+    if(WIN32)
+        copy_onnxruntime_dll(moonshine)
+    endif()
+else()
+    target_compile_definitions(moonshine PRIVATE MOONSHINE_C_API_MOONSHINE_TTS=0)
+endif()
+
+# macOS shared lib: replace linker ad-hoc signature with a full codesign pass. Linker-signed
+# libmoonshine.dylib can trigger AMFI "CODESIGNING Invalid Page" when dlopen'd from e.g. Homebrew Python.
+if(APPLE AND NOT IOS AND NOT MOONSHINE_BUILD_SWIFT)
+    add_custom_command(TARGET moonshine POST_BUILD
+        COMMAND /usr/bin/codesign --force --sign - "$<TARGET_FILE:moonshine>"
+        COMMENT "Ad-hoc codesign libmoonshine.dylib for stable dlopen on macOS"
+    )
+endif()
+
 add_executable(moonshine-c-api-test moonshine-c-api-test.cpp)
 set_target_properties(moonshine-c-api-test PROPERTIES
     CXX_STANDARD 20
@@ -182,6 +226,29 @@ if (IOS OR MOONSHINE_BUILD_SWIFT)
 endif()
 
 target_link_libraries(moonshine-c-api-test PRIVATE
+    moonshine
+)
+
+add_executable(moonshine-c-api-memory-test moonshine-c-api-memory-test.cpp)
+set_target_properties(moonshine-c-api-memory-test PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED YES
+    CXX_EXTENSIONS NO
+)
+target_include_directories(moonshine-c-api-memory-test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}
+    ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+    ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+)
+if (IOS OR MOONSHINE_BUILD_SWIFT)
+    set_target_properties(moonshine-c-api-memory-test PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.moonshine-c-api-memory-test"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+    )
+endif()
+target_link_libraries(moonshine-c-api-memory-test PRIVATE
     moonshine
 )
 
@@ -315,6 +382,25 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
     else()
         target_link_libraries(cosine-distance-test PRIVATE
             moonshine
+        )
+    endif()
+
+    add_executable(spelling-fusion-test spelling-fusion-test.cpp spelling-fusion.cpp spelling-fusion-data.cpp)
+    set_target_properties(spelling-fusion-test PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(spelling-fusion-test PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+    )
+    if (IOS OR MOONSHINE_BUILD_SWIFT)
+        set_target_properties(spelling-fusion-test PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.spelling-fusion-test"
+            MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
         )
     endif()
 
@@ -462,6 +548,42 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
         )
     else()
         target_link_libraries(speaker-embedding-model-test PRIVATE
+            moonshine
+            ${ONNXRUNTIME_LIB_PATH}
+        )
+    endif()
+
+    add_executable(spelling-model-test spelling-model-test.cpp spelling-model.cpp spelling-fusion.cpp spelling-fusion-data.cpp)
+    set_target_properties(spelling-model-test PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(spelling-model-test PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+        ${CMAKE_CURRENT_LIST_DIR}/ort-utils
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+    )
+
+    copy_onnxruntime_dll(spelling-model-test)
+
+    if (IOS OR MOONSHINE_BUILD_SWIFT)
+        set_target_properties(spelling-model-test PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.spelling-model-test"
+            MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        )
+        target_link_libraries(spelling-model-test PRIVATE
+            moonshine
+            ${ONNXRUNTIME_LIB_PATH}
+            "-framework CoreFoundation"
+            "-framework Foundation"
+        )
+    else()
+        target_link_libraries(spelling-model-test PRIVATE
             moonshine
             ${ONNXRUNTIME_LIB_PATH}
         )

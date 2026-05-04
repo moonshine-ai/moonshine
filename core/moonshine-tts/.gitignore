@@ -1,0 +1,4 @@
+build*/
+build-*/
+cmake-build-*/
+out.wav

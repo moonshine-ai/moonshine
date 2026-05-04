@@ -8,6 +8,14 @@ To use this you'll first need to download a prebuilt version of the library, or 
 
 The library files are available as part of our [releases on GitHub](https://github.com/moonshine-ai/moonshine/releases). Look for the most recent version, and you should see a file called moonshine-voice-_.tgz, where _ is your platform. Download and extract that archive, placing the resulting folder in this `examples/c++` directory.
 
+For example, on MacOS you can download and extract the library with:
+
+```bash
+cd examples/c++
+curl -O -L https://github.com/moonshine-ai/moonshine/releases/download/v0.0.60/moonshine-voice-macos-arm64.tar.gz
+tar xzf moonshine-voice-macos-arm64.tar.gz 
+```
+
 ## Build
 
 The archive contains a .a or .lib archive (depending on your platform) inside the `lib` folder. This is the static library you'll need to link against. There are also two headers, one for the low-level C API, and another for the higher-level C++ framework that's built on top of it.
@@ -22,6 +30,11 @@ g++ transcriber.cpp \
   -Lmoonshine-voice-linux-x86_64/lib \
   -lmoonshine \
   -o transcriber
+g++ text-to-speech.cpp \
+  -Imoonshine-voice-linux-x86_64/include \
+  -Lmoonshine-voice-linux-x86_64/lib \
+  -lmoonshine \
+  -o text-to-speech
 export LD_LIBRARY_PATH=`pwd`/moonshine-voice-linux-x86_64/lib
 ```
 
@@ -33,6 +46,13 @@ g++ transcriber.cpp \
   -Lmoonshine-voice-macos-arm64/lib \
   -lmoonshine \
   -o transcriber \
+  -framework CoreFoundation \
+  -framework Foundation
+g++ text-to-speech.cpp \
+  -Imoonshine-voice-macos-arm64/include \
+  -Lmoonshine-voice-macos-arm64/lib \
+  -lmoonshine \
+  -o text-to-speech \
   -framework CoreFoundation \
   -framework Foundation
 ```

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Moonshine TTS</string>
+    <string name="speak">Speak</string>
+    <string name="speaking">Speaking…</string>
+    <string name="language_label">Language</string>
+    <string name="voice_label">Voice</string>
+    <string name="hint_enter_text">Enter text to speak…</string>
+    <string name="initializing">Initializing TTS…</string>
+    <string name="downloading_asset">Downloading %1$s (%2$d / %3$d)</string>
+    <string name="voice_suffix_downloadable">— tap to download</string>
+</resources>

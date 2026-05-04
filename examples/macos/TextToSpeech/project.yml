@@ -1,0 +1,33 @@
+name: TextToSpeech
+options:
+  bundleIdPrefix: com.moonshine
+  deploymentTarget:
+    macOS: "13.0"
+  developmentLanguage: en
+  xcodeVersion: "15.0"
+
+packages:
+  Moonshine:
+    path: ../../../swift
+
+targets:
+  TextToSpeech:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Sources/TextToSpeech
+    dependencies:
+      - package: Moonshine
+        product: MoonshineVoice
+    settings:
+      SWIFT_VERSION: "6.0"
+      PRODUCT_NAME: TextToSpeech
+
+schemes:
+  TextToSpeech:
+    build:
+      targets:
+        TextToSpeech: all
+    run:
+      config: Debug
+      executable: TextToSpeech

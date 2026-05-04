@@ -14,6 +14,20 @@ public class JNI {
     public static final int MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING = 5;
 
     public static final int MOONSHINE_FLAG_FORCE_UPDATE = 1 << 0;
+    /**
+     * Run the alphanumeric spelling-fusion path on completed lines. Requires
+     * the transcriber to have been built with a {@code spelling_model_path}
+     * option (or a non-null spelling model byte array passed to
+     * {@link #moonshineLoadTranscriberFromMemory}); without one, this flag
+     * is a no-op.
+     */
+    public static final int MOONSHINE_FLAG_SPELLING_MODE = 1 << 1;
+
+    /** Embedding model architecture for intent recognition (Gemma 300M). */
+    public static final int MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M = 0;
+
+    /** Pass to TTS/G2P create calls; must match native {@code moonshine-c-api.h}. */
+    public static final int MOONSHINE_HEADER_VERSION = 20000;
 
     public static native int moonshineGetVersion();
 
@@ -23,8 +37,17 @@ public class JNI {
 
     public static native int moonshineLoadTranscriberFromFiles(String path, int model_arch, Object[] options);
 
+    /**
+     * Loads a transcriber from in-memory model buffers.
+     *
+     * @param spelling_model_data Optional spelling-CNN {@code .ort} payload; pass
+     *                            {@code null} when not using
+     *                            {@link #MOONSHINE_FLAG_SPELLING_MODE}. When provided,
+     *                            the buffer is referenced (not copied) for the
+     *                            transcriber's lifetime.
+     */
     public static native int moonshineLoadTranscriberFromMemory(byte[] encoder_model_data, byte[] decoder_model_data,
-            byte[] tokenizer_data, int model_arch, Object[] options);
+            byte[] tokenizer_data, byte[] spelling_model_data, int model_arch, Object[] options);
 
     public static native void moonshineFreeTranscriber(int transcriber_handle);
 
@@ -43,10 +66,66 @@ public class JNI {
     public static native int moonshineAddAudioToStream(int transcriber_handle,
             int stream_handle,
             float[] audio_data,
-            int sample_rate);
+            int sample_rate,
+            int flags);
 
     public static native Transcript moonshineTranscribeStream(int transcriber_handle,
             int stream_handle, int flags);
+
+    public static native int moonshineCreateIntentRecognizer(String model_path,
+            int embedding_model_arch, String model_variant);
+
+    public static native void moonshineFreeIntentRecognizer(int intent_recognizer_handle);
+
+    public static native int moonshineRegisterIntent(int intent_recognizer_handle,
+            String canonical_phrase, float[] embedding, int priority);
+
+    public static native int moonshineUnregisterIntent(int intent_recognizer_handle,
+            String canonical_phrase);
+
+    /** Returns null on failure. */
+    public static native IntentMatch[] moonshineGetClosestIntents(
+            int intent_recognizer_handle, String utterance, float tolerance_threshold);
+
+    public static native int moonshineGetIntentCount(int intent_recognizer_handle);
+
+    public static native int moonshineClearIntents(int intent_recognizer_handle);
+
+    /** Returns null on failure. */
+    public static native float[] moonshineCalculateIntentEmbedding(
+            int intent_recognizer_handle, String sentence);
+
+    public static native int moonshineCreateTtsSynthesizerFromFiles(String language,
+            String[] filenames, TranscriberOption[] options);
+
+    public static native int moonshineCreateTtsSynthesizerFromMemory(String language,
+            String[] filenames, byte[][] memory, TranscriberOption[] options);
+
+    public static native void moonshineFreeTtsSynthesizer(int tts_synthesizer_handle);
+
+    public static native String moonshineGetG2pDependencies(String languages,
+            TranscriberOption[] options);
+
+    public static native String moonshineGetTtsDependencies(String languages,
+            TranscriberOption[] options);
+
+    public static native String moonshineGetTtsVoices(String languages,
+            TranscriberOption[] options);
+
+    public static native TtsSynthesisResult moonshineTextToSpeech(int tts_synthesizer_handle,
+            String text, TranscriberOption[] options);
+
+    public static native int moonshineCreateGraphemeToPhonemizerFromFiles(String language,
+            String[] filenames, TranscriberOption[] options);
+
+    public static native int moonshineCreateGraphemeToPhonemizerFromMemory(String language,
+            String[] filenames, byte[][] memory, TranscriberOption[] options);
+
+    public static native void moonshineFreeGraphemeToPhonemizer(
+            int grapheme_to_phonemizer_handle);
+
+    public static native String moonshineTextToPhonemes(int grapheme_to_phonemizer_handle,
+            String text, TranscriberOption[] options);
 
     static boolean isLibraryLoaded = false;
 
