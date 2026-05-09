@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import os
 import sys
 from typing import Callable, List, Optional
+from pathlib import Path
 
 from moonshine_voice.moonshine_api import (
     _MoonshineLib,
