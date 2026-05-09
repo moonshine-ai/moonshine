@@ -7,6 +7,7 @@ recognize intents from transcribed speech.
 
 import ctypes
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 from moonshine_voice.moonshine_api import MoonshineIntentMatchC, _MoonshineLib
