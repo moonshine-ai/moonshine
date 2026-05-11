@@ -9,8 +9,9 @@ from moonshine_voice.utils import get_model_path
 
 import numpy as np
 import sounddevice as sd
+import sys
 import time
-from typing import Callable
+from typing import Callable, Optional
 
 
 class MicTranscriber:
@@ -45,6 +46,35 @@ class MicTranscriber:
         self._channels = channels
         self._blocksize = blocksize
 
+    def _query_device_default_samplerate(self) -> Optional[int]:
+        """Return the input device's native default sample rate, or None on failure.
+
+        Used as a fallback when the requested rate isn't natively supported by
+        the capture device (common on USB mics that only do 44100/48000 Hz).
+        """
+        try:
+            info = sd.query_devices(self._device, "input")
+        except (sd.PortAudioError, OSError, ValueError) as e:
+            print(f"MicTranscriber: could not query device info: {e}", file=sys.stderr)
+            return None
+        rate = info.get("default_samplerate") if isinstance(info, dict) else None
+        try:
+            rate = int(rate) if rate else None
+        except (TypeError, ValueError):
+            rate = None
+        return rate if rate and rate > 0 else None
+
+    def _open_input_stream(self, samplerate: int, callback) -> sd.InputStream:
+        stream = sd.InputStream(
+            samplerate=samplerate,
+            blocksize=self._blocksize,
+            device=self._device,
+            channels=self._channels,
+            dtype="float32",
+            callback=callback,
+        )
+        return stream
+
     def _start_listening(self):
         """
         Start listening to the microphone (or specified audio device).
@@ -59,17 +89,26 @@ class MicTranscriber:
             if in_data is not None:
                 # Flatten and convert to float32 if needed
                 audio_data = in_data.astype(np.float32).flatten()
-                # Call add_audio on the stream
+                # The Moonshine C API resamples to its internal 16 kHz, so we
+                # pass whatever rate the device is actually capturing at.
                 self.mic_stream.add_audio(audio_data, self._samplerate)
 
-        self._sd_stream = sd.InputStream(
-            samplerate=self._samplerate,
-            blocksize=self._blocksize,
-            device=self._device,
-            channels=self._channels,
-            dtype="float32",
-            callback=audio_callback,
-        )
+        try:
+            self._sd_stream = self._open_input_stream(self._samplerate, audio_callback)
+        except sd.PortAudioError as e:
+            # Most commonly PaErrorCode -9997 (Invalid sample rate) when the
+            # capture device doesn't natively support our requested rate.
+            # Fall back to the device's default rate; the C API will resample.
+            fallback = self._query_device_default_samplerate()
+            if fallback is None or fallback == self._samplerate:
+                raise
+            print(
+                f"MicTranscriber: device does not support {self._samplerate} Hz "
+                f"({e}); falling back to {fallback} Hz.",
+                file=sys.stderr,
+            )
+            self._samplerate = fallback
+            self._sd_stream = self._open_input_stream(self._samplerate, audio_callback)
         self._sd_stream.start()
 
     def start(self):
