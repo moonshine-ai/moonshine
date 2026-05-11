@@ -1,7 +1,9 @@
 """Text-to-speech via the Moonshine C API."""
 
 import queue
+import sys
 import threading
+import traceback
 import wave
 from dataclasses import dataclass
 from pathlib import Path
@@ -444,7 +446,11 @@ class TextToSpeech:
                 if not self._say_stop_event.is_set():
                     self._play_queue.put(item)
             except Exception:
-                pass
+                print(
+                    "TextToSpeech: synthesis worker dropped an utterance:",
+                    file=sys.stderr,
+                )
+                traceback.print_exc(file=sys.stderr)
             finally:
                 self._say_queue.task_done()
 
@@ -477,7 +483,11 @@ class TextToSpeech:
             try:
                 self._play_one(item, sd)
             except Exception:
-                pass
+                print(
+                    "TextToSpeech: playback worker failed to play an utterance:",
+                    file=sys.stderr,
+                )
+                traceback.print_exc(file=sys.stderr)
             finally:
                 self._play_queue.task_done()
 
