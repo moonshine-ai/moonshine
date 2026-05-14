@@ -469,7 +469,7 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
   }
   stream->clear_new_audio_buffer();
   this->update_transcript_from_segments(segments, stream, flags, out_transcript);
-  {
+  if (!this->options.return_audio_data) {
     std::lock_guard<std::mutex> lock(stream->vad_mutex);
     stream->vad->clear_completed_segment_audio_data();
   }
