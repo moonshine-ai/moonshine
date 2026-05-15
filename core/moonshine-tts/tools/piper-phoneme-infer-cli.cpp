@@ -108,8 +108,8 @@ int main(int argc, char** argv) {
     const std::filesystem::path base = ec ? std::filesystem::absolute(onnx_path) : canon;
     opt.g2p_options.g2p_root = base.parent_path().parent_path().parent_path();
   }
-  opt.piper_normalize_audio = true;
-  opt.piper_output_volume = 1.F;
+  opt.normalize_audio = true;
+  opt.output_volume = 1.F;
   opt.piper_noise_scale_override = noise_scale_override;
   opt.piper_noise_w_override = noise_w_override;
 

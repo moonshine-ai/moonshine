@@ -152,6 +152,86 @@ def _say_device_spec_key(device: Optional[Union[int, str]]) -> Tuple[Any, ...]:
         return ("name", s.casefold())
 
 
+# Sample rates probed when the output device rejects the synthesizer's
+# native rate. 48 kHz is the modern default and is a clean 2x integer
+# upsample from the 24 kHz the C core emits, so we try it first. The rest
+# are common consumer-audio rates; selection prefers integer multiples
+# (or divisors) of the source rate and only falls back to the nearest
+# rate when no clean ratio is available.
+_RESAMPLE_CANDIDATES: Tuple[int, ...] = (
+    48000, 96000, 192000, 44100, 88200, 32000, 22050, 16000, 11025, 8000,
+)
+
+
+def _select_output_sample_rate(
+    sd: Any, *, device: Optional[int], source_sr: int,
+) -> Tuple[Optional[int], Optional[Exception]]:
+    """Pick the best output sample rate the device will actually open.
+
+    Returns ``(target_sr, last_error)``. ``target_sr`` is ``None`` if no
+    candidate rate works (in which case ``last_error`` is the PortAudio
+    error from the source-rate probe and useful for diagnostics).
+    Otherwise ``target_sr`` is:
+
+    1. ``source_sr`` if the device accepts it natively (no resampling),
+    2. 48000 Hz when supported (cleanest fallback for 24 kHz input),
+    3. otherwise the largest supported rate that is an integer multiple
+       or divisor of ``source_sr``,
+    4. otherwise the supported rate closest to ``source_sr``.
+    """
+    last_err: Optional[Exception] = None
+
+    def _try(sr: int) -> bool:
+        nonlocal last_err
+        try:
+            sd.check_output_settings(
+                samplerate=sr, channels=1, dtype="float32", device=device,
+            )
+            return True
+        except (sd.PortAudioError, OSError, ValueError) as e:
+            last_err = e
+            return False
+
+    if _try(source_sr):
+        return source_sr, None
+    supported = [
+        sr for sr in _RESAMPLE_CANDIDATES
+        if sr != source_sr and _try(sr)
+    ]
+    if not supported:
+        return None, last_err
+    if 48000 in supported:
+        return 48000, last_err
+    multiples = [
+        sr for sr in supported
+        if sr % source_sr == 0 or source_sr % sr == 0
+    ]
+    if multiples:
+        return max(multiples), last_err
+    return min(supported, key=lambda sr: abs(sr - source_sr)), last_err
+
+
+def _resample_linear(
+    np: Any, samples: Any, source_sr: int, target_sr: int,
+) -> Any:
+    """Numpy-only linear-interpolation resample of mono float32 audio.
+
+    Linear interpolation is the highest-quality resampler we can build
+    without scipy; for clean integer ratios (e.g. 24 kHz -> 48 kHz) the
+    new sample positions land exactly between source samples, so the
+    interpolation error stays small.
+    """
+    if source_sr == target_sr or samples.size == 0:
+        return samples.astype(np.float32, copy=False)
+    n_src = int(samples.shape[0])
+    n_dst = max(1, int(round(n_src * target_sr / source_sr)))
+    if n_src == 1:
+        return np.full(n_dst, float(samples[0]), dtype=np.float32)
+    src_x = np.arange(n_src, dtype=np.float64)
+    dst_x = np.linspace(0.0, n_src - 1, n_dst, dtype=np.float64)
+    return np.interp(dst_x, src_x, samples).astype(np.float32)
+
+
 def _say_resolve_output_index(
     spec_key: Tuple[Any, ...],
     outs: List[Tuple[int, str]],
@@ -207,6 +287,8 @@ class TextToSpeech:
         options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
         asset_root: Optional[Path] = None,
         download: bool = True,
+        output_device: Optional[Union[int, str]] = None,
+        volume: Optional[float] = None,
     ):
         self._extra_options = dict(options) if options else {}
         if voice is None:
@@ -292,7 +374,10 @@ class TextToSpeech:
         self._handle = handle
         self._say_device_cache: Optional[Tuple[Tuple[Any, ...],
                                                Optional[int]]] = None
-        self._say_settings_ok: Optional[Tuple[Tuple[Any, ...], int]] = None
+        # ((spec_key, source_sr), target_sr) — target_sr equals source_sr
+        # when the device accepts the synthesizer rate natively; otherwise
+        # it's the resample target chosen by _select_output_sample_rate.
+        self._say_settings_ok: Optional[Tuple[Tuple[Tuple[Any, ...], int], int]] = None
 
         self._say_queue: queue.Queue = queue.Queue()
         self._play_queue: queue.Queue = queue.Queue(maxsize=1)
@@ -300,7 +385,9 @@ class TextToSpeech:
         self._synth_thread: Optional[threading.Thread] = None
         self._play_thread: Optional[threading.Thread] = None
         self._say_lock = threading.Lock()
-
+        self._output_device = output_device
+        self._volume = volume
+        
     def _c_options_for_create(self) -> Dict[str, Union[str, int, float, bool]]:
         merged: Dict[str, Union[str, int, float, bool]] = dict(
             self._extra_options)
@@ -333,8 +420,8 @@ class TextToSpeech:
         if speed is not None:
             options["speed"] = str(speed)
 
-        # if volume is not None:
-        #     options["volume"] = str(volume)
+        if volume is not None:
+            options["output_volume"] = str(volume)
 
         return moonshine_text_to_speech_samples(self._handle, text, options)
 
@@ -365,6 +452,12 @@ class TextToSpeech:
         the utterance is enqueued.
         """
         _import_say_audio_deps()
+
+        if self._output_device is not None:
+            device = self._output_device
+
+        if self._volume is not None:
+            volume = self._volume
 
         texts = text if isinstance(text, list) else [text]
         for t in texts:
@@ -464,7 +557,7 @@ class TextToSpeech:
     # -- playback thread -----------------------------------------------------
 
     def _play_worker(self) -> None:
-        _, sd = _import_say_audio_deps()
+        np, sd = _import_say_audio_deps()
 
         while not self._say_stop_event.is_set():
             try:
@@ -481,7 +574,7 @@ class TextToSpeech:
                 break
 
             try:
-                self._play_one(item, sd)
+                self._play_one(item, sd, np)
             except Exception:
                 print(
                     "TextToSpeech: playback worker failed to play an utterance:",
@@ -491,7 +584,7 @@ class TextToSpeech:
             finally:
                 self._play_queue.task_done()
 
-    def _play_one(self, item: _PlayItem, sd: Any) -> None:
+    def _play_one(self, item: _PlayItem, sd: Any, np: Any) -> None:
         """Resolve the device and play a single synthesized utterance (runs on playback thread)."""
         spec_key = _say_device_spec_key(item.device)
         if isinstance(item.device, str):
@@ -523,27 +616,43 @@ class TextToSpeech:
             return
 
         settings_key = (spec_key, item.sample_rate)
-        if self._say_settings_ok != settings_key:
-            try:
-                sd.check_output_settings(
-                    samplerate=item.sample_rate,
-                    channels=1,
-                    dtype="float32",
-                    device=resolved,
-                )
-            except (sd.PortAudioError, OSError, ValueError) as e:
+        cached = self._say_settings_ok
+        if cached is not None and cached[0] == settings_key:
+            target_sr = cached[1]
+        else:
+            target_sr, last_err = _select_output_sample_rate(
+                sd, device=resolved, source_sr=item.sample_rate,
+            )
+            if target_sr is None:
                 outs = _say_enumerate_output_devices(sd)
+                tried = ", ".join(
+                    str(sr) for sr in (item.sample_rate,) + _RESAMPLE_CANDIDATES
+                )
+                err_suffix = f": {last_err}" if last_err is not None else ""
                 raise MoonshineAudioOutputError(
-                    f"Audio output cannot play {item.sample_rate} Hz mono float32 on the selected device: {e}",
+                    f"Audio output {resolved!r} rejected every probed sample rate "
+                    f"({tried} Hz) for mono float32{err_suffix}.",
                     available_outputs=_say_device_lines(outs),
-                ) from e
-            self._say_settings_ok = settings_key
+                ) from last_err
+            self._say_settings_ok = (settings_key, target_sr)
+            if target_sr != item.sample_rate:
+                print(
+                    f"TextToSpeech: output device does not support "
+                    f"{item.sample_rate} Hz; resampling to {target_sr} Hz.",
+                    file=sys.stderr,
+                )
 
         if self._say_stop_event.is_set():
             return
 
+        if target_sr != item.sample_rate:
+            data = _resample_linear(
+                np, item.data, item.sample_rate, target_sr)
+        else:
+            data = item.data
+
         try:
-            sd.play(item.data, item.sample_rate, device=resolved)
+            sd.play(data, target_sr, device=resolved)
             while sd.get_stream().active:
                 if self._say_stop_event.is_set():
                     sd.stop()

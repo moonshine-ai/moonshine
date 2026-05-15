@@ -992,7 +992,8 @@ Use `list_tts_languages()`, `list_tts_voices()`, and `get_tts_voice_catalog()` t
 - `speed`: Speaking rate multiplier (floating-point).
 - `kokoro_dir`, `kokoro_model` / `kokoro_model_onnx`, `kokoro_config` / `kokoro_config_json`: Override paths for Kokoro ONNX and config within the asset tree.
 - `piper_onnx` / `piper_model_onnx`, `piper_onnx_json`, `piper_voices_dir` / `voices_dir`, `piper_voices_json_dir` / `voices_json_dir`: Override paths for Piper model, JSON sidecar, and voice directories.
-- `piper_normalize_audio`, `piper_output_volume`, `piper_noise_scale` / `piper_noise_scale_override`, `piper_noise_w` / `piper_noise_w_override`: Piper inference tuning (see native option parsing for types).
+- `normalize_audio` / `piper_normalize_audio` (legacy alias), `output_volume` / `piper_output_volume` (legacy alias): Shared post-synthesis effects applied to both Kokoro and Piper output (peak-normalize, apply gain, then clip to `[-1, 1]`).
+- `piper_noise_scale` / `piper_noise_scale_override`, `piper_noise_w` / `piper_noise_w_override`: Piper inference tuning (see native option parsing for types).
 
 Additional keys are forwarded to the G2P option parser (language-specific ONNX overrides, feature flags, and so on).
 

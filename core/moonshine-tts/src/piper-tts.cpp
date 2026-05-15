@@ -6,6 +6,7 @@
 #include "ort-onnx-external-data.h"
 #include "ipa-postprocess.h"
 #include "moonshine-g2p.h"
+#include "moonshine-tts-options.h"
 #include "utf8-utils.h"
 
 #include <onnxruntime_cxx_api.h>
@@ -258,32 +259,6 @@ std::vector<int64_t> ipa_utf8_to_piper_ids(const std::string& ipa_nfc,
   return ids;
 }
 
-/// Match ``speak._piper_apply_synthesis_output_effects`` / ``PiperVoice.synthesize`` post-ORT step.
-void piper_apply_synthesis_output_effects(std::vector<float>& audio, bool normalize_audio, float volume) {
-  if (normalize_audio) {
-    float max_val = 0.F;
-    for (float x : audio) {
-      max_val = std::max(max_val, std::fabs(x));
-    }
-    if (max_val < 1e-8F) {
-      std::fill(audio.begin(), audio.end(), 0.F);
-    } else {
-      const float inv = 1.F / max_val;
-      for (float& x : audio) {
-        x *= inv;
-      }
-    }
-  }
-  if (volume != 1.F) {
-    for (float& x : audio) {
-      x *= volume;
-    }
-  }
-  for (float& x : audio) {
-    x = std::max(-1.F, std::min(1.F, x));
-  }
-}
-
 std::vector<float> resample_linear(const std::vector<float>& x, int src_sr, int dst_sr) {
   if (src_sr == dst_sr || x.empty()) {
     return x;
@@ -431,8 +406,8 @@ struct PiperTTS::Impl {
   bool user_voices_dir_ = false;
   bool explicit_onnx_file_ = false;
   std::vector<std::string> ort_provider_names_{};
-  bool piper_normalize_audio_ = true;
-  float piper_output_volume_ = 1.F;
+  bool normalize_audio_ = true;
+  float output_volume_ = 1.F;
   std::optional<float> noise_scale_override_{};
   std::optional<float> noise_w_override_{};
   FileInformationMap tts_asset_files_{};
@@ -496,7 +471,7 @@ struct PiperTTS::Impl {
     const size_t n_el = ti.GetElementCount();
     const float* ptr = outv.GetTensorData<float>();
     std::vector<float> wave(ptr, ptr + n_el);
-    piper_apply_synthesis_output_effects(wave, piper_normalize_audio_, piper_output_volume_);
+    apply_synthesis_output_effects(wave, normalize_audio_, output_volume_);
     if (native_sample_rate_ != PiperTTS::kSampleRateHz) {
       wave = resample_linear(wave, native_sample_rate_, PiperTTS::kSampleRateHz);
     }
@@ -555,8 +530,8 @@ struct PiperTTS::Impl {
   explicit Impl(const PiperTTSOptions& opt)
       : speed_(opt.speed),
         ort_provider_names_(opt.ort_provider_names),
-        piper_normalize_audio_(opt.piper_normalize_audio),
-        piper_output_volume_(opt.piper_output_volume),
+        normalize_audio_(opt.normalize_audio),
+        output_volume_(opt.output_volume),
         noise_scale_override_(opt.piper_noise_scale_override),
         noise_w_override_(opt.piper_noise_w_override),
         tts_asset_files_(opt.tts_asset_files) {
@@ -659,6 +634,14 @@ void PiperTTS::set_speed(double speed) { impl_->set_speed(speed); }
 double PiperTTS::speed() const { return impl_->speed_; }
 
 void PiperTTS::set_onnx_model(std::string_view basename_or_stem) { impl_->set_onnx_model(basename_or_stem); }
+
+bool PiperTTS::normalize_audio() const { return impl_->normalize_audio_; }
+
+void PiperTTS::set_normalize_audio(bool on) { impl_->normalize_audio_ = on; }
+
+float PiperTTS::output_volume() const { return impl_->output_volume_; }
+
+void PiperTTS::set_output_volume(float volume) { impl_->output_volume_ = volume; }
 
 std::vector<float> PiperTTS::synthesize(std::string_view text) { return impl_->synthesize(text); }
 
