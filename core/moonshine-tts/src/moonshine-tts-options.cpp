@@ -1,11 +1,38 @@
-#include "moonshine-tts.h"
+#include "moonshine-tts-options.h"
 
 #include "string-utils.h"
 
+#include <algorithm>
+#include <cmath>
 #include <stdexcept>
 #include <string_view>
 
 namespace moonshine_tts {
+
+void apply_synthesis_output_effects(std::vector<float>& audio, bool normalize_audio, float volume) {
+  if (normalize_audio) {
+    float max_val = 0.F;
+    for (float x : audio) {
+      max_val = std::max(max_val, std::fabs(x));
+    }
+    if (max_val < 1e-8F) {
+      std::fill(audio.begin(), audio.end(), 0.F);
+    } else {
+      const float inv = 1.F / max_val;
+      for (float& x : audio) {
+        x *= inv;
+      }
+    }
+  }
+  if (volume != 1.F) {
+    for (float& x : audio) {
+      x *= volume;
+    }
+  }
+  for (float& x : audio) {
+    x = std::max(-1.F, std::min(1.F, x));
+  }
+}
 
 MoonshineTTSOptions::MoonshineTTSOptions() {
   files.set_path(kTtsKokoroModelOnnxKey, std::filesystem::path{kTtsKokoroModelOnnxKey});
@@ -127,10 +154,10 @@ void MoonshineTTSOptions::parse_options(
       (void)value;
     } else if (key == "output" || key == "o") {
       output_path = std::filesystem::path(trim(value));
-    } else if (key == "piper_normalize_audio") {
-      piper_normalize_audio = bool_from_string(value.c_str());
-    } else if (key == "piper_output_volume") {
-      piper_output_volume = float_from_string(value.c_str());
+    } else if (key == "normalize_audio" || key == "piper_normalize_audio") {
+      normalize_audio = bool_from_string(value.c_str());
+    } else if (key == "output_volume" || key == "piper_output_volume") {
+      output_volume = float_from_string(value.c_str());
     } else if (key == "piper_noise_scale" || key == "piper_noise_scale_override") {
       const std::string t = trim(value);
       piper_noise_scale_override =

@@ -59,13 +59,31 @@ void replace_utf8(std::string& s, std::string_view old_s, std::string_view new_s
   }
 }
 
-std::optional<double> parse_speed_override_from_pairs(
+/// Per-call overrides parsed from ``MoonshineTTS::synthesize`` option pairs. Keys mirror
+/// ``MoonshineTTSOptions::parse_options`` (including legacy ``piper_normalize_audio`` /
+/// ``piper_output_volume`` aliases for the effects step).
+struct SynthesisOverrides {
+  std::optional<double> speed;
+  std::optional<bool> normalize_audio;
+  std::optional<float> output_volume;
+
+  bool empty() const {
+    return !speed.has_value() && !normalize_audio.has_value() && !output_volume.has_value();
+  }
+};
+
+SynthesisOverrides parse_synthesis_overrides_from_pairs(
     const std::vector<std::pair<std::string, std::string>>& pairs) {
-  std::optional<double> out;
+  SynthesisOverrides out;
   for (const auto& e : pairs) {
     const std::string key = replace_all(to_lowercase(e.first), "-", "_");
+    const std::string value = trim(e.second);
     if (key == "speed") {
-      out = static_cast<double>(float_from_string(trim(e.second).c_str()));
+      out.speed = static_cast<double>(float_from_string(value.c_str()));
+    } else if (key == "normalize_audio" || key == "piper_normalize_audio") {
+      out.normalize_audio = bool_from_string(value.c_str());
+    } else if (key == "output_volume" || key == "piper_output_volume") {
+      out.output_volume = float_from_string(value.c_str());
     }
   }
   return out;
@@ -670,8 +688,8 @@ PiperTTSOptions make_piper_options(std::string_view language, const MoonshineTTS
   p.speed = opt.speed;
   p.g2p_options = opt.g2p_options;
   p.ort_provider_names = opt.ort_provider_names;
-  p.piper_normalize_audio = opt.piper_normalize_audio;
-  p.piper_output_volume = opt.piper_output_volume;
+  p.normalize_audio = opt.normalize_audio;
+  p.output_volume = opt.output_volume;
   p.piper_noise_scale_override = opt.piper_noise_scale_override;
   p.piper_noise_w_override = opt.piper_noise_w_override;
   p.tts_asset_files = opt.files;
@@ -814,6 +832,8 @@ struct KokoroTtsEngine {
 
   std::string voice_id_{};
   double speed_ = 1.0;
+  bool normalize_audio_ = true;
+  float output_volume_ = 1.F;
   /// ``speed`` ONNX input element type from the loaded graph (FP32 community ONNX vs double local export).
   ONNXTensorElementDataType speed_elem_type_ = ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE;
   char kokoro_lang_ = 'a';
@@ -867,6 +887,11 @@ struct KokoroTtsEngine {
     speed_ = s;
   }
 
+  bool normalize_audio() const { return normalize_audio_; }
+  void set_normalize_audio(bool on) { normalize_audio_ = on; }
+  float output_volume() const { return output_volume_; }
+  void set_output_volume(float v) { output_volume_ = v; }
+
   explicit KokoroTtsEngine(std::string_view language, MoonshineTTSOptions opt) {
     log_profiling_ = opt.log_profiling;
     TIMER_START_IF(log_profiling_, kokoro_engine_init);
@@ -874,6 +899,8 @@ struct KokoroTtsEngine {
       throw std::runtime_error("MoonshineTTS: speed must be a positive finite number");
     }
     speed_ = opt.speed;
+    normalize_audio_ = opt.normalize_audio;
+    output_volume_ = opt.output_volume;
     g2p_opt_ = std::move(opt.g2p_options);
     tts_files_ = std::move(opt.files);
     const std::filesystem::path& root = g2p_opt_.g2p_root;
@@ -1095,6 +1122,8 @@ struct KokoroTtsEngine {
               ci + 1, n_el);
     }
 
+    apply_synthesis_output_effects(wave_all, normalize_audio_, output_volume_);
+
     LOGF_IF(log_profiling_, "KokoroTtsEngine::synthesize: total %zu samples (%.2fs at %dHz)",
             wave_all.size(),
             static_cast<double>(wave_all.size()) / MoonshineTTS::kSampleRateHz,
@@ -1181,30 +1210,31 @@ struct MoonshineTTS::Impl {
     return synthesize_unlocked(text);
   }
 
-  std::vector<float> synthesize_with_speed_override(std::string_view text, double speed) {
+  std::vector<float> synthesize_with_overrides(std::string_view text, const SynthesisOverrides& ov) {
     std::lock_guard<std::mutex> lock(synth_mu_);
-    double prev = 0.0;
-    if (kokoro_) {
-      prev = kokoro_->speed();
-      kokoro_->set_speed(speed);
-    } else {
-      prev = piper_->speed();
-      piper_->set_speed(speed);
-    }
+    const double prev_speed = kokoro_ ? kokoro_->speed() : piper_->speed();
+    const bool prev_normalize = kokoro_ ? kokoro_->normalize_audio() : piper_->normalize_audio();
+    const float prev_volume = kokoro_ ? kokoro_->output_volume() : piper_->output_volume();
+    const auto apply = [&](double speed, bool normalize, float volume) {
+      if (kokoro_) {
+        kokoro_->set_speed(speed);
+        kokoro_->set_normalize_audio(normalize);
+        kokoro_->set_output_volume(volume);
+      } else {
+        piper_->set_speed(speed);
+        piper_->set_normalize_audio(normalize);
+        piper_->set_output_volume(volume);
+      }
+    };
+    apply(ov.speed.value_or(prev_speed),
+          ov.normalize_audio.value_or(prev_normalize),
+          ov.output_volume.value_or(prev_volume));
     try {
       std::vector<float> wave = synthesize_unlocked(text);
-      if (kokoro_) {
-        kokoro_->set_speed(prev);
-      } else {
-        piper_->set_speed(prev);
-      }
+      apply(prev_speed, prev_normalize, prev_volume);
       return wave;
     } catch (...) {
-      if (kokoro_) {
-        kokoro_->set_speed(prev);
-      } else {
-        piper_->set_speed(prev);
-      }
+      apply(prev_speed, prev_normalize, prev_volume);
       throw;
     }
   }
@@ -1226,11 +1256,11 @@ std::vector<float> MoonshineTTS::synthesize(
   if (option_overrides.empty()) {
     return synthesize(text);
   }
-  const std::optional<double> sp = parse_speed_override_from_pairs(option_overrides);
-  if (!sp.has_value()) {
+  const SynthesisOverrides ov = parse_synthesis_overrides_from_pairs(option_overrides);
+  if (ov.empty()) {
     return synthesize(text);
   }
-  return impl_->synthesize_with_speed_override(text, *sp);
+  return impl_->synthesize_with_overrides(text, ov);
 }
 
 void write_wav_mono_pcm16(const std::filesystem::path& path, const std::vector<float>& samples) {

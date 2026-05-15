@@ -1145,7 +1145,8 @@ void apply_g2p_dependency_query_c_options(
       log_api_calls = bool_from_string(value.c_str());
     } else if (key == "voice" || key == "speed" || key == "vocoder_engine" ||
                key == "engine" || key == "output" || key == "o" ||
-               key == "piper_normalize_audio" || key == "piper_output_volume" ||
+               key == "normalize_audio" || key == "piper_normalize_audio" ||
+               key == "output_volume" || key == "piper_output_volume" ||
                key == "kokoro_dir" || key == "kokoro_model" ||
                key == "kokoro_model_onnx" || key == "kokoro_config" ||
                key == "kokoro_config_json" || key == "piper_onnx" ||
