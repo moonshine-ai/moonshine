@@ -198,6 +198,11 @@ def run_live(args: argparse.Namespace) -> None:
                 pass
 
     runner = DialogFlow(
+        # Pass ``tts`` alongside ``speak_fn`` so DialogFlow can auto-wire
+        # the success / error beeps to ``tts.play_success`` /
+        # ``tts.play_error`` (no-op when --no-tts strips the synth, since
+        # ``tts`` will be ``None`` and the beep callbacks stay unset).
+        tts=tts,
         speak_fn=speak,
         intent_recognizer=intent_recognizer,
         mute_fn=mute,
