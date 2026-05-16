@@ -131,11 +131,12 @@ def __getattr__(name):
         return globals()[name]
 
     # Lazy import TTS / G2P
-    if name == "TextToSpeech":
+    if name in ("TextToSpeech", "list_output_devices"):
         if not _tts_imported:
-            from moonshine_voice.tts import TextToSpeech
+            from moonshine_voice.tts import TextToSpeech, list_output_devices
 
             globals()["TextToSpeech"] = TextToSpeech
+            globals()["list_output_devices"] = list_output_devices
             _tts_imported = True
         return globals()[name]
 
@@ -315,6 +316,7 @@ __all__ = [
     "get_embedding_model_variants",
     # TTS / G2P
     "TextToSpeech",
+    "list_output_devices",
     "GraphemeToPhonemizer",
     "TTS_CDN_BASE_URL",
     "tts_asset_cache_path",

@@ -3,6 +3,7 @@
 import queue
 import sys
 import threading
+import time
 import traceback
 import wave
 from dataclasses import dataclass
@@ -49,13 +50,12 @@ class _BeepRequest:
     the same order as any in-flight :meth:`TextToSpeech.say` calls
     rather than racing ahead on the play queue.
 
-    ``kind`` selects the cached waveform:
+    ``kind`` selects which packaged WAV to play:
 
-    * ``"error"`` – descending two-tone (660 Hz → 440 Hz) used to signal
-      a misrecognition or a rejected utterance.
-    * ``"success"`` – ascending two-tone (523 Hz → 784 Hz) used to
-      signal a recognized utterance, played just before the TTS
-      response.
+    * ``"error"`` – ``assets/error.wav``, played to signal a
+      misrecognition or a rejected utterance.
+    * ``"success"`` – ``assets/success.wav``, played to signal a
+      recognized utterance, just before the TTS response.
     """
     device: Optional[Union[int, str]]
     kind: str = "error"
@@ -63,89 +63,50 @@ class _BeepRequest:
 
 _SHUTDOWN_SENTINEL = object()
 
-# Sample rate used for synthetically generated beeps.  22.05 kHz matches
-# the typical TTS output rate and is plenty for a short sine tone.
-_BEEP_SAMPLE_RATE = 22050
-
-# Cache of generated beep waveforms keyed by ``(kind, sample_rate)`` so
-# we only pay the numpy cost once per TextToSpeech lifetime per beep
-# kind.
-_BEEP_CACHE: Dict[Tuple[str, int], Any] = {}
-
-
-def _beep_envelope(np: Any, sample_rate: int, freq: float, duration_ms: int) -> Any:
-    """Generate a fixed-amplitude sine tone with a 10 ms linear fade in/out.
-
-    Peak amplitude is held to ~0.25 so beeps stay audible but don't
-    startle next to normal-volume TTS.
-    """
-    n = int(sample_rate * duration_ms / 1000)
-    if n <= 0:
-        return np.zeros(0, dtype=np.float32)
-    t = np.arange(n, dtype=np.float32) / float(sample_rate)
-    wave = (0.25 * np.sin(2.0 * np.pi * freq * t)).astype(np.float32)
-    ramp_n = min(int(sample_rate * 0.010), n // 2)
-    if ramp_n > 0:
-        ramp = np.linspace(0.0, 1.0, ramp_n, dtype=np.float32)
-        wave[:ramp_n] *= ramp
-        wave[-ramp_n:] *= ramp[::-1]
-    return wave
-
-
-def _generate_error_beep_samples(np: Any, sample_rate: int) -> Any:
-    """Build a short, two-tone *descending* beep as float32 mono samples.
-
-    Shape:
-      * 660 Hz for 80 ms (with a 10 ms linear fade in/out to avoid clicks)
-      * 30 ms silence
-      * 440 Hz for 120 ms (same fade envelope)
-
-    The descending pitch reads as "uh-oh" / negative confirmation.
-    """
-    gap = np.zeros(int(sample_rate * 0.030), dtype=np.float32)
-    return np.concatenate([
-        _beep_envelope(np, sample_rate, 660.0, 80),
-        gap,
-        _beep_envelope(np, sample_rate, 440.0, 120),
-    ])
-
-
-def _generate_success_beep_samples(np: Any, sample_rate: int) -> Any:
-    """Build a short, two-tone *ascending* beep as float32 mono samples.
-
-    Shape:
-      * 523 Hz (C5) for 60 ms (10 ms fade in/out)
-      * 20 ms silence
-      * 784 Hz (G5) for 80 ms (same fade envelope)
-
-    Slightly shorter overall than the error beep so the TTS reply still
-    arrives promptly after the cue.  The rising pitch reads as
-    "got it" / positive acknowledgement, mirroring the descending error
-    beep's "didn't get it" feel.
-    """
-    gap = np.zeros(int(sample_rate * 0.020), dtype=np.float32)
-    return np.concatenate([
-        _beep_envelope(np, sample_rate, 523.0, 60),
-        gap,
-        _beep_envelope(np, sample_rate, 784.0, 80),
-    ])
-
-
-_BEEP_GENERATORS: Dict[str, Any] = {
-    "error": _generate_error_beep_samples,
-    "success": _generate_success_beep_samples,
+# Beep WAVs shipped with the package.  The bundled clips are short,
+# pre-recorded cues that already include any lead-in / fade
+# the recording artist wanted; the runner just decodes and plays them
+# verbatim through the same pipeline as a synthesized utterance, so
+# the same device-resolution / resampling / mute path applies.
+_BEEP_ASSET_FILES: Dict[str, str] = {
+    "success": "success.wav",
+    "error": "error.wav",
 }
 
+# Cache of decoded beep waveforms keyed by ``kind``.  Each entry is a
+# ``(samples_float32, sample_rate)`` pair — the WAVs ship at 48 kHz
+# and the runner converts to numpy float32 mono once per process,
+# so subsequent ``play_success`` / ``play_error`` calls only pay the
+# queue-handoff cost.  ``load_wav_file`` mixes stereo down to mono
+# automatically, which is exactly what the playback worker expects.
+_BEEP_CACHE: Dict[str, Tuple[Any, int]] = {}
 
-def _get_beep_samples(np: Any, kind: str, sample_rate: int) -> Any:
-    cache_key = (kind, sample_rate)
-    cached = _BEEP_CACHE.get(cache_key)
-    if cached is None:
-        generator = _BEEP_GENERATORS.get(kind)
-        if generator is None:
-            raise ValueError(f"Unknown beep kind {kind!r}")
-        cached = generator(np, sample_rate)
-        _BEEP_CACHE[cache_key] = cached
+
+def _load_beep_samples(np: Any, kind: str) -> Tuple[Any, int]:
+    """Return ``(samples_float32, sample_rate)`` for the named beep.
+
+    Loaded lazily from the packaged ``assets/<kind>.wav`` file the first
+    time it's requested and cached for the lifetime of the process.
+    Raises :class:`ValueError` for unknown kinds and lets file errors
+    from :func:`load_wav_file` propagate (so a missing asset is loud,
+    not silent — the symptom otherwise would be the same "no beep"
+    issue we just spent two iterations debugging).
+    """
+    cached = _BEEP_CACHE.get(kind)
+    if cached is not None:
+        return cached
+    filename = _BEEP_ASSET_FILES.get(kind)
+    if filename is None:
+        raise ValueError(f"Unknown beep kind {kind!r}")
+    # Imported lazily to keep ``moonshine_voice.tts`` import-light
+    # for callers that never invoke ``play_success`` / ``play_error``.
+    from moonshine_voice.utils import get_assets_path, load_wav_file
+
+    path = get_assets_path() / filename
+    samples_list, sr = load_wav_file(path)
+    samples = np.asarray(samples_list, dtype=np.float32)
+    cached = (samples, int(sr))
+    _BEEP_CACHE[kind] = cached
     return cached
 
 
@@ -160,6 +121,96 @@ def _import_say_audio_deps():
             "(e.g. `pip install numpy sounddevice`)."
         ) from e
     return np, sd
+
+
+def _resolve_default_output_index(sd: Any) -> Optional[int]:
+    """Return PortAudio's current default output device index, if any.
+
+    Wraps ``sd.default.device`` because sounddevice exposes that as a
+    custom ``_InputOutputPair`` NamedTuple, *not* a plain ``tuple`` /
+    ``list``, so an ``isinstance(..., (tuple, list))`` check on it
+    misses and the diagnostic flag would silently never light up.
+    Falls back through several access patterns so a minor sounddevice
+    API change can't suppress the "current default" annotation.
+    """
+    try:
+        default_pair = sd.default.device
+    except Exception:
+        return None
+    try:
+        out_idx = default_pair[1]
+    except (TypeError, IndexError):
+        try:
+            out_idx = getattr(default_pair, "output", None)
+        except Exception:
+            out_idx = None
+        if out_idx is None:
+            try:
+                out_idx = int(default_pair)
+            except (TypeError, ValueError):
+                return None
+    if out_idx is None or out_idx == -1:
+        return None
+    try:
+        return int(out_idx)
+    except (TypeError, ValueError):
+        return None
+
+
+def list_output_devices() -> List[str]:
+    """Return human-readable output device descriptions for diagnostics.
+
+    Each entry is formatted ``"[idx] name (hostapi: NAME)"`` so a
+    caller can paste either the index or a substring of the name into
+    :class:`TextToSpeech`'s ``output_device`` argument (or the
+    ``--output-device`` flag of the CLI demo).  The first line of the
+    returned list flags PortAudio's default output device — on
+    Raspberry Pi this is often *not* the one with speakers attached
+    (e.g. HDMI when the user has wired up the 3.5 mm jack), and a
+    silent assistant with no errors in the logs is exactly the
+    symptom of the wrong device being selected.
+
+    Use :class:`TextToSpeech`'s ``output_device`` to pin to a
+    specific one when ``None`` (= host default) doesn't reach a
+    speaker.
+    """
+    _, sd = _import_say_audio_deps()
+    lines: List[str] = []
+    default_out = _resolve_default_output_index(sd)
+    try:
+        hostapis = list(sd.query_hostapis())
+    except Exception:
+        hostapis = []
+    try:
+        devices = sd.query_devices()
+    except Exception as e:
+        return [f"<sounddevice query_devices() failed: {e!r}>"]
+    for i, d in enumerate(devices):
+        try:
+            n_out = int(d.get("max_output_channels", 0) or 0)
+        except (TypeError, ValueError):
+            n_out = 0
+        if n_out <= 0:
+            continue
+        name = str(d.get("name", "") or "")
+        hostapi_idx = d.get("hostapi", -1)
+        hostapi_name = ""
+        try:
+            hostapi_name = hostapis[hostapi_idx]["name"]
+        except (IndexError, KeyError, TypeError):
+            pass
+        try:
+            sr = int(d.get("default_samplerate", 0) or 0)
+        except (TypeError, ValueError):
+            sr = 0
+        marker = "*" if i == default_out else " "
+        lines.append(
+            f"{marker} [{i}] {name} (hostapi: {hostapi_name or '?'}, "
+            f"channels: {n_out}, default_sr: {sr or '?'} Hz)"
+        )
+    if not lines:
+        lines.append("<no PortAudio output devices available>")
+    return lines
 
 
 def _say_enumerate_output_devices(sd) -> List[Tuple[int, str]]:
@@ -228,19 +279,40 @@ def _select_output_sample_rate(
     3. otherwise the largest supported rate that is an integer multiple
        or divisor of ``source_sr``,
     4. otherwise the supported rate closest to ``source_sr``.
+
+    Probes that fail with ``paDeviceUnavailable`` (-9985) are retried
+    a few times with a short backoff: that error code is transient on
+    exclusive-access ALSA devices (e.g. USB DACs) when a previous
+    ``sd.play()`` stream hasn't fully released the device yet, and a
+    single failed probe shouldn't be enough to disqualify a rate the
+    device actually supports.
     """
     last_err: Optional[Exception] = None
 
     def _try(sr: int) -> bool:
         nonlocal last_err
-        try:
-            sd.check_output_settings(
-                samplerate=sr, channels=1, dtype="float32", device=device,
-            )
-            return True
-        except (sd.PortAudioError, OSError, ValueError) as e:
-            last_err = e
-            return False
+        # paDeviceUnavailable on Linux/ALSA after a just-finished play
+        # commonly clears within ~10-50 ms; give it up to ~200 ms total
+        # before believing the device really doesn't support this rate.
+        for attempt in range(5):
+            try:
+                sd.check_output_settings(
+                    samplerate=sr, channels=1, dtype="float32", device=device,
+                )
+                return True
+            except sd.PortAudioError as e:
+                last_err = e
+                # PortAudioError stores the numeric code in ``args[1]``
+                # for sounddevice; -9985 == paDeviceUnavailable.
+                code = e.args[1] if len(e.args) >= 2 else None
+                if code == -9985 and attempt < 4:
+                    time.sleep(0.05)
+                    continue
+                return False
+            except (OSError, ValueError) as e:
+                last_err = e
+                return False
+        return False
 
     if _try(source_sr):
         return source_sr, None
@@ -339,6 +411,7 @@ class TextToSpeech:
         download: bool = True,
         output_device: Optional[Union[int, str]] = None,
         volume: Optional[float] = None,
+        debug: bool = False,
     ):
         self._extra_options = dict(options) if options else {}
         if voice is None:
@@ -437,7 +510,98 @@ class TextToSpeech:
         self._say_lock = threading.Lock()
         self._output_device = output_device
         self._volume = volume
-        
+        self._debug = bool(debug)
+        self._log_start: Optional[float] = None
+        self._log_last: Optional[float] = None
+        self._log_lock = threading.Lock()
+        # Set on the first `_play_one` call to a one-line summary of
+        # which PortAudio device the runner actually opened — printed
+        # unconditionally so a silent setup with no errors in the
+        # logs (often a wrong-default-device problem on Raspberry Pi)
+        # is debuggable without needing --debug.
+        self._announced_resolved_device = False
+
+    def _announce_resolved_device(self, sd: Any, resolved: Optional[int]) -> None:
+        """Print a one-liner identifying the PortAudio device we opened.
+
+        Always prints (regardless of ``debug``): a silent runtime with
+        no errors in the trace is almost always the *wrong* PortAudio
+        device being selected (e.g. HDMI on a Pi when speakers are on
+        the 3.5 mm jack), and the only way to spot that from the
+        logs is to see *which* device the worker actually opened.
+
+        Includes the host-API name and the default sample rate the
+        device claims to support; on top of that, when the resolved
+        device is the host default we list the other available
+        outputs so the user can pin a specific one via
+        ``TextToSpeech(output_device=...)`` (or the CLI's
+        ``--output-device`` flag).
+        """
+        try:
+            if resolved is None:
+                idx = _resolve_default_output_index(sd)
+                origin = "host default"
+            else:
+                idx = resolved
+                origin = "explicit"
+            info = sd.query_devices(idx) if idx is not None else None
+            try:
+                hostapis = list(sd.query_hostapis())
+            except Exception:
+                hostapis = []
+            hostapi_name = ""
+            if info is not None:
+                try:
+                    hostapi_name = hostapis[info.get("hostapi", -1)]["name"]
+                except (IndexError, KeyError, TypeError):
+                    pass
+            name = info.get("name", "?") if info else "?"
+            default_sr = info.get("default_samplerate", "?") if info else "?"
+            print(
+                f"TextToSpeech: opening PortAudio output [{idx}] {name!r} "
+                f"({origin}, hostapi: {hostapi_name or '?'}, "
+                f"default_sr: {default_sr} Hz). "
+                f"If you don't hear anything, this may be the wrong "
+                f"device — list alternatives with "
+                f"`moonshine_voice.tts.list_output_devices()` and pin "
+                f"one via `TextToSpeech(output_device=...)`.",
+                file=sys.stderr,
+                flush=True,
+            )
+        except Exception as e:
+            print(
+                f"TextToSpeech: could not introspect resolved output "
+                f"device (resolved={resolved!r}): {e!r}",
+                file=sys.stderr,
+                flush=True,
+            )
+
+    def _log(self, msg: str) -> None:
+        """Emit a timestamped trace line to stderr when ``debug=True``.
+
+        Same shape as ``DialogFlow._log`` so traces from the two
+        components can be read together: each line shows the wall
+        time since the previous log line and since the first log
+        line of this instance.  Off by default — TTS traces are
+        verbose and only useful for diagnosing playback problems
+        (e.g. why a beep didn't seem to play).
+        """
+        if not self._debug:
+            return
+        with self._log_lock:
+            now = time.perf_counter()
+            if self._log_start is None:
+                self._log_start = now
+                self._log_last = now
+            delta_ms = (now - (self._log_last or now)) * 1000.0
+            total_ms = (now - (self._log_start or now)) * 1000.0
+            self._log_last = now
+            print(
+                f"[TextToSpeech +{delta_ms:7.1f}ms / {total_ms:8.1f}ms] {msg}",
+                file=sys.stderr,
+                flush=True,
+            )
+
     def _c_options_for_create(self) -> Dict[str, Union[str, int, float, bool]]:
         merged: Dict[str, Union[str, int, float, bool]] = dict(
             self._extra_options)
@@ -525,14 +689,12 @@ class TextToSpeech:
         *,
         device: Optional[Union[int, str]] = None,
     ) -> None:
-        """Play a short two-tone *descending* "error" beep and return immediately.
+        """Play the bundled "error" beep and return immediately.
 
-        The beep is generated synthetically (no text synthesis, no
-        language or voice assets needed) and queued for playback through
-        the same pipeline as :meth:`say` — so if a previous ``say``
-        hasn't finished speaking yet the beep plays right after it,
-        rather than racing ahead.  Use :meth:`wait` / :meth:`is_talking`
-        to track playback.
+        Plays ``assets/error.wav`` queued through the same pipeline as
+        :meth:`say` — so if a previous ``say`` hasn't finished speaking
+        yet the beep plays right after it, rather than racing ahead.
+        Use :meth:`wait` / :meth:`is_talking` to track playback.
 
         Pairs with :meth:`play_success`: callers that want audible
         feedback for whether speech recognition succeeded can call
@@ -540,10 +702,19 @@ class TextToSpeech:
         :meth:`play_error` on an unrecognized one.
 
         ``device`` accepts the same values as :meth:`say` (``None`` =
-        host default, a PortAudio index, a decimal string index, or a
-        case-insensitive device-name substring).
+        constructor's ``output_device`` if set, otherwise host
+        default; a PortAudio index, a decimal string index, or a
+        case-insensitive device-name substring).  Honouring the
+        constructor's ``output_device`` here matches :meth:`say`'s
+        behaviour — without that, callers who pin a specific output
+        device for speech would get their cue beeps routed to the
+        host default and end up with audible speech but inaudible
+        beeps.
         """
         _import_say_audio_deps()
+        if device is None and self._output_device is not None:
+            device = self._output_device
+        self._log(f"play_error: enqueue (device={device!r})")
         self._say_queue.put(_BeepRequest(device=device, kind="error"))
         self._ensure_say_workers()
 
@@ -552,18 +723,23 @@ class TextToSpeech:
         *,
         device: Optional[Union[int, str]] = None,
     ) -> None:
-        """Play a short two-tone *ascending* "success" beep and return immediately.
+        """Play the bundled "success" beep and return immediately.
 
-        Counterpart to :meth:`play_error` for positive feedback: a brief
-        rising chirp confirming that the most recent utterance was
-        recognized / accepted.  Same queueing rules as
-        :meth:`play_error` — synthesized once, cached, and ordered
+        Counterpart to :meth:`play_error` for positive feedback: plays
+        ``assets/success.wav`` confirming that the most recent
+        utterance was recognized / accepted.  Same queueing rules as
+        :meth:`play_error` — decoded once, cached, and ordered
         through the say queue so it never races ahead of an in-flight
         :meth:`say`.
 
-        ``device`` accepts the same values as :meth:`say`.
+        ``device`` accepts the same values as :meth:`say` and falls
+        back to the constructor's ``output_device`` when ``None``,
+        for the same reason as :meth:`play_error`.
         """
         _import_say_audio_deps()
+        if device is None and self._output_device is not None:
+            device = self._output_device
+        self._log(f"play_success: enqueue (device={device!r})")
         self._say_queue.put(_BeepRequest(device=device, kind="success"))
         self._ensure_say_workers()
 
@@ -604,15 +780,33 @@ class TextToSpeech:
 
             try:
                 if isinstance(req, _BeepRequest):
+                    self._log(
+                        f"synth_worker: dequeued beep kind={req.kind!r}"
+                    )
+                    samples, beep_sr = _load_beep_samples(np, req.kind)
                     item = _PlayItem(
-                        data=_get_beep_samples(np, req.kind, _BEEP_SAMPLE_RATE),
-                        sample_rate=_BEEP_SAMPLE_RATE,
+                        data=samples,
+                        sample_rate=beep_sr,
                         device=req.device,
                     )
+                    self._log(
+                        f"synth_worker: beep ready ({req.kind!r}, "
+                        f"{len(item.data)} samples @ {item.sample_rate} Hz)"
+                    )
                 else:
+                    self._log(
+                        "synth_worker: dequeued say request"
+                        f" (text={(req.text or '')[:40]!r})"
+                    )
                     item = self._synthesize_one(req, np)
+                    self._log(
+                        f"synth_worker: synth done "
+                        f"({len(item.data)} samples @ {item.sample_rate} Hz)"
+                    )
                 if not self._say_stop_event.is_set():
+                    self._log("synth_worker: handing item to play_queue")
                     self._play_queue.put(item)
+                    self._log("synth_worker: item accepted by play_queue")
             except Exception:
                 print(
                     "TextToSpeech: synthesis worker dropped an utterance:",
@@ -687,6 +881,10 @@ class TextToSpeech:
 
         resolved = self._say_device_cache[1]
 
+        if not self._announced_resolved_device:
+            self._announced_resolved_device = True
+            self._announce_resolved_device(sd, resolved)
+
         if self._say_stop_event.is_set():
             return
 
@@ -726,13 +924,73 @@ class TextToSpeech:
         else:
             data = item.data
 
+        expected_duration_s = (len(data) / float(target_sr)) if target_sr else 0.0
+        self._log(
+            f"play_one: starting sd.play "
+            f"({len(data)} samples @ {target_sr} Hz, "
+            f"~{expected_duration_s * 1000.0:.1f} ms expected, "
+            f"device={resolved!r})"
+        )
+        t_start = time.perf_counter()
         try:
             sd.play(data, target_sr, device=resolved)
+            t_after_play = time.perf_counter()
+            # Snapshot ``stream.active`` immediately after sd.play() so
+            # we can tell, after the fact, whether the playback ever
+            # actually started.  ``sd.play`` returns once the stream
+            # has been opened and ``start()`` has been called, but on
+            # some backends the driver takes a few ms to ramp up — for
+            # very short clips (like the ~160 ms success beep) the
+            # stream can transition False → True → False entirely
+            # between two polls of ``get_stream().active``, which
+            # makes the worker think the item was played even though
+            # nothing reached the speakers.  Logging the initial /
+            # final state plus elapsed time vs. expected duration
+            # makes that race visible.
+            try:
+                initial_active = bool(sd.get_stream().active)
+            except Exception:
+                initial_active = False
+            self._log(
+                f"play_one: sd.play returned in "
+                f"{(t_after_play - t_start) * 1000.0:.1f} ms; "
+                f"stream.active={initial_active}"
+            )
+            poll_count = 0
             while sd.get_stream().active:
+                poll_count += 1
                 if self._say_stop_event.is_set():
                     sd.stop()
+                    self._log(
+                        f"play_one: stop_event set after "
+                        f"{(time.perf_counter() - t_start) * 1000.0:.1f} ms; "
+                        f"calling sd.stop"
+                    )
                     return
                 self._say_stop_event.wait(timeout=0.05)
+            elapsed_ms = (time.perf_counter() - t_start) * 1000.0
+            self._log(
+                f"play_one: playback done after {elapsed_ms:.1f} ms "
+                f"(expected ~{expected_duration_s * 1000.0:.1f} ms, "
+                f"polls={poll_count})"
+            )
+            # Explicitly tear down the global play stream once the
+            # buffer is exhausted.  ``sd.play()`` leaves the stream
+            # *inactive but open* by default, which on Linux/ALSA
+            # exclusive-access devices (e.g. plain ``hw:`` USB DACs)
+            # means PortAudio keeps the device claimed.  The next
+            # ``sd.check_output_settings()`` then fails with
+            # ``paDeviceUnavailable`` for every probed rate, even
+            # rates the device just played at — and the play worker
+            # raises and drops the next utterance.  Calling
+            # ``sd.stop()`` here (with ``ignore_errors=True``)
+            # releases the device promptly.  ``sd.play()`` will
+            # transparently re-open it for the next item.
+            try:
+                sd.stop(ignore_errors=True)
+                self._log("play_one: sd.stop after natural completion")
+            except Exception as stop_err:  # pragma: no cover - defensive
+                self._log(f"play_one: sd.stop after completion raised: {stop_err!r}")
         except (sd.PortAudioError, OSError, ValueError) as e:
             outs = _say_enumerate_output_devices(sd)
             raise MoonshineAudioOutputError(
