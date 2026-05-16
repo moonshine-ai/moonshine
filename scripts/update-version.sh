@@ -60,6 +60,7 @@ done < <(grep -rlI \
   --exclude=zh_hans.txt \
   --exclude=ipa-postprocess.cpp \
   --exclude=*.tsv \
+  --exclude=ko_kr.txt \
   "$OLD_VERSION" .)
 for FILE in "${ACTUAL_FILES[@]}"; do
 	echo "Checking file '$FILE'"
