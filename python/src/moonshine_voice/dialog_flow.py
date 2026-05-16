@@ -531,6 +531,28 @@ class DialogFlow(TranscriptEventListener):
             reliable echo cancellation *and* want barge-in: callers
             still get the utterance via the regular
             ``TranscriptEventListener`` path.
+        success_beep_fn: Optional callable ``() -> None`` invoked the
+            moment a completed transcript line is recognized — i.e.
+            it matched a trigger phrase or was successfully
+            interpreted as the answer to an active prompt — and
+            *before* any TTS response begins.  Gives the user a
+            short audible cue that "I heard you and understood"
+            before the assistant starts replying.  When omitted,
+            falls back to ``tts.play_success()`` if the configured
+            ``tts`` exposes one (e.g. the bundled
+            :class:`TextToSpeech`); pass any callable to override
+            (e.g. play a custom WAV) or ``lambda: None`` to
+            silence.
+        error_beep_fn: Optional callable ``() -> None`` invoked when
+            a completed transcript line *isn't* recognized — no
+            trigger matched, no active flow could interpret it as
+            an answer, and no global handler took it.  Pairs with
+            ``success_beep_fn`` so misrecognitions don't end in
+            silence: the user hears a distinct "didn't get that"
+            cue immediately, and the runner then reprompts /
+            abandons / forwards to the intent recognizer as before.
+            Same fallback as ``success_beep_fn`` — auto-wired to
+            ``tts.play_error()`` when available.
     """
 
     def __init__(
@@ -542,6 +564,8 @@ class DialogFlow(TranscriptEventListener):
         speak_fn: Optional[Callable[[str], None]] = None,
         mute_fn: Optional[Callable[[bool], None]] = None,
         spelling_mode_fn: Optional[Callable[[bool], None]] = None,
+        success_beep_fn: Optional[Callable[[], None]] = None,
+        error_beep_fn: Optional[Callable[[], None]] = None,
         phrase_matcher_factory: Optional[PhraseMatcherFactory] = None,
         cached_embeddings: Optional[CachedEmbeddings] = None,
         trigger_threshold: float = 0.7,
@@ -556,6 +580,22 @@ class DialogFlow(TranscriptEventListener):
         self._speak_fn = speak_fn
         self._mute_fn = mute_fn
         self._spelling_mode_fn = spelling_mode_fn
+        # Auto-wire success/error beeps from ``tts`` when the caller
+        # didn't pass an explicit callback.  We duck-type both
+        # methods so backends without beep support (e.g. test stubs
+        # that only implement ``say``) silently skip the cue rather
+        # than raising.  Callers who want to disable the beeps even
+        # when ``tts`` supports them can pass ``lambda: None``.
+        if success_beep_fn is None and tts is not None:
+            method = getattr(tts, "play_success", None)
+            if callable(method):
+                success_beep_fn = method
+        if error_beep_fn is None and tts is not None:
+            method = getattr(tts, "play_error", None)
+            if callable(method):
+                error_beep_fn = method
+        self._success_beep_fn = success_beep_fn
+        self._error_beep_fn = error_beep_fn
         self._spelling_mode_active = False
         self._trigger_threshold = float(trigger_threshold)
         self._spell_feedback = bool(spell_feedback)
@@ -781,6 +821,10 @@ class DialogFlow(TranscriptEventListener):
             active, utterance
         ):
             self._log("process_utterance: alpha short-circuit → deliver")
+            # The success/error cue is played by ``_deliver_to_active``
+            # once interpretation has decided whether the line was
+            # recognized — partial spelled input keeps quiet here so
+            # the spell-back acts as feedback instead.
             self._deliver_to_active(active, utterance)
             return True
 
@@ -791,6 +835,10 @@ class DialogFlow(TranscriptEventListener):
             f"phrase={trigger_phrase!r}"
         )
         if trigger_kind == "global":
+            # A global handler matched — the line was recognized.  Cue
+            # the user before the handler's potential ``Say`` reply
+            # begins so the beep doesn't pile up on top of the TTS.
+            self._play_success_beep()
             self._invoke_global(trigger_phrase)
             return True
 
@@ -799,9 +847,16 @@ class DialogFlow(TranscriptEventListener):
             return True
 
         if trigger_kind == "flow":
+            self._play_success_beep()
             self._start_flow(trigger_phrase)
             return True
 
+        # Nothing in DialogFlow's domain matched.  Forward to the
+        # intent recognizer (if any) for app-level handling, and then
+        # play the "didn't get that" cue regardless: from the
+        # runner's point of view the line wasn't recognized as a
+        # flow trigger, global, or active-prompt answer, and
+        # silence here is a bad experience.
         if self._intent_recognizer is not None:
             self._log("process_utterance: forwarding to intent recognizer")
             try:
@@ -809,6 +864,7 @@ class DialogFlow(TranscriptEventListener):
             except Exception as e:
                 print(f"DialogFlow: intent recognizer error: {e}", file=sys.stderr)
         self._log("process_utterance: no handler matched")
+        self._play_error_beep()
         return False
 
     def _should_short_circuit_to_alpha(
@@ -899,21 +955,37 @@ class DialogFlow(TranscriptEventListener):
             value = self._interpret_answer(prompt, utterance, active)
         except _PartialInput:
             self._log("deliver_to_active: partial input; awaiting more")
-            # Still gathering input (e.g. spelled letter-by-letter).  Don't
-            # advance the generator yet; wait for the next utterance.
+            # Still gathering input (e.g. spelled letter-by-letter).
+            # Don't beep or advance the generator yet — the per-character
+            # spell-back from ``_speak_character_feedback`` is itself
+            # the "I heard that letter" cue, and stacking a success
+            # beep on top would be noisy at every keystroke.
             return
         except _Reprompt as r:
+            # Recognized a line but couldn't interpret it for the
+            # current prompt.  Beep first so the user notices their
+            # last answer was rejected, then speak the reprompt.
             self._log(f"deliver_to_active: reprompt → {_summarise(r.text)!r}")
+            self._play_error_beep()
             self._speak(r.text)
             return
         except _AbandonPrompt as a:
+            # Out of retries — the prompt is being torn down.  Same
+            # rationale as the reprompt path: cue the user that the
+            # last utterance was the one that failed before the
+            # generator's exception handler runs.
             self._log(f"deliver_to_active: abandon → {a.exc!r}")
+            self._play_error_beep()
             self._throw(active, a.exc)
             return
         self._log(
             f"deliver_to_active: interpreted {prompt_kind} → "
             f"{_summarise(repr(value))}; advancing flow"
         )
+        # Successful interpretation — play the recognition cue before
+        # advancing the generator so the beep lands ahead of any
+        # ``Say`` the next yield produces.
+        self._play_success_beep()
         self._advance(active, value=value)
 
     def _advance(self, active: _ActiveFlow, value: Any) -> None:
@@ -1427,6 +1499,39 @@ class DialogFlow(TranscriptEventListener):
         except Exception as e:
             self._log(f"spell_feedback: speak failed: {e!r}")
 
+    # -- Success / error beeps ---------------------------------------------
+
+    def _play_success_beep(self) -> None:
+        """Play the "recognized" cue, if a beep callback is wired.
+
+        Fired before the TTS reply on every recognized utterance:
+        trigger matches, completed alphanumeric input, and matched
+        confirm / choose / free-form answers.  Failures are swallowed
+        so a broken audio backend can't derail flow progress — the
+        beep is purely a UX nicety.
+        """
+        if self._success_beep_fn is None:
+            return
+        try:
+            self._success_beep_fn()
+        except Exception as e:
+            self._log(f"success_beep: failed: {e!r}")
+
+    def _play_error_beep(self) -> None:
+        """Play the "not recognized" cue, if a beep callback is wired.
+
+        Fired when an utterance can't be routed: no trigger matched,
+        an active flow couldn't interpret it (reprompt / abandon),
+        or the runner is unmounted entirely.  Same failure-swallowing
+        contract as :meth:`_play_success_beep`.
+        """
+        if self._error_beep_fn is None:
+            return
+        try:
+            self._error_beep_fn()
+        except Exception as e:
+            self._log(f"error_beep: failed: {e!r}")
+
     def _speak_undo_feedback(self, character: str) -> None:
         """Speak ``"deleting <spoken_form(character)>"`` after an UNDO.
 
@@ -1732,6 +1837,11 @@ if __name__ == "__main__":
     # ---- Wire up DialogFlow ----------------------------------------------
 
     runner = DialogFlow(
+        # Pass ``tts`` alongside ``speak_fn`` so the runner can auto-wire
+        # ``tts.play_success`` / ``tts.play_error`` for the recognition
+        # cue beeps; with ``--no-tts`` ``tts`` stays ``None`` and the
+        # beeps quietly become no-ops.
+        tts=tts,
         speak_fn=speak,
         intent_recognizer=intent_recognizer,
         mute_fn=mute,

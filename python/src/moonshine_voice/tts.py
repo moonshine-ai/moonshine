@@ -45,10 +45,20 @@ class _PlayItem:
 
 @dataclass
 class _BeepRequest:
-    """Queued error-beep marker; routed through the say queue so it
-    plays in the same order as any in-flight :meth:`TextToSpeech.say`
-    calls rather than racing ahead on the play queue."""
+    """Queued beep marker; routed through the say queue so it plays in
+    the same order as any in-flight :meth:`TextToSpeech.say` calls
+    rather than racing ahead on the play queue.
+
+    ``kind`` selects the cached waveform:
+
+    * ``"error"`` – descending two-tone (660 Hz → 440 Hz) used to signal
+      a misrecognition or a rejected utterance.
+    * ``"success"`` – ascending two-tone (523 Hz → 784 Hz) used to
+      signal a recognized utterance, played just before the TTS
+      response.
+    """
     device: Optional[Union[int, str]]
+    kind: str = "error"
 
 
 _SHUTDOWN_SENTINEL = object()
@@ -57,45 +67,85 @@ _SHUTDOWN_SENTINEL = object()
 # the typical TTS output rate and is plenty for a short sine tone.
 _BEEP_SAMPLE_RATE = 22050
 
-# Cache of generated beep waveforms keyed by sample rate so we only pay
-# the numpy cost once per TextToSpeech lifetime.
-_ERROR_BEEP_CACHE: Dict[int, Any] = {}
+# Cache of generated beep waveforms keyed by ``(kind, sample_rate)`` so
+# we only pay the numpy cost once per TextToSpeech lifetime per beep
+# kind.
+_BEEP_CACHE: Dict[Tuple[str, int], Any] = {}
+
+
+def _beep_envelope(np: Any, sample_rate: int, freq: float, duration_ms: int) -> Any:
+    """Generate a fixed-amplitude sine tone with a 10 ms linear fade in/out.
+
+    Peak amplitude is held to ~0.25 so beeps stay audible but don't
+    startle next to normal-volume TTS.
+    """
+    n = int(sample_rate * duration_ms / 1000)
+    if n <= 0:
+        return np.zeros(0, dtype=np.float32)
+    t = np.arange(n, dtype=np.float32) / float(sample_rate)
+    wave = (0.25 * np.sin(2.0 * np.pi * freq * t)).astype(np.float32)
+    ramp_n = min(int(sample_rate * 0.010), n // 2)
+    if ramp_n > 0:
+        ramp = np.linspace(0.0, 1.0, ramp_n, dtype=np.float32)
+        wave[:ramp_n] *= ramp
+        wave[-ramp_n:] *= ramp[::-1]
+    return wave
 
 
 def _generate_error_beep_samples(np: Any, sample_rate: int) -> Any:
-    """Build a short, two-tone descending beep as float32 mono samples.
+    """Build a short, two-tone *descending* beep as float32 mono samples.
 
     Shape:
       * 660 Hz for 80 ms (with a 10 ms linear fade in/out to avoid clicks)
       * 30 ms silence
       * 440 Hz for 120 ms (same fade envelope)
 
-    Peak amplitude is held to ~0.25 so the beep is audible but not
-    startling next to normal-volume speech.
+    The descending pitch reads as "uh-oh" / negative confirmation.
     """
-
-    def _tone(freq: float, duration_ms: int) -> Any:
-        n = int(sample_rate * duration_ms / 1000)
-        if n <= 0:
-            return np.zeros(0, dtype=np.float32)
-        t = np.arange(n, dtype=np.float32) / float(sample_rate)
-        wave = (0.25 * np.sin(2.0 * np.pi * freq * t)).astype(np.float32)
-        ramp_n = min(int(sample_rate * 0.010), n // 2)
-        if ramp_n > 0:
-            ramp = np.linspace(0.0, 1.0, ramp_n, dtype=np.float32)
-            wave[:ramp_n] *= ramp
-            wave[-ramp_n:] *= ramp[::-1]
-        return wave
-
     gap = np.zeros(int(sample_rate * 0.030), dtype=np.float32)
-    return np.concatenate([_tone(660.0, 80), gap, _tone(440.0, 120)])
+    return np.concatenate([
+        _beep_envelope(np, sample_rate, 660.0, 80),
+        gap,
+        _beep_envelope(np, sample_rate, 440.0, 120),
+    ])
 
 
-def _get_error_beep_samples(np: Any, sample_rate: int) -> Any:
-    cached = _ERROR_BEEP_CACHE.get(sample_rate)
+def _generate_success_beep_samples(np: Any, sample_rate: int) -> Any:
+    """Build a short, two-tone *ascending* beep as float32 mono samples.
+
+    Shape:
+      * 523 Hz (C5) for 60 ms (10 ms fade in/out)
+      * 20 ms silence
+      * 784 Hz (G5) for 80 ms (same fade envelope)
+
+    Slightly shorter overall than the error beep so the TTS reply still
+    arrives promptly after the cue.  The rising pitch reads as
+    "got it" / positive acknowledgement, mirroring the descending error
+    beep's "didn't get it" feel.
+    """
+    gap = np.zeros(int(sample_rate * 0.020), dtype=np.float32)
+    return np.concatenate([
+        _beep_envelope(np, sample_rate, 523.0, 60),
+        gap,
+        _beep_envelope(np, sample_rate, 784.0, 80),
+    ])
+
+
+_BEEP_GENERATORS: Dict[str, Any] = {
+    "error": _generate_error_beep_samples,
+    "success": _generate_success_beep_samples,
+}
+
+
+def _get_beep_samples(np: Any, kind: str, sample_rate: int) -> Any:
+    cache_key = (kind, sample_rate)
+    cached = _BEEP_CACHE.get(cache_key)
     if cached is None:
-        cached = _generate_error_beep_samples(np, sample_rate)
-        _ERROR_BEEP_CACHE[sample_rate] = cached
+        generator = _BEEP_GENERATORS.get(kind)
+        if generator is None:
+            raise ValueError(f"Unknown beep kind {kind!r}")
+        cached = generator(np, sample_rate)
+        _BEEP_CACHE[cache_key] = cached
     return cached
 
 
@@ -475,7 +525,7 @@ class TextToSpeech:
         *,
         device: Optional[Union[int, str]] = None,
     ) -> None:
-        """Play a short two-tone "error" beep and return immediately.
+        """Play a short two-tone *descending* "error" beep and return immediately.
 
         The beep is generated synthetically (no text synthesis, no
         language or voice assets needed) and queued for playback through
@@ -484,12 +534,37 @@ class TextToSpeech:
         rather than racing ahead.  Use :meth:`wait` / :meth:`is_talking`
         to track playback.
 
+        Pairs with :meth:`play_success`: callers that want audible
+        feedback for whether speech recognition succeeded can call
+        :meth:`play_success` on a recognized utterance and
+        :meth:`play_error` on an unrecognized one.
+
         ``device`` accepts the same values as :meth:`say` (``None`` =
         host default, a PortAudio index, a decimal string index, or a
         case-insensitive device-name substring).
         """
         _import_say_audio_deps()
-        self._say_queue.put(_BeepRequest(device=device))
+        self._say_queue.put(_BeepRequest(device=device, kind="error"))
+        self._ensure_say_workers()
+
+    def play_success(
+        self,
+        *,
+        device: Optional[Union[int, str]] = None,
+    ) -> None:
+        """Play a short two-tone *ascending* "success" beep and return immediately.
+
+        Counterpart to :meth:`play_error` for positive feedback: a brief
+        rising chirp confirming that the most recent utterance was
+        recognized / accepted.  Same queueing rules as
+        :meth:`play_error` — synthesized once, cached, and ordered
+        through the say queue so it never races ahead of an in-flight
+        :meth:`say`.
+
+        ``device`` accepts the same values as :meth:`say`.
+        """
+        _import_say_audio_deps()
+        self._say_queue.put(_BeepRequest(device=device, kind="success"))
         self._ensure_say_workers()
 
     def _ensure_say_workers(self) -> None:
@@ -530,7 +605,7 @@ class TextToSpeech:
             try:
                 if isinstance(req, _BeepRequest):
                     item = _PlayItem(
-                        data=_get_error_beep_samples(np, _BEEP_SAMPLE_RATE),
+                        data=_get_beep_samples(np, req.kind, _BEEP_SAMPLE_RATE),
                         sample_rate=_BEEP_SAMPLE_RATE,
                         device=req.device,
                     )
