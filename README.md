@@ -20,7 +20,7 @@
 - The framework and models are optimized for live streaming applications, offering low latency responses by doing a lot of the work while the user is still talking.
 - All speech to text models are based on our [cutting edge research](https://arxiv.org/abs/2602.12241) and trained from scratch, so we can offer [higher accuracy than Whisper Large V3 at the top end](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard), down to tiny 26MB models for constrained deployments.
 - It's easy to integrate across platforms, with the same library running on [Python](#python), [iOS](#ios), [Android](#android), [MacOS](#macos), [Linux](#linux), [Windows](#windows), [Raspberry Pis](#raspberry-pi), [IoT devices](https://www.linkedin.com/posts/petewarden_most-of-the-recent-news-about-ai-seems-to-activity-7384664255242932224-v6Mr/), and wearables.
-- Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, text to speech, speaker identification (diarization), command recognition, and conversation flow, so you can build a voice application using a single API.
+- Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, text to speech, speaker identification (diarization), command recognition, and [building conversational agents](#getting-started-with-a-conversational-agent), so you can build your voice application with a single library.
 - It supports multiple languages, including English, Spanish, Mandarin, Japanese, Korean, Vietnamese, Ukrainian, and Arabic for STT, and English, Spanish, Arabic, German, French, Hindi, Italian, Japanese, Korean, Dutch, Portuguese, Russian, Turkish, Ukrainian, Vietnamese, and Mandarin for TTS.
   
 ## Quickstart
@@ -335,7 +335,7 @@ To define these flows, you used a [`DialogFlow`](#dialogflow) object, with callb
 
 This registers the `report_ip_address()` function to be called whenever the user says anything similar to "What is my IP address?". The matching is done semantically, so alternative phrasings like "Tell me your IP address" or "Can you tell me the local IP address?" should trigger it too. You can register as many top-level conversation starters as you'd like, the system will listen out and route to the closest in meaning.
 
-The function itself receives a `Dialog` argument that represents the current conversational exchange. In this simple case we don't need any additional input from the user so we just use it to `say()` the information that was requested. 
+The function itself receives a `Dialog` argument that represents the current conversational exchange. In this simple case we don't need any additional input from the user so we just use it to `say()` the information that was requested. We break the IP address into separate words for each digit for clarity, and replace the connecting periods with explicit "dot"s, so that 192.178.4.72 becomes "1 9 2 dot 1 7 8 dot 4 dot 72", since that's the conventional way to articulate them in speech.
 
 For more complex conversations, like setting up a new wifi network, you can define multiple steps and branch points directly in Python:
 
