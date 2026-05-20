@@ -578,11 +578,11 @@ The [`examples`](examples/) folder has code samples organized by platform. We us
 
 - **[Android](examples/android/)**
   - [IntentRecognizer](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-IntentRecognizer.tar.gz)
-  - [TextToSpeech](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-TextToSpeech.tar.gz) — [`examples/android/TextToSpeech/`](examples/android/TextToSpeech/)
+  - [TextToSpeech](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-TextToSpeech.tar.gz)
   - [Transcriber](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-Transcriber.tar.gz)
 - **[Portable C++](examples/c++/README.md)**
-  - [`transcriber.cpp`](examples/c++/transcriber.cpp)
-  - [`text-to-speech.cpp`](examples/c++/text-to-speech.cpp)
+  - [transcriber.cpp](examples/c++/transcriber.cpp)
+  - [text-to-speech.cpp](examples/c++/text-to-speech.cpp)
 - **[iOS](examples/ios/)**
   - [IntentRecognizer](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-IntentRecognizer.tar.gz)
   - [TextToSpeech](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-TextToSpeech.tar.gz)
@@ -594,14 +594,21 @@ The [`examples`](examples/) folder has code samples organized by platform. We us
 - **[Windows](examples/windows/)**
   - [cli-transcriber](https://github.com/moonshine-ai/moonshine/releases/latest/download/windows-cli-transcriber.tar.gz)
 - **[Python](examples/python/)**
-  - [`basic_transcription.py`](examples/python/basic_transcription.py)
-  - [`mic_transcription.py`](examples/python/mic_transcription.py)
-  - [`intent_recognition.py`](examples/python/intent_recognition.py)
-  - [`ollama-voice/ollama_voice.py`](examples/python/ollama-voice/ollama_voice.py )
+  - [basic_transcription.py](examples/python/basic_transcription.py)
+  - [mic_transcription.py](examples/python/mic_transcription.py)
+  - [intent_recognition.py](examples/python/intent_recognition.py)
+  - [ollama-voice/ollama_voice.py](examples/python/ollama-voice/ollama_voice.py )
 - **[Raspberry Pi](examples/raspberry-pi/)**
   - [my-dalek](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz)
+  - [Pi Help Bot](https://github.com/moonshine-ai/pi-help-bot/archive/refs/heads/main.zip)
 
-The examples usually include one minimal project that just creates a transcriber and then feeds it data from a WAV file, and another that's pulling audio from a microphone using the platform's default framework for accessing audio devices. For Android, [`examples/android/IntentRecognizer`](examples/android/IntentRecognizer/) is a self-contained Gradle project you can copy out of the tree: it depends on **`ai.moonshine:moonshine-voice:0.0.61`** from Maven Central (includes `IntentRecognizer`) and bundles **small English streaming** ASR plus **embeddinggemma-300m** under `app/src/main/assets/` (Git LFS). Streaming weights are mirrored from assets to internal storage at runtime, then loaded with `MicTranscriber.loadFromFiles` and `MOONSHINE_MODEL_ARCH_SMALL_STREAMING`. [`examples/android/TextToSpeech`](examples/android/TextToSpeech/) is the same style of Gradle sample for on-device TTS: it uses the `TextToSpeech` class from **`moonshine-voice`** and bundles everything the default English voice needs to run fully offline — the **Kokoro** model, the `af_alloy` voice, and the `en_us` G2P + OOV files (`dict_filtered_heteronyms.tsv`, `g2p-config.json`, `oov/model.onnx`, `oov/onnx-config.json`) — under `app/src/main/assets/tts-data/` (Git LFS). Every other voice — the full Kokoro catalog and Piper voices across all supported languages — is resolved from `moonshine_get_tts_dependencies` and downloaded on demand from `https://download.moonshine.ai/tts/` the first time the user picks a voice that needs it, with a small progress indicator while assets are fetched. Downloads are cached under `filesDir`, so subsequent launches reuse them offline. [`examples/ios/TextToSpeech`](examples/ios/TextToSpeech/) follows the same pattern on Apple platforms: the Xcode project pulls **`MoonshineVoice`** from the Swift package and bundles the same Kokoro + `af_alloy` + `en_us` offline set under `tts-data/` (Git LFS). On first launch the bundled tree is staged into `Application Support/tts-data/`, then `TextToSpeech.getDependencies` is used to download any missing files from `https://download.moonshine.ai/tts/`, with a progress indicator in the UI. Switching to a different voice triggers the same on-demand download, and cached files are reused on subsequent launches.
+The examples usually include one minimal project that just creates a transcriber and then feeds it data from a WAV file, and another that's pulling audio from a microphone using the platform's default framework for accessing audio devices. For Android, [`examples/android/IntentRecognizer`](examples/android/IntentRecognizer/) is a self-contained Gradle project you can copy out of the tree: it depends on **`ai.moonshine:moonshine-voice:0.0.61`** from Maven Central (includes `IntentRecognizer`) and bundles **small English streaming** ASR plus **embeddinggemma-300m** under `app/src/main/assets/` (Git LFS). 
+
+Streaming weights are mirrored from assets to internal storage at runtime, then loaded with `MicTranscriber.loadFromFiles` and `MOONSHINE_MODEL_ARCH_SMALL_STREAMING`. [`examples/android/TextToSpeech`](examples/android/TextToSpeech/) is the same style of Gradle sample for on-device TTS: it uses the `TextToSpeech` class from **`moonshine-voice`** and bundles everything the default English voice needs to run fully offline — the **Kokoro** model, the `af_alloy` voice, and the `en_us` G2P + OOV files (`dict_filtered_heteronyms.tsv`, `g2p-config.json`, `oov/model.onnx`, `oov/onnx-config.json`) — under `app/src/main/assets/tts-data/` (Git LFS). 
+
+Every other voice — the full Kokoro catalog and Piper voices across all supported languages — is resolved from `moonshine_get_tts_dependencies` and downloaded on demand from `https://download.moonshine.ai/tts/` the first time the user picks a voice that needs it, with a small progress indicator while assets are fetched. Downloads are cached under `filesDir`, so subsequent launches reuse them offline. 
+
+[`examples/ios/TextToSpeech`](examples/ios/TextToSpeech/) follows the same pattern on Apple platforms: the Xcode project pulls **`MoonshineVoice`** from the Swift package and bundles the same Kokoro + `af_alloy` + `en_us` offline set under `tts-data/` (Git LFS). On first launch the bundled tree is staged into `Application Support/tts-data/`, then `TextToSpeech.getDependencies` is used to download any missing files from `https://download.moonshine.ai/tts/`, with a progress indicator in the UI. Switching to a different voice triggers the same on-demand download, and cached files are reused on subsequent launches.
 
 ### Adding the Library to your own App
 
@@ -895,6 +902,8 @@ This documentation covers the Python API, but the same functions and classes are
   - [Stream](#stream)
   - [TranscriptEventListener](#transcripteventlistener)
   - [IntentRecognizer](#intentrecognizer)
+  - [DialogFlow](#dialogflow)
+  - [Dialog](#dialog)
   - [TextToSpeech](#texttospeech)
   - [GraphemeToPhonemizer](#graphemetophonemizer)
 
@@ -1043,6 +1052,87 @@ A specialized kind of event listener that you add as a listener to a `Transcribe
 - <a id="intentrecognizer-intent-count"></a>`intent_count()`: Returns the number of registered intents.
 - <a id="intentrecognizer-clear-intents"></a>`clear_intents()`: Removes all registered intents from the recognizer.
 - <a id="intentrecognizer-set-on-intent"></a>`set_on_intent()`: Sets a callable that is called when any registered action is triggered, not just a single command as for `register_intent()`.
+
+#### DialogFlow
+
+A runner that drives generator-based conversational flows. You register flow functions against trigger phrases, and the runner routes completed transcript lines either to its configured `IntentRecognizer` (when no flow is active) or to the currently suspended generator (when one is). It implements the [`TranscriptEventListener`](#transcripteventlistener) interface, so you attach it to a `Transcriber` or `MicTranscriber` with [`add_listener()`](#transcriber-add-listener) the same way you would an `IntentRecognizer`. See [Getting Started with a Conversational Agent](#getting-started-with-a-conversational-agent) for usage examples.
+
+A flow is an ordinary Python generator function that takes a [`Dialog`](#dialog) as its argument and yields prompt objects back to the runner. The runner carries out each prompt (speaking text, waiting for the user's response) and resumes the generator with the answer via `.send()`. This lets you write multi-step, branching conversations using regular Python control flow, including loops and exception handlers, without any async machinery. Trigger matching, confirmation, and option selection are all done semantically through the embedding model, so alternative phrasings will work without you needing to enumerate them.
+
+- <a id="dialogflow-init"></a>`__init__()`: Constructs the runner with optional TTS, intent recognizer, and audio plumbing hooks. All arguments are keyword-only.
+  - `tts`: An optional [`TextToSpeech`](#texttospeech) instance used to speak prompts. When set, the runner calls `tts.say(text)` and blocks on `tts.wait()` before resuming the flow. If `tts.play_success` and `tts.play_error` are available they're auto-wired as the recognition-cue beep callbacks.
+  - `intent_recognizer`: An optional [`IntentRecognizer`](#intentrecognizer) used to compute the embeddings that drive trigger-phrase matching against incoming utterances. Utterances that don't match any registered flow or global are also forwarded to this recognizer for app-level handling.
+  - `speak_fn`: Optional callable `(text) -> None` that speaks the text and blocks until playback finishes. Overrides `tts` when set, which is useful for tests and alternative TTS backends.
+  - `mute_fn`: Optional callable `(should_mute: bool) -> None` invoked before and after each spoken prompt so you can silence the microphone while the assistant is talking, to avoid the agent transcribing itself.
+  - `spelling_mode_fn`: Optional callable `(active: bool) -> None` invoked whenever the runner enters or leaves a `SPELLED` / `DIGITS` prompt. Wire this to the underlying transcriber's `set_transcribe_flags()` to flip `MOONSHINE_FLAG_SPELLING_MODE` on only while spelled input is expected, so the spelling-CNN fusion path is used for password and code dictation without perturbing free-form recognition.
+  - `success_beep_fn`: Optional callable `() -> None` played the moment a completed transcript line is recognized, just before any TTS response begins. Defaults to `tts.play_success()` when `tts` exposes one. Pass `lambda: None` to silence.
+  - `error_beep_fn`: Optional callable `() -> None` played when a completed transcript line isn't recognized: no trigger matched, no active flow could interpret it, and no global handler took it. Defaults to `tts.play_error()` when available.
+  - `trigger_threshold`: A float between 0 and 1 setting the minimum embedding-similarity score required for an utterance to count as matching a registered trigger phrase. Defaults to `0.7`.
+  - `spell_feedback`: A boolean (default `True`) that controls whether every character recognized during a `SPELLED` / `DIGITS` prompt is spoken back to the user as confirmation, along with `"deleting <character>"` for undo commands. Pass `False` to silence the character-by-character echo (for example when no TTS is wired up).
+  - `ignore_stt_during_tts`: A boolean (default `True`). When set, every utterance that arrives while the runner is mid-prompt (i.e. the TTS is actively speaking) is dropped before it can advance the flow, match a global trigger, or fall through to the intent recognizer. This guards against self-capture on devices with weak echo cancellation. Disable only when you have reliable echo cancellation and want barge-in.
+  - `log_io`: A boolean (default `False`). When enabled, every utterance the runner receives and every prompt the assistant speaks is logged to stderr in a clean `user: ...` / `assistant: ...` format. Distinct from `debug`: this is the user-facing dialogue transcript without the verbose internal trace.
+  - `debug`: A boolean (default `False`). When enabled, stage-transition traces with per-step and cumulative timings are written to stderr, which is useful for diagnosing latency or missing-beep issues.
+
+- <a id="dialogflow-register-flow"></a>`register_flow()`: Registers a flow generator function to be started whenever the trigger phrase is matched against an incoming utterance.
+  - `trigger_phrase`: A canonical phrase that is embedded once at registration time and compared against utterances via cosine similarity, so alternative phrasings of the same meaning will all start the flow.
+  - `flow`: A callable that takes a [`Dialog`](#dialog) and returns a generator yielding prompts. Typically a generator function.
+
+- <a id="dialogflow-unregister-flow"></a>`unregister_flow()`: Removes a previously registered flow. Returns `True` if a flow was removed, `False` otherwise.
+  - `trigger_phrase`: The trigger phrase used when the flow was registered.
+
+- <a id="dialogflow-register-global"></a>`register_global()`: Registers a phrase that is always live, even while a flow is running. Useful for commands like "cancel" or "start over" that should interrupt any in-progress conversation.
+  - `trigger_phrase`: The canonical phrase to match, in the same way as `register_flow()`.
+  - `handler`: A callable that takes the current [`Dialog`](#dialog) and returns an optional prompt to speak (or `None`). The handler can also call `d.cancel()` or `d.restart()` to abandon or reset the active flow.
+
+- <a id="dialogflow-process-utterance"></a>`process_utterance()`: Routes an utterance manually, without going through transcript events. Returns `True` if the utterance was consumed by a flow or a global handler, `False` otherwise. Useful for unit tests, or for driving the runner from input sources other than a `Transcriber`.
+  - `utterance`: The string to route.
+
+- <a id="dialogflow-cancel-active"></a>`cancel_active()`: Abandons the currently running flow, if any. Returns `True` if a flow was canceled.
+
+- <a id="dialogflow-say"></a>`say()`: Speaks `text` through the configured TTS, outside any flow. Useful for welcome messages, status announcements, and error notifications that don't need a full flow registration. Blocks until playback finishes, and shares the same playback path as in-flow prompts so `mute_fn` and self-capture suppression still apply.
+  - `text`: The string to speak.
+
+- `is_active`: A read-only boolean property that's `True` when a flow is currently in progress.
+- `active_trigger`: A read-only property returning the trigger phrase of the active flow, or `None` if no flow is running.
+- `registered_flows`: A read-only list of all registered flow trigger phrases.
+
+`DialogFlow` also implements the [`TranscriptEventListener`](#transcripteventlistener) interface, so once you attach it via `transcriber.add_listener(dialog_flow)`, completed lines are routed automatically through `process_utterance()` without you having to call it yourself.
+
+#### Dialog
+
+The context object passed as the first argument to every flow function. Each method returns a prompt object that the flow `yield`s back to the runner; the runner then carries out the prompt (speaking text, waiting for input) and sends the result, if any, back into the generator via `.send()`. `Dialog` itself performs no I/O, so flows can be unit-tested by constructing a `Dialog`, calling the flow function, and driving the resulting generator manually without any audio, TTS, or event loop.
+
+- `trigger_phrase`: The phrase that started the flow, available to the flow function as `d.trigger_phrase`.
+- `state`: A `dict` for the flow's own per-conversation state, initially empty.
+
+- <a id="dialog-say"></a>`say()`: Returns a prompt that, when yielded, speaks `text` and resumes the flow once playback has finished. The flow receives `None` from the `yield`.
+  - `text`: The string for the assistant to speak.
+  - `barge_in`: Reserved for future use; when supported, will allow the user to interrupt playback by speaking.
+
+- <a id="dialog-ask"></a>`ask()`: Returns a prompt that speaks a question and resumes the flow with the user's next utterance as a string.
+  - `prompt`: The string for the assistant to speak before listening.
+  - `mode`: One of `FREE` (free-form natural-language input, the default), `SPELLED` (the user dictates one character at a time, terminated by "done"/"stop"/"finish", with each character spoken back as feedback and support for NATO-alphabet style words and "delete"/"undo" commands), `DIGITS` (digits-only spelled input), or `PHRASE` (a single phrase). These constants are exported from the `moonshine_voice` package.
+  - `bias_terms`: Optional list of strings the recognizer should bias toward when interpreting the response.
+  - `timeout`: Seconds to wait for a response before reprompting. Defaults to 8 seconds.
+  - `no_input_reprompt`: Template used to reprompt the user when no input arrives within the timeout. `{prompt}` is substituted with the original prompt text. Pass `None` to skip the reprompt.
+  - `max_retries`: Number of times to reprompt before raising `NoInputError` into the flow. Defaults to 2.
+
+- <a id="dialog-confirm"></a>`confirm()`: Returns a prompt that asks a yes/no question and resumes the flow with a `bool`. Matching is semantic, so "okay", "affirmative", and "go ahead" all count as yes, and "no", "cancel", and "stop" count as no.
+  - `prompt`: The yes/no question for the assistant to speak.
+  - `timeout`: Seconds to wait for a response. Defaults to 6 seconds.
+  - `max_retries`: Number of reprompts before raising `NoMatchError` into the flow. Defaults to 1.
+
+- <a id="dialog-choose"></a>`choose()`: Returns a prompt that asks the user to pick from a set of named options and resumes the flow with the key of the matched option as a string. Each option key has a list of associated phrases; matching is done against the union of the key and its phrases using the embedding model.
+  - `prompt`: The string for the assistant to speak.
+  - `options`: A mapping of option keys to lists of associated phrases the user might say.
+  - `timeout`: Seconds to wait for a response. Defaults to 8 seconds.
+  - `max_retries`: Number of reprompts before raising `NoMatchError`. Defaults to 2.
+
+- <a id="dialog-cancel"></a>`cancel()`: Raises `DialogCancelled` into the generator to abandon the active flow entirely. Typically called from a global handler registered with `DialogFlow.register_global()`.
+
+- <a id="dialog-restart"></a>`restart()`: Raises `DialogRestart` into the generator to restart the active flow from the beginning. Typically called from a global handler.
+
+- <a id="dialog-replay-last-prompt"></a>`replay_last_prompt()`: Returns a `Say` prompt that re-speaks the most recent question. Intended for global "repeat" / "say that again" handlers; returns `None` if nothing has been spoken yet.
 
 #### TextToSpeech
 
