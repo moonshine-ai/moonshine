@@ -14,13 +14,13 @@
 - [Acknowledgements](#acknowledgements)
 - [License](#license)
 
-[Moonshine](https://moonshine.ai) Voice is an open source AI toolkit for developers building real-time voice applications.
+[Moonshine](https://moonshine.ai) Voice is an open source AI toolkit for developers building real-time voice agents and applications.
 
 - Everything runs on-device, so it's fast, private, and you don't need an account, credit card, or API keys.
 - The framework and models are optimized for live streaming applications, offering low latency responses by doing a lot of the work while the user is still talking.
 - All speech to text models are based on our [cutting edge research](https://arxiv.org/abs/2602.12241) and trained from scratch, so we can offer [higher accuracy than Whisper Large V3 at the top end](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard), down to tiny 26MB models for constrained deployments.
 - It's easy to integrate across platforms, with the same library running on [Python](#python), [iOS](#ios), [Android](#android), [MacOS](#macos), [Linux](#linux), [Windows](#windows), [Raspberry Pis](#raspberry-pi), [IoT devices](https://www.linkedin.com/posts/petewarden_most-of-the-recent-news-about-ai-seems-to-activity-7384664255242932224-v6Mr/), and wearables.
-- Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, text to speech, speaker identification (diarization) and command recognition, so you don't need to be an expert to build a voice application.
+- Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, text to speech, speaker identification (diarization), command recognition, and conversation flow, so you can build a voice application using a single API.
 - It supports multiple languages, including English, Spanish, Mandarin, Japanese, Korean, Vietnamese, Ukrainian, and Arabic for STT, and English, Spanish, Arabic, German, French, Hindi, Italian, Japanese, Korean, Dutch, Portuguese, Russian, Turkish, Ukrainian, Vietnamese, and Mandarin for TTS.
   
 ## Quickstart
@@ -105,6 +105,8 @@ You'll need a USB microphone plugged in to get audio input, but the Python pip p
 
 I've recorded [a screencast on YouTube](https://www.youtube.com/watch?v=NNcqx1wFxl0) to help you get started, and you can also download [github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz) for some fun, Pi-specific examples. [The README](examples/raspberry-pi/my-dalek/README.md) has information about using a virtual environment for the Python install if you don't want to use `--break-system-packages`.
 
+You can look at [github.com/moonshine-ai/pi-help-bot](https://github.com/moonshine-ai/pi-help-bot) for a more advanced example.
+
 ## When should you choose Moonshine over Whisper?
 
 TL;DR - When you're working with live speech.
@@ -154,7 +156,8 @@ The Moonshine API is designed to take care of the details around capturing and t
 - [Concepts](#concepts)
 - [Getting Started with Transcription](#getting-started-with-transcription)
   - [Transcription Event Flow](#transcription-event-flow)
-- [Getting Started with Command Recognition](#getting-started-with-command-recognition)
+- [Getting Started with a Conversational Agent](#getting-started-with-a-conversational-agent)
+  - [Agent Setup](#agent-setup)
 - [Getting Started with Text to Speech](#getting-started-with-text-to-speech)
   - [Converting Graphemes to Phonemes](#converting-graphemes-to-phonemes)
 - [Examples](#examples)
@@ -214,6 +217,10 @@ A [**TranscriptEventListener**](python/src/moonshine_voice/transcriber.py#L266) 
 An [**IntentRecognizer**](python/src/moonshine_voice/intent_recognizer.py#L44) is a type of TranscriptEventListener that allows you to invoke different callback functions when preprogrammed intents are detected. This is useful for building voice command recognition features.
 
 A [**TextToSpeech**](python/src/moonshine_voice/tts.py#L20) object synthesizes audio for playback to the user.
+
+A [**DialogFlow**](python/src/moonshine_voice/dialog_flow.py#L453) object manages conversations between the user and an agent.
+
+A [**Dialog**](python/src/moonshine_voice/dialog_flow.py#L335) object is created for each conversational exchange, and allows the agent to hold a multi-step discussion with the user.
 
 ### Getting Started with Transcription
 
@@ -305,80 +312,169 @@ We offer some guarantees about these events:
 - Each line has a 64-bit `lineId` that is designed to be unique enough to avoid collisions.
 - This `lineId` remains the same for the line over time, from the first `LineStarted` event onwards.
 
-### Getting Started with Command Recognition
+### Getting Started with a Conversational Agent
 
-If you want your application to respond when users talk, you need to understand what they're saying. The previous generation of voice interfaces could only recognize speech that was phrased in exactly the form they expected. For example "Alexa, turn on living-room lights" might work, but "Alexa, lights on in the living room please" might not. The general problem of figuring out what a user wants from natural speech is known as intent recognition. There have been decades of research into this area, but the rise of transformer-based LLMs has given us new tools. We have integrated some of these advances into Moonshine Voice's command recognition API.
+Many applications need a voice agent that can understand what users are saying and respond appropriately. To make this as straightforward as possible, we let you define different conversational flows. A flow can be as simple as responding to a query, or be a multi-step, branching conversation that takes actions.
 
-The basic idea is that your application registers some general actions you're interested in, like "Turn the lights on" or "Move left", and then Moonshine sends an event when the user says something that matches the meaning of those phrases. It works a lot like a graphical user interface - you define a button (action) and an event callback that is triggered when the user presses that button.
+To define these flows, you used a [`DialogFlow`](#dialogflow) object, with callbacks that take [`Dialog`](#dialog) arguments. Here's an example of a simple flow, taken from the [github.com/moonshine-ai/pi-help-bot](https://github.com/moonshine-ai/pi-help-bot) sample code:
 
-To give it a try for yourself, run this built-in example:
+```python
+    def report_ip_address(d: Dialog):
+        ip = _find_local_ip()
+        if ip is None:
+            yield d.say("Sorry, I couldn't find a local IP address.")
+            return
+        speech_ip = re.sub(r"(\d)", r"\1 ", ip.replace(".", " dot "))
+        yield d.say([
+            f"Okay. Your local IP address is {speech_ip}. ",
+            f"To repeat, that's {speech_ip}."
+        ])
+
+    dialog_flow.register_flow("What is my IP address?", report_ip_address)
+```
+
+This registers the `report_ip_address()` function to be called whenever the user says anything similar to "What is my IP address?". The matching is done semantically, so alternative phrasings like "Tell me your IP address" or "Can you tell me the local IP address?" should trigger it too. You can register as many top-level conversation starters as you'd like, the system will listen out and route to the closest in meaning.
+
+The function itself receives a `Dialog` argument that represents the current conversational exchange. In this simple case we don't need any additional input from the user so we just use it to `say()` the information that was requested. 
+
+For more complex conversations, like setting up a new wifi network, you can define multiple steps and branch points directly in Python:
+
+```python
+   def connect_to_wifi(d: Dialog):
+        input_ssid = yield d.ask("What's the name of your Wi-Fi network? Say list if you want to pick from a list or spell if you want to spell out the start of the name")
+        input_ssid = input_ssid.strip()
+
+        networks = _scan_wifi_networks()
+
+        if input_ssid.lower().strip(string.punctuation) == "list":
+            yield d.say("Say yes to the network you want to connect to.")
+            for network in networks:
+                if (yield d.confirm(f"{network}?")):
+                    input_ssid = network
+                    break
+        elif input_ssid.lower().strip(string.punctuation) == "spell":
+            input_ssid = yield d.ask("Spell out the start of the network name.", mode=SPELLED)
+
+        found_ssid = fuzzy_match_network(input_ssid, networks)
+        if found_ssid is None:
+            yield d.say(f"Sorry, I couldn't find a matching network for {input_ssid}.")
+            return
+
+        password = yield d.ask(
+            f"Please spell the Wi-Fi password for {found_ssid} one character at a time, and say done when finished.",
+            mode=SPELLED,
+        )
+
+        yield d.say(f"Connecting to {found_ssid}.")
+
+        try:
+            result = subprocess.run(
+                ["sudo", "nmcli", "device", "wifi",
+                    "connect", found_ssid, "password", password],
+                capture_output=True, text=True, timeout=30,
+            )
+        except FileNotFoundError:
+            yield d.say("Sorry, network manager was not found on this system.")
+            return
+        except subprocess.TimeoutExpired:
+            yield d.say("Sorry, the connection attempt timed out.")
+            return
+
+        if result.returncode == 0:
+            yield d.say(f"Connected to {found_ssid}.")
+        else:
+            print(f"[ERROR] nmcli stderr: {result.stderr}", file=sys.stderr)
+            yield d.say(
+                f"Sorry, I wasn't able to connect to {found_ssid}. "
+                "Please check the network name and password and try again."
+            )
+
+    dialog_flow.register_flow("Connect to Wi-Fi", connect_to_wifi)
+```
+
+The first thing the function does is ask the user to give them the name of the network they want to join, through the call:
+
+```python
+input_ssid = yield d.ask("What's the name of your Wi-Fi network?...")
+```
+
+The Dialog class lets you ask users questions and will return the string containing the what they said in response. The only unusual feature here, compared to regular Python code, is the `yield` keyword. Because it may take some time for the user to respond, we call yield to hand back control to the main script until their response has been received. This is a general pattern for `DialogFlow` and you'll see it wherever we're waiting for the user to say something, to avoid blocking.
+
+```python
+        if input_ssid.lower().strip(string.punctuation) == "list":
+            yield d.say("Say yes to the network you want to connect to.")
+            for network in networks:
+                if (yield d.confirm(f"{network}?")):
+                    input_ssid = network
+                    break
+```
+
+Our example application supports a few different input methods - running through a list of networks, spelling out the first few letters, or saying the name. Here we implement the list approach by looping through all the available networks and asking the user whether each is the one they want. Here you can see that regular loops and conditional statements work as you'd expect in Python.
+
+For each network, we call `confirm()`, which asks a question and then waits for a positive or negative result. Like all matching in the system this is done semantically, so "okay", "affirmative", and "go ahead" will work as well as a straightforward "yes".
+
+```python
+        password = yield d.ask(
+            f"Please spell the Wi-Fi password for {found_ssid} one character at a time, and say done when finished.",
+            mode=SPELLED,
+        )
+```
+
+Password input is tricky, because they consist of arbitrary letters, digits, and symbols, and so they have to be spelled out by the user. Moonshine supports this through the `mode=SPELLED` argument. This asks the user to spell out each character, and uses a fine-tuned model to recognise what the user is saying for each. As well as supporting regular utterances like "aitch" or "capital zee", it also supports the NATO alphabet ("alpha", "bravo", etc) and even short descriptive phrases like "E as in elephant". It repeats back what it heard, and lets you delete mistakes.
+
+```python
+        try:
+            result = subprocess.run(
+                ["sudo", "nmcli", "device", "wifi",
+                    "connect", found_ssid, "password", password],
+                capture_output=True, text=True, timeout=30,
+            )
+        except FileNotFoundError:
+            yield d.say("Sorry, network manager was not found on this system.")
+            return
+        except subprocess.TimeoutExpired:
+            yield d.say("Sorry, the connection attempt timed out.")
+            return
+```
+
+The flow also works with other control structures like exception handlers, so you can specify your conversations using idiomatic code, even for error recovery.
+
+To give this a try for yourself, run this built-in example:
 
 ```bash
-python -m moonshine_voice.intent_recognizer
+python -m moonshine_voice.dialog_flow
 ```
 
-This will present you with a menu of command phrases, and then start listening to the microphone. If you say something that's a variant on one of the phrases you'll see a "triggered" log message telling you which action was matched, along with how confident the system is in the match.
+### Agent Setup
 
-```bash
-📝 Let there be light.
-'TURN ON THE LIGHTS' triggered by 'Let there be light.' with 76% confidence
-```
-
-To show that you can modify these at run time, try supplying your own list of phrases as a comma-separated string argument to `--intents`.
-
-```bash
-python -m moonshine_voice.intent_recognizer --intents "Turn left, turn right, go backwards, go forward"
-```
-
-This could be the core command set to control a robot's movement for example. It's worth spending a bit of time experimenting with different wordings of the command phrases, and different variations on the user side, to get a feel for how the system works.
-
-Under the hood this is all accomplished using two main classes. We've met the `MicTranscriber` above, the new addition is `IntentRecognizer`. This listens to the results of the transcriber, fuzzily matches completed lines against any intents that have been registered with it, and calls back the client-supplied code.
-
-The fuzzy matching uses a sentence-embedding model based on Gemma300m, so the first step is downloading it and getting the path:
+An agent needs a speech-to-text `Transcriber` object to receive input, an `IntentRecognizer` to understand the input, and a `TextToSpeech` object to respond:
 
 ```python
-embedding_model_path, embedding_model_arch = get_embedding_model(
-    args.embedding_model, args.quantization
-)
+    embedding_model_path, embedding_model_arch = get_embedding_model()
+    intent_recognizer = IntentRecognizer(
+        model_path=embedding_model_path,
+        model_arch=embedding_model_arch
+    )
+
+    tts = TextToSpeech(args.tts_language)
+
+    model_path, model_arch = get_model_for_language(args.language)
+    mic_transcriber = MicTranscriber(
+        model_path=model_path, model_arch=model_arch
+    )
+
+    dialog_flow = DialogFlow(
+        tts=tts,
+        intent_recognizer=intent_recognizer
+    )
+    add_commands(dialog_flow, tts)
+
+    mic_transcriber.add_listener(dialog_flow)
+
+    mic_transcriber.start()
 ```
 
-Once we have the model's location, we create an `IntentRecognizer` using that path. The only other argument is the `threshold` we use for fuzzy matching. It's between 0 and 1, with low numbers producing more matches but at the cost of less accuracy, and vice versa for high values. The built-in default is 0.8 (fairly strict); the CLI `--threshold` flag overrides it.
-
-```python
-intent_recognizer = IntentRecognizer(
-    model_path=embedding_model_path,
-    model_arch=embedding_model_arch,
-    model_variant=args.quantization,
-    threshold=args.threshold,
-)
-```
-
-Next we tell the recognizer what kinds of phrases to listen out for, and what to do when there's a match. You can optionally pass a pre-computed embedding and/or a priority to `register_intent()`, but in the simplest case you just supply a phrase and a handler:
-
-```python
-def on_intent_triggered_on(trigger: str, utterance: str, similarity: float):
-    print(f"\n'{trigger.upper()}' triggered by '{utterance}' with {similarity:.0%} confidence")
-
-for intent in intents:
-    intent_recognizer.register_intent(intent, on_intent_triggered_on)
-```
-
-If you need to pre-compute an embedding (for example, to store it in a database or share it between sessions), use `calculate_embedding()`:
-
-```python
-embedding = intent_recognizer.calculate_embedding("turn on the lights")
-intent_recognizer.register_intent("turn on the lights", handler, embedding=embedding, priority=1)
-```
-
-The recognizer supports the transcript event listener interface, so the final stage is adding it as a listener to the `MicTranscriber`.
-
-```python
-mic_transcriber.add_listener(intent_recognizer)
-```
-
-Once you start the transcriber, it will listen out for any variations on the supplied phrases, and call `on_intent_triggered_on()` whenever there's a match.
-
-The current intent recognition is designed for full-sentence matching, which works well for straightforward commands, but we will be expanding into more advanced "slot filling" techniques in the future, to handle extracting the quantity from "I want ten bananas" for example.
+The `add_commands()` function calls `register_flow()` for all of the phrases the agent should recognize.
 
 ### Getting Started with Text to Speech
 
