@@ -76,11 +76,9 @@ else
 	PLAT_NAME="any"
 fi
 
-rm -rf dist/*
-
 # Build platform-specific wheel (PEP 517 avoids deprecated setup.py install paths)
-# rm -rf dist/* wheelhouse/*
-# uv build --wheel --out-dir dist
+rm -rf dist/* wheelhouse/*
+uv build --wheel --out-dir dist
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
 	# Target manylinux_2_34 for wider compatibility (default would be 2_39 on newer images)
 	auditwheel repair dist/moonshine_voice-*.whl -w dist/ --plat "manylinux_${LINUX_VERSION}_${ARCH}"
