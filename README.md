@@ -1233,6 +1233,7 @@ We're grateful to:
 - [WikiPron](https://github.com/CUNY-CL/wikipron) (CUNY-CL) for Italian, Russian, and European Portuguese pronunciations.
 - [Koichi Yasuoka](https://huggingface.co/KoichiYasuoka) for the Hugging Face models [chinese-roberta-base-upos](https://huggingface.co/KoichiYasuoka/chinese-roberta-base-upos), [roberta-small-japanese-char-luw-upos](https://huggingface.co/KoichiYasuoka/roberta-small-japanese-char-luw-upos), and [roberta-base-korean-morph-upos](https://huggingface.co/KoichiYasuoka/roberta-base-korean-morph-upos).
 - [hexgrad/Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) and [onnx-community/Kokoro-82M-ONNX](https://huggingface.co/onnx-community/Kokoro-82M-ONNX) for Kokoro TTS weights and ONNX ([`core/moonshine-tts/data/kokoro`](core/moonshine-tts/data/kokoro)).
+- [PiperTTS](https://huggingface.co/rhasspy/piper-voices) for their excellent lightweight TTS models.
 - [MeloTTS](https://github.com/myshell-ai/MeloTTS) from [MyShell](https://myshell.ai) as reference for Korean Piper voice training ([`core/moonshine-tts/data/ko`](core/moonshine-tts/data/ko)).
 - [English Wiktionary](https://en.wiktionary.org/wiki/Wiktionary:Copyrights) and [hermitdave/FrequencyWords](https://github.com/hermitdave/FrequencyWords) for Hindi lexicon material ([`core/moonshine-tts/data/hi`](core/moonshine-tts/data/hi)).
 - [hbenbel/French-Dictionary](https://github.com/hbenbel/French-Dictionary) for related French liaison lexicon work ([`core/moonshine-tts/data/fr`](core/moonshine-tts/data/fr)).
