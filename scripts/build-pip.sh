@@ -76,6 +76,8 @@ else
 	PLAT_NAME="any"
 fi
 
+rm -rf dist/*
+
 # Build platform-specific wheel (PEP 517 avoids deprecated setup.py install paths)
 # rm -rf dist/* wheelhouse/*
 # uv build --wheel --out-dir dist
