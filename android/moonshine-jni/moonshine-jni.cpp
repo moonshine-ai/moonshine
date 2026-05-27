@@ -10,11 +10,8 @@
 #include <utility>
 #include <vector>
 
-#include <android/log.h>
 #define LOG_TAG "MoonshineJNI"
-#define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__))
-#define LOGW(...) ((void)__android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__))
-#define LOGE(...) ((void)__android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__))
+#include <android/log_macros.h>
 
 #include "moonshine-c-api.h"
 #include "utf8.h"
@@ -369,7 +366,7 @@ Java_ai_moonshine_voice_JNI_moonshineLoadTranscriberFromFiles(
         path_str, model_arch, coptions.data(), coptions.size(),
         MOONSHINE_HEADER_VERSION);
   } catch (const std::exception &e) {
-    LOGE("moonshineLoadTranscriberFromFiles: %s\n", e.what());
+    ALOGE("moonshineLoadTranscriberFromFiles: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
 }
@@ -417,7 +414,7 @@ Java_ai_moonshine_voice_JNI_moonshineLoadTranscriberFromMemory(
         spelling_model_data_ptr, spelling_model_data_size, model_arch,
         coptions.data(), coptions.size(), MOONSHINE_HEADER_VERSION);
   } catch (const std::exception &e) {
-    LOGE("moonshineLoadTranscriberFromMemory: %s\n", e.what());
+    ALOGE("moonshineLoadTranscriberFromMemory: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
 }
@@ -429,7 +426,7 @@ Java_ai_moonshine_voice_JNI_moonshineFreeTranscriber(JNIEnv * /* env */,
   try {
     moonshine_free_transcriber(transcriber_handle);
   } catch (const std::exception &e) {
-    LOGE("moonshineFreeTranscriber: %s\n", e.what());
+    ALOGE("moonshineFreeTranscriber: %s\n", e.what());
   }
 }
 
@@ -449,7 +446,7 @@ Java_ai_moonshine_voice_JNI_moonshineTranscribeWithoutStreaming(
     }
     return c_transcript_to_jobject(env, transcript);
   } catch (const std::exception &e) {
-    LOGE("moonshineTranscribeWithoutStreaming: %s\n", e.what());
+    ALOGE("moonshineTranscribeWithoutStreaming: %s\n", e.what());
     return nullptr;
   }
 }
@@ -461,7 +458,7 @@ Java_ai_moonshine_voice_JNI_moonshineCreateStream(JNIEnv * /* env */,
   try {
     return moonshine_create_stream(transcriber_handle, 0);
   } catch (const std::exception &e) {
-    LOGE("moonshineCreateStream: %s\n", e.what());
+    ALOGE("moonshineCreateStream: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
 }
@@ -474,7 +471,7 @@ Java_ai_moonshine_voice_JNI_moonshineFreeStream(JNIEnv * /* env */,
   try {
     moonshine_free_stream(transcriber_handle, stream_handle);
   } catch (const std::exception &e) {
-    LOGE("moonshineFreeStream: %s\n", e.what());
+    ALOGE("moonshineFreeStream: %s\n", e.what());
   }
 }
 
@@ -486,7 +483,7 @@ Java_ai_moonshine_voice_JNI_moonshineStartStream(JNIEnv * /* env */,
   try {
     return moonshine_start_stream(transcriber_handle, stream_handle);
   } catch (const std::exception &e) {
-    LOGE("moonshineStartStream: %s\n", e.what());
+    ALOGE("moonshineStartStream: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
 }
@@ -499,7 +496,7 @@ Java_ai_moonshine_voice_JNI_moonshineStopStream(JNIEnv * /* env */,
   try {
     return moonshine_stop_stream(transcriber_handle, stream_handle);
   } catch (const std::exception &e) {
-    LOGE("moonshineStopStream: %s\n", e.what());
+    ALOGE("moonshineStopStream: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
 }
@@ -518,7 +515,7 @@ Java_ai_moonshine_voice_JNI_moonshineAddAudioToStream(
         transcriber_handle, stream_handle, audio_data_ptr, audio_data_size,
         sample_rate, flags);
   } catch (const std::exception &e) {
-    LOGE("moonshineAddAudioToStream: %s\n", e.what());
+    ALOGE("moonshineAddAudioToStream: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
 }
@@ -531,18 +528,18 @@ Java_ai_moonshine_voice_JNI_moonshineTranscribeStream(JNIEnv *env,
                                                       jint flags) {
   try {
     struct transcript_t *transcript = nullptr;
-    LOGE("moonshineTranscribeStream: start transcribe stream");
+    ALOGD("moonshineTranscribeStream: start transcribe stream");
     int transcription_error = moonshine_transcribe_stream(
         transcriber_handle, stream_handle, flags, &transcript);
-    LOGE("moonshineTranscribeStream: transcription error: %d", transcription_error);
+    ALOGD("moonshineTranscribeStream: transcription error: %d", transcription_error);
     if (transcription_error != 0) {
-      LOGE("moonshineTranscribeStream: transcription error: %d", transcription_error);
+      ALOGE("moonshineTranscribeStream: transcription error: %d", transcription_error);
       return nullptr;
     }
-    LOGE("moonshineTranscribeStream: transcript=%p", (void *)transcript);
+    ALOGD("moonshineTranscribeStream: transcript=%p", (void *)transcript);
     return c_transcript_to_jobject(env, transcript);
   } catch (const std::exception &e) {
-    LOGE("moonshineTranscribeStream: %s\n", e.what());
+    ALOGE("moonshineTranscribeStream: %s\n", e.what());
     return nullptr;
   }
 }
@@ -595,7 +592,7 @@ Java_ai_moonshine_voice_JNI_moonshineCreateTtsSynthesizerFromFiles(
     }
     return handle;
   } catch (const std::exception &e) {
-    LOGE("moonshineCreateTtsSynthesizerFromFiles: %s\n", e.what());
+    ALOGE("moonshineCreateTtsSynthesizerFromFiles: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
 }
@@ -684,7 +681,7 @@ Java_ai_moonshine_voice_JNI_moonshineCreateTtsSynthesizerFromMemory(
     }
     return handle;
   } catch (const std::exception &e) {
-    LOGE("moonshineCreateTtsSynthesizerFromMemory: %s\n", e.what());
+    ALOGE("moonshineCreateTtsSynthesizerFromMemory: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
 }
@@ -698,7 +695,7 @@ Java_ai_moonshine_voice_JNI_moonshineFreeTtsSynthesizer(JNIEnv * /* env */,
     std::lock_guard<std::mutex> lock(g_tts_memory_backing_mutex);
     g_tts_memory_backing.erase(tts_handle);
   } catch (const std::exception &e) {
-    LOGE("moonshineFreeTtsSynthesizer: %s\n", e.what());
+    ALOGE("moonshineFreeTtsSynthesizer: %s\n", e.what());
   }
 }
 
@@ -737,7 +734,7 @@ Java_ai_moonshine_voice_JNI_moonshineGetG2pDependencies(JNIEnv *env,
     std::free(out);
     return env->NewStringUTF(sanitized.c_str());
   } catch (const std::exception &e) {
-    LOGE("moonshineGetG2pDependencies: %s\n", e.what());
+    ALOGE("moonshineGetG2pDependencies: %s\n", e.what());
     return nullptr;
   }
 }
@@ -777,7 +774,7 @@ Java_ai_moonshine_voice_JNI_moonshineGetTtsDependencies(JNIEnv *env,
     std::free(out);
     return env->NewStringUTF(sanitized.c_str());
   } catch (const std::exception &e) {
-    LOGE("moonshineGetTtsDependencies: %s\n", e.what());
+    ALOGE("moonshineGetTtsDependencies: %s\n", e.what());
     return nullptr;
   }
 }
@@ -816,7 +813,7 @@ Java_ai_moonshine_voice_JNI_moonshineGetTtsVoices(JNIEnv *env, jobject /* this *
     std::free(out);
     return env->NewStringUTF(sanitized.c_str());
   } catch (const std::exception &e) {
-    LOGE("moonshineGetTtsVoices: %s\n", e.what());
+    ALOGE("moonshineGetTtsVoices: %s\n", e.what());
     return nullptr;
   }
 }
@@ -866,7 +863,7 @@ Java_ai_moonshine_voice_JNI_moonshineTextToSpeech(JNIEnv *env, jobject /* this *
     env->DeleteLocalRef(resClass);
     return res;
   } catch (const std::exception &e) {
-    LOGE("moonshineTextToSpeech: %s\n", e.what());
+    ALOGE("moonshineTextToSpeech: %s\n", e.what());
     return nullptr;
   }
 }
@@ -919,7 +916,7 @@ Java_ai_moonshine_voice_JNI_moonshineCreateGraphemeToPhonemizerFromFiles(
     }
     return handle;
   } catch (const std::exception &e) {
-    LOGE("moonshineCreateGraphemeToPhonemizerFromFiles: %s\n", e.what());
+    ALOGE("moonshineCreateGraphemeToPhonemizerFromFiles: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
 }
@@ -1008,7 +1005,7 @@ Java_ai_moonshine_voice_JNI_moonshineCreateGraphemeToPhonemizerFromMemory(
     }
     return handle;
   } catch (const std::exception &e) {
-    LOGE("moonshineCreateGraphemeToPhonemizerFromMemory: %s\n", e.what());
+    ALOGE("moonshineCreateGraphemeToPhonemizerFromMemory: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
 }
@@ -1021,7 +1018,7 @@ Java_ai_moonshine_voice_JNI_moonshineFreeGraphemeToPhonemizer(
     std::lock_guard<std::mutex> lock(g_g2p_memory_backing_mutex);
     g_g2p_memory_backing.erase(g2p_handle);
   } catch (const std::exception &e) {
-    LOGE("moonshineFreeGraphemeToPhonemizer: %s\n", e.what());
+    ALOGE("moonshineFreeGraphemeToPhonemizer: %s\n", e.what());
   }
 }
 
@@ -1060,7 +1057,7 @@ Java_ai_moonshine_voice_JNI_moonshineTextToPhonemes(
     std::string sanitized = utf8::replace_invalid(ipa);
     return env->NewStringUTF(sanitized.c_str());
   } catch (const std::exception &e) {
-    LOGE("moonshineTextToPhonemes: %s\n", e.what());
+    ALOGE("moonshineTextToPhonemes: %s\n", e.what());
     return nullptr;
   }
 }
@@ -1087,7 +1084,7 @@ Java_ai_moonshine_voice_JNI_moonshineCreateIntentRecognizer(
     }
     return handle;
   } catch (const std::exception &e) {
-    LOGE("moonshineCreateIntentRecognizer: %s\n", e.what());
+    ALOGE("moonshineCreateIntentRecognizer: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
 }
@@ -1123,7 +1120,7 @@ Java_ai_moonshine_voice_JNI_moonshineRegisterIntent(JNIEnv *env, jobject /* this
     env->ReleaseStringUTFChars(canonical_phrase, phrase);
     return err;
   } catch (const std::exception &e) {
-    LOGE("moonshineRegisterIntent: %s\n", e.what());
+    ALOGE("moonshineRegisterIntent: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
 }
@@ -1141,7 +1138,7 @@ Java_ai_moonshine_voice_JNI_moonshineUnregisterIntent(
     env->ReleaseStringUTFChars(canonical_phrase, phrase);
     return err;
   } catch (const std::exception &e) {
-    LOGE("moonshineUnregisterIntent: %s\n", e.what());
+    ALOGE("moonshineUnregisterIntent: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
 }
@@ -1191,7 +1188,7 @@ Java_ai_moonshine_voice_JNI_moonshineGetClosestIntents(
     env->DeleteLocalRef(match_class);
     return arr;
   } catch (const std::exception &e) {
-    LOGE("moonshineGetClosestIntents: %s\n", e.what());
+    ALOGE("moonshineGetClosestIntents: %s\n", e.what());
     return nullptr;
   }
 }
@@ -1210,7 +1207,7 @@ Java_ai_moonshine_voice_JNI_moonshineClearIntents(JNIEnv * /* env */,
   try {
     return moonshine_clear_intents(intent_handle);
   } catch (const std::exception &e) {
-    LOGE("moonshineClearIntents: %s\n", e.what());
+    ALOGE("moonshineClearIntents: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
 }
@@ -1240,7 +1237,7 @@ Java_ai_moonshine_voice_JNI_moonshineCalculateIntentEmbedding(
     moonshine_free_intent_embedding(out_embedding);
     return result;
   } catch (const std::exception &e) {
-    LOGE("moonshineCalculateIntentEmbedding: %s\n", e.what());
+    ALOGE("moonshineCalculateIntentEmbedding: %s\n", e.what());
     return nullptr;
   }
 }
