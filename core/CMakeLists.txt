@@ -192,6 +192,21 @@ if(MOONSHINE_TTS_BUILD_ONNX)
     if(WIN32)
         copy_onnxruntime_dll(moonshine)
     endif()
+    # Windows static lib: merge TTS archives into moonshine.lib so release consumers
+    # only need moonshine.lib plus the existing public dependency libs.
+    if(WIN32 AND NOT MOONSHINE_BUILD_SHARED)
+        add_custom_command(TARGET moonshine POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E echo "Merging TTS static libraries into moonshine.lib..."
+            COMMAND lib /OUT:"$<TARGET_FILE:moonshine>.merged"
+                "$<TARGET_FILE:moonshine_tts_utf8proc>"
+                "$<TARGET_FILE:moonshine_tts_core>"
+                "$<TARGET_FILE:moonshine_tts_ort>"
+                "$<TARGET_FILE:moonshine>"
+            COMMAND ${CMAKE_COMMAND} -E remove "$<TARGET_FILE:moonshine>"
+            COMMAND ${CMAKE_COMMAND} -E rename "$<TARGET_FILE:moonshine>.merged" "$<TARGET_FILE:moonshine>"
+            COMMENT "Merging TTS archives into moonshine.lib"
+        )
+    endif()
 else()
     target_compile_definitions(moonshine PRIVATE MOONSHINE_C_API_MOONSHINE_TTS=0)
 endif()
