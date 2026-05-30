@@ -13,8 +13,10 @@ If you're working from a git checkout instead, run `download-lib.bat` to fetch t
 ## Building
 
 1. Open `cli-transcriber.sln` in Visual Studio
-2. Select the desired configuration (Debug or Release) and platform (x64)
+2. Select **Release** and **x64** (recommended), or **Debug** and **x64** if you need to step through your own code
 3. Build the solution (Build > Build Solution or press F7)
+
+The prebuilt Moonshine libraries are Release-only (`/MD`). The Debug configuration uses the same runtime library so it can link against them; you still get unoptimized code and debug symbols for the example app itself.
 
 Alternatively, you can build from the command line:
 

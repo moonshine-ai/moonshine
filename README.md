@@ -81,18 +81,7 @@ Download [github.com/moonshine-ai/moonshine/releases/latest/download/macos-MicTr
 
 Download [github.com/moonshine-ai/moonshine/releases/latest/download/windows-cli-transcriber.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/windows-cli-transcriber.tar.gz), extract it, and then open the `cli-transcriber\cli-transcriber.vcxproj` project in Visual Studio.
 
-[Install Moonshine in Python](#python) for model downloading.
-
-In the terminal:
-
-```batch
-pip install moonshine-voice
-cd examples\windows\cli-transcriber
-.\download-lib.bat
-msbuild cli-transcriber.sln /p:Configuration=Release /p:Platform=x64
-python -m moonshine_voice.download --language en
-x64\Release\cli-transcriber.exe --model-path <path from the download command> --model-arch <number from the download command>
-```
+It's a self-contained archive that includes the library and model, so Ctrl+Shift+B or F7 will build the executable.
 
 ### Raspberry Pi
 
