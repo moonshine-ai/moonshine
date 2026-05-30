@@ -20,6 +20,9 @@ EXAMPLES_DIR="${REPO_ROOT_DIR}/examples"
 for PLATFORM_PATH in "${EXAMPLES_DIR}"/*; do
 	[[ -d "${PLATFORM_PATH}" ]] || continue
 	PLATFORM="$(basename "${PLATFORM_PATH}")"
+	if [[ "${PLATFORM}" == "windows" ]]; then
+		continue
+	fi
 	for PROJECT_PATH in "${PLATFORM_PATH}"/*; do
 		[[ -d "${PROJECT_PATH}" ]] || continue
 		NAME="$(basename "${PROJECT_PATH}")"

@@ -49,5 +49,6 @@ ssh ${WINDOWS_CLOUD_USER}@${WINDOWS_CLOUD_HOST} 'cd moonshine `
   ; git pull origin main `
   ; scripts/test-core.bat `
   ; scripts/publish-binary.bat upload `
+  ; scripts/publish-examples.bat upload `
   ; scripts/build-pip.bat upload' \
   || exit 1
