@@ -1,9 +1,3 @@
-#include <Windows.h>
-#include <audioclient.h>
-#include <comdef.h>
-#include <functiondiscoverykeys_devpkey.h>
-#include <mmdeviceapi.h>
-
 #include <atomic>
 #include <iostream>
 #include <memory>
@@ -13,6 +7,12 @@
 #include <vector>
 
 #include "../../../core/moonshine-cpp.h"
+
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <Windows.h>
+#include <mmdeviceapi.h>
+#include <audioclient.h>
 
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "mmdevapi.lib")
