@@ -6,7 +6,7 @@
 #include <thread>
 #include <vector>
 
-#include "../../../core/moonshine-cpp.h"
+#include "moonshine-cpp.h"
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
