@@ -25,6 +25,7 @@ KNOWN_FILES=(
 	./scripts/publish-binary.sh
 	./scripts/publish-binary.bat
 	./scripts/publish-examples.sh
+	./scripts/publish-examples.bat
 	./scripts/test-examples.sh
 	./examples/c++/download-library.sh
 	./examples/c++/README.md
