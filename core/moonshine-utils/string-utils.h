@@ -4,6 +4,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <cstdint>
 
 std::string replace_all(std::string str, const std::string &from,
                         const std::string &to);
