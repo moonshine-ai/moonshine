@@ -1,6 +1,10 @@
 #include "ort-utils.h"
 
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
+#include <memory>
+#include <mutex>
 
 #ifndef _WIN32
 #include <fcntl.h>
@@ -83,8 +87,36 @@ int ort_session_from_memory(const OrtApi *ort_api, OrtEnv *env,
                             OrtSession **session) {
   RETURN_ON_NULL(ort_api);
   RETURN_ON_NULL(data);
+  // CreateSessionFromArray parses the .ort flatbuffer in place and performs
+  // aligned (e.g. 64-bit) loads. Buffers backed by file/mmap or heap vectors
+  // are sufficiently aligned, but the baked-in model data arrays (static
+  // const uint8_t[]) are only 1-byte aligned, which faults with SIGBUS
+  // (BUS_ADRALN) on 32-bit ARM (armeabi-v7a). When the source pointer is not
+  // 64-byte aligned, copy it into an aligned buffer that outlives the session
+  // (ORT may reference the bytes directly for the session's lifetime).
+  const uint8_t *aligned_data = data;
+  // Match the page alignment that the file/mmap load path (ort_session_from_path)
+  // produces; 64-byte alignment is not sufficient to avoid the SIGBUS on ARM32.
+  const size_t kAlign = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+  if ((reinterpret_cast<uintptr_t>(data) % kAlign) != 0) {
+    static std::mutex aligned_store_mutex;
+    static std::vector<std::unique_ptr<uint8_t, void (*)(void *)>> aligned_store;
+    const size_t padded = (data_size + (kAlign - 1)) & ~(kAlign - 1);
+    void *buf = nullptr;
+    if (posix_memalign(&buf, kAlign, padded == 0 ? kAlign : padded) != 0 ||
+        buf == nullptr) {
+      LOGF("%s", "Failed to allocate aligned buffer for in-memory ORT model");
+      return -1;
+    }
+    std::memcpy(buf, data, data_size);
+    {
+      std::lock_guard<std::mutex> lock(aligned_store_mutex);
+      aligned_store.emplace_back(static_cast<uint8_t *>(buf), std::free);
+    }
+    aligned_data = static_cast<const uint8_t *>(buf);
+  }
   RETURN_ON_ORT_ERROR(
-      ort_api, ort_api->CreateSessionFromArray(env, data, data_size,
+      ort_api, ort_api->CreateSessionFromArray(env, aligned_data, data_size,
                                                session_options, session));
   return 0;
 }
