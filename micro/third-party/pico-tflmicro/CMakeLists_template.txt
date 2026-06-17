@@ -1,0 +1,114 @@
+# == DO NOT EDIT THE FOLLOWING LINES for the Raspberry Pi Pico VS Code Extension to work ==
+if(WIN32)
+    set(USERHOME $ENV{USERPROFILE})
+else()
+    set(USERHOME $ENV{HOME})
+endif()
+set(sdkVersion 2.1.0)
+set(toolchainVersion 13_3_Rel1)
+set(picotoolVersion 2.1.0)
+set(picoVscode ${USERHOME}/.pico-sdk/cmake/pico-vscode.cmake)
+if (EXISTS ${picoVscode})
+    include(${picoVscode})
+endif()
+# ====================================================================================
+set(PICO_BOARD pico CACHE STRING "Board type")
+
+cmake_minimum_required(VERSION 3.12)
+
+# Pull in PICO SDK (must be before project)
+include(pico_sdk_import.cmake)
+
+project(pico-tflmicro C CXX ASM)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
+
+pico_sdk_init()
+
+add_library(pico-tflmicro STATIC)
+
+target_include_directories(pico-tflmicro
+  PUBLIC
+  ${CMAKE_CURRENT_LIST_DIR}/src/
+  ${CMAKE_CURRENT_LIST_DIR}/src/third_party/ruy
+  ${CMAKE_CURRENT_LIST_DIR}/src/third_party/gemmlowp
+  ${CMAKE_CURRENT_LIST_DIR}/src/third_party/kissfft
+  ${CMAKE_CURRENT_LIST_DIR}/src/third_party/flatbuffers
+  ${CMAKE_CURRENT_LIST_DIR}/src/third_party/cmsis/CMSIS/Core/Include
+  ${CMAKE_CURRENT_LIST_DIR}/src/third_party/flatbuffers/include
+  ${CMAKE_CURRENT_LIST_DIR}/src/third_party/cmsis_nn/Include
+)
+
+target_compile_definitions(
+  pico-tflmicro
+  PUBLIC
+  COMPILE_DEFINITIONS TF_LITE_DISABLE_X86_NEON=1
+  COMPILE_DEFINITIONS TF_LITE_STATIC_MEMORY=1
+  COMPILE_DEFINITIONS TF_LITE_USE_CTIME=1
+  COMPILE_DEFINITIONS CMSIS_NN=1
+  COMPILE_DEFINITIONS ARDUINO=1
+  COMPILE_DEFINITIONS TFLITE_USE_CTIME=1
+)
+
+set_target_properties(
+  pico-tflmicro
+  PROPERTIES
+  COMPILE_FLAGS -Os
+  COMPILE_FLAGS -fno-rtti
+  COMPILE_FLAGS -fno-exceptions
+  COMPILE_FLAGS -fno-threadsafe-statics
+  COMPILE_FLAGS -nostdlib
+)
+
+target_link_libraries(
+  pico-tflmicro
+  pico_stdlib
+  pico_multicore
+)
+
+target_sources(pico-tflmicro
+  PRIVATE
+{{LIBRARY_SOURCES}}
+)
+
+add_library(pico-tflmicro_test STATIC)
+
+target_include_directories(pico-tflmicro_test
+  PUBLIC
+  ${CMAKE_CURRENT_LIST_DIR}/src/
+  ${CMAKE_CURRENT_LIST_DIR}/src/third_party/ruy
+  ${CMAKE_CURRENT_LIST_DIR}/src/third_party/gemmlowp
+  ${CMAKE_CURRENT_LIST_DIR}/src/third_party/kissfft
+  ${CMAKE_CURRENT_LIST_DIR}/src/third_party/flatbuffers
+  ${CMAKE_CURRENT_LIST_DIR}/src/third_party/cmsis/CMSIS/Core/Include
+  ${CMAKE_CURRENT_LIST_DIR}/src/third_party/flatbuffers/include
+  ${CMAKE_CURRENT_LIST_DIR}/src/third_party/cmsis_nn/Include
+)
+
+target_compile_definitions(
+  pico-tflmicro_test
+  PUBLIC
+  COMPILE_DEFINITIONS TF_LITE_DISABLE_X86_NEON=1
+  COMPILE_DEFINITIONS TF_LITE_STATIC_MEMORY=1
+  COMPILE_DEFINITIONS CMSIS_NN=1
+)
+
+set_target_properties(
+  pico-tflmicro_test
+  PROPERTIES
+  COMPILE_FLAGS -fno-rtti
+  COMPILE_FLAGS -fno-exceptions
+  COMPILE_FLAGS -fno-threadsafe-statics
+  COMPILE_FLAGS -nostdlib
+)
+
+target_link_libraries(
+  pico-tflmicro_test
+  pico_stdlib
+  pico_multicore
+)
+
+add_subdirectory("examples/hello_world")
+add_subdirectory("examples/person_detection")
+
+{{TEST_FOLDERS}}

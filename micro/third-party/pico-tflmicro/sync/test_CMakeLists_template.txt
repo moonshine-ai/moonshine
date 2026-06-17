@@ -1,0 +1,39 @@
+cmake_minimum_required(VERSION 3.12)
+
+project({{TEST_NAME}} C CXX ASM)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
+
+add_executable({{TEST_NAME}} "")
+
+target_include_directories({{TEST_NAME}}
+  PRIVATE
+  ${CMAKE_CURRENT_LIST_DIR}/../../tests/{{TEST_NAME}}
+)
+
+set_target_properties(
+  {{TEST_NAME}}
+  PROPERTIES
+  COMPILE_FLAGS -Os
+  COMPILE_FLAGS -fno-rtti
+  COMPILE_FLAGS -fno-exceptions
+  COMPILE_FLAGS -fno-threadsafe-statics
+  COMPILE_FLAGS -nostdlib
+)
+
+pico_enable_stdio_usb({{TEST_NAME}} 1)
+pico_enable_stdio_uart({{TEST_NAME}} 0)
+
+target_sources({{TEST_NAME}}
+  PRIVATE
+  ${CMAKE_CURRENT_LIST_DIR}/../../tests/{{TEST_NAME}}/{{CPP_BASE}}
+{{EXTRA_SOURCES}}
+)
+
+target_link_libraries(
+  {{TEST_NAME}}
+  pico-tflmicro
+  pico-tflmicro_test
+)
+
+pico_add_extra_outputs({{TEST_NAME}})
