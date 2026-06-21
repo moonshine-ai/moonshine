@@ -587,6 +587,7 @@ The [`examples`](examples/) folder has code samples organized by platform. We us
   - [mic_transcription.py](examples/python/mic_transcription.py)
   - [intent_recognition.py](examples/python/intent_recognition.py)
   - [ollama-voice/ollama_voice.py](examples/python/ollama-voice/ollama_voice.py )
+  - [telnyx-media-streaming/telnyx_media_streaming.py](examples/python/telnyx-media-streaming/telnyx_media_streaming.py)
 - **[Raspberry Pi](examples/raspberry-pi/)**
   - [my-dalek](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz)
   - [Pi Help Bot](https://github.com/moonshine-ai/pi-help-bot/archive/refs/heads/main.zip)
