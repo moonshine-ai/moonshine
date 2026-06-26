@@ -21,6 +21,6 @@ target_include_directories(tts
 
 target_compile_features(tts PUBLIC cxx_std_17)
 
-if(CPP_TINY_BUILD_TESTS)
+if(MOONSHINE_MICRO_BUILD_TESTS)
   add_subdirectory(tests)
 endif()

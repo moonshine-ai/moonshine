@@ -1,7 +1,6 @@
-# stt
+# Speech to Text
 
-On-device **speech-to-text for isolated letters and digits**: a TFLM wrapper
-around the int8 mel-mode `SpellingCNN`. Given a normalised log-mel feature plane
+On-device **speech-to-text for isolated letters, digits, and command words**: a TFLM wrapper around the int8 mel-mode `SpellingCNN`. Given a normalised log-mel feature plane
 (from the [`feature-generation`](../feature-generation) module) it runs the
 int8 classifier with CMSIS-NN kernels and returns dequantized logits,
 which the included helpers turn into a labelled prediction.
@@ -10,21 +9,22 @@ which the included helpers turn into a labelled prediction.
 
 - [Vocabulary](#vocabulary)
 - [Public API](#public-api)
-- [Memory & compute](#memory--compute)
-  - [Latency @ 250 MHz](#latency--250-mhz)
+- [Memory \& compute](#memory--compute)
 - [Tests](#tests)
 - [Generating data](#generating-data)
 
 ## Vocabulary
 
-The checked-in SpellingCNN is a **36-way classifier** over isolated spoken
-letters and digits. Class labels (from `example-rp2350/generated/classes.*`) are:
+The checked-in SpellingCNN is a **51-way classifier** over isolated spoken
+letters, digits, and command words. Class labels (from
+`examples/rp2350/generated/classes.*`) are:
 
 - **Letters (26):** `a`, `b`, `c`, …, `z`
 - **Digits (10):** `zero`, `one`, `two`, `three`, `four`, `five`, `six`, `seven`, `eight`, `nine`
+- **Command / symbol words (15):** `capital`, `uppercase`, `star`, `dollar`, `underscore`, `exclamation`, `percent`, `delete`, `done`, `cancel`, `wifi`, `ip`, `yes`, `no`, `hey rp`
 
 Each class is a single hyperarticulated token in a ~1 s window at 16 kHz. The
-model supports isolated letters and digits only — not NATO/ICAO phonetic names,
+model supports isolated tokens only — not NATO/ICAO phonetic names,
 spelled-out words, or continuous speech. Replacing the embedded `.tflite` and `classes.*` blobs (via
 [`scripts/generate_embedded_data.py`](scripts/generate_embedded_data.py)) swaps
 the label set, but flash and arena sizing must be revalidated for a different
@@ -56,7 +56,7 @@ re-export with new ops fails loudly at `AllocateTensors()`.
 
 | Resource | Size | Notes |
 | -------- | ---- | ----- |
-| Flash (model) | ~2.3 MiB | int8 SpellingCNN weights (`model_data.*`) |
+| Flash (model) | ~1.3 MiB | int8 SpellingCNN weights (`model_data.*`) |
 | RAM (arena peak) | ~346 KiB | TFLM working set; app provisions 384 KiB |
 | RAM (features) | 0 extra | fp32 log-mel written into idle arena overlay |
 | Heap | 0 | interpreter + resolver placement-newed into arena head (~1 KiB) |
@@ -68,8 +68,8 @@ feature buffer.
 
 | Operation | Latency | Compute (approx.) | Notes |
 | --------- | ------- | ----------------- | ----- |
-| `Classifier::Run()` (dual-core) | ~535 ms per 1 s audio | ~52 MMAC per 1 s audio (~52 MMAC/s in) | CMSIS-NN int8 SIMD |
-| `Classifier::Run()` (single-core) | ~877 ms per 1 s audio | ~52 MMAC per 1 s audio (~52 MMAC/s in) | same model, no core split |
+| `Classifier::Run()` (dual-core) | ~314 ms per 1 s audio | ~36 MMAC per 1 s audio (~36 MMAC/s in) | CMSIS-NN int8 SIMD |
+| `Classifier::Run()` (single-core) | ~507 ms per 1 s audio | ~36 MMAC per 1 s audio (~36 MMAC/s in) | same model, no core split |
 
 MAC count is from the exported SpellingCNN graph structure (64×128 input). See
 the top-level README for the full pipeline breakdown.
@@ -84,7 +84,7 @@ on-device embedded-clip test loop on the desktop for regression checks.
 ## Generating data
 
 `scripts/generate_embedded_data.py` reads the checked-in
-`models/spelling_cnn_letters_digits_mel_int8.tflite` and its metadata sidecar,
+`models/spelling_cnn_mel_int8.tflite` and its metadata sidecar,
 then emits the example's embedded blobs (`model_data`, `classes`, `mel_tables`,
 `audio_config`, `test_clips`):
 
@@ -93,6 +93,6 @@ python scripts/generate_embedded_data.py                 # 2 clips/class
 python scripts/generate_embedded_data.py --clips-per-class 1
 ```
 
-Output lands in `example-rp2350/generated/` by default. `scripts/desktop_parity.py`
+Output lands in `examples/rp2350/generated/` by default. `scripts/desktop_parity.py`
 reproduces the on-device run with `ai_edge_litert` and diffs per-clip
 predictions against a captured `pico_monitor.log`.

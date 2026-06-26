@@ -35,6 +35,6 @@ target_compile_features(feature_generation PUBLIC cxx_std_17)
 # Optional per-module unit tests (host or target, depending on the harness the
 # parent project provides). Guarded so adding the module to a firmware build
 # doesn't pull test executables in unless asked.
-if(CPP_TINY_BUILD_TESTS)
+if(MOONSHINE_MICRO_BUILD_TESTS)
   add_subdirectory(tests)
 endif()

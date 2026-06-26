@@ -301,7 +301,7 @@ static void core1_mat_mul_worker(void) {
 #endif  // TF_LITE_PICO_MULTICORE
 
 /* ======================================================================
- * cpp-tiny RP2350 dual-core (Cortex-M33 + DSP/SIMD) GEMM split.
+ * moonshine-micro RP2350 dual-core (Cortex-M33 + DSP/SIMD) GEMM split.
  *
  * Unlike the legacy TF_LITE_PICO_MULTICORE path above (which lives in
  * the SCALAR #else branch and was written for the RP2040 M0+), this

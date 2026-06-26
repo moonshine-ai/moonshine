@@ -4,4 +4,4 @@
 
 add_executable(predictor_test predictor_test.cc)
 target_link_libraries(predictor_test PRIVATE stt tflm_test_support)
-cpp_tiny_register_micro_test(predictor_test)
+moonshine_micro_register_micro_test(predictor_test)

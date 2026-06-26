@@ -4,4 +4,4 @@
 
 add_executable(vad_segmenter_test vad_segmenter_test.cc)
 target_link_libraries(vad_segmenter_test PRIVATE vad tflm_test_support)
-cpp_tiny_register_micro_test(vad_segmenter_test)
+moonshine_micro_register_micro_test(vad_segmenter_test)

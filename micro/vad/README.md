@@ -1,4 +1,4 @@
-# vad
+# Voice Activity Detection
 
 On-device **voice activity detection**: an int8 `TinyVadCNN` plus a moving-average smoother and 1 s clip
 extractor. In the always-on path it runs once per ~32 ms hop, turning audio into
@@ -14,14 +14,13 @@ The module is split into two reusable pieces:
 The streaming log-mel front-end that feeds `Vad` is the
 [`feature-generation`](../feature-generation) module's `MelStreamer` (one FFT per
 hop). The application composes `MelStreamer → Vad → VadSegmenter`; see
-`example-rp2350`'s audio path. Dependencies are only feature-generation and
+`examples/rp2350`'s audio path. Dependencies are only feature-generation and
 TFLM, so the VAD can drop into a different example on another platform unchanged.
 
 <!--TOC-->
 
 - [Public API](#public-api)
-- [Memory & compute](#memory--compute)
-  - [Latency @ 250 MHz](#latency--250-mhz)
+- [Memory \& compute](#memory--compute)
 - [Tests](#tests)
 - [Generating data](#generating-data)
 
@@ -93,4 +92,4 @@ python scripts/generate_vad_embedded_data.py \
     --tflite ../models/tinyvad_cnn_speech_mel_head16.tflite
 ```
 
-Output lands in `example-rp2350/generated/` by default.
+Output lands in `examples/rp2350/generated/` by default.

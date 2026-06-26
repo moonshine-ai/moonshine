@@ -1,8 +1,8 @@
-# tts
+# Text to Speech
 
 A portable, dependency-free **formant (Klatt-style) text-to-speech** synth core.
-The goal is *"robotic but understandable"* speech that fits the RP2350's resource
-envelope. On-device it speaks back the recognized letter/digit after STT.
+The goal is *"robotic but understandable"* speech that fits a tight resource
+envelope. It synthesizes the output audio in a streaming fashion, to keep memory usage minimal.
 
 The core is C++17, **float-only math, no allocation in the audio inner loop, and
 no third-party dependency** (not even kissfft or TFLM).
@@ -10,8 +10,7 @@ no third-party dependency** (not even kissfft or TFLM).
 <!--TOC-->
 
 - [Public API](#public-api)
-- [Memory & compute](#memory--compute)
-  - [Latency @ 250 MHz](#latency--250-mhz)
+- [Memory \& compute](#memory--compute)
 - [Tests](#tests)
 - [Tuning](#tuning)
 

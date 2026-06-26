@@ -7,7 +7,8 @@ desktop inspection and re-embedding into firmware.
 <!--TOC-->
 
 - [System diagram](#system-diagram)
-- [SpellingCNN — isolated letters and digits](#spellingcnn--isolated-letters-and-digits)
+- [SpellingCNN — letters, digits, and command words](#spellingcnn--letters-digits-and-command-words)
+  - [Provenance](#provenance)
   - [Architecture](#architecture)
   - [Files](#files)
   - [Inputs and outputs](#inputs-and-outputs)
@@ -34,53 +35,78 @@ flowchart LR
     Seg --> Clip["1 s int16 clip"]
     Clip --> MelB["Log-mel batch"]
     MelB --> STT["SpellingCNN"]
-    STT --> Logits["36 logits"]
+    STT --> Logits["51 logits"]
     Logits --> TTS["TTS"]
   end
 
   TTS --> Spk["spoken reply"]
 ```
 
-## SpellingCNN — isolated letters and digits
+## SpellingCNN — letters, digits, and command words
 
-36-way classifier for hyperarticulated **isolated letters (`a`…`z`) and digit
-words (`zero`…`nine`)** in a ~1 s window. Limited to isolated tokens — not NATO
-names, running speech, or multi-character strings.
+51-way classifier for hyperarticulated **isolated spoken tokens** in a ~1 s
+window: the 26 letters `a`…`z`, the ten digit words `zero`…`nine`, and 15
+command/symbol words used by the voice WiFi-setup flow (`capital`, `uppercase`,
+`star`, `dollar`, `underscore`, `exclamation`, `percent`, `delete`, `done`,
+`cancel`, `wifi`, `ip`, `yes`, `no`, `hey rp`). Limited to isolated tokens — not
+NATO names, running speech, or multi-character strings.
+
+### Provenance
+
+| Field | Value |
+| ----- | ----- |
+| Source run | `run_2026_06_24_19_08` (best epoch 45) |
+| Training data | local TTS wavs (ElevenLabs / Google / Polly) + People's Speech real-voice clips (packed parquet on the Hub), class-balanced sampling (`--sampling-power 1.0`) |
+| Speaker-independent val | 98.47% top-1, 97.16% macro, 97.00% E-set |
+| Held-out `captured` (220 real clips) | **90.91%** top-1, **85.96%** E-set |
+
+The int8 export is accuracy-neutral vs the fp32 PyTorch model on `captured`
+(90.91% / 85.96%, argmax parity on the export check). Supersedes the previous
+`run_2026_06_18_18_43` export (which scored 89.55% / 85.96% on the same set).
 
 ### Architecture
 
-MobileNetV2-style inverted-residual CNN:
+MobileNetV2-style inverted-residual CNN (`model_size=1`, width multiplier
+**1.0**, ~**1.02M** params):
 
 | Stage | Blocks | Notes |
 | ----- | ------ | ----- |
 | Stem | 3×3 conv, stride `(2, 2)` | downsamples freq and time |
-| Backbone | 7 IR stages: `(1,16,1)`, `(4,24,2)`, `(4,32,3)`, `(4,64,3)`, `(4,96,2)`, `(4,160,2)`, `(4,240,1)` | width multiplier **1.4** (~1.94M params) |
-| Head | 1×1 conv → global average pool → linear | 36 logits |
+| Backbone | 7 IR stages: `(1,16,1)`, `(4,24,2)`, `(4,32,3)`, `(4,64,3)`, `(4,96,2)`, `(4,160,2)`, `(4,240,1)` | expand · out-channels · repeats |
+| Head | 1×1 conv (640) → global average pool → linear | 51 logits |
+
+`pad_to_odd` is enabled, so every stride-2 conv sees an odd input: PyTorch's
+symmetric `padding=1` then matches TFLite SAME and folds into the conv, avoiding
+the standalone `PAD` op that would otherwise set the TFLM arena peak.
 
 TFLM op set: `PAD`, `DEPTHWISE_CONV_2D`, `CONV_2D`, `ADD`, `SUM`,
 `FULLY_CONNECTED`, `RESHAPE`.
 
-**Per-inference compute:** ~**69 MMAC** per forward pass on a `(1, 1, 64, 128)`
-log-mel input (analytical count from the PyTorch graph).
+**Per-inference compute:** ~**36 MMAC** per forward pass on a `(1, 1, 64, 128)`
+log-mel input (int8 LiteRT estimate).
 
 ### Files
 
 | File | Format | Role |
 | ---- | ------ | ---- |
-| [`spelling_cnn_letters_digits_mel_int8.tflite`](spelling_cnn_letters_digits_mel_int8.tflite) | int8 LiteRT | primary int8 deploy artifact (~2.3 MiB) |
-| [`spelling_cnn_letters_digits_mel_fp32.tflite`](spelling_cnn_letters_digits_mel_fp32.tflite) | fp32 LiteRT | reference / re-quantization |
-| [`spelling_cnn_letters_digits_mel.onnx`](spelling_cnn_letters_digits_mel.onnx) | fp32 ONNX | desktop inspection |
-| [`spelling_cnn_letters_digits_mel.shrunk.onnx`](spelling_cnn_letters_digits_mel.shrunk.onnx) | int8 ONNX | compact desktop deploy |
-| [`spelling_cnn_letters_digits_meta.json`](spelling_cnn_letters_digits_meta.json) | JSON | classes, audio dims |
+| [`spelling_cnn_mel_int8.tflite`](spelling_cnn_mel_int8.tflite) | int8 LiteRT | primary int8 deploy artifact, embedded into firmware (~1.28 MiB) |
+| [`spelling_cnn_mel_fp32.tflite`](spelling_cnn_mel_fp32.tflite) | fp32 LiteRT | reference / re-quantization |
+| [`spelling_cnn_mel.onnx`](spelling_cnn_mel.onnx) | fp32 ONNX | desktop inspection |
+| [`spelling_cnn_mel.shrunk.onnx`](spelling_cnn_mel.shrunk.onnx) | int8 ONNX | compact desktop deploy |
+| [`spelling_cnn_meta.json`](spelling_cnn_meta.json) | JSON | classes, audio dims |
+
+The `spelling_cnn_letters_digits_mel*` files are the superseded 36-class
+(letters + digits only) export, kept for reference; the embed/resolve tooling
+prefers the `spelling_cnn_mel*` names above.
 
 ### Inputs and outputs
 
 | Tensor | Shape | Dtype | Description |
 | ------ | ----- | ----- | ----------- |
 | `log_mel` (in) | `(B, 1, 64, 128)` | fp32 (ONNX) / int8 (TFLM) | per-clip normalised log-mel: 64 mels × 128 frames, 16 kHz, hop 125 (~1 s) |
-| `logits` (out) | `(B, 36)` | fp32 | unnormalised class scores; apply softmax for probabilities |
+| `logits` (out) | `(B, 51)` | fp32 | unnormalised class scores; apply softmax for probabilities |
 
-Class order is in `spelling_cnn_letters_digits_meta.json` (`classes` array).
+Class order is in `spelling_cnn_meta.json` (`classes` array).
 
 ## TinyVadCNN — voice activity detection
 

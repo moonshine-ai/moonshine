@@ -14,7 +14,7 @@
 //
 // The streaming log-mel front-end that feeds Vad lives in the
 // feature-generation module (MelStreamer); compose them in your application
-// (see example-rp2350's audio path). The VAD model is shape-agnostic: the model
+// (see examples/rp2350's audio path). The VAD model is shape-agnostic: the model
 // bytes, arena, and (n_mels, window_frames) are all supplied by the caller, so
 // the module carries no model or platform dependency beyond feature-generation
 // and TFLM.
