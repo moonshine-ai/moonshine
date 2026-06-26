@@ -2,8 +2,6 @@
 
 # Moonshine Micro — Voice Interfaces for Microcontrollers
 
-**Voice Interfaces for Everyone**
-
 [Moonshine Voice](https://github.com/moonshine-ai/moonshine) is an open source AI toolkit for developers building real-time voice agents and applications. Moonshine Micro is a version of that designed specifically for embedded system processors like microcontrollers and DSPs. It includes [voice-activity detection](vad/README.md), [command recognition](stt/README.md), and [speech synthesis](tts/README.md) and can run in as little as 500KB RAM.
 
 The memory and compute requirements are designed to fit resource-constrained
