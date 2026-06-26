@@ -18,9 +18,14 @@ moonshine_tensor_t *moonshine_tensor_from_shape_and_dtype(
   }
   moonshine_tensor_t *moonshine_tensor = static_cast<moonshine_tensor_t *>(
       DEBUG_CALLOC(1, sizeof(moonshine_tensor_t)));
+  if (moonshine_tensor == nullptr) return nullptr;
   moonshine_tensor->dtype = dtype;
   moonshine_tensor->shape =
       static_cast<int64_t *>(DEBUG_CALLOC(shape.size(), sizeof(int64_t)));
+  if (moonshine_tensor->shape == nullptr) {
+    DEBUG_FREE(moonshine_tensor);
+    return nullptr;
+  }
   std::memcpy(moonshine_tensor->shape, shape.data(),
               shape.size() * sizeof(int64_t));
   moonshine_tensor->shape_count = shape.size();
@@ -30,6 +35,11 @@ moonshine_tensor_t *moonshine_tensor_from_shape_and_dtype(
   const size_t data_size_in_bytes = element_count * bytes_per_element;
   moonshine_tensor->data =
       static_cast<uint8_t *>(DEBUG_CALLOC(data_size_in_bytes, 1));
+  if (moonshine_tensor->data == nullptr) {
+    DEBUG_FREE(moonshine_tensor->shape);
+    DEBUG_FREE(moonshine_tensor);
+    return nullptr;
+  }
   if (data_to_copy != nullptr) {
     std::memcpy(moonshine_tensor->data, data_to_copy, data_size_in_bytes);
   }
@@ -252,9 +262,14 @@ moonshine_tensor_t *moonshine_tensor_from_shape_and_dtype(
     const void *data_to_copy) {
   moonshine_tensor_t *moonshine_tensor = static_cast<moonshine_tensor_t *>(
       DEBUG_CALLOC(1, sizeof(moonshine_tensor_t)));
+  if (moonshine_tensor == nullptr) return nullptr;
   moonshine_tensor->dtype = dtype;
   moonshine_tensor->shape =
       static_cast<int64_t *>(DEBUG_CALLOC(shape.size(), sizeof(int64_t)));
+  if (moonshine_tensor->shape == nullptr) {
+    DEBUG_FREE(moonshine_tensor);
+    return nullptr;
+  }
   std::memcpy(moonshine_tensor->shape, shape.data(),
               shape.size() * sizeof(int64_t));
   moonshine_tensor->shape_count = shape.size();
@@ -264,6 +279,11 @@ moonshine_tensor_t *moonshine_tensor_from_shape_and_dtype(
   const size_t data_size_in_bytes = element_count * bytes_per_element;
   moonshine_tensor->data =
       static_cast<uint8_t *>(DEBUG_CALLOC(data_size_in_bytes, 1));
+  if (moonshine_tensor->data == nullptr) {
+    DEBUG_FREE(moonshine_tensor->shape);
+    DEBUG_FREE(moonshine_tensor);
+    return nullptr;
+  }
   if (data_to_copy != nullptr) {
     std::memcpy(moonshine_tensor->data, data_to_copy, data_size_in_bytes);
   }
