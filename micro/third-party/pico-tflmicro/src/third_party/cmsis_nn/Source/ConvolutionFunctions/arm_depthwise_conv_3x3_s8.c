@@ -47,7 +47,7 @@
 
 #include "pico.h"
 
-// cpp-tiny RP2350 dual-core split of the 3x3/ch_mult=1 depthwise conv.
+// moonshine-micro RP2350 dual-core split of the 3x3/ch_mult=1 depthwise conv.
 // We partition the OUTPUT ROWS (out_h) across both M33 cores: each core
 // writes a disjoint, contiguous band of output rows with the identical
 // SMLAD kernel, so the result is bit-identical to single-core (only the

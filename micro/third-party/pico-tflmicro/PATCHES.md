@@ -28,7 +28,7 @@ When `SPELLING_TINY_MULTICORE` is undefined these fall back to the upstream
 single-core scalar/SIMD paths, so the patch is inert in a single-core build.
 
 Because this is platform-specific, it is the one piece of "platform code" that
-could not be lifted out into `example-rp2350/` — it is physically interleaved
+could not be lifted out into `examples/rp2350/` — it is physically interleaved
 with the CMSIS-NN kernels. A port to another platform would simply leave
 `SPELLING_TINY_MULTICORE` undefined.
 

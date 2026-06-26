@@ -1,8 +1,8 @@
 /*
- * cpp-tiny RP2350 dual-core dispatch (shared across CMSIS-NN kernels).
+ * moonshine-micro RP2350 dual-core dispatch (shared across CMSIS-NN kernels).
  *
  * NOT part of upstream CMSIS-NN. Added for the moonshine-spelling
- * cpp-tiny port to let more than one kernel (the int8 SIMD GEMM and the
+ * moonshine-micro port to let more than one kernel (the int8 SIMD GEMM and the
  * 3x3 depthwise conv) hand half their work to a persistent worker on
  * RP2350 core 1. The implementation lives in
  * Source/NNSupportFunctions/arm_nn_mat_mult_nt_t_s8.c (already compiled);

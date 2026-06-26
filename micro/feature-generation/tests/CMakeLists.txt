@@ -8,4 +8,4 @@
 add_executable(feature_generation_test feature_generation_test.cc)
 target_link_libraries(feature_generation_test
   PRIVATE feature_generation kissfft tflm_test_support)
-cpp_tiny_register_micro_test(feature_generation_test)
+moonshine_micro_register_micro_test(feature_generation_test)

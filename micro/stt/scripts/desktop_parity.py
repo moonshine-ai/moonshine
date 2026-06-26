@@ -1,4 +1,4 @@
-"""Desktop regression check for the cpp-tiny on-device embedded-clip test loop.
+"""Desktop regression check for the moonshine-micro on-device embedded-clip test loop.
 
 The Pico firmware runs an int8 mel-mode ``.tflite`` over a fixed set of
 embedded clips and prints a per-clip ``exp=.. got=..`` table plus an
@@ -30,7 +30,7 @@ import sys
 import numpy as np
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
-for _p in (REPO_ROOT, REPO_ROOT / "scripts", REPO_ROOT / "cpp-tiny" / "stt" / "scripts"):
+for _p in (REPO_ROOT, REPO_ROOT / "scripts", REPO_ROOT / "moonshine-micro" / "stt" / "scripts"):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
@@ -111,7 +111,11 @@ def _parse_device_log(path: pathlib.Path) -> list[tuple[str, str]]:
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--tflite", default=None, help="Model path (default: auto tiny).")
-    ap.add_argument("--wavs-dir", default="real_spelled/captured")
+    ap.add_argument(
+        "--wavs-dirs",
+        default="speech-data/real/captured,speech-data/real/peoples_speech",
+        help="Comma-separated clip roots (relative to repo root), searched in order.",
+    )
     ap.add_argument("--clips-per-class", type=int, default=2)
     ap.add_argument("--max-classes", type=int, default=None)
     ap.add_argument("--n-mels", type=int, default=None, help="Override sidecar.")
@@ -173,8 +177,13 @@ def main(argv: list[str]) -> int:
           f"q={in_d['quantization']}  ->  out {np.dtype(out_d['dtype']).name} "
           f"q={out_d['quantization']}")
 
+    wavs_roots = [
+        REPO_ROOT / p.strip()
+        for p in args.wavs_dirs.split(",")
+        if p.strip()
+    ]
     selected = _pick_clips(
-        REPO_ROOT / args.wavs_dir, classes, args.clips_per_class, args.max_classes
+        wavs_roots, classes, args.clips_per_class, args.max_classes
     )
     print(f"Clips:   {len(selected)}\n")
 

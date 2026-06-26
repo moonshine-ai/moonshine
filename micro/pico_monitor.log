@@ -1,0 +1,38 @@
+[41/72]  exp=u     got=u     p=0.678  log_mel_us= 39888  infer_us=316056  OK
+[42/72]  exp=u     got=u     p=0.770  log_mel_us= 39892  infer_us=313934  OK
+[43/72]  exp=v     got=v     p=0.451  log_mel_us= 39886  infer_us=313701  OK
+[44/72]  exp=v     got=v     p=0.776  log_mel_us= 39324  infer_us=313829  OK
+[45/72]  exp=w     got=w     p=0.557  log_mel_us= 39319  infer_us=313804  OK
+[46/72]  exp=w     got=w     p=0.607  log_mel_us= 39907  infer_us=314048  OK
+[47/72]  exp=x     got=x     p=0.643  log_mel_us= 39907  infer_us=313470  OK
+[48/72]  exp=x     got=x     p=0.665  log_mel_us= 39331  infer_us=313916  OK
+[49/72]  exp=y     got=y     p=0.786  log_mel_us= 39325  infer_us=313927  OK
+[50/72]  exp=y     got=y     p=0.785  log_mel_us= 39895  infer_us=313858  OK
+[51/72]  exp=z     got=z     p=0.672  log_mel_us= 39904  infer_us=313541  OK
+[52/72]  exp=z     got=z     p=0.749  log_mel_us= 39335  infer_us=314084  OK
+[53/72]  exp=zero  got=zero  p=0.504  log_mel_us= 39315  infer_us=313730  OK
+[54/72]  exp=zero  got=zero  p=0.534  log_mel_us= 39899  infer_us=313809  OK
+[55/72]  exp=one   got=y     p=0.409  log_mel_us= 39915  infer_us=313714  FAIL
+[56/72]  exp=one   got=one   p=0.865  log_mel_us= 39316  infer_us=313918  OK
+[57/72]  exp=two   got=two   p=0.323  log_mel_us= 39321  infer_us=313888  OK
+[58/72]  exp=two   got=two   p=0.705  log_mel_us= 39927  infer_us=314144  OK
+[59/72]  exp=three got=three p=0.650  log_mel_us= 39900  infer_us=313576  OK
+[60/72]  exp=three got=three p=0.797  log_mel_us= 39321  infer_us=314007  OK
+[61/72]  exp=four  got=four  p=0.644  log_mel_us= 39326  infer_us=313758  OK
+[62/72]  exp=four  got=four  p=0.716  log_mel_us= 39894  infer_us=314039  OK
+[63/72]  exp=five  got=five  p=0.765  log_mel_us= 39900  infer_us=313674  OK
+[64/72]  exp=five  got=five  p=0.853  log_mel_us= 39321  infer_us=313838  OK
+[65/72]  exp=six   got=x     p=0.428  log_mel_us= 39329  infer_us=313697  FAIL
+[66/72]  exp=six   got=six   p=0.656  log_mel_us= 39916  infer_us=313998  OK
+[67/72]  exp=seven got=seven p=0.719  log_mel_us= 39896  infer_us=313626  OK
+[68/72]  exp=seven got=seven p=0.761  log_mel_us= 39321  infer_us=314119  OK
+[69/72]  exp=eight got=a     p=0.340  log_mel_us= 39317  infer_us=313900  FAIL
+[70/72]  exp=eight got=a     p=0.657  log_mel_us= 39907  infer_us=314016  FAIL
+[71/72]  exp=nine  got=nine  p=0.751  log_mel_us= 39882  infer_us=313725  OK
+[72/72]  exp=nine  got=nine  p=0.703  log_mel_us= 39345  infer_us=313729  OK
+--- end ---
+accuracy: 65/72 = 90.3%
+avg latency: 354.47 ms / clip (log_mel + infer)
+[boot] entering TTS service (reusing 393216-byte arena for synthesis)
+
+[tts] ready. commands: SPEAK <text> | IPA <ipa> | RATE <hz> | SPEED <x> | GENDER <0..1>

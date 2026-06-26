@@ -18,7 +18,7 @@ Example (the checked-in 64-mel STT front-end config):
       --sample-rate 16000 --n-fft 512 --win-length 512 \
       --n-mels 64 --f-min 20 --f-max 8000 \
       --namespace spelling --prefix kMel \
-      --out-dir ../../example-rp2350/generated
+      --out-dir ../../examples/rp2350/generated
 """
 import argparse
 import math

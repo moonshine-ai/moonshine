@@ -1,4 +1,4 @@
-# feature-generation
+# Feature Generation
 
 A portable, **heap-free log-mel spectrogram front-end** for microcontrollers.
 It turns 16 kHz PCM into the normalised log-mel features that the VAD and STT
@@ -14,8 +14,7 @@ any front-end on any platform that provides those two.
 
 - [Two front-ends](#two-front-ends)
 - [Public API](#public-api)
-- [Memory & compute](#memory--compute)
-  - [Latency @ 250 MHz](#latency--250-mhz)
+- [Memory \& compute](#memory--compute)
 - [Tests](#tests)
 - [Generating flash tables](#generating-flash-tables)
 
@@ -95,5 +94,5 @@ python scripts/generate_mel_tables.py \
     --sample-rate 16000 --n-fft 512 --win-length 512 \
     --n-mels 64 --f-min 20 --f-max 8000 \
     --prefix kMel --const-prefix kMelTable --basename mel_tables \
-    --out-dir ../example-rp2350/generated
+    --out-dir ../examples/rp2350/generated
 ```

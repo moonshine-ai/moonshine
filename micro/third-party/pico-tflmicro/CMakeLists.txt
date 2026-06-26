@@ -1,7 +1,7 @@
 # Vendored from https://github.com/raspberrypi/pico-tflmicro.
 #
 # This file was the upstream top-level project file. We use pico-tflmicro
-# as a SUBDIRECTORY of cpp-tiny, so the top-level project()/pico_sdk_init()
+# as a SUBDIRECTORY of moonshine-micro, so the top-level project()/pico_sdk_init()
 # calls have been removed (the parent CMakeLists.txt does both before
 # add_subdirectory(...)). The test-subdirectory list at the bottom has
 # also been removed because we don't ship the upstream tests folder.
