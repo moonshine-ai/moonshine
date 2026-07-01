@@ -4,6 +4,8 @@
 *.a filter=lfs diff=lfs merge=lfs -text
 *.examples/c++/transcriber filter=lfs diff=lfs merge=lfs -text
 core/speaker-embedding-model-data.cpp filter=lfs diff=lfs merge=lfs -text
+# Generated ZipVoice reference-voice PCM arrays (large source file, like the embedding model data).
+core/moonshine-tts/src/zipvoice-voices-data.cpp filter=lfs diff=lfs merge=lfs -text
 
 # moonshine-tts bundled data (same types as moonshine-ai/moonshine-tts; scoped to data/).
 core/moonshine-tts/data/**/*.tsv filter=lfs diff=lfs merge=lfs -text

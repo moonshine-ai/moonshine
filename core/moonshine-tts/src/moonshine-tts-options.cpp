@@ -47,12 +47,20 @@ void MoonshineTTSOptions::apply_voice_engine_prefix() {
   const std::string low = to_lowercase(voice);
   static constexpr std::string_view k_k = "kokoro_";
   static constexpr std::string_view k_p = "piper_";
+  static constexpr std::string_view k_z = "zipvoice_";
   if (low.size() >= k_k.size() && low.compare(0, k_k.size(), k_k) == 0) {
     vocoder_engine = "kokoro";
     voice = trim(voice.substr(k_k.size()));
   } else if (low.size() >= k_p.size() && low.compare(0, k_p.size(), k_p) == 0) {
     vocoder_engine = "piper";
     voice = trim(voice.substr(k_p.size()));
+  } else if (low.size() >= k_z.size() && low.compare(0, k_z.size(), k_z) == 0) {
+    vocoder_engine = "zipvoice";
+    voice = trim(voice.substr(k_z.size()));
+  } else if (low == "zipvoice") {
+    // Bare engine selector with no built-in id: caller supplies a prompt clip.
+    vocoder_engine = "zipvoice";
+    voice.clear();
   }
 }
 
@@ -166,6 +174,33 @@ void MoonshineTTSOptions::parse_options(
       const std::string t = trim(value);
       piper_noise_w_override =
           t.empty() ? std::nullopt : std::optional<float>(float_from_string(t.c_str()));
+    } else if (key == "zipvoice_prompt_transcript" || key == "prompt_transcript") {
+      zipvoice_prompt_transcript = value;
+    } else if (key == "zipvoice_prompt_sample_rate" || key == "prompt_sample_rate") {
+      const std::string t = trim(value);
+      if (!t.empty()) {
+        zipvoice_prompt_sample_rate = static_cast<int>(float_from_string(t.c_str()));
+      }
+    } else if (key == "zipvoice_model" || key == "zipvoice_model_name") {
+      // ``zipvoice`` (full) vs ``zipvoice_distill`` (default). Only changes sampling defaults.
+      zipvoice_distill = (trim(to_lowercase(value)) != "zipvoice");
+    } else if (key == "zipvoice_distill") {
+      zipvoice_distill = bool_from_string(value.c_str());
+    } else if (key == "zipvoice_num_step" || key == "num_step") {
+      const std::string t = trim(value);
+      if (!t.empty()) {
+        zipvoice_num_step = static_cast<int>(float_from_string(t.c_str()));
+      }
+    } else if (key == "zipvoice_guidance_scale" || key == "guidance_scale") {
+      const std::string t = trim(value);
+      if (!t.empty()) {
+        zipvoice_guidance_scale = float_from_string(t.c_str());
+      }
+    } else if (key == "zipvoice_t_shift" || key == "t_shift") {
+      const std::string t = trim(value);
+      if (!t.empty()) {
+        zipvoice_t_shift = float_from_string(t.c_str());
+      }
     } else if (key == "log_profiling") {
       log_profiling = bool_from_string(value.c_str());
     } else {

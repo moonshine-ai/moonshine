@@ -339,6 +339,69 @@ internal final class MoonshineAPI: @unchecked Sendable {
         return handle
     }
 
+    /// Create a TTS synthesizer from in-memory asset buffers keyed by canonical filename.
+    ///
+    /// The buffers pointed to by ``memoryPtrs`` are **not** copied by the native layer; the caller
+    /// must keep them valid until the synthesizer is freed.
+    func createTtsSynthesizerFromMemory(
+        language: String,
+        filenames: [String],
+        memoryPtrs: [UnsafePointer<UInt8>?],
+        memorySizes: [UInt64],
+        options: [TranscriberOption]? = nil,
+        moonshineVersion: Int32 = 20000
+    ) throws -> Int32 {
+        precondition(filenames.count == memoryPtrs.count && filenames.count == memorySizes.count)
+        let langCString = language.cString(using: .utf8)!
+        let fileCStrings = filenames.map { $0.cString(using: .utf8)! }
+        let opts = options ?? []
+        let nameCStrings = opts.map { $0.name.cString(using: .utf8)! }
+        let valueCStrings = opts.map { $0.value.cString(using: .utf8)! }
+        let optionStructs = (0..<opts.count).map { i -> moonshine_option_t in
+            moonshine_option_t(
+                name: nameCStrings[i].withUnsafeBufferPointer { $0.baseAddress },
+                value: valueCStrings[i].withUnsafeBufferPointer { $0.baseAddress }
+            )
+        }
+
+        // The C signature is ``const char **`` / ``const uint8_t **`` / ``const uint64_t *`` — the
+        // outer pointers are mutable, so use mutable buffers (contents are still treated as const).
+        var filePtrs: [UnsafePointer<CChar>?] = fileCStrings.map {
+            $0.withUnsafeBufferPointer { $0.baseAddress }
+        }
+        var mem = memoryPtrs
+        var sizes = memorySizes
+        let handle: Int32 = withExtendedLifetime(
+            (fileCStrings, nameCStrings, valueCStrings, optionStructs)
+        ) {
+            filePtrs.withUnsafeMutableBufferPointer { fileBuf in
+                mem.withUnsafeMutableBufferPointer { memBuf in
+                    sizes.withUnsafeMutableBufferPointer { sizeBuf in
+                        optionStructs.withUnsafeBufferPointer { optBuf in
+                            moonshine_create_tts_synthesizer_from_memory(
+                                langCString,
+                                fileBuf.baseAddress,
+                                UInt64(filenames.count),
+                                memBuf.baseAddress,
+                                sizeBuf.baseAddress,
+                                opts.isEmpty ? nil : optBuf.baseAddress,
+                                UInt64(opts.count),
+                                moonshineVersion
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        if handle < 0 {
+            let errorString = errorToString(handle)
+            throw MoonshineError.custom(
+                message: "Failed to create TTS synthesizer from memory: \(errorString)", code: handle)
+        }
+        return handle
+    }
+
     /// Synthesize text to speech, returning PCM float samples and sample rate.
     func textToSpeech(
         ttsHandle: Int32,

@@ -161,7 +161,15 @@ if(MOONSHINE_TTS_BUILD_ONNX)
     src/moonshine-tts.cpp
     src/piper-tts.cpp
     src/piper-voice-catalog.cpp
+    # ZipVoice zero-shot voice-cloning engine: compiled-in ai.zipvoice custom ops + embedded VCTK
+    # reference voice clips.
+    src/zipvoice-tts.cpp
+    src/zipvoice-mel.cpp
+    src/zipvoice-custom-ops.cpp
+    src/zipvoice-voices.cpp
+    src/zipvoice-voices-data.cpp
   )
+
   target_link_libraries(moonshine_tts_ort PUBLIC moonshine_tts_core)
   target_include_directories(moonshine_tts_ort PRIVATE
     ${_MOONSHINE_CORE_ROOT}/moonshine-utils
@@ -226,6 +234,12 @@ if(MOONSHINE_TTS_BUILD_ONNX)
   moonshine_tts_set_ort_rpath(moonshine_tts_speed_test)
   if(WIN32)
     copy_onnxruntime_dll(moonshine_tts_speed_test)
+  endif()
+
+  moonshine_tts_add_test(zipvoice_tts_test moonshine_tts_ort)
+  moonshine_tts_set_ort_rpath(zipvoice_tts_test)
+  if(WIN32)
+    copy_onnxruntime_dll(zipvoice_tts_test)
   endif()
 
   moonshine_tts_add_test(korean_tok_pos_onnx_test moonshine_tts_ort)

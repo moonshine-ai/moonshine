@@ -713,9 +713,15 @@ def _tts_voice_want_aliases(voice: str) -> Set[str]:
     want = _normalize_tts_voice_stem(voice)
     aliases = {want}
     low = want.lower()
-    if low and not low.startswith("kokoro_") and not low.startswith("piper_"):
+    if (
+        low
+        and not low.startswith("kokoro_")
+        and not low.startswith("piper_")
+        and not low.startswith("zipvoice_")
+    ):
         aliases.add(_normalize_tts_voice_stem(f"kokoro_{want}"))
         aliases.add(_normalize_tts_voice_stem(f"piper_{want}"))
+        aliases.add(_normalize_tts_voice_stem(f"zipvoice_{want}"))
     return aliases
 
 
@@ -1003,7 +1009,7 @@ if __name__ == "__main__":
         "--voice",
         type=str,
         default=None,
-        help="TTS voice: kokoro_* or piper_* prefix plus id/stem (e.g. kokoro_af_heart)",
+        help="TTS voice: kokoro_*, piper_*, or zipvoice_* prefix plus id/stem (e.g. kokoro_af_heart, zipvoice_american_female)",
     )
     parser.add_argument(
         "--root",

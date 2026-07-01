@@ -29,6 +29,19 @@ inline constexpr std::string_view kTtsPiperVoicesKey = "piper/voices";
 /// Optional directory of ``*.onnx.json`` files parallel to ``kTtsPiperVoicesKey`` (same basename rules).
 inline constexpr std::string_view kTtsPiperVoicesJsonKey = "piper/voices_json";
 
+/// ZipVoice zero-shot voice-cloning model assets. These ship in ORT format (``.ort``); the
+/// ``resolve_disk_model_file_path`` helper still accepts a sibling ``.onnx`` when a ``.ort`` is
+/// absent. The fm_decoder may be the ``ai.zipvoice`` custom-op (Swoosh/GluGate/…) rewrite, whose ops
+/// are compiled into the library.
+inline constexpr std::string_view kTtsZipVoiceTextEncoderKey = "zipvoice/text_encoder.ort";
+inline constexpr std::string_view kTtsZipVoiceFmDecoderKey = "zipvoice/fm_decoder.ort";
+inline constexpr std::string_view kTtsZipVoiceVocoderKey = "zipvoice/vocoder.ort";
+inline constexpr std::string_view kTtsZipVoiceTokensKey = "zipvoice/tokens.txt";
+inline constexpr std::string_view kTtsZipVoiceModelJsonKey = "zipvoice/model.json";
+/// Optional user-supplied reference clip as raw little-endian float32 mono PCM (used when ``voice`` is
+/// bare ``zipvoice`` with no built-in id). Sample rate comes from ``zipvoice_prompt_sample_rate``.
+inline constexpr std::string_view kTtsZipVoicePromptAudioKey = "zipvoice/prompt_audio";
+
 /// Shared configuration for ``MoonshineTTS`` (Kokoro and Piper file paths, G2P, ORT, CLI-oriented fields).
 /// Vocoder assets use ``files`` (same pattern as ``MoonshineG2POptions::files``). The **language** is passed to
 /// ``MoonshineTTS``'s constructor.
@@ -55,6 +68,17 @@ struct MoonshineTTSOptions {
   float output_volume = 1.F;
   std::optional<float> piper_noise_scale_override{};
   std::optional<float> piper_noise_w_override{};
+
+  /// ZipVoice controls (used only when the ``zipvoice`` vocoder is selected). ``num_step`` <= 0 and
+  /// ``guidance_scale`` < 0 select the per-model default. ``prompt_transcript`` describes a
+  /// caller-supplied ``zipvoice/prompt_audio`` clip; ``prompt_sample_rate`` is its sample rate.
+  std::string zipvoice_prompt_transcript{};
+  int zipvoice_prompt_sample_rate = 24000;
+  bool zipvoice_distill = true;
+  int zipvoice_num_step = 0;
+  float zipvoice_guidance_scale = -1.F;
+  float zipvoice_t_shift = 0.5F;
+
   /// Default WAV path for CLI-style tooling (``-o`` / ``output`` in ``parse_options``).
   std::filesystem::path output_path = "out.wav";
 

@@ -216,6 +216,66 @@ final class TextToSpeechTests: XCTestCase {
         print("TTS dependencies: \(json.prefix(500))...")
     }
 
+    // MARK: - ZipVoice
+
+    /// Whether the ZipVoice model bundle is present under ``dataPath``/zipvoice.
+    private static func zipVoiceModelsPresent(_ dataPath: String) -> Bool {
+        let zv = URL(fileURLWithPath: dataPath).appendingPathComponent("zipvoice")
+        let fm = FileManager.default
+        func any(_ names: [String]) -> Bool {
+            names.contains { fm.fileExists(atPath: zv.appendingPathComponent($0).path) }
+        }
+        return any(["text_encoder.ort", "text_encoder.onnx"])
+            && any(["fm_decoder.ort", "fm_decoder.onnx"])
+            && any(["vocoder.ort", "vocoder.onnx"])
+            && fm.fileExists(atPath: zv.appendingPathComponent("tokens.txt").path)
+    }
+
+    func testGetVoicesListsZipVoice() throws {
+        let dataPath = try Self.getTtsDataPath()
+        let json = try TextToSpeech.getVoices(
+            languages: "en_us",
+            options: [
+                TranscriberOption(name: "g2p_root", value: dataPath),
+                TranscriberOption(name: "voice", value: "zipvoice_american_female"),
+            ]
+        )
+        XCTAssertTrue(json.contains("zipvoice_american_female"),
+                      "Should list the built-in ZipVoice voice")
+    }
+
+    func testZipVoiceBuiltinVoiceSynthesizes() throws {
+        let dataPath = try Self.getTtsDataPath()
+        try XCTSkipUnless(Self.zipVoiceModelsPresent(dataPath),
+                          "ZipVoice model bundle not present under data/zipvoice")
+        let tts = try TextToSpeech(
+            language: "en_us", g2pRoot: dataPath, voice: "zipvoice_american_female")
+        defer { tts.close() }
+        let result = try tts.synthesize(text: "Hello from ZipVoice.")
+        XCTAssertGreaterThan(result.samples.count, 0)
+        XCTAssertEqual(result.sampleRateHz, 24000)
+    }
+
+    func testZipVoicePromptPCMSynthesizes() throws {
+        let dataPath = try Self.getTtsDataPath()
+        try XCTSkipUnless(Self.zipVoiceModelsPresent(dataPath),
+                          "ZipVoice model bundle not present under data/zipvoice")
+        var pcm = [Float](repeating: 0, count: 24000)
+        for i in 0..<pcm.count {
+            pcm[i] = 0.05 * Float(sin(2.0 * Double.pi * 150.0 * Double(i) / 24000.0))
+        }
+        let tts = try TextToSpeech(
+            language: "en_us",
+            g2pRoot: dataPath,
+            promptPCM: pcm,
+            promptSampleRate: 24000,
+            promptTranscript: "This is a reference clip."
+        )
+        defer { tts.close() }
+        let result = try tts.synthesize(text: "Cloning a custom voice.")
+        XCTAssertEqual(result.sampleRateHz, 24000)
+    }
+
     // MARK: - Device Enumeration (macOS only)
 
     #if os(macOS)
