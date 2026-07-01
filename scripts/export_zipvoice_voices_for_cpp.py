@@ -42,6 +42,15 @@ CLIP_SAMPLES = SAMPLE_RATE * CLIP_SECONDS
 # Accents that only ship a single gender in VCTK are kept as-is; "Unknown" is skipped.
 SKIP_ACCENTS = {"Unknown"}
 
+# Built-in voice slugs (accent_gender) to exclude, e.g. low-quality renders removed after review.
+EXCLUDE_SLUGS = {
+    "welsh_female",
+    "scottish_male",
+    "scottish_female",
+    "northern_irish_male",
+    "british_female",
+}
+
 
 def slug_from_voice_id(voice_id: str) -> str:
     """``voice_000_american_female`` -> ``american_female``."""
@@ -62,6 +71,9 @@ def select_voices(voices):
             continue
         seen.add(key)
         chosen.append(v)
+    # Drop excluded slugs *after* selection so an excluded voice is removed entirely rather than
+    # replaced by another speaker of the same accent/gender.
+    chosen = [v for v in chosen if slug_from_voice_id(v["voice_id"]) not in EXCLUDE_SLUGS]
     chosen.sort(key=lambda v: slug_from_voice_id(v["voice_id"]))
     return chosen
 

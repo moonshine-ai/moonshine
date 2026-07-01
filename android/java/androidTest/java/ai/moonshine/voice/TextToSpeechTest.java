@@ -56,7 +56,7 @@ public class TextToSpeechTest {
         assertTrue("expected built-in ZipVoice voice id",
                 json.contains("zipvoice_american_female"));
         assertTrue("expected a second built-in ZipVoice voice id",
-                json.contains("zipvoice_scottish_male"));
+                json.contains("zipvoice_indian_male"));
         assertFalse("zipvoice engine should not list kokoro voices", json.contains("kokoro_"));
     }
 

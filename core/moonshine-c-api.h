@@ -675,7 +675,7 @@ MOONSHINE_EXPORT int32_t moonshine_calculate_embedding_distance(
 
    ZipVoice (zero-shot voice cloning) is selected with ``voice`` =
    ``zipvoice_<id>`` for a built-in VCTK reference voice (e.g.
-   ``zipvoice_american_female``, ``zipvoice_scottish_male``), or a bare
+   ``zipvoice_american_female``, ``zipvoice_indian_male``), or a bare
    ``zipvoice`` together with a caller-supplied reference clip via
    ``moonshine_create_tts_synthesizer_from_memory`` (key
    ``zipvoice/prompt_audio``). ZipVoice model assets
