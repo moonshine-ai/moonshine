@@ -62,6 +62,9 @@ done < <(grep -rlI \
   --exclude=ipa-postprocess.cpp \
   --exclude=*.tsv \
   --exclude=ko_kr.txt \
+  --exclude=vad_mel_tables.cc \
+  --exclude=mel_tables.cc \
+  --exclude=zipvoice-voices-data.cpp \
   "$OLD_VERSION" .)
 for FILE in "${ACTUAL_FILES[@]}"; do
 	echo "Checking file '$FILE'"
