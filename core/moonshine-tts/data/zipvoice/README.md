@@ -55,7 +55,7 @@ into the exported graph), so both deploy through the same files here; select wit
 
 ## Reference voices
 
-The 20 built-in reference voices (`zipvoice_american_female`, `zipvoice_scottish_male`, …) are VCTK
+The built-in reference voices (`zipvoice_american_female`, `zipvoice_indian_male`, …) are VCTK
 clips compiled directly into `libmoonshine` (`core/moonshine-tts/src/zipvoice-voices-data.cpp`),
 regenerated with `scripts/export_zipvoice_voices_for_cpp.py`. Callers can also pass their own
 reference clip as in-memory PCM (`zipvoice/prompt_audio`).

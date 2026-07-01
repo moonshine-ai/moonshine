@@ -1049,7 +1049,7 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.find("\"zipvoice_american_female\"") != std::string::npos);
-    CHECK(json.find("\"zipvoice_scottish_male\"") != std::string::npos);
+    CHECK(json.find("\"zipvoice_indian_male\"") != std::string::npos);
     // No assets under /tmp, so ZipVoice voices report as missing.
     CHECK(json.find("\"state\":\"missing\"") != std::string::npos);
     CHECK(json.find("kokoro_") == std::string::npos);

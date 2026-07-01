@@ -14,8 +14,8 @@ TEST_CASE("zipvoice-builtin-voices") {
   size_t count = 0;
   const ZipVoiceBuiltinVoice* voices = zipvoice_builtin_voices(&count);
   REQUIRE(voices != nullptr);
-  // One masculine + one feminine per accent where both exist, plus single-gender accents.
-  CHECK(count >= 18);
+  // One masculine + one feminine per accent where both exist, minus voices excluded after review.
+  CHECK(count >= 12);
 
   const ZipVoiceBuiltinVoice* v = zipvoice_find_builtin_voice("american_female");
   REQUIRE(v != nullptr);
@@ -26,8 +26,11 @@ TEST_CASE("zipvoice-builtin-voices") {
   CHECK(v->pcm != nullptr);
   CHECK(std::string(v->prompt_text).size() > 0);
 
-  CHECK(zipvoice_find_builtin_voice("scottish_male") != nullptr);
+  CHECK(zipvoice_find_builtin_voice("indian_male") != nullptr);
   CHECK(zipvoice_find_builtin_voice("not_a_real_voice") == nullptr);
+  // Removed after review — must no longer be present.
+  CHECK(zipvoice_find_builtin_voice("scottish_male") == nullptr);
+  CHECK(zipvoice_find_builtin_voice("british_female") == nullptr);
 
   const std::vector<float> f = zipvoice_builtin_voice_pcm_to_float(*v);
   REQUIRE(f.size() == v->num_samples);
