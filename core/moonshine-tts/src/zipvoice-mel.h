@@ -1,6 +1,7 @@
 #ifndef MOONSHINE_TTS_ZIPVOICE_MEL_H
 #define MOONSHINE_TTS_ZIPVOICE_MEL_H
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
