@@ -8,6 +8,8 @@
 #include "piper-tts.h"
 #include "string-utils.h"
 #include "utf8-utils.h"
+#include "zipvoice-tts.h"
+#include "zipvoice-voices.h"
 
 #include <onnxruntime_cxx_api.h>
 
@@ -815,6 +817,71 @@ std::vector<std::string> piper_vocoder_dependency_keys_with_options(std::string_
   return {};
 }
 
+ZipVoiceTTSOptions make_zipvoice_options(std::string_view language, const MoonshineTTSOptions& opt) {
+  ZipVoiceTTSOptions z;
+  z.lang = std::string(language);
+  z.speed = opt.speed;
+  z.g2p_options = opt.g2p_options;
+  z.ort_provider_names = opt.ort_provider_names;
+  z.normalize_audio = opt.normalize_audio;
+  z.output_volume = opt.output_volume;
+  z.distill = opt.zipvoice_distill;
+  z.num_step = opt.zipvoice_num_step;
+  z.guidance_scale = opt.zipvoice_guidance_scale;
+  z.t_shift = opt.zipvoice_t_shift;
+  z.prompt_sample_rate = opt.zipvoice_prompt_sample_rate;
+  z.prompt_transcript = opt.zipvoice_prompt_transcript;
+  z.tts_asset_files = opt.files;
+  z.voice_id = opt.voice;  // engine prefix already stripped
+  const auto it = opt.files.entries.find(std::string(kTtsZipVoicePromptAudioKey));
+  if (it != opt.files.entries.end() && it->second.memory != nullptr &&
+      it->second.memory_size >= sizeof(float)) {
+    const size_t n = it->second.memory_size / sizeof(float);
+    z.prompt_pcm.resize(n);
+    std::memcpy(z.prompt_pcm.data(), it->second.memory, n * sizeof(float));
+  }
+  return z;
+}
+
+std::vector<std::string> zipvoice_vocoder_dependency_keys() {
+  return {std::string(kTtsZipVoiceTextEncoderKey), std::string(kTtsZipVoiceFmDecoderKey),
+          std::string(kTtsZipVoiceVocoderKey), std::string(kTtsZipVoiceTokensKey),
+          std::string(kTtsZipVoiceModelJsonKey)};
+}
+
+bool zipvoice_asset_present(const MoonshineTTSOptions& opt, std::string_view key) {
+  const std::string k(key);
+  const auto it = opt.files.entries.find(k);
+  if (it != opt.files.entries.end() && it->second.memory != nullptr && it->second.memory_size > 0) {
+    return true;
+  }
+  std::filesystem::path p = (it != opt.files.entries.end() && !it->second.path.empty())
+                                ? resolve_path_under_root(opt.g2p_options.g2p_root, it->second.path)
+                                : resolve_path_under_root(opt.g2p_options.g2p_root, std::filesystem::path(k));
+  resolve_disk_model_file_path(p);
+  return std::filesystem::is_regular_file(p);
+}
+
+bool zipvoice_assets_available(const MoonshineTTSOptions& opt) {
+  return zipvoice_asset_present(opt, kTtsZipVoiceTextEncoderKey) &&
+         zipvoice_asset_present(opt, kTtsZipVoiceFmDecoderKey) &&
+         zipvoice_asset_present(opt, kTtsZipVoiceVocoderKey) &&
+         zipvoice_asset_present(opt, kTtsZipVoiceTokensKey);
+}
+
+std::vector<std::pair<std::string, bool>> list_zipvoice_voices_with_availability(
+    const MoonshineTTSOptions& opt) {
+  const bool available = zipvoice_assets_available(opt);
+  size_t count = 0;
+  const ZipVoiceBuiltinVoice* voices = zipvoice_builtin_voices(&count);
+  std::vector<std::pair<std::string, bool>> out;
+  out.reserve(count);
+  for (size_t i = 0; i < count; ++i) {
+    out.emplace_back(std::string(voices[i].id), available);
+  }
+  return out;
+}
+
 struct KokoroTtsEngine {
   std::filesystem::path model_path_;
   std::filesystem::path config_path_;
@@ -1136,6 +1203,7 @@ struct KokoroTtsEngine {
 struct MoonshineTTS::Impl {
   std::unique_ptr<KokoroTtsEngine> kokoro_;
   std::unique_ptr<PiperTTS> piper_;
+  std::unique_ptr<ZipVoiceTTS> zipvoice_;
   std::mutex synth_mu_;
   bool log_profiling_ = false;
 
@@ -1150,7 +1218,8 @@ struct MoonshineTTS::Impl {
       }
       const bool is_tts_only =
           (map_key.size() >= 7 && map_key.compare(0, 7, "kokoro/") == 0) ||
-          (map_key.size() >= 6 && map_key.compare(0, 6, "piper/") == 0);
+          (map_key.size() >= 6 && map_key.compare(0, 6, "piper/") == 0) ||
+          (map_key.size() >= 9 && map_key.compare(0, 9, "zipvoice/") == 0);
       if (is_tts_only) {
         opt.files.entries[map_key] = fi;
       } else {
@@ -1168,20 +1237,23 @@ struct MoonshineTTS::Impl {
     if (eng.empty()) {
       eng = "auto";
     }
-    if (eng != "kokoro" && eng != "piper" && eng != "auto") {
+    if (eng != "kokoro" && eng != "piper" && eng != "zipvoice" && eng != "auto") {
       throw std::runtime_error(
-          "MoonshineTTS: vocoder_engine must be kokoro, piper, or auto (got \"" + eng + "\")");
+          "MoonshineTTS: vocoder_engine must be kokoro, piper, zipvoice, or auto (got \"" + eng + "\")");
     }
     const bool kokoro_ok = kokoro_tts_lang_supported_inner(language, opt.g2p_options);
-    const bool use_kokoro = (eng == "kokoro") || (eng == "auto" && kokoro_ok);
+    const bool use_zipvoice = (eng == "zipvoice");
+    const bool use_kokoro = !use_zipvoice && ((eng == "kokoro") || (eng == "auto" && kokoro_ok));
 
     LOGF_IF(log_profiling_, "MoonshineTTS: language='%.*s', vocoder_engine='%s' (resolved=%s), voice='%s'",
             (int)std::string_view(language).size(), std::string_view(language).data(),
             opt_in.vocoder_engine.c_str(),
-            use_kokoro ? "kokoro" : "piper",
+            use_zipvoice ? "zipvoice" : (use_kokoro ? "kokoro" : "piper"),
             opt.voice.c_str());
 
-    if (use_kokoro) {
+    if (use_zipvoice) {
+      zipvoice_ = std::make_unique<ZipVoiceTTS>(make_zipvoice_options(language, opt));
+    } else if (use_kokoro) {
       kokoro_ = std::make_unique<KokoroTtsEngine>(language, std::move(opt));
     } else {
       TIMER_START_IF(log_profiling_, piper_init);
@@ -1192,6 +1264,9 @@ struct MoonshineTTS::Impl {
   }
 
   std::vector<float> synthesize_unlocked(std::string_view text) {
+    if (zipvoice_) {
+      return zipvoice_->synthesize(text);
+    }
     if (kokoro_) {
       return kokoro_->synthesize(text);
     }
@@ -1212,6 +1287,26 @@ struct MoonshineTTS::Impl {
 
   std::vector<float> synthesize_with_overrides(std::string_view text, const SynthesisOverrides& ov) {
     std::lock_guard<std::mutex> lock(synth_mu_);
+    if (zipvoice_) {
+      const double prev_speed = zipvoice_->speed();
+      const bool prev_normalize = zipvoice_->normalize_audio();
+      const float prev_volume = zipvoice_->output_volume();
+      const auto apply_zv = [&](double speed, bool normalize, float volume) {
+        zipvoice_->set_speed(speed);
+        zipvoice_->set_normalize_audio(normalize);
+        zipvoice_->set_output_volume(volume);
+      };
+      apply_zv(ov.speed.value_or(prev_speed), ov.normalize_audio.value_or(prev_normalize),
+               ov.output_volume.value_or(prev_volume));
+      try {
+        std::vector<float> wave = synthesize_unlocked(text);
+        apply_zv(prev_speed, prev_normalize, prev_volume);
+        return wave;
+      } catch (...) {
+        apply_zv(prev_speed, prev_normalize, prev_volume);
+        throw;
+      }
+    }
     const double prev_speed = kokoro_ ? kokoro_->speed() : piper_->speed();
     const bool prev_normalize = kokoro_ ? kokoro_->normalize_audio() : piper_->normalize_audio();
     const float prev_volume = kokoro_ ? kokoro_->output_volume() : piper_->output_volume();
@@ -1333,8 +1428,11 @@ std::vector<std::string> moonshine_catalog_tts_vocoder_only_dependency_keys(
   if (eng.empty()) {
     eng = "auto";
   }
-  if (eng != "kokoro" && eng != "piper" && eng != "auto") {
+  if (eng != "kokoro" && eng != "piper" && eng != "zipvoice" && eng != "auto") {
     return {};
+  }
+  if (eng == "zipvoice") {
+    return zipvoice_vocoder_dependency_keys();
   }
   const std::string lk = normalize_lang_key(lang_cli);
   const bool kokoro_ok = kokoro_tts_lang_supported_inner(lk, opt.g2p_options);
@@ -1374,8 +1472,15 @@ std::vector<MoonshineTtsVoiceAvailability> moonshine_list_tts_voices_with_availa
   if (eng.empty()) {
     eng = "auto";
   }
-  if (eng != "kokoro" && eng != "piper" && eng != "auto") {
+  if (eng != "kokoro" && eng != "piper" && eng != "zipvoice" && eng != "auto") {
     return {};
+  }
+  if (eng == "zipvoice") {
+    std::vector<MoonshineTtsVoiceAvailability> zv;
+    for (const auto& pr : list_zipvoice_voices_with_availability(opt)) {
+      zv.push_back(MoonshineTtsVoiceAvailability{std::string("zipvoice_") + pr.first, pr.second});
+    }
+    return zv;
   }
   const std::string lk = normalize_lang_key(language_cli);
   const bool kokoro_ok = kokoro_tts_lang_supported_inner(lk, opt.g2p_options);
@@ -1394,6 +1499,15 @@ std::vector<MoonshineTtsVoiceAvailability> moonshine_list_tts_voices_with_availa
     for (const auto& pr :
          piper_list_voices_with_availability(make_piper_options(std::string(language_cli), opt_p))) {
       out.push_back(MoonshineTtsVoiceAvailability{std::string("piper_") + pr.first, pr.second});
+    }
+    // ZipVoice zero-shot cloning voices are English-only; surface them under the auto catalog so a
+    // ``zipvoice_*`` voice validates without the caller having to pin the engine first.
+    if (lk.rfind("en", 0) == 0) {
+      MoonshineTTSOptions opt_z = opt;
+      opt_z.voice.clear();
+      for (const auto& pr : list_zipvoice_voices_with_availability(opt_z)) {
+        out.push_back(MoonshineTtsVoiceAvailability{std::string("zipvoice_") + pr.first, pr.second});
+      }
     }
     std::sort(out.begin(), out.end(),
               [](const MoonshineTtsVoiceAvailability& a, const MoonshineTtsVoiceAvailability& b) {

@@ -758,6 +758,86 @@ void parse_tts_options(const OptionVector &options,
   out_options.parse_options(options, &cli_language_out, &language_was_set_out);
 }
 
+// When the ZipVoice engine is selected with a caller-supplied prompt clip (memory key
+// ``zipvoice/prompt_audio``) but no transcript, and the caller passed an existing ASR transcriber via
+// the ``zipvoice_asr_transcriber_handle`` option, transcribe the clip with Moonshine ASR and use the
+// result as the prompt transcript. This keeps the TTS library free of an ASR dependency (the ASR call
+// happens here, at the C API layer, which already owns both subsystems).
+void maybe_autotranscribe_zipvoice_prompt(
+    const OptionVector &options, moonshine_tts::MoonshineTTSOptions &tts_options) {
+  if (tts_options.vocoder_engine != "zipvoice") {
+    return;
+  }
+  if (!tts_options.zipvoice_prompt_transcript.empty()) {
+    return;
+  }
+  const std::string prompt_key{moonshine_tts::kTtsZipVoicePromptAudioKey};
+  const auto pit = tts_options.files.entries.find(prompt_key);
+  if (pit == tts_options.files.entries.end() || pit->second.memory == nullptr ||
+      pit->second.memory_size < sizeof(float)) {
+    return;
+  }
+  int32_t asr_handle = -1;
+  bool have_handle = false;
+  for (const auto &kv : options) {
+    std::string key = replace_all(to_lowercase(kv.first), "-", "_");
+    if (key == "zipvoice_asr_transcriber_handle" || key == "asr_transcriber_handle") {
+      const std::string v = trim(kv.second);
+      if (!v.empty()) {
+        try {
+          asr_handle = static_cast<int32_t>(std::stol(v));
+          have_handle = true;
+        } catch (const std::exception &) {
+          have_handle = false;
+        }
+      }
+    }
+  }
+  if (!have_handle) {
+    return;  // No ASR handle: engine tolerates an empty transcript (lower quality).
+  }
+  const size_t n = pit->second.memory_size / sizeof(float);
+  std::vector<float> pcm(n);
+  std::memcpy(pcm.data(), pit->second.memory, n * sizeof(float));
+  transcript_t *out_transcript = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(transcriber_map_mutex);
+    const auto tit = transcriber_map.find(asr_handle);
+    if (tit == transcriber_map.end() || tit->second == nullptr) {
+      return;
+    }
+    try {
+      tit->second->transcribe_without_streaming(
+          pcm.data(), static_cast<uint64_t>(pcm.size()),
+          moonshine_tts::MoonshineTTS::kSampleRateHz, 0, &out_transcript);
+    } catch (const std::exception &e) {
+      LOGF("ZipVoice prompt auto-transcription failed: %s", e.what());
+      return;
+    }
+  }
+  std::string text;
+  if (out_transcript != nullptr) {
+    for (uint64_t i = 0; i < out_transcript->line_count; ++i) {
+      const char *line = out_transcript->lines[i].text;
+      if (line == nullptr) {
+        continue;
+      }
+      std::string t = trim(std::string(line));
+      if (t.empty()) {
+        continue;
+      }
+      if (!text.empty()) {
+        text += " ";
+      }
+      text += t;
+    }
+    // ``out_transcript`` points into transcriber-owned storage; it must not be freed here.
+  }
+  if (!text.empty()) {
+    tts_options.zipvoice_prompt_transcript = std::move(text);
+  }
+}
+
 #define CHECK_TTS_SYNTHESIZER_HANDLE(synth_handle)                             \
   do {                                                                         \
     if ((synth_handle) < 0 ||                                                  \
@@ -796,6 +876,7 @@ int32_t moonshine_create_tts_synthesizer_from_files(
   bool lang_from_options_set = false;
   parse_tts_options(uncommon_options, tts_options, lang_from_options,
                     lang_from_options_set);
+  maybe_autotranscribe_zipvoice_prompt(uncommon_options, tts_options);
   std::string lang = (language != nullptr && language[0] != '\0')
                          ? std::string(language)
                          : std::string("en_us");
@@ -850,7 +931,8 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
       const std::string key(filenames[i]);
       const bool is_tts_only =
           (key.size() >= 7 && key.compare(0, 7, "kokoro/") == 0) ||
-          (key.size() >= 6 && key.compare(0, 6, "piper/") == 0);
+          (key.size() >= 6 && key.compare(0, 6, "piper/") == 0) ||
+          (key.size() >= 9 && key.compare(0, 9, "zipvoice/") == 0);
       moonshine_tts::FileInformationMap &dest =
           is_tts_only ? tts_options.files : tts_options.g2p_options.files;
       if (memory[i] != nullptr && memory_sizes[i] > 0) {
@@ -882,6 +964,7 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
     bool lang_from_options_set = false;
     parse_tts_options(uncommon_options, tts_options, lang_from_options,
                       lang_from_options_set);
+    maybe_autotranscribe_zipvoice_prompt(uncommon_options, tts_options);
     std::string lang = (language != nullptr && language[0] != '\0')
                            ? std::string(language)
                            : std::string("en_us");

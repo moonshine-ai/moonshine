@@ -8,11 +8,15 @@ import CoreAudio
 public typealias AudioDeviceID = UInt32
 #endif
 
-/// On-device text-to-speech using the Moonshine native API (Kokoro / Piper).
+/// On-device text-to-speech using the Moonshine native API (Kokoro / Piper / ZipVoice).
 ///
 /// Provide a `g2pRoot` directory containing G2P and vocoder assets. Use
 /// ``synthesize(text:options:)`` to get raw PCM samples, or ``say(_:device:options:)``
 /// to queue text for synthesis and playback.
+///
+/// ZipVoice zero-shot voice cloning: pass a built-in reference voice via
+/// `voice: "zipvoice_<id>"` (e.g. `zipvoice_american_female`) on the file-based initializer, or
+/// clone your own voice with ``init(language:g2pRoot:promptPCM:promptSampleRate:promptTranscript:options:)``.
 ///
 /// Usage:
 /// ```swift
@@ -28,6 +32,9 @@ public class TextToSpeech: @unchecked Sendable {
     private let api: MoonshineAPI
     private var handle: Int32
     private let _language: String
+    /// Retained reference-clip PCM buffer for the ZipVoice-from-memory path (native layer does not copy it).
+    private var promptBuffer: UnsafeMutablePointer<UInt8>?
+    private var promptBufferCount: Int = 0
 
     private let sayLock = NSLock()
     private var sayEngine: AVAudioEngine?
@@ -83,6 +90,65 @@ public class TextToSpeech: @unchecked Sendable {
             options: allOptions,
             moonshineVersion: TextToSpeech.moonshineHeaderVersion
         )
+    }
+
+    /// Initialize a ZipVoice synthesizer that clones ``promptPCM`` (mono float samples in -1..1).
+    ///
+    /// - Parameters:
+    ///   - language: Moonshine language tag (English only for now, e.g. `en_us`).
+    ///   - g2pRoot: Directory containing the ZipVoice model assets.
+    ///   - promptPCM: Reference clip as mono float PCM.
+    ///   - promptSampleRate: Sample rate of ``promptPCM``.
+    ///   - promptTranscript: Transcript of the clip (recommended; may be nil).
+    ///   - options: Additional options.
+    /// - Throws: `MoonshineError` if the synthesizer cannot be created.
+    public init(
+        language: String,
+        g2pRoot: String,
+        promptPCM: [Float],
+        promptSampleRate: Int32 = 24000,
+        promptTranscript: String? = nil,
+        options: [TranscriberOption]? = nil
+    ) throws {
+        self.api = MoonshineAPI.shared
+        self._language = language
+
+        // Convert to little-endian float32 bytes in a stable heap buffer that outlives the synthesizer
+        // (the native layer keeps a pointer to it rather than copying).
+        let byteCount = promptPCM.count * MemoryLayout<Float>.size
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: max(byteCount, 1))
+        promptPCM.withUnsafeBytes { src in
+            if let base = src.baseAddress, byteCount > 0 {
+                buffer.update(from: base.assumingMemoryBound(to: UInt8.self), count: byteCount)
+            }
+        }
+        self.promptBuffer = buffer
+        self.promptBufferCount = byteCount
+
+        var allOptions = options ?? []
+        allOptions.append(TranscriberOption(name: "g2p_root", value: g2pRoot))
+        allOptions.append(TranscriberOption(name: "voice", value: "zipvoice"))
+        allOptions.append(TranscriberOption(
+            name: "zipvoice_prompt_sample_rate", value: String(promptSampleRate)))
+        if let transcript = promptTranscript, !transcript.isEmpty {
+            allOptions.append(TranscriberOption(name: "zipvoice_prompt_transcript", value: transcript))
+        }
+
+        do {
+            self.handle = try api.createTtsSynthesizerFromMemory(
+                language: language,
+                filenames: ["zipvoice/prompt_audio"],
+                memoryPtrs: [UnsafePointer(buffer)],
+                memorySizes: [UInt64(byteCount)],
+                options: allOptions,
+                moonshineVersion: TextToSpeech.moonshineHeaderVersion
+            )
+        } catch {
+            buffer.deallocate()
+            self.promptBuffer = nil
+            self.promptBufferCount = 0
+            throw error
+        }
     }
 
     deinit {
@@ -376,6 +442,11 @@ public class TextToSpeech: @unchecked Sendable {
         if handle >= 0 {
             api.freeTtsSynthesizer(handle)
             handle = -1
+        }
+        if let buffer = promptBuffer {
+            buffer.deallocate()
+            promptBuffer = nil
+            promptBufferCount = 0
         }
     }
 

@@ -2,6 +2,7 @@
 
 #include <array>
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -1019,5 +1020,119 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     CHECK(json.find("\"piper_en_US-saikat\"") != std::string::npos);
     CHECK(json.find("\"state\":\"found\"") != std::string::npos);
     std::free(out);
+  }
+
+  SUBCASE("tts-zipvoice-dependencies") {
+    const moonshine_option_t opts[] = {
+        {"voice", "zipvoice_american_female"},
+    };
+    char* out = nullptr;
+    REQUIRE(moonshine_get_tts_dependencies("en_us", opts, 1, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string json(out);
+    CHECK(json.find("\"zipvoice/text_encoder.ort\"") != std::string::npos);
+    CHECK(json.find("\"zipvoice/fm_decoder.ort\"") != std::string::npos);
+    CHECK(json.find("\"zipvoice/vocoder.ort\"") != std::string::npos);
+    CHECK(json.find("\"zipvoice/tokens.txt\"") != std::string::npos);
+    CHECK(json.find("\"kokoro/model.onnx\"") == std::string::npos);
+    CHECK(json.find("piper-voices") == std::string::npos);
+    std::free(out);
+  }
+
+  SUBCASE("tts-zipvoice-voices-listing") {
+    const moonshine_option_t opts[] = {
+        {"voice", "zipvoice_american_female"},
+        {"g2p_root", "/tmp"},
+    };
+    char* out = nullptr;
+    REQUIRE(moonshine_get_tts_voices("en_us", opts, 2, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string json(out);
+    CHECK(json.find("\"zipvoice_american_female\"") != std::string::npos);
+    CHECK(json.find("\"zipvoice_scottish_male\"") != std::string::npos);
+    // No assets under /tmp, so ZipVoice voices report as missing.
+    CHECK(json.find("\"state\":\"missing\"") != std::string::npos);
+    CHECK(json.find("kokoro_") == std::string::npos);
+    std::free(out);
+  }
+}
+
+// Full ZipVoice synthesis needs the model bundle under ``<data>/zipvoice`` (not committed in bulk).
+// These cases exercise the built-in-voice and user-PCM paths when the assets are present, and skip
+// cleanly otherwise.
+TEST_CASE("moonshine-tts-zipvoice-synthesis") {
+  const auto data_root = find_moonshine_tts_data_dir();
+  if (!data_root) {
+    MESSAGE("skip: moonshine-tts data directory not found");
+    return;
+  }
+  const std::filesystem::path zv = *data_root / "zipvoice";
+  const bool have_models =
+      (std::filesystem::is_regular_file(zv / "text_encoder.ort") ||
+       std::filesystem::is_regular_file(zv / "text_encoder.onnx")) &&
+      (std::filesystem::is_regular_file(zv / "fm_decoder.ort") ||
+       std::filesystem::is_regular_file(zv / "fm_decoder.onnx")) &&
+      (std::filesystem::is_regular_file(zv / "vocoder.ort") ||
+       std::filesystem::is_regular_file(zv / "vocoder.onnx")) &&
+      std::filesystem::is_regular_file(zv / "tokens.txt");
+  if (!have_models) {
+    MESSAGE("skip: ZipVoice model bundle not present under data/zipvoice");
+    return;
+  }
+  const std::string g2p_root_str = data_root->string();
+
+  SUBCASE("builtin-voice-synthesizes-audio") {
+    const moonshine_option_t create_opts[] = {
+        {"voice", "zipvoice_american_female"},
+        {"g2p_root", g2p_root_str.c_str()},
+    };
+    const int32_t h = moonshine_create_tts_synthesizer_from_files(
+        "en_us", nullptr, 0, create_opts,
+        static_cast<uint64_t>(sizeof(create_opts) / sizeof(create_opts[0])),
+        MOONSHINE_HEADER_VERSION);
+    REQUIRE(h >= 0);
+    float* audio = nullptr;
+    uint64_t n = 0;
+    int32_t sr = 0;
+    REQUIRE(moonshine_text_to_speech(h, "Hello there, this is a test.", nullptr, 0, &audio, &n, &sr) ==
+            MOONSHINE_ERROR_NONE);
+    CHECK(sr == 24000);
+    CHECK(n > 0);
+    if (audio != nullptr) {
+      std::free(audio);
+    }
+    moonshine_free_tts_synthesizer(h);
+  }
+
+  SUBCASE("user-pcm-with-explicit-transcript") {
+    // A short synthetic reference clip (silence + tone) suffices to exercise the memory + prompt path.
+    std::vector<float> pcm(24000, 0.f);
+    for (size_t i = 0; i < pcm.size(); ++i) {
+      pcm[i] = 0.05f * std::sin(2.0 * 3.14159265 * 150.0 * i / 24000.0);
+    }
+    const char* filenames[] = {"zipvoice/prompt_audio"};
+    const uint8_t* mem[] = {reinterpret_cast<const uint8_t*>(pcm.data())};
+    const uint64_t sizes[] = {pcm.size() * sizeof(float)};
+    const moonshine_option_t create_opts[] = {
+        {"voice", "zipvoice"},
+        {"g2p_root", g2p_root_str.c_str()},
+        {"zipvoice_prompt_sample_rate", "24000"},
+        {"zipvoice_prompt_transcript", "This is a reference clip."},
+    };
+    const int32_t h = moonshine_create_tts_synthesizer_from_memory(
+        "en_us", filenames, 1, mem, sizes, create_opts,
+        static_cast<uint64_t>(sizeof(create_opts) / sizeof(create_opts[0])),
+        MOONSHINE_HEADER_VERSION);
+    REQUIRE(h >= 0);
+    float* audio = nullptr;
+    uint64_t n = 0;
+    int32_t sr = 0;
+    REQUIRE(moonshine_text_to_speech(h, "Testing one two three.", nullptr, 0, &audio, &n, &sr) ==
+            MOONSHINE_ERROR_NONE);
+    CHECK(sr == 24000);
+    if (audio != nullptr) {
+      std::free(audio);
+    }
+    moonshine_free_tts_synthesizer(h);
   }
 }

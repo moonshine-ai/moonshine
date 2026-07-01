@@ -1,5 +1,6 @@
 """Text-to-speech via the Moonshine C API."""
 
+import ctypes
 import queue
 import sys
 import threading
@@ -13,6 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from moonshine_voice.download import (
     download_tts_assets,
     ensure_tts_voice_downloaded,
+    normalize_moonshine_language_tag,
     tts_asset_cache_path,
     validate_tts_language,
     validate_tts_voice_known,
@@ -396,7 +398,10 @@ class TextToSpeech:
     voices reported as ``found`` for that language under the resolved asset root
     (`MoonshineTtsVoiceError` lists downloaded ids then catalog ids available for download).
     With ``download=True``, a voice that is catalogued but not yet on disk is downloaded automatically.
-    Use a ``kokoro_`` or ``piper_`` prefix on ``voice`` to pin the vocoder (e.g. ``kokoro_af_heart``).
+    Use a ``kokoro_``, ``piper_``, or ``zipvoice_`` prefix on ``voice`` to pin the vocoder (e.g.
+    ``kokoro_af_heart``, ``zipvoice_american_female``). ZipVoice is a zero-shot voice cloner: besides
+    the built-in ``zipvoice_<id>`` reference voices you can clone your own by passing ``prompt_pcm``
+    (mono float PCM), ``prompt_sample_rate`` and (recommended) ``prompt_transcript``.
     Use `list_tts_languages` and
     `list_tts_voices` (``present`` / ``downloadable``) or `get_tts_voice_catalog` to discover options.
     """
@@ -412,8 +417,28 @@ class TextToSpeech:
         output_device: Optional[Union[int, str]] = None,
         volume: Optional[float] = None,
         debug: bool = False,
+        prompt_pcm: Optional[Any] = None,
+        prompt_sample_rate: int = 24000,
+        prompt_transcript: Optional[str] = None,
     ):
+        # ZipVoice zero-shot voice cloning: pass a built-in reference voice as
+        # ``voice="zipvoice_<id>"`` (e.g. ``zipvoice_american_female``) through the normal path, or
+        # supply your own reference clip as mono float PCM in ``prompt_pcm`` (with
+        # ``prompt_sample_rate`` and, ideally, ``prompt_transcript``). When ``prompt_pcm`` is set the
+        # synthesizer is created from memory with the ``zipvoice`` engine.
         self._extra_options = dict(options) if options else {}
+        if prompt_pcm is not None:
+            self._init_zipvoice_from_pcm(
+                language,
+                voice=voice,
+                asset_root=asset_root,
+                download=download,
+                prompt_pcm=prompt_pcm,
+                prompt_sample_rate=prompt_sample_rate,
+                prompt_transcript=prompt_transcript,
+            )
+            self._init_playback_state(output_device, volume, debug)
+            return
         if voice is None:
             opt_voice = self._extra_options.get("voice")
             if isinstance(opt_voice, str):
@@ -495,6 +520,15 @@ class TextToSpeech:
                     "utf-8") if msg else f"Failed to create TTS synthesizer ({handle})"
             )
         self._handle = handle
+        self._init_playback_state(output_device, volume, debug)
+
+    def _init_playback_state(
+        self,
+        output_device: Optional[Union[int, str]],
+        volume: Optional[float],
+        debug: bool,
+    ) -> None:
+        """Shared playback/queue state used by both the from-files and ZipVoice-from-memory paths."""
         self._say_device_cache: Optional[Tuple[Tuple[Any, ...],
                                                Optional[int]]] = None
         # ((spec_key, source_sr), target_sr) — target_sr equals source_sr
@@ -514,21 +548,96 @@ class TextToSpeech:
         self._log_start: Optional[float] = None
         self._log_last: Optional[float] = None
         self._log_lock = threading.Lock()
-        # Set on the first `_play_one` call to a one-line summary of
-        # which PortAudio device the runner actually opened — printed
-        # unconditionally so a silent setup with no errors in the
-        # logs (often a wrong-default-device problem on Raspberry Pi)
-        # is debuggable without needing --debug.
+        # Set on the first `_play_one` call to a one-line summary of which PortAudio device the runner
+        # actually opened. Only logged when ``debug=True`` (helps diagnose a silent setup with no
+        # errors in the logs, often a wrong-default-device problem on Raspberry Pi).
         self._announced_resolved_device = False
+
+    def _init_zipvoice_from_pcm(
+        self,
+        language: str,
+        *,
+        voice: Optional[str],
+        asset_root: Optional[Path],
+        download: bool,
+        prompt_pcm: Any,
+        prompt_sample_rate: int,
+        prompt_transcript: Optional[str],
+    ) -> None:
+        """Create a ZipVoice synthesizer from an in-memory reference clip (mono float PCM)."""
+        import array as _array
+
+        self._extra_options.pop("voice", None)
+        self._language = normalize_moonshine_language_tag(language)
+        # Fetch the ZipVoice model assets (text encoder / fm decoder / vocoder / tokens / config).
+        if download:
+            self._asset_root = download_tts_assets(
+                self._language,
+                voice="zipvoice",
+                options=self._extra_options,
+                cache_root=Path(asset_root) if asset_root is not None else None,
+            )
+        else:
+            if asset_root is None:
+                raise MoonshineError(
+                    "When download=False, asset_root must point to a directory already "
+                    "populated with ZipVoice assets (g2p_root layout)."
+                )
+            self._asset_root = Path(asset_root).resolve()
+
+        # Coerce the reference clip to little-endian float32 bytes.
+        try:
+            import numpy as _np  # type: ignore
+            pcm = _np.asarray(prompt_pcm, dtype="<f4").ravel()
+            pcm_bytes = pcm.tobytes()
+        except Exception:
+            arr = _array.array("f", [float(x) for x in prompt_pcm])
+            pcm_bytes = arr.tobytes()
+
+        self._lib = _MoonshineLib().lib
+        self._voice = voice if (voice and voice.strip()) else "zipvoice"
+
+        create_opts: Dict[str, Union[str, int, float, bool]] = dict(self._extra_options)
+        create_opts["voice"] = self._voice if self._voice.startswith("zipvoice") else "zipvoice"
+        create_opts["g2p_root"] = str(self._asset_root)
+        create_opts["zipvoice_prompt_sample_rate"] = int(prompt_sample_rate)
+        if prompt_transcript is not None and str(prompt_transcript).strip():
+            create_opts["zipvoice_prompt_transcript"] = str(prompt_transcript)
+        opt_arr, opt_n, _keep_opts = moonshine_options_array(create_opts)
+
+        filenames = (ctypes.c_char_p * 1)(b"zipvoice/prompt_audio")
+        buf = (ctypes.c_uint8 * len(pcm_bytes)).from_buffer_copy(pcm_bytes)
+        self._prompt_pcm_buf = buf  # keep alive for the synthesizer's lifetime
+        mem_ptrs = (ctypes.POINTER(ctypes.c_uint8) * 1)(
+            ctypes.cast(buf, ctypes.POINTER(ctypes.c_uint8))
+        )
+        mem_sizes = (ctypes.c_uint64 * 1)(len(pcm_bytes))
+
+        handle = self._lib.moonshine_create_tts_synthesizer_from_memory(
+            self._language.encode("utf-8"),
+            filenames,
+            1,
+            mem_ptrs,
+            mem_sizes,
+            opt_arr,
+            opt_n,
+            MOONSHINE_HEADER_VERSION,
+        )
+        if handle < 0:
+            msg = self._lib.moonshine_error_to_string(handle)
+            raise MoonshineError(
+                msg.decode("utf-8") if msg else f"Failed to create ZipVoice synthesizer ({handle})"
+            )
+        self._handle = handle
 
     def _announce_resolved_device(self, sd: Any, resolved: Optional[int]) -> None:
         """Print a one-liner identifying the PortAudio device we opened.
 
-        Always prints (regardless of ``debug``): a silent runtime with
-        no errors in the trace is almost always the *wrong* PortAudio
-        device being selected (e.g. HDMI on a Pi when speakers are on
-        the 3.5 mm jack), and the only way to spot that from the
-        logs is to see *which* device the worker actually opened.
+        Emitted only when ``debug=True`` (silent during normal use). When enabled
+        it helps diagnose a silent runtime with no errors in the trace, which is
+        almost always the *wrong* PortAudio device being selected (e.g. HDMI on a
+        Pi when speakers are on the 3.5 mm jack); the log shows *which* device the
+        worker actually opened.
 
         Includes the host-API name and the default sample rate the
         device claims to support; on top of that, when the resolved
@@ -536,7 +645,11 @@ class TextToSpeech:
         outputs so the user can pin a specific one via
         ``TextToSpeech(output_device=...)`` (or the CLI's
         ``--output-device`` flag).
+
+        Only emitted when ``debug=True``; it is silent during normal use.
         """
+        if not self._debug:
+            return
         try:
             if resolved is None:
                 idx = _resolve_default_output_index(sd)

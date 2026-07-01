@@ -672,6 +672,17 @@ MOONSHINE_EXPORT int32_t moonshine_calculate_embedding_distance(
    choice (and other TTS paths via ``moonshine_option_t`` as documented for
    ``MoonshineTTSOptions``). ``engine`` / ``vocoder_engine`` options are
    ignored.
+
+   ZipVoice (zero-shot voice cloning) is selected with ``voice`` =
+   ``zipvoice_<id>`` for a built-in VCTK reference voice (e.g.
+   ``zipvoice_american_female``, ``zipvoice_scottish_male``), or a bare
+   ``zipvoice`` together with a caller-supplied reference clip via
+   ``moonshine_create_tts_synthesizer_from_memory`` (key
+   ``zipvoice/prompt_audio``). ZipVoice model assets
+   (``zipvoice/text_encoder.ort``, ``zipvoice/fm_decoder.ort``,
+   ``zipvoice/vocoder.ort``, ``zipvoice/tokens.txt``,
+   ``zipvoice/model.json``) are resolved under ``g2p_root`` or supplied in
+   memory. English only for now.
 */
 MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_files(
     const char *language, const char **filenames, uint64_t filenames_count,
@@ -686,7 +697,15 @@ MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_files(
    ``filenames[i]`` is the canonical ``MoonshineTTSOptions::files`` key (e.g.
    ``kokoro/model.onnx``, ``kokoro/config.json``,
    ``kokoro/voices/af_heart.kokorovoice``,
-   ``piper/onnx``, ``piper/onnx.json``). When ``memory[i]`` is non-NULL and
+   ``piper/onnx``, ``piper/onnx.json``, ``zipvoice/text_encoder.ort``,
+   ``zipvoice/fm_decoder.ort``, ``zipvoice/vocoder.ort``,
+   ``zipvoice/tokens.txt``, ``zipvoice/model.json``). For ZipVoice a
+   caller-supplied reference clip is passed as key ``zipvoice/prompt_audio``
+   (raw little-endian float32 mono PCM); set ``zipvoice_prompt_sample_rate`` and,
+   optionally, ``zipvoice_prompt_transcript``. When the transcript is omitted,
+   pass ``zipvoice_asr_transcriber_handle=<handle>`` (an existing transcriber
+   from ``moonshine_create_transcriber_*``) to auto-transcribe the clip with
+   Moonshine ASR. When ``memory[i]`` is non-NULL and
    ``memory_sizes[i]`` > 0, that buffer is used as the asset bytes; the library
    does not copy it—keep the buffers valid until
    ``moonshine_free_tts_synthesizer``. When ``memory[i]`` is NULL or
