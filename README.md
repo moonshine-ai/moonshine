@@ -7,6 +7,9 @@
 - [Quickstart](#quickstart)
 - [When should you choose Moonshine over Whisper?](#when-should-you-choose-moonshine-over-whisper)
 - [Using the Library](#using-the-library)
+  - [Speech to Text](#getting-started-with-transcription)
+  - [Text to Speech](#getting-started-with-text-to-speech)
+  - [Conversational Agents](#getting-started-with-a-conversational-agent)
 - [Models](#models)
 - [API Reference](#api-reference)
 - [Support](#support)
@@ -148,6 +151,7 @@ The Moonshine API is designed to take care of the details around capturing and t
 - [Getting Started with a Conversational Agent](#getting-started-with-a-conversational-agent)
   - [Agent Setup](#agent-setup)
 - [Getting Started with Text to Speech](#getting-started-with-text-to-speech)
+  - [Voice Samples](#voice-samples)
   - [Converting Graphemes to Phonemes](#converting-graphemes-to-phonemes)
 - [Examples](#examples)
 - [Adding the Library to your own App](#adding-the-library-to-your-own-app)
@@ -515,6 +519,43 @@ list_tts_voices("ru")
 ```
 
 If a voice is marked as `downloadable` that means if you pass it in to the `TextToSpeech` constructor then Moonshine will download it to a cache automatically (as long as the `download` argument is its default true) and will be available on your machine with no internet access required for subsequent calls.
+
+#### Voice Samples
+
+To help you choose a voice, here are sample clips of each one saying "Welcome to Moonshine Voice text to speech". Click the ▶ next to a name to hear it.
+
+##### ZipVoice
+
+These voices were created using the zero-shot voice cloning capabilities of [ZipVoice](https://github.com/k2-fsa/ZipVoice), a fast and high-quality flow-matching TTS model from the k2-fsa team.
+
+| | | | |
+| --- | --- | --- | --- |
+| American Female [▶](docs/audio/zipvoice_american_female.wav) | American Male [▶](docs/audio/zipvoice_american_male.wav) | Australian Male [▶](docs/audio/zipvoice_australian_male.wav) | Canadian Female [▶](docs/audio/zipvoice_canadian_female.wav) |
+| Canadian Male [▶](docs/audio/zipvoice_canadian_male.wav) | English Female [▶](docs/audio/zipvoice_english_female.wav) | English Male [▶](docs/audio/zipvoice_english_male.wav) | Indian Female [▶](docs/audio/zipvoice_indian_female.wav) |
+| Indian Male [▶](docs/audio/zipvoice_indian_male.wav) | Irish Female [▶](docs/audio/zipvoice_irish_female.wav) | Irish Male [▶](docs/audio/zipvoice_irish_male.wav) | New Zealand Female [▶](docs/audio/zipvoice_new_zealand_female.wav) |
+| Northern Irish Female [▶](docs/audio/zipvoice_northern_irish_female.wav) | South African Female [▶](docs/audio/zipvoice_south_african_female.wav) | South African Male [▶](docs/audio/zipvoice_south_african_male.wav) | |
+
+##### Kokoro
+
+These voices come from the excellent [Kokoro](https://github.com/hexgrad/kokoro) project, an 82-million-parameter open-weight TTS model that delivers quality comparable to much larger models.
+
+| American Female | American Male | British Female | British Male |
+| --- | --- | --- | --- |
+| Alloy [▶](docs/audio/kokoro_af_alloy.wav) | Adam [▶](docs/audio/kokoro_am_adam.wav) | Alice [▶](docs/audio/kokoro_bf_alice.wav) | Daniel [▶](docs/audio/kokoro_bm_daniel.wav) |
+| Aoede [▶](docs/audio/kokoro_af_aoede.wav) | Echo [▶](docs/audio/kokoro_am_echo.wav) | Emma [▶](docs/audio/kokoro_bf_emma.wav) | Fable [▶](docs/audio/kokoro_bm_fable.wav) |
+| Bella [▶](docs/audio/kokoro_af_bella.wav) | Eric [▶](docs/audio/kokoro_am_eric.wav) | Isabella [▶](docs/audio/kokoro_bf_isabella.wav) | George [▶](docs/audio/kokoro_bm_george.wav) |
+| Heart [▶](docs/audio/kokoro_af_heart.wav) | Fenrir [▶](docs/audio/kokoro_am_fenrir.wav) | Lily [▶](docs/audio/kokoro_bf_lily.wav) | Lewis [▶](docs/audio/kokoro_bm_lewis.wav) |
+| Jessica [▶](docs/audio/kokoro_af_jessica.wav) | Liam [▶](docs/audio/kokoro_am_liam.wav) | | |
+| Kore [▶](docs/audio/kokoro_af_kore.wav) | Michael [▶](docs/audio/kokoro_am_michael.wav) | | |
+| Nicole [▶](docs/audio/kokoro_af_nicole.wav) | Onyx [▶](docs/audio/kokoro_am_onyx.wav) | | |
+| Nova [▶](docs/audio/kokoro_af_nova.wav) | Puck [▶](docs/audio/kokoro_am_puck.wav) | | |
+| River [▶](docs/audio/kokoro_af_river.wav) | Santa [▶](docs/audio/kokoro_am_santa.wav) | | |
+| Sarah [▶](docs/audio/kokoro_af_sarah.wav) | | | |
+| Sky [▶](docs/audio/kokoro_af_sky.wav) | | | |
+
+##### Piper TTS
+
+The [Piper](https://github.com/OHF-Voice/piper1-gpl) project provides over a hundred lightweight voices across all of the languages Moonshine supports, from many contributors — too many to sample here. You can listen to every Piper voice on the [Piper voice samples page](https://rhasspy.github.io/piper-samples/), and use any of them with Moonshine through the `piper_` voice names returned by `list_tts_voices()`.
 
 #### Converting Graphemes to Phonemes
 
