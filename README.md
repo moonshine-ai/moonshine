@@ -530,10 +530,10 @@ These voices were created using the zero-shot voice cloning capabilities of [Zip
 
 | | | | |
 | --- | --- | --- | --- |
-| American Female [▶](docs/audio/zipvoice_american_female.wav) | American Male [▶](docs/audio/zipvoice_american_male.wav) | Australian Male [▶](docs/audio/zipvoice_australian_male.wav) | Canadian Female [▶](docs/audio/zipvoice_canadian_female.wav) |
-| Canadian Male [▶](docs/audio/zipvoice_canadian_male.wav) | English Female [▶](docs/audio/zipvoice_english_female.wav) | English Male [▶](docs/audio/zipvoice_english_male.wav) | Indian Female [▶](docs/audio/zipvoice_indian_female.wav) |
-| Indian Male [▶](docs/audio/zipvoice_indian_male.wav) | Irish Female [▶](docs/audio/zipvoice_irish_female.wav) | Irish Male [▶](docs/audio/zipvoice_irish_male.wav) | New Zealand Female [▶](docs/audio/zipvoice_new_zealand_female.wav) |
-| Northern Irish Female [▶](docs/audio/zipvoice_northern_irish_female.wav) | South African Female [▶](docs/audio/zipvoice_south_african_female.wav) | South African Male [▶](docs/audio/zipvoice_south_african_male.wav) | |
+| American Female [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_american_female.wav) | American Male [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_american_male.wav) | Australian Male [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_australian_male.wav) | Canadian Female [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_canadian_female.wav) |
+| Canadian Male [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_canadian_male.wav) | English Female [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_english_female.wav) | English Male [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_english_male.wav) | Indian Female [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_indian_female.wav) |
+| Indian Male [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_indian_male.wav) | Irish Female [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_irish_female.wav) | Irish Male [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_irish_male.wav) | New Zealand Female [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_new_zealand_female.wav) |
+| Northern Irish Female [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_northern_irish_female.wav) | South African Female [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_south_african_female.wav) | South African Male [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_south_african_male.wav) | |
 
 ##### Kokoro
 
@@ -541,17 +541,17 @@ These voices come from the excellent [Kokoro](https://github.com/hexgrad/kokoro)
 
 | American Female | American Male | British Female | British Male |
 | --- | --- | --- | --- |
-| Alloy [▶](docs/audio/kokoro_af_alloy.wav) | Adam [▶](docs/audio/kokoro_am_adam.wav) | Alice [▶](docs/audio/kokoro_bf_alice.wav) | Daniel [▶](docs/audio/kokoro_bm_daniel.wav) |
-| Aoede [▶](docs/audio/kokoro_af_aoede.wav) | Echo [▶](docs/audio/kokoro_am_echo.wav) | Emma [▶](docs/audio/kokoro_bf_emma.wav) | Fable [▶](docs/audio/kokoro_bm_fable.wav) |
-| Bella [▶](docs/audio/kokoro_af_bella.wav) | Eric [▶](docs/audio/kokoro_am_eric.wav) | Isabella [▶](docs/audio/kokoro_bf_isabella.wav) | George [▶](docs/audio/kokoro_bm_george.wav) |
-| Heart [▶](docs/audio/kokoro_af_heart.wav) | Fenrir [▶](docs/audio/kokoro_am_fenrir.wav) | Lily [▶](docs/audio/kokoro_bf_lily.wav) | Lewis [▶](docs/audio/kokoro_bm_lewis.wav) |
-| Jessica [▶](docs/audio/kokoro_af_jessica.wav) | Liam [▶](docs/audio/kokoro_am_liam.wav) | | |
-| Kore [▶](docs/audio/kokoro_af_kore.wav) | Michael [▶](docs/audio/kokoro_am_michael.wav) | | |
-| Nicole [▶](docs/audio/kokoro_af_nicole.wav) | Onyx [▶](docs/audio/kokoro_am_onyx.wav) | | |
-| Nova [▶](docs/audio/kokoro_af_nova.wav) | Puck [▶](docs/audio/kokoro_am_puck.wav) | | |
-| River [▶](docs/audio/kokoro_af_river.wav) | Santa [▶](docs/audio/kokoro_am_santa.wav) | | |
-| Sarah [▶](docs/audio/kokoro_af_sarah.wav) | | | |
-| Sky [▶](docs/audio/kokoro_af_sky.wav) | | | |
+| Alloy [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_alloy.wav) | Adam [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_am_adam.wav) | Alice [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_bf_alice.wav) | Daniel [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_bm_daniel.wav) |
+| Aoede [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_aoede.wav) | Echo [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_am_echo.wav) | Emma [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_bf_emma.wav) | Fable [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_bm_fable.wav) |
+| Bella [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_bella.wav) | Eric [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_am_eric.wav) | Isabella [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_bf_isabella.wav) | George [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_bm_george.wav) |
+| Heart [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_heart.wav) | Fenrir [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_am_fenrir.wav) | Lily [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_bf_lily.wav) | Lewis [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_bm_lewis.wav) |
+| Jessica [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_jessica.wav) | Liam [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_am_liam.wav) | | |
+| Kore [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_kore.wav) | Michael [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_am_michael.wav) | | |
+| Nicole [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_nicole.wav) | Onyx [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_am_onyx.wav) | | |
+| Nova [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_nova.wav) | Puck [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_am_puck.wav) | | |
+| River [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_river.wav) | Santa [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_am_santa.wav) | | |
+| Sarah [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_sarah.wav) | | | |
+| Sky [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_sky.wav) | | | |
 
 ##### Piper TTS
 
