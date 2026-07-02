@@ -98,7 +98,7 @@ std::vector<float> trim_edge_silence(const std::vector<float>& wav, int sample_r
   }
   size_t end = std::min(wav.size(), last + static_cast<size_t>(keep));
   if (end <= start) {
-    // All silence: keep the original to avoid an empty prompt.
+    // All silence: keep the original to avoid an empty clone.
     start = 0;
     end = wav.size();
   }
@@ -195,11 +195,11 @@ struct ZipVoiceTTS::Impl {
   Ort::Session vocoder_{nullptr};
   std::vector<std::string> te_in_, te_out_, fm_in_, fm_out_, vo_in_, vo_out_;
 
-  // Prepared prompt.
-  std::vector<float> prompt_features_;  // [T_prompt * feat_dim] row-major
-  int prompt_frames_ = 0;
-  float prompt_rms_ = 0.F;
-  std::vector<int64_t> prompt_token_ids_{};
+  // Prepared clone.
+  std::vector<float> clone_features_;  // [T_clone * feat_dim] row-major
+  int clone_frames_ = 0;
+  float clone_rms_ = 0.F;
+  std::vector<int64_t> clone_token_ids_{};
 
   ~Impl() {
     for (auto& e : tts_files_.entries) {
@@ -351,42 +351,42 @@ struct ZipVoiceTTS::Impl {
 
     g2p_ = std::make_unique<MoonshineG2P>(g2p_dialect, g2p_opt_);
 
-    // Resolve the reference (prompt) clip and its transcript.
-    std::vector<float> prompt_pcm;
-    int prompt_sr = opt.prompt_sample_rate;
-    std::string prompt_text = opt.prompt_transcript;
+    // Resolve the reference (clone) clip and its transcript.
+    std::vector<float> clone_pcm;
+    int clone_sr = opt.clone_sample_rate;
+    std::string clone_text = opt.clone_transcript;
     if (!opt.voice_id.empty()) {
       const ZipVoiceBuiltinVoice* v = zipvoice_find_builtin_voice(opt.voice_id);
       if (v == nullptr) {
         throw std::runtime_error("ZipVoiceTTS: unknown built-in voice '" + opt.voice_id + "'");
       }
-      prompt_pcm = zipvoice_builtin_voice_pcm_to_float(*v);
-      prompt_sr = static_cast<int>(v->sample_rate);
-      prompt_text = v->prompt_text;
+      clone_pcm = zipvoice_builtin_voice_pcm_to_float(*v);
+      clone_sr = static_cast<int>(v->sample_rate);
+      clone_text = v->clone_transcript;
     } else {
-      prompt_pcm = opt.prompt_pcm;
+      clone_pcm = opt.clone_pcm;
     }
-    if (prompt_pcm.empty()) {
+    if (clone_pcm.empty()) {
       throw std::runtime_error(
-          "ZipVoiceTTS: no reference voice supplied (set a built-in voice id or prompt PCM)");
+          "ZipVoiceTTS: no reference voice supplied (set a built-in voice id or clone PCM)");
     }
-    if (prompt_sr != VocosFbank::kSampleRate) {
-      prompt_pcm = resample_linear(prompt_pcm, prompt_sr, VocosFbank::kSampleRate);
+    if (clone_sr != VocosFbank::kSampleRate) {
+      clone_pcm = resample_linear(clone_pcm, clone_sr, VocosFbank::kSampleRate);
     }
-    prompt_pcm = trim_edge_silence(prompt_pcm, VocosFbank::kSampleRate, /*trail_sil_ms=*/200);
-    prompt_rms_ = rms_of(prompt_pcm);
-    if (prompt_rms_ > 0.F && prompt_rms_ < target_rms_) {
-      const float g = target_rms_ / prompt_rms_;
-      for (float& s : prompt_pcm) {
+    clone_pcm = trim_edge_silence(clone_pcm, VocosFbank::kSampleRate, /*trail_sil_ms=*/200);
+    clone_rms_ = rms_of(clone_pcm);
+    if (clone_rms_ > 0.F && clone_rms_ < target_rms_) {
+      const float g = target_rms_ / clone_rms_;
+      for (float& s : clone_pcm) {
         s *= g;
       }
     }
     VocosFbank fbank;
-    prompt_features_ = fbank.extract(prompt_pcm, &prompt_frames_);
-    for (float& v : prompt_features_) {
+    clone_features_ = fbank.extract(clone_pcm, &clone_frames_);
+    for (float& v : clone_features_) {
       v *= feat_scale_;
     }
-    prompt_token_ids_ = ipa_text_to_token_ids(prompt_text);
+    clone_token_ids_ = ipa_text_to_token_ids(clone_text);
   }
 
   double speed() const { return speed_; }
@@ -405,7 +405,7 @@ struct ZipVoiceTTS::Impl {
   // (row-major), setting *out_frames.
   std::vector<float> run_text_encoder(const std::vector<int64_t>& tokens, int* out_frames) {
     std::vector<int64_t> tok = tokens;
-    std::vector<int64_t> ptok = prompt_token_ids_;
+    std::vector<int64_t> ptok = clone_token_ids_;
     if (tok.empty()) {
       tok.push_back(token2id_.count(" ") ? token2id_.at(" ") : 0);
     }
@@ -414,7 +414,7 @@ struct ZipVoiceTTS::Impl {
     }
     const std::array<int64_t, 2> shape_tok{1, static_cast<int64_t>(tok.size())};
     const std::array<int64_t, 2> shape_ptok{1, static_cast<int64_t>(ptok.size())};
-    int64_t pfl = prompt_frames_;
+    int64_t pfl = clone_frames_;
     float sp = static_cast<float>(speed_);
 
     std::vector<Ort::Value> inputs;
@@ -464,12 +464,12 @@ struct ZipVoiceTTS::Impl {
     for (size_t i = 0; i < total; ++i) {
       x[i] = dist(rng);
     }
-    // speech_condition = pad(prompt_features, to frames) along time.
+    // speech_condition = pad(clone_features, to frames) along time.
     std::vector<float> speech_condition(total, 0.F);
-    const size_t copy_frames = std::min<size_t>(static_cast<size_t>(prompt_frames_),
+    const size_t copy_frames = std::min<size_t>(static_cast<size_t>(clone_frames_),
                                                 static_cast<size_t>(frames));
-    std::copy(prompt_features_.begin(),
-              prompt_features_.begin() + static_cast<std::ptrdiff_t>(copy_frames * feat),
+    std::copy(clone_features_.begin(),
+              clone_features_.begin() + static_cast<std::ptrdiff_t>(copy_frames * feat),
               speech_condition.begin());
 
     const std::vector<float> ts = get_time_steps(num_step_, t_shift_);
@@ -504,14 +504,14 @@ struct ZipVoiceTTS::Impl {
       }
     }
 
-    // Trim the prompt frames from the front.
-    const int gen_frames = frames - prompt_frames_;
+    // Trim the clone frames from the front.
+    const int gen_frames = frames - clone_frames_;
     *out_gen_frames = gen_frames;
     if (gen_frames <= 0) {
       return {};
     }
     std::vector<float> pred(static_cast<size_t>(gen_frames) * feat);
-    std::copy(x.begin() + static_cast<std::ptrdiff_t>(static_cast<size_t>(prompt_frames_) * feat),
+    std::copy(x.begin() + static_cast<std::ptrdiff_t>(static_cast<size_t>(clone_frames_) * feat),
               x.end(), pred.begin());
     return pred;
   }
@@ -549,15 +549,15 @@ struct ZipVoiceTTS::Impl {
 
   // Split target token ids into chunks near a target size, preferring space-token boundaries.
   std::vector<std::vector<int64_t>> chunk_target_ids(const std::vector<int64_t>& ids) {
-    // max_tokens ~ so total (prompt + generated) audio stays around 25s (mirrors speak.py).
+    // max_tokens ~ so total (clone + generated) audio stays around 25s (mirrors speak.py).
     int max_tokens = 400;
-    if (!prompt_token_ids_.empty() && prompt_frames_ > 0) {
-      const double prompt_duration =
-          static_cast<double>(prompt_frames_) * VocosFbank::kHop / VocosFbank::kSampleRate;
+    if (!clone_token_ids_.empty() && clone_frames_ > 0) {
+      const double clone_duration =
+          static_cast<double>(clone_frames_) * VocosFbank::kHop / VocosFbank::kSampleRate;
       const double token_duration =
-          prompt_duration / (static_cast<double>(prompt_token_ids_.size()) * speed_);
+          clone_duration / (static_cast<double>(clone_token_ids_.size()) * speed_);
       if (token_duration > 1e-6) {
-        const int m = static_cast<int>((25.0 - prompt_duration) / token_duration);
+        const int m = static_cast<int>((25.0 - clone_duration) / token_duration);
         max_tokens = std::max(1, m);
       }
     }
@@ -642,8 +642,8 @@ struct ZipVoiceTTS::Impl {
         continue;
       }
       std::vector<float> wav = run_vocoder(pred, gen_frames);
-      if (prompt_rms_ > 0.F && prompt_rms_ < target_rms_) {
-        const float g = prompt_rms_ / target_rms_;
+      if (clone_rms_ > 0.F && clone_rms_ < target_rms_) {
+        const float g = clone_rms_ / target_rms_;
         for (float& s : wav) {
           s *= g;
         }
@@ -651,6 +651,8 @@ struct ZipVoiceTTS::Impl {
       wavs.push_back(std::move(wav));
     }
     std::vector<float> out = cross_fade_concat(wavs, 0.1F, kSampleRateHz);
+    out = zipvoice_compress_long_pauses(out, kSampleRateHz);
+    out = trim_edge_silence(out, kSampleRateHz, /*trail_sil_ms=*/0);
     apply_synthesis_output_effects(out, normalize_audio_, output_volume_);
     return out;
   }
@@ -669,5 +671,125 @@ float ZipVoiceTTS::output_volume() const { return impl_->output_volume(); }
 void ZipVoiceTTS::set_output_volume(float volume) { impl_->set_output_volume(volume); }
 
 std::vector<float> ZipVoiceTTS::synthesize(std::string_view text) { return impl_->synthesize(text); }
+
+std::vector<float> zipvoice_compress_long_pauses(const std::vector<float>& wav, int sample_rate,
+                                                 float max_silence_ms, float keep_silence_ms,
+                                                 float fade_ms) {
+  if (wav.size() < 4 || sample_rate <= 0) {
+    return wav;
+  }
+
+  const int win = std::max(1, (20 * sample_rate) / 1000);
+  std::vector<float> env(wav.size(), 0.F);
+  double acc = 0.0;
+  for (size_t i = 0; i < wav.size(); ++i) {
+    acc += std::fabs(wav[i]);
+    if (i >= static_cast<size_t>(win)) {
+      acc -= std::fabs(wav[i - static_cast<size_t>(win)]);
+    }
+    const int denom = static_cast<int>(std::min(i + 1, static_cast<size_t>(win)));
+    env[i] = static_cast<float>(acc / static_cast<double>(denom));
+  }
+
+  float peak = 0.F;
+  for (float e : env) {
+    peak = std::max(peak, e);
+  }
+  const float thresh = std::max(0.0031622776601683794F, 0.04F * peak);  // floor -50 dBFS
+
+  const int min_silence = std::max(1, (80 * sample_rate) / 1000);
+  const int max_silence = std::max(min_silence + 1, static_cast<int>(max_silence_ms * sample_rate / 1000.F));
+  const int keep_silence = std::max(1, static_cast<int>(keep_silence_ms * sample_rate / 1000.F));
+  const int fade = std::max(1, static_cast<int>(fade_ms * sample_rate / 1000.F));
+
+  struct Run {
+    size_t start = 0;
+    size_t end = 0;
+  };
+  std::vector<Run> runs;
+  size_t i = 0;
+  while (i < wav.size()) {
+    if (env[i] < thresh) {
+      size_t j = i;
+      while (j < wav.size() && env[j] < thresh) {
+        ++j;
+      }
+      if (static_cast<int>(j - i) >= min_silence) {
+        runs.push_back({i, j});
+      }
+      i = j;
+    } else {
+      ++i;
+    }
+  }
+  if (runs.empty()) {
+    return wav;
+  }
+
+  auto fade_out_tail = [&](std::vector<float>& buf, int fade_len) {
+    if (fade_len <= 0 || buf.empty()) {
+      return;
+    }
+    fade_len = std::min(fade_len, static_cast<int>(buf.size()));
+    for (int k = 0; k < fade_len; ++k) {
+      const float g = 1.F - static_cast<float>(k + 1) / static_cast<float>(fade_len);
+      buf[buf.size() - static_cast<size_t>(fade_len) + static_cast<size_t>(k)] *= g;
+    }
+  };
+
+  auto append_fade_in = [&](std::vector<float>& buf, size_t speech_start, size_t speech_end) {
+    const int fade_len = std::min(fade, static_cast<int>(speech_end - speech_start));
+    if (fade_len <= 0) {
+      return;
+    }
+    for (int k = 0; k < fade_len; ++k) {
+      const float g = static_cast<float>(k + 1) / static_cast<float>(fade_len);
+      buf.push_back(wav[speech_start + static_cast<size_t>(k)] * g);
+    }
+    if (speech_start + static_cast<size_t>(fade_len) < speech_end) {
+      buf.insert(buf.end(), wav.begin() + static_cast<std::ptrdiff_t>(speech_start + fade_len),
+                 wav.begin() + static_cast<std::ptrdiff_t>(speech_end));
+    }
+  };
+
+  std::vector<float> out;
+  out.reserve(wav.size());
+  size_t cursor = 0;
+  bool need_fade_in = false;
+  for (const Run& run : runs) {
+    if (run.start > cursor) {
+      if (need_fade_in) {
+        append_fade_in(out, cursor, run.start);
+      } else {
+        out.insert(out.end(), wav.begin() + static_cast<std::ptrdiff_t>(cursor),
+                   wav.begin() + static_cast<std::ptrdiff_t>(run.start));
+      }
+      need_fade_in = false;
+    }
+
+    const size_t run_len = run.end - run.start;
+    if (static_cast<int>(run_len) <= max_silence) {
+      out.insert(out.end(), wav.begin() + static_cast<std::ptrdiff_t>(run.start),
+                 wav.begin() + static_cast<std::ptrdiff_t>(run.end));
+    } else {
+      fade_out_tail(out, fade);
+      const size_t keep = std::min(static_cast<size_t>(keep_silence), run_len);
+      out.insert(out.end(), wav.begin() + static_cast<std::ptrdiff_t>(run.start),
+                 wav.begin() + static_cast<std::ptrdiff_t>(run.start + keep));
+      need_fade_in = true;
+    }
+    cursor = run.end;
+  }
+
+  if (cursor < wav.size()) {
+    if (need_fade_in) {
+      append_fade_in(out, cursor, wav.size());
+    } else {
+      out.insert(out.end(), wav.begin() + static_cast<std::ptrdiff_t>(cursor), wav.end());
+    }
+  }
+
+  return out;
+}
 
 }  // namespace moonshine_tts

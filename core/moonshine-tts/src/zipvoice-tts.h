@@ -12,9 +12,9 @@
 
 namespace moonshine_tts {
 
-/// Options for the ZipVoice zero-shot voice-cloning ONNX TTS engine. The reference ("prompt") voice
+/// Options for the ZipVoice zero-shot voice-cloning ONNX TTS engine. The reference voice to clone
 /// is supplied either as a built-in VCTK ``voice_id`` (see ``zipvoice-voices.h``) or as in-memory
-/// mono float PCM (``prompt_pcm`` + ``prompt_sample_rate``) with an optional ``prompt_transcript``
+/// mono float PCM (``clone_pcm`` + ``clone_sample_rate``) with an optional ``clone_transcript``
 /// (when empty for a supplied clip, the caller is expected to have transcribed it upstream).
 struct ZipVoiceTTSOptions {
   /// Locale tag (English only for now, e.g. ``en_us`` / ``en_gb``).
@@ -22,8 +22,8 @@ struct ZipVoiceTTSOptions {
   double speed = 1.0;
   MoonshineG2POptions g2p_options{};
   std::vector<std::string> ort_provider_names{};
-  /// Peak-normalize the final waveform. Off by default: ZipVoice matches the prompt's loudness, so
-  /// peak normalization would override that. Clipping to ``[-1, 1]`` is always applied.
+  /// Peak-normalize the final waveform. Off by default: ZipVoice matches the reference clip's
+  /// loudness, so peak normalization would override that. Clipping to ``[-1, 1]`` is always applied.
   bool normalize_audio = false;
   float output_volume = 1.F;
 
@@ -40,13 +40,13 @@ struct ZipVoiceTTSOptions {
   unsigned int seed = 666U;
 
   /// Built-in reference voice id (without the ``zipvoice_`` prefix), e.g. ``american_female``. When
-  /// non-empty, ``prompt_pcm`` / ``prompt_transcript`` are ignored and the compiled-in clip is used.
+  /// non-empty, ``clone_pcm`` / ``clone_transcript`` are ignored and the compiled-in clip is used.
   std::string voice_id{};
-  /// Reference clip as mono float PCM in ``[-1, 1]`` (used when ``voice_id`` is empty).
-  std::vector<float> prompt_pcm{};
-  int prompt_sample_rate = 24000;
-  /// Transcript of ``prompt_pcm`` (required for good cloning; empty is tolerated but degrades quality).
-  std::string prompt_transcript{};
+  /// Reference clip to clone as mono float PCM in ``[-1, 1]`` (used when ``voice_id`` is empty).
+  std::vector<float> clone_pcm{};
+  int clone_sample_rate = 24000;
+  /// Transcript of ``clone_pcm`` (required for good cloning; empty is tolerated but degrades quality).
+  std::string clone_transcript{};
 
   /// In-memory ZipVoice assets keyed by ``zipvoice/text_encoder.ort`` etc. (see moonshine-tts-options.h).
   FileInformationMap tts_asset_files{};
@@ -78,6 +78,13 @@ class ZipVoiceTTS {
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };
+
+/// Post-process ZipVoice output: shorten internal pauses longer than ``max_silence_ms`` down to
+/// ``keep_silence_ms`` with short crossfades at trim boundaries (``fade_ms``).
+std::vector<float> zipvoice_compress_long_pauses(const std::vector<float>& wav, int sample_rate,
+                                                  float max_silence_ms = 350.F,
+                                                  float keep_silence_ms = 180.F,
+                                                  float fade_ms = 12.F);
 
 }  // namespace moonshine_tts
 

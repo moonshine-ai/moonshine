@@ -758,21 +758,21 @@ void parse_tts_options(const OptionVector &options,
   out_options.parse_options(options, &cli_language_out, &language_was_set_out);
 }
 
-// When the ZipVoice engine is selected with a caller-supplied prompt clip (memory key
-// ``zipvoice/prompt_audio``) but no transcript, and the caller passed an existing ASR transcriber via
+// When the ZipVoice engine is selected with a caller-supplied clone reference clip (memory key
+// ``zipvoice/clone_audio``) but no transcript, and the caller passed an existing ASR transcriber via
 // the ``zipvoice_asr_transcriber_handle`` option, transcribe the clip with Moonshine ASR and use the
-// result as the prompt transcript. This keeps the TTS library free of an ASR dependency (the ASR call
+// result as the clone transcript. This keeps the TTS library free of an ASR dependency (the ASR call
 // happens here, at the C API layer, which already owns both subsystems).
-void maybe_autotranscribe_zipvoice_prompt(
+void maybe_autotranscribe_zipvoice_clone(
     const OptionVector &options, moonshine_tts::MoonshineTTSOptions &tts_options) {
   if (tts_options.vocoder_engine != "zipvoice") {
     return;
   }
-  if (!tts_options.zipvoice_prompt_transcript.empty()) {
+  if (!tts_options.zipvoice_clone_transcript.empty()) {
     return;
   }
-  const std::string prompt_key{moonshine_tts::kTtsZipVoicePromptAudioKey};
-  const auto pit = tts_options.files.entries.find(prompt_key);
+  const std::string clone_key{moonshine_tts::kTtsZipVoiceCloneAudioKey};
+  const auto pit = tts_options.files.entries.find(clone_key);
   if (pit == tts_options.files.entries.end() || pit->second.memory == nullptr ||
       pit->second.memory_size < sizeof(float)) {
     return;
@@ -811,7 +811,7 @@ void maybe_autotranscribe_zipvoice_prompt(
           pcm.data(), static_cast<uint64_t>(pcm.size()),
           moonshine_tts::MoonshineTTS::kSampleRateHz, 0, &out_transcript);
     } catch (const std::exception &e) {
-      LOGF("ZipVoice prompt auto-transcription failed: %s", e.what());
+      LOGF("ZipVoice clone auto-transcription failed: %s", e.what());
       return;
     }
   }
@@ -834,7 +834,7 @@ void maybe_autotranscribe_zipvoice_prompt(
     // ``out_transcript`` points into transcriber-owned storage; it must not be freed here.
   }
   if (!text.empty()) {
-    tts_options.zipvoice_prompt_transcript = std::move(text);
+    tts_options.zipvoice_clone_transcript = std::move(text);
   }
 }
 
@@ -876,7 +876,7 @@ int32_t moonshine_create_tts_synthesizer_from_files(
   bool lang_from_options_set = false;
   parse_tts_options(uncommon_options, tts_options, lang_from_options,
                     lang_from_options_set);
-  maybe_autotranscribe_zipvoice_prompt(uncommon_options, tts_options);
+  maybe_autotranscribe_zipvoice_clone(uncommon_options, tts_options);
   std::string lang = (language != nullptr && language[0] != '\0')
                          ? std::string(language)
                          : std::string("en_us");
@@ -964,7 +964,7 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
     bool lang_from_options_set = false;
     parse_tts_options(uncommon_options, tts_options, lang_from_options,
                       lang_from_options_set);
-    maybe_autotranscribe_zipvoice_prompt(uncommon_options, tts_options);
+    maybe_autotranscribe_zipvoice_clone(uncommon_options, tts_options);
     std::string lang = (language != nullptr && language[0] != '\0')
                            ? std::string(language)
                            : std::string("en_us");

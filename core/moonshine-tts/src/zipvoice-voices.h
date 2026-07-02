@@ -8,7 +8,7 @@
 
 namespace moonshine_tts {
 
-/// One built-in ZipVoice reference ("prompt") voice, sourced from the VCTK corpus and compiled into
+/// One built-in ZipVoice reference voice to clone, sourced from the VCTK corpus and compiled into
 /// the library as a 4-second, 24 kHz, mono 16-bit PCM clip plus its exact transcript. Selected as one
 /// masculine and one feminine speaker per accent where both are available. The ``id`` is the accent +
 /// gender slug (e.g. ``american_female``); callers select it via ``voice = "zipvoice_<id>"``.
@@ -17,7 +17,7 @@ struct ZipVoiceBuiltinVoice {
   const char* accent;
   const char* gender;
   const char* vctk_speaker;
-  const char* prompt_text;
+  const char* clone_transcript;
   const int16_t* pcm;      // mono 16-bit PCM
   uint32_t num_samples;
   uint32_t sample_rate;    // always 24000

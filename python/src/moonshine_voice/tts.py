@@ -356,6 +356,69 @@ def _resample_linear(
     return np.interp(dst_x, src_x, samples).astype(np.float32)
 
 
+def _normalize_clone_argument(
+    clone: Union[str, Path, Tuple[Any, int]],
+) -> Tuple[Any, int]:
+    """Return ``(pcm, sample_rate)`` from a ``clone`` spec.
+
+    Accepts either a path to a WAV file on disk (``str`` / ``Path``), which is
+    decoded with :func:`moonshine_voice.utils.load_wav_file` (16/24-bit PCM,
+    stereo mixed down to mono), or a ``(pcm, sample_rate)`` pair where ``pcm``
+    is mono float PCM in ``[-1, 1]`` (any sequence or numpy array) and
+    ``sample_rate`` is in Hz.
+    """
+    if isinstance(clone, (str, Path)):
+        from moonshine_voice.utils import load_wav_file
+
+        return load_wav_file(clone)
+    if isinstance(clone, (tuple, list)) and len(clone) == 2:
+        pcm, sample_rate = clone
+        try:
+            rate = int(sample_rate)
+        except (TypeError, ValueError):
+            rate = 0
+        if rate > 0:
+            return pcm, rate
+    raise MoonshineError(
+        "clone must be a path to a .wav file or a (pcm, sample_rate) pair "
+        "(mono float PCM in [-1, 1] plus a positive sample rate in Hz)."
+    )
+
+
+def _autotranscribe_clone_pcm(
+    pcm: Any,
+    sample_rate: int,
+    *,
+    language: str = "en_us",
+) -> str:
+    """Transcribe a clone reference clip so ZipVoice gets text aligned with the audio."""
+    from moonshine_voice.download import ModelArch, get_model_for_language
+    from moonshine_voice.transcriber import Transcriber
+
+    model_path, model_arch = get_model_for_language(
+        language.split("_", 1)[0].split("-", 1)[0],
+        wanted_model_arch=ModelArch.BASE)
+    try:
+        import numpy as _np  # type: ignore
+        samples = _np.asarray(pcm, dtype=_np.float32).ravel().tolist()
+    except Exception:
+        samples = [float(x) for x in pcm]
+    with Transcriber(model_path=model_path, model_arch=model_arch) as tr:
+        transcript = tr.transcribe_without_streaming(samples, sample_rate=sample_rate)
+    parts = [
+        line.text.strip()
+        for line in transcript.lines
+        if line.text and line.text.strip()
+    ]
+    text = " ".join(parts).strip()
+    if not text:
+        raise MoonshineError(
+            "Could not auto-transcribe the clone reference clip; pass clone_transcript "
+            "with the text spoken in the clip."
+        )
+    return text
+
+
 def _say_resolve_output_index(
     spec_key: Tuple[Any, ...],
     outs: List[Tuple[int, str]],
@@ -400,8 +463,12 @@ class TextToSpeech:
     With ``download=True``, a voice that is catalogued but not yet on disk is downloaded automatically.
     Use a ``kokoro_``, ``piper_``, or ``zipvoice_`` prefix on ``voice`` to pin the vocoder (e.g.
     ``kokoro_af_heart``, ``zipvoice_american_female``). ZipVoice is a zero-shot voice cloner: besides
-    the built-in ``zipvoice_<id>`` reference voices you can clone your own by passing ``prompt_pcm``
-    (mono float PCM), ``prompt_sample_rate`` and (recommended) ``prompt_transcript``.
+    the built-in ``zipvoice_<id>`` reference voices you can clone your own by passing ``clone`` —
+    either a path to a ``.wav`` file or a ``(pcm, sample_rate)`` pair of mono float PCM — along with
+    (recommended) ``clone_transcript``, the text spoken in the reference clip (when omitted, the clip
+    is auto-transcribed with Moonshine ASR before cloning). When ``clone`` is set
+    the ZipVoice engine is used automatically; passing ``voice`` together with ``clone``
+    raises `MoonshineError`.
     Use `list_tts_languages` and
     `list_tts_voices` (``present`` / ``downloadable``) or `get_tts_voice_catalog` to discover options.
     """
@@ -417,25 +484,36 @@ class TextToSpeech:
         output_device: Optional[Union[int, str]] = None,
         volume: Optional[float] = None,
         debug: bool = False,
-        prompt_pcm: Optional[Any] = None,
-        prompt_sample_rate: int = 24000,
-        prompt_transcript: Optional[str] = None,
+        clone: Optional[Union[str, Path, Tuple[Any, int]]] = None,
+        clone_transcript: Optional[str] = None,
     ):
-        # ZipVoice zero-shot voice cloning: pass a built-in reference voice as
-        # ``voice="zipvoice_<id>"`` (e.g. ``zipvoice_american_female``) through the normal path, or
-        # supply your own reference clip as mono float PCM in ``prompt_pcm`` (with
-        # ``prompt_sample_rate`` and, ideally, ``prompt_transcript``). When ``prompt_pcm`` is set the
-        # synthesizer is created from memory with the ``zipvoice`` engine.
+        # ZipVoice zero-shot voice cloning: supply your own reference clip via ``clone`` (a .wav
+        # path or a ``(pcm, sample_rate)`` pair) with, ideally, ``clone_transcript``. When a
+        # reference clip is given the synthesizer is created from memory with the ``zipvoice``
+        # engine. Do not pass ``voice`` — the clone clip defines the voice.
         self._extra_options = dict(options) if options else {}
-        if prompt_pcm is not None:
-            self._init_zipvoice_from_pcm(
+        if clone_transcript is not None and clone is None:
+            raise MoonshineError(
+                "clone_transcript requires the clone argument to be set.")
+        if clone is not None:
+            explicit_voice = voice
+            if explicit_voice is None:
+                opt_voice = self._extra_options.get("voice")
+                if isinstance(opt_voice, str) and opt_voice.strip():
+                    explicit_voice = opt_voice.strip()
+            if explicit_voice is not None:
+                raise MoonshineError(
+                    f"Voice cloning uses the clone reference clip, but voice={explicit_voice!r} "
+                    "was also set. Omit the voice argument when clone is set."
+                )
+            clone_pcm, clone_sample_rate = _normalize_clone_argument(clone)
+            self._init_zipvoice_from_clone(
                 language,
-                voice=voice,
                 asset_root=asset_root,
                 download=download,
-                prompt_pcm=prompt_pcm,
-                prompt_sample_rate=prompt_sample_rate,
-                prompt_transcript=prompt_transcript,
+                clone_pcm=clone_pcm,
+                clone_sample_rate=clone_sample_rate,
+                clone_transcript=clone_transcript,
             )
             self._init_playback_state(output_device, volume, debug)
             return
@@ -529,6 +607,7 @@ class TextToSpeech:
         debug: bool,
     ) -> None:
         """Shared playback/queue state used by both the from-files and ZipVoice-from-memory paths."""
+        self._closed = False
         self._say_device_cache: Optional[Tuple[Tuple[Any, ...],
                                                Optional[int]]] = None
         # ((spec_key, source_sr), target_sr) — target_sr equals source_sr
@@ -553,16 +632,15 @@ class TextToSpeech:
         # errors in the logs, often a wrong-default-device problem on Raspberry Pi).
         self._announced_resolved_device = False
 
-    def _init_zipvoice_from_pcm(
+    def _init_zipvoice_from_clone(
         self,
         language: str,
         *,
-        voice: Optional[str],
         asset_root: Optional[Path],
         download: bool,
-        prompt_pcm: Any,
-        prompt_sample_rate: int,
-        prompt_transcript: Optional[str],
+        clone_pcm: Any,
+        clone_sample_rate: int,
+        clone_transcript: Optional[str],
     ) -> None:
         """Create a ZipVoice synthesizer from an in-memory reference clip (mono float PCM)."""
         import array as _array
@@ -588,26 +666,48 @@ class TextToSpeech:
         # Coerce the reference clip to little-endian float32 bytes.
         try:
             import numpy as _np  # type: ignore
-            pcm = _np.asarray(prompt_pcm, dtype="<f4").ravel()
+            pcm = _np.asarray(clone_pcm, dtype="<f4").ravel()
             pcm_bytes = pcm.tobytes()
         except Exception:
-            arr = _array.array("f", [float(x) for x in prompt_pcm])
+            arr = _array.array("f", [float(x) for x in clone_pcm])
+            pcm = None
             pcm_bytes = arr.tobytes()
 
+        resolved_transcript = (
+            str(clone_transcript).strip()
+            if clone_transcript is not None and str(clone_transcript).strip()
+            else None
+        )
+        if resolved_transcript is None:
+            print(
+                "TextToSpeech: transcribing clone reference clip with Moonshine ASR…",
+                file=sys.stderr,
+                flush=True,
+            )
+            resolved_transcript = _autotranscribe_clone_pcm(
+                pcm if pcm is not None else clone_pcm,
+                clone_sample_rate,
+                language=self._language,
+            )
+            print(
+                f"TextToSpeech: clone transcript: {resolved_transcript!r}",
+                file=sys.stderr,
+                flush=True,
+            )
+
         self._lib = _MoonshineLib().lib
-        self._voice = voice if (voice and voice.strip()) else "zipvoice"
+        self._voice = "zipvoice"
 
         create_opts: Dict[str, Union[str, int, float, bool]] = dict(self._extra_options)
-        create_opts["voice"] = self._voice if self._voice.startswith("zipvoice") else "zipvoice"
+        create_opts["voice"] = self._voice
         create_opts["g2p_root"] = str(self._asset_root)
-        create_opts["zipvoice_prompt_sample_rate"] = int(prompt_sample_rate)
-        if prompt_transcript is not None and str(prompt_transcript).strip():
-            create_opts["zipvoice_prompt_transcript"] = str(prompt_transcript)
+        create_opts["zipvoice_clone_sample_rate"] = int(clone_sample_rate)
+        create_opts["zipvoice_clone_transcript"] = resolved_transcript
         opt_arr, opt_n, _keep_opts = moonshine_options_array(create_opts)
 
-        filenames = (ctypes.c_char_p * 1)(b"zipvoice/prompt_audio")
+        filenames = (ctypes.c_char_p * 1)(b"zipvoice/clone_audio")
         buf = (ctypes.c_uint8 * len(pcm_bytes)).from_buffer_copy(pcm_bytes)
-        self._prompt_pcm_buf = buf  # keep alive for the synthesizer's lifetime
+        self._clone_pcm_buf = buf  # keep alive for the synthesizer's lifetime
         mem_ptrs = (ctypes.POINTER(ctypes.c_uint8) * 1)(
             ctypes.cast(buf, ctypes.POINTER(ctypes.c_uint8))
         )
@@ -1158,6 +1258,9 @@ class TextToSpeech:
         self._play_thread = None
 
     def close(self) -> None:
+        if getattr(self, "_closed", False):
+            return
+        self._closed = True
         if getattr(self, "_say_queue", None) is not None:
             self._say_stop_event.set()
 
@@ -1263,6 +1366,19 @@ if __name__ == "__main__":
         help="Voice id with kokoro_ or piper_ prefix (e.g. kokoro_af_heart)",
     )
     parser.add_argument(
+        "--clone",
+        default=None,
+        type=Path,
+        metavar="WAV_PATH",
+        help="Clone the voice from a reference .wav clip using ZipVoice",
+    )
+    parser.add_argument(
+        "--clone-transcript",
+        default=None,
+        metavar="TEXT",
+        help="Transcript of the --clone reference clip (optional; auto-transcribed with Moonshine ASR when omitted)",
+    )
+    parser.add_argument(
         "--text",
         default="Hello world!",
         help="Text to speak (default: %(default)r)",
@@ -1309,11 +1425,17 @@ if __name__ == "__main__":
             print(e, file=sys.stderr)
             sys.exit(2)
 
+    if args.clone_transcript is not None and args.clone is None:
+        print("--clone-transcript requires --clone", file=sys.stderr)
+        sys.exit(2)
+
     try:
         with TextToSpeech(
             args.language,
             voice=args.voice,
             options=extra,
+            clone=args.clone,
+            clone_transcript=args.clone_transcript,
         ) as tts:
             if args.out is not None:
                 samples, sr = tts.synthesize(args.text, options=extra)
@@ -1334,6 +1456,9 @@ if __name__ == "__main__":
                     )
                     samples, sr = tts.synthesize(args.text, options=extra)
                     _write_wav_mono_pcm16(fallback_path, samples, sr)
+    except KeyboardInterrupt:
+        print("\nInterrupted.", file=sys.stderr)
+        sys.exit(130)
     except MoonshineError as e:
         print(e, file=sys.stderr)
         sys.exit(1)

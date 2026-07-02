@@ -256,7 +256,7 @@ final class TextToSpeechTests: XCTestCase {
         XCTAssertEqual(result.sampleRateHz, 24000)
     }
 
-    func testZipVoicePromptPCMSynthesizes() throws {
+    func testZipVoiceClonePCMSynthesizes() throws {
         let dataPath = try Self.getTtsDataPath()
         try XCTSkipUnless(Self.zipVoiceModelsPresent(dataPath),
                           "ZipVoice model bundle not present under data/zipvoice")
@@ -267,9 +267,9 @@ final class TextToSpeechTests: XCTestCase {
         let tts = try TextToSpeech(
             language: "en_us",
             g2pRoot: dataPath,
-            promptPCM: pcm,
-            promptSampleRate: 24000,
-            promptTranscript: "This is a reference clip."
+            clonePCM: pcm,
+            cloneSampleRate: 24000,
+            cloneTranscript: "This is a reference clip."
         )
         defer { tts.close() }
         let result = try tts.synthesize(text: "Cloning a custom voice.")

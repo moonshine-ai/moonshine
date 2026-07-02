@@ -829,16 +829,16 @@ ZipVoiceTTSOptions make_zipvoice_options(std::string_view language, const Moonsh
   z.num_step = opt.zipvoice_num_step;
   z.guidance_scale = opt.zipvoice_guidance_scale;
   z.t_shift = opt.zipvoice_t_shift;
-  z.prompt_sample_rate = opt.zipvoice_prompt_sample_rate;
-  z.prompt_transcript = opt.zipvoice_prompt_transcript;
+  z.clone_sample_rate = opt.zipvoice_clone_sample_rate;
+  z.clone_transcript = opt.zipvoice_clone_transcript;
   z.tts_asset_files = opt.files;
   z.voice_id = opt.voice;  // engine prefix already stripped
-  const auto it = opt.files.entries.find(std::string(kTtsZipVoicePromptAudioKey));
+  const auto it = opt.files.entries.find(std::string(kTtsZipVoiceCloneAudioKey));
   if (it != opt.files.entries.end() && it->second.memory != nullptr &&
       it->second.memory_size >= sizeof(float)) {
     const size_t n = it->second.memory_size / sizeof(float);
-    z.prompt_pcm.resize(n);
-    std::memcpy(z.prompt_pcm.data(), it->second.memory, n * sizeof(float));
+    z.clone_pcm.resize(n);
+    std::memcpy(z.clone_pcm.data(), it->second.memory, n * sizeof(float));
   }
   return z;
 }

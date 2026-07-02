@@ -112,14 +112,14 @@ public class TextToSpeechTest {
     }
 
     @Test
-    public void testZipVoicePromptPcmSynthesizes() {
+    public void testZipVoiceClonePcmSynthesizes() {
         String root = findZipVoiceRoot();
         org.junit.Assume.assumeTrue("ZipVoice model bundle not present in test assets", root != null);
         float[] pcm = new float[24000];
         for (int i = 0; i < pcm.length; i++) {
             pcm[i] = (float) (0.05 * Math.sin(2.0 * Math.PI * 150.0 * i / 24000.0));
         }
-        TextToSpeech tts = TextToSpeech.fromZipVoicePrompt("en_us", pcm, 24000,
+        TextToSpeech tts = TextToSpeech.fromZipVoiceClone("en_us", pcm, 24000,
                 "This is a reference clip.", root, null);
         try {
             TtsSynthesisResult result = tts.synthesize("Cloning a custom voice.");

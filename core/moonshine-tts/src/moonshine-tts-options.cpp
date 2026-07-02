@@ -58,7 +58,7 @@ void MoonshineTTSOptions::apply_voice_engine_prefix() {
     vocoder_engine = "zipvoice";
     voice = trim(voice.substr(k_z.size()));
   } else if (low == "zipvoice") {
-    // Bare engine selector with no built-in id: caller supplies a prompt clip.
+    // Bare engine selector with no built-in id: caller supplies a clone reference clip.
     vocoder_engine = "zipvoice";
     voice.clear();
   }
@@ -174,12 +174,12 @@ void MoonshineTTSOptions::parse_options(
       const std::string t = trim(value);
       piper_noise_w_override =
           t.empty() ? std::nullopt : std::optional<float>(float_from_string(t.c_str()));
-    } else if (key == "zipvoice_prompt_transcript" || key == "prompt_transcript") {
-      zipvoice_prompt_transcript = value;
-    } else if (key == "zipvoice_prompt_sample_rate" || key == "prompt_sample_rate") {
+    } else if (key == "zipvoice_clone_transcript" || key == "clone_transcript") {
+      zipvoice_clone_transcript = value;
+    } else if (key == "zipvoice_clone_sample_rate" || key == "clone_sample_rate") {
       const std::string t = trim(value);
       if (!t.empty()) {
-        zipvoice_prompt_sample_rate = static_cast<int>(float_from_string(t.c_str()));
+        zipvoice_clone_sample_rate = static_cast<int>(float_from_string(t.c_str()));
       }
     } else if (key == "zipvoice_model" || key == "zipvoice_model_name") {
       // ``zipvoice`` (full) vs ``zipvoice_distill`` (default). Only changes sampling defaults.

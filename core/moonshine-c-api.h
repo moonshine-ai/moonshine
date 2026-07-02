@@ -678,7 +678,7 @@ MOONSHINE_EXPORT int32_t moonshine_calculate_embedding_distance(
    ``zipvoice_american_female``, ``zipvoice_indian_male``), or a bare
    ``zipvoice`` together with a caller-supplied reference clip via
    ``moonshine_create_tts_synthesizer_from_memory`` (key
-   ``zipvoice/prompt_audio``). ZipVoice model assets
+   ``zipvoice/clone_audio``). ZipVoice model assets
    (``zipvoice/text_encoder.ort``, ``zipvoice/fm_decoder.ort``,
    ``zipvoice/vocoder.ort``, ``zipvoice/tokens.txt``,
    ``zipvoice/model.json``) are resolved under ``g2p_root`` or supplied in
@@ -700,9 +700,9 @@ MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_files(
    ``piper/onnx``, ``piper/onnx.json``, ``zipvoice/text_encoder.ort``,
    ``zipvoice/fm_decoder.ort``, ``zipvoice/vocoder.ort``,
    ``zipvoice/tokens.txt``, ``zipvoice/model.json``). For ZipVoice a
-   caller-supplied reference clip is passed as key ``zipvoice/prompt_audio``
-   (raw little-endian float32 mono PCM); set ``zipvoice_prompt_sample_rate`` and,
-   optionally, ``zipvoice_prompt_transcript``. When the transcript is omitted,
+   caller-supplied reference clip is passed as key ``zipvoice/clone_audio``
+   (raw little-endian float32 mono PCM); set ``zipvoice_clone_sample_rate`` and,
+   optionally, ``zipvoice_clone_transcript``. When the transcript is omitted,
    pass ``zipvoice_asr_transcriber_handle=<handle>`` (an existing transcriber
    from ``moonshine_create_transcriber_*``) to auto-transcribe the clip with
    Moonshine ASR. When ``memory[i]`` is non-NULL and
