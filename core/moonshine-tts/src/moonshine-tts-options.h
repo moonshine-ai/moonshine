@@ -39,8 +39,8 @@ inline constexpr std::string_view kTtsZipVoiceVocoderKey = "zipvoice/vocoder.ort
 inline constexpr std::string_view kTtsZipVoiceTokensKey = "zipvoice/tokens.txt";
 inline constexpr std::string_view kTtsZipVoiceModelJsonKey = "zipvoice/model.json";
 /// Optional user-supplied reference clip as raw little-endian float32 mono PCM (used when ``voice`` is
-/// bare ``zipvoice`` with no built-in id). Sample rate comes from ``zipvoice_prompt_sample_rate``.
-inline constexpr std::string_view kTtsZipVoicePromptAudioKey = "zipvoice/prompt_audio";
+/// bare ``zipvoice`` with no built-in id). Sample rate comes from ``zipvoice_clone_sample_rate``.
+inline constexpr std::string_view kTtsZipVoiceCloneAudioKey = "zipvoice/clone_audio";
 
 /// Shared configuration for ``MoonshineTTS`` (Kokoro and Piper file paths, G2P, ORT, CLI-oriented fields).
 /// Vocoder assets use ``files`` (same pattern as ``MoonshineG2POptions::files``). The **language** is passed to
@@ -70,10 +70,10 @@ struct MoonshineTTSOptions {
   std::optional<float> piper_noise_w_override{};
 
   /// ZipVoice controls (used only when the ``zipvoice`` vocoder is selected). ``num_step`` <= 0 and
-  /// ``guidance_scale`` < 0 select the per-model default. ``prompt_transcript`` describes a
-  /// caller-supplied ``zipvoice/prompt_audio`` clip; ``prompt_sample_rate`` is its sample rate.
-  std::string zipvoice_prompt_transcript{};
-  int zipvoice_prompt_sample_rate = 24000;
+  /// ``guidance_scale`` < 0 select the per-model default. ``clone_transcript`` describes a
+  /// caller-supplied ``zipvoice/clone_audio`` clip; ``clone_sample_rate`` is its sample rate.
+  std::string zipvoice_clone_transcript{};
+  int zipvoice_clone_sample_rate = 24000;
   bool zipvoice_distill = true;
   int zipvoice_num_step = 0;
   float zipvoice_guidance_scale = -1.F;

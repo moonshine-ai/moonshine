@@ -2,6 +2,7 @@
 #include "doctest.h"
 
 #include "zipvoice-mel.h"
+#include "zipvoice-tts.h"
 #include "zipvoice-voices.h"
 
 #include <cmath>
@@ -24,7 +25,7 @@ TEST_CASE("zipvoice-builtin-voices") {
   CHECK(v->sample_rate == 24000u);
   CHECK(v->num_samples == 24000u * 4u);  // 4-second clip
   CHECK(v->pcm != nullptr);
-  CHECK(std::string(v->prompt_text).size() > 0);
+  CHECK(std::string(v->clone_transcript).size() > 0);
 
   CHECK(zipvoice_find_builtin_voice("indian_male") != nullptr);
   CHECK(zipvoice_find_builtin_voice("not_a_real_voice") == nullptr);
@@ -58,4 +59,41 @@ TEST_CASE("zipvoice-vocos-fbank") {
     // log(clamp(min=1e-7)) >= log(1e-7)
     CHECK(x >= std::log(1e-7f) - 1e-3f);
   }
+}
+
+TEST_CASE("zipvoice-compress-long-pauses") {
+  const int sr = 24000;
+  auto tone = [&](size_t n, float amp) {
+    std::vector<float> x(n);
+    for (size_t i = 0; i < n; ++i) {
+      x[i] = amp * std::sin(2.0 * 3.14159265358979 * 440.0 * static_cast<double>(i) / sr);
+    }
+    return x;
+  };
+
+  // speech (200 ms) + long pause (800 ms) + speech (200 ms)
+  std::vector<float> wav;
+  {
+    auto a = tone(static_cast<size_t>(0.2 * sr), 0.5f);
+    auto b = tone(static_cast<size_t>(0.2 * sr), 0.4f);
+    wav.insert(wav.end(), a.begin(), a.end());
+    wav.insert(wav.end(), static_cast<size_t>(0.8 * sr), 0.f);
+    wav.insert(wav.end(), b.begin(), b.end());
+  }
+  const size_t before = wav.size();
+  const std::vector<float> out = zipvoice_compress_long_pauses(wav, sr);
+  CHECK(out.size() < before);
+  CHECK(out.size() > static_cast<size_t>(0.45 * sr));  // still has both speech blocks + kept pause
+
+  // Short internal gap should be preserved.
+  std::vector<float> short_gap;
+  {
+    auto a = tone(static_cast<size_t>(0.2 * sr), 0.5f);
+    auto b = tone(static_cast<size_t>(0.2 * sr), 0.4f);
+    short_gap.insert(short_gap.end(), a.begin(), a.end());
+    short_gap.insert(short_gap.end(), static_cast<size_t>(0.15 * sr), 0.f);
+    short_gap.insert(short_gap.end(), b.begin(), b.end());
+  }
+  const std::vector<float> kept = zipvoice_compress_long_pauses(short_gap, sr);
+  CHECK(kept.size() == short_gap.size());
 }

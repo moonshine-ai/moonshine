@@ -23,7 +23,7 @@
 - The framework and models are optimized for live streaming applications, offering low latency responses by doing a lot of the work while the user is still talking.
 - All speech to text models are based on our [cutting edge research](https://arxiv.org/abs/2602.12241) and trained from scratch, so we can offer [higher accuracy than Whisper Large V3 at the top end](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard), down to tiny 26MB models for constrained deployments.
 - It's easy to integrate across platforms, with the same library running on [Python](#python), [iOS](#ios), [Android](#android), [MacOS](#macos), [Linux](#linux), [Windows](#windows), [Raspberry Pis](#raspberry-pi), [IoT devices](https://www.linkedin.com/posts/petewarden_most-of-the-recent-news-about-ai-seems-to-activity-7384664255242932224-v6Mr/), [microcontrollers](micro/README.md), [DSPs](micro/README.md), and wearables.
-- Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, text to speech, speaker identification (diarization), command recognition, and [conversational agents](#getting-started-with-a-conversational-agent), so you can build your voice application with a single library.
+- Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, text to speech, voice cloning, speaker identification (diarization), command recognition, and [conversational agents](#getting-started-with-a-conversational-agent), so you can build your voice application with a single library.
 - It supports multiple languages, including English, Spanish, Mandarin, Japanese, Korean, Vietnamese, Ukrainian, and Arabic for STT, and English, Spanish, Arabic, German, French, Hindi, Italian, Japanese, Korean, Dutch, Portuguese, Russian, Turkish, Ukrainian, Vietnamese, and Mandarin for TTS.
   
 ## Quickstart
@@ -525,7 +525,35 @@ If a voice is marked as `downloadable` that means if you pass it in to the `Text
 
 #### Voice Cloning
 
-The integrated [ZipVoice model](https://github.com/k2-fsa/ZipVoice) can imitate someone's voice, given a short audio clip.
+The integrated [ZipVoice model](https://github.com/k2-fsa/ZipVoice) can imitate someone's voice, given a short audio clip. Pass the clip to the `TextToSpeech` constructor's `clone` argument, either as a path to a `.wav` file or as a `(pcm, sample_rate)` pair of mono float samples. You can also pass `clone_transcript`, the text spoken in the clip; when omitted, Moonshine auto-transcribes the clip with its ASR model before cloning (this takes a few extra seconds on first use):
+
+```python
+from moonshine_voice import TextToSpeech
+import importlib.resources;
+
+clone_path = importlib.resources.files("moonshine_voice.assets").joinpath("clone-test.wav")
+clone_transcript = "Ever tried. Ever failed. No matter. Try Again. Fail again. Fail better."
+
+tts = TextToSpeech(
+    "en-us",
+    clone=clone_path,
+    clone_transcript=clone_transcript,
+)
+tts.say("Ask not what your country can do for you, but what you can do for your country")
+tts.wait()
+```
+
+The ZipVoice engine is selected automatically when `clone` is set, so no `voice` argument is needed (passing a voice together with `clone` raises an error). 
+
+You can also try cloning from the command line. Since you won't always have easy access to a clean transcript of the speech you want to clone from, you can leave it out and have Moonshine automatically generate one, in both the API and command line.
+
+```bash
+curl -O 'https://github.com/moonshine-ai/moonshine/raw/refs/heads/main/python/src/moonshine_voice/assets/clone-test.wav'
+
+python3 -m moonshine_voice.tts \
+  --clone clone-test.wav \
+  --text "I am so excited about Moonshine Voice's text to speech"
+```
 
 #### Voice Samples
 
@@ -533,7 +561,7 @@ To help you choose a voice, here are sample clips of each one saying "Welcome to
 
 ##### ZipVoice
 
-These voices were created using the zero-shot voice cloning capabilities of [ZipVoice](https://github.com/k2-fsa/ZipVoice), a high-quality flow-matching TTS model from the k2-fsa team. It takes longer to generate than Kokoro or PiperTTS, but offers voice cloning and more realistic speech.
+These voices were created using the zero-shot voice cloning capabilities of [ZipVoice](https://github.com/k2-fsa/ZipVoice), a high-quality flow-matching TTS model from the k2-fsa team. It takes significantly longer to generate than Kokoro or PiperTTS, but offers [voice cloning](#voice-cloning) and more realistic speech.
 
 | | | |
 | --- | --- | --- |
@@ -1186,6 +1214,8 @@ Use `list_tts_languages()`, `list_tts_voices()`, and `get_tts_voice_catalog()` t
   - `options`: Optional mapping of string keys to strings, numbers, or booleans, passed through to the native option parser (see below). The Python binding always sets `g2p_root` to the resolved asset directory; do not rely on overriding that key for a different layout—use `asset_root` / `tts_root`-style options instead.
   - `asset_root`: Optional directory to use as the TTS cache or as the on-disk asset tree. When `download` is true, downloads go under this root when set; when false, this path must already contain the expected `g2p_root` layout.
   - `download`: When true (default), missing TTS assets are downloaded from `https://download.moonshine.ai/tts/`. When false, `asset_root` is required and must already contain the files the native layer expects.
+  - `clone`: Optional reference clip for ZipVoice voice cloning; either a path to a `.wav` file or a `(pcm, sample_rate)` pair of mono float PCM. When set, the ZipVoice engine is used automatically; passing `voice` together with `clone` raises an error.
+  - `clone_transcript`: Optional transcript of the `clone` clip (recommended for better cloning quality; requires `clone`).
 
 - `language`: Read-only property returning the normalized language tag in use.
 
@@ -1218,6 +1248,7 @@ Use `list_tts_languages()`, `list_tts_voices()`, and `get_tts_voice_catalog()` t
 - `piper_onnx` / `piper_model_onnx`, `piper_onnx_json`, `piper_voices_dir` / `voices_dir`, `piper_voices_json_dir` / `voices_json_dir`: Override paths for Piper model, JSON sidecar, and voice directories.
 - `normalize_audio` / `piper_normalize_audio` (legacy alias), `output_volume` / `piper_output_volume` (legacy alias): Shared post-synthesis effects applied to both Kokoro and Piper output (peak-normalize, apply gain, then clip to `[-1, 1]`).
 - `piper_noise_scale` / `piper_noise_scale_override`, `piper_noise_w` / `piper_noise_w_override`: Piper inference tuning (see native option parsing for types).
+- `zipvoice_clone_sample_rate` / `clone_sample_rate`, `zipvoice_clone_transcript` / `clone_transcript`: Sample rate and transcript for a caller-supplied ZipVoice reference clip (memory key `zipvoice/clone_audio`); the Python `clone` / `clone_transcript` constructor arguments set these for you.
 
 Additional keys are forwarded to the G2P option parser (language-specific ONNX overrides, feature flags, and so on).
 

@@ -1105,19 +1105,19 @@ TEST_CASE("moonshine-tts-zipvoice-synthesis") {
   }
 
   SUBCASE("user-pcm-with-explicit-transcript") {
-    // A short synthetic reference clip (silence + tone) suffices to exercise the memory + prompt path.
+    // A short synthetic reference clip (silence + tone) suffices to exercise the memory + clone path.
     std::vector<float> pcm(24000, 0.f);
     for (size_t i = 0; i < pcm.size(); ++i) {
       pcm[i] = 0.05f * std::sin(2.0 * 3.14159265 * 150.0 * i / 24000.0);
     }
-    const char* filenames[] = {"zipvoice/prompt_audio"};
+    const char* filenames[] = {"zipvoice/clone_audio"};
     const uint8_t* mem[] = {reinterpret_cast<const uint8_t*>(pcm.data())};
     const uint64_t sizes[] = {pcm.size() * sizeof(float)};
     const moonshine_option_t create_opts[] = {
         {"voice", "zipvoice"},
         {"g2p_root", g2p_root_str.c_str()},
-        {"zipvoice_prompt_sample_rate", "24000"},
-        {"zipvoice_prompt_transcript", "This is a reference clip."},
+        {"zipvoice_clone_sample_rate", "24000"},
+        {"zipvoice_clone_transcript", "This is a reference clip."},
     };
     const int32_t h = moonshine_create_tts_synthesizer_from_memory(
         "en_us", filenames, 1, mem, sizes, create_opts,
