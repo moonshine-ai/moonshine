@@ -91,5 +91,5 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
 fi
 
 if [[ "$1" == "upload" ]]; then
-	twine upload --skip-existing dist/*
+	twine upload --verbose --skip-existing dist/*
 fi
