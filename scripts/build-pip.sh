@@ -17,6 +17,11 @@ fi
 cmake ..
 cmake --build . --config Release
 
+# Drop stale native libs from other platforms (e.g. macOS dylibs left in the
+# tree when this script runs inside Docker with the host repo bind-mounted).
+rm -f ${PYTHON_DIR}/src/moonshine_voice/libmoonshine.* \
+	${PYTHON_DIR}/src/moonshine_voice/libonnxruntime.*
+
 cp ${CORE_BUILD_DIR}/libmoonshine.* ${PYTHON_DIR}/src/moonshine_voice/
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -86,5 +91,5 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
 fi
 
 if [[ "$1" == "upload" ]]; then
-	twine upload dist/*
+	twine upload --skip-existing dist/*
 fi
