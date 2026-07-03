@@ -92,7 +92,12 @@ std::vector<std::string> parse_class_list_json(const std::string &raw) {
 
 }  // namespace
 
-SpellingModel::SpellingModel(bool log_ort_run) : log_ort_run(log_ort_run) {
+SpellingModel::SpellingModel(bool log_ort_run,
+                             const std::vector<std::string> &ort_provider_names,
+                             const std::string &coreml_cache_dir)
+    : log_ort_run(log_ort_run),
+      ort_provider_names_(ort_provider_names),
+      coreml_cache_dir_(coreml_cache_dir) {
   ort_api_ = OrtGetApiBase()->GetApi(ORT_API_VERSION);
   LOG_ORT_ERROR(ort_api_,
                 ort_api_->CreateEnv(ORT_LOGGING_LEVEL_WARNING, "SpellingModel",
@@ -145,6 +150,8 @@ void SpellingModel::initialize_session_options() {
                               ort_session_options_,
                               "session.disable_prepacking", "1"));
   LOG_ORT_ERROR(ort_api_, ort_api_->DisableCpuMemArena(ort_session_options_));
+  ort_configure_execution_providers(ort_api_, ort_session_options_, ort_provider_names_,
+                                    coreml_cache_dir_);
 }
 
 void SpellingModel::apply_default_metadata() {

@@ -22,6 +22,7 @@ struct ZipVoiceTTSOptions {
   double speed = 1.0;
   MoonshineG2POptions g2p_options{};
   std::vector<std::string> ort_provider_names{};
+  std::string coreml_cache_dir{};
   /// Peak-normalize the final waveform. Off by default: ZipVoice matches the reference clip's
   /// loudness, so peak normalization would override that. Clipping to ``[-1, 1]`` is always applied.
   bool normalize_audio = false;

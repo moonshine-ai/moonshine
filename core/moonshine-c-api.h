@@ -279,7 +279,11 @@ MOONSHINE_EXPORT const char *moonshine_transcript_to_string(
    example MOONSHINE_MODEL_ARCH_BASE or MOONSHINE_MODEL_ARCH_TINY_STREAMING.
 
    The `options` parameter is used to set any custom options for the
-   transcriber. Pass ``"spelling_model_path"`` with a path to a
+   transcriber. Recognized options include ``log_ort_run`` (bool),
+   ``ort_providers`` (comma-separated execution provider names such as
+   ``CoreML,CPU`` on macOS or ``NNAPI,CPU`` on Android; default is CPU-only),
+   and ``coreml_cache_dir`` (directory for CoreML compiled model cache).
+   Pass ``"spelling_model_path"`` with a path to a
    spelling-CNN ``.ort`` file (e.g.
    ``https://download.moonshine.ai/model/spelling-en/spelling_cnn.ort``)
    to enable alphanumeric spelling fusion via

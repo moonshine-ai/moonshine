@@ -147,6 +147,10 @@ void parse_transcriber_options(const OptionVector &options,
       out_options.word_timestamps = bool_from_string(option_value);
     } else if (option_name == "spelling_model_path") {
       out_options.spelling_model_path = option_value;
+    } else if (option_name == "ort_providers" || option_name == "ort_provider") {
+      out_options.ort_provider_names = ort_parse_provider_names(option_value);
+    } else if (option_name == "coreml_cache_dir") {
+      out_options.coreml_cache_dir = option_value;
     } else {
       throw std::runtime_error("Unknown transcriber option: '" + option_name +
                                "', value=" + option_value);

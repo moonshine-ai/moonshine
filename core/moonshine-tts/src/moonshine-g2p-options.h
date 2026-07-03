@@ -103,6 +103,8 @@ struct MoonshineG2POptions {
 
   std::filesystem::path g2p_root{};
   bool use_cuda = false;
+  std::vector<std::string> ort_provider_names{};
+  std::string coreml_cache_dir{};
   bool spanish_with_stress = true;
   bool spanish_narrow_obstruents = true;
   bool german_with_stress = true;

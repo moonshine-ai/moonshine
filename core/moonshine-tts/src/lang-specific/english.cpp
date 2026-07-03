@@ -78,8 +78,11 @@ std::string pick_english_heteronym_ipa(std::vector<std::string> alts, bool prefe
 EnglishRuleG2p::EnglishRuleG2p(std::filesystem::path dict_tsv,
                                std::optional<std::filesystem::path> oov_onnx, bool use_cuda,
                                std::optional<EnglishOnnxAuxMemory> oov_from_memory,
-                               bool prefer_british_heteronyms)
+                               bool prefer_british_heteronyms,
+                               const std::vector<std::string>& ort_providers,
+                               const std::string& coreml_cache_dir)
     : impl_(std::make_unique<Impl>()), prefer_british_heteronyms_(prefer_british_heteronyms) {
+  (void)use_cuda;
   if (!std::filesystem::is_regular_file(dict_tsv)) {
     throw std::runtime_error("English G2P: dictionary not found at " + dict_tsv.generic_string());
   }
@@ -89,16 +92,19 @@ EnglishRuleG2p::EnglishRuleG2p(std::filesystem::path dict_tsv,
     impl_->oov = std::make_unique<OnnxOovG2p>(impl_->env, oov_from_memory->model_onnx.data(),
                                               oov_from_memory->model_onnx.size(),
                                               nlohmann::json::parse(oov_from_memory->onnx_config_json_utf8),
-                                              use_cuda);
+                                              ort_providers, coreml_cache_dir);
   } else if (oov_onnx && std::filesystem::is_regular_file(*oov_onnx)) {
-    impl_->oov = std::make_unique<OnnxOovG2p>(impl_->env, *oov_onnx, use_cuda);
+    impl_->oov = std::make_unique<OnnxOovG2p>(impl_->env, *oov_onnx, ort_providers, coreml_cache_dir);
   }
 }
 
 EnglishRuleG2p::EnglishRuleG2p(std::string dict_tsv_utf8, std::optional<std::filesystem::path> oov_onnx,
                                bool use_cuda, std::optional<EnglishOnnxAuxMemory> oov_from_memory,
-                               bool prefer_british_heteronyms)
+                               bool prefer_british_heteronyms,
+                               const std::vector<std::string>& ort_providers,
+                               const std::string& coreml_cache_dir)
     : impl_(std::make_unique<Impl>()), prefer_british_heteronyms_(prefer_british_heteronyms) {
+  (void)use_cuda;
   if (dict_tsv_utf8.empty()) {
     throw std::runtime_error("English G2P: empty dictionary buffer");
   }
@@ -108,9 +114,9 @@ EnglishRuleG2p::EnglishRuleG2p(std::string dict_tsv_utf8, std::optional<std::fil
     impl_->oov = std::make_unique<OnnxOovG2p>(impl_->env, oov_from_memory->model_onnx.data(),
                                               oov_from_memory->model_onnx.size(),
                                               nlohmann::json::parse(oov_from_memory->onnx_config_json_utf8),
-                                              use_cuda);
+                                              ort_providers, coreml_cache_dir);
   } else if (oov_onnx && std::filesystem::is_regular_file(*oov_onnx)) {
-    impl_->oov = std::make_unique<OnnxOovG2p>(impl_->env, *oov_onnx, use_cuda);
+    impl_->oov = std::make_unique<OnnxOovG2p>(impl_->env, *oov_onnx, ort_providers, coreml_cache_dir);
   }
 }
 

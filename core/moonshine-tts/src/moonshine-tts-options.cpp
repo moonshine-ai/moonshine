@@ -1,5 +1,6 @@
 #include "moonshine-tts-options.h"
 
+#include "ort-utils.h"
 #include "string-utils.h"
 
 #include <algorithm>
@@ -203,6 +204,10 @@ void MoonshineTTSOptions::parse_options(
       }
     } else if (key == "log_profiling") {
       log_profiling = bool_from_string(value.c_str());
+    } else if (key == "ort_providers" || key == "ort_provider") {
+      ort_provider_names = ort_parse_provider_names(trim(value));
+    } else if (key == "coreml_cache_dir") {
+      coreml_cache_dir = trim(value);
     } else {
       g2p_pairs.push_back(entry);
     }

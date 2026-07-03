@@ -20,6 +20,7 @@ add_subdirectory(
 
 add_library(ort-utils STATIC
     ort-utils.cpp
+    ort-utils-ep.cpp
     moonshine-ort-allocator.cpp
     moonshine-tensor-view.cpp
     moonshine-tensor.cpp
@@ -75,3 +76,23 @@ target_include_directories(ort-utils-test PRIVATE
 target_link_libraries(ort-utils-test PRIVATE
     ort-utils
 )
+
+add_executable(ort-utils-ep-test ort-utils-ep-test.cpp)
+
+target_include_directories(ort-utils-ep-test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}
+    ${CMAKE_CURRENT_LIST_DIR}/../moonshine-utils
+    ${CMAKE_CURRENT_LIST_DIR}/../third-party/doctest
+    ${CMAKE_CURRENT_LIST_DIR}/../third-party/onnxruntime/include
+)
+
+target_link_libraries(ort-utils-ep-test PRIVATE
+    ort-utils
+)
+
+if(APPLE AND ONNXRUNTIME_LIB_PATH MATCHES "\\.a$")
+  target_link_libraries(ort-utils-ep-test PRIVATE
+    "-framework CoreFoundation"
+    "-framework Foundation"
+  )
+endif()

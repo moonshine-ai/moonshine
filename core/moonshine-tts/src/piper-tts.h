@@ -38,6 +38,7 @@ struct PiperTTSOptions {
   double speed = 1.0;
   MoonshineG2POptions g2p_options{};
   std::vector<std::string> ort_provider_names{};
+  std::string coreml_cache_dir{};
   /// Match ``piper-tts`` ``SynthesisConfig.normalize_audio`` (scale chunk to full range before clip).
   bool normalize_audio = true;
   /// Match ``SynthesisConfig.volume`` (applied after normalize).

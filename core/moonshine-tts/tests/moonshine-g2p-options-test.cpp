@@ -45,6 +45,8 @@ TEST_CASE("MoonshineG2POptions parse_options accepts every known option") {
   all.emplace_back("path_root", "/tmp/p");
   all.emplace_back("model_root", "/tmp/m");
   all.emplace_back("use_cuda", "false");
+  all.emplace_back("ort_providers", "CoreML,CPU");
+  all.emplace_back("coreml_cache_dir", "/tmp/coreml-cache");
   all.emplace_back("spanish_with_stress", "true");
   all.emplace_back("spanish_narrow_obstruents", "true");
   all.emplace_back("german_dict_path", "custom/de.tsv");
@@ -97,6 +99,10 @@ TEST_CASE("MoonshineG2POptions parse_options accepts every known option") {
 
   CHECK(o.g2p_root == std::filesystem::path{"/tmp/m"});
   CHECK(o.use_cuda == false);
+  REQUIRE(o.ort_provider_names.size() == 2);
+  CHECK(o.ort_provider_names[0] == "coreml");
+  CHECK(o.ort_provider_names[1] == "cpu");
+  CHECK(o.coreml_cache_dir == "/tmp/coreml-cache");
   CHECK(o.german_vocoder_stress == false);
   CHECK(o.relative_asset_path(kG2pGermanDictKey) == std::filesystem::path{"custom/de.tsv"});
   CHECK(o.relative_asset_path(kG2pFrenchCsvDirKey) == std::filesystem::path{"custom/frdir"});

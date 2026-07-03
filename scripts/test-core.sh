@@ -20,6 +20,7 @@ ${REPO_ROOT_DIR}/core/bin-tokenizer/build/bin-tokenizer-test
 ${REPO_ROOT_DIR}/core/third-party/onnxruntime/build/onnxruntime-test
 ${REPO_ROOT_DIR}/core/moonshine-utils/build/debug-utils-test
 ${REPO_ROOT_DIR}/core/moonshine-utils/build/string-utils-test
+${REPO_ROOT_DIR}/core/ort-utils/build/ort-utils-ep-test
 ${REPO_ROOT_DIR}/core/build/resampler-test
 ${REPO_ROOT_DIR}/core/build/voice-activity-detector-test
 ${REPO_ROOT_DIR}/core/build/transcriber-test
@@ -49,6 +50,8 @@ if [[ ! -x "${MOONSHINE_TTS_BUILD_DIR}/utf8_utils_test" ]]; then
 fi
 
 "${MOONSHINE_TTS_BUILD_DIR}/utf8_utils_test"
+"${MOONSHINE_TTS_BUILD_DIR}/moonshine_g2p_options_test"
+"${MOONSHINE_TTS_BUILD_DIR}/moonshine_tts_options_test"
 "${MOONSHINE_TTS_BUILD_DIR}/german_rule_g2p_test"
 "${MOONSHINE_TTS_BUILD_DIR}/dutch_rule_g2p_test"
 "${MOONSHINE_TTS_BUILD_DIR}/italian_rule_g2p_test"

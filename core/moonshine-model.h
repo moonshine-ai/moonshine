@@ -12,6 +12,9 @@
 #include "onnxruntime_c_api.h"
 #include "word-alignment.h"
 
+#include <string>
+#include <vector>
+
 struct MoonshineModel {
   const OrtApi *ort_api;
   OrtEnv *ort_env;
@@ -61,7 +64,9 @@ struct MoonshineModel {
   int last_cross_attn_enc_len = 0;
   int last_cross_attn_steps = 0;
 
-  MoonshineModel(bool log_ort_run = false, float max_tokens_per_second = 6.5f);
+  MoonshineModel(bool log_ort_run = false, float max_tokens_per_second = 6.5f,
+                 const std::vector<std::string> &ort_provider_names = {},
+                 const std::string &coreml_cache_dir = {});
   ~MoonshineModel();
 
   int load(const char *encoder_model_path, const char *decoder_model_path,
