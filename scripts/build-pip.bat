@@ -83,7 +83,7 @@ if errorlevel 1 exit /b 1
 
 REM Upload to PyPI if "upload" argument is provided
 if "%1"=="upload" (
-    twine upload --skip-existing dist\*
+    twine upload --verbose --skip-existing dist\*
     if errorlevel 1 exit /b 1
 )
 
