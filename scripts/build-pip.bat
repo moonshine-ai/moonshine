@@ -28,6 +28,9 @@ if errorlevel 1 exit /b 1
 cmake --build . --config Release
 if errorlevel 1 exit /b 1
 
+del /Q "%PYTHON_DIR%\src\moonshine_voice\libmoonshine.*" 2>nul
+del /Q "%PYTHON_DIR%\src\moonshine_voice\libonnxruntime.*" 2>nul
+
 copy /Y "%CORE_BUILD_DIR%\Release\*.dll" "%PYTHON_DIR%\src\moonshine_voice\"
 if errorlevel 1 exit /b 1
 
@@ -80,7 +83,7 @@ if errorlevel 1 exit /b 1
 
 REM Upload to PyPI if "upload" argument is provided
 if "%1"=="upload" (
-    twine upload dist\*
+    twine upload --skip-existing dist\*
     if errorlevel 1 exit /b 1
 )
 
