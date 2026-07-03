@@ -134,6 +134,8 @@ struct TranscriberOptions {
   float speaker_id_cluster_threshold = 0.6f;
   std::string save_input_wav_path = "";
   bool log_ort_run = false;
+  std::vector<std::string> ort_provider_names{};
+  std::string coreml_cache_dir{};
   bool return_audio_data = true;
   bool log_output_text = false;
   bool word_timestamps = false;

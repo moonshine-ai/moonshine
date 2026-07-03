@@ -251,10 +251,12 @@ std::optional<RuleBasedG2pInstance> try_english(std::string_view trimmed,
   if (dict_from_files) {
     std::string dict_utf8 = options.read_utf8_asset(kG2pEnglishDictKey);
     out.engine = std::make_unique<EnglishRuleG2p>(std::move(dict_utf8), oov_onnx, options.use_cuda,
-                                                  oov_mem, prefer_british);
+                                                  oov_mem, prefer_british, options.ort_provider_names,
+                                                  options.coreml_cache_dir);
   } else {
-    out.engine =
-        std::make_unique<EnglishRuleG2p>(dict_tsv, oov_onnx, options.use_cuda, oov_mem, prefer_british);
+    out.engine = std::make_unique<EnglishRuleG2p>(dict_tsv, oov_onnx, options.use_cuda, oov_mem,
+                                                  prefer_british, options.ort_provider_names,
+                                                  options.coreml_cache_dir);
   }
   return out;
 }

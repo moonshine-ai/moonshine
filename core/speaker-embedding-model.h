@@ -9,6 +9,9 @@
 
 #include "onnxruntime_c_api.h"
 
+#include <string>
+#include <vector>
+
 struct SpeakerEmbeddingModel {
   static constexpr size_t ideal_input_size = 80000;
   static constexpr size_t embedding_size = 512;
@@ -25,7 +28,9 @@ struct SpeakerEmbeddingModel {
   const char *embedding_mmapped_data = nullptr;
   size_t embedding_mmapped_data_size = 0;
 
-  SpeakerEmbeddingModel(bool log_ort_run = false);
+  SpeakerEmbeddingModel(bool log_ort_run = false,
+                        const std::vector<std::string> &ort_provider_names = {},
+                        const std::string &coreml_cache_dir = {});
   ~SpeakerEmbeddingModel();
 
   int load(const char *speaker_embedding_model_path);

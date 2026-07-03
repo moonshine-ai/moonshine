@@ -2,6 +2,7 @@
 #include "g2p-path.h"
 #include "moonshine-g2p-options.h"
 #include "ort-onnx-external-data.h"
+#include "ort-session-options.h"
 #include "utf8-utils.h"
 
 #include <nlohmann/json.h>
@@ -26,29 +27,27 @@ extern "C" {
 namespace moonshine_tts {
 namespace {
 
-Ort::SessionOptions make_session_options(bool use_cuda) {
-  Ort::SessionOptions session_options;
-  session_options.SetIntraOpNumThreads(1);
-  session_options.SetInterOpNumThreads(1);
-  (void)use_cuda;
-  return session_options;
-}
-
 std::unique_ptr<Ort::Session> open_session(Ort::Env& env, const std::filesystem::path& model_path,
-                                           bool use_cuda) {
+                                           const std::vector<std::string>& ort_providers,
+                                           const std::string& coreml_cache_dir) {
 #ifdef _WIN32
   const std::wstring w = model_path.wstring();
-  return std::make_unique<Ort::Session>(env, w.c_str(), make_session_options(use_cuda));
+  return std::make_unique<Ort::Session>(
+      env, w.c_str(), make_g2p_ort_session_options(ort_providers, coreml_cache_dir));
 #else
   const std::string u8 = model_path.string();
-  return std::make_unique<Ort::Session>(env, u8.c_str(), make_session_options(use_cuda));
+  return std::make_unique<Ort::Session>(
+      env, u8.c_str(), make_g2p_ort_session_options(ort_providers, coreml_cache_dir));
 #endif
 }
 
 std::unique_ptr<Ort::Session> open_session_memory(Ort::Env& env, const void* data, size_t len,
-                                                  bool use_cuda, const MoonshineG2POptions* opt,
+                                                  const std::vector<std::string>& ort_providers,
+                                                  const std::string& coreml_cache_dir,
+                                                  const MoonshineG2POptions* opt,
                                                   std::string_view model_map_key) {
-  Ort::SessionOptions so = make_session_options(use_cuda);
+  Ort::SessionOptions so =
+      make_g2p_ort_session_options(ort_providers, coreml_cache_dir);
   if (opt != nullptr && !model_map_key.empty()) {
     ort_add_external_initializer_files_for_onnx_model_buffer(so, opt->files, model_map_key);
   }
@@ -679,7 +678,12 @@ ChineseTokPosOnnx::ChineseTokPosOnnx(const MoonshineG2POptions* opt, std::string
     : env_(ORT_LOGGING_LEVEL_WARNING, "moonshine_chinese_tok_pos"),
       mem_(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)),
       model_dir_(std::move(model_dir_fallback)) {
+  (void)use_cuda;
   const MoonshineG2POptions* opt_ptr = opt;
+  const std::vector<std::string> ort_providers =
+      opt_ptr != nullptr ? opt_ptr->ort_provider_names : std::vector<std::string>{};
+  const std::string coreml_cache_dir =
+      opt_ptr != nullptr ? opt_ptr->coreml_cache_dir : std::string{};
   std::string meta_json;
   if (!bundle_load_utf8(opt_ptr, onnx_bundle_key, "meta.json", model_dir_, meta_json)) {
     throw std::runtime_error("ChineseTokPosOnnx: missing meta.json (memory or disk under " +
@@ -703,13 +707,13 @@ ChineseTokPosOnnx::ChineseTokPosOnnx(const MoonshineG2POptions* opt, std::string
       !onnx_model_storage_.empty()) {
     const std::string model_map_key = g2p_bundle_file_key(onnx_bundle_key, onnx_name);
     session_ = open_session_memory(env_, onnx_model_storage_.data(), onnx_model_storage_.size(),
-                                   use_cuda, opt_ptr, model_map_key);
+                                   ort_providers, coreml_cache_dir, opt_ptr, model_map_key);
   } else {
     const auto onnx_path = resolve_prefer_ort_model(model_dir_, onnx_name);
     if (!std::filesystem::is_regular_file(onnx_path)) {
       throw std::runtime_error("ChineseTokPosOnnx: missing " + onnx_path.string());
     }
-    session_ = open_session(env_, onnx_path, use_cuda);
+    session_ = open_session(env_, onnx_path, ort_providers, coreml_cache_dir);
   }
   {
     Ort::AllocatorWithDefaultOptions alloc;

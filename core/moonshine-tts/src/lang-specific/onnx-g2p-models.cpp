@@ -1,6 +1,7 @@
 #include "onnx-g2p-models.h"
 
 #include "constants.h"
+#include "ort-session-options.h"
 #include "utf8-utils.h"
 
 #include <array>
@@ -16,27 +17,25 @@ namespace moonshine_tts {
 
 namespace {
 
-Ort::SessionOptions make_session_options(bool use_cuda) {
-  Ort::SessionOptions session_options;
-  session_options.SetIntraOpNumThreads(1);
-  session_options.SetInterOpNumThreads(1);
-  (void)use_cuda;
-  // Optional CUDA: link a GPU ORT build and append execution provider here if needed.
-  return session_options;
-}
-
-Ort::Session open_session(Ort::Env& env, const std::filesystem::path& model_path, bool use_cuda) {
+Ort::Session open_session(Ort::Env& env, const std::filesystem::path& model_path,
+                        const std::vector<std::string>& ort_providers,
+                        const std::string& coreml_cache_dir) {
 #ifdef _WIN32
   const std::wstring w = model_path.wstring();
-  return Ort::Session(env, w.c_str(), make_session_options(use_cuda));
+  return Ort::Session(env, w.c_str(),
+                      make_g2p_ort_session_options(ort_providers, coreml_cache_dir));
 #else
   const std::string u8 = model_path.string();
-  return Ort::Session(env, u8.c_str(), make_session_options(use_cuda));
+  return Ort::Session(env, u8.c_str(),
+                      make_g2p_ort_session_options(ort_providers, coreml_cache_dir));
 #endif
 }
 
-Ort::Session open_session_memory(Ort::Env& env, const void* data, size_t len, bool use_cuda) {
-  return Ort::Session(env, data, len, make_session_options(use_cuda));
+Ort::Session open_session_memory(Ort::Env& env, const void* data, size_t len,
+                                 const std::vector<std::string>& ort_providers,
+                                 const std::string& coreml_cache_dir) {
+  return Ort::Session(env, data, len,
+                      make_g2p_ort_session_options(ort_providers, coreml_cache_dir));
 }
 
 std::vector<int64_t> encode_chars_for_model(
@@ -85,13 +84,19 @@ int argmax_vocab_row(const float* logits, int64_t vocab, int time_index) {
 
 }  // namespace
 
-OnnxOovG2p::OnnxOovG2p(Ort::Env& env, const std::filesystem::path& model_onnx, bool use_cuda)
-    : tab_(load_oov_tables(model_onnx)), session_(open_session(env, model_onnx, use_cuda)) {}
+OnnxOovG2p::OnnxOovG2p(Ort::Env& env, const std::filesystem::path& model_onnx,
+                       const std::vector<std::string>& ort_providers,
+                       const std::string& coreml_cache_dir)
+    : tab_(load_oov_tables(model_onnx)),
+      session_(open_session(env, model_onnx, ort_providers, coreml_cache_dir)) {}
 
 OnnxOovG2p::OnnxOovG2p(Ort::Env& env, const void* model_onnx_bytes, size_t model_onnx_size,
-                       const nlohmann::json& onnx_config, bool use_cuda)
+                       const nlohmann::json& onnx_config,
+                       const std::vector<std::string>& ort_providers,
+                       const std::string& coreml_cache_dir)
     : tab_(load_oov_tables_from_json(onnx_config, "onnx-config (memory)")),
-      session_(open_session_memory(env, model_onnx_bytes, model_onnx_size, use_cuda)) {}
+      session_(open_session_memory(env, model_onnx_bytes, model_onnx_size, ort_providers,
+                                   coreml_cache_dir)) {}
 
 std::vector<std::string> OnnxOovG2p::predict_phonemes(const std::string& word) {
   if (word.empty()) {

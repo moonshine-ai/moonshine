@@ -9,6 +9,8 @@
 #include "moonshine-tts-options.h"
 #include "utf8-utils.h"
 
+#include "ort-session-options.h"
+
 #include <onnxruntime_cxx_api.h>
 
 #include <nlohmann/json.h>
@@ -277,15 +279,6 @@ std::vector<float> resample_linear(const std::vector<float>& x, int src_sr, int 
   return y;
 }
 
-Ort::SessionOptions make_ort_options(const std::vector<std::string>& names) {
-  (void)names;
-  Ort::SessionOptions opts;
-  opts.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-  opts.SetIntraOpNumThreads(0);
-  opts.SetInterOpNumThreads(0);
-  return opts;
-}
-
 void load_piper_onnx_json(const std::filesystem::path& json_path,
                           std::unordered_map<std::string, std::vector<int64_t>>& phoneme_id_map, int& native_sample_rate,
                           float& noise_scale, float& length_scale_default, float& noise_w, int& num_speakers) {
@@ -406,6 +399,7 @@ struct PiperTTS::Impl {
   bool user_voices_dir_ = false;
   bool explicit_onnx_file_ = false;
   std::vector<std::string> ort_provider_names_{};
+  std::string coreml_cache_dir_{};
   bool normalize_audio_ = true;
   float output_volume_ = 1.F;
   std::optional<float> noise_scale_override_{};
@@ -506,7 +500,8 @@ struct PiperTTS::Impl {
     for (const auto& e : phoneme_id_map_) {
       phoneme_map_keys_.insert(e.first);
     }
-    Ort::SessionOptions session_opts = make_ort_options(ort_provider_names_);
+    Ort::SessionOptions session_opts =
+        make_ort_session_options(ort_provider_names_, coreml_cache_dir_);
     const auto oit = tts_asset_files_.entries.find(k_piper_onnx);
     if (oit != tts_asset_files_.entries.end()) {
       FileInformation& of = oit->second;
@@ -530,6 +525,7 @@ struct PiperTTS::Impl {
   explicit Impl(const PiperTTSOptions& opt)
       : speed_(opt.speed),
         ort_provider_names_(opt.ort_provider_names),
+        coreml_cache_dir_(opt.coreml_cache_dir),
         normalize_audio_(opt.normalize_audio),
         output_volume_(opt.output_volume),
         noise_scale_override_(opt.piper_noise_scale_override),

@@ -10,7 +10,9 @@
 #include "ort-utils.h"
 #include "moonshine-tensor-view.h"
 
-SpeakerEmbeddingModel::SpeakerEmbeddingModel(bool log_ort_run)
+SpeakerEmbeddingModel::SpeakerEmbeddingModel(
+    bool log_ort_run, const std::vector<std::string> &ort_provider_names,
+    const std::string &coreml_cache_dir)
     : embedding_session(nullptr), log_ort_run(log_ort_run) {
   ort_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
   LOG_ORT_ERROR(ort_api, ort_api->CreateEnv(ORT_LOGGING_LEVEL_WARNING,
@@ -32,6 +34,8 @@ SpeakerEmbeddingModel::SpeakerEmbeddingModel(bool log_ort_run)
                 ort_api->AddSessionConfigEntry(
                     ort_session_options, "session.disable_prepacking", "1"));
   LOG_ORT_ERROR(ort_api, ort_api->DisableCpuMemArena(ort_session_options));
+  ort_configure_execution_providers(ort_api, ort_session_options, ort_provider_names,
+                                    coreml_cache_dir);
 }
 
 SpeakerEmbeddingModel::~SpeakerEmbeddingModel() {

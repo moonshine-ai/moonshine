@@ -55,6 +55,7 @@ struct MoonshineTTSOptions {
   std::string voice{};
   double speed = 1.0;
   std::vector<std::string> ort_provider_names{};
+  std::string coreml_cache_dir{};
   MoonshineG2POptions g2p_options{};
   FileInformationMap files{};
   /// ``kokoro``, ``piper``, or ``auto`` (pick Kokoro when ``kokoro_tts_lang_supported(language, g2p_options)``).

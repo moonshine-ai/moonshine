@@ -2,6 +2,7 @@
 
 #include "moonshine-asset-catalog.h"
 #include "g2p-path.h"
+#include "ort-utils.h"
 #include "string-utils.h"
 
 #include <filesystem>
@@ -45,6 +46,9 @@ bool is_known_g2p_option(std::string_view key) {
       "path_root",
       "model_root",
       "use_cuda",
+      "ort_providers",
+      "ort_provider",
+      "coreml_cache_dir",
       "spanish_with_stress",
       "spanish_narrow_obstruents",
       "german_dict_path",
@@ -203,6 +207,10 @@ void MoonshineG2POptions::parse_options(
       g2p_root = std::filesystem::path(trim(value));
     } else if (key == "use_cuda") {
       use_cuda = bool_from_string(v);
+    } else if (key == "ort_providers" || key == "ort_provider") {
+      ort_provider_names = ort_parse_provider_names(trim(value));
+    } else if (key == "coreml_cache_dir") {
+      coreml_cache_dir = trim(value);
     } else if (key == "spanish_with_stress") {
       spanish_with_stress = bool_from_string(v);
     } else if (key == "spanish_narrow_obstruents") {

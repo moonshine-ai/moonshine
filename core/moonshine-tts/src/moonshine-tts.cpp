@@ -11,8 +11,9 @@
 #include "zipvoice-tts.h"
 #include "zipvoice-voices.h"
 
-#include <onnxruntime_cxx_api.h>
+#include "ort-session-options.h"
 
+#include <onnxruntime_cxx_api.h>
 #include <nlohmann/json.h>
 
 extern "C" {
@@ -621,14 +622,6 @@ void read_kokorovoice(const std::filesystem::path& path, std::vector<float>& out
   read_kokorovoice_bytes(buf.data(), buf.size(), path.string(), out_flat, rows, cols);
 }
 
-Ort::SessionOptions make_ort_options(const std::vector<std::string>& names) {
-  (void)names;
-  Ort::SessionOptions opts;
-  opts.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-  opts.SetIntraOpNumThreads(0);
-  opts.SetInterOpNumThreads(0);
-  return opts;
-}
 
 }  // namespace
 
@@ -690,6 +683,7 @@ PiperTTSOptions make_piper_options(std::string_view language, const MoonshineTTS
   p.speed = opt.speed;
   p.g2p_options = opt.g2p_options;
   p.ort_provider_names = opt.ort_provider_names;
+  p.coreml_cache_dir = opt.coreml_cache_dir;
   p.normalize_audio = opt.normalize_audio;
   p.output_volume = opt.output_volume;
   p.piper_noise_scale_override = opt.piper_noise_scale_override;
@@ -823,6 +817,7 @@ ZipVoiceTTSOptions make_zipvoice_options(std::string_view language, const Moonsh
   z.speed = opt.speed;
   z.g2p_options = opt.g2p_options;
   z.ort_provider_names = opt.ort_provider_names;
+  z.coreml_cache_dir = opt.coreml_cache_dir;
   z.normalize_audio = opt.normalize_audio;
   z.output_volume = opt.output_volume;
   z.distill = opt.zipvoice_distill;
@@ -1022,7 +1017,8 @@ struct KokoroTtsEngine {
       model_fi.free();
       throw std::runtime_error("MoonshineTTS: empty Kokoro ONNX (" + model_path_.string() + ")");
     }
-    Ort::SessionOptions session_opts = make_ort_options(opt.ort_provider_names);
+    Ort::SessionOptions session_opts =
+        make_ort_session_options(opt.ort_provider_names, opt.coreml_cache_dir);
     ort_add_external_initializer_files_for_onnx_model_buffer(session_opts, tts_files_,
                                                                kTtsKokoroModelOnnxKey);
     session_ = Ort::Session(env_, onnx_buf, onnx_len, session_opts);

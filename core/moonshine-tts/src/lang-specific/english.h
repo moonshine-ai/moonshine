@@ -27,12 +27,16 @@ class EnglishRuleG2p : public RuleBasedG2p {
   EnglishRuleG2p(std::filesystem::path dict_tsv, std::optional<std::filesystem::path> oov_onnx,
                  bool use_cuda = false,
                  std::optional<EnglishOnnxAuxMemory> oov_from_memory = std::nullopt,
-                 bool prefer_british_heteronyms = false);
+                 bool prefer_british_heteronyms = false,
+                 const std::vector<std::string>& ort_providers = {},
+                 const std::string& coreml_cache_dir = {});
   /// Lexicon as UTF-8; OOV ONNX may be on-disk or in-memory.
   EnglishRuleG2p(std::string dict_tsv_utf8, std::optional<std::filesystem::path> oov_onnx,
                  bool use_cuda = false,
                  std::optional<EnglishOnnxAuxMemory> oov_from_memory = std::nullopt,
-                 bool prefer_british_heteronyms = false);
+                 bool prefer_british_heteronyms = false,
+                 const std::vector<std::string>& ort_providers = {},
+                 const std::string& coreml_cache_dir = {});
   ~EnglishRuleG2p() override;
 
   EnglishRuleG2p(EnglishRuleG2p&&) noexcept;

@@ -66,8 +66,10 @@ target_include_directories(moonshine_tts_core PUBLIC
 target_include_directories(moonshine_tts_core PRIVATE
   ${_MOONSHINE_TTS_ROOT}/src
   ${_MOONSHINE_CORE_ROOT}/moonshine-utils
+  ${_MOONSHINE_CORE_ROOT}/ort-utils
+  ${_MOONSHINE_CORE_ROOT}/third-party/onnxruntime/include
 )
-target_link_libraries(moonshine_tts_core PUBLIC moonshine_tts_utf8proc moonshine-utils)
+target_link_libraries(moonshine_tts_core PUBLIC moonshine_tts_utf8proc moonshine-utils ort-utils)
 set_target_properties(moonshine_tts_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(MSVC)
   target_compile_options(moonshine_tts_core PRIVATE /utf-8)
@@ -119,6 +121,7 @@ endfunction()
 moonshine_tts_add_test(utf8_utils_test moonshine_tts_core)
 moonshine_tts_add_test(file_information_test moonshine_tts_core)
 moonshine_tts_add_test(moonshine_g2p_options_test moonshine_tts_core)
+moonshine_tts_add_test(moonshine_tts_options_test moonshine_tts_core)
 moonshine_tts_add_test(german_rule_g2p_test moonshine_tts_core)
 moonshine_tts_add_test(dutch_rule_g2p_test moonshine_tts_core)
 moonshine_tts_add_test(italian_rule_g2p_test moonshine_tts_core)
@@ -145,6 +148,7 @@ if(MOONSHINE_TTS_BUILD_ONNX)
   include(${_MOONSHINE_TTS_ROOT}/cmake/moonshine-tts-onnxruntime.cmake)
 
   add_library(moonshine_tts_ort STATIC
+    src/ort-session-options.cpp
     src/ort-onnx-external-data.cpp
     src/lang-specific/onnx-g2p-models.cpp
     src/lang-specific/korean-tok-pos-onnx.cpp
@@ -173,7 +177,9 @@ if(MOONSHINE_TTS_BUILD_ONNX)
   target_link_libraries(moonshine_tts_ort PUBLIC moonshine_tts_core)
   target_include_directories(moonshine_tts_ort PRIVATE
     ${_MOONSHINE_CORE_ROOT}/moonshine-utils
+    ${_MOONSHINE_CORE_ROOT}/ort-utils
   )
+  target_link_libraries(moonshine_tts_ort PUBLIC ort-utils)
   set_target_properties(moonshine_tts_ort PROPERTIES POSITION_INDEPENDENT_CODE ON)
   if(MSVC)
     target_compile_options(moonshine_tts_ort PRIVATE /utf-8)

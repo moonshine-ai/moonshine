@@ -412,6 +412,8 @@ TEST_CASE("moonshine-test-v2") {
         {"speaker_id_cluster_threshold", "0.6"},
         {"return_audio_data", "false"},
         {"log_output_text", "true"},
+        {"ort_providers", "CPU"},
+        {"coreml_cache_dir", "/tmp/moonshine-coreml-cache"},
     };
     const uint64_t options_count = sizeof(options) / sizeof(options[0]);
     std::string root_model_path = "tiny-en";

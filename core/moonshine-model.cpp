@@ -79,7 +79,9 @@ int set_model_options_from_arch(MoonshineModel *model, int32_t model_arch) {
 }
 }  // namespace
 
-MoonshineModel::MoonshineModel(bool log_ort_run, float max_tokens_per_second)
+MoonshineModel::MoonshineModel(bool log_ort_run, float max_tokens_per_second,
+                               const std::vector<std::string> &ort_provider_names,
+                               const std::string &coreml_cache_dir)
     : encoder_session(nullptr),
       decoder_session(nullptr),
       tokenizer(nullptr),
@@ -115,6 +117,8 @@ MoonshineModel::MoonshineModel(bool log_ort_run, float max_tokens_per_second)
                 ort_api->AddSessionConfigEntry(
                     ort_session_options, "session.disable_prepacking", "1"));
   LOG_ORT_ERROR(ort_api, ort_api->DisableCpuMemArena(ort_session_options));
+  ort_configure_execution_providers(ort_api, ort_session_options, ort_provider_names,
+                                    coreml_cache_dir);
 }
 
 MoonshineModel::~MoonshineModel() {

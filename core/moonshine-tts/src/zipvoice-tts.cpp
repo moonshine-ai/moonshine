@@ -9,6 +9,7 @@
 #include "utf8-utils.h"
 #include "zipvoice-custom-ops.h"
 #include "zipvoice-mel.h"
+#include "ort-session-options.h"
 #include "zipvoice-voices.h"
 
 #include <onnxruntime_cxx_api.h>
@@ -53,14 +54,6 @@ void resolve_zipvoice_lang(const std::string& lang, std::string& g2p_dialect, st
     g2p_dialect = "en_us";
   }
   ipa_lang_key = "en_us";  // ZipVoice was trained with en-us espeak phonemes.
-}
-
-Ort::SessionOptions make_ort_options() {
-  Ort::SessionOptions opts;
-  opts.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-  opts.SetIntraOpNumThreads(0);
-  opts.SetInterOpNumThreads(0);
-  return opts;
 }
 
 std::vector<float> resample_linear(const std::vector<float>& x, int src_sr, int dst_sr) {
@@ -188,6 +181,8 @@ struct ZipVoiceTTS::Impl {
   std::unordered_set<std::string> token_keys_{};
 
   FileInformationMap tts_files_{};
+  std::vector<std::string> ort_provider_names_{};
+  std::string coreml_cache_dir_{};
   Ort::Env env_{ORT_LOGGING_LEVEL_WARNING, "moonshine_zipvoice"};
   Ort::MemoryInfo mem_{Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)};
   Ort::Session text_encoder_{nullptr};
@@ -209,8 +204,7 @@ struct ZipVoiceTTS::Impl {
 
   Ort::Session load_session(std::string_view key, bool register_custom_ops,
                             const std::vector<std::string>& providers) {
-    (void)providers;
-    Ort::SessionOptions opts = make_ort_options();
+    Ort::SessionOptions opts = make_ort_session_options(providers, coreml_cache_dir_);
     if (register_custom_ops) {
       zipvoice_register_custom_ops(opts);
     }
@@ -302,6 +296,8 @@ struct ZipVoiceTTS::Impl {
       g2p_opt_.g2p_root = std::filesystem::current_path();
     }
     tts_files_ = opt.tts_asset_files;
+    ort_provider_names_ = opt.ort_provider_names;
+    coreml_cache_dir_ = opt.coreml_cache_dir;
 
     std::string g2p_dialect;
     resolve_zipvoice_lang(opt.lang, g2p_dialect, ipa_lang_key_);
@@ -335,10 +331,10 @@ struct ZipVoiceTTS::Impl {
     }
 
     text_encoder_ = load_session(kTtsZipVoiceTextEncoderKey, /*register_custom_ops=*/false,
-                                 opt.ort_provider_names);
+                                 ort_provider_names_);
     fm_decoder_ = load_session(kTtsZipVoiceFmDecoderKey, /*register_custom_ops=*/true,
-                               opt.ort_provider_names);
-    vocoder_ = load_session(kTtsZipVoiceVocoderKey, /*register_custom_ops=*/false, opt.ort_provider_names);
+                               ort_provider_names_);
+    vocoder_ = load_session(kTtsZipVoiceVocoderKey, /*register_custom_ops=*/false, ort_provider_names_);
     te_in_ = text_encoder_.GetInputNames();
     te_out_ = text_encoder_.GetOutputNames();
     fm_in_ = fm_decoder_.GetInputNames();

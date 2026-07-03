@@ -83,7 +83,9 @@ Transcriber::Transcriber(const TranscriberOptions &options)
                              std::to_string((int)(model_source)));
   }
   if (options.identify_speakers) {
-    this->speaker_embedding_model = new SpeakerEmbeddingModel();
+    this->speaker_embedding_model = new SpeakerEmbeddingModel(
+        this->options.log_ort_run, this->options.ort_provider_names,
+        this->options.coreml_cache_dir);
     int load_error = this->speaker_embedding_model->load_from_memory(
         speaker_embedding_model_ort_bytes,
         speaker_embedding_model_ort_byte_count);
@@ -104,7 +106,9 @@ Transcriber::Transcriber(const TranscriberOptions &options)
                                     options.spelling_model_data_size > 0;
   const bool has_spelling_path = !options.spelling_model_path.empty();
   if (has_spelling_buffer || has_spelling_path) {
-    this->spelling_model = new SpellingModel(this->options.log_ort_run);
+    this->spelling_model = new SpellingModel(this->options.log_ort_run,
+                                             this->options.ort_provider_names,
+                                             this->options.coreml_cache_dir);
     int load_error = 0;
     if (has_spelling_buffer) {
       load_error = this->spelling_model->load_from_memory(
@@ -143,8 +147,9 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
   if (is_streaming_model_arch(model_arch)) {
     // Streaming model: expects frontend.onnx, encoder.onnx, adapter.onnx,
     // decoder.onnx, and streaming_config.json
-    this->streaming_model =
-        new MoonshineStreamingModel(this->options.log_ort_run);
+    this->streaming_model = new MoonshineStreamingModel(
+        this->options.log_ort_run, this->options.ort_provider_names,
+        this->options.coreml_cache_dir);
 
     int32_t load_error = this->streaming_model->load(
         model_path, tokenizer_path.c_str(), model_arch);
@@ -186,7 +191,9 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
     // Non-streaming model: expects encoder_model.ort and
     // decoder_model_merged.ort
     this->stt_model = new MoonshineModel(this->options.log_ort_run,
-                                         this->options.max_tokens_per_second);
+                                         this->options.max_tokens_per_second,
+                                         this->options.ort_provider_names,
+                                         this->options.coreml_cache_dir);
 
     std::string encoder_model_path =
         append_path_component(model_path, "encoder_model.ort");
@@ -276,7 +283,9 @@ void Transcriber::load_from_memory(const uint8_t *encoder_model_data,
   }
 
   this->stt_model = new MoonshineModel(this->options.log_ort_run,
-                                       this->options.max_tokens_per_second);
+                                       this->options.max_tokens_per_second,
+                                       this->options.ort_provider_names,
+                                       this->options.coreml_cache_dir);
   int32_t load_error = this->stt_model->load_from_memory(
       encoder_model_data, encoder_model_data_size, decoder_model_data,
       decoder_model_data_size, tokenizer_data, tokenizer_data_size, model_arch);

@@ -143,7 +143,9 @@ void MoonshineStreamingState::reset(const MoonshineStreamingConfig &cfg) {
  * ============================================================================
  */
 
-MoonshineStreamingModel::MoonshineStreamingModel(bool log_ort_run)
+MoonshineStreamingModel::MoonshineStreamingModel(
+    bool log_ort_run, const std::vector<std::string> &ort_provider_names,
+    const std::string &coreml_cache_dir)
     : frontend_session(nullptr),
       encoder_session(nullptr),
       adapter_session(nullptr),
@@ -163,6 +165,8 @@ MoonshineStreamingModel::MoonshineStreamingModel(bool log_ort_run)
   LOG_ORT_ERROR(ort_api, ort_api->CreateSessionOptions(&ort_session_options));
   LOG_ORT_ERROR(ort_api, ort_api->SetSessionGraphOptimizationLevel(
                              ort_session_options, ORT_ENABLE_ALL));
+  ort_configure_execution_providers(ort_api, ort_session_options, ort_provider_names,
+                                    coreml_cache_dir);
 
   memset(&config, 0, sizeof(config));
 }
