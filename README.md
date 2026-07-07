@@ -763,13 +763,13 @@ If you want to call this library from a language we don't support, then you shou
 The easiest way to get the model files required for transcription is by using the Python download module. After [installing it](#python) run the downloader like this:
 
 ```bash
-python -m moonshine_voice.download --language en
+python -m moonshine_voice.download --stt --language en
 ```
 
 You can use either the two-letter code or the English name for the `language` argument. If you want to see which languages are supported by your current version they're [listed below](#available-models), or you can supply a bogus language as the argument to this command:
 
 ```bash
-python -m moonshine_voice.download --language foo
+python -m moonshine_voice.download --stt --language foo
 ```
 
 You can also optionally request a specific model architecture using the `model-arch` flag, chosen from the numbers in [moonshine-c-api.h](/core/moonshine-c-api.h). If no architecture is set, the script will load the highest-quality model available.
