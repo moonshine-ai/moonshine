@@ -95,6 +95,46 @@ struct WordTiming {
       : word(word), start(start), end(end), confidence(confidence) {}
 };
 
+/// One contiguous span of speech within a line attributed to a single
+/// speaker. Only populated when the identify_speakers transcriber option is
+/// enabled. Spans can be revised on any transcription update, even for lines
+/// that are already complete; see TranscriptLine::haveSpeakersChanged.
+/// Character ranges use UTF-8 byte offsets into the line text; word timestamps
+/// are enabled automatically when identify_speakers is on.
+struct SpeakerSpan {
+  /// Time offset from the start of the audio or stream in seconds
+  float startTime;
+  /// Length of the span in seconds
+  float duration;
+  /// Stable identifier for the speaker within this stream
+  uint64_t speakerId;
+  /// The order the speaker first appeared in the transcript, starting at 0
+  uint32_t speakerIndex;
+  /// UTF-8 byte offset into the line text where this span begins (inclusive).
+  /// Zero when unknown. Populated when identify_speakers is enabled.
+  uint64_t startChar;
+  /// UTF-8 byte offset into the line text where this span ends (exclusive).
+  /// Zero when unknown.
+  uint64_t endChar;
+
+  SpeakerSpan()
+      : startTime(0.0f),
+        duration(0.0f),
+        speakerId(0),
+        speakerIndex(0),
+        startChar(0),
+        endChar(0) {}
+  SpeakerSpan(float startTime, float duration, uint64_t speakerId,
+              uint32_t speakerIndex, uint64_t startChar = 0,
+              uint64_t endChar = 0)
+      : startTime(startTime),
+        duration(duration),
+        speakerId(speakerId),
+        speakerIndex(speakerIndex),
+        startChar(startChar),
+        endChar(endChar) {}
+};
+
 /// A single line of transcription
 struct TranscriptLine {
   /// UTF-8 encoded transcription text
@@ -122,16 +162,19 @@ struct TranscriptLine {
   /// (streaming only)
   bool hasTextChanged;
 
-  /// Whether a speaker ID has been calculated for the line.
-  bool hasSpeakerId;
-
-  /// The speaker ID for the line.
-  uint64_t speakerId;
-
-  /// The order the speaker appeared in the current transcript.
-  uint32_t speakerIndex;
+  /// Whether the speaker spans of the line have changed since the previous
+  /// call. Unlike the other change flags, this can fire for lines that are
+  /// already complete, since diarization refines speaker assignments
+  /// retroactively as more audio arrives.
+  bool haveSpeakersChanged;
 
   int32_t lastTranscriptionLatencyMs;
+
+  /// Speaker spans covering this line, ordered by start time and clipped to
+  /// the line's time range (empty unless the identify_speakers option is
+  /// enabled). These are mutable: they can be revised on any transcription
+  /// update, even after the line is complete.
+  std::vector<SpeakerSpan> speakerSpans;
 
   /// Audio data for this line, if available (16KHz float PCM, -1.0 to 1.0)
   std::vector<float> audioData;
@@ -148,9 +191,7 @@ struct TranscriptLine {
         isUpdated(false),
         isNew(false),
         hasTextChanged(false),
-        hasSpeakerId(false),
-        speakerId(0),
-        speakerIndex(0),
+        haveSpeakersChanged(false),
         lastTranscriptionLatencyMs(0) {}
 
   /// Construct from C API structure
@@ -162,12 +203,18 @@ struct TranscriptLine {
         isUpdated(line_c.is_updated != 0),
         isNew(line_c.is_new != 0),
         hasTextChanged(line_c.has_text_changed != 0),
-        hasSpeakerId(line_c.has_speaker_id != 0),
-        speakerId(line_c.speaker_id),
-        speakerIndex(line_c.speaker_index),
+        haveSpeakersChanged(line_c.have_speakers_changed != 0),
         lastTranscriptionLatencyMs(line_c.last_transcription_latency_ms) {
     if (line_c.text) {
       text = std::string(line_c.text);
+    }
+    if (line_c.speaker_spans && line_c.speaker_span_count > 0) {
+      speakerSpans.reserve(line_c.speaker_span_count);
+      for (uint64_t i = 0; i < line_c.speaker_span_count; i++) {
+        const auto &s = line_c.speaker_spans[i];
+        speakerSpans.emplace_back(s.start_time, s.duration, s.speaker_id,
+                                  s.speaker_index, s.start_char, s.end_char);
+      }
     }
     if (line_c.audio_data && line_c.audio_data_count > 0) {
       audioData.assign(line_c.audio_data,
@@ -185,14 +232,30 @@ struct TranscriptLine {
   }
 
   std::string toString() const {
+    std::string spansString;
+    if (!speakerSpans.empty()) {
+      spansString = ", speaker spans=[";
+      for (size_t i = 0; i < speakerSpans.size(); i++) {
+        const SpeakerSpan &span = speakerSpans[i];
+        if (i > 0) {
+          spansString += ", ";
+        }
+        spansString += std::to_string(span.startTime) + "s+" +
+                       std::to_string(span.duration) + "s speaker " +
+                       std::to_string(span.speakerIndex) + " (" +
+                       std::to_string(span.speakerId) + ") chars " +
+                       std::to_string(span.startChar) + "-" +
+                       std::to_string(span.endChar);
+      }
+      spansString += "]";
+    }
     return "[" + std::to_string(startTime) + "s] '" + text + "' (" +
            std::to_string(duration) + "s) [" + std::to_string(lineId) + "] " +
            (isComplete ? " complete, " : " incomplete, ") +
            (isUpdated ? " updated, " : " not updated, ") +
            (isNew ? " new" : " not new, ") +
            (hasTextChanged ? " text changed" : " text not changed") +
-           (hasSpeakerId ? " speaker id=" + std::to_string(speakerId) +
-           ", speaker index=" + std::to_string(speakerIndex) : "") +
+           (haveSpeakersChanged ? ", speakers changed" : "") + spansString +
            ", last transcription latency ms=" +
            std::to_string(lastTranscriptionLatencyMs);
   }
@@ -238,6 +301,7 @@ class TranscriptEvent {
     LINE_STARTED,
     LINE_UPDATED,
     LINE_TEXT_CHANGED,
+    LINE_SPEAKERS_CHANGED,
     LINE_COMPLETED,
     ERROR
   };
@@ -277,6 +341,16 @@ class LineTextChanged : public TranscriptEvent {
  public:
   LineTextChanged(const TranscriptLine &line, int32_t streamHandle)
       : TranscriptEvent(line, streamHandle, LINE_TEXT_CHANGED) {}
+};
+
+/// Event emitted when the speaker spans of a transcription line change.
+/// Only fired when the identify_speakers option is enabled. Note that this
+/// can fire for lines that are already complete, since diarization refines
+/// speaker assignments retroactively as more audio arrives.
+class LineSpeakersChanged : public TranscriptEvent {
+ public:
+  LineSpeakersChanged(const TranscriptLine &line, int32_t streamHandle)
+      : TranscriptEvent(line, streamHandle, LINE_SPEAKERS_CHANGED) {}
 };
 
 /// Event emitted when a transcription line is completed
@@ -321,6 +395,10 @@ class TranscriptEventListener {
 
   /// Called when the text of a transcription line changes
   virtual void onLineTextChanged(const LineTextChanged &) {}
+
+  /// Called when the speaker spans of a transcription line change. Can be
+  /// called for lines that are already complete.
+  virtual void onLineSpeakersChanged(const LineSpeakersChanged &) {}
 
   /// Called when a transcription line is completed
   virtual void onLineCompleted(const LineCompleted &) {}
@@ -980,6 +1058,9 @@ inline void Stream::notifyFromTranscript(const Transcript &transcript) {
     if (line.hasTextChanged) {
       emit(LineTextChanged(line, handle_));
     }
+    if (line.haveSpeakersChanged) {
+      emit(LineSpeakersChanged(line, handle_));
+    }
     if (line.isComplete && line.isUpdated) {
       emit(LineCompleted(line, handle_));
     }
@@ -1000,6 +1081,10 @@ inline void Stream::emit(const TranscriptEvent &event) {
         case TranscriptEvent::LINE_TEXT_CHANGED:
           listener->onLineTextChanged(
               static_cast<const LineTextChanged &>(event));
+          break;
+        case TranscriptEvent::LINE_SPEAKERS_CHANGED:
+          listener->onLineSpeakersChanged(
+              static_cast<const LineSpeakersChanged &>(event));
           break;
         case TranscriptEvent::LINE_COMPLETED:
           listener->onLineCompleted(static_cast<const LineCompleted &>(event));

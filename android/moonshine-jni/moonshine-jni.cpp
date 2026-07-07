@@ -73,9 +73,8 @@ static std::unique_ptr<transcript_t> c_transcript_from_jobject(
   jfieldID isNewField = get_field(env, lineClass, "isNew", "Z");
   jfieldID hasTextChangedField =
       get_field(env, lineClass, "hasTextChanged", "Z");
-  jfieldID hasSpeakerIdField = get_field(env, lineClass, "hasSpeakerId", "Z");
-  jfieldID speakerIdField = get_field(env, lineClass, "speakerId", "J");
-  jfieldID speakerIndexField = get_field(env, lineClass, "speakerIndex", "I");
+  jfieldID haveSpeakersChangedField =
+      get_field(env, lineClass, "haveSpeakersChanged", "Z");
 
   jsize lineCount = env->CallIntMethod(linesList, sizeMethod);
   std::unique_ptr<transcript_t> transcript(new transcript_t());
@@ -100,11 +99,12 @@ static std::unique_ptr<transcript_t> c_transcript_from_jobject(
     transcript->lines[i].is_new = env->GetBooleanField(line, isNewField);
     transcript->lines[i].has_text_changed =
         env->GetBooleanField(line, hasTextChangedField);
-    transcript->lines[i].has_speaker_id =
-        env->GetBooleanField(line, hasSpeakerIdField);
-    transcript->lines[i].speaker_id = env->GetLongField(line, speakerIdField);
-    transcript->lines[i].speaker_index =
-        env->GetIntField(line, speakerIndexField);
+    transcript->lines[i].have_speakers_changed =
+        env->GetBooleanField(line, haveSpeakersChangedField);
+    // Speaker spans are output-only metadata, so this Java-to-C conversion
+    // (used only for test round-trips) doesn't copy them back.
+    transcript->lines[i].speaker_spans = nullptr;
+    transcript->lines[i].speaker_span_count = 0;
   }
   return transcript;
 }
@@ -125,9 +125,8 @@ static jobject c_transcript_to_jobject(JNIEnv *env, struct transcript_t *transcr
   jfieldID isNewField = get_field(env, lineClass, "isNew", "Z");
   jfieldID hasTextChangedField =
       get_field(env, lineClass, "hasTextChanged", "Z");
-  jfieldID hasSpeakerIdField = get_field(env, lineClass, "hasSpeakerId", "Z");
-  jfieldID speakerIdField = get_field(env, lineClass, "speakerId", "J");
-  jfieldID speakerIndexField = get_field(env, lineClass, "speakerIndex", "I");
+  jfieldID haveSpeakersChangedField =
+      get_field(env, lineClass, "haveSpeakersChanged", "Z");
   jmethodID listConstructor = get_method(env, listClass, "<init>", "()V");
   jobject linesList = env->NewObject(listClass, listConstructor);
 
@@ -150,9 +149,50 @@ static jobject c_transcript_to_jobject(JNIEnv *env, struct transcript_t *transcr
     env->SetBooleanField(jline, isUpdatedField, line->is_updated);
     env->SetBooleanField(jline, isNewField, line->is_new);
     env->SetBooleanField(jline, hasTextChangedField, line->has_text_changed);
-    env->SetBooleanField(jline, hasSpeakerIdField, line->has_speaker_id);
-    env->SetLongField(jline, speakerIdField, line->speaker_id);
-    env->SetIntField(jline, speakerIndexField, line->speaker_index);
+    env->SetBooleanField(jline, haveSpeakersChangedField,
+                         line->have_speakers_changed);
+
+    // Populate speaker spans if available
+    if (line->speaker_spans != nullptr && line->speaker_span_count > 0) {
+      jclass spanClass = get_class(env, "ai/moonshine/voice/SpeakerSpan");
+      jmethodID spanConstructor = get_method(env, spanClass, "<init>", "()V");
+      jfieldID spanStartField = get_field(env, spanClass, "startTime", "F");
+      jfieldID spanDurationField = get_field(env, spanClass, "duration", "F");
+      jfieldID spanSpeakerIdField =
+          get_field(env, spanClass, "speakerId", "J");
+      jfieldID spanSpeakerIndexField =
+          get_field(env, spanClass, "speakerIndex", "I");
+      jfieldID spanStartCharField =
+          get_field(env, spanClass, "startChar", "J");
+      jfieldID spanEndCharField = get_field(env, spanClass, "endChar", "J");
+
+      jclass spanListClass = get_class(env, "java/util/ArrayList");
+      jmethodID spanListConstructor =
+          get_method(env, spanListClass, "<init>", "()V");
+      jmethodID spanListAdd =
+          get_method(env, spanListClass, "add", "(Ljava/lang/Object;)Z");
+      jobject spansList = env->NewObject(spanListClass, spanListConstructor);
+
+      for (uint64_t j = 0; j < line->speaker_span_count; j++) {
+        const speaker_span_t *span = &line->speaker_spans[j];
+        jobject jspan = env->NewObject(spanClass, spanConstructor);
+        env->SetFloatField(jspan, spanStartField, span->start_time);
+        env->SetFloatField(jspan, spanDurationField, span->duration);
+        env->SetLongField(jspan, spanSpeakerIdField, span->speaker_id);
+        env->SetIntField(jspan, spanSpeakerIndexField, span->speaker_index);
+        env->SetLongField(jspan, spanStartCharField, span->start_char);
+        env->SetLongField(jspan, spanEndCharField, span->end_char);
+        env->CallBooleanMethod(spansList, spanListAdd, jspan);
+        env->DeleteLocalRef(jspan);
+      }
+
+      jfieldID spansField =
+          get_field(env, lineClass, "speakerSpans", "Ljava/util/List;");
+      env->SetObjectField(jline, spansField, spansList);
+      env->DeleteLocalRef(spansList);
+      env->DeleteLocalRef(spanClass);
+      env->DeleteLocalRef(spanListClass);
+    }
 
     // Populate word timestamps if available
     if (line->words != nullptr && line->word_count > 0) {

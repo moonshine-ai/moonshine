@@ -294,12 +294,13 @@ We also offer a specialization of the base `Transcriber` class called `MicTransc
 
 #### Transcription Event Flow
 
-The main communication channel between the library and your application is through events that are passed to any listener functions you have registered. There are four major event types:
+The main communication channel between the library and your application is through events that are passed to any listener functions you have registered. There are five major event types:
 
 - `LineStarted`. This is sent to listeners when the beginning of a new speech segment is detected. It may or may not contain any text, but since it's dispatched near the start of an utterance, that text is likely to change over time.
 - `LineUpdated`. Called whenever any of the information about a line changes, including the duration, audio data, and text.
 - `LineTextChanged`. Called only when the text associated with a line is updated. This is a subset of `LineUpdated` that focuses on the common need to refresh the text shown to users as often as possible to keep the experience interactive.
-- `LineCompleted`. Sent when we detect that someone has paused speaking, and we've ended the current segment. The line data structure has the final values for the text, duration, and speaker ID.
+- `LineSpeakersChanged`. Only fired when the opt-in `identify_speakers` option is enabled. Called when the speaker spans attached to a line change. Unlike the other line events, this can fire for lines that are already complete, because the diarization algorithm keeps refining its speaker assignments as more audio arrives.
+- `LineCompleted`. Sent when we detect that someone has paused speaking, and we've ended the current segment. The line data structure has the final values for the text and duration.
 
 We offer some guarantees about these events:
 
@@ -308,7 +309,7 @@ We offer some guarantees about these events:
 - `LineUpdated` and `LineTextChanged` will only ever be called after the `LineStarted` and before the `LineCompleted` events for a segment.
 - Those update events are not guaranteed to be called (and in practice can be disabled by setting `update_interval` to a very large value).
 - There will only be one line active at any one time for any given stream.
-- Once `LineCompleted` has been called, the library will never alter that line's data again.
+- Once `LineCompleted` has been called, the library will never alter that line's text, timing, or audio data again. The one exception is the line's speaker spans: when `identify_speakers` is enabled, those can be revised at any time (signaled by `LineSpeakersChanged`), since diarization re-clusters the whole audio history as more speech arrives.
 - If `stop()` is called on a transcriber or stream, any active lines will have `LineCompleted` called.
 - Each line has a 64-bit `lineId` that is designed to be unique enough to avoid collisions.
 - This `lineId` remains the same for the line over time, from the first `LineStarted` event onwards.
@@ -1006,11 +1007,17 @@ Represents a single "line" or speech segment in a transcript. It includes inform
 - `is_new`: A boolean indicating whether the line has been added to the transcript by the last update call.
 - `has_text_changed`: A boolean that's set if the contents of the line's text was modified by the last transcript update. If this is set, `is_updated` will always be set too, but if other properties of the line (for example the duration or the audio data) have changed but the text remains the same, then `is_updated` can be true while `has_text_changed` is false.
 
-- `has_speaker_id`: Whether a speaker has been identified for this line. Unless the `identify_speakers` option passed to the Transcriber is set to false, this will always be true by the time the line is complete, and potentially it may be set earlier. The speaker identification process is still experimental, so the current accuracy may not be reliable enough for some applications.
+- `have_speakers_changed`: A boolean that's set if the line's speaker spans were revised by the last transcript update. Unlike the other change flags, this can be set for lines that are already complete, since the diarization algorithm keeps refining speaker assignments retroactively as more audio arrives. Only relevant when the `identify_speakers` option is enabled.
 
-- `speaker_id`: A unique-ish unsigned 64-bit integer that is designed for storage or used to identify the same speaker across multiple sessions.
+- `speaker_spans`: An array of speaker spans describing who was talking during which parts of the line, ordered by start time and clipped to the line's time range. Empty unless the opt-in `identify_speakers` option is enabled (which also turns on word timestamps automatically, since they are needed to map spans onto the line text). Each span has:
+    - `start_time`: A float giving the time offset in seconds from the start of the stream.
+    - `duration`: A float giving the length of the span in seconds.
+    - `speaker_id`: A unique-ish unsigned 64-bit integer that is stable for a given speaker within a stream, designed for storage or keeping track of speakers over time.
+    - `speaker_index`: An integer that represents the order in which the speaker first appeared in the transcript, to make it easy to give speakers default names like "Speaker 1:", etc.
+    - `start_char`: A UTF-8 byte offset into the line's `text` where this span begins (inclusive). Zero when unknown.
+    - `end_char`: A UTF-8 byte offset into the line's `text` where this span ends (exclusive). Slice with `text[start_char:end_char]` in Python. Both zero when the span could not be aligned to words yet.
 
-- `speaker_index`: An integer that represents the order in which the speaker appeared in the transcript, to make it easy to give speakers default names like "Speaker 1:", etc.
+  Be aware that speaker spans are *mutable*: the diarization algorithm re-clusters the entire audio history on a cadence, so the spans of any line - including completed ones - can move, merge, split, or change speaker on any transcription call. Watch the `have_speakers_changed` flag (or the `LineSpeakersChanged` event) to catch revisions.
 
 - `audio_data`: An array of 32-bit floats representing the raw audio data that the line is based on, as 16KHz mono PCM data between 0.0 and 1.0. This can be useful for further processing (for example to drive a visual indicator or to feed into a specialized speech to text model after the line is complete).
 
@@ -1066,7 +1073,9 @@ Handles the speech to text pipeline.
     - `vad_window_duration`: The VAD runs every 30ms, but to get higher-confidence values we average the results over time. This value is the time in seconds to average over. The default is 0.5s, shorter durations will spot speech faster at the cost of lower accuracy, higher values may increase accuracy, but at the cost of missing shorter utterances.
     - `vad_look_behind_sample_count`: Because we're averaging over time, the mean VAD signal will lag behind the initial speech detection. To compensate for that, when speech is detected we pull in some of the audio immediately before the average passed the threshold. This value is the number of samples to prepend, and defaults to 8192 (all at 16KHz).
     - `vad_max_segment_duration`: It can be hard to find gaps in rapid-fire speech, but a lot of applications want their text in chunks that aren't endless. This option sets the longest duration a line can be before it's marked as complete and a new segment is started. The default is 15 seconds, and to increase the chance that a natural break is found, the `vad_threshold` is linearly decreased over time from two thirds of the maximum duration until the maximum is reached.
-    - `identify_speakers`: A boolean that controls whether to run the speaker identification stage in the pipeline.
+    - `identify_speakers`: A boolean (default false) that controls whether to run the speaker diarization stage of the pipeline. When enabled, each line carries a `speaker_spans` array describing who spoke when, including UTF-8 character ranges into the line text. Word timestamps are enabled automatically in this mode. This runs a C++ port of the [pyannote community-1 pipeline](https://github.com/moonshine-ai/cpp-annote) inline inside transcription calls, which adds significant compute. The pipeline also caches analysis results for the whole session and re-clusters the full history on a cadence, so cost and memory grow with session length; long-running sessions may want a longer `diarization_cluster_cadence`. For tests, `test-assets/endgame_nagg_nell.wav` is a ~28 second synthetic two-speaker clip (ZipVoice TTS, Beckett's *Endgame* dialogue); regenerate it with `python3 scripts/generate-diarization-test-audio.py`.
+    - `diarization_cluster_cadence`: A float (default 2.0) giving the minimum number of seconds of new audio between diarization re-clustering passes. Raising this reduces compute on long sessions, at the cost of slower refinement of speaker assignments.
+    - `diarization_analyze_cadence`: A float (default 0, meaning the model default of 1.0) giving the number of seconds between diarization segmentation/embedding model runs.
     - `return_audio_data`: By default the transcriber returns the segment of audio data corresponding to a line of text along with the transcription. You can disable this if you want to reduce memory overhead.
     - `log_output_text`: If this is enabled then the results of the speech to text model will be logged to the console.
 
@@ -1333,6 +1342,8 @@ This code, apart from the source in `core/third-party`, is licensed under the MI
 
 The English-language models are also released under the MIT License. Models for other languages are released under the [Moonshine Community License](https://moonshine.ai), which is a non-commercial license.
 
-The code in `core/third-party` is licensed according to the terms of the open source projects it originates from, with details in a LICENSE file in each subfolder.
+The code in `core/third-party` is licensed according to the terms of the open source projects it originates from, with details in a LICENSE file in each subfolder. 
+
+The Eigen library is compiled with only the MPL-2.0 subset, all files with other licenses are removed.
 
 The text to speech and grapheme to phoneme models and data files are licensed under the terms listed in their readmes and their source repositories. Per-language details and regeneration notes live under [`core/moonshine-tts/data/`](core/moonshine-tts/data/README.md).

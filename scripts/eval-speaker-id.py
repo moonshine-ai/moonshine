@@ -9,31 +9,16 @@ from datasets import load_dataset
 
 import argparse
 
-# Starting point for v1 of speaker identification:
-# Speaker confusion: 17.37%
-# Speaker confusion: 34.01%
-# Speaker confusion: 20.66%
-# Speaker confusion: 18.13%
-# Speaker confusion: 37.92%
-# Speaker confusion: 15.27%
-# Speaker confusion: 44.41%
-# Speaker confusion: 24.09%
-# Speaker confusion: 25.11%
-# Speaker confusion: 45.82%
+# Starting point for v1 of speaker identification (embedding model +
+# online clusterer, per-line speaker IDs):
 # Average speaker confusion: 30.67%
 #
-# With shorter segments unable to create new clusters:
-# Speaker confusion: 17.37%
-# Speaker confusion: 34.01%
-# Speaker confusion: 19.70%
-# Speaker confusion: 25.45%
-# Speaker confusion: 35.07%
-# Speaker confusion: 15.78%
-# Speaker confusion: 28.11%
-# Speaker confusion: 19.82%
-# Speaker confusion: 21.81%
-# Speaker confusion: 32.78%
+# v1 with shorter segments unable to create new clusters:
 # Average speaker confusion: 26.44%
+#
+# v2 uses the cpp-annote port of the pyannote community-1 pipeline and
+# reports per-line speaker *spans*, which are scored directly against the
+# reference below.
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--start-index", type=int, default=0)
@@ -42,7 +27,9 @@ parser.add_argument("--model-arch", type=int, default=0)
 parser.add_argument("--options", type=str, default=None)
 args = parser.parse_args()
 
-options = {"skip_transcription": True}
+# Speaker identification is opt-in, and transcription itself isn't needed
+# for this evaluation.
+options = {"skip_transcription": True, "identify_speakers": True}
 if args.options is not None:
     for option in args.options.split(","):
         key, value = option.split("=")
@@ -77,13 +64,19 @@ for sample_index in range(args.start_index, args.start_index + args.sample_count
         end_time = timestamps_end[i]
         ref_unique_speakers.add(speaker_index)
         reference[Segment(start_time, end_time)] = f"sample_{sample_index}_{speaker_index}"
+    # The hypothesis is built from the per-line speaker spans. Span times are
+    # absolute stream times already clipped to each line, so they can be used
+    # directly as diarization segments.
     hypothesis = Annotation()
     hyp_unique_speakers = set()
+    hyp_span_count = 0
     for line in transcript.lines:
-        hyp_unique_speakers.add(line.speaker_index)
-        hypothesis[Segment(line.start_time, line.start_time + line.duration)] = (
-            f"sample_{sample_index}_{line.speaker_index}"
-        )
+        for span in line.speaker_spans or []:
+            hyp_unique_speakers.add(span.speaker_index)
+            hyp_span_count += 1
+            hypothesis[Segment(span.start_time, span.start_time + span.duration)] = (
+                f"sample_{sample_index}_{span.speaker_index}"
+            )
     sample_metrics = metric(reference, hypothesis, detailed=True)
     confusion = sample_metrics["confusion"]
     total = sample_metrics["total"]
@@ -91,7 +84,7 @@ for sample_index in range(args.start_index, args.start_index + args.sample_count
     print(f"Reference unique speakers: {ref_unique_speakers}")
     print(f"Hypothesis unique speakers: {hyp_unique_speakers}")
     print(f"Reference line count: {len(reference)}")
-    print(f"Hypothesis line count: {len(hypothesis)}")
+    print(f"Hypothesis line count: {len(transcript.lines)}, span count: {hyp_span_count}")
 
 confusion = metric["confusion"]
 total = metric["total"]

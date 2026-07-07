@@ -136,8 +136,11 @@ void parse_transcriber_options(const OptionVector &options,
       out_options.max_tokens_per_second = float_from_string(option_value);
     } else if (option_name == "identify_speakers") {
       out_options.identify_speakers = bool_from_string(option_value);
-    } else if (option_name == "speaker_id_cluster_threshold") {
-      out_options.speaker_id_cluster_threshold =
+    } else if (option_name == "diarization_cluster_cadence") {
+      out_options.diarization_cluster_cadence =
+          float_from_string(option_value);
+    } else if (option_name == "diarization_analyze_cadence") {
+      out_options.diarization_analyze_cadence =
           float_from_string(option_value);
     } else if (option_name == "return_audio_data") {
       out_options.return_audio_data = bool_from_string(option_value);

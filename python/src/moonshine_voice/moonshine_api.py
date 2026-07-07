@@ -82,6 +82,19 @@ class TranscriptWordC(ctypes.Structure):
     ]
 
 
+class SpeakerSpanC(ctypes.Structure):
+    """C structure for speaker_span_t."""
+
+    _fields_ = [
+        ("start_time", ctypes.c_float),
+        ("duration", ctypes.c_float),
+        ("speaker_id", ctypes.c_uint64),
+        ("speaker_index", ctypes.c_uint32),
+        ("start_char", ctypes.c_uint64),
+        ("end_char", ctypes.c_uint64),
+    ]
+
+
 class TranscriptLineC(ctypes.Structure):
     """C structure for transcript_line_t."""
 
@@ -96,9 +109,9 @@ class TranscriptLineC(ctypes.Structure):
         ("is_updated", ctypes.c_int8),
         ("is_new", ctypes.c_int8),
         ("has_text_changed", ctypes.c_int8),
-        ("has_speaker_id", ctypes.c_int8),
-        ("speaker_id", ctypes.c_uint64),
-        ("speaker_index", ctypes.c_uint32),
+        ("have_speakers_changed", ctypes.c_int8),
+        ("speaker_spans", ctypes.POINTER(SpeakerSpanC)),
+        ("speaker_span_count", ctypes.c_uint64),
         ("last_transcription_latency_ms", ctypes.c_uint32),
         ("words", ctypes.POINTER(TranscriptWordC)),
         ("word_count", ctypes.c_uint64),
@@ -197,6 +210,41 @@ class WordTiming:
 
 
 @dataclass
+class SpeakerSpan:
+    """One contiguous span of speech within a line attributed to one speaker.
+
+    Only populated when the ``identify_speakers`` option is enabled. Spans
+    are mutable: the diarization algorithm re-clusters the audio history as
+    more speech arrives, so the spans of any line - including completed
+    ones - can be revised on any transcription update. Watch
+    ``TranscriptLine.have_speakers_changed`` (or the ``LineSpeakersChanged``
+    event) to detect revisions.
+
+    ``identify_speakers`` also enables word timestamps automatically. Use
+    ``line.text[span.start_char:span.end_char]`` to get the UTF-8 substring
+    for a span (byte offsets, like Python string slicing).
+    """
+
+    start_time: float
+    duration: float
+    speaker_id: int
+    speaker_index: int
+    start_char: int = 0
+    end_char: int = 0
+
+    def __str__(self) -> str:
+        char_range = (
+            f", chars {self.start_char}:{self.end_char}"
+            if self.end_char > self.start_char
+            else ""
+        )
+        return (
+            f"[{self.start_time:.2f}s +{self.duration:.2f}s] "
+            f"Speaker {self.speaker_index} ({self.speaker_id}){char_range}"
+        )
+
+
+@dataclass
 class TranscriptLine:
     """A single line of transcription."""
 
@@ -208,15 +256,19 @@ class TranscriptLine:
     is_updated: bool = False
     is_new: bool = False
     has_text_changed: bool = False
-    has_speaker_id: bool = False
-    speaker_id: int = 0
-    speaker_index: int = 0
+    have_speakers_changed: bool = False
+    speaker_spans: Optional[List[SpeakerSpan]] = None
     audio_data: Optional[List[float]] = None
     last_transcription_latency_ms: int = 0
     words: Optional[List[WordTiming]] = None
 
     def __str__(self) -> str:
-        return f"[{self.start_time:.2f}s] Speaker {self.speaker_index}: '{self.text}', metadata: [duration={self.duration:.2f}s, line_id={self.line_id}, is_complete={self.is_complete}, is_updated={self.is_updated}, is_new={self.is_new}, has_text_changed={self.has_text_changed}, has_speaker_id={self.has_speaker_id}, speaker_id={self.speaker_id}, audio_data_len={len(self.audio_data) if self.audio_data else 0}, last_transcription_latency_ms={self.last_transcription_latency_ms}, words={len(self.words) if self.words else 0}]"
+        spans_str = (
+            "[" + ", ".join(str(span) for span in self.speaker_spans) + "]"
+            if self.speaker_spans
+            else "[]"
+        )
+        return f"[{self.start_time:.2f}s]: '{self.text}', metadata: [duration={self.duration:.2f}s, line_id={self.line_id}, is_complete={self.is_complete}, is_updated={self.is_updated}, is_new={self.is_new}, has_text_changed={self.has_text_changed}, have_speakers_changed={self.have_speakers_changed}, speaker_spans={spans_str}, audio_data_len={len(self.audio_data) if self.audio_data else 0}, last_transcription_latency_ms={self.last_transcription_latency_ms}, words={len(self.words) if self.words else 0}]"
 
 
 @dataclass

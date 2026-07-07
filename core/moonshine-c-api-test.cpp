@@ -140,7 +140,9 @@ TEST_CASE("moonshine-test-v2") {
       REQUIRE(line.is_updated == 1);
       REQUIRE(line.is_new == 1);
       REQUIRE(line.has_text_changed == 1);
-      REQUIRE(line.has_speaker_id == 1);
+      // Speaker identification is opt-in, so no spans by default.
+      REQUIRE(line.speaker_spans == nullptr);
+      REQUIRE(line.speaker_span_count == 0);
     }
   }
   SUBCASE("transcribe-stream") {
@@ -203,7 +205,8 @@ TEST_CASE("moonshine-test-v2") {
         REQUIRE(line.audio_data_count > 0);
         REQUIRE(line.start_time >= 0.0f);
         REQUIRE(line.duration > 0.0f);
-        REQUIRE(line.has_speaker_id == 0);
+        REQUIRE(line.speaker_spans == nullptr);
+        REQUIRE(line.speaker_span_count == 0);
         // There should be at most one incomplete line at the end of the
         // transcript.
         if (line.is_complete == 0) {
@@ -297,7 +300,8 @@ TEST_CASE("moonshine-test-v2") {
       REQUIRE(line.duration > 0.0f);
       REQUIRE(line.is_complete == 1);
       REQUIRE(line.is_updated == 1);
-      REQUIRE(line.has_speaker_id == 1);
+      REQUIRE(line.speaker_spans == nullptr);
+      REQUIRE(line.speaker_span_count == 0);
     }
   }
   SUBCASE("transcribe-without-streaming-skip-transcription") {
@@ -409,7 +413,8 @@ TEST_CASE("moonshine-test-v2") {
         {"vad_max_segment_duration", "15.0"},
         {"max_tokens_per_second", "6.5"},
         {"identify_speakers", "true"},
-        {"speaker_id_cluster_threshold", "0.6"},
+        {"diarization_cluster_cadence", "2.0"},
+        {"diarization_analyze_cadence", "1.0"},
         {"return_audio_data", "false"},
         {"log_output_text", "true"},
         {"ort_providers", "CPU"},
