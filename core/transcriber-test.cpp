@@ -1,7 +1,9 @@
 #include "transcriber.h"
 
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
+#include <set>
 #include <string>
 
 #include "debug-utils.h"
@@ -510,9 +512,10 @@ TEST_CASE("transcriber-test") {
     first.start_time = 1.25f;
     first.duration = 3.5f;
     first.audio_data = {0.25f, 0.5f, 0.75f};
-    first.speaker_index = 3;
-    first.speaker_id = 55;
-    first.has_speaker_id = true;
+    first.speaker_spans = {
+        {.start_time = 1.25f, .duration = 2.0f, .speaker_id = 55,
+         .speaker_index = 3}};
+    first.have_speakers_changed = true;
 
     TranscriberLine second;
     second.text = new std::string("second");
@@ -525,9 +528,12 @@ TEST_CASE("transcriber-test") {
     REQUIRE(second.start_time == first.start_time);
     REQUIRE(second.duration == first.duration);
     REQUIRE(second.audio_data == first.audio_data);
-    REQUIRE(second.speaker_index == first.speaker_index);
-    REQUIRE(second.speaker_id == first.speaker_id);
-    REQUIRE(second.has_speaker_id == first.has_speaker_id);
+    REQUIRE(second.speaker_spans.size() == first.speaker_spans.size());
+    REQUIRE(second.speaker_spans[0].speaker_id ==
+            first.speaker_spans[0].speaker_id);
+    REQUIRE(second.speaker_spans[0].speaker_index ==
+            first.speaker_spans[0].speaker_index);
+    REQUIRE(second.have_speakers_changed == first.have_speakers_changed);
 
     TranscriberLine repeated_assignment_target;
     repeated_assignment_target.text = new std::string("seed");
@@ -536,14 +542,17 @@ TEST_CASE("transcriber-test") {
       source.text = new std::string("value_" + std::to_string(i));
       source.id = (uint64_t)(1000 + i);
       source.duration = i * 0.01f;
-      source.speaker_index = (uint32_t)(i % 4);
+      source.speaker_spans = {
+          {.start_time = 0.0f, .duration = source.duration,
+           .speaker_id = (uint64_t)(i), .speaker_index = (uint32_t)(i % 4)}};
       repeated_assignment_target = source;
       REQUIRE(repeated_assignment_target.text != nullptr);
       REQUIRE(*repeated_assignment_target.text == *source.text);
       REQUIRE(repeated_assignment_target.text != source.text);
       REQUIRE(repeated_assignment_target.id == source.id);
       REQUIRE(repeated_assignment_target.duration == source.duration);
-      REQUIRE(repeated_assignment_target.speaker_index == source.speaker_index);
+      REQUIRE(repeated_assignment_target.speaker_spans[0].speaker_index ==
+              source.speaker_spans[0].speaker_index);
     }
 
     const std::string before_self_assignment = *repeated_assignment_target.text;
@@ -748,12 +757,38 @@ TEST_CASE("transcriber-test") {
     transcriber.free_stream(stream_id);
     free(wav_data);
   }
+  SUBCASE("test-speaker-spans-absent-by-default") {
+    std::string wav_path = "two_cities.wav";
+    REQUIRE(std::filesystem::exists(wav_path));
+    float *wav_data = nullptr;
+    size_t wav_data_size = 0;
+    int32_t wav_sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
+                          &wav_sample_rate));
+    std::string root_model_path = "tiny-en";
+    REQUIRE(std::filesystem::exists(root_model_path));
+    TranscriberOptions options;
+    options.model_source = TranscriberOptions::ModelSource::FILES;
+    options.model_path = root_model_path.c_str();
+    options.model_arch = MOONSHINE_MODEL_ARCH_TINY;
+    Transcriber transcriber(options);
+    struct transcript_t *transcript = nullptr;
+    transcriber.transcribe_without_streaming(wav_data, wav_data_size,
+                                             wav_sample_rate, 0, &transcript);
+    REQUIRE(transcript != nullptr);
+    REQUIRE(transcript->line_count > 0);
+    for (size_t i = 0; i < transcript->line_count; i++) {
+      const struct transcript_line_t &line = transcript->lines[i];
+      REQUIRE(line.speaker_spans == nullptr);
+      REQUIRE(line.speaker_span_count == 0);
+      REQUIRE(line.have_speakers_changed == 0);
+    }
+    free(wav_data);
+  }
   SUBCASE("test-identify-speakers") {
     std::string first_pete_wav_path = "two_cities.wav";
-    std::string second_pete_wav_path = "beckett.wav";
     std::string other_speaker_wav_path = "two_cities_librivox_48k.wav";
     REQUIRE(std::filesystem::exists(first_pete_wav_path));
-    REQUIRE(std::filesystem::exists(second_pete_wav_path));
     REQUIRE(std::filesystem::exists(other_speaker_wav_path));
     float *first_pete_wav_data = nullptr;
     size_t first_pete_wav_data_size = 0;
@@ -763,14 +798,6 @@ TEST_CASE("transcriber-test") {
                           &first_pete_wav_sample_rate));
     REQUIRE(first_pete_wav_data != nullptr);
     REQUIRE(first_pete_wav_data_size > 0);
-    float *second_pete_wav_data = nullptr;
-    size_t second_pete_wav_data_size = 0;
-    int32_t second_pete_wav_sample_rate = 0;
-    REQUIRE(load_wav_data(second_pete_wav_path.c_str(), &second_pete_wav_data,
-                          &second_pete_wav_data_size,
-                          &second_pete_wav_sample_rate));
-    REQUIRE(second_pete_wav_data != nullptr);
-    REQUIRE(second_pete_wav_data_size > 0);
     float *other_speaker_wav_data = nullptr;
     size_t other_speaker_wav_data_size = 0;
     int32_t other_speaker_wav_sample_rate = 0;
@@ -797,40 +824,148 @@ TEST_CASE("transcriber-test") {
     transcriber.transcribe_stream(stream_id, 0, &transcript);
     REQUIRE(transcript != nullptr);
     REQUIRE(transcript->line_count > 0);
-    REQUIRE(transcript->lines[0].has_speaker_id == true);
-    REQUIRE(transcript->lines[0].speaker_index == 0);
-    const uint64_t first_pete_speaker_id = transcript->lines[0].speaker_id;
-    const size_t first_pete_line_count = transcript->line_count;
-    for (size_t i = 1; i < transcript->line_count; i++) {
+    // The whole first file is one speaker, so every attributed span should
+    // carry the same stable speaker ID, and the first speaker should have
+    // index zero.
+    REQUIRE(transcript->lines[0].speaker_span_count > 0);
+    REQUIRE(transcript->lines[0].speaker_spans[0].speaker_index == 0);
+    // identify_speakers turns on word timestamps so spans can be mapped to text.
+    REQUIRE(transcript->lines[0].word_count > 0);
+    const uint64_t first_pete_speaker_id =
+        transcript->lines[0].speaker_spans[0].speaker_id;
+    for (size_t i = 0; i < transcript->line_count; i++) {
       const struct transcript_line_t &line = transcript->lines[i];
-      REQUIRE(line.has_speaker_id == true);
-      REQUIRE(line.speaker_id == first_pete_speaker_id);
+      for (uint64_t j = 0; j < line.speaker_span_count; j++) {
+        const struct speaker_span_t &span = line.speaker_spans[j];
+        REQUIRE(span.speaker_id == first_pete_speaker_id);
+        // Spans are clipped to the line's time range (small tolerance for
+        // float rounding).
+        REQUIRE(span.start_time >= line.start_time - 0.01f);
+        REQUIRE(span.start_time + span.duration <=
+                line.start_time + line.duration + 0.01f);
+        if (line.text != nullptr && line.word_count > 0 &&
+            line.speaker_span_count == 1) {
+          const size_t text_len = strlen(line.text);
+          REQUIRE(span.end_char > span.start_char);
+          REQUIRE(span.start_char < text_len);
+          REQUIRE(span.end_char <= text_len);
+        }
+      }
     }
     transcriber.add_audio_to_stream(stream_id, other_speaker_wav_data,
                                     other_speaker_wav_data_size,
                                     other_speaker_wav_sample_rate);
     transcriber.transcribe_stream(stream_id, 0, &transcript);
-    const size_t other_speaker_line_count = transcript->line_count;
-    for (size_t i = first_pete_line_count + 1; i < transcript->line_count;
-         i++) {
-      const struct transcript_line_t &line = transcript->lines[i];
-      REQUIRE(line.has_speaker_id == true);
-    }
-    transcriber.add_audio_to_stream(stream_id, second_pete_wav_data,
-                                    second_pete_wav_data_size,
-                                    second_pete_wav_sample_rate);
+    REQUIRE(transcript != nullptr);
+    // Force a final clustering pass over the whole session.
+    transcriber.stop_stream(stream_id);
     transcriber.transcribe_stream(stream_id, 0, &transcript);
     REQUIRE(transcript != nullptr);
-    REQUIRE(transcript->line_count > other_speaker_line_count);
-    REQUIRE(transcript->lines[other_speaker_line_count].has_speaker_id == true);
-    for (size_t i = other_speaker_line_count + 1; i < transcript->line_count;
-         i++) {
+    // The second file is a different speaker, so the final clustering should
+    // have found more than one stable speaker ID across the transcript.
+    std::set<uint64_t> speaker_ids;
+    size_t lines_with_spans = 0;
+    for (size_t i = 0; i < transcript->line_count; i++) {
       const struct transcript_line_t &line = transcript->lines[i];
-      REQUIRE(line.has_speaker_id == true);
+      REQUIRE(line.is_complete == 1);
+      if (line.speaker_span_count > 0) {
+        lines_with_spans += 1;
+      }
+      for (uint64_t j = 0; j < line.speaker_span_count; j++) {
+        speaker_ids.insert(line.speaker_spans[j].speaker_id);
+      }
     }
+    REQUIRE(lines_with_spans > 0);
+    REQUIRE(speaker_ids.size() > 1);
     transcriber.free_stream(stream_id);
     free(first_pete_wav_data);
-    free(second_pete_wav_data);
     free(other_speaker_wav_data);
+  }
+  SUBCASE("test-identify-speakers-batch") {
+    std::string wav_path = "two_cities.wav";
+    REQUIRE(std::filesystem::exists(wav_path));
+    float *wav_data = nullptr;
+    size_t wav_data_size = 0;
+    int32_t wav_sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
+                          &wav_sample_rate));
+    std::string root_model_path = "tiny-en";
+    REQUIRE(std::filesystem::exists(root_model_path));
+    TranscriberOptions options;
+    options.model_source = TranscriberOptions::ModelSource::FILES;
+    options.model_path = root_model_path.c_str();
+    options.model_arch = MOONSHINE_MODEL_ARCH_TINY;
+    options.identify_speakers = true;
+    Transcriber transcriber(options);
+    struct transcript_t *transcript = nullptr;
+    transcriber.transcribe_without_streaming(wav_data, wav_data_size,
+                                             wav_sample_rate, 0, &transcript);
+    REQUIRE(transcript != nullptr);
+    REQUIRE(transcript->line_count > 0);
+    size_t lines_with_spans = 0;
+    for (size_t i = 0; i < transcript->line_count; i++) {
+      const struct transcript_line_t &line = transcript->lines[i];
+      if (line.speaker_span_count > 0) {
+        lines_with_spans += 1;
+        REQUIRE(line.speaker_spans != nullptr);
+      }
+    }
+    REQUIRE(lines_with_spans > 0);
+    free(wav_data);
+  }
+  SUBCASE("test-identify-speakers-endgame") {
+    std::string wav_path = "endgame_nagg_nell.wav";
+    REQUIRE(std::filesystem::exists(wav_path));
+    float *wav_data = nullptr;
+    size_t wav_data_size = 0;
+    int32_t wav_sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
+                          &wav_sample_rate));
+    const float wav_duration =
+        wav_data_size / static_cast<float>(wav_sample_rate);
+    REQUIRE(wav_duration >= 20.0f);
+    REQUIRE(wav_duration <= 35.0f);
+
+    std::string root_model_path = "tiny-en";
+    REQUIRE(std::filesystem::exists(root_model_path));
+    TranscriberOptions options;
+    options.model_source = TranscriberOptions::ModelSource::FILES;
+    options.model_path = root_model_path.c_str();
+    options.model_arch = MOONSHINE_MODEL_ARCH_TINY;
+    options.identify_speakers = true;
+    Transcriber transcriber(options);
+    struct transcript_t *transcript = nullptr;
+    transcriber.transcribe_without_streaming(wav_data, wav_data_size,
+                                             wav_sample_rate, 0, &transcript);
+    REQUIRE(transcript != nullptr);
+    REQUIRE(transcript->line_count > 0);
+
+    std::set<uint64_t> speaker_ids;
+    float total_span_duration = 0.0f;
+    size_t lines_with_spans = 0;
+    for (size_t i = 0; i < transcript->line_count; i++) {
+      const struct transcript_line_t &line = transcript->lines[i];
+      REQUIRE(line.word_count > 0);
+      if (line.speaker_span_count == 0) {
+        continue;
+      }
+      lines_with_spans += 1;
+      for (uint64_t j = 0; j < line.speaker_span_count; j++) {
+        const struct speaker_span_t &span = line.speaker_spans[j];
+        speaker_ids.insert(span.speaker_id);
+        total_span_duration += span.duration;
+        REQUIRE(span.duration > 0.0f);
+        if (line.text != nullptr && span.end_char > span.start_char) {
+          REQUIRE(span.end_char <= strlen(line.text));
+        }
+      }
+    }
+    REQUIRE(lines_with_spans > 0);
+    // Synthetic ZipVoice dialogue alternates male/female voices; expect at
+    // least two stable speaker IDs, but do not assert exact boundaries.
+    REQUIRE(speaker_ids.size() >= 2);
+    REQUIRE(total_span_duration >= wav_duration * 0.35f);
+    REQUIRE(total_span_duration <= wav_duration * 1.25f);
+    free(wav_data);
   }
 }

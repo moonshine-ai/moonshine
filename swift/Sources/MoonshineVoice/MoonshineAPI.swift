@@ -263,6 +263,22 @@ internal final class MoonshineAPI: @unchecked Sendable {
                 }
             }
 
+            // Extract speaker spans if available
+            var speakerSpans: [SpeakerSpan] = []
+            if let spansPtr = lineC.speaker_spans, lineC.speaker_span_count > 0 {
+                for j in 0..<Int(lineC.speaker_span_count) {
+                    let spanC = spansPtr[j]
+                    speakerSpans.append(SpeakerSpan(
+                        startTime: spanC.start_time,
+                        duration: spanC.duration,
+                        speakerId: spanC.speaker_id,
+                        speakerIndex: spanC.speaker_index,
+                        startChar: spanC.start_char,
+                        endChar: spanC.end_char
+                    ))
+                }
+            }
+
             let line = TranscriptLine(
                 text: text,
                 startTime: lineC.start_time,
@@ -272,9 +288,8 @@ internal final class MoonshineAPI: @unchecked Sendable {
                 isUpdated: lineC.is_updated != 0,
                 isNew: lineC.is_new != 0,
                 hasTextChanged: lineC.has_text_changed != 0,
-                hasSpeakerId: lineC.has_speaker_id != 0,
-                speakerId: lineC.speaker_id,
-                speakerIndex: lineC.speaker_index,
+                haveSpeakersChanged: lineC.have_speakers_changed != 0,
+                speakerSpans: speakerSpans,
                 audioData: audioData,
                 words: words
             )

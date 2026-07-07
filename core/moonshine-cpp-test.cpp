@@ -182,7 +182,8 @@ TEST_CASE("moonshine-cpp-test") {
       REQUIRE(line.isUpdated);
       REQUIRE(line.isNew);
       REQUIRE(line.hasTextChanged);
-      REQUIRE(line.hasSpeakerId);
+      // Speaker identification is opt-in, so no spans by default.
+      REQUIRE(line.speakerSpans.empty());
     }
   }
   SUBCASE("transcribe-with-streaming") {

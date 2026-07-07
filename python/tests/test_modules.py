@@ -59,6 +59,53 @@ def test_transcriber_transcribes_bundled_audio():
     assert "fail" in combined, describe(result)
 
 
+def test_diarization_finds_two_speakers_on_endgame_clip():
+    """Synthetic Nagg/Nell ZipVoice dialogue should yield two speaker IDs."""
+    moonshine_voice = pytest.importorskip("moonshine_voice")
+    from moonshine_voice import Transcriber
+    from moonshine_voice.moonshine_api import ModelArch
+    from moonshine_voice.utils import load_wav_file
+
+    wav_path = assets_path() / "endgame_nagg_nell.wav"
+    if not wav_path.exists():
+        pytest.skip("endgame_nagg_nell.wav not bundled")
+
+    model_path = REPO_ROOT / "test-assets" / "tiny-en"
+    if not (model_path / "decoder_with_attention.ort").exists():
+        pytest.skip("test-assets/tiny-en missing decoder_with_attention.ort")
+
+    audio, sample_rate = load_wav_file(wav_path)
+    duration = len(audio) / float(sample_rate)
+    assert 20.0 <= duration <= 35.0
+
+    transcriber = Transcriber(
+        str(model_path),
+        model_arch=ModelArch.TINY,
+        options={"identify_speakers": "true"},
+    )
+    transcript = transcriber.transcribe_without_streaming(audio, sample_rate)
+    assert transcript.lines
+
+    speaker_ids = set()
+    total_span_duration = 0.0
+    lines_with_spans = 0
+    for line in transcript.lines:
+        assert line.words
+        if not line.speaker_spans:
+            continue
+        lines_with_spans += 1
+        for span in line.speaker_spans:
+            speaker_ids.add(span.speaker_id)
+            total_span_duration += span.duration
+            if span.end_char > span.start_char:
+                assert span.end_char <= len(line.text.encode("utf-8"))
+
+    assert lines_with_spans > 0
+    assert len(speaker_ids) >= 2
+    assert total_span_duration >= duration * 0.35
+    assert total_span_duration <= duration * 1.25
+
+
 def test_tts_synthesizes_wav(tmp_path):
     out_path = tmp_path / "out.wav"
     result = run_module(

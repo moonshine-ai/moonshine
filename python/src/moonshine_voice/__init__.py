@@ -17,6 +17,7 @@ from moonshine_voice.errors import (
 
 from moonshine_voice.moonshine_api import (
     ModelArch,
+    SpeakerSpan,
     Transcript,
     TranscriptLine,
     model_arch_to_string,
@@ -92,6 +93,7 @@ def __getattr__(name):
         "LineStarted",
         "LineUpdated",
         "LineTextChanged",
+        "LineSpeakersChanged",
         "LineCompleted",
         "Error",
     ):
@@ -104,6 +106,7 @@ def __getattr__(name):
                 LineStarted,
                 LineUpdated,
                 LineTextChanged,
+                LineSpeakersChanged,
                 LineCompleted,
                 Error,
             )
@@ -116,6 +119,7 @@ def __getattr__(name):
             globals()["LineStarted"] = LineStarted
             globals()["LineUpdated"] = LineUpdated
             globals()["LineTextChanged"] = LineTextChanged
+            globals()["LineSpeakersChanged"] = LineSpeakersChanged
             globals()["LineCompleted"] = LineCompleted
             globals()["Error"] = Error
             _transcriber_imported = True
@@ -278,6 +282,7 @@ __all__ = [
     "Transcriber",
     "MicTranscriber",
     "ModelArch",
+    "SpeakerSpan",
     "TranscriptLine",
     "Transcript",
     "Stream",
@@ -286,6 +291,7 @@ __all__ = [
     "LineStarted",
     "LineUpdated",
     "LineTextChanged",
+    "LineSpeakersChanged",
     "LineCompleted",
     "Error",
     "IntentRecognizer",

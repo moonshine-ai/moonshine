@@ -11,8 +11,7 @@
 #include "onnxruntime_c_api.h"
 #include "spelling-fusion.h"
 
-/* Wraps the SpellingCNN ``.ort`` model. Mirrors the construction /
-   loading shape of ``SpeakerEmbeddingModel``: an instance is created
+/* Wraps the SpellingCNN ``.ort`` model. An instance is created
    without a session, then ``load`` or ``load_from_memory`` is called.
 
    All metadata defaults (sample rate, clip seconds, class list,

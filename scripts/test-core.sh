@@ -27,8 +27,6 @@ ${REPO_ROOT_DIR}/core/build/transcriber-test
 ${REPO_ROOT_DIR}/core/build/moonshine-c-api-test
 ${REPO_ROOT_DIR}/core/build/moonshine-cpp-test
 ${REPO_ROOT_DIR}/core/build/cosine-distance-test
-${REPO_ROOT_DIR}/core/build/speaker-embedding-model-test
-${REPO_ROOT_DIR}/core/build/online-clusterer-test
 ${REPO_ROOT_DIR}/core/build/word-alignment-test
 
 # Run this test in a temporary directory to ensure no file assets are being accessed

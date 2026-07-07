@@ -227,6 +227,9 @@ public class Transcriber {
       if (line.hasTextChanged) {
         this.emit(new TranscriptEvent.LineTextChanged(line, streamHandle));
       }
+      if (line.haveSpeakersChanged) {
+        this.emit(new TranscriptEvent.LineSpeakersChanged(line, streamHandle));
+      }
       if (line.isComplete && line.isUpdated) {
         // There's a potential race condition when stop() is called from a different thread
         // than the one that called addAudioToStream(), which is fairly common since the

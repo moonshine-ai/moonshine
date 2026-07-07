@@ -59,14 +59,61 @@ set(MOONSHINE_SRC_FILES
     transcriber.cpp
     gemma-embedding-model.cpp
     intent-recognizer.cpp
-    speaker-embedding-model.cpp
-    speaker-embedding-model-data.cpp
+    speaker-diarizer.cpp
     spelling-fusion.cpp
     spelling-fusion-data.cpp
     spelling-model.cpp
-    online-clusterer.cpp
     word-alignment.cpp
 )
+
+# cpp-annote speaker diarization library (vendored, see cpp-annote/README.md).
+# Its bundled dependencies (Eigen, kaldi-native-fbank, kissfft) live under
+# third-party/ alongside the other vendored libraries. Compiled directly into
+# the moonshine target so that static framework/library merging on iOS and
+# Windows picks it up without extra archives.
+set(CPP_ANNOTE_DIR ${CMAKE_CURRENT_LIST_DIR}/cpp-annote)
+set(THIRD_PARTY_DIR ${CMAKE_CURRENT_LIST_DIR}/third-party)
+set(CPP_ANNOTE_SRC_FILES
+    ${CPP_ANNOTE_DIR}/src/cpp-annote.cpp
+    ${CPP_ANNOTE_DIR}/src/cpp-annote-streaming.cpp
+    ${CPP_ANNOTE_DIR}/src/community1_cpp_annote_embedded.cpp
+    ${CPP_ANNOTE_DIR}/src/community1_ort_embedded.cpp
+    ${CPP_ANNOTE_DIR}/src/compute_fbank.cpp
+    ${CPP_ANNOTE_DIR}/src/embedding_ort_infer.cpp
+    ${CPP_ANNOTE_DIR}/src/filter_train.cpp
+    ${CPP_ANNOTE_DIR}/src/clustering_vbx.cpp
+    ${CPP_ANNOTE_DIR}/src/plda_vbx.cpp
+    ${CPP_ANNOTE_DIR}/src/scipy_linkage.cpp
+    ${CPP_ANNOTE_DIR}/src/parity_log.cpp
+    ${THIRD_PARTY_DIR}/kissfft/kiss_fft.c
+    ${THIRD_PARTY_DIR}/kissfft/kiss_fftr.c
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/feature-fbank.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/feature-functions.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/feature-mfcc.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/feature-raw-audio-samples.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/feature-window.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/istft.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/kaldi-math.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/mel-computations.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/online-feature.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/rfft.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/stft.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/whisper-feature.cc
+)
+# Vendored code isn't held to the project's warning settings, and Eigen is
+# restricted to its MPL2-licensed subset.
+if (WIN32)
+    set_source_files_properties(${CPP_ANNOTE_SRC_FILES} PROPERTIES
+        COMPILE_OPTIONS "/w"
+        COMPILE_DEFINITIONS "EIGEN_MPL2_ONLY=1"
+    )
+else()
+    set_source_files_properties(${CPP_ANNOTE_SRC_FILES} PROPERTIES
+        COMPILE_OPTIONS "-w"
+        COMPILE_DEFINITIONS "EIGEN_MPL2_ONLY=1"
+    )
+endif()
+list(APPEND MOONSHINE_SRC_FILES ${CPP_ANNOTE_SRC_FILES})
 
 # Build as STATIC framework for iOS/Swift (shared frameworks cannot be embedded)
 # Build as SHARED library for other platforms
@@ -102,6 +149,9 @@ target_include_directories(moonshine PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
     ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
     ${CMAKE_CURRENT_LIST_DIR}/third-party/utf-8/
+    ${CPP_ANNOTE_DIR}/src
+    ${THIRD_PARTY_DIR}
+    ${THIRD_PARTY_DIR}/kissfft
 )
 
 # Extra static archives merged into moonshine.framework (iOS / Swift xcframework).
@@ -552,42 +602,6 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
         )
     endif()
 
-    add_executable(speaker-embedding-model-test speaker-embedding-model-test.cpp speaker-embedding-model.cpp resampler.cpp)
-    set_target_properties(speaker-embedding-model-test PROPERTIES
-        CXX_STANDARD 20
-        CXX_STANDARD_REQUIRED YES
-        CXX_EXTENSIONS NO
-    )
-    target_include_directories(speaker-embedding-model-test PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}
-        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
-        ${CMAKE_CURRENT_LIST_DIR}/ort-utils
-        ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
-        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
-    )
-
-    copy_onnxruntime_dll(speaker-embedding-model-test)
-
-    if (IOS OR MOONSHINE_BUILD_SWIFT)
-        set_target_properties(speaker-embedding-model-test PROPERTIES
-            MACOSX_BUNDLE TRUE
-            MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.speaker-embedding-model-test"
-            MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
-            MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
-        )
-        target_link_libraries(speaker-embedding-model-test PRIVATE
-            moonshine
-            ${ONNXRUNTIME_LIB_PATH}
-            "-framework CoreFoundation"
-            "-framework Foundation"
-        )
-    else()
-        target_link_libraries(speaker-embedding-model-test PRIVATE
-            moonshine
-            ${ONNXRUNTIME_LIB_PATH}
-        )
-    endif()
-
     add_executable(spelling-model-test spelling-model-test.cpp spelling-model.cpp spelling-fusion.cpp spelling-fusion-data.cpp)
     set_target_properties(spelling-model-test PROPERTIES
         CXX_STANDARD 20
@@ -624,18 +638,4 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
         )
     endif()
 
-    add_executable(online-clusterer-test online-clusterer-test.cpp online-clusterer.cpp)
-    set_target_properties(online-clusterer-test PROPERTIES
-        CXX_STANDARD 20
-        CXX_STANDARD_REQUIRED YES
-        CXX_EXTENSIONS NO
-    )
-    target_include_directories(online-clusterer-test PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}
-        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
-        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
-    )
-    target_link_libraries(online-clusterer-test PRIVATE
-        moonshine
-    )
 endif()

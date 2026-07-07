@@ -51,7 +51,6 @@ done < <(grep -rlI \
   --exclude=spanish-unicode-tables.cpp \
   --exclude=russian.cpp \
   --exclude=arabic-ipa.cpp \
-  --exclude=speaker-embedding-model-data.cpp \
   --exclude=moonshine-cpp-test.cpp \
   --exclude=.env \
   --exclude=icon_mic.xml \

@@ -172,6 +172,9 @@ public class Stream {
             if line.hasTextChanged {
                 emit(LineTextChanged(line: line, streamHandle: handle))
             }
+            if line.haveSpeakersChanged {
+                emit(LineSpeakersChanged(line: line, streamHandle: handle))
+            }
             if line.isComplete && line.isUpdated {
                 emit(LineCompleted(line: line, streamHandle: handle))
             }
@@ -230,6 +233,8 @@ public class Stream {
                     listener.onLineUpdated(lineUpdated)
                 } else if let lineTextChanged = event as? LineTextChanged {
                     listener.onLineTextChanged(lineTextChanged)
+                } else if let lineSpeakersChanged = event as? LineSpeakersChanged {
+                    listener.onLineSpeakersChanged(lineSpeakersChanged)
                 } else if let lineCompleted = event as? LineCompleted {
                     listener.onLineCompleted(lineCompleted)
                 } else if let error = event as? TranscriptError {
