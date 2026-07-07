@@ -97,6 +97,7 @@ trap cleanup EXIT
 
 cd ${REPO_ROOT_DIR}
 scripts/test-core.sh
+scripts/test-docs.sh
 scripts/build-swift.sh
 scripts/publish-swift.sh
 scripts/publish-android.sh

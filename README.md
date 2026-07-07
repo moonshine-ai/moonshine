@@ -34,6 +34,7 @@ Example apps for iOS, Android, macOS, Windows, and Raspberry Pi are published on
 
 ### Python
 
+<!-- doc-test: parse-only -->
 ```bash
 pip install moonshine-voice
 python -m moonshine_voice.mic_transcriber --language en
@@ -41,12 +42,14 @@ python -m moonshine_voice.mic_transcriber --language en
 
 Listens to the microphone and prints updates to the transcript as they come in.
 
+<!-- doc-test: parse-only -->
 ```bash
 python -m moonshine_voice.intent_recognizer
 ```
 
 Listens for user-defined action phrases, like "Turn on the lights", using semantic matching so natural language variations are recognized. For more, check out [our "Getting Started" Colab notebook](https://bit.ly/moonshine-colab) and [video](https://www.youtube.com/watch?v=WH-AGvHmtoM).
 
+<!-- doc-test: parse-only -->
 ```bash
 python -m moonshine_voice.tts --language en_us --text "Hello world"
 ```
@@ -65,6 +68,7 @@ Download [github.com/moonshine-ai/moonshine/releases/latest/download/android-Tra
 
 [Download](https://github.com/moonshine-ai/moonshine/archive/refs/heads/main.zip) or `git clone` this repository and then run:
 
+<!-- doc-test: skip -->
 ```bash
 cd core
 mkdir -p build
@@ -90,6 +94,7 @@ It's a self-contained archive that includes the library and model, so Ctrl+Shift
 
 You'll need a USB microphone plugged in to get audio input, but the Python pip package has been optimized for the Pi, so you can run:
 
+<!-- doc-test: skip -->
 ```bash
  sudo pip install --break-system-packages moonshine-voice
  python -m moonshine_voice.mic_transcriber --language en
@@ -336,7 +341,7 @@ The function itself receives a `Dialog` argument that represents the current con
 For more complex conversations, like setting up a new wifi network, you can define multiple steps and branch points directly in Python:
 
 ```python
-   def connect_to_wifi(d: Dialog):
+    def connect_to_wifi(d: Dialog):
         input_ssid = yield d.ask("What's the name of your Wi-Fi network? Say list if you want to pick from a list or spell if you want to spell out the start of the name")
         input_ssid = input_ssid.strip()
 
@@ -437,6 +442,7 @@ The flow also works with other control structures like exception handlers, so yo
 
 To give this a try for yourself, run this built-in example:
 
+<!-- doc-test: parse-only -->
 ```bash
 python -m moonshine_voice.dialog_flow
 ```
@@ -495,6 +501,7 @@ tts.stop()  # cancel remaining utterances and halt playback
 
 If you're on a machine without an audio output, or want to do further processing, you can retrieve the audio samples using the `synthesize()` method:
 
+<!-- doc-test: run -->
 ```python
 from moonshine_voice import TextToSpeech
 
@@ -504,6 +511,7 @@ audio_data, sample_rate = tts.synthesize("Howdy, partner")
 
 As you can see, text to speech supports multiple languages. To see which are available, run the `list_tts_languages()` function:
 
+<!-- doc-test: run -->
 ```python
 from moonshine_voice import list_tts_languages
 list_tts_languages()
@@ -513,6 +521,7 @@ list_tts_languages()
 
 For each language, you can list which voices are available:
 
+<!-- doc-test: run -->
 ```python
 from moonshine_voice import list_tts_voices
 
@@ -547,8 +556,9 @@ The ZipVoice engine is selected automatically when `clone` is set, so no `voice`
 
 You can also try cloning from the command line. Since you won't always have easy access to a clean transcript of the speech you want to clone from, you can leave it out and have Moonshine automatically generate one, in both the API and command line.
 
+<!-- doc-test: parse-only -->
 ```bash
-curl -O 'https://github.com/moonshine-ai/moonshine/raw/refs/heads/main/python/src/moonshine_voice/assets/clone-test.wav'
+curl -O -L 'https://github.com/moonshine-ai/moonshine/raw/refs/heads/main/python/src/moonshine_voice/assets/clone-test.wav'
 
 python3 -m moonshine_voice.tts \
   --clone clone-test.wav \
@@ -629,6 +639,7 @@ Every language requires a different process to convert its written form into spe
 
 If you want access to just the grapheme to phoneme capability, without the speech synthesis, you can all it directly:
 
+<!-- doc-test: run -->
 ```python
 from moonshine_voice import GraphemeToPhonemizer
 
@@ -712,7 +723,7 @@ The library is designed to help you understand what's going wrong when you hit a
 
 If no errors are being reported but the quality of the transcription isn't what you expect, it's worth ruling out an issue with the audio data that the transcriber is receiving. To make this easier, you can pass in the `save_input_wav_path` option when you create a transcriber. That will save any audio received into .wav files in the folder you specify. Here's a Python example:
 
-```python
+```bash
 python -m moonshine_voice.transcriber --options='save_input_wav_path=.'
 ```
 
@@ -722,7 +733,8 @@ This will run test audio through a transcriber, and write out the audio it has r
 
 If you're running into errors it can be hard to keep track of the timeline of your interactions with the library. The `log_api_calls` option will print out the underlying API calls that have been triggered to the console, so you can investigate any ordering or timing issues.
 
-```python
+<!-- doc-test: skip -->
+```bash
 uv run -m moonshine_voice.transcriber --options='log_api_calls=true'
 ```
 
@@ -734,6 +746,7 @@ If you want to debug into the library internals, or add instrumentation to help 
 
 The core engine of the library is contained in the `core` folder of this repo. It's written in C++ with a C interface for easy integration with other languages. We use cmake to build on all our platforms, and so the easiest way to get started is something like this:
 
+<!-- doc-test: skip -->
 ```bash
 cd core
 mkdir -p build
@@ -768,6 +781,7 @@ python -m moonshine_voice.download --stt --language en
 
 You can use either the two-letter code or the English name for the `language` argument. If you want to see which languages are supported by your current version they're [listed below](#available-models), or you can supply a bogus language as the argument to this command:
 
+<!-- doc-test: expect-error -->
 ```bash
 python -m moonshine_voice.download --stt --language foo
 ```
@@ -776,7 +790,7 @@ You can also optionally request a specific model architecture using the `model-a
 
 The download script will log the location of the downloaded model files and the model architecture, for example:
 
-```bash
+```text
 encoder_model.ort: 100%|███████████████████████████████████████████████████████| 29.9M/29.9M [00:00<00:00, 34.5MB/s]
 decoder_model_merged.ort: 100%|██████████████████████████████████████████████████| 104M/104M [00:02<00:00, 52.6MB/s]
 tokenizer.bin: 100%|█████████████████████████████████████████████████████████████| 244k/244k [00:00<00:00, 1.44MB/s]
@@ -792,11 +806,11 @@ The last two lines tell you which model architecture is being used, and where th
 
 The download module also helps you obtain the assets you need to recognize intent, primarily a sentence embedding model. 
 
-```python
+```bash
 python -m moonshine_voice.download --intent
 ```
 
-```bash
+```text
 model_q4.onnx: 100%|███████████████████████████████████████████████| 507k/507k [00:00<00:00, 4.59MB/s]
 model_q4.onnx_data: 100%|██████████████████████████████████████████| 188M/188M [00:06<00:00, 32.6MB/s]
 Embedding model path: /Users/petewarden/Library/Caches/moonshine_voice/download.moonshine.ai/model/embeddinggemma-300m
@@ -809,7 +823,9 @@ A large variety of models, dictionaries and other files are needed for TTS, and 
 
 ```bash
 python -m moonshine_voice.download --tts --root /tmp/tts-files/
+```
 
+```text
 dict_filtered_heteronyms.tsv: 100%|██████████████████████████████| 2.77M/2.77M [00:00<00:00, 15.5MB/s]
 g2p-config.json: 100%|██████████████████████████████████████████████| 60.0.65.0 [00:00<00:00, 160kB/s]
 model.onnx: 100%|████████████████████████████████████████████████| 20.9M/20.9M [00:00<00:00, 37.7MB/s]
@@ -829,9 +845,10 @@ If you have an application that may be stored in an arbitrary location after ins
 
 The core library includes a benchmarking tool that simulates processing live audio by loading a .wav audio file and feeding it in chunks to the model. To run it:
 
-```
+<!-- doc-test: skip -->
+```bash
 cd core
-md build
+mkdir -p build
 cd build
 cmake ..
 cmake --build . --config Release
