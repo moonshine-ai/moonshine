@@ -6,7 +6,7 @@ enable_testing()
 
 set(CMAKE_CXX_STANDARD 20)
 
-set(MOONSHINE_VERSION "0.0.65")
+set(MOONSHINE_VERSION "0.0.67")
 
 # Ensure the standard is strictly enforced (optional, but recommended)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,14 +15,46 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if (NOT WIN32)
+  # Base warnings are fatal (matches prior behavior).
   add_compile_options(-Wall -Wextra -pedantic -Werror)
+  # Additional useful diagnostics (C++ only — these flags are invalid for C
+  # sources). They are emitted as non-fatal warnings (-Wno-error) because parts
+  # of the existing codebase still use old-style casts / shadowing, and we do
+  # not want to break the build on pre-existing patterns during this release.
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wshadow>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wnon-virtual-dtor>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wold-style-cast>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wcast-align>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wunused>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Woverloaded-virtual>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wconversion>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wsign-conversion>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wnull-dereference>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wdouble-promotion>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wformat=2>)
+  # Keep the new diagnostics non-fatal so -Werror only binds to the base set.
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-error=shadow>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-error=old-style-cast>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-error=cast-align>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-error=overloaded-virtual>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-error=conversion>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-error=sign-conversion>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-error=null-dereference>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-error=double-promotion>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-error=format>)
+  # Pre-existing test/benchmark scaffolding ignores some nodiscard/fread
+  # results; keep that non-fatal rather than churning unrelated test code.
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-error=unused-result>)
+  # Disable specific warnings that are too noisy for this codebase
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-sign-conversion>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-conversion>)
 endif()
 # Enable this to catch memory leaks and access violations.
 # This is only supported on Linux.
 # if(LINUX)
 #     add_compile_options(-fsanitize=address -fno-omit-frame-pointer -g)
 #     add_link_options(-fsanitize=address -fno-omit-frame-pointer)
-# endif()
+#endif()
 
 include(${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/find-ort-library-path.cmake)
 
@@ -66,6 +98,14 @@ set(MOONSHINE_SRC_FILES
     spelling-model.cpp
     online-clusterer.cpp
     word-alignment.cpp
+)
+
+# cosine-distance.cpp uses SSE3 (_mm_hadd_ps) for the baseline SSE path and
+# AVX (guarded by a target("avx") helper) for the fast path. Enable SSE3 for
+# this translation unit so the intrinsics are available without raising the
+# global -march (which would break portability of the shared library).
+set_source_files_properties(cosine-distance.cpp PROPERTIES
+    COMPILE_OPTIONS "-msse3"
 )
 
 # Build as STATIC framework for iOS/Swift (shared frameworks cannot be embedded)
@@ -513,7 +553,7 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
         )
     endif()
 
-    add_executable(gemma-embedding-model-test gemma-embedding-model-test.cpp gemma-embedding-model.cpp)
+    add_executable(gemma-embedding-model-test gemma-embedding-model-test.cpp gemma-embedding-model.cpp cosine-distance.cpp)
     set_target_properties(gemma-embedding-model-test PROPERTIES
         CXX_STANDARD 20
         CXX_STANDARD_REQUIRED YES
@@ -637,5 +677,35 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
     )
     target_link_libraries(online-clusterer-test PRIVATE
         moonshine
+    )
+
+    add_executable(memory-safety-test memory-safety-test.cpp)
+    set_target_properties(memory-safety-test PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(memory-safety-test PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+    )
+    target_link_libraries(memory-safety-test PRIVATE
+        moonshine
+        moonshine-utils
+    )
+
+    add_executable(benchmark-suite benchmark-suite.cpp)
+    set_target_properties(benchmark-suite PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(benchmark-suite PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+    )
+    target_link_libraries(benchmark-suite PRIVATE
+        moonshine
+        moonshine-utils
     )
 endif()
