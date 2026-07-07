@@ -5,6 +5,9 @@
 # python/tests/test_docs.py) and running the getting-started notebook end to
 # end, all against a freshly built wheel.
 #
+# The Python module tests (python/tests/test_modules.py) are run separately
+# by scripts/test-python.sh.
+#
 # Usage:
 #   ./scripts/test-docs.sh                Build the wheel first, then test.
 #   ./scripts/test-docs.sh --skip-build   Reuse the wheel already in
@@ -44,5 +47,5 @@ cp "${PYTHON_DIR}/getting-started-with-moonshine-voice.ipynb" "${WORK_DIR}/"
 
 pytest -v \
     --nbmake --nbmake-timeout=900 \
-    "${PYTHON_DIR}/tests" \
+    "${PYTHON_DIR}/tests/test_docs.py" \
     "${WORK_DIR}/getting-started-with-moonshine-voice.ipynb"
