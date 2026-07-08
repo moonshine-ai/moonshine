@@ -1,0 +1,38 @@
+# clang-tidy configuration for the Moonshine core library.
+#
+# The goal is high-signal reliability checks (memory safety, bounds, undefined
+# behaviour) without the noise of full "modernize"/naming enforcement, keeping
+# with our "C++ as a better C" style (see STYLE_GUIDE.md). This runs as part of
+# scripts/reliability.sh against the compile_commands.json produced by a
+# MOONSHINE_RELIABILITY=ON build.
+#
+# Third-party and vendored code (third-party/, cpp-annote/) is excluded via
+# HeaderFilterRegex below and by the source-file selection in the script; we do
+# not modify or lint vendored sources.
+---
+Checks: >
+  -*,
+  bugprone-*,
+  cert-*,
+  cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  cppcoreguidelines-pro-bounds-constant-array-index,
+  cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  cppcoreguidelines-pro-type-reinterpret-cast,
+  cppcoreguidelines-pro-type-cstyle-cast,
+  cppcoreguidelines-narrowing-conversions,
+  misc-misplaced-const,
+  misc-uniqueptr-reset-release,
+  performance-move-const-arg,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -cert-err58-cpp
+
+# Only surface diagnostics from first-party headers. llvm::Regex has no
+# negative lookahead, so we enumerate first-party locations rather than
+# excluding third-party/ and cpp-annote/.
+HeaderFilterRegex: '.*/core/[^/]*\.h$|.*/core/(moonshine-utils|ort-utils|bin-tokenizer|reliability)/.*\.h$|.*/core/moonshine-tts/src/.*\.h$'
+
+WarningsAsErrors: ''
+
+FormatStyle: file

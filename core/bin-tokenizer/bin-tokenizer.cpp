@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <stdexcept>
 
 #include "debug-utils.h"
@@ -65,9 +66,23 @@ BinTokenizer::BinTokenizer(const uint8_t *tokenizer_data,
     if (first_byte < 128) {
       byte_count = first_byte;
     } else {
+      if (offset >= tokenizer_data_size) {
+        throw std::runtime_error(
+            "Truncated tokenizer data: missing length byte at offset " +
+            std::to_string(offset));
+      }
       uint8_t second_byte = tokenizer_data[offset];
       byte_count = (second_byte * 128) + first_byte - 128;
       offset++;
+    }
+    // Guard against a truncated blob so the memcpy below cannot read past the
+    // end of the input (offset is always <= tokenizer_data_size here, so the
+    // subtraction cannot underflow).
+    if (byte_count > tokenizer_data_size - offset) {
+      throw std::runtime_error(
+          "Truncated tokenizer data: token of " + std::to_string(byte_count) +
+          " bytes at offset " + std::to_string(offset) +
+          " exceeds input size " + std::to_string(tokenizer_data_size));
     }
     std::vector<uint8_t> bytes(byte_count);
     std::memcpy(bytes.data(), tokenizer_data + offset, byte_count);

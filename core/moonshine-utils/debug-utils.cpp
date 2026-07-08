@@ -145,9 +145,15 @@ bool load_wav_data(const char *path, float **out_float_data,
     return false;
   }
   float *result_data = (float *)malloc(num_samples * sizeof(float));
+  if (result_data == nullptr) {
+    std::fclose(file);
+    std::fprintf(stderr, "Failed to allocate %zu samples\n", num_samples);
+    return false;
+  }
   for (size_t i = 0; i < num_samples; ++i) {
     int16_t sample = 0;
     if (std::fread(&sample, sizeof(int16_t), 1, file) != 1) {
+      free(result_data);
       std::fclose(file);
       std::fprintf(stderr, "Failed to read sample %zu\n", i);
       return false;

@@ -17,12 +17,26 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 if (NOT WIN32)
   add_compile_options(-Wall -Wextra -pedantic -Werror)
 endif()
-# Enable this to catch memory leaks and access violations.
-# This is only supported on Linux.
-# if(LINUX)
-#     add_compile_options(-fsanitize=address -fno-omit-frame-pointer -g)
-#     add_link_options(-fsanitize=address -fno-omit-frame-pointer)
-# endif()
+
+# Opt-in reliability build (Linux/Clang): AddressSanitizer + UndefinedBehavior
+# Sanitizer plus a compile-commands database for clang-tidy, and the fuzzing
+# harnesses under reliability/. This is OFF by default and is never used for
+# release builds, so production binaries, their performance, and the set of
+# runtime dependencies shipped to library users are all unaffected.
+# See core/STYLE_GUIDE.md and scripts/reliability.sh.
+option(MOONSHINE_RELIABILITY
+    "Build with sanitizers and fuzzing support (Linux/Clang only)" OFF)
+if (MOONSHINE_RELIABILITY)
+    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+    add_compile_options(
+        -fsanitize=address,undefined
+        -fsanitize-ignorelist=${CMAKE_CURRENT_LIST_DIR}/reliability/sanitizer-ignorelist.txt
+        -fno-omit-frame-pointer
+        -fno-sanitize-recover=all
+        -g
+    )
+    add_link_options(-fsanitize=address,undefined)
+endif()
 
 include(${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/find-ort-library-path.cmake)
 
@@ -638,4 +652,21 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
         )
     endif()
 
+endif()
+
+# Style enforcement: banned constructs must not creep back into first-party
+# code. Registered as a ctest so `ctest -R check-banned-constructs` (and the
+# reliability script) fail if a banned pattern appears. See core/STYLE_GUIDE.md.
+add_test(
+    NAME check-banned-constructs
+    COMMAND bash ${CMAKE_CURRENT_LIST_DIR}/../scripts/check-banned-constructs.sh
+    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/..
+)
+
+# Fuzzing harnesses are only configured for the opt-in reliability build.
+if (MOONSHINE_RELIABILITY)
+    add_subdirectory(
+        ${CMAKE_CURRENT_LIST_DIR}/reliability
+        ${CMAKE_CURRENT_LIST_DIR}/reliability/build
+    )
 endif()
