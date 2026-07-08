@@ -15,9 +15,9 @@ public struct WordTiming {
 /// One contiguous span of speech within a line attributed to a single
 /// speaker. Only populated when the `identify_speakers` option is enabled.
 ///
-/// Spans are mutable: the diarization algorithm re-clusters the audio history
-/// as more speech arrives, so the spans of any line - including completed
-/// ones - can be revised on any transcription update. Watch
+/// Spans for recent audio are mutable: streaming diarization re-clusters a
+/// sliding window (`diarization_cluster_window_sec`, default 120s) as more
+/// speech arrives. Assignments for older audio are frozen. Watch
 /// `TranscriptLine.haveSpeakersChanged` to detect revisions.
 public struct SpeakerSpan {
     /// Time offset from the start of the audio or stream in seconds.

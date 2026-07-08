@@ -747,7 +747,8 @@ std::vector<float> CppAnnoteEngine::run_embedding_ort_single(
 
 std::vector<DiarizationTurn> CppAnnoteEngine::cluster_and_decode(
     const std::vector<float> &seg_out, const std::vector<float> &emb, int C,
-    DiarizationProfile &profile, double chunk_step_sec_override) {
+    DiarizationProfile &profile, double chunk_step_sec_override,
+    double chunks_start_sec) {
   using Clock = std::chrono::steady_clock;
   const int F = seg_F_;
   const int Kcls = seg_K_;
@@ -776,7 +777,7 @@ std::vector<DiarizationTurn> CppAnnoteEngine::cluster_and_decode(
 
   const auto t_after_vbx = Clock::now();
 
-  double seg_ss = 0.;
+  double seg_ss = chunks_start_sec;
   double seg_sd = chunk_dur_sec;
   double seg_st = chunk_step_sec;
 
@@ -839,7 +840,8 @@ std::vector<DiarizationTurn> CppAnnoteEngine::cluster_and_decode(
   int K_di = 0;
   const std::vector<float> discrete =
       reconstruct_to_diarization(seg_out, C, F, Kcls, seg_ss, seg_sd, seg_st,
-                                 hptr, count_i8, 0.0, rf_dur_, rf_step_, K_di);
+                                 hptr, count_i8, chunks_start_sec, rf_dur_,
+                                 rf_step_, K_di);
   if (K_di <= 0) {
     throw std::runtime_error(
         "reconstruct returned non-positive speaker column count");
@@ -856,8 +858,8 @@ std::vector<DiarizationTurn> CppAnnoteEngine::cluster_and_decode(
                    static_cast<size_t>(k)];
     }
     std::vector<std::pair<double, double>> regs;
-    binarize_column(col.data(), rows, 0.0, rf_dur_, rf_step_, onset, offset,
-                    pad_onset, pad_offset, regs);
+    binarize_column(col.data(), rows, chunks_start_sec, rf_dur_, rf_step_, onset,
+                    offset, pad_onset, pad_offset, regs);
     if (!apply_annotation_support) {
       filter_min_duration_on(regs, min_on_);
     }

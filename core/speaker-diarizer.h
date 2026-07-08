@@ -27,14 +27,18 @@ struct SpeakerDiarizerOptions {
   // Seconds between segmentation/embedding model runs. Zero means use the
   // model default (1 second for the community-1 models). Must be <= 10.
   double analyze_cadence = 0.0;
+  // Maximum seconds of audio history fed to VBx per refresh. Zero means
+  // unlimited (full-history re-clustering). Default 120 for streaming.
+  double cluster_window_sec = 120.0;
 };
 
 // Speaker diarization built on the cpp-annote port of the pyannote
-// community-1 pipeline (see cpp-annote/README.md). The pipeline
-// re-clusters the entire audio history on a cadence, so the turns returned
-// from get_turns() are mutable: spans can move, merge, split, or change
-// speaker as more audio arrives. Callers should treat every call's result as
-// the current best estimate for the whole stream.
+// community-1 pipeline (see cpp-annote/README.md). Streaming sessions
+// re-cluster a bounded sliding window of recent audio on a cadence; older
+// turns are frozen. One-shot diarize() uses full-history clustering.
+// Turns from get_turns() can still move within the active window as more
+// audio arrives. Callers should treat every call's result as the current
+// best estimate for the whole stream.
 class SpeakerDiarizer {
  public:
   explicit SpeakerDiarizer(

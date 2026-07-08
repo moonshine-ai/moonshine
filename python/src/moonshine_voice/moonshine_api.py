@@ -214,9 +214,10 @@ class SpeakerSpan:
     """One contiguous span of speech within a line attributed to one speaker.
 
     Only populated when the ``identify_speakers`` option is enabled. Spans
-    are mutable: the diarization algorithm re-clusters the audio history as
-    more speech arrives, so the spans of any line - including completed
-    ones - can be revised on any transcription update. Watch
+    for recent audio are mutable: streaming diarization re-clusters a
+    sliding window (``diarization_cluster_window_sec``, default 120s) as more
+    speech arrives, so spans can be revised on any transcription update.
+    Assignments for audio older than the window are frozen. Watch
     ``TranscriptLine.have_speakers_changed`` (or the ``LineSpeakersChanged``
     event) to detect revisions.
 

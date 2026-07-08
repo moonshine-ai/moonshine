@@ -148,6 +148,9 @@ struct TranscriberOptions {
   // Seconds between diarization segmentation/embedding model runs. Zero
   // means use the model default (1 second).
   float diarization_analyze_cadence = 0.0f;
+  // Maximum seconds of audio history fed to VBx per refresh. Zero means
+  // unlimited. Default 120 bounds compute on long streaming sessions.
+  float diarization_cluster_window_sec = 120.0f;
   std::string save_input_wav_path = "";
   bool log_ort_run = false;
   std::vector<std::string> ort_provider_names{};

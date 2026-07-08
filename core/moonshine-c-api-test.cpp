@@ -415,6 +415,7 @@ TEST_CASE("moonshine-test-v2") {
         {"identify_speakers", "true"},
         {"diarization_cluster_cadence", "2.0"},
         {"diarization_analyze_cadence", "1.0"},
+        {"diarization_cluster_window_sec", "120.0"},
         {"return_audio_data", "false"},
         {"log_output_text", "true"},
         {"ort_providers", "CPU"},

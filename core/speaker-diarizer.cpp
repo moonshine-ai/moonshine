@@ -76,6 +76,7 @@ struct SpeakerDiarizer::Impl {
     cppannote::StreamingDiarizationConfig config;
     config.cluster_cadence = this->options.cluster_cadence;
     config.analyze_cadence = this->options.analyze_cadence;
+    config.cluster_window_sec = this->options.cluster_window_sec;
     return config;
   }
 
@@ -241,6 +242,7 @@ std::vector<SpeakerTurn> SpeakerDiarizer::diarize(const float *audio_data,
   constexpr double kNeverRefresh = 1e18;
   cppannote::StreamingDiarizationConfig config = this->impl->session_config();
   config.cluster_cadence = kNeverRefresh;
+  config.cluster_window_sec = 0.0;
   Impl::StreamState state;
   state.session = std::make_unique<cppannote::StreamingDiarizationSession>(
       this->impl->engine, config);

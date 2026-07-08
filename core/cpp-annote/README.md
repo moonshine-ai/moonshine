@@ -4,6 +4,9 @@ Vendored copy of https://github.com/moonshine-ai/cpp-annote, a C++/ONNX Runtime
 port of the pyannote community-1 speaker diarization pipeline. Used by the
 transcriber for opt-in speaker identification (`identify_speakers` option).
 
+Streaming sessions bound VBx to a sliding window (default 120s via
+`diarization_cluster_window_sec`); batch/one-shot diarization uses full history.
+
 Local modifications relative to upstream:
 
 - Removed the cnpy/zlib dependency: the file-based `PldaModel::load()` NPZ

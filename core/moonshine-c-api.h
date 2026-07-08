@@ -179,10 +179,10 @@ To make the streaming results easier to work with we offer some guarantees:
    Speaker IDs are 64-bit
    randomly-generated numbers that are stable for a given speaker within a
    stream, and speaker indices count speakers in order of first appearance.
-   Unlike the text and timing of a line, speaker spans are *mutable*: the
-   diarization algorithm continuously re-clusters the audio history as more
-   speech arrives, so the spans of any line - including completed ones - can
-   be revised on any transcription call. The ``have_speakers_changed`` flag is
+   Unlike the text and timing of a line, speaker spans for recent audio are
+   *mutable*: streaming diarization re-clusters a sliding window
+   (``diarization_cluster_window_sec``, default 120s) as more speech arrives;
+   assignments for older audio are frozen. The ``have_speakers_changed`` flag is
    set on a line whenever its spans changed since the previous call.
 
 See the stream transcription examples below for more details on what this
@@ -327,12 +327,15 @@ MOONSHINE_EXPORT const char *moonshine_transcript_to_string(
    This also enables word timestamps automatically. This runs the cpp-annote
    diarization pipeline (a port of
    pyannote community-1) inline inside transcription calls, which adds
-   significant compute, and re-clustering cost grows with session length.
+   significant compute, and re-clustering cost grows with session length unless
+   bounded by ``diarization_cluster_window_sec``.
    ``diarization_cluster_cadence`` (float seconds, default 2.0) sets the
    minimum interval between re-clustering passes - raise it to reduce cost on
-   long sessions - and ``diarization_analyze_cadence`` (float seconds,
+   long sessions - ``diarization_analyze_cadence`` (float seconds,
    default 0 = model default of 1.0) sets the interval between
-   segmentation/embedding model runs.
+   segmentation/embedding model runs, and ``diarization_cluster_window_sec``
+   (float seconds, default 120.0) limits how much audio history VBx
+   re-clustering considers on each refresh (0 = unlimited full history).
    Pass ``"spelling_model_path"`` with a path to a
    spelling-CNN ``.ort`` file (e.g.
    ``https://download.moonshine.ai/model/spelling-en/spelling_cnn.ort``)
@@ -488,10 +491,10 @@ MOONSHINE_EXPORT int32_t moonshine_transcribe_without_streaming(
    its text and timing will never change again.
 
    The one exception is speaker information: when the `identify_speakers`
-   option is enabled, the `speaker_spans` of any line - including completed
-   ones - can be revised on any call to moonshine_transcribe_stream, since the
-   diarization algorithm re-clusters the audio history as more speech arrives.
-   Watch the `have_speakers_changed` flag to detect these revisions.
+   option is enabled, speaker spans for recent audio can be revised on any call
+   to moonshine_transcribe_stream, since diarization re-clusters a sliding
+   window of recent speech. Older assignments are frozen. Watch the
+   `have_speakers_changed` flag to detect these revisions.
 */
 
 /* Creates a stream. This function returns a handle to the stream, which can be
