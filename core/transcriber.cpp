@@ -91,6 +91,8 @@ Transcriber::Transcriber(const TranscriberOptions &options)
     SpeakerDiarizerOptions diarizer_options;
     diarizer_options.cluster_cadence = this->options.diarization_cluster_cadence;
     diarizer_options.analyze_cadence = this->options.diarization_analyze_cadence;
+    diarizer_options.cluster_window_sec =
+        this->options.diarization_cluster_window_sec;
     this->speaker_diarizer = new SpeakerDiarizer(diarizer_options);
   }
   // Lazily attach the spelling model when the caller provided one.
@@ -477,7 +479,8 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
     // Ensure that all lines are marked as complete if the stream is stopped.
     if (is_stopped) {
       stream->transcript_output->mark_all_lines_as_complete();
-    } else if (speakers_changed) {
+    }
+    if (speakers_changed) {
       stream->transcript_output->update_transcript_from_lines();
     }
     *out_transcript = &(stream->transcript_output->transcript);

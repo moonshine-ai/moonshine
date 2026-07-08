@@ -142,6 +142,9 @@ void parse_transcriber_options(const OptionVector &options,
     } else if (option_name == "diarization_analyze_cadence") {
       out_options.diarization_analyze_cadence =
           float_from_string(option_value);
+    } else if (option_name == "diarization_cluster_window_sec") {
+      out_options.diarization_cluster_window_sec =
+          float_from_string(option_value);
     } else if (option_name == "return_audio_data") {
       out_options.return_audio_data = bool_from_string(option_value);
     } else if (option_name == "log_output_text") {
