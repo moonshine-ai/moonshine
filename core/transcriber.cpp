@@ -483,7 +483,9 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
     if (speakers_changed) {
       stream->transcript_output->update_transcript_from_lines();
     }
-    *out_transcript = &(stream->transcript_output->transcript);
+    if (out_transcript != nullptr) {
+      *out_transcript = &(stream->transcript_output->transcript);
+    }
     return;
   }
 
@@ -734,7 +736,9 @@ void Transcriber::update_transcript_from_segments(
     stream->transcript_output->mark_all_lines_as_complete();
   }
   stream->transcript_output->update_transcript_from_lines();
-  *out_transcript = &(stream->transcript_output->transcript);
+  if (out_transcript != nullptr) {
+    *out_transcript = &(stream->transcript_output->transcript);
+  }
 }
 
 namespace {
