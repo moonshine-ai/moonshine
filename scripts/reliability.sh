@@ -24,8 +24,10 @@
 #                        (copied back locally to commit) instead of gating on it
 #   TSAN               1 => run the ThreadSanitizer stage (default 1); 0 to skip
 #   TSAN_STRICT        1 => TSan findings fail the run (default 0, advisory)
-#   FORMAT_STRICT      1 => formatting drift fails the run (default 0, advisory).
-#                      Run scripts/format-core.sh to fix drift wholesale.
+#
+# The local static checks (banned constructs + formatting) are hard gates: any
+# failure aborts the run before syncing, so drift is never silently skipped. Run
+# scripts/format-core.sh to fix formatting drift wholesale.
 set -euo pipefail
 
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -38,21 +40,20 @@ FUZZ_SECONDS="${FUZZ_SECONDS:-900}"
 TIDY_UPDATE_BASELINE="${TIDY_UPDATE_BASELINE:-0}"
 TSAN="${TSAN:-1}"
 TSAN_STRICT="${TSAN_STRICT:-0}"
-FORMAT_STRICT="${FORMAT_STRICT:-0}"
 
-echo "=== Local static checks ==="
-echo "--- banned constructs (hard gate) ---"
-"${SCRIPTS_DIR}/check-banned-constructs.sh"
+echo "=== Local static checks (hard gates) ==="
+echo "--- banned constructs ---"
+if ! "${SCRIPTS_DIR}/check-banned-constructs.sh"; then
+  echo "error: banned-constructs check failed (see errors above)." >&2
+  exit 1
+fi
 
 echo "--- formatting ---"
-if "${SCRIPTS_DIR}/format-core.sh" --check; then
-  echo "formatting: clean"
-elif [[ "${FORMAT_STRICT}" == "1" ]]; then
-  echo "error: formatting drift (FORMAT_STRICT=1)." >&2
+if ! "${SCRIPTS_DIR}/format-core.sh" --check; then
+  echo "error: formatting drift (see above). Run scripts/format-core.sh to fix it." >&2
   exit 1
-else
-  echo "warning: formatting drift above is advisory; run scripts/format-core.sh to fix." >&2
 fi
+echo "formatting: clean"
 
 echo ""
 echo "=== Syncing working tree to ${RELIABILITY_HOST}:${REMOTE_DIR} ==="
