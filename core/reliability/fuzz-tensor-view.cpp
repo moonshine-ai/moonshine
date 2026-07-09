@@ -28,8 +28,8 @@ struct Reader {
   int64_t next_i64() {
     int64_t value = 0;
     for (int i = 0; i < 8; ++i) {
-      value = static_cast<int64_t>((static_cast<uint64_t>(value) << 8) |
-                                   next_u8());
+      value =
+          static_cast<int64_t>((static_cast<uint64_t>(value) << 8) | next_u8());
     }
     return value;
   }
@@ -64,7 +64,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   size_t element_count = 1;
   for (const int64_t dim : shape) {
     if (dim < 0 || (dim != 0 && element_count > kMaxCopyElements /
-                                                     static_cast<size_t>(dim))) {
+                                                    static_cast<size_t>(dim))) {
       safe_to_copy = false;
       break;
     }

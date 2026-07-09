@@ -332,7 +332,8 @@ int32_t moonshine_create_stream(int32_t transcriber_handle, uint32_t flags) {
   }
 }
 
-int32_t moonshine_free_stream(int32_t transcriber_handle, int32_t stream_handle) {
+int32_t moonshine_free_stream(int32_t transcriber_handle,
+                              int32_t stream_handle) {
   if (log_api_calls) {
     LOGF("moonshine_free_stream(transcriber_handle=%d, stream_handle=%d)",
          transcriber_handle, stream_handle);
