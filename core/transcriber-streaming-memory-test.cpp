@@ -54,8 +54,7 @@ size_t read_rss_kb() {
   mach_task_basic_info_data_t info;
   mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
   if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO,
-                reinterpret_cast<task_info_t>(&info),
-                &count) != KERN_SUCCESS) {
+                reinterpret_cast<task_info_t>(&info), &count) != KERN_SUCCESS) {
     return 0;
   }
   return info.resident_size / 1024;
@@ -183,17 +182,17 @@ bool detect_continual_growth(const std::vector<size_t> &samples,
                 denom;
 
   if (out_report != nullptr) {
-    *out_report =
-        "early_median=" + std::to_string(early_median) +
-        ", late_median=" + std::to_string(late_median) +
-        ", growth=" + std::to_string(growth) +
-        ", growth_tolerance=" + std::to_string(growth_tolerance) +
-        ", positive_fraction=" + std::to_string(positive_fraction) +
-        ", slope_per_sample=" + std::to_string(slope_per_sample) +
-        ", samples=" + std::to_string(samples.size());
+    *out_report = "early_median=" + std::to_string(early_median) +
+                  ", late_median=" + std::to_string(late_median) +
+                  ", growth=" + std::to_string(growth) +
+                  ", growth_tolerance=" + std::to_string(growth_tolerance) +
+                  ", positive_fraction=" + std::to_string(positive_fraction) +
+                  ", slope_per_sample=" + std::to_string(slope_per_sample) +
+                  ", samples=" + std::to_string(samples.size());
   }
 
-  return growth > growth_tolerance && positive_fraction >= min_positive_fraction &&
+  return growth > growth_tolerance &&
+         positive_fraction >= min_positive_fraction &&
          slope_per_sample > min_slope_per_sample;
 }
 
@@ -212,7 +211,8 @@ TEST_CASE("transcriber-streaming-memory") {
       env_float("MOONSHINE_STREAM_MEMORY_AUDIO_SECONDS", 120.0f);
   REQUIRE(target_audio_seconds >= 60.0f);
 
-  std::vector<float> fixture_audio = load_looped_fixture_audio(target_audio_seconds);
+  std::vector<float> fixture_audio =
+      load_looped_fixture_audio(target_audio_seconds);
   REQUIRE_MESSAGE(!fixture_audio.empty(),
                   "two_cities_16k.wav fixture is required");
 
@@ -238,7 +238,8 @@ TEST_CASE("transcriber-streaming-memory") {
   std::vector<size_t> completed_byte_samples;
   std::vector<size_t> rss_samples;
   const size_t expected_sample_count =
-      static_cast<size_t>(target_audio_seconds / options.transcription_interval) +
+      static_cast<size_t>(target_audio_seconds /
+                          options.transcription_interval) +
       8;
   completed_byte_samples.reserve(expected_sample_count);
   rss_samples.reserve(expected_sample_count);
@@ -291,8 +292,7 @@ TEST_CASE("transcriber-streaming-memory") {
   std::string rss_report;
   const bool rss_growing =
       !rss_samples.empty() &&
-      detect_continual_growth(rss_samples, 48 * 1024, 0.70, 512.0,
-                                &rss_report);
+      detect_continual_growth(rss_samples, 48 * 1024, 0.70, 512.0, &rss_report);
   (void)rss_growing;
 
   if (completed_growing) {
