@@ -433,6 +433,7 @@ run_fuzzer fuzz_bin_tokenizer "${TOKENIZER_SEEDS[@]:-}"
 run_fuzzer fuzz_wav_pcm "${WAV_SEEDS[@]:-}"
 run_fuzzer fuzz_resampler
 run_fuzzer fuzz_string_utils
+run_fuzzer fuzz_tensor_view
 
 # ---------------------------------------------------------------------------
 # Summary.
