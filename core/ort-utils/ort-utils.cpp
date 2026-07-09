@@ -178,48 +178,60 @@ ONNXTensorElementDataType ort_get_type(const OrtApi *ort_api,
 
 std::vector<int64_t> ort_get_input_shape(const OrtApi *ort_api,
                                          OrtSession *session, int index) {
-  OrtTypeInfo *type_info;
+  OrtTypeInfo *type_info = nullptr;
   LOG_ORT_ERROR(ort_api,
                 ort_api->SessionGetInputTypeInfo(session, index, &type_info));
-  return ort_get_shape(ort_api, type_info);
+  std::vector<int64_t> shape = ort_get_shape(ort_api, type_info);
+  ort_api->ReleaseTypeInfo(type_info);
+  return shape;
 }
 
 ONNXTensorElementDataType ort_get_input_type(const OrtApi *ort_api,
                                              OrtSession *session, int index) {
-  OrtTypeInfo *type_info;
+  OrtTypeInfo *type_info = nullptr;
   LOG_ORT_ERROR(ort_api,
                 ort_api->SessionGetInputTypeInfo(session, index, &type_info));
-  return ort_get_type(ort_api, type_info);
+  ONNXTensorElementDataType type = ort_get_type(ort_api, type_info);
+  ort_api->ReleaseTypeInfo(type_info);
+  return type;
 }
 
 std::vector<int64_t> ort_get_output_shape(const OrtApi *ort_api,
                                           OrtSession *session, int index) {
-  OrtTypeInfo *type_info;
+  OrtTypeInfo *type_info = nullptr;
   LOG_ORT_ERROR(ort_api,
                 ort_api->SessionGetOutputTypeInfo(session, index, &type_info));
-  return ort_get_shape(ort_api, type_info);
+  std::vector<int64_t> shape = ort_get_shape(ort_api, type_info);
+  ort_api->ReleaseTypeInfo(type_info);
+  return shape;
 }
 
 ONNXTensorElementDataType ort_get_output_type(const OrtApi *ort_api,
                                               OrtSession *session, int index) {
-  OrtTypeInfo *type_info;
+  OrtTypeInfo *type_info = nullptr;
   LOG_ORT_ERROR(ort_api,
                 ort_api->SessionGetOutputTypeInfo(session, index, &type_info));
-  return ort_get_type(ort_api, type_info);
+  ONNXTensorElementDataType type = ort_get_type(ort_api, type_info);
+  ort_api->ReleaseTypeInfo(type_info);
+  return type;
 }
 
 std::vector<int64_t> ort_get_value_shape(const OrtApi *ort_api,
                                          const OrtValue *value) {
-  OrtTypeInfo *type_info;
+  OrtTypeInfo *type_info = nullptr;
   LOG_ORT_ERROR(ort_api, ort_api->GetTypeInfo(value, &type_info));
-  return ort_get_shape(ort_api, type_info);
+  std::vector<int64_t> shape = ort_get_shape(ort_api, type_info);
+  ort_api->ReleaseTypeInfo(type_info);
+  return shape;
 }
 
 ONNXTensorElementDataType ort_get_value_type(const OrtApi *ort_api,
                                              const OrtValue *value) {
-  OrtTypeInfo *type_info;
+  OrtTypeInfo *type_info = nullptr;
   LOG_ORT_ERROR(ort_api, ort_api->GetTypeInfo(value, &type_info));
-  return ort_get_type(ort_api, type_info);
+  ONNXTensorElementDataType type = ort_get_type(ort_api, type_info);
+  ort_api->ReleaseTypeInfo(type_info);
+  return type;
 }
 
 OrtStatus *ort_run(const OrtApi *ort_api, OrtSession *session,
