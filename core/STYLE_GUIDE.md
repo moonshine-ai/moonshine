@@ -63,8 +63,10 @@ Third-party and vendored code (`core/third-party/` and `core/cpp-annote/`) is
 | Formatting | `scripts/format-core.sh --check` (`clang-format`) |
 | Banned constructs | `scripts/check-banned-constructs.sh` (also the `check-banned-constructs` ctest) |
 | Memory / UB bugs | ASan + UBSan build via `-DMOONSHINE_RELIABILITY=ON` |
+| Container bounds / preconditions | `-D_GLIBCXX_ASSERTIONS` (reliability build only) |
+| Data races | ThreadSanitizer build (`-DMOONSHINE_SANITIZER=thread`) driving `transcriber-concurrency-test` (many parallel streams), run by `scripts/reliability.sh`. TSan runs with `MOONSHINE_ORT_SINGLE_THREAD=1` so onnxruntime stays on the calling thread (its uninstrumented pool otherwise deadlocks TSan); first-party locking is still exercised. |
 | Per-module robustness | libFuzzer targets in `core/reliability/` |
-| Reliability lints | `core/.clang-tidy` (bounds, `reinterpret_cast`, bugprone) |
+| Reliability lints + static analysis | `core/.clang-tidy` (bounds, `reinterpret_cast`, bugprone, and the `clang-analyzer-*` path-sensitive engine) |
 
 ### The banned-constructs baseline
 

@@ -428,22 +428,27 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
                                     struct transcript_t **out_transcript) {
   TranscriberStream *stream = nullptr;
   {
+    // Resolve the stream pointer entirely under streams_mutex. Reading the map
+    // outside the lock (as an earlier version did on a second streams[] lookup)
+    // races with create_stream()/free_stream() mutating the map on another
+    // thread, which ThreadSanitizer flags and can corrupt the red-black tree.
     std::lock_guard<std::mutex> lock(this->streams_mutex);
-    if (this->streams.find(stream_id) == this->streams.end()) {
+    auto it = this->streams.find(stream_id);
+    if (it == this->streams.end()) {
       std::string error_message =
           "Stream with ID " + std::to_string(stream_id) + " not found in " +
           std::to_string(this->streams.size()) + " streams: ";
-      for (const auto &stream : this->streams) {
+      for (const auto &entry : this->streams) {
         char addr_str[32];
-        snprintf(addr_str, sizeof(addr_str), "%p", (void *)stream.second);
-        error_message += "ID: " + std::to_string(stream.first) +
+        snprintf(addr_str, sizeof(addr_str), "%p", (void *)entry.second);
+        error_message += "ID: " + std::to_string(entry.first) +
                          ", Address: " + std::string(addr_str) + "\n";
       }
       throw std::runtime_error(error_message);
     }
+    stream = it->second;
   }
 
-  stream = this->streams[stream_id];
   if (stream == nullptr) {
     std::string error_message =
         "Stream with ID " + std::to_string(stream_id) + " is null";

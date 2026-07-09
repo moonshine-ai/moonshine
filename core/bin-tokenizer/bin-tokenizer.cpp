@@ -85,7 +85,12 @@ BinTokenizer::BinTokenizer(const uint8_t *tokenizer_data,
           " exceeds input size " + std::to_string(tokenizer_data_size));
     }
     std::vector<uint8_t> bytes(byte_count);
-    std::memcpy(bytes.data(), tokenizer_data + offset, byte_count);
+    // A two-byte length can legitimately encode a zero-length token; skip the
+    // copy in that case, since bytes.data() is null for an empty vector and
+    // memcpy() is declared nonnull (passing null is UB even when count is 0).
+    if (byte_count > 0) {
+      std::memcpy(bytes.data(), tokenizer_data + offset, byte_count);
+    }
     offset += byte_count;
     tokens_to_bytes.push_back(bytes);
   }

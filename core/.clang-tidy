@@ -14,6 +14,7 @@ Checks: >
   -*,
   bugprone-*,
   cert-*,
+  clang-analyzer-*,
   cppcoreguidelines-pro-bounds-array-to-pointer-decay,
   cppcoreguidelines-pro-bounds-constant-array-index,
   cppcoreguidelines-pro-bounds-pointer-arithmetic,
@@ -26,7 +27,19 @@ Checks: >
   -bugprone-easily-swappable-parameters,
   -bugprone-narrowing-conversions,
   -bugprone-implicit-widening-of-multiplication-result,
-  -cert-err58-cpp
+  -cert-err58-cpp,
+  -clang-analyzer-cplusplus.NewDeleteLeaks,
+  -clang-analyzer-unix.Malloc,
+  -clang-analyzer-optin.performance.Padding
+
+# clang-analyzer-* runs the path-sensitive clang static analyzer engine through
+# clang-tidy, which lets us keep its high-signal checks (null dereference,
+# uninitialized reads, use-after-free) while dropping the checkers that flood
+# this codebase with false positives: the leak checkers cannot reason about the
+# onnxruntime C-API ownership handoff or doctest's allocations (they produced
+# >1200 bogus "memory leak" reports in a standalone scan-build run), and Padding
+# is a micro-optimisation, not a reliability signal. HeaderFilterRegex below
+# keeps analyzer noise out of vendored headers.
 
 # Only surface diagnostics from first-party headers. llvm::Regex has no
 # negative lookahead, so we enumerate first-party locations rather than

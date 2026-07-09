@@ -16,7 +16,7 @@ enum class G2pWordPath {
   kDictHeteronym,    // reserved (English heteronym ONNX removed)
   kDictFirstAlternativeNoHeteronymModel,  // multiple pronunciations; no model —
                                           // first alt
-  kOovModel,           // OOV ONNX produced phoneme tokens
+  kOovModel,                              // OOV ONNX produced phoneme tokens
   kOovModelNoOutput,   // OOV ran but produced no non-empty IPA
   kUnknownNoOovModel,  // not in dict and no OOV model loaded
   kEnglishNumber,      // ``english_number_token_ipa``

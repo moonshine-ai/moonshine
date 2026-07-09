@@ -18,24 +18,42 @@ if (NOT WIN32)
   add_compile_options(-Wall -Wextra -pedantic -Werror)
 endif()
 
-# Opt-in reliability build (Linux/Clang): AddressSanitizer + UndefinedBehavior
-# Sanitizer plus a compile-commands database for clang-tidy, and the fuzzing
+# Opt-in reliability build (Linux/Clang): a sanitizer build plus a compile-
+# commands database for clang-tidy, and (for the address build) the fuzzing
 # harnesses under reliability/. This is OFF by default and is never used for
 # release builds, so production binaries, their performance, and the set of
 # runtime dependencies shipped to library users are all unaffected.
 # See core/STYLE_GUIDE.md and scripts/reliability.sh.
 option(MOONSHINE_RELIABILITY
     "Build with sanitizers and fuzzing support (Linux/Clang only)" OFF)
+# Which sanitizer(s) to build with. "address,undefined" (default) is the ASan +
+# UBSan build that also carries the libFuzzer harnesses; "thread" is a separate
+# ThreadSanitizer build for the data-race stage (TSan cannot be combined with
+# ASan, so scripts/reliability-remote.sh builds it into its own directory).
+set(MOONSHINE_SANITIZER "address,undefined" CACHE STRING
+    "Sanitizer set for MOONSHINE_RELIABILITY builds (address,undefined|thread)")
 if (MOONSHINE_RELIABILITY)
     set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
     add_compile_options(
-        -fsanitize=address,undefined
+        -fsanitize=${MOONSHINE_SANITIZER}
         -fsanitize-ignorelist=${CMAKE_CURRENT_LIST_DIR}/reliability/sanitizer-ignorelist.txt
         -fno-omit-frame-pointer
         -fno-sanitize-recover=all
         -g
+        # Lightweight libstdc++ precondition checks (bounds on vector/string
+        # operator[], .front()/.back(), invalid iterator ranges, etc.). These
+        # catch logic out-of-bounds that ASan misses when the bad index still
+        # lands inside the same heap allocation. Unlike _GLIBCXX_DEBUG this does
+        # not change container ABI, so it coexists with the prebuilt onnxruntime.
+        -D_GLIBCXX_ASSERTIONS
+        # The vendored doctest header pulls in <ciso646>, which very recent
+        # libstdc++ versions flag with a deprecation "#warning". We must not edit
+        # third-party code, so keep -Werror everywhere except for that directive
+        # class; real first-party warnings still fail the build. (Quoted so CMake
+        # does not treat the leading '#' as a comment.)
+        "-Wno-error=#warnings"
     )
-    add_link_options(-fsanitize=address,undefined)
+    add_link_options(-fsanitize=${MOONSHINE_SANITIZER})
 endif()
 
 include(${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/find-ort-library-path.cmake)
@@ -509,6 +527,34 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
         )
     endif()
 
+    # Multi-threaded stress test for the transcriber's thread-safe API. Built
+    # only for the opt-in reliability build (it exists to give ThreadSanitizer
+    # real cross-thread contention to analyse), so normal builds are unchanged.
+    if (MOONSHINE_RELIABILITY)
+        find_package(Threads REQUIRED)
+        add_executable(transcriber-concurrency-test
+            transcriber-concurrency-test.cpp
+            transcriber.cpp voice-activity-detector.cpp resampler.cpp)
+        set_target_properties(transcriber-concurrency-test PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED YES
+            CXX_EXTENSIONS NO
+        )
+        target_include_directories(transcriber-concurrency-test PRIVATE
+            ${CMAKE_CURRENT_LIST_DIR}
+            ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+            ${CMAKE_CURRENT_LIST_DIR}/ort-utils
+            ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
+            ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
+            ${CMAKE_CURRENT_LIST_DIR}/third-party/utf-8/
+            ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+        )
+        target_link_libraries(transcriber-concurrency-test PRIVATE
+            moonshine
+            Threads::Threads
+        )
+    endif()
+
     add_executable(word-alignment-test word-alignment-test.cpp)
     set_target_properties(word-alignment-test PROPERTIES
         CXX_STANDARD 20
@@ -663,8 +709,10 @@ add_test(
     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/..
 )
 
-# Fuzzing harnesses are only configured for the opt-in reliability build.
-if (MOONSHINE_RELIABILITY)
+# Fuzzing harnesses are only configured for the opt-in address/UBSan reliability
+# build. libFuzzer's runtime is built for the ASan-style build; the ThreadSanitizer
+# build (MOONSHINE_SANITIZER=thread) skips them entirely.
+if (MOONSHINE_RELIABILITY AND MOONSHINE_SANITIZER MATCHES "address")
     add_subdirectory(
         ${CMAKE_CURRENT_LIST_DIR}/reliability
         ${CMAKE_CURRENT_LIST_DIR}/reliability/build
