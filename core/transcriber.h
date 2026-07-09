@@ -214,6 +214,9 @@ class Transcriber {
                            uint64_t audio_length, int32_t sample_rate);
   void transcribe_stream(int32_t stream_id, uint32_t flags,
                          struct transcript_t **out_transcript);
+  // Reliability-test helper: bytes of PCM retained inside stream VAD segments.
+  size_t stream_vad_retained_audio_bytes(int32_t stream_id);
+  size_t stream_vad_completed_audio_bytes(int32_t stream_id);
   static std::string transcript_to_string(
       const struct transcript_t *transcript);
 

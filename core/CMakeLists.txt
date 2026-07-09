@@ -527,6 +527,41 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
         )
     endif()
 
+    add_executable(transcriber-streaming-memory-test
+        transcriber-streaming-memory-test.cpp
+        transcriber.cpp voice-activity-detector.cpp resampler.cpp)
+    set_target_properties(transcriber-streaming-memory-test PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(transcriber-streaming-memory-test PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+        ${CMAKE_CURRENT_LIST_DIR}/ort-utils
+        ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/utf-8/
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+    )
+    if (IOS OR MOONSHINE_BUILD_SWIFT)
+        set_target_properties(transcriber-streaming-memory-test PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.transcriber-streaming-memory-test"
+            MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        )
+        target_link_libraries(transcriber-streaming-memory-test PRIVATE
+            moonshine
+            "-framework CoreFoundation"
+            "-framework Foundation"
+        )
+    else()
+        target_link_libraries(transcriber-streaming-memory-test PRIVATE
+            moonshine
+        )
+    endif()
+
     # Multi-threaded stress test for the transcriber's thread-safe API. Built
     # only for the opt-in reliability build (it exists to give ThreadSanitizer
     # real cross-thread contention to analyse), so normal builds are unchanged.

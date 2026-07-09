@@ -104,6 +104,24 @@ void VoiceActivityDetector::clear_completed_segment_audio_data() {
   }
 }
 
+size_t VoiceActivityDetector::retained_segment_audio_byte_count() const {
+  size_t total_samples = 0;
+  for (const VoiceActivitySegment &segment : segments) {
+    total_samples += segment.audio_data.size();
+  }
+  return total_samples * sizeof(float);
+}
+
+size_t VoiceActivityDetector::completed_segment_audio_byte_count() const {
+  size_t total_samples = 0;
+  for (const VoiceActivitySegment &segment : segments) {
+    if (segment.is_complete) {
+      total_samples += segment.audio_data.size();
+    }
+  }
+  return total_samples * sizeof(float);
+}
+
 void VoiceActivityDetector::process_audio_chunk(const float *audio_data,
                                                 size_t audio_data_size) {
   assert(audio_data_size == (size_t)(hop_size));

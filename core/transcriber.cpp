@@ -541,6 +541,28 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
   }
 }
 
+size_t Transcriber::stream_vad_retained_audio_bytes(int32_t stream_id) {
+  std::lock_guard<std::mutex> lock(this->streams_mutex);
+  auto it = this->streams.find(stream_id);
+  if (it == this->streams.end() || it->second == nullptr) {
+    return 0;
+  }
+  TranscriberStream *stream = it->second;
+  std::lock_guard<std::mutex> vad_lock(stream->vad_mutex);
+  return stream->vad->retained_segment_audio_byte_count();
+}
+
+size_t Transcriber::stream_vad_completed_audio_bytes(int32_t stream_id) {
+  std::lock_guard<std::mutex> lock(this->streams_mutex);
+  auto it = this->streams.find(stream_id);
+  if (it == this->streams.end() || it->second == nullptr) {
+    return 0;
+  }
+  TranscriberStream *stream = it->second;
+  std::lock_guard<std::mutex> vad_lock(stream->vad_mutex);
+  return stream->vad->completed_segment_audio_byte_count();
+}
+
 std::string Transcriber::transcript_to_string(
     const struct transcript_t *transcript) {
   std::string result;
