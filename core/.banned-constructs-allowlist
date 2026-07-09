@@ -25,6 +25,7 @@ reinterpret_cast:core/moonshine-tts/src/ort-onnx-external-data.cpp
 reinterpret_cast:core/moonshine-tts/src/piper-tts.cpp
 reinterpret_cast:core/moonshine-tts/src/zipvoice-tts.cpp
 reinterpret_cast:core/spelling-model-test.cpp
+reinterpret_cast:core/transcriber-streaming-memory-test.cpp
 c_alloc:core/intent-recognizer-test.cpp
 c_alloc:core/moonshine-c-api-memory-test.cpp
 c_alloc:core/moonshine-c-api-test.cpp
@@ -57,6 +58,7 @@ c_alloc:core/moonshine-utils/debug-utils-test.cpp
 c_alloc:core/moonshine-utils/debug-utils.cpp
 c_alloc:core/moonshine-utils/debug-utils.h
 c_alloc:core/spelling-model-test.cpp
+c_alloc:core/transcriber-streaming-memory-test.cpp
 c_alloc:core/transcriber-test.cpp
 c_alloc:core/transcriber.h
 c_alloc:core/word-alignment-benchmark.cpp
