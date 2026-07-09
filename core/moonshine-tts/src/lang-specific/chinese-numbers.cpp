@@ -1,7 +1,5 @@
 #include "chinese-numbers.h"
 
-#include "utf8-utils.h"
-
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
@@ -9,14 +7,17 @@
 #include <string_view>
 #include <vector>
 
+#include "utf8-utils.h"
+
 namespace moonshine_tts {
 namespace {
 
 constexpr std::uint64_t kMaxCardinal = 10'000'000'000'000'000ULL;  // 10^16
 
 char32_t digit_cp(unsigned d) {
-  static constexpr char32_t k[] = {U'\u96F6', U'\u4E00', U'\u4E8C', U'\u4E09', U'\u56DB', U'\u4E94',
-                                   U'\u516D', U'\u4E03', U'\u516B', U'\u4E5D'};
+  static constexpr char32_t k[] = {U'\u96F6', U'\u4E00', U'\u4E8C', U'\u4E09',
+                                   U'\u56DB', U'\u4E94', U'\u516D', U'\u4E03',
+                                   U'\u516B', U'\u4E5D'};
   if (d > 9) {
     return 0;
   }
@@ -31,7 +32,8 @@ std::string cn_digit(unsigned d) {
 
 bool ends_with_ling_utf8(const std::string& s) {
   static const unsigned char kLing[] = {0xE9, 0x9B, 0xB6};
-  return s.size() >= 3 && static_cast<unsigned char>(s[s.size() - 3]) == kLing[0] &&
+  return s.size() >= 3 &&
+         static_cast<unsigned char>(s[s.size() - 3]) == kLing[0] &&
          static_cast<unsigned char>(s[s.size() - 2]) == kLing[1] &&
          static_cast<unsigned char>(s[s.size() - 1]) == kLing[2];
 }
@@ -112,7 +114,8 @@ std::string int_to_han_u64(std::uint64_t n) {
     x /= 10000U;
   }
   std::vector<unsigned> gs(low_first.rbegin(), low_first.rend());
-  static constexpr char32_t kUnits[] = {U'\0', U'\u4E07', U'\u4EBF', U'\u5146', U'\u4EAC', U'\u57C3'};
+  static constexpr char32_t kUnits[] = {U'\0',     U'\u4E07', U'\u4EBF',
+                                        U'\u5146', U'\u4EAC', U'\u57C3'};
   const size_t m = gs.size();
   std::string out;
   bool zero_pending = false;
@@ -160,9 +163,12 @@ bool ascii_digit_string(std::string_view t, std::uint64_t& out_val) {
 
 }  // namespace
 
-std::string int_to_mandarin_cardinal_han(std::uint64_t n) { return int_to_han_u64(n); }
+std::string int_to_mandarin_cardinal_han(std::uint64_t n) {
+  return int_to_han_u64(n);
+}
 
-std::optional<std::string> arabic_numeral_token_to_han(std::string_view token_sv) {
+std::optional<std::string> arabic_numeral_token_to_han(
+    std::string_view token_sv) {
   std::string token(trim_ascii_ws_copy(token_sv));
   if (token.empty()) {
     return std::nullopt;

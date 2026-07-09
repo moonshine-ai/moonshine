@@ -1,16 +1,18 @@
-// Simplified Chinese ONNX segmentation + UPOS + lexicon G2P (mirrors ``chinese_rule_g2p.py`` CLI).
-#include "chinese-onnx-g2p.h"
-
+// Simplified Chinese ONNX segmentation + UPOS + lexicon G2P (mirrors
+// ``chinese_rule_g2p.py`` CLI).
 #include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "chinese-onnx-g2p.h"
+
 namespace {
 
 void usage(const char* argv0) {
-  std::cerr << "Usage: " << argv0 << " [--model-dir PATH] [--dict PATH] [--stdin] [TEXT...]\n"
+  std::cerr << "Usage: " << argv0
+            << " [--model-dir PATH] [--dict PATH] [--stdin] [TEXT...]\n"
             << "  Default model: data/zh_hans/roberta_chinese_base_upos_onnx\n"
             << "  Default dict: data/zh_hans/dict.tsv\n";
 }
@@ -24,9 +26,10 @@ std::string read_all_stdin() {
 }  // namespace
 
 int main(int argc, char** argv) {
-  std::filesystem::path model_dir =
-      std::filesystem::path("data") / "zh_hans" / "roberta_chinese_base_upos_onnx";
-  std::filesystem::path dict_path = std::filesystem::path("data") / "zh_hans" / "dict.tsv";
+  std::filesystem::path model_dir = std::filesystem::path("data") / "zh_hans" /
+                                    "roberta_chinese_base_upos_onnx";
+  std::filesystem::path dict_path =
+      std::filesystem::path("data") / "zh_hans" / "dict.tsv";
   bool force_stdin = false;
   std::vector<std::string> parts;
 
@@ -60,7 +63,8 @@ int main(int argc, char** argv) {
   }
 
   try {
-    moonshine_tts::ChineseOnnxG2p g2p(std::move(model_dir), std::move(dict_path), false);
+    moonshine_tts::ChineseOnnxG2p g2p(std::move(model_dir),
+                                      std::move(dict_path), false);
     std::cout << g2p.text_to_ipa(text) << '\n';
   } catch (const std::exception& e) {
     std::cerr << "error: " << e.what() << '\n';

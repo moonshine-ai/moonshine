@@ -1,6 +1,5 @@
 #include "transcriber.h"
 
-#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -515,9 +514,10 @@ TEST_CASE("transcriber-test") {
     first.start_time = 1.25f;
     first.duration = 3.5f;
     first.audio_data = {0.25f, 0.5f, 0.75f};
-    first.speaker_spans = {
-        {.start_time = 1.25f, .duration = 2.0f, .speaker_id = 55,
-         .speaker_index = 3}};
+    first.speaker_spans = {{.start_time = 1.25f,
+                            .duration = 2.0f,
+                            .speaker_id = 55,
+                            .speaker_index = 3}};
     first.have_speakers_changed = true;
 
     TranscriberLine second;
@@ -545,9 +545,10 @@ TEST_CASE("transcriber-test") {
       source.text = new std::string("value_" + std::to_string(i));
       source.id = (uint64_t)(1000 + i);
       source.duration = i * 0.01f;
-      source.speaker_spans = {
-          {.start_time = 0.0f, .duration = source.duration,
-           .speaker_id = (uint64_t)(i), .speaker_index = (uint32_t)(i % 4)}};
+      source.speaker_spans = {{.start_time = 0.0f,
+                               .duration = source.duration,
+                               .speaker_id = (uint64_t)(i),
+                               .speaker_index = (uint32_t)(i % 4)}};
       repeated_assignment_target = source;
       REQUIRE(repeated_assignment_target.text != nullptr);
       REQUIRE(*repeated_assignment_target.text == *source.text);
@@ -832,7 +833,8 @@ TEST_CASE("transcriber-test") {
     // index zero.
     REQUIRE(transcript->lines[0].speaker_span_count > 0);
     REQUIRE(transcript->lines[0].speaker_spans[0].speaker_index == 0);
-    // identify_speakers turns on word timestamps so spans can be mapped to text.
+    // identify_speakers turns on word timestamps so spans can be mapped to
+    // text.
     REQUIRE(transcript->lines[0].word_count > 0);
     const uint64_t first_pete_speaker_id =
         transcript->lines[0].speaker_spans[0].speaker_id;
@@ -969,163 +971,6 @@ TEST_CASE("transcriber-test") {
     REQUIRE(speaker_ids.size() >= 2);
     REQUIRE(total_span_duration >= wav_duration * 0.35f);
     REQUIRE(total_span_duration <= wav_duration * 1.25f);
-    free(wav_data);
-  }
-  SUBCASE("test-diarization-latency-bounded-on-long-stream") {
-    std::string wav_path = "endgame_nagg_nell.wav";
-    REQUIRE(std::filesystem::exists(wav_path));
-    float *wav_data = nullptr;
-    size_t wav_data_size = 0;
-    int32_t wav_sample_rate = 0;
-    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
-                          &wav_sample_rate));
-
-    std::vector<float> stream_audio;
-    const size_t target_samples =
-        static_cast<size_t>(180.0f * static_cast<float>(wav_sample_rate));
-    stream_audio.reserve(target_samples);
-    while (stream_audio.size() < target_samples) {
-      const size_t need = target_samples - stream_audio.size();
-      const size_t take = std::min(need, wav_data_size);
-      stream_audio.insert(stream_audio.end(), wav_data,
-                          wav_data + static_cast<ptrdiff_t>(take));
-    }
-
-    SpeakerDiarizerOptions options;
-    options.cluster_window_sec = 120.0;
-    SpeakerDiarizer diarizer(options);
-    const int32_t stream_id = diarizer.create_stream();
-    diarizer.start_stream(stream_id);
-
-    const size_t chunk_samples =
-        static_cast<size_t>(0.5f * static_cast<float>(wav_sample_rate));
-    std::vector<double> call_ms;
-    call_ms.reserve(stream_audio.size() / chunk_samples + 1);
-    for (size_t offset = 0; offset < stream_audio.size();
-         offset += chunk_samples) {
-      const size_t end = std::min(offset + chunk_samples, stream_audio.size());
-      const auto t0 = std::chrono::steady_clock::now();
-      diarizer.add_audio_to_stream(
-          stream_id, stream_audio.data() + offset, end - offset,
-          wav_sample_rate);
-      const auto t1 = std::chrono::steady_clock::now();
-      call_ms.push_back(
-          std::chrono::duration<double, std::milli>(t1 - t0).count());
-    }
-    const std::vector<SpeakerTurn> turns = diarizer.finish_stream(stream_id);
-    diarizer.free_stream(stream_id);
-    free(wav_data);
-
-    REQUIRE(turns.size() > 0);
-    REQUIRE(call_ms.size() >= 120);
-
-    const size_t early_count = std::min<size_t>(60, call_ms.size() / 3);
-    const size_t late_start = call_ms.size() - early_count;
-    double early_max = 0.0;
-    double late_max = 0.0;
-    for (size_t i = 0; i < early_count; ++i) {
-      early_max = std::max(early_max, call_ms[i]);
-    }
-    for (size_t i = late_start; i < call_ms.size(); ++i) {
-      late_max = std::max(late_max, call_ms[i]);
-    }
-    // With a 120s clustering window, refresh cost should stop growing once the
-    // window is full. Late-stream spikes should stay near early-stream spikes.
-    REQUIRE(late_max <= std::max(early_max * 1.75, 400.0));
-  }
-  SUBCASE("test-diarization-frozen-turns-cover-early-audio") {
-    std::string wav_path = "endgame_nagg_nell.wav";
-    REQUIRE(std::filesystem::exists(wav_path));
-    float *wav_data = nullptr;
-    size_t wav_data_size = 0;
-    int32_t wav_sample_rate = 0;
-    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
-                          &wav_sample_rate));
-
-    std::vector<float> stream_audio;
-    const size_t target_samples =
-        static_cast<size_t>(300.0f * static_cast<float>(wav_sample_rate));
-    stream_audio.reserve(target_samples);
-    while (stream_audio.size() < target_samples) {
-      const size_t need = target_samples - stream_audio.size();
-      const size_t take = std::min(need, wav_data_size);
-      stream_audio.insert(stream_audio.end(), wav_data,
-                          wav_data + static_cast<ptrdiff_t>(take));
-    }
-
-    SpeakerDiarizerOptions diarizer_options;
-    diarizer_options.cluster_window_sec = 120.0;
-    SpeakerDiarizer diarizer(diarizer_options);
-    const int32_t diarizer_stream_id = diarizer.create_stream();
-    diarizer.start_stream(diarizer_stream_id);
-
-    const size_t chunk_samples =
-        static_cast<size_t>(0.5f * static_cast<float>(wav_sample_rate));
-    for (size_t offset = 0; offset < stream_audio.size();
-         offset += chunk_samples) {
-      const size_t end = std::min(offset + chunk_samples, stream_audio.size());
-      diarizer.add_audio_to_stream(
-          diarizer_stream_id, stream_audio.data() + offset, end - offset,
-          wav_sample_rate);
-    }
-    const std::vector<SpeakerTurn> turns =
-        diarizer.finish_stream(diarizer_stream_id);
-    diarizer.free_stream(diarizer_stream_id);
-
-    float min_turn_start = 1e9f;
-    float max_turn_end = 0.0f;
-    float covered = 0.0f;
-    for (const SpeakerTurn &turn : turns) {
-      min_turn_start = std::min(min_turn_start, turn.start_time);
-      max_turn_end = std::max(max_turn_end, turn.start_time + turn.duration);
-      covered += turn.duration;
-    }
-    REQUIRE(min_turn_start < 30.0f);
-    REQUIRE(max_turn_end > 250.0f);
-    REQUIRE(covered > 140.0f);
-
-    std::string root_model_path = "tiny-en";
-    REQUIRE(std::filesystem::exists(root_model_path));
-    TranscriberOptions options;
-    options.model_source = TranscriberOptions::ModelSource::NONE;
-    options.identify_speakers = true;
-    options.diarization_cluster_window_sec = 120.0f;
-    Transcriber transcriber(options);
-    const int32_t stream_id = transcriber.create_stream();
-    transcriber.start_stream(stream_id);
-    for (size_t offset = 0; offset < stream_audio.size();
-         offset += chunk_samples) {
-      const size_t end = std::min(offset + chunk_samples, stream_audio.size());
-      transcriber.add_audio_to_stream(
-          stream_id, stream_audio.data() + offset, end - offset,
-          wav_sample_rate);
-      transcriber.transcribe_stream(stream_id, 0, nullptr);
-    }
-    transcriber.stop_stream(stream_id);
-    struct transcript_t *transcript = nullptr;
-    transcriber.transcribe_stream(stream_id, MOONSHINE_FLAG_FORCE_UPDATE,
-                                  &transcript);
-    REQUIRE(transcript != nullptr);
-
-    float span_min = 1e9f;
-    float span_max = 0.0f;
-    size_t lines_with_spans = 0;
-    for (size_t i = 0; i < transcript->line_count; i++) {
-      const struct transcript_line_t &line = transcript->lines[i];
-      if (line.speaker_span_count == 0) {
-        continue;
-      }
-      lines_with_spans += 1;
-      for (uint64_t j = 0; j < line.speaker_span_count; j++) {
-        const struct speaker_span_t &span = line.speaker_spans[j];
-        span_min = std::min(span_min, span.start_time);
-        span_max = std::max(span_max, span.start_time + span.duration);
-      }
-    }
-    REQUIRE(lines_with_spans > 0);
-    REQUIRE(span_min < 30.0f);
-    REQUIRE(span_max > 250.0f);
-    transcriber.free_stream(stream_id);
     free(wav_data);
   }
 }

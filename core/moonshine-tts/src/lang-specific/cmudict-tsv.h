@@ -9,7 +9,8 @@
 
 namespace moonshine_tts {
 
-// word key (normalized grapheme) -> sorted unique IPA strings (TSV: word<TAB>ipa).
+// word key (normalized grapheme) -> sorted unique IPA strings (TSV:
+// word<TAB>ipa).
 class CmudictTsv {
  public:
   explicit CmudictTsv(const std::filesystem::path& path);

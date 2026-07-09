@@ -4,7 +4,8 @@
 
 namespace moonshine_tts {
 
-bool utf8_decode_at(const std::string& s, size_t i, char32_t& out_cp, size_t& out_len) {
+bool utf8_decode_at(const std::string& s, size_t i, char32_t& out_cp,
+                    size_t& out_len) {
   const size_t n = s.size();
   if (i >= n) {
     return false;
@@ -34,7 +35,8 @@ bool utf8_decode_at(const std::string& s, size_t i, char32_t& out_cp, size_t& ou
       out_len = 1;
       return true;
     }
-    out_cp = (static_cast<char32_t>(c0 & 0x0Fu) << 12) | ((c1 & 0x3Fu) << 6) | (c2 & 0x3Fu);
+    out_cp = (static_cast<char32_t>(c0 & 0x0Fu) << 12) | ((c1 & 0x3Fu) << 6) |
+             (c2 & 0x3Fu);
     out_len = 3;
     return true;
   }
@@ -123,7 +125,8 @@ std::vector<std::string> utf8_split_codepoints(const std::string& utf8) {
         out.emplace_back(1, utf8[i++]);
         continue;
       }
-      cp = ((c0 & 0x07) << 18) | ((c1 & 0x3F) << 12) | ((c2 & 0x3F) << 6) | (c3 & 0x3F);
+      cp = ((c0 & 0x07) << 18) | ((c1 & 0x3F) << 12) | ((c2 & 0x3F) << 6) |
+           (c3 & 0x3F);
       adv = 4;
     } else {
       out.emplace_back(1, utf8[i++]);
@@ -137,9 +140,8 @@ std::vector<std::string> utf8_split_codepoints(const std::string& utf8) {
   return out;
 }
 
-std::optional<std::pair<int, int>> utf8_find_token_codepoints(const std::string& text,
-                                                              const std::string& token,
-                                                              int start_cp) {
+std::optional<std::pair<int, int>> utf8_find_token_codepoints(
+    const std::string& text, const std::string& token, int start_cp) {
   const auto hay = utf8_split_codepoints(text);
   const auto nd = utf8_split_codepoints(token);
   if (nd.empty()) {
@@ -215,7 +217,8 @@ bool codepoint_is_unicode_word_neighbor_for_digits(char32_t c) {
   return false;
 }
 
-std::optional<char32_t> utf8_codepoint_before_index(const std::string& s, size_t byte_idx) {
+std::optional<char32_t> utf8_codepoint_before_index(const std::string& s,
+                                                    size_t byte_idx) {
   if (byte_idx == 0 || byte_idx > s.size()) {
     return std::nullopt;
   }
@@ -231,7 +234,8 @@ std::optional<char32_t> utf8_codepoint_before_index(const std::string& s, size_t
   return cp;
 }
 
-std::optional<char32_t> utf8_codepoint_at_index(const std::string& s, size_t byte_idx) {
+std::optional<char32_t> utf8_codepoint_at_index(const std::string& s,
+                                                size_t byte_idx) {
   if (byte_idx >= s.size()) {
     return std::nullopt;
   }
@@ -243,13 +247,17 @@ std::optional<char32_t> utf8_codepoint_at_index(const std::string& s, size_t byt
   return cp;
 }
 
-bool digit_ascii_span_expandable_python_w(const std::string& text, size_t start_byte, size_t end_byte) {
-  const std::optional<char32_t> prev = utf8_codepoint_before_index(text, start_byte);
-  if (prev.has_value() && codepoint_is_unicode_word_neighbor_for_digits(*prev)) {
+bool digit_ascii_span_expandable_python_w(const std::string& text,
+                                          size_t start_byte, size_t end_byte) {
+  const std::optional<char32_t> prev =
+      utf8_codepoint_before_index(text, start_byte);
+  if (prev.has_value() &&
+      codepoint_is_unicode_word_neighbor_for_digits(*prev)) {
     return false;
   }
   const std::optional<char32_t> next = utf8_codepoint_at_index(text, end_byte);
-  if (next.has_value() && codepoint_is_unicode_word_neighbor_for_digits(*next)) {
+  if (next.has_value() &&
+      codepoint_is_unicode_word_neighbor_for_digits(*next)) {
     return false;
   }
   return true;
@@ -267,7 +275,8 @@ std::string normalize_rule_based_dialect_cli_key(std::string_view raw) {
   return s;
 }
 
-std::vector<std::string> dedupe_dialect_ids_preserve_first(std::vector<std::string> ids) {
+std::vector<std::string> dedupe_dialect_ids_preserve_first(
+    std::vector<std::string> ids) {
   std::unordered_set<std::string> seen;
   std::vector<std::string> out;
   out.reserve(ids.size());

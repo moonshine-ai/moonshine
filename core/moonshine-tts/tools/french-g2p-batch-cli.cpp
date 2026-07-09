@@ -1,7 +1,6 @@
-// French rule + lexicon G2P (no ONNX). Batch mode: one input line -> one IPA line on stdout.
-// For fast parity checks vs Python without spawning moonshine-tts-g2p per phrase.
-#include "french.h"
-
+// French rule + lexicon G2P (no ONNX). Batch mode: one input line -> one IPA
+// line on stdout. For fast parity checks vs Python without spawning
+// moonshine-tts-g2p per phrase.
 #include <cctype>
 #include <filesystem>
 #include <iostream>
@@ -9,27 +8,33 @@
 #include <string>
 #include <vector>
 
+#include "french.h"
+
 namespace {
 
 void usage(const char* argv0) {
-  std::cerr
-      << "Usage: " << argv0
-      << " [--dict PATH] [--csv-dir DIR]\n"
-      << "       [--no-stress] [--no-liaison] [--no-optional-liaison]\n"
-      << "       [--no-oov] [--no-expand-digits] [--whole-stdin]\n"
-      << "       [TEXT...]\n"
-      << "  With no TEXT: read stdin line-by-line; each non-empty line is phonemized; "
-         "empty lines print an empty line.\n"
-      << "  With TEXT...: join arguments with spaces, phonemize once, print one line.\n"
-      << "  --whole-stdin: read entire stdin as one string (newlines kept) and phonemize once.\n"
-      << "  Default dict: data/fr/dict.tsv ; default CSV dir: data/fr (relative to cwd).\n";
+  std::cerr << "Usage: " << argv0 << " [--dict PATH] [--csv-dir DIR]\n"
+            << "       [--no-stress] [--no-liaison] [--no-optional-liaison]\n"
+            << "       [--no-oov] [--no-expand-digits] [--whole-stdin]\n"
+            << "       [TEXT...]\n"
+            << "  With no TEXT: read stdin line-by-line; each non-empty line "
+               "is phonemized; "
+               "empty lines print an empty line.\n"
+            << "  With TEXT...: join arguments with spaces, phonemize once, "
+               "print one line.\n"
+            << "  --whole-stdin: read entire stdin as one string (newlines "
+               "kept) and phonemize once.\n"
+            << "  Default dict: data/fr/dict.tsv ; default CSV dir: data/fr "
+               "(relative to cwd).\n";
 }
 
 std::string trim_sv(std::string s) {
-  while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front())) != 0) {
+  while (!s.empty() &&
+         std::isspace(static_cast<unsigned char>(s.front())) != 0) {
     s.erase(s.begin());
   }
-  while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back())) != 0) {
+  while (!s.empty() &&
+         std::isspace(static_cast<unsigned char>(s.back())) != 0) {
     s.pop_back();
   }
   return s;
@@ -44,7 +49,8 @@ std::string read_all_stdin() {
 }  // namespace
 
 int main(int argc, char** argv) {
-  std::filesystem::path dict_path = std::filesystem::path("data") / "fr" / "dict.tsv";
+  std::filesystem::path dict_path =
+      std::filesystem::path("data") / "fr" / "dict.tsv";
   std::filesystem::path csv_dir = std::filesystem::path("data") / "fr";
   moonshine_tts::FrenchRuleG2p::Options opt;
   bool whole_stdin = false;

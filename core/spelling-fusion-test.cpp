@@ -31,7 +31,9 @@ TEST_CASE("spelling-fusion: normalize") {
   // Curly quotes (U+2018, U+2019, U+201C, U+201D) are stripped.
   // Use string-literal concatenation to break the hex-escape run so the
   // compiler doesn't read ``\x9CAww`` as a single oversized escape.
-  CHECK(spelling_normalize("\xE2\x80\x9C" "Aww." "\xE2\x80\x9D") == "aww");
+  CHECK(spelling_normalize("\xE2\x80\x9C"
+                           "Aww."
+                           "\xE2\x80\x9D") == "aww");
 }
 
 TEST_CASE("spelling-fusion: matcher classifies plain letters") {
@@ -188,8 +190,7 @@ TEST_CASE(
   // top-1 probability for utterances like "dollar sign" is empirically
   // low and this is the branch that fires in production.
   SpellingPrediction weak = {"a", 0.20f, "a"};
-  FusedResult r1 =
-      fuse_default("dollar sign", char_match("$"), &weak, matcher);
+  FusedResult r1 = fuse_default("dollar sign", char_match("$"), &weak, matcher);
   CHECK(r1.is_character());
   CHECK(r1.character == "$");
 
@@ -276,8 +277,7 @@ TEST_CASE("spelling-fusion: agreement preserves matcher casing") {
   // Matcher returned upper-case "B" via the modifier; the spelling
   // model agrees (case-blind). Output stays upper-case.
   SpellingPrediction agree = {"b", 0.99f, "b"};
-  FusedResult r =
-      fuse_default("capital b", char_match("B"), &agree, matcher);
+  FusedResult r = fuse_default("capital b", char_match("B"), &agree, matcher);
   CHECK(r.character == "B");
 }
 

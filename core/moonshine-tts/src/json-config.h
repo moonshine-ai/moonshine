@@ -1,14 +1,14 @@
 #ifndef MOONSHINE_TTS_JSON_CONFIG_H
 #define MOONSHINE_TTS_JSON_CONFIG_H
 
+#include <nlohmann/json.h>
+
 #include <cstdint>
 #include <filesystem>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
-
-#include <nlohmann/json.h>
 
 namespace moonshine_tts {
 
@@ -28,7 +28,8 @@ struct OovOnnxTables {
 OovOnnxTables load_oov_tables(const std::filesystem::path& model_onnx_path);
 
 /// Parse merged ``onnx-config.json`` (already loaded).
-OovOnnxTables load_oov_tables_from_json(const nlohmann::json& cfg, std::string_view source_label);
+OovOnnxTables load_oov_tables_from_json(const nlohmann::json& cfg,
+                                        std::string_view source_label);
 
 }  // namespace moonshine_tts
 

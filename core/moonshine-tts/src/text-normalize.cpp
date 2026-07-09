@@ -1,8 +1,8 @@
 #include "text-normalize.h"
 
-#include "utf8-utils.h"
-
 #include <cctype>
+
+#include "utf8-utils.h"
 namespace moonshine_tts {
 
 namespace {
@@ -15,7 +15,8 @@ bool is_word_char_utf8(std::string_view unit) {
     const unsigned char u = static_cast<unsigned char>(unit[0]);
     return std::isalnum(u) != 0;
   }
-  // Non-ASCII UTF-8 sequence: treat as word character (accents, IPA in keys, etc.).
+  // Non-ASCII UTF-8 sequence: treat as word character (accents, IPA in keys,
+  // etc.).
   return true;
 }
 
@@ -46,7 +47,8 @@ std::vector<std::string> split_text_to_words(std::string_view text) {
 
 std::string normalize_word_for_lookup(std::string_view token) {
   std::string s(token.begin(), token.end());
-  // tolower ASCII range; leave UTF-8 multibyte sequences unchanged except via copy
+  // tolower ASCII range; leave UTF-8 multibyte sequences unchanged except via
+  // copy
   for (char& ch : s) {
     if (static_cast<unsigned char>(ch) < 128) {
       ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));

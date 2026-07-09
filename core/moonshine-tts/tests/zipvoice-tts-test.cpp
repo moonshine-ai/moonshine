@@ -1,13 +1,13 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
-#include "doctest.h"
-
-#include "zipvoice-mel.h"
 #include "zipvoice-tts.h"
-#include "zipvoice-voices.h"
 
 #include <cmath>
 #include <string>
 #include <vector>
+
+#include "doctest.h"
+#include "zipvoice-mel.h"
+#include "zipvoice-voices.h"
 
 using namespace moonshine_tts;
 
@@ -15,10 +15,12 @@ TEST_CASE("zipvoice-builtin-voices") {
   size_t count = 0;
   const ZipVoiceBuiltinVoice* voices = zipvoice_builtin_voices(&count);
   REQUIRE(voices != nullptr);
-  // One masculine + one feminine per accent where both exist, minus voices excluded after review.
+  // One masculine + one feminine per accent where both exist, minus voices
+  // excluded after review.
   CHECK(count >= 12);
 
-  const ZipVoiceBuiltinVoice* v = zipvoice_find_builtin_voice("american_female");
+  const ZipVoiceBuiltinVoice* v =
+      zipvoice_find_builtin_voice("american_female");
   REQUIRE(v != nullptr);
   CHECK(std::string(v->accent) == "American");
   CHECK(std::string(v->gender) == "female");
@@ -47,7 +49,8 @@ TEST_CASE("zipvoice-vocos-fbank") {
   const int sr = VocosFbank::kSampleRate;
   std::vector<float> tone(static_cast<size_t>(sr));
   for (size_t i = 0; i < tone.size(); ++i) {
-    tone[i] = 0.5f * std::sin(2.0 * 3.14159265358979 * 440.0 * static_cast<double>(i) / sr);
+    tone[i] = 0.5f * std::sin(2.0 * 3.14159265358979 * 440.0 *
+                              static_cast<double>(i) / sr);
   }
   int frames = 0;
   const std::vector<float> mel = fbank.extract(tone, &frames);
@@ -66,7 +69,8 @@ TEST_CASE("zipvoice-compress-long-pauses") {
   auto tone = [&](size_t n, float amp) {
     std::vector<float> x(n);
     for (size_t i = 0; i < n; ++i) {
-      x[i] = amp * std::sin(2.0 * 3.14159265358979 * 440.0 * static_cast<double>(i) / sr);
+      x[i] = amp * std::sin(2.0 * 3.14159265358979 * 440.0 *
+                            static_cast<double>(i) / sr);
     }
     return x;
   };
@@ -83,7 +87,9 @@ TEST_CASE("zipvoice-compress-long-pauses") {
   const size_t before = wav.size();
   const std::vector<float> out = zipvoice_compress_long_pauses(wav, sr);
   CHECK(out.size() < before);
-  CHECK(out.size() > static_cast<size_t>(0.45 * sr));  // still has both speech blocks + kept pause
+  CHECK(out.size() >
+        static_cast<size_t>(0.45 *
+                            sr));  // still has both speech blocks + kept pause
 
   // Short internal gap should be preserved.
   std::vector<float> short_gap;

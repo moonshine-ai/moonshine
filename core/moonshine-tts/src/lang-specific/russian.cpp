@@ -1,20 +1,14 @@
 #include "russian.h"
 
-#include "g2p-word-log.h"
-#include "ipa-postprocess.h"
-#include "ipa-symbols.h"
-#include "german.h"
-#include "utf8-utils.h"
-
-#include <cctype>
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <cwctype>
 #include <fstream>
 #include <istream>
 #include <limits>
-#include <sstream>
 #include <regex>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -22,6 +16,12 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+#include "g2p-word-log.h"
+#include "german.h"
+#include "ipa-postprocess.h"
+#include "ipa-symbols.h"
+#include "utf8-utils.h"
 
 namespace moonshine_tts {
 namespace {
@@ -53,9 +53,7 @@ bool is_unicode_mn(char32_t cp) {
   return false;
 }
 
-bool is_combining_mark(char32_t cp) {
-  return is_unicode_mn(cp);
-}
+bool is_combining_mark(char32_t cp) { return is_unicode_mn(cp); }
 
 char32_t russian_tolower_cp(char32_t c) {
   if (c == U'\u0401') {
@@ -70,8 +68,8 @@ char32_t russian_tolower_cp(char32_t c) {
 bool is_russian_vowel_letter(char32_t c) {
   c = russian_tolower_cp(c);
   static const std::unordered_set<char32_t> vowels{
-      U'\u0430', U'\u0435', U'\u0451', U'\u0438', U'\u043E', U'\u0443', U'\u044B',
-      U'\u044D', U'\u044E', U'\u044F'};
+      U'\u0430', U'\u0435', U'\u0451', U'\u0438', U'\u043E',
+      U'\u0443', U'\u044B', U'\u044D', U'\u044E', U'\u044F'};
   return vowels.count(c) != 0;
 }
 
@@ -86,29 +84,40 @@ bool is_russian_lex_key_cp(char32_t c) {
   return c == U'\u0451';
 }
 
-/// Python ``unicodedata.normalize("NFD", c)`` for selected precomposed characters (wiki + Cyrillic).
+/// Python ``unicodedata.normalize("NFD", c)`` for selected precomposed
+/// characters (wiki + Cyrillic).
 const std::unordered_map<char32_t, std::u32string>& canonical_nfd_map() {
   static const std::unordered_map<char32_t, std::u32string> kMap = {
-      {U'\u00E0', U"\u0061\u0300"}, {U'\u00E9', U"\u0065\u0301"}, {U'\u00ED', U"\u0069\u0301"},
-      {U'\u0117', U"\u0065\u0307"}, {U'\u0160', U"\u0053\u030C"}, {U'\u0161', U"\u0073\u030C"},
-      {U'\u016B', U"\u0075\u0304"}, {U'\u03AE', U"\u03B7\u0301"}, {U'\u03CC', U"\u03BF\u0301"},
-      {U'\u0400', U"\u0415\u0300"}, {U'\u0401', U"\u0415\u0308"}, {U'\u0403', U"\u0413\u0301"},
-      {U'\u0407', U"\u0406\u0308"}, {U'\u040C', U"\u041A\u0301"}, {U'\u040D', U"\u0418\u0300"},
-      {U'\u040E', U"\u0423\u0306"}, {U'\u0419', U"\u0418\u0306"}, {U'\u0439', U"\u0438\u0306"},
-      {U'\u0450', U"\u0435\u0300"}, {U'\u0451', U"\u0435\u0308"}, {U'\u0453', U"\u0433\u0301"},
-      {U'\u0457', U"\u0456\u0308"}, {U'\u045C', U"\u043A\u0301"}, {U'\u045D', U"\u0438\u0300"},
-      {U'\u045E', U"\u0443\u0306"}, {U'\u0476', U"\u0474\u030F"}, {U'\u0477', U"\u0475\u030F"},
-      {U'\u04C1', U"\u0416\u0306"}, {U'\u04C2', U"\u0436\u0306"}, {U'\u04D0', U"\u0410\u0306"},
-      {U'\u04D1', U"\u0430\u0306"}, {U'\u04D2', U"\u0410\u0308"}, {U'\u04D3', U"\u0430\u0308"},
-      {U'\u04D6', U"\u0415\u0306"}, {U'\u04D7', U"\u0435\u0306"}, {U'\u04DA', U"\u04D8\u0308"},
-      {U'\u04DB', U"\u04D9\u0308"}, {U'\u04DC', U"\u0416\u0308"}, {U'\u04DD', U"\u0436\u0308"},
-      {U'\u04DE', U"\u0417\u0308"}, {U'\u04DF', U"\u0437\u0308"}, {U'\u04E2', U"\u0418\u0304"},
-      {U'\u04E3', U"\u0438\u0304"}, {U'\u04E4', U"\u0418\u0308"}, {U'\u04E5', U"\u0438\u0308"},
-      {U'\u04E6', U"\u041E\u0308"}, {U'\u04E7', U"\u043E\u0308"}, {U'\u04EA', U"\u04E8\u0308"},
-      {U'\u04EB', U"\u04E9\u0308"}, {U'\u04EC', U"\u042D\u0308"}, {U'\u04ED', U"\u044D\u0308"},
-      {U'\u04EE', U"\u0423\u0304"}, {U'\u04EF', U"\u0443\u0304"}, {U'\u04F0', U"\u0423\u0308"},
-      {U'\u04F1', U"\u0443\u0308"}, {U'\u04F2', U"\u0423\u030B"}, {U'\u04F3', U"\u0443\u030B"},
-      {U'\u04F4', U"\u0427\u0308"}, {U'\u04F5', U"\u0447\u0308"}, {U'\u04F8', U"\u042B\u0308"},
+      {U'\u00E0', U"\u0061\u0300"}, {U'\u00E9', U"\u0065\u0301"},
+      {U'\u00ED', U"\u0069\u0301"}, {U'\u0117', U"\u0065\u0307"},
+      {U'\u0160', U"\u0053\u030C"}, {U'\u0161', U"\u0073\u030C"},
+      {U'\u016B', U"\u0075\u0304"}, {U'\u03AE', U"\u03B7\u0301"},
+      {U'\u03CC', U"\u03BF\u0301"}, {U'\u0400', U"\u0415\u0300"},
+      {U'\u0401', U"\u0415\u0308"}, {U'\u0403', U"\u0413\u0301"},
+      {U'\u0407', U"\u0406\u0308"}, {U'\u040C', U"\u041A\u0301"},
+      {U'\u040D', U"\u0418\u0300"}, {U'\u040E', U"\u0423\u0306"},
+      {U'\u0419', U"\u0418\u0306"}, {U'\u0439', U"\u0438\u0306"},
+      {U'\u0450', U"\u0435\u0300"}, {U'\u0451', U"\u0435\u0308"},
+      {U'\u0453', U"\u0433\u0301"}, {U'\u0457', U"\u0456\u0308"},
+      {U'\u045C', U"\u043A\u0301"}, {U'\u045D', U"\u0438\u0300"},
+      {U'\u045E', U"\u0443\u0306"}, {U'\u0476', U"\u0474\u030F"},
+      {U'\u0477', U"\u0475\u030F"}, {U'\u04C1', U"\u0416\u0306"},
+      {U'\u04C2', U"\u0436\u0306"}, {U'\u04D0', U"\u0410\u0306"},
+      {U'\u04D1', U"\u0430\u0306"}, {U'\u04D2', U"\u0410\u0308"},
+      {U'\u04D3', U"\u0430\u0308"}, {U'\u04D6', U"\u0415\u0306"},
+      {U'\u04D7', U"\u0435\u0306"}, {U'\u04DA', U"\u04D8\u0308"},
+      {U'\u04DB', U"\u04D9\u0308"}, {U'\u04DC', U"\u0416\u0308"},
+      {U'\u04DD', U"\u0436\u0308"}, {U'\u04DE', U"\u0417\u0308"},
+      {U'\u04DF', U"\u0437\u0308"}, {U'\u04E2', U"\u0418\u0304"},
+      {U'\u04E3', U"\u0438\u0304"}, {U'\u04E4', U"\u0418\u0308"},
+      {U'\u04E5', U"\u0438\u0308"}, {U'\u04E6', U"\u041E\u0308"},
+      {U'\u04E7', U"\u043E\u0308"}, {U'\u04EA', U"\u04E8\u0308"},
+      {U'\u04EB', U"\u04E9\u0308"}, {U'\u04EC', U"\u042D\u0308"},
+      {U'\u04ED', U"\u044D\u0308"}, {U'\u04EE', U"\u0423\u0304"},
+      {U'\u04EF', U"\u0443\u0304"}, {U'\u04F0', U"\u0423\u0308"},
+      {U'\u04F1', U"\u0443\u0308"}, {U'\u04F2', U"\u0423\u030B"},
+      {U'\u04F3', U"\u0443\u030B"}, {U'\u04F4', U"\u0427\u0308"},
+      {U'\u04F5', U"\u0447\u0308"}, {U'\u04F8', U"\u042B\u0308"},
       {U'\u04F9', U"\u044B\u0308"},
   };
   return kMap;
@@ -149,7 +158,8 @@ char32_t unicode_tolower_like_python(char32_t cp) {
   return cp;
 }
 
-/// Mirrors Python ``normalize_lookup_key`` (lower + NFD + Mn strip + Cyrillic key filter).
+/// Mirrors Python ``normalize_lookup_key`` (lower + NFD + Mn strip + Cyrillic
+/// key filter).
 std::string normalize_lookup_key_utf8(const std::string& word) {
   const std::string trimmed = trim_ascii_ws_copy(word);
   std::u32string u32;
@@ -203,7 +213,8 @@ bool surface_is_all_lowercase_russian(const std::string& surf) {
   return surf == utf8_russian_lowercase(surf);
 }
 
-void load_russian_lexicon_stream(std::istream& in, std::unordered_map<std::string, std::string>& out_lex) {
+void load_russian_lexicon_stream(
+    std::istream& in, std::unordered_map<std::string, std::string>& out_lex) {
   std::unordered_map<std::string, std::pair<std::string, bool>> tmp;
   std::string line;
   while (std::getline(in, line)) {
@@ -234,11 +245,13 @@ void load_russian_lexicon_stream(std::istream& in, std::unordered_map<std::strin
   }
 }
 
-void load_russian_lexicon_file(const std::filesystem::path& path,
-                               std::unordered_map<std::string, std::string>& out_lex) {
+void load_russian_lexicon_file(
+    const std::filesystem::path& path,
+    std::unordered_map<std::string, std::string>& out_lex) {
   std::ifstream in(path);
   if (!in) {
-    throw std::runtime_error("Russian G2P: cannot read lexicon " + path.generic_string());
+    throw std::runtime_error("Russian G2P: cannot read lexicon " +
+                             path.generic_string());
   }
   load_russian_lexicon_stream(in, out_lex);
 }
@@ -320,7 +333,8 @@ std::optional<int> acute_stressed_vowel_ordinal(const std::string& w_nfc) {
   return std::nullopt;
 }
 
-int vowel_ordinal_to_syllable(const std::vector<std::string>& syls, int nucleus_ord) {
+int vowel_ordinal_to_syllable(const std::vector<std::string>& syls,
+                              int nucleus_ord) {
   int v = 0;
   for (size_t si = 0; si < syls.size(); ++si) {
     size_t p = 0;
@@ -340,14 +354,16 @@ int vowel_ordinal_to_syllable(const std::vector<std::string>& syls, int nucleus_
   return 0;
 }
 
-std::vector<std::string> russian_orthographic_syllables_utf8(const std::string& word_lower) {
+std::vector<std::string> russian_orthographic_syllables_utf8(
+    const std::string& word_lower) {
   std::string w;
   size_t i = 0;
   while (i < word_lower.size()) {
     char32_t cp = 0;
     size_t adv = 0;
     utf8_decode_at(word_lower, i, cp, adv);
-    if (is_russian_lex_key_cp(russian_tolower_cp(cp)) && !is_combining_mark(cp)) {
+    if (is_russian_lex_key_cp(russian_tolower_cp(cp)) &&
+        !is_combining_mark(cp)) {
       utf8_append_codepoint(w, russian_tolower_cp(cp));
     }
     i += adv;
@@ -403,13 +419,15 @@ std::vector<std::string> russian_orthographic_syllables_utf8(const std::string& 
       syllables.push_back(std::move(cur));
     }
   }
-  syllables.erase(std::remove_if(syllables.begin(), syllables.end(),
-                                 [](const std::string& x) { return x.empty(); }),
-                  syllables.end());
+  syllables.erase(
+      std::remove_if(syllables.begin(), syllables.end(),
+                     [](const std::string& x) { return x.empty(); }),
+      syllables.end());
   return syllables;
 }
 
-int stress_syllable_index(const std::vector<std::string>& syls, const std::string& stress_src) {
+int stress_syllable_index(const std::vector<std::string>& syls,
+                          const std::string& stress_src) {
   if (syls.empty()) {
     return 0;
   }
@@ -446,64 +464,68 @@ std::vector<int> syllable_index_per_codepoint(const std::string& w) {
 
 bool palatalizable_cons(char32_t ch) {
   static const std::unordered_set<char32_t> s{
-      U'\u0431', U'\u0432', U'\u0433', U'\u0434', U'\u0437', U'\u043A', U'\u043B', U'\u043C',
-      U'\u043D', U'\u043F', U'\u0440', U'\u0441', U'\u0442', U'\u0444', U'\u0445'};
+      U'\u0431', U'\u0432', U'\u0433', U'\u0434', U'\u0437',
+      U'\u043A', U'\u043B', U'\u043C', U'\u043D', U'\u043F',
+      U'\u0440', U'\u0441', U'\u0442', U'\u0444', U'\u0445'};
   return s.count(ch) != 0;
 }
 
 std::string emit_consonant(char32_t ch, bool palatal) {
   switch (ch) {
-  case U'\u0448':
-    // Was omitted in the Python port (``ш`` not in ``_CONS_PHONE``); TTS needs a segment.
-    return "\xCA\x82";  // U+0282 LATIN SMALL LETTER S WITH HOOK (ʂ); \xC9\x82 is U+0242 ɂ (wrong).
-  case U'\u0447':
-    return "tɕ";
-  case U'\u0449':
-    return "ɕː";
-  case U'\u0446':
-    return "ts";
-  case U'\u0436':
-    return "ʐ";
-  case U'\u0431':
-    return palatal ? "b" + kPalatal : "b";
-  case U'\u0432':
-    return palatal ? "v" + kPalatal : "v";
-  case U'\u0433':
-    return palatal ? "\xC9\xA1" + kPalatal : "\xC9\xA1";
-  case U'\u0434':
-    return palatal ? "d" + kPalatal : "d";
-  case U'\u0437':
-    return palatal ? "z" + kPalatal : "z";
-  case U'\u0439':
-    return "j";
-  case U'\u043A':
-    return palatal ? "k" + kPalatal : "k";
-  case U'\u043B':
-    return palatal ? "l" + kPalatal : "l";
-  case U'\u043C':
-    return palatal ? "m" + kPalatal : "m";
-  case U'\u043D':
-    return palatal ? "n" + kPalatal : "n";
-  case U'\u043F':
-    return palatal ? "p" + kPalatal : "p";
-  case U'\u0440':
-    return palatal ? "r" + kPalatal : "r";
-  case U'\u0441':
-    return palatal ? "s" + kPalatal : "s";
-  case U'\u0442':
-    return palatal ? "t" + kPalatal : "t";
-  case U'\u0444':
-    return palatal ? "f" + kPalatal : "f";
-  case U'\u0445':
-    return palatal ? "x" + kPalatal : "x";
-  default:
-    return "";
+    case U'\u0448':
+      // Was omitted in the Python port (``ш`` not in ``_CONS_PHONE``); TTS
+      // needs a segment.
+      return "\xCA\x82";  // U+0282 LATIN SMALL LETTER S WITH HOOK (ʂ); \xC9\x82
+                          // is U+0242 ɂ (wrong).
+    case U'\u0447':
+      return "tɕ";
+    case U'\u0449':
+      return "ɕː";
+    case U'\u0446':
+      return "ts";
+    case U'\u0436':
+      return "ʐ";
+    case U'\u0431':
+      return palatal ? "b" + kPalatal : "b";
+    case U'\u0432':
+      return palatal ? "v" + kPalatal : "v";
+    case U'\u0433':
+      return palatal ? "\xC9\xA1" + kPalatal : "\xC9\xA1";
+    case U'\u0434':
+      return palatal ? "d" + kPalatal : "d";
+    case U'\u0437':
+      return palatal ? "z" + kPalatal : "z";
+    case U'\u0439':
+      return "j";
+    case U'\u043A':
+      return palatal ? "k" + kPalatal : "k";
+    case U'\u043B':
+      return palatal ? "l" + kPalatal : "l";
+    case U'\u043C':
+      return palatal ? "m" + kPalatal : "m";
+    case U'\u043D':
+      return palatal ? "n" + kPalatal : "n";
+    case U'\u043F':
+      return palatal ? "p" + kPalatal : "p";
+    case U'\u0440':
+      return palatal ? "r" + kPalatal : "r";
+    case U'\u0441':
+      return palatal ? "s" + kPalatal : "s";
+    case U'\u0442':
+      return palatal ? "t" + kPalatal : "t";
+    case U'\u0444':
+      return palatal ? "f" + kPalatal : "f";
+    case U'\u0445':
+      return palatal ? "x" + kPalatal : "x";
+    default:
+      return "";
   }
 }
 
 bool ipa_piece_ends_with_palatal(const std::string& piece) {
   if (piece.size() >= kPalatal.size() &&
-      piece.compare(piece.size() - kPalatal.size(), kPalatal.size(), kPalatal) == 0) {
+      piece.compare(piece.size() - kPalatal.size(), kPalatal.size(),
+                    kPalatal) == 0) {
     return true;
   }
   return false;
@@ -518,8 +540,8 @@ bool ipa_piece_last_is_vowel_letter(const std::string& piece) {
   size_t adv = 0;
   utf8_decode_at(cps.back(), 0, cp, adv);
   return cp == U'a' || cp == U'e' || cp == U'i' || cp == U'o' || cp == U'u' ||
-         cp == U'\u025B' || cp == U'\u0259' || cp == U'\u0268' || cp == U'\u026A' ||
-         cp == U'\u028A';
+         cp == U'\u025B' || cp == U'\u0259' || cp == U'\u0268' ||
+         cp == U'\u026A' || cp == U'\u028A';
 }
 
 bool ipa_piece_after_hard_consonant(const std::string& piece) {
@@ -535,8 +557,8 @@ bool ipa_piece_after_hard_consonant(const std::string& piece) {
   return true;
 }
 
-std::string vowel_ipa(char32_t ch, bool stressed, bool after_palatal, bool after_hard,
-                      bool word_initial_jot) {
+std::string vowel_ipa(char32_t ch, bool stressed, bool after_palatal,
+                      bool after_hard, bool word_initial_jot) {
   const char32_t cl = russian_tolower_cp(ch);
   if (cl == U'\u0430') {
     return stressed ? "a" : "\xC9\x99";
@@ -602,7 +624,8 @@ std::string letters_to_ipa_rules(const std::string& w_clean, int stress_syl) {
     char32_t cp = 0;
     size_t adv = 0;
     utf8_decode_at(w_clean, z, cp, adv);
-    if (is_russian_lex_key_cp(russian_tolower_cp(cp)) && !is_combining_mark(cp)) {
+    if (is_russian_lex_key_cp(russian_tolower_cp(cp)) &&
+        !is_combining_mark(cp)) {
       utf8_append_codepoint(w, russian_tolower_cp(cp));
     }
     z += adv;
@@ -634,16 +657,18 @@ std::string letters_to_ipa_rules(const std::string& w_clean, int stress_syl) {
     return ipa_piece_ends_with_palatal(last);
   };
 
-  auto after_hard = [&]() -> bool { return ipa_piece_after_hard_consonant(out.empty() ? "" : out.back()); };
+  auto after_hard = [&]() -> bool {
+    return ipa_piece_after_hard_consonant(out.empty() ? "" : out.back());
+  };
 
   while (byte_i < n) {
     char32_t ch = 0;
     size_t adv = 0;
     utf8_decode_at(w, byte_i, ch, adv);
-    const int syl_here =
-        (cp_index >= 0 && static_cast<size_t>(cp_index) < syll_idx_per_cp.size())
-            ? syll_idx_per_cp[static_cast<size_t>(cp_index)]
-            : 0;
+    const int syl_here = (cp_index >= 0 && static_cast<size_t>(cp_index) <
+                                               syll_idx_per_cp.size())
+                             ? syll_idx_per_cp[static_cast<size_t>(cp_index)]
+                             : 0;
     const bool stressed = (syl_here == stress_syl);
 
     if (ch == U'\u044A' || ch == U'\u042A') {
@@ -696,7 +721,8 @@ std::string letters_to_ipa_rules(const std::string& w_clean, int stress_syl) {
       continue;
     }
 
-    if (emit_consonant(ch, false).empty() && ch != U'\u0446' && ch != U'\u0447' && ch != U'\u0449') {
+    if (emit_consonant(ch, false).empty() && ch != U'\u0446' &&
+        ch != U'\u0447' && ch != U'\u0449') {
       byte_i += adv;
       ++cp_index;
       continue;
@@ -725,18 +751,19 @@ std::string letters_to_ipa_rules(const std::string& w_clean, int stress_syl) {
       }
       if (is_russian_vowel_letter(nx)) {
         const char32_t v = nx;
-        if ((ch == U'\u0436' || ch == U'\u0446' || ch == U'\u0448') && is_russian_vowel_letter(v)) {
+        if ((ch == U'\u0436' || ch == U'\u0446' || ch == U'\u0448') &&
+            is_russian_vowel_letter(v)) {
           const char32_t vl = russian_tolower_cp(v);
-          if (vl == U'\u0435' || vl == U'\u0451' || vl == U'\u0438' || vl == U'\u044E' ||
-              vl == U'\u044F') {
+          if (vl == U'\u0435' || vl == U'\u0451' || vl == U'\u0438' ||
+              vl == U'\u044E' || vl == U'\u044F') {
             palatal = false;
           }
         } else if (ch == U'\u0447' || ch == U'\u0449') {
           palatal = false;
         } else {
           const char32_t vl = russian_tolower_cp(v);
-          if (vl == U'\u0435' || vl == U'\u0451' || vl == U'\u0438' || vl == U'\u044E' ||
-              vl == U'\u044F') {
+          if (vl == U'\u0435' || vl == U'\u0451' || vl == U'\u0438' ||
+              vl == U'\u044E' || vl == U'\u044F') {
             palatal = palatalizable_cons(ch);
           }
         }
@@ -767,8 +794,9 @@ std::string insert_primary_stress_before_vowel(std::string s) {
     char32_t cp = 0;
     size_t adv = 0;
     utf8_decode_at(s, i, cp, adv);
-    if (cp == U'a' || cp == U'e' || cp == U'i' || cp == U'o' || cp == U'u' || cp == U'\u025B' ||
-        cp == U'\u0259' || cp == U'\u0268' || cp == U'\u026A' || cp == U'\u028A' || cp == U'\u00F8' ||
+    if (cp == U'a' || cp == U'e' || cp == U'i' || cp == U'o' || cp == U'u' ||
+        cp == U'\u025B' || cp == U'\u0259' || cp == U'\u0268' ||
+        cp == U'\u026A' || cp == U'\u028A' || cp == U'\u00F8' ||
         cp == U'\u0275') {
       s.insert(i, kPri);
       return s;
@@ -778,7 +806,8 @@ std::string insert_primary_stress_before_vowel(std::string s) {
   return kPri + s;
 }
 
-std::string rules_word_to_ipa_single(const std::string& w_clean, const std::string& stress_source,
+std::string rules_word_to_ipa_single(const std::string& w_clean,
+                                     const std::string& stress_source,
                                      bool with_stress) {
   const auto syls = russian_orthographic_syllables_utf8(w_clean);
   const int stress_syl = stress_syllable_index(syls, stress_source);
@@ -839,7 +868,8 @@ std::string rules_word_to_ipa(const std::string& raw, bool with_stress) {
     for (size_t c = 0; c < w_chunks.size(); ++c) {
       std::string part;
       if (stress_chunks.size() == w_chunks.size()) {
-        part = rules_word_to_ipa_single(w_chunks[c], stress_chunks[c], with_stress);
+        part = rules_word_to_ipa_single(w_chunks[c], stress_chunks[c],
+                                        with_stress);
       } else {
         part = rules_word_to_ipa_single(w_chunks[c], stress_src, with_stress);
       }
@@ -869,8 +899,9 @@ bool is_latin1_supplement_python_word_char(char32_t cp) {
   if (cp >= U'\u00F8' && cp <= U'\u00FF') {
     return true;
   }
-  return cp == U'\u00AA' || cp == U'\u00B2' || cp == U'\u00B3' || cp == U'\u00B5' || cp == U'\u00B9' ||
-         cp == U'\u00BA' || cp == U'\u00BC' || cp == U'\u00BD' || cp == U'\u00BE';
+  return cp == U'\u00AA' || cp == U'\u00B2' || cp == U'\u00B3' ||
+         cp == U'\u00B5' || cp == U'\u00B9' || cp == U'\u00BA' ||
+         cp == U'\u00BC' || cp == U'\u00BD' || cp == U'\u00BE';
 }
 
 bool is_unicode_word_char_w(char32_t cp) {
@@ -912,7 +943,8 @@ bool utf8_contains_cyrillic(const std::string& tok) {
   return false;
 }
 
-bool try_consume_unicode_word(const std::string& text, size_t pos, size_t& out_end) {
+bool try_consume_unicode_word(const std::string& text, size_t pos,
+                              size_t& out_end) {
   if (pos >= text.size()) {
     return false;
   }
@@ -937,12 +969,14 @@ bool try_consume_unicode_word(const std::string& text, size_t pos, size_t& out_e
   return out_end > pos;
 }
 
-/// Lexicon entries mark a fleeting soft sign as ⁽ʲ⁾ (U+207D U+02B2 U+207E). Piper / espeak-style
-/// phones and many vocoders only understand plain U+02B2; leaving the superscript parens in the
-/// string mis-anchors palatalization and hurts synthesis intelligibility.
+/// Lexicon entries mark a fleeting soft sign as ⁽ʲ⁾ (U+207D U+02B2 U+207E).
+/// Piper / espeak-style phones and many vocoders only understand plain U+02B2;
+/// leaving the superscript parens in the string mis-anchors palatalization and
+/// hurts synthesis intelligibility.
 std::string normalize_russian_fleeting_palatal_markers_utf8(std::string ipa) {
   static const std::string kFleeting{"\xE2\x81\xBD\xCA\xB2\xE2\x81\xBE"};
-  for (size_t p = ipa.find(kFleeting); p != std::string::npos; p = ipa.find(kFleeting, p)) {
+  for (size_t p = ipa.find(kFleeting); p != std::string::npos;
+       p = ipa.find(kFleeting, p)) {
     ipa.replace(p, kFleeting.size(), kPalatal);
     p += kPalatal.size();
   }
@@ -1037,7 +1071,8 @@ std::string RussianRuleG2p::word_to_ipa(const std::string& word) const {
     return wraw;
   }
   if (!options_.expand_cardinal_digits) {
-    static const std::regex dig_pass(R"(^[0-9]+(?:-[0-9]+)*$)", std::regex::ECMAScript);
+    static const std::regex dig_pass(R"(^[0-9]+(?:-[0-9]+)*$)",
+                                     std::regex::ECMAScript);
     if (std::regex_match(wraw, dig_pass)) {
       return wraw;
     }
@@ -1045,8 +1080,8 @@ std::string RussianRuleG2p::word_to_ipa(const std::string& word) const {
   return lookup_or_rules(wraw);
 }
 
-std::string RussianRuleG2p::text_to_ipa_no_expand(const std::string& text,
-                                                  std::vector<G2pWordLog>* per_word_log) const {
+std::string RussianRuleG2p::text_to_ipa_no_expand(
+    const std::string& text, std::vector<G2pWordLog>* per_word_log) const {
   std::string out;
   size_t pos = 0;
   const size_t n = text.size();
@@ -1072,7 +1107,8 @@ std::string RussianRuleG2p::text_to_ipa_no_expand(const std::string& text,
         const std::string k = normalize_lookup_key_utf8(tok);
         std::string wipa = word_to_ipa(tok);
         if (per_word_log != nullptr) {
-          per_word_log->push_back(G2pWordLog{tok, k, G2pWordPath::kRuleBasedG2p, wipa});
+          per_word_log->push_back(
+              G2pWordLog{tok, k, G2pWordPath::kRuleBasedG2p, wipa});
           out += per_word_log->back().ipa;
         } else {
           out += wipa;
@@ -1088,8 +1124,8 @@ std::string RussianRuleG2p::text_to_ipa_no_expand(const std::string& text,
     while (pos < n) {
       utf8_decode_at(text, pos, cp, adv);
       size_t tmp = 0;
-      if (try_consume_unicode_word(text, pos, tmp) || cp == U' ' || cp == U'\t' || cp == U'\n' ||
-          cp == U'\r') {
+      if (try_consume_unicode_word(text, pos, tmp) || cp == U' ' ||
+          cp == U'\t' || cp == U'\n' || cp == U'\r') {
         break;
       }
       pos += adv;
@@ -1118,7 +1154,8 @@ std::string RussianRuleG2p::text_to_ipa_no_expand(const std::string& text,
   return collapsed;
 }
 
-std::string RussianRuleG2p::text_to_ipa(std::string text, std::vector<G2pWordLog>* per_word_log) {
+std::string RussianRuleG2p::text_to_ipa(std::string text,
+                                        std::vector<G2pWordLog>* per_word_log) {
   if (options_.expand_cardinal_digits) {
     text = expand_russian_digit_tokens_in_text(std::move(text));
   }
@@ -1137,7 +1174,8 @@ std::vector<std::string> RussianRuleG2p::dialect_ids() {
   return dedupe_dialect_ids_preserve_first({"ru", "ru-RU", "ru_ru", "russian"});
 }
 
-std::filesystem::path resolve_russian_dict_path(const std::filesystem::path& model_root) {
+std::filesystem::path resolve_russian_dict_path(
+    const std::filesystem::path& model_root) {
   return model_root / "ru" / "dict.tsv";
 }
 

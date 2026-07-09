@@ -1,27 +1,28 @@
 #include "moonshine-g2p.h"
+
+#include <cctype>
+#include <stdexcept>
+
+#include "arabic.h"
+#include "chinese.h"
 #include "debug-utils.h"
-#include "rule-based-g2p-factory.h"
-#include "rule-based-g2p.h"
 #include "dutch.h"
 #include "english.h"
 #include "french.h"
 #include "german.h"
-#include "chinese.h"
-#include "korean.h"
-#include "vietnamese.h"
-#include "japanese.h"
-#include "arabic.h"
+#include "hindi.h"
 #include "italian.h"
+#include "japanese.h"
+#include "korean.h"
 #include "portuguese.h"
+#include "rule-based-g2p-factory.h"
+#include "rule-based-g2p.h"
 #include "russian.h"
 #include "spanish.h"
 #include "turkish.h"
 #include "ukrainian.h"
-#include "hindi.h"
 #include "utf8-utils.h"
-
-#include <cctype>
-#include <stdexcept>
+#include "vietnamese.h"
 
 namespace moonshine_tts {
 
@@ -47,14 +48,16 @@ std::string normalize_spanish_dialect_cli_key(std::string_view raw) {
     size_t i = 3;
     while (i < s.size() && s[i] != '-') {
       if (std::isalpha(static_cast<unsigned char>(s[i])) != 0) {
-        s[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(s[i])));
+        s[i] =
+            static_cast<char>(std::toupper(static_cast<unsigned char>(s[i])));
       }
       ++i;
     }
     if (i < s.size() && s[i] == '-') {
       ++i;
       while (i < s.size()) {
-        s[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(s[i])));
+        s[i] =
+            static_cast<char>(std::tolower(static_cast<unsigned char>(s[i])));
         ++i;
       }
     }
@@ -64,29 +67,46 @@ std::string normalize_spanish_dialect_cli_key(std::string_view raw) {
 
 const char* rule_backend_name(RuleBasedG2pKind k) {
   switch (k) {
-    case RuleBasedG2pKind::English:    return "English";
-    case RuleBasedG2pKind::Spanish:    return "Spanish";
-    case RuleBasedG2pKind::German:     return "German";
-    case RuleBasedG2pKind::French:     return "French";
-    case RuleBasedG2pKind::Dutch:      return "Dutch";
-    case RuleBasedG2pKind::Italian:    return "Italian";
-    case RuleBasedG2pKind::Russian:    return "Russian";
-    case RuleBasedG2pKind::Chinese:    return "Chinese";
-    case RuleBasedG2pKind::Korean:     return "Korean";
-    case RuleBasedG2pKind::Vietnamese: return "Vietnamese";
-    case RuleBasedG2pKind::Japanese:   return "Japanese";
-    case RuleBasedG2pKind::Arabic:     return "Arabic";
-    case RuleBasedG2pKind::Portuguese: return "Portuguese";
-    case RuleBasedG2pKind::Turkish:    return "Turkish";
-    case RuleBasedG2pKind::Ukrainian:  return "Ukrainian";
-    case RuleBasedG2pKind::Hindi:      return "Hindi";
+    case RuleBasedG2pKind::English:
+      return "English";
+    case RuleBasedG2pKind::Spanish:
+      return "Spanish";
+    case RuleBasedG2pKind::German:
+      return "German";
+    case RuleBasedG2pKind::French:
+      return "French";
+    case RuleBasedG2pKind::Dutch:
+      return "Dutch";
+    case RuleBasedG2pKind::Italian:
+      return "Italian";
+    case RuleBasedG2pKind::Russian:
+      return "Russian";
+    case RuleBasedG2pKind::Chinese:
+      return "Chinese";
+    case RuleBasedG2pKind::Korean:
+      return "Korean";
+    case RuleBasedG2pKind::Vietnamese:
+      return "Vietnamese";
+    case RuleBasedG2pKind::Japanese:
+      return "Japanese";
+    case RuleBasedG2pKind::Arabic:
+      return "Arabic";
+    case RuleBasedG2pKind::Portuguese:
+      return "Portuguese";
+    case RuleBasedG2pKind::Turkish:
+      return "Turkish";
+    case RuleBasedG2pKind::Ukrainian:
+      return "Ukrainian";
+    case RuleBasedG2pKind::Hindi:
+      return "Hindi";
   }
   return "Unknown";
 }
 
 }  // namespace
 
-bool dialect_resolves_to_spanish_rules(std::string_view dialect_id, bool spanish_narrow_obstruents) {
+bool dialect_resolves_to_spanish_rules(std::string_view dialect_id,
+                                       bool spanish_narrow_obstruents) {
   const std::string spanish_key = normalize_spanish_dialect_cli_key(dialect_id);
   if (spanish_key.empty()) {
     return false;
@@ -99,7 +119,8 @@ bool dialect_resolves_to_spanish_rules(std::string_view dialect_id, bool spanish
   }
 }
 
-bool dialect_uses_rule_based_g2p(std::string_view dialect_id, const MoonshineG2POptions& options) {
+bool dialect_uses_rule_based_g2p(std::string_view dialect_id,
+                                 const MoonshineG2POptions& options) {
   const std::string norm = normalize_rule_based_dialect_cli_key(dialect_id);
   if (norm.empty()) {
     return false;
@@ -107,7 +128,8 @@ bool dialect_uses_rule_based_g2p(std::string_view dialect_id, const MoonshineG2P
   if (dialect_resolves_to_english_rules(norm)) {
     return true;
   }
-  if (dialect_resolves_to_spanish_rules(norm, options.spanish_narrow_obstruents)) {
+  if (dialect_resolves_to_spanish_rules(norm,
+                                        options.spanish_narrow_obstruents)) {
     return true;
   }
   if (dialect_resolves_to_german_rules(norm)) {
@@ -140,7 +162,8 @@ bool dialect_uses_rule_based_g2p(std::string_view dialect_id, const MoonshineG2P
   if (dialect_resolves_to_arabic_rules(norm)) {
     return true;
   }
-  if (dialect_resolves_to_brazilian_portuguese_rules(norm) || dialect_resolves_to_portugal_rules(norm)) {
+  if (dialect_resolves_to_brazilian_portuguese_rules(norm) ||
+      dialect_resolves_to_portugal_rules(norm)) {
     return true;
   }
   if (dialect_resolves_to_turkish_rules(norm)) {
@@ -160,7 +183,8 @@ MoonshineG2P::~MoonshineG2P() = default;
 MoonshineG2P::MoonshineG2P(MoonshineG2P&&) noexcept = default;
 MoonshineG2P& MoonshineG2P::operator=(MoonshineG2P&&) noexcept = default;
 
-MoonshineG2P::MoonshineG2P(std::string dialect_id, MoonshineG2POptions options) {
+MoonshineG2P::MoonshineG2P(std::string dialect_id,
+                           MoonshineG2POptions options) {
   log_profiling_ = options.log_profiling;
   TIMER_START_IF(log_profiling_, g2p_init);
   const std::string trimmed = trim_copy(dialect_id);
@@ -184,11 +208,14 @@ MoonshineG2P::MoonshineG2P(std::string dialect_id, MoonshineG2POptions options) 
 
   throw std::runtime_error(
       "MoonshineG2P: unsupported dialect \"" + trimmed +
-      "\". Only rule-based locales are supported (e.g. en_us, en_gb, es-MX, de, fr, nl, it, ru, zh, ko, vi, ja, ar, pt_br, tr, uk, hi); "
-      "see dialect_uses_rule_based_g2p() and rule_based_g2p_dialect_catalog().");
+      "\". Only rule-based locales are supported (e.g. en_us, en_gb, es-MX, "
+      "de, fr, nl, it, ru, zh, ko, vi, ja, ar, pt_br, tr, uk, hi); "
+      "see dialect_uses_rule_based_g2p() and "
+      "rule_based_g2p_dialect_catalog().");
 }
 
-std::string MoonshineG2P::text_to_ipa(std::string_view text, std::vector<G2pWordLog>* per_word_log) {
+std::string MoonshineG2P::text_to_ipa(std::string_view text,
+                                      std::vector<G2pWordLog>* per_word_log) {
   TIMER_START_IF(log_profiling_, g2p_text_to_ipa);
   if (rules_) {
     std::string result = rules_->text_to_ipa(std::string(text), per_word_log);

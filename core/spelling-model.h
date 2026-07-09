@@ -25,9 +25,10 @@ class SpellingModel {
  public:
   static constexpr size_t default_target_samples = 16000;
 
-  explicit SpellingModel(bool log_ort_run = false,
-                         const std::vector<std::string> &ort_provider_names = {},
-                         const std::string &coreml_cache_dir = {});
+  explicit SpellingModel(
+      bool log_ort_run = false,
+      const std::vector<std::string> &ort_provider_names = {},
+      const std::string &coreml_cache_dir = {});
   ~SpellingModel();
 
   SpellingModel(const SpellingModel &) = delete;

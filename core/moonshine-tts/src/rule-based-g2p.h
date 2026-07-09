@@ -13,8 +13,8 @@ class RuleBasedG2p {
  public:
   virtual ~RuleBasedG2p() = default;
 
-  virtual std::string text_to_ipa(std::string text,
-                                  std::vector<G2pWordLog>* per_word_log = nullptr) = 0;
+  virtual std::string text_to_ipa(
+      std::string text, std::vector<G2pWordLog>* per_word_log = nullptr) = 0;
 };
 
 }  // namespace moonshine_tts

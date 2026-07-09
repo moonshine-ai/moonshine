@@ -6,8 +6,7 @@ namespace moonshine_tts {
 
 Ort::SessionOptions make_ort_session_options(
     const std::vector<std::string>& provider_names,
-    const std::string& coreml_cache_dir,
-    int intra_op_num_threads,
+    const std::string& coreml_cache_dir, int intra_op_num_threads,
     int inter_op_num_threads) {
   Ort::SessionOptions opts;
   opts.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);

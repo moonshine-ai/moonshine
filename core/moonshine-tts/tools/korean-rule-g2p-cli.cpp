@@ -1,17 +1,20 @@
-// Korean rule + lexicon G2P (no ONNX). Mirrors ``korean_rule_g2p.py`` CLI subset.
-#include "korean.h"
-
+// Korean rule + lexicon G2P (no ONNX). Mirrors ``korean_rule_g2p.py`` CLI
+// subset.
 #include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "korean.h"
+
 namespace {
 
 void usage(const char* argv0) {
-  std::cerr << "Usage: " << argv0 << " [--dict PATH] [--sep SEP] [--no-expand-digits] [--stdin] [TEXT...]\n"
-            << "  Default dict: data/ko/dict.tsv (relative to current directory).\n";
+  std::cerr
+      << "Usage: " << argv0
+      << " [--dict PATH] [--sep SEP] [--no-expand-digits] [--stdin] [TEXT...]\n"
+      << "  Default dict: data/ko/dict.tsv (relative to current directory).\n";
 }
 
 std::string read_all_stdin() {
@@ -23,7 +26,8 @@ std::string read_all_stdin() {
 }  // namespace
 
 int main(int argc, char** argv) {
-  std::filesystem::path dict_path = std::filesystem::path("data") / "ko" / "dict.tsv";
+  std::filesystem::path dict_path =
+      std::filesystem::path("data") / "ko" / "dict.tsv";
   std::string syllable_sep = ".";
   bool expand_digits = true;
   bool force_stdin = false;

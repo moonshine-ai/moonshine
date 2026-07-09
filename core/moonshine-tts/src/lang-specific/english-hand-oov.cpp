@@ -1,13 +1,13 @@
 #include "english-hand-oov.h"
 
-#include "text-normalize.h"
-
 #include <cctype>
 #include <cstring>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
+
+#include "text-normalize.h"
 
 namespace moonshine_tts {
 namespace {
@@ -39,10 +39,12 @@ bool last_ipa_unit_is_vowel(std::string_view prev) {
   const std::string_view last = last_utf8_char(prev);
   if (last.size() == 1) {
     const char ch = last[0];
-    return ch == 'a' || ch == 'e' || ch == 'i' || ch == 'o' || ch == 'u' || ch == 'y';
+    return ch == 'a' || ch == 'e' || ch == 'i' || ch == 'o' || ch == 'u' ||
+           ch == 'y';
   }
-  return last == "æ" || last == "ɛ" || last == "ɪ" || last == "ɔ" || last == "ʊ" || last == "ɑ" ||
-         last == "ɒ" || last == "ə" || last == "ɚ" || last == "ɝ" || last == "ɨ" || last == "ʉ";
+  return last == "æ" || last == "ɛ" || last == "ɪ" || last == "ɔ" ||
+         last == "ʊ" || last == "ɑ" || last == "ɒ" || last == "ə" ||
+         last == "ɚ" || last == "ɝ" || last == "ɨ" || last == "ʉ";
 }
 
 constexpr bool is_vowel(char c) {
@@ -66,18 +68,21 @@ bool magic_e_lengthens(std::string_view w, int vowel_i) {
   if (vowel_i < 0 || vowel_i >= static_cast<int>(w.size())) {
     return false;
   }
-  if (w.empty() || w.back() != 'e' || w.size() < static_cast<size_t>(vowel_i + 3)) {
+  if (w.empty() || w.back() != 'e' ||
+      w.size() < static_cast<size_t>(vowel_i + 3)) {
     return false;
   }
   const int j = vowel_i + 1;
   if (j >= static_cast<int>(w.size()) - 1) {
     return false;
   }
-  if (!(w[static_cast<size_t>(w.size() - 2)] >= 'a' && w[static_cast<size_t>(w.size() - 2)] <= 'z' &&
+  if (!(w[static_cast<size_t>(w.size() - 2)] >= 'a' &&
+        w[static_cast<size_t>(w.size() - 2)] <= 'z' &&
         !is_vowel(w[static_cast<size_t>(w.size() - 2)]))) {
     return false;
   }
-  const std::string_view mid = w.substr(static_cast<size_t>(j), w.size() - 1 - static_cast<size_t>(j));
+  const std::string_view mid =
+      w.substr(static_cast<size_t>(j), w.size() - 1 - static_cast<size_t>(j));
   if (mid.empty()) {
     return false;
   }
@@ -90,7 +95,8 @@ bool magic_e_lengthens(std::string_view w, int vowel_i) {
 }
 
 std::pair<std::string, int> r_controlled(std::string_view w, int i) {
-  if (i + 1 >= static_cast<int>(w.size()) || w[static_cast<size_t>(i + 1)] != 'r') {
+  if (i + 1 >= static_cast<int>(w.size()) ||
+      w[static_cast<size_t>(i + 1)] != 'r') {
     return {"", 0};
   }
   const char v = w[static_cast<size_t>(i)];
@@ -122,43 +128,52 @@ struct Literal {
 
 // Longest graphemes first (same set as ``english_rule_g2p._OOV_LITERALS``).
 const Literal kLiterals[] = {
-    {"tch", "tʃ"},   {"dge", "dʒ"},   {"tion", "ʃən"}, {"sion", "ʒən"}, {"sure", "ʒɚ"},
-    {"ture", "tʃɚ"}, {"ough", "oʊ"},  {"augh", "ɔː"},  {"eigh", "eɪ"},  {"igh", "aɪ"},
-    {"oar", "ɔɹ"},   {"our", "aʊɹ"},  {"oor", "ɔɹ"},   {"ear", "ɪɹ"},   {"eer", "ɪɹ"},
-    {"ier", "ɪɹ"},   {"air", "ɛɹ"},   {"are", "ɛɹ"},   {"ire", "aɪɹ"},  {"ure", "jʊɹ"},
-    {"ai", "eɪ"},    {"ay", "eɪ"},    {"au", "ɔː"},   {"aw", "ɔː"},    {"ea", "iː"},
-    {"ee", "iː"},    {"ei", "eɪ"},    {"ey", "eɪ"},    {"eu", "juː"},   {"ew", "juː"},
-    {"ie", "iː"},    {"oa", "oʊ"},    {"oe", "oʊ"},    {"oi", "ɔɪ"},    {"oy", "ɔɪ"},
-    {"oo", "uː"},    {"ou", "aʊ"},    {"ow", "oʊ"},    {"ph", "f"},     {"gh", ""},
-    {"ng", "ŋ"},     {"ch", "tʃ"},    {"sh", "ʃ"},     {"th", "θ"},     {"wh", "w"},
-    {"qu", "kw"},   {"ck", "k"},     {"sch", "sk"},   {"ss", "s"},     {"ll", "l"},
-    {"mm", "m"},    {"nn", "n"},     {"ff", "f"},     {"pp", "p"},     {"tt", "t"},
-    {"zz", "z"},    {"rr", "ɹ"},     {"dd", "d"},     {"bb", "b"},     {"gg", "ɡ"},
+    {"tch", "tʃ"},  {"dge", "dʒ"},   {"tion", "ʃən"}, {"sion", "ʒən"},
+    {"sure", "ʒɚ"}, {"ture", "tʃɚ"}, {"ough", "oʊ"},  {"augh", "ɔː"},
+    {"eigh", "eɪ"}, {"igh", "aɪ"},   {"oar", "ɔɹ"},   {"our", "aʊɹ"},
+    {"oor", "ɔɹ"},  {"ear", "ɪɹ"},   {"eer", "ɪɹ"},   {"ier", "ɪɹ"},
+    {"air", "ɛɹ"},  {"are", "ɛɹ"},   {"ire", "aɪɹ"},  {"ure", "jʊɹ"},
+    {"ai", "eɪ"},   {"ay", "eɪ"},    {"au", "ɔː"},    {"aw", "ɔː"},
+    {"ea", "iː"},   {"ee", "iː"},    {"ei", "eɪ"},    {"ey", "eɪ"},
+    {"eu", "juː"},  {"ew", "juː"},   {"ie", "iː"},    {"oa", "oʊ"},
+    {"oe", "oʊ"},   {"oi", "ɔɪ"},    {"oy", "ɔɪ"},    {"oo", "uː"},
+    {"ou", "aʊ"},   {"ow", "oʊ"},    {"ph", "f"},     {"gh", ""},
+    {"ng", "ŋ"},    {"ch", "tʃ"},    {"sh", "ʃ"},     {"th", "θ"},
+    {"wh", "w"},    {"qu", "kw"},    {"ck", "k"},     {"sch", "sk"},
+    {"ss", "s"},    {"ll", "l"},     {"mm", "m"},     {"nn", "n"},
+    {"ff", "f"},    {"pp", "p"},     {"tt", "t"},     {"zz", "z"},
+    {"rr", "ɹ"},    {"dd", "d"},     {"bb", "b"},     {"gg", "ɡ"},
 };
 
 const std::unordered_map<std::string, std::string> kFunctionWords = {
-    {"the", "ðə"},   {"a", "ə"},      {"an", "æn"},    {"to", "tə"},    {"of", "əv"},
-    {"and", "ænd"},  {"or", "ɔɹ"},    {"are", "ɑɹ"},   {"was", "wəz"},  {"were", "wɝ"},
-    {"from", "fɹʌm"}, {"have", "hæv"}, {"has", "hæz"}, {"been", "bɪn"}, {"do", "du"},
-    {"does", "dʌz"}, {"your", "jɔɹ"}, {"you", "ju"}, {"they", "ðeɪ"}, {"their", "ðɛɹ"},
+    {"the", "ðə"},    {"a", "ə"},      {"an", "æn"},     {"to", "tə"},
+    {"of", "əv"},     {"and", "ænd"},  {"or", "ɔɹ"},     {"are", "ɑɹ"},
+    {"was", "wəz"},   {"were", "wɝ"},  {"from", "fɹʌm"}, {"have", "hæv"},
+    {"has", "hæz"},   {"been", "bɪn"}, {"do", "du"},     {"does", "dʌz"},
+    {"your", "jɔɹ"},  {"you", "ju"},   {"they", "ðeɪ"},  {"their", "ðɛɹ"},
     {"there", "ðɛɹ"},
 };
 
 bool th_voiced_word(std::string_view w) {
-  return w == "the" || w == "this" || w == "that" || w == "they" || w == "then" || w == "than" ||
-         w == "there" || w == "these" || w == "those";
+  return w == "the" || w == "this" || w == "that" || w == "they" ||
+         w == "then" || w == "than" || w == "there" || w == "these" ||
+         w == "those";
 }
 
 std::string oov_single_consonant(char c, std::string_view w, int i) {
   if (c == 'c') {
-    const char nxt = (i + 1 < static_cast<int>(w.size())) ? w[static_cast<size_t>(i + 1)] : '\0';
+    const char nxt = (i + 1 < static_cast<int>(w.size()))
+                         ? w[static_cast<size_t>(i + 1)]
+                         : '\0';
     if (nxt == 'e' || nxt == 'i' || nxt == 'y') {
       return "s";
     }
     return "k";
   }
   if (c == 'g') {
-    const char nxt = (i + 1 < static_cast<int>(w.size())) ? w[static_cast<size_t>(i + 1)] : '\0';
+    const char nxt = (i + 1 < static_cast<int>(w.size()))
+                         ? w[static_cast<size_t>(i + 1)]
+                         : '\0';
     if (nxt == 'e' || nxt == 'i' || nxt == 'y') {
       return "dʒ";
     }
@@ -227,7 +242,8 @@ std::pair<std::string, int> oov_vowel(std::string_view w, int i) {
   const int nxt_c = next_vowel_index(w, i + 1);
   bool closed = false;
   if (nxt_c >= 0) {
-    const std::string_view between = w.substr(static_cast<size_t>(i + 1), static_cast<size_t>(nxt_c - i - 1));
+    const std::string_view between = w.substr(
+        static_cast<size_t>(i + 1), static_cast<size_t>(nxt_c - i - 1));
     if (!between.empty()) {
       closed = true;
       for (char c : between) {
@@ -237,7 +253,8 @@ std::pair<std::string, int> oov_vowel(std::string_view w, int i) {
         }
       }
     }
-  } else if (i + 1 < static_cast<int>(w.size()) && !is_vowel(w[static_cast<size_t>(i + 1)])) {
+  } else if (i + 1 < static_cast<int>(w.size()) &&
+             !is_vowel(w[static_cast<size_t>(i + 1)])) {
     closed = true;
   }
   if (v == 'a') {
@@ -295,16 +312,17 @@ std::pair<std::string, int> oov_vowel(std::string_view w, int i) {
 }
 
 const char* kVowelPrefixes[] = {
-    "aɪ", "aʊ", "eɪ", "oʊ", "ɔɪ", "juː", "iː", "uː", "ɑː", "ɔː", "ɜː", "ɛɹ", "ɑɹ", "ɔɹ",
-    "ɪɹ", "ʊɹ", "aɪɹ", "ɪə", "eə", "ʊə", "iə", "ə",  "ɪ",  "ɛ",  "æ",  "ʌ",  "ʊ",  "ɑ",
-    "ɔ",  "i",  "u",  "e",  "o",  "ɚ",  "ɝ",  "ɒ",
+    "aɪ", "aʊ", "eɪ", "oʊ", "ɔɪ",  "juː", "iː", "uː", "ɑː", "ɔː", "ɜː", "ɛɹ",
+    "ɑɹ", "ɔɹ", "ɪɹ", "ʊɹ", "aɪɹ", "ɪə",  "eə", "ʊə", "iə", "ə",  "ɪ",  "ɛ",
+    "æ",  "ʌ",  "ʊ",  "ɑ",  "ɔ",   "i",   "u",  "e",  "o",  "ɚ",  "ɝ",  "ɒ",
 };
 
 std::string add_primary_stress_if_missing(std::string s) {
   if (s.empty()) {
     return s;
   }
-  if (utf8_starts_with(s, kIpaPrimaryStress) || utf8_starts_with(s, kIpaSecondaryStress)) {
+  if (utf8_starts_with(s, kIpaPrimaryStress) ||
+      utf8_starts_with(s, kIpaSecondaryStress)) {
     return s;
   }
   for (const char* pref : kVowelPrefixes) {
@@ -358,7 +376,8 @@ std::string oov_grapheme_to_ipa(std::string_view word) {
       if (i + L > n) {
         continue;
       }
-      if (std::string_view(wv).substr(static_cast<size_t>(i), static_cast<size_t>(L)) != lit.grapheme) {
+      if (std::string_view(wv).substr(static_cast<size_t>(i),
+                                      static_cast<size_t>(L)) != lit.grapheme) {
         continue;
       }
       if (lit.grapheme == "gh") {

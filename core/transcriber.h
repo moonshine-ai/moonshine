@@ -12,10 +12,10 @@
 
 #include "moonshine-model.h"
 #include "moonshine-streaming-model.h"
-#include "voice-activity-detector.h"
 #include "speaker-diarizer.h"
 #include "spelling-fusion.h"
 #include "spelling-model.h"
+#include "voice-activity-detector.h"
 #include "word-alignment.h"
 
 // Whenever this struct is modified, the following files must be updated:
@@ -137,7 +137,7 @@ struct TranscriberOptions {
   // because it adds a significant amount of compute to transcribe calls.
   bool identify_speakers = false;
   float transcription_interval = 0.5f;
-  float vad_threshold = 0.5f;  
+  float vad_threshold = 0.5f;
   float vad_window_duration = 0.5f;
   int32_t vad_hop_size = 512;
   size_t vad_look_behind_sample_count = 8192;
@@ -232,8 +232,8 @@ class Transcriber {
   // the resulting spans on the lines, marking have_speakers_changed on any
   // line whose spans differ from the previous set. Can update completed
   // lines. Returns true if any line changed.
-  static bool apply_speaker_turns_to_lines(const std::vector<SpeakerTurn> &turns,
-                                           TranscriptStreamOutput *output);
+  static bool apply_speaker_turns_to_lines(
+      const std::vector<SpeakerTurn> &turns, TranscriptStreamOutput *output);
 
   // Apply the alphanumeric-spelling fusion to a single line's text in
   // place. Returns true iff the fuser produced a CHARACTER result (in

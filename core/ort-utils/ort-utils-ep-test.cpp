@@ -21,8 +21,8 @@ TEST_CASE("ort_parse_provider_names") {
   }
 
   SUBCASE("execution provider suffix aliases") {
-    const auto names =
-        ort_parse_provider_names("CoreMLExecutionProvider,CPUExecutionProvider");
+    const auto names = ort_parse_provider_names(
+        "CoreMLExecutionProvider,CPUExecutionProvider");
     REQUIRE(names.size() == 2);
     CHECK(names[0] == "coreml");
     CHECK(names[1] == "cpu");

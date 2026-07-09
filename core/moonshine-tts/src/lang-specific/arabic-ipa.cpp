@@ -15,9 +15,10 @@ extern "C" {
 namespace moonshine_tts {
 namespace {
 
-const std::unordered_set<char32_t> kSun{U'\u062A', U'\u062B', U'\u062F', U'\u0630', U'\u0631', U'\u0632',
-                                        U'\u0633', U'\u0634', U'\u0635', U'\u0636', U'\u0637', U'\u0638',
-                                        U'\u0644', U'\u0646'};
+const std::unordered_set<char32_t> kSun{
+    U'\u062A', U'\u062B', U'\u062F', U'\u0630', U'\u0631',
+    U'\u0632', U'\u0633', U'\u0634', U'\u0635', U'\u0636',
+    U'\u0637', U'\u0638', U'\u0644', U'\u0646'};
 
 bool is_ar_combining(char32_t ch) {
   const std::uint32_t o = static_cast<std::uint32_t>(ch);
@@ -27,8 +28,9 @@ bool is_ar_combining(char32_t ch) {
   if (o == 0x670u) {
     return true;
   }
-  return utf8proc_category(static_cast<utf8proc_int32_t>(ch)) == UTF8PROC_CATEGORY_MN && o >= 0x0600u &&
-         o <= 0x06FFu;
+  return utf8proc_category(static_cast<utf8proc_int32_t>(ch)) ==
+             UTF8PROC_CATEGORY_MN &&
+         o >= 0x0600u && o <= 0x06FFu;
 }
 
 bool is_ar_base_letter(char32_t ch) {
@@ -53,7 +55,8 @@ std::u32string u32_nfc_u32(const std::u32string& s) {
   for (char32_t c : s) {
     utf8_append_codepoint(u8, c);
   }
-  utf8proc_uint8_t* nfc = utf8proc_NFC(reinterpret_cast<const utf8proc_uint8_t*>(u8.c_str()));
+  utf8proc_uint8_t* nfc =
+      utf8proc_NFC(reinterpret_cast<const utf8proc_uint8_t*>(u8.c_str()));
   if (nfc == nullptr) {
     return s;
   }
@@ -83,15 +86,16 @@ std::string u32_to_utf8_str(const std::u32string& s) {
 
 bool has_vowel_mark_u32(const std::u32string& marks) {
   for (char32_t c : marks) {
-    if (c == U'\u064E' || c == U'\u064F' || c == U'\u0650' || c == U'\u064B' || c == U'\u064C' || c == U'\u064D' ||
-        c == U'\u0652') {
+    if (c == U'\u064E' || c == U'\u064F' || c == U'\u0650' || c == U'\u064B' ||
+        c == U'\u064C' || c == U'\u064D' || c == U'\u0652') {
       return true;
     }
   }
   return false;
 }
 
-std::vector<std::pair<char32_t, std::u32string>> iter_clusters(const std::u32string& s_in) {
+std::vector<std::pair<char32_t, std::u32string>> iter_clusters(
+    const std::u32string& s_in) {
   const std::u32string s = u32_nfc_u32(s_in);
   std::vector<std::pair<char32_t, std::u32string>> out;
   std::size_t i = 0;
@@ -104,9 +108,11 @@ std::vector<std::pair<char32_t, std::u32string>> iter_clusters(const std::u32str
       ++i;
       continue;
     }
-    if (is_ar_base_letter(ch) || (static_cast<std::uint32_t>(ch) >= 0x0600u &&
-                                  static_cast<std::uint32_t>(ch) <= 0x06FFu &&
-                                  utf8proc_category(static_cast<utf8proc_int32_t>(ch)) == UTF8PROC_CATEGORY_LO)) {
+    if (is_ar_base_letter(ch) ||
+        (static_cast<std::uint32_t>(ch) >= 0x0600u &&
+         static_cast<std::uint32_t>(ch) <= 0x06FFu &&
+         utf8proc_category(static_cast<utf8proc_int32_t>(ch)) ==
+             UTF8PROC_CATEGORY_LO)) {
       std::u32string marks;
       std::size_t j = i + 1;
       while (j < s.size()) {
@@ -162,8 +168,8 @@ std::u32string apply_default_fatha_u32(const std::u32string& w) {
       acc += marks;
       continue;
     }
-    if (base == U'\u0627' || base == U'\u0648' || base == U'\u064A' || base == U'\u0649' || base == U'\u0622' ||
-        base == U'\u0629') {
+    if (base == U'\u0627' || base == U'\u0648' || base == U'\u064A' ||
+        base == U'\u0649' || base == U'\u0622' || base == U'\u0629') {
       acc.push_back(base);
       acc += marks;
       continue;
@@ -176,7 +182,8 @@ std::u32string apply_default_fatha_u32(const std::u32string& w) {
       }
       m2.erase(p, 1);
     }
-    if (!m2.empty() && !has_vowel_mark_u32(m2) && m2.find(U'\u0651') != std::u32string::npos) {
+    if (!m2.empty() && !has_vowel_mark_u32(m2) &&
+        m2.find(U'\u0651') != std::u32string::npos) {
       acc.push_back(base);
       acc += m2;
       continue;
@@ -195,71 +202,71 @@ std::u32string apply_default_fatha_u32(const std::u32string& w) {
 
 std::string onset_ipa(char32_t base) {
   switch (base) {
-  case U'\u0621':
-    return "ʔ";
-  case U'\u0623':
-  case U'\u0625':
-  case U'\u0624':
-  case U'\u0626':
-    return "ʔ";
-  case U'\u0622':
-    return "ʔaː";
-  case U'\u0628':
-    return "b";
-  case U'\u062A':
-    return "t";
-  case U'\u062B':
-    return "θ";
-  case U'\u062C':
-    return "dʒ";
-  case U'\u062D':
-    return "ħ";
-  case U'\u062E':
-    return "x";
-  case U'\u062F':
-    return "d";
-  case U'\u0630':
-    return "ð";
-  case U'\u0631':
-    return "r";
-  case U'\u0632':
-    return "z";
-  case U'\u0633':
-    return "s";
-  case U'\u0634':
-    return "ʃ";
-  case U'\u0635':
-    return "sˤ";
-  case U'\u0636':
-    return "dˤ";
-  case U'\u0637':
-    return "tˤ";
-  case U'\u0638':
-    return "ðˤ";
-  case U'\u0639':
-    return "ʕ";
-  case U'\u063A':
-    return "ɣ";
-  case U'\u0641':
-    return "f";
-  case U'\u0642':
-    return "q";
-  case U'\u0643':
-    return "k";
-  case U'\u0644':
-    return "l";
-  case U'\u0645':
-    return "m";
-  case U'\u0646':
-    return "n";
-  case U'\u0647':
-    return "h";
-  case U'\u0648':
-    return "w";
-  case U'\u064A':
-    return "j";
-  default:
-    return "";
+    case U'\u0621':
+      return "ʔ";
+    case U'\u0623':
+    case U'\u0625':
+    case U'\u0624':
+    case U'\u0626':
+      return "ʔ";
+    case U'\u0622':
+      return "ʔaː";
+    case U'\u0628':
+      return "b";
+    case U'\u062A':
+      return "t";
+    case U'\u062B':
+      return "θ";
+    case U'\u062C':
+      return "dʒ";
+    case U'\u062D':
+      return "ħ";
+    case U'\u062E':
+      return "x";
+    case U'\u062F':
+      return "d";
+    case U'\u0630':
+      return "ð";
+    case U'\u0631':
+      return "r";
+    case U'\u0632':
+      return "z";
+    case U'\u0633':
+      return "s";
+    case U'\u0634':
+      return "ʃ";
+    case U'\u0635':
+      return "sˤ";
+    case U'\u0636':
+      return "dˤ";
+    case U'\u0637':
+      return "tˤ";
+    case U'\u0638':
+      return "ðˤ";
+    case U'\u0639':
+      return "ʕ";
+    case U'\u063A':
+      return "ɣ";
+    case U'\u0641':
+      return "f";
+    case U'\u0642':
+      return "q";
+    case U'\u0643':
+      return "k";
+    case U'\u0644':
+      return "l";
+    case U'\u0645':
+      return "m";
+    case U'\u0646':
+      return "n";
+    case U'\u0647':
+      return "h";
+    case U'\u0648':
+      return "w";
+    case U'\u064A':
+      return "j";
+    default:
+      return "";
   }
 }
 
@@ -316,11 +323,13 @@ std::string diac_word_to_ipa_u32(const std::u32string& word) {
   for (const auto& pr : iter_clusters(w)) {
     char32_t base = pr.first;
     const std::u32string& marks = pr.second;
-    if (base == U' ' || base == U',' || base == U';' || base == U'?' || base == U'!') {
+    if (base == U' ' || base == U',' || base == U';' || base == U'?' ||
+        base == U'!') {
       continue;
     }
     if (!is_ar_base_letter(base) &&
-        utf8proc_category(static_cast<utf8proc_int32_t>(base)) != UTF8PROC_CATEGORY_LO) {
+        utf8proc_category(static_cast<utf8proc_int32_t>(base)) !=
+            UTF8PROC_CATEGORY_LO) {
       continue;
     }
     std::string v = vowel_from_marks(marks);
@@ -329,7 +338,8 @@ std::string diac_word_to_ipa_u32(const std::u32string& word) {
     std::string onset = onset_ipa(base);
 
     if (base == U'\u0627' && marks.empty()) {
-      if (!parts.empty() && (parts.back() == "a" || parts.back() == "i" || parts.back() == "u")) {
+      if (!parts.empty() &&
+          (parts.back() == "a" || parts.back() == "i" || parts.back() == "u")) {
         parts.back() += "ː";
       } else {
         parts.push_back("aː");
@@ -394,15 +404,17 @@ std::string arabic_msa_strip_diacritics_utf8(std::string_view utf8) {
   return u32_to_utf8_str(strip_ar_diac_u32(u));
 }
 
-std::string arabic_msa_apply_onnx_partial_postprocess_utf8(std::string_view utf8) {
+std::string arabic_msa_apply_onnx_partial_postprocess_utf8(
+    std::string_view utf8) {
   std::u32string u = utf8_str_to_u32(std::string(utf8));
   u = strip_spurious_tatweil_u32(u);
   u = apply_default_fatha_u32(u);
   return u32_to_utf8_str(u32_nfc_u32(u));
 }
 
-std::string arabic_msa_word_to_ipa_with_assimilation_utf8(std::string_view filled_diac_utf8,
-                                                            std::string_view assimilation_prefix_source_utf8) {
+std::string arabic_msa_word_to_ipa_with_assimilation_utf8(
+    std::string_view filled_diac_utf8,
+    std::string_view assimilation_prefix_source_utf8) {
   const std::string wtrim = trim_ascii_ws_copy(filled_diac_utf8);
   std::u32string w = u32_nfc_u32(utf8_str_to_u32(wtrim));
   if (w.empty()) {
@@ -413,8 +425,10 @@ std::string arabic_msa_word_to_ipa_with_assimilation_utf8(std::string_view fille
           ? std::string(filled_diac_utf8)
           : std::string(assimilation_prefix_source_utf8);
   const std::string key_trim = trim_ascii_ws_copy(key_src);
-  std::u32string bare = strip_ar_diac_u32(u32_nfc_u32(utf8_str_to_u32(key_trim)));
-  if (bare.size() >= 3 && bare[0] == U'\u0627' && bare[1] == U'\u0644' && kSun.count(bare[2]) != 0) {
+  std::u32string bare =
+      strip_ar_diac_u32(u32_nfc_u32(utf8_str_to_u32(key_trim)));
+  if (bare.size() >= 3 && bare[0] == U'\u0627' && bare[1] == U'\u0644' &&
+      kSun.count(bare[2]) != 0) {
     std::u32string stem = w.substr(2);
     std::string onset = onset_ipa(bare[2]);
     std::string stem_ipa = diac_word_to_ipa_u32(stem);

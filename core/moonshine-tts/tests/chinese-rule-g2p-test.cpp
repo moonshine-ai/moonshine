@@ -7,12 +7,12 @@
 #include "moonshine-g2p.h"
 #endif
 
-#include "rule-g2p-test-support.h"
-
 #include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <string>
+
+#include "rule-g2p-test-support.h"
 
 namespace r = moonshine_tts::rule_g2p_test;
 
@@ -20,8 +20,9 @@ namespace {
 
 std::filesystem::path make_temp_tsv(const char* contents) {
   const auto tick = std::chrono::steady_clock::now().time_since_epoch().count();
-  std::filesystem::path p = std::filesystem::temp_directory_path() /
-                            ("moonshine_chinese_test_" + std::to_string(tick) + ".tsv");
+  std::filesystem::path p =
+      std::filesystem::temp_directory_path() /
+      ("moonshine_chinese_test_" + std::to_string(tick) + ".tsv");
   std::ofstream o(p);
   o << contents;
   return p;
@@ -40,7 +41,9 @@ TEST_CASE("chinese: dialect_resolves_to_chinese_rules") {
   CHECK_FALSE(dialect_resolves_to_chinese_rules("ja"));
 }
 
-TEST_CASE("chinese: lexicon lookup and Arabic numeral expansion via per-char Han IPA") {
+TEST_CASE(
+    "chinese: lexicon lookup and Arabic numeral expansion via per-char Han "
+    "IPA") {
   // 42 → 四十二; provide per-character entries for han_reading_to_ipa.
   const auto p = make_temp_tsv(
       "\xe5\x9b\x9b\ts4_ipa\n"
@@ -54,7 +57,8 @@ TEST_CASE("chinese: lexicon lookup and Arabic numeral expansion via per-char Han
 }
 
 #ifdef MOONSHINE_TTS_WITH_G2P_CLASS
-TEST_CASE("chinese: MoonshineG2P zh matches ChineseOnnxG2p when ONNX bundle exists") {
+TEST_CASE(
+    "chinese: MoonshineG2P zh matches ChineseOnnxG2p when ONNX bundle exists") {
   const auto data = r::moonshine_tts_bundled_data_dir_relative();
   const auto onnx_dir = moonshine_tts::default_chinese_tok_pos_model_dir(data);
   const auto p = make_temp_tsv("\xe6\xb5\x8b\xe8\xaf\x95\tzh_test_ipa\n");

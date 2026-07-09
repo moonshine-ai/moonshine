@@ -15,22 +15,29 @@ namespace moonshine_tts {
 
 struct MoonshineG2POptions;
 
-/// Simplified-Chinese surfaces + UD UPOS via ONNX (``KoichiYasuoka/chinese-roberta-base-upos`` BIO),
-/// mirroring ``chinese_tok_pos_onnx.ChineseTokPosOnnx`` / WordPiece from
+/// Simplified-Chinese surfaces + UD UPOS via ONNX
+/// (``KoichiYasuoka/chinese-roberta-base-upos`` BIO), mirroring
+/// ``chinese_tok_pos_onnx.ChineseTokPosOnnx`` / WordPiece from
 /// ``data/zh_hans/roberta_chinese_base_upos_onnx/``.
 class ChineseTokPosOnnx {
  public:
-  explicit ChineseTokPosOnnx(std::filesystem::path model_dir, bool use_cuda = false);
-  /// Load tokenizer + ONNX from ``opt`` when non-null and assets exist, else from disk under
+  explicit ChineseTokPosOnnx(std::filesystem::path model_dir,
+                             bool use_cuda = false);
+  /// Load tokenizer + ONNX from ``opt`` when non-null and assets exist, else
+  /// from disk under
   /// ``model_dir_fallback``.
-  ChineseTokPosOnnx(const MoonshineG2POptions* opt, std::string_view onnx_bundle_key,
-                    std::filesystem::path model_dir_fallback, bool use_cuda = false);
+  ChineseTokPosOnnx(const MoonshineG2POptions* opt,
+                    std::string_view onnx_bundle_key,
+                    std::filesystem::path model_dir_fallback,
+                    bool use_cuda = false);
 
   /// One ``(surface, UPOS)`` per BIO word (empty input → empty list).
-  std::vector<std::pair<std::string, std::string>> annotate(std::string_view text_utf8);
+  std::vector<std::pair<std::string, std::string>> annotate(
+      std::string_view text_utf8);
 
   /// ``tok1/UPOS1 tok2/UPOS2 `` (trailing space if non-empty).
-  static std::string format_annotated_line(const std::vector<std::pair<std::string, std::string>>& pairs);
+  static std::string format_annotated_line(
+      const std::vector<std::pair<std::string, std::string>>& pairs);
 
   const std::filesystem::path& model_dir() const { return model_dir_; }
 
@@ -48,8 +55,10 @@ class ChineseTokPosOnnx {
   std::vector<std::uint8_t> onnx_model_storage_;
 };
 
-/// ``<repo>/data/zh_hans/roberta_chinese_base_upos_onnx`` when *repo_root* is the repository root.
-std::filesystem::path default_chinese_tok_pos_model_dir(const std::filesystem::path& g2p_data_root);
+/// ``<repo>/data/zh_hans/roberta_chinese_base_upos_onnx`` when *repo_root* is
+/// the repository root.
+std::filesystem::path default_chinese_tok_pos_model_dir(
+    const std::filesystem::path& g2p_data_root);
 
 }  // namespace moonshine_tts
 

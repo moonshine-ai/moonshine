@@ -1,16 +1,18 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+#include "chinese-tok-pos-onnx.h"
+
 #include <doctest/doctest.h>
 
-#include "chinese-tok-pos-onnx.h"
 #include "rule-g2p-test-support.h"
 
 namespace r = moonshine_tts::rule_g2p_test;
 
 TEST_CASE("chinese tok pos: single sentence matches reference file") {
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const auto model =
-      moonshine_tts::default_chinese_tok_pos_model_dir(r::moonshine_tts_bundled_data_dir_relative());
-  const std::filesystem::path golden = r::tests_data_dir(repo) / "zh_hans" / "tok_pos_sample.txt";
+  const auto model = moonshine_tts::default_chinese_tok_pos_model_dir(
+      r::moonshine_tts_bundled_data_dir_relative());
+  const std::filesystem::path golden =
+      r::tests_data_dir(repo) / "zh_hans" / "tok_pos_sample.txt";
   if (!std::filesystem::is_regular_file(model / "model.onnx") ||
       !std::filesystem::is_regular_file(golden)) {
     return;
@@ -18,18 +20,24 @@ TEST_CASE("chinese tok pos: single sentence matches reference file") {
   const std::string expected = r::load_ref_text_trimmed(golden);
   moonshine_tts::ChineseTokPosOnnx pipe(model, false);
   const auto pairs = pipe.annotate("上海是一座城市。");
-  CHECK(moonshine_tts::ChineseTokPosOnnx::format_annotated_line(pairs) == expected);
+  CHECK(moonshine_tts::ChineseTokPosOnnx::format_annotated_line(pairs) ==
+        expected);
 }
 
-TEST_CASE("chinese tok pos: first 100 wiki lines match reference when assets and golden exist") {
+TEST_CASE(
+    "chinese tok pos: first 100 wiki lines match reference when assets and "
+    "golden exist") {
   constexpr std::size_t kWikiLines = 100;
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
-  const auto model =
-      moonshine_tts::default_chinese_tok_pos_model_dir(r::moonshine_tts_bundled_data_dir_relative());
-  const auto wiki = r::moonshine_tts_bundled_data_dir_relative() / "zh_hans" / "wiki-text.txt";
-  const std::filesystem::path golden = r::tests_data_dir(repo) / "zh_hans" / "tok_pos_wiki_filtered.txt";
+  const auto model = moonshine_tts::default_chinese_tok_pos_model_dir(
+      r::moonshine_tts_bundled_data_dir_relative());
+  const auto wiki = r::moonshine_tts_bundled_data_dir_relative() / "zh_hans" /
+                    "wiki-text.txt";
+  const std::filesystem::path golden =
+      r::tests_data_dir(repo) / "zh_hans" / "tok_pos_wiki_filtered.txt";
   if (!std::filesystem::is_regular_file(model / "model.onnx") ||
-      !std::filesystem::is_regular_file(wiki) || !std::filesystem::is_regular_file(golden)) {
+      !std::filesystem::is_regular_file(wiki) ||
+      !std::filesystem::is_regular_file(golden)) {
     return;
   }
   moonshine_tts::ChineseTokPosOnnx pipe(model, false);
@@ -40,7 +48,8 @@ TEST_CASE("chinese tok pos: first 100 wiki lines match reference when assets and
       (void)pipe.annotate(line);
       tokenizable.push_back(line);
     } catch (const std::exception&) {
-      // Same WordPiece path as Python: skip lines with tricky mixed scripts / NFC edge cases.
+      // Same WordPiece path as Python: skip lines with tricky mixed scripts /
+      // NFC edge cases.
     }
   }
   if (tokenizable.empty()) {
@@ -51,6 +60,7 @@ TEST_CASE("chinese tok pos: first 100 wiki lines match reference when assets and
   for (std::size_t i = 0; i < tokenizable.size(); ++i) {
     INFO("wiki filtered index " << (i + 1));
     const auto pairs = pipe.annotate(tokenizable[i]);
-    CHECK(moonshine_tts::ChineseTokPosOnnx::format_annotated_line(pairs) == py[i]);
+    CHECK(moonshine_tts::ChineseTokPosOnnx::format_annotated_line(pairs) ==
+          py[i]);
   }
 }

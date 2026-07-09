@@ -89,8 +89,10 @@ Transcriber::Transcriber(const TranscriberOptions &options)
   }
   if (options.identify_speakers) {
     SpeakerDiarizerOptions diarizer_options;
-    diarizer_options.cluster_cadence = this->options.diarization_cluster_cadence;
-    diarizer_options.analyze_cadence = this->options.diarization_analyze_cadence;
+    diarizer_options.cluster_cadence =
+        this->options.diarization_cluster_cadence;
+    diarizer_options.analyze_cadence =
+        this->options.diarization_analyze_cadence;
     diarizer_options.cluster_window_sec =
         this->options.diarization_cluster_window_sec;
     this->speaker_diarizer = new SpeakerDiarizer(diarizer_options);
@@ -100,7 +102,7 @@ Transcriber::Transcriber(const TranscriberOptions &options)
   // are language-specific, so the C API leaves the choice to the
   // caller (Python downloads it, native callers can ship an .ort).
   const bool has_spelling_buffer = options.spelling_model_data != nullptr &&
-                                    options.spelling_model_data_size > 0;
+                                   options.spelling_model_data_size > 0;
   const bool has_spelling_path = !options.spelling_model_path.empty();
   if (has_spelling_buffer || has_spelling_path) {
     this->spelling_model = new SpellingModel(this->options.log_ort_run,
@@ -111,14 +113,14 @@ Transcriber::Transcriber(const TranscriberOptions &options)
       load_error = this->spelling_model->load_from_memory(
           options.spelling_model_data, options.spelling_model_data_size);
     } else {
-      load_error = this->spelling_model->load(options.spelling_model_path.c_str());
+      load_error =
+          this->spelling_model->load(options.spelling_model_path.c_str());
     }
     if (load_error != 0) {
       delete this->spelling_model;
       this->spelling_model = nullptr;
-      throw std::runtime_error(
-          "Failed to load spelling model. Error code: " +
-          std::to_string(load_error));
+      throw std::runtime_error("Failed to load spelling model. Error code: " +
+                               std::to_string(load_error));
     }
   }
 }
@@ -187,10 +189,9 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
   } else {
     // Non-streaming model: expects encoder_model.ort and
     // decoder_model_merged.ort
-    this->stt_model = new MoonshineModel(this->options.log_ort_run,
-                                         this->options.max_tokens_per_second,
-                                         this->options.ort_provider_names,
-                                         this->options.coreml_cache_dir);
+    this->stt_model = new MoonshineModel(
+        this->options.log_ort_run, this->options.max_tokens_per_second,
+        this->options.ort_provider_names, this->options.coreml_cache_dir);
 
     std::string encoder_model_path =
         append_path_component(model_path, "encoder_model.ort");
@@ -240,9 +241,8 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
         size_t dec_mmapped_size = 0;
         int32_t dec_err = ort_session_from_path(
             this->stt_model->ort_api, this->stt_model->ort_env,
-            this->stt_model->ort_session_options,
-            decoder_attn_path.c_str(), &this->stt_model->decoder_session,
-            &dec_mmapped, &dec_mmapped_size);
+            this->stt_model->ort_session_options, decoder_attn_path.c_str(),
+            &this->stt_model->decoder_session, &dec_mmapped, &dec_mmapped_size);
         if (dec_err != 0) {
           LOGF("Warning: Failed to load decoder_with_attention from %s\n",
                decoder_attn_path.c_str());
@@ -279,10 +279,9 @@ void Transcriber::load_from_memory(const uint8_t *encoder_model_data,
         "Use load_from_files instead.");
   }
 
-  this->stt_model = new MoonshineModel(this->options.log_ort_run,
-                                       this->options.max_tokens_per_second,
-                                       this->options.ort_provider_names,
-                                       this->options.coreml_cache_dir);
+  this->stt_model = new MoonshineModel(
+      this->options.log_ort_run, this->options.max_tokens_per_second,
+      this->options.ort_provider_names, this->options.coreml_cache_dir);
   int32_t load_error = this->stt_model->load_from_memory(
       encoder_model_data, encoder_model_data_size, decoder_model_data,
       decoder_model_data_size, tokenizer_data, tokenizer_data_size, model_arch);
@@ -337,7 +336,8 @@ void Transcriber::transcribe_without_streaming(
     segments = *(stream->vad->get_segments());
   }
 
-  this->update_transcript_from_segments(segments, stream, flags, out_transcript);
+  this->update_transcript_from_segments(segments, stream, flags,
+                                        out_transcript);
 
   if (this->speaker_diarizer != nullptr) {
     const std::vector<SpeakerTurn> turns =
@@ -493,9 +493,9 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
   // segmentation/embedding models on new analysis chunks and re-clusters on
   // the configured cadence, which is the main cost of identify_speakers.
   if (diarization_enabled) {
-    this->speaker_diarizer->add_audio_to_stream(
-        stream->diarizer_stream_id, audio_data, audio_length,
-        INTERNAL_SAMPLE_RATE);
+    this->speaker_diarizer->add_audio_to_stream(stream->diarizer_stream_id,
+                                                audio_data, audio_length,
+                                                INTERNAL_SAMPLE_RATE);
   }
 
   // Use VAD to segment audio
@@ -507,7 +507,8 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
     segments = *(stream->vad->get_segments());
   }
   stream->clear_new_audio_buffer();
-  this->update_transcript_from_segments(segments, stream, flags, out_transcript);
+  this->update_transcript_from_segments(segments, stream, flags,
+                                        out_transcript);
 
   if (diarization_enabled) {
     const std::vector<SpeakerTurn> turns =
@@ -576,15 +577,14 @@ bool Transcriber::apply_spelling_fusion(TranscriberLine &line) {
   bool have_prediction = false;
   if (this->spelling_model != nullptr && !line.audio_data.empty()) {
     std::lock_guard<std::mutex> lock(this->spelling_model_mutex);
-    int err = this->spelling_model->predict(
-        line.audio_data.data(), line.audio_data.size(), INTERNAL_SAMPLE_RATE,
-        &prediction);
+    int err = this->spelling_model->predict(line.audio_data.data(),
+                                            line.audio_data.size(),
+                                            INTERNAL_SAMPLE_RATE, &prediction);
     have_prediction = (err == 0);
   }
 
   FusedResult result =
-      fuse_default(raw_text, match,
-                   have_prediction ? &prediction : nullptr,
+      fuse_default(raw_text, match, have_prediction ? &prediction : nullptr,
                    this->spelling_matcher);
   if (!result.is_character()) return false;
 

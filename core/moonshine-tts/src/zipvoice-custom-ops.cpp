@@ -1,20 +1,24 @@
-// Custom ONNX Runtime operators for the ZipVoice Zipformer (domain ai.zipvoice).
+// Custom ONNX Runtime operators for the ZipVoice Zipformer (domain
+// ai.zipvoice).
 //
-// Ported from the standalone ``custom_ops/swoosh_op.cc`` in the ZipVoice repo. The only structural
-// change is that these kernels are compiled *into* libmoonshine (which already links onnxruntime)
-// and registered on a session directly via ``zipvoice_register_custom_ops`` rather than being built
-// as a separate shared library that ORT ``dlopen``s at runtime. This avoids loading a .so/.dll,
-// which some platforms (e.g. iOS) make difficult.
+// Ported from the standalone ``custom_ops/swoosh_op.cc`` in the ZipVoice repo.
+// The only structural change is that these kernels are compiled *into*
+// libmoonshine (which already links onnxruntime) and registered on a session
+// directly via ``zipvoice_register_custom_ops`` rather than being built as a
+// separate shared library that ORT ``dlopen``s at runtime. This avoids loading
+// a .so/.dll, which some platforms (e.g. iOS) make difficult.
 //
-// SwooshL / SwooshR: the Zipformer activations. Exported to ONNX they decompose into ~11
-// element-wise nodes each; these ops collapse each activation into a single kernel.
+// SwooshL / SwooshR: the Zipformer activations. Exported to ONNX they decompose
+// into ~11 element-wise nodes each; these ops collapse each activation into a
+// single kernel.
 //   softplus(z) = log(1 + exp(z)) = max(z, 0) + log1p(exp(-|z|))
 //   SwooshL(x)  = softplus(x - 4.0) - 0.08 * x - 0.035
 //   SwooshR(x)  = softplus(x - 1.0) - 0.08 * x - 0.313261687
 // GluGate: out[..., c] = x[..., c] * sigmoid(x[..., C + c]),  C = lastdim / 2
-// DepthwiseConv1d: fuses Transpose -> depthwise Conv1d ('same' pad K//2) -> Transpose in [T,N,C].
-// BiasNorm: RMS-style norm of (x - bias) over channels, scaled by exp(log_scale).
-// Bypass: per-channel residual lerp src_orig + (src - src_orig) * scale.
+// DepthwiseConv1d: fuses Transpose -> depthwise Conv1d ('same' pad K//2) ->
+// Transpose in [T,N,C]. BiasNorm: RMS-style norm of (x - bias) over channels,
+// scaled by exp(log_scale). Bypass: per-channel residual lerp src_orig + (src -
+// src_orig) * scale.
 
 #include "zipvoice-custom-ops.h"
 
@@ -36,13 +40,14 @@ constexpr float kRightBias = 0.313261687f;
 // Number of elements processed per ParallelFor task.
 constexpr size_t kTile = 1024;
 
-// softplus(z) = max(z,0) + g(|z|),  g(u) = log1p(exp(-u)); g approximated by a degree-8 polynomial
-// on [0, kSoftplusU], truncated to 0 outside. Pure FMA (vectorizes on NEON/AVX), ~3.4e-4 abs error.
+// softplus(z) = max(z,0) + g(|z|),  g(u) = log1p(exp(-u)); g approximated by a
+// degree-8 polynomial on [0, kSoftplusU], truncated to 0 outside. Pure FMA
+// (vectorizes on NEON/AVX), ~3.4e-4 abs error.
 constexpr float kSoftplusU = 8.0f;
 constexpr float kSoftplusC[9] = {
-    6.93208957e-01f, -5.00340649e-01f, 1.24495565e-01f,
-    3.08191795e-03f, -9.28873378e-03f, 2.42859460e-03f,
-    -3.09979591e-04f, 2.03891086e-05f, -5.52490641e-07f};
+    6.93208957e-01f,  -5.00340649e-01f, 1.24495565e-01f,
+    3.08191795e-03f,  -9.28873378e-03f, 2.42859460e-03f,
+    -3.09979591e-04f, 2.03891086e-05f,  -5.52490641e-07f};
 
 inline float SoftplusPoly(float z) {
   const float a = std::fabs(z);
@@ -131,9 +136,10 @@ void ComputeGluRow(void* user_data, size_t r) {
   const float* gate = val + C;
   float* out = job.out + r * C;
 
-  // Portable scalar sigmoid (tiled + threaded by the caller). The Accelerate ``vvexpf`` fast path from
-  // the standalone custom-op library is intentionally dropped here so libmoonshine needs no Accelerate
-  // framework dependency; the difference is a small GluGate micro-optimization.
+  // Portable scalar sigmoid (tiled + threaded by the caller). The Accelerate
+  // ``vvexpf`` fast path from the standalone custom-op library is intentionally
+  // dropped here so libmoonshine needs no Accelerate framework dependency; the
+  // difference is a small GluGate micro-optimization.
   for (size_t c = 0; c < C; ++c) out[c] = val[c] * SigmoidScalar(gate[c]);
 }
 
@@ -203,8 +209,10 @@ struct DepthwiseConvKernel {
     Ort::ConstValue w = ctx.GetInput(1);
     Ort::ConstValue b = ctx.GetInput(2);
 
-    const std::vector<int64_t> xshape = x.GetTensorTypeAndShapeInfo().GetShape();
-    const std::vector<int64_t> wshape = w.GetTensorTypeAndShapeInfo().GetShape();
+    const std::vector<int64_t> xshape =
+        x.GetTensorTypeAndShapeInfo().GetShape();
+    const std::vector<int64_t> wshape =
+        w.GetTensorTypeAndShapeInfo().GetShape();
     if (xshape.size() != 3 || wshape.size() != 3) {
       ORT_CXX_API_THROW("DepthwiseConv1d expects x[T,N,C], weight[C,1,K]",
                         ORT_INVALID_ARGUMENT);
@@ -226,8 +234,15 @@ struct DepthwiseConvKernel {
       }
     }
 
-    DwJob job{x.GetTensorData<float>(), wpacked.data(), b.GetTensorData<float>(),
-              out.GetTensorMutableData<float>(), T, N, C, K, K / 2};
+    DwJob job{x.GetTensorData<float>(),
+              wpacked.data(),
+              b.GetTensorData<float>(),
+              out.GetTensorMutableData<float>(),
+              T,
+              N,
+              C,
+              K,
+              K / 2};
     ctx.ParallelFor(ComputeConvRow, static_cast<size_t>(T * N),
                     /*num_batch=*/0, &job);
   }
@@ -238,7 +253,7 @@ struct BiasNormJob {
   const float* bias;  // [C]
   float* out;         // [rows, C]
   int64_t C;
-  float scale;        // exp(log_scale)
+  float scale;  // exp(log_scale)
 };
 
 void ComputeBiasNormRow(void* user_data, size_t r) {
@@ -332,7 +347,8 @@ struct BypassKernel {
 };
 
 struct SwooshLOp : Ort::CustomOpBase<SwooshLOp, SwooshKernel> {
-  void* CreateKernel(const OrtApi& /*api*/, const OrtKernelInfo* /*info*/) const {
+  void* CreateKernel(const OrtApi& /*api*/,
+                     const OrtKernelInfo* /*info*/) const {
     return new SwooshKernel(/*is_left=*/true);
   }
   const char* GetName() const { return "SwooshL"; }
@@ -347,7 +363,8 @@ struct SwooshLOp : Ort::CustomOpBase<SwooshLOp, SwooshKernel> {
 };
 
 struct SwooshROp : Ort::CustomOpBase<SwooshROp, SwooshKernel> {
-  void* CreateKernel(const OrtApi& /*api*/, const OrtKernelInfo* /*info*/) const {
+  void* CreateKernel(const OrtApi& /*api*/,
+                     const OrtKernelInfo* /*info*/) const {
     return new SwooshKernel(/*is_left=*/false);
   }
   const char* GetName() const { return "SwooshR"; }
@@ -362,7 +379,8 @@ struct SwooshROp : Ort::CustomOpBase<SwooshROp, SwooshKernel> {
 };
 
 struct GluGateOp : Ort::CustomOpBase<GluGateOp, GluKernel> {
-  void* CreateKernel(const OrtApi& /*api*/, const OrtKernelInfo* /*info*/) const {
+  void* CreateKernel(const OrtApi& /*api*/,
+                     const OrtKernelInfo* /*info*/) const {
     return new GluKernel();
   }
   const char* GetName() const { return "GluGate"; }
@@ -378,7 +396,8 @@ struct GluGateOp : Ort::CustomOpBase<GluGateOp, GluKernel> {
 
 struct DepthwiseConvOp
     : Ort::CustomOpBase<DepthwiseConvOp, DepthwiseConvKernel> {
-  void* CreateKernel(const OrtApi& /*api*/, const OrtKernelInfo* /*info*/) const {
+  void* CreateKernel(const OrtApi& /*api*/,
+                     const OrtKernelInfo* /*info*/) const {
     return new DepthwiseConvKernel();
   }
   const char* GetName() const { return "DepthwiseConv1d"; }
@@ -393,7 +412,8 @@ struct DepthwiseConvOp
 };
 
 struct BiasNormOp : Ort::CustomOpBase<BiasNormOp, BiasNormKernel> {
-  void* CreateKernel(const OrtApi& /*api*/, const OrtKernelInfo* /*info*/) const {
+  void* CreateKernel(const OrtApi& /*api*/,
+                     const OrtKernelInfo* /*info*/) const {
     return new BiasNormKernel();
   }
   const char* GetName() const { return "BiasNorm"; }
@@ -408,7 +428,8 @@ struct BiasNormOp : Ort::CustomOpBase<BiasNormOp, BiasNormKernel> {
 };
 
 struct BypassOp : Ort::CustomOpBase<BypassOp, BypassKernel> {
-  void* CreateKernel(const OrtApi& /*api*/, const OrtKernelInfo* /*info*/) const {
+  void* CreateKernel(const OrtApi& /*api*/,
+                     const OrtKernelInfo* /*info*/) const {
     return new BypassKernel();
   }
   const char* GetName() const { return "Bypass"; }
@@ -422,7 +443,8 @@ struct BypassOp : Ort::CustomOpBase<BypassOp, BypassKernel> {
   }
 };
 
-// Op instances must outlive every session that references them, so keep them in static storage.
+// Op instances must outlive every session that references them, so keep them in
+// static storage.
 SwooshLOp c_SwooshLOp;
 SwooshROp c_SwooshROp;
 GluGateOp c_GluGateOp;
@@ -430,7 +452,8 @@ DepthwiseConvOp c_DepthwiseConvOp;
 BiasNormOp c_BiasNormOp;
 BypassOp c_BypassOp;
 
-// One process-lifetime domain holding all ops; safe to Add() to multiple SessionOptions.
+// One process-lifetime domain holding all ops; safe to Add() to multiple
+// SessionOptions.
 Ort::CustomOpDomain& zipvoice_domain() {
   static Ort::CustomOpDomain domain = [] {
     Ort::CustomOpDomain d("ai.zipvoice");

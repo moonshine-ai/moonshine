@@ -15,7 +15,8 @@ const ZipVoiceBuiltinVoice* zipvoice_find_builtin_voice(std::string_view id) {
   return nullptr;
 }
 
-std::vector<float> zipvoice_builtin_voice_pcm_to_float(const ZipVoiceBuiltinVoice& voice) {
+std::vector<float> zipvoice_builtin_voice_pcm_to_float(
+    const ZipVoiceBuiltinVoice& voice) {
   std::vector<float> out(voice.num_samples);
   for (uint32_t i = 0; i < voice.num_samples; ++i) {
     out[i] = static_cast<float>(voice.pcm[i]) / 32768.F;
