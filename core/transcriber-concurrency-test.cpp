@@ -7,11 +7,12 @@
 // this test drives many independent streams in parallel to surface first-party
 // data races.
 //
-// It exists primarily to give ThreadSanitizer something real to analyse. Because
-// TSan's interceptors deadlock inside onnxruntime's uninstrumented thread pool,
-// the reliability script runs this (and the TSan build in general) with
-// MOONSHINE_ORT_SINGLE_THREAD=1 so onnxruntime stays on the calling thread; the
-// first-party synchronization we care about is unaffected by that flag.
+// It exists primarily to give ThreadSanitizer something real to analyse.
+// Because TSan's interceptors deadlock inside onnxruntime's uninstrumented
+// thread pool, the reliability script runs this (and the TSan build in general)
+// with MOONSHINE_ORT_SINGLE_THREAD=1 so onnxruntime stays on the calling
+// thread; the first-party synchronization we care about is unaffected by that
+// flag.
 //
 // Each worker owns its stream for the whole iteration and only ever reads that
 // stream's own transcript output, so any race TSan reports here is in the
@@ -56,8 +57,8 @@ std::vector<float> load_clip() {
   }
   // load_wav_data hands back a raw C-allocated buffer; adopt it in a unique_ptr
   // with a std::free deleter so it is released on every path without a bare
-  // deallocation call (see STYLE_GUIDE.md), then copy the leading window into an
-  // owning vector.
+  // deallocation call (see STYLE_GUIDE.md), then copy the leading window into
+  // an owning vector.
   std::unique_ptr<float, decltype(&std::free)> owned(wav_data, &std::free);
   const size_t count = std::min(wav_data_size, kMaxClipSamples);
   return std::vector<float>(wav_data, wav_data + count);
@@ -67,8 +68,9 @@ std::vector<float> load_clip() {
 
 TEST_CASE("transcriber-concurrency") {
   std::vector<float> clip = load_clip();
-  REQUIRE_MESSAGE(!clip.empty(),
-                  "two_cities.wav fixture is required for the concurrency test");
+  REQUIRE_MESSAGE(
+      !clip.empty(),
+      "two_cities.wav fixture is required for the concurrency test");
 
   std::string root_model_path = "tiny-en";
   REQUIRE(std::filesystem::exists(root_model_path));
@@ -101,8 +103,7 @@ TEST_CASE("transcriber-concurrency") {
   Transcriber transcriber(options);
 
   unsigned hw = std::thread::hardware_concurrency();
-  const int thread_count =
-      static_cast<int>(std::clamp<unsigned>(hw, 3u, 6u));
+  const int thread_count = static_cast<int>(std::clamp<unsigned>(hw, 3u, 6u));
 
   std::atomic<int> completed_streams{0};
   std::atomic<bool> saw_null_transcript{false};
