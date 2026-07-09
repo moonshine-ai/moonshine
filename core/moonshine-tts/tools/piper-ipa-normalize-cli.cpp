@@ -1,19 +1,22 @@
-// Prints Piper-ready IPA (NFC + replacements + optional inventory coercion) for parity tests.
-// Usage: piper-ipa-normalize-cli --lang en_us --phoneme-json PATH [--no-coerce] -- IPA_UTF8
+// Prints Piper-ready IPA (NFC + replacements + optional inventory coercion) for
+// parity tests. Usage: piper-ipa-normalize-cli --lang en_us --phoneme-json PATH
+// [--no-coerce] -- IPA_UTF8
 
-#include "ipa-postprocess.h"
+#include <nlohmann/json.h>
 
 #include <fstream>
 #include <iostream>
-#include <nlohmann/json.h>
 #include <string>
 #include <string_view>
 #include <unordered_set>
 
+#include "ipa-postprocess.h"
+
 namespace {
 
 void print_usage() {
-  std::cerr << "Usage: piper-ipa-normalize-cli --lang KEY --phoneme-json PATH [--no-coerce] -- IPA\n";
+  std::cerr << "Usage: piper-ipa-normalize-cli --lang KEY --phoneme-json PATH "
+               "[--no-coerce] -- IPA\n";
 }
 
 bool load_keys(const std::string& path, std::unordered_set<std::string>& keys) {
@@ -27,7 +30,8 @@ bool load_keys(const std::string& path, std::unordered_set<std::string>& keys) {
     return false;
   }
   keys.clear();
-  for (auto it = j["phoneme_id_map"].begin(); it != j["phoneme_id_map"].end(); ++it) {
+  for (auto it = j["phoneme_id_map"].begin(); it != j["phoneme_id_map"].end();
+       ++it) {
     keys.insert(it.key());
   }
   return true;
@@ -86,7 +90,8 @@ int main(int argc, char** argv) {
     ipa.push_back(' ');
     ipa += argv[i];
   }
-  const std::string out = moonshine_tts::ipa_to_piper_ready(ipa, lang, keys, coerce);
+  const std::string out =
+      moonshine_tts::ipa_to_piper_ready(ipa, lang, keys, coerce);
   std::cout << out;
   return 0;
 }

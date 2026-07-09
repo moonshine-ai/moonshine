@@ -10,7 +10,8 @@ pip install moonshine-voice
 
 ## Quick Start
 
-```
+<!-- doc-test: parse-only -->
+```bash
 # Listens to the microphone, logging to the console when there are 
 # speech updates.
 python -m moonshine_voice.mic_transcriber

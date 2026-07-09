@@ -1,6 +1,7 @@
 #ifndef STRING_UTILS_H
 #define STRING_UTILS_H
 
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>

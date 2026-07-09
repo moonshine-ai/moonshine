@@ -1,17 +1,19 @@
 #include "moonshine-tts.h"
 
+#include <nlohmann/json.h>
+#include <onnxruntime_cxx_api.h>
+
 #include "debug-utils.h"
-#include "moonshine-asset-catalog.h"
 #include "g2p-path.h"
+#include "moonshine-asset-catalog.h"
 #include "moonshine-g2p.h"
 #include "ort-onnx-external-data.h"
+#include "ort-session-options.h"
 #include "piper-tts.h"
 #include "string-utils.h"
 #include "utf8-utils.h"
-
-#include <onnxruntime_cxx_api.h>
-
-#include <nlohmann/json.h>
+#include "zipvoice-tts.h"
+#include "zipvoice-voices.h"
 
 extern "C" {
 #include <utf8proc.h>
@@ -51,7 +53,8 @@ std::string utf8_nfc(std::string_view s) {
   return out;
 }
 
-void replace_utf8(std::string& s, std::string_view old_s, std::string_view new_s) {
+void replace_utf8(std::string& s, std::string_view old_s,
+                  std::string_view new_s) {
   size_t pos = 0;
   while ((pos = s.find(old_s, pos)) != std::string::npos) {
     s.replace(pos, old_s.size(), new_s);
@@ -59,13 +62,34 @@ void replace_utf8(std::string& s, std::string_view old_s, std::string_view new_s
   }
 }
 
-std::optional<double> parse_speed_override_from_pairs(
+/// Per-call overrides parsed from ``MoonshineTTS::synthesize`` option pairs.
+/// Keys mirror
+/// ``MoonshineTTSOptions::parse_options`` (including legacy
+/// ``piper_normalize_audio`` /
+/// ``piper_output_volume`` aliases for the effects step).
+struct SynthesisOverrides {
+  std::optional<double> speed;
+  std::optional<bool> normalize_audio;
+  std::optional<float> output_volume;
+
+  bool empty() const {
+    return !speed.has_value() && !normalize_audio.has_value() &&
+           !output_volume.has_value();
+  }
+};
+
+SynthesisOverrides parse_synthesis_overrides_from_pairs(
     const std::vector<std::pair<std::string, std::string>>& pairs) {
-  std::optional<double> out;
+  SynthesisOverrides out;
   for (const auto& e : pairs) {
     const std::string key = replace_all(to_lowercase(e.first), "-", "_");
+    const std::string value = trim(e.second);
     if (key == "speed") {
-      out = static_cast<double>(float_from_string(trim(e.second).c_str()));
+      out.speed = static_cast<double>(float_from_string(value.c_str()));
+    } else if (key == "normalize_audio" || key == "piper_normalize_audio") {
+      out.normalize_audio = bool_from_string(value.c_str());
+    } else if (key == "output_volume" || key == "piper_output_volume") {
+      out.output_volume = float_from_string(value.c_str());
     }
   }
   return out;
@@ -85,7 +109,8 @@ bool py_isspace_utf8_ch(std::string_view ch) {
     return std::isspace(static_cast<unsigned char>(cp)) != 0;
   }
   const auto cat = utf8proc_category(static_cast<utf8proc_int32_t>(cp));
-  return cat == UTF8PROC_CATEGORY_ZS || cat == UTF8PROC_CATEGORY_ZL || cat == UTF8PROC_CATEGORY_ZP;
+  return cat == UTF8PROC_CATEGORY_ZS || cat == UTF8PROC_CATEGORY_ZL ||
+         cat == UTF8PROC_CATEGORY_ZP;
 }
 
 std::string collapse_whitespace_join_single_space(const std::string& s) {
@@ -93,10 +118,14 @@ std::string collapse_whitespace_join_single_space(const std::string& s) {
   std::string out;
   bool pending_space = false;
   for (char32_t cp : u) {
-    const bool sp = (cp < 128 && std::isspace(static_cast<unsigned char>(cp)) != 0) ||
-                    utf8proc_category(static_cast<utf8proc_int32_t>(cp)) == UTF8PROC_CATEGORY_ZS ||
-                    utf8proc_category(static_cast<utf8proc_int32_t>(cp)) == UTF8PROC_CATEGORY_ZL ||
-                    utf8proc_category(static_cast<utf8proc_int32_t>(cp)) == UTF8PROC_CATEGORY_ZP;
+    const bool sp =
+        (cp < 128 && std::isspace(static_cast<unsigned char>(cp)) != 0) ||
+        utf8proc_category(static_cast<utf8proc_int32_t>(cp)) ==
+            UTF8PROC_CATEGORY_ZS ||
+        utf8proc_category(static_cast<utf8proc_int32_t>(cp)) ==
+            UTF8PROC_CATEGORY_ZL ||
+        utf8proc_category(static_cast<utf8proc_int32_t>(cp)) ==
+            UTF8PROC_CATEGORY_ZP;
     if (sp) {
       if (!out.empty()) {
         pending_space = true;
@@ -129,18 +158,22 @@ std::string normalize_lang_key(std::string_view raw) {
 struct LangProfile {
   char kokoro_lang = 'a';
   const char* default_voice = "af_heart";
-  /// MoonshineG2P dialect id; nullptr when resolved only via ``resolve_lang_for_tts`` Spanish fallback.
+  /// MoonshineG2P dialect id; nullptr when resolved only via
+  /// ``resolve_lang_for_tts`` Spanish fallback.
   const char* g2p_dialect = "en_us";
 };
 
 const LangProfile* lookup_lang_profile(std::string_view key) {
-  // Keys use underscore form; ``normalize_lang_key`` maps client ``-`` / spaces to ``_`` before lookup.
+  // Keys use underscore form; ``normalize_lang_key`` maps client ``-`` / spaces
+  // to ``_`` before lookup.
   static const std::unordered_map<std::string, LangProfile> m{
       {"en_us", {'a', "af_heart", "en_us"}},
       {"en", {'a', "af_heart", "en_us"}},
-      // UK Kokoro voice uses the same English rule + ONNX G2P assets as US (``en_us`` under g2p_root).
+      // UK Kokoro voice uses the same English rule + ONNX G2P assets as US
+      // (``en_us`` under g2p_root).
       {"en_gb", {'b', "bf_emma", "en_gb"}},
-      // Spanish G2P must be a concrete dialect id (same default as spanish_rule_g2p.text_to_ipa).
+      // Spanish G2P must be a concrete dialect id (same default as
+      // spanish_rule_g2p.text_to_ipa).
       {"es", {'e', "ef_dora", "es-MX"}},
       {"fr", {'f', "ff_siwis", "fr"}},
       {"hi", {'h', "hf_alpha", "hi"}},
@@ -164,37 +197,42 @@ const LangProfile* lookup_lang_profile(std::string_view key) {
   return &it->second;
 }
 
-/// Fills *profile* and *g2p_dialect* for ``MoonshineG2P`` (Kokoro locale + rule-based tag).
-void resolve_lang_for_tts(const std::string& lk, const MoonshineG2POptions& opt, LangProfile& profile,
-                          std::string& g2p_dialect) {
+/// Fills *profile* and *g2p_dialect* for ``MoonshineG2P`` (Kokoro locale +
+/// rule-based tag).
+void resolve_lang_for_tts(const std::string& lk, const MoonshineG2POptions& opt,
+                          LangProfile& profile, std::string& g2p_dialect) {
   if (const LangProfile* p = lookup_lang_profile(lk)) {
     profile = *p;
     g2p_dialect = p->g2p_dialect;
     return;
   }
   const std::string norm = normalize_rule_based_dialect_cli_key(lk);
-  if (!norm.empty() && dialect_resolves_to_spanish_rules(norm, opt.spanish_narrow_obstruents)) {
+  if (!norm.empty() &&
+      dialect_resolves_to_spanish_rules(norm, opt.spanish_narrow_obstruents)) {
     profile = {'e', "ef_dora", nullptr};
     g2p_dialect = norm;
     return;
   }
-  throw std::runtime_error("MoonshineTTS: unsupported --lang key \"" + lk + "\"");
+  throw std::runtime_error("MoonshineTTS: unsupported --lang key \"" + lk +
+                           "\"");
 }
 
-bool kokoro_tts_lang_supported_inner(std::string_view lang_cli, const MoonshineG2POptions& opt) {
+bool kokoro_tts_lang_supported_inner(std::string_view lang_cli,
+                                     const MoonshineG2POptions& opt) {
   const std::string lk = normalize_lang_key(lang_cli);
   if (lookup_lang_profile(lk) != nullptr) {
     return true;
   }
   const std::string norm = normalize_rule_based_dialect_cli_key(lk);
-  return !norm.empty() && dialect_resolves_to_spanish_rules(norm, opt.spanish_narrow_obstruents);
+  return !norm.empty() &&
+         dialect_resolves_to_spanish_rules(norm, opt.spanish_narrow_obstruents);
 }
 
 bool voice_prefix_ok(char kokoro_lang, std::string_view voice) {
   static const std::unordered_map<char, std::vector<std::string_view>> pref{
-      {'a', {"af_", "am_"}}, {'b', {"bf_", "bm_"}}, {'e', {"ef_", "em_"}}, {'f', {"ff_"}},
-      {'h', {"hf_", "hm_"}}, {'i', {"if_", "im_"}}, {'p', {"pf_", "pm_"}},
-      {'j', {"jf_", "jm_"}}, {'z', {"zf_", "zm_"}},
+      {'a', {"af_", "am_"}}, {'b', {"bf_", "bm_"}}, {'e', {"ef_", "em_"}},
+      {'f', {"ff_"}},        {'h', {"hf_", "hm_"}}, {'i', {"if_", "im_"}},
+      {'p', {"pf_", "pm_"}}, {'j', {"jf_", "jm_"}}, {'z', {"zf_", "zm_"}},
   };
   const auto it = pref.find(kokoro_lang);
   if (it == pref.end()) {
@@ -208,9 +246,11 @@ bool voice_prefix_ok(char kokoro_lang, std::string_view voice) {
   return false;
 }
 
-/// If ``--lang`` is US English but the user asked for a British Kokoro voice id (``bf_*`` / ``bm_*``), or the
-/// reverse, switch the Kokoro profile so ``voice_prefix_ok`` and IPA normalization match the voice pack.
-void maybe_align_en_profile_for_kokoro_voice(std::string_view voice, LangProfile& profile,
+/// If ``--lang`` is US English but the user asked for a British Kokoro voice id
+/// (``bf_*`` / ``bm_*``), or the reverse, switch the Kokoro profile so
+/// ``voice_prefix_ok`` and IPA normalization match the voice pack.
+void maybe_align_en_profile_for_kokoro_voice(std::string_view voice,
+                                             LangProfile& profile,
                                              std::string& g2p_dialect) {
   if (voice.size() < 3) {
     return;
@@ -229,16 +269,18 @@ void maybe_align_en_profile_for_kokoro_voice(std::string_view voice, LangProfile
   }
 }
 
-/// When the CLI language is not a Kokoro-backed locale (e.g. ``de`` for Piper-only), but the user
-/// selected a Kokoro voice id, infer ``LangProfile`` / G2P dialect from the voice stem (``af_river`` → US English).
-bool infer_lang_profile_from_kokoro_voice(std::string_view voice_sv, LangProfile& profile,
+/// When the CLI language is not a Kokoro-backed locale (e.g. ``de`` for
+/// Piper-only), but the user selected a Kokoro voice id, infer ``LangProfile``
+/// / G2P dialect from the voice stem (``af_river`` → US English).
+bool infer_lang_profile_from_kokoro_voice(std::string_view voice_sv,
+                                          LangProfile& profile,
                                           std::string& g2p_dialect) {
   const std::string v = trim_ascii_ws_copy(voice_sv);
   if (v.empty()) {
     return false;
   }
-  static constexpr const char* k_keys[] = {"en_us", "en_gb", "es", "fr", "hi", "it",
-                                             "pt_br", "ja", "zh", "zh_hans"};
+  static constexpr const char* k_keys[] = {
+      "en_us", "en_gb", "es", "fr", "hi", "it", "pt_br", "ja", "zh", "zh_hans"};
   for (const char* key : k_keys) {
     const LangProfile* p = lookup_lang_profile(key);
     if (p == nullptr) {
@@ -246,32 +288,41 @@ bool infer_lang_profile_from_kokoro_voice(std::string_view voice_sv, LangProfile
     }
     if (voice_prefix_ok(p->kokoro_lang, v)) {
       profile = *p;
-      g2p_dialect = p->g2p_dialect != nullptr ? std::string(p->g2p_dialect) : std::string();
+      g2p_dialect = p->g2p_dialect != nullptr ? std::string(p->g2p_dialect)
+                                              : std::string();
       return true;
     }
   }
   return false;
 }
 
-/// Like ``resolve_lang_for_tts`` for Kokoro paths, but if *lk* is not Kokoro-capable (Piper-only language),
-/// fall back to a profile derived from *voice_for_infer* when non-empty.
-void resolve_lang_for_kokoro(const std::string& lk, const MoonshineG2POptions& g2p, LangProfile& profile,
-                             std::string& g2p_dialect, std::string_view voice_for_infer) {
+/// Like ``resolve_lang_for_tts`` for Kokoro paths, but if *lk* is not
+/// Kokoro-capable (Piper-only language), fall back to a profile derived from
+/// *voice_for_infer* when non-empty.
+void resolve_lang_for_kokoro(const std::string& lk,
+                             const MoonshineG2POptions& g2p,
+                             LangProfile& profile, std::string& g2p_dialect,
+                             std::string_view voice_for_infer) {
   try {
     resolve_lang_for_tts(lk, g2p, profile, g2p_dialect);
   } catch (const std::runtime_error&) {
-    if (!infer_lang_profile_from_kokoro_voice(voice_for_infer, profile, g2p_dialect)) {
+    if (!infer_lang_profile_from_kokoro_voice(voice_for_infer, profile,
+                                              g2p_dialect)) {
       throw;
     }
   }
 }
 
-bool kokoro_voice_asset_exists(const std::string& voice_id, const std::filesystem::path& voices_dir,
+bool kokoro_voice_asset_exists(const std::string& voice_id,
+                               const std::filesystem::path& voices_dir,
                                const FileInformationMap* tts_files,
                                const std::filesystem::path& g2p_root) {
-  const auto voice_path = [&](const std::string& id) { return voices_dir / (id + ".kokorovoice"); };
+  const auto voice_path = [&](const std::string& id) {
+    return voices_dir / (id + ".kokorovoice");
+  };
   if (tts_files != nullptr) {
-    const std::string vk = std::string("kokoro/voices/") + voice_id + ".kokorovoice";
+    const std::string vk =
+        std::string("kokoro/voices/") + voice_id + ".kokorovoice";
     const auto it = tts_files->entries.find(vk);
     if (it != tts_files->entries.end()) {
       const FileInformation& fi = it->second;
@@ -279,7 +330,8 @@ bool kokoro_voice_asset_exists(const std::string& voice_id, const std::filesyste
         return true;
       }
       if (!fi.path.empty()) {
-        const std::filesystem::path p = resolve_path_under_root(g2p_root, fi.path);
+        const std::filesystem::path p =
+            resolve_path_under_root(g2p_root, fi.path);
         return std::filesystem::is_regular_file(p);
       }
     }
@@ -287,20 +339,26 @@ bool kokoro_voice_asset_exists(const std::string& voice_id, const std::filesyste
   return std::filesystem::is_regular_file(voice_path(voice_id));
 }
 
-// Kokoro-82M voice ids (hexgrad/Kokoro-82M VOICES.md). Bundles may ship a subset; availability is per asset.
+// Kokoro-82M voice ids (hexgrad/Kokoro-82M VOICES.md). Bundles may ship a
+// subset; availability is per asset.
 static const char* const kKokoroVoiceCatalog[] = {
-    "af_alloy",   "af_aoede",   "af_bella",   "af_heart",   "af_jessica", "af_kore",    "af_nicole",
-    "af_nova",    "af_river",   "af_sarah",   "af_sky",     "am_adam",    "am_echo",    "am_eric",
-    "am_fenrir",  "am_liam",    "am_michael", "am_onyx",    "am_puck",    "am_santa",   "bf_alice",
-    "bf_emma",    "bf_isabella", "bf_lily",   "bm_daniel",  "bm_fable",   "bm_george",  "bm_lewis",
-    "ef_dora",    "em_alex",    "em_santa",   "ff_siwis",   "hf_alpha",   "hf_beta",    "hm_omega",
-    "hm_psi",     "if_sara",    "im_nicola",  "jf_alpha",   "jf_gongitsune", "jf_nezumi", "jf_tebukuro",
-    "jm_kumo",    "pf_dora",    "pm_alex",    "pm_santa",   "zf_xiaobei", "zf_xiaoni",  "zf_xiaoxiao",
-    "zf_xiaoyi",  "zm_yunjian", "zm_yunxi",   "zm_yunxia",  "zm_yunyang",
+    "af_alloy",   "af_aoede",    "af_bella",    "af_heart",    "af_jessica",
+    "af_kore",    "af_nicole",   "af_nova",     "af_river",    "af_sarah",
+    "af_sky",     "am_adam",     "am_echo",     "am_eric",     "am_fenrir",
+    "am_liam",    "am_michael",  "am_onyx",     "am_puck",     "am_santa",
+    "bf_alice",   "bf_emma",     "bf_isabella", "bf_lily",     "bm_daniel",
+    "bm_fable",   "bm_george",   "bm_lewis",    "ef_dora",     "em_alex",
+    "em_santa",   "ff_siwis",    "hf_alpha",    "hf_beta",     "hm_omega",
+    "hm_psi",     "if_sara",     "im_nicola",   "jf_alpha",    "jf_gongitsune",
+    "jf_nezumi",  "jf_tebukuro", "jm_kumo",     "pf_dora",     "pm_alex",
+    "pm_santa",   "zf_xiaobei",  "zf_xiaoni",   "zf_xiaoxiao", "zf_xiaoyi",
+    "zm_yunjian", "zm_yunxi",    "zm_yunxia",   "zm_yunyang",
 };
 
-std::string select_voice_id(char kokoro_lang, std::string_view requested, std::string_view default_voice,
-                            const std::filesystem::path& voices_dir, const FileInformationMap* tts_files,
+std::string select_voice_id(char kokoro_lang, std::string_view requested,
+                            std::string_view default_voice,
+                            const std::filesystem::path& voices_dir,
+                            const FileInformationMap* tts_files,
                             const std::filesystem::path& g2p_root) {
   const auto exists = [&](const std::string& id) {
     return kokoro_voice_asset_exists(id, voices_dir, tts_files, g2p_root);
@@ -317,7 +375,8 @@ std::string select_voice_id(char kokoro_lang, std::string_view requested, std::s
     if (available.empty()) {
       LOG("  Available Kokoro voices for this language: (none)");
     } else {
-      LOGF("  Available Kokoro voices for this language: %s", available.c_str());
+      LOGF("  Available Kokoro voices for this language: %s",
+           available.c_str());
     }
   };
 
@@ -349,12 +408,14 @@ std::string select_voice_id(char kokoro_lang, std::string_view requested, std::s
       continue;
     }
     if (cand != def) {
-      LOGF("Default Kokoro voice '%s' not found; using '%s' instead", def.c_str(), cand.c_str());
+      LOGF("Default Kokoro voice '%s' not found; using '%s' instead",
+           def.c_str(), cand.c_str());
     }
     return cand;
   }
 
-  // No matching files on disk: return a valid-prefix id for dependency prefetch, else the default.
+  // No matching files on disk: return a valid-prefix id for dependency
+  // prefetch, else the default.
   if (!requested.empty()) {
     const std::string req(requested);
     if (voice_prefix_ok(kokoro_lang, req)) {
@@ -393,26 +454,28 @@ void apply_diphthong_map(std::string& s, char kokoro_lang) {
   }
 }
 
-// Mandarin Chinese IPA normalization for Kokoro: Chao tone letters → arrow contour symbols,
-// consonant mappings to Kokoro's inventory (ꭧ for retroflex, ʦ for dental affricate, ʨ for palatal),
-// tone repositioning before final nasals. Must run before the generic vocab-filter pass.
+// Mandarin Chinese IPA normalization for Kokoro: Chao tone letters → arrow
+// contour symbols, consonant mappings to Kokoro's inventory (ꭧ for retroflex, ʦ
+// for dental affricate, ʨ for palatal), tone repositioning before final nasals.
+// Must run before the generic vocab-filter pass.
 void apply_chinese_kokoro_normalization(std::string& ipa) {
   // ── Consonant mappings (longest first) ──
   // Retroflex affricates: ʈʂʰ → ꭧʰ, ʈʂ → ꭧ  (ꭧ = U+AB67, \xea\xad\xa7)
-  replace_utf8(ipa, "\xca\x88\xca\x82\xca\xb0", "\xea\xad\xa7\xca\xb0");  // ʈʂʰ → ꭧʰ
-  replace_utf8(ipa, "\xca\x88\xca\x82", "\xea\xad\xa7");                    // ʈʂ → ꭧ
+  replace_utf8(ipa, "\xca\x88\xca\x82\xca\xb0",
+               "\xea\xad\xa7\xca\xb0");                   // ʈʂʰ → ꭧʰ
+  replace_utf8(ipa, "\xca\x88\xca\x82", "\xea\xad\xa7");  // ʈʂ → ꭧ
 
   // Palatal affricates: tɕʰ → ʨʰ, tɕ → ʨ  (ʨ = U+02A8, \xca\xa8)
   replace_utf8(ipa, "t\xc9\x95\xca\xb0", "\xca\xa8\xca\xb0");  // tɕʰ → ʨʰ
-  replace_utf8(ipa, "t\xc9\x95", "\xca\xa8");                    // tɕ → ʨ
+  replace_utf8(ipa, "t\xc9\x95", "\xca\xa8");                  // tɕ → ʨ
 
   // Dental affricates: tsʰ → ʦʰ, ts → ʦ  (ʦ = U+02A6, \xca\xa6)
   replace_utf8(ipa, "ts\xca\xb0", "\xca\xa6\xca\xb0");  // tsʰ → ʦʰ
-  replace_utf8(ipa, "ts", "\xca\xa6");                    // ts → ʦ
+  replace_utf8(ipa, "ts", "\xca\xa6");                  // ts → ʦ
 
   // Tie-bar removal (if present): t͡ɕ, t͡s, d͡z
   replace_utf8(ipa, "t\xcd\xa1\xc9\x95", "\xca\xa8");  // t͡ɕ → ʨ
-  replace_utf8(ipa, "t\xcd\xa1s", "\xca\xa6");          // t͡s → ʦ
+  replace_utf8(ipa, "t\xcd\xa1s", "\xca\xa6");         // t͡s → ʦ
 
   // ── Vowel/rhoticity mappings ──
   // er/erhua: aɻ → ɚ  (before generic ɻ → ɻ, which is already in Kokoro vocab)
@@ -429,28 +492,30 @@ void apply_chinese_kokoro_normalization(std::string& ipa) {
 
   // ── Chao tone letters → Kokoro arrow symbols ──
   // Multi-letter sequences first (longest first).
-  // → = U+2192 (\xe2\x86\x92), ↗ = U+2197 (\xe2\x86\x97), ↓ = U+2193 (\xe2\x86\x93), ↘ = U+2198 (\xe2\x86\x98)
-  replace_utf8(ipa, "\xcb\xa8\xcb\xa9\xcb\xa6", "\xe2\x86\x93");  // ˨˩˦ (Tone 3) → ↓
-  replace_utf8(ipa, "\xcb\xa5\xcb\xa5", "\xe2\x86\x92");           // ˥˥  (Tone 1) → →
-  replace_utf8(ipa, "\xcb\xa7\xcb\xa5", "\xe2\x86\x97");           // ˧˥  (Tone 2) → ↗
-  replace_utf8(ipa, "\xcb\xa5\xcb\xa9", "\xe2\x86\x98");           // ˥˩  (Tone 4) → ↘
-  replace_utf8(ipa, "\xcb\xa9\xcb\xa9", "\xe2\x86\x93");           // ˩˩ → ↓
-  replace_utf8(ipa, "\xcb\xa5\xcb\xa7", "\xe2\x86\x98");           // ˥˧ → ↘
-  replace_utf8(ipa, "\xcb\xa7\xcb\xa9", "\xe2\x86\x93");           // ˧˩ → ↓
-  replace_utf8(ipa, "\xcb\xa8\xcb\xa5", "\xe2\x86\x97");           // ˨˥ → ↗
+  // → = U+2192 (\xe2\x86\x92), ↗ = U+2197 (\xe2\x86\x97), ↓ = U+2193
+  // (\xe2\x86\x93), ↘ = U+2198 (\xe2\x86\x98)
+  replace_utf8(ipa, "\xcb\xa8\xcb\xa9\xcb\xa6",
+               "\xe2\x86\x93");                           // ˨˩˦ (Tone 3) → ↓
+  replace_utf8(ipa, "\xcb\xa5\xcb\xa5", "\xe2\x86\x92");  // ˥˥  (Tone 1) → →
+  replace_utf8(ipa, "\xcb\xa7\xcb\xa5", "\xe2\x86\x97");  // ˧˥  (Tone 2) → ↗
+  replace_utf8(ipa, "\xcb\xa5\xcb\xa9", "\xe2\x86\x98");  // ˥˩  (Tone 4) → ↘
+  replace_utf8(ipa, "\xcb\xa9\xcb\xa9", "\xe2\x86\x93");  // ˩˩ → ↓
+  replace_utf8(ipa, "\xcb\xa5\xcb\xa7", "\xe2\x86\x98");  // ˥˧ → ↘
+  replace_utf8(ipa, "\xcb\xa7\xcb\xa9", "\xe2\x86\x93");  // ˧˩ → ↓
+  replace_utf8(ipa, "\xcb\xa8\xcb\xa5", "\xe2\x86\x97");  // ˨˥ → ↗
   // Single remaining tone letters.
   replace_utf8(ipa, "\xcb\xa5", "\xe2\x86\x92");  // ˥ → →
   replace_utf8(ipa, "\xcb\xa6", "\xe2\x86\x92");  // ˦ → →
-  replace_utf8(ipa, "\xcb\xa7", "");               // ˧ (neutral) → drop
+  replace_utf8(ipa, "\xcb\xa7", "");              // ˧ (neutral) → drop
   replace_utf8(ipa, "\xcb\xa8", "\xe2\x86\x93");  // ˨ → ↓
   replace_utf8(ipa, "\xcb\xa9", "\xe2\x86\x93");  // ˩ → ↓
 
   // ── Tone repositioning: move tone arrow before final nasals ──
   // Kokoro expects tones between the vowel and final nasal: pa→ŋ, pə↓n
-  // Our G2P puts tones after the syllable: pɑŋ˥˥ → pɑŋ→ (after arrow conversion)
-  // Need to swap: [nasal][arrow] → [arrow][nasal]
-  static const std::string kArrows[] = {
-      "\xe2\x86\x92", "\xe2\x86\x97", "\xe2\x86\x93", "\xe2\x86\x98"};
+  // Our G2P puts tones after the syllable: pɑŋ˥˥ → pɑŋ→ (after arrow
+  // conversion) Need to swap: [nasal][arrow] → [arrow][nasal]
+  static const std::string kArrows[] = {"\xe2\x86\x92", "\xe2\x86\x97",
+                                        "\xe2\x86\x93", "\xe2\x86\x98"};
   for (const std::string& arrow : kArrows) {
     // Swap n + arrow → arrow + n
     {
@@ -467,8 +532,9 @@ void apply_chinese_kokoro_normalization(std::string& ipa) {
   }
 }
 
-std::string normalize_ipa_to_kokoro(std::string ipa, char kokoro_lang,
-                                    const std::unordered_set<std::string>& vocab_keys) {
+std::string normalize_ipa_to_kokoro(
+    std::string ipa, char kokoro_lang,
+    const std::unordered_set<std::string>& vocab_keys) {
   ipa = utf8_nfc(trim_ascii_ws_copy(ipa));
   apply_diphthong_map(ipa, kokoro_lang);
   if (kokoro_lang == 'h') {
@@ -488,7 +554,8 @@ std::string normalize_ipa_to_kokoro(std::string ipa, char kokoro_lang,
   return collapse_whitespace_join_single_space(kept);
 }
 
-std::vector<std::string> chunk_phonemes(const std::string& ps, int max_cp = 510) {
+std::vector<std::string> chunk_phonemes(const std::string& ps,
+                                        int max_cp = 510) {
   std::vector<std::string> chunks;
   if (ps.empty()) {
     return chunks;
@@ -551,8 +618,9 @@ std::vector<std::string> chunk_phonemes(const std::string& ps, int max_cp = 510)
   return chunks;
 }
 
-std::vector<int64_t> phoneme_str_to_input_ids(const std::string& phonemes,
-                                              const std::unordered_map<std::string, int>& vocab) {
+std::vector<int64_t> phoneme_str_to_input_ids(
+    const std::string& phonemes,
+    const std::unordered_map<std::string, int>& vocab) {
   std::vector<int64_t> ids;
   ids.push_back(0);
   for (const std::string& ch : utf8_split_codepoints(phonemes)) {
@@ -565,25 +633,32 @@ std::vector<int64_t> phoneme_str_to_input_ids(const std::string& phonemes,
   return ids;
 }
 
-void read_kokorovoice_bytes(const uint8_t* data, size_t size, std::string_view context_for_errors,
-                            std::vector<float>& out_flat, uint32_t& rows, uint32_t& cols) {
+void read_kokorovoice_bytes(const uint8_t* data, size_t size,
+                            std::string_view context_for_errors,
+                            std::vector<float>& out_flat, uint32_t& rows,
+                            uint32_t& cols) {
   if (data == nullptr || size < 4 + 4 + 4) {
-    throw std::runtime_error("MoonshineTTS: voice buffer too small (" + std::string(context_for_errors) + ")");
+    throw std::runtime_error("MoonshineTTS: voice buffer too small (" +
+                             std::string(context_for_errors) + ")");
   }
   if (std::string_view(reinterpret_cast<const char*>(data), 4) != kVoiceMagic) {
-    throw std::runtime_error("MoonshineTTS: bad magic (" + std::string(context_for_errors) + ") (expected KVO1)");
+    throw std::runtime_error("MoonshineTTS: bad magic (" +
+                             std::string(context_for_errors) +
+                             ") (expected KVO1)");
   }
   uint32_t r = 0;
   uint32_t c = 0;
   std::memcpy(&r, data + 4, 4);
   std::memcpy(&c, data + 8, 4);
   if (r == 0 || c == 0) {
-    throw std::runtime_error("MoonshineTTS: invalid voice header (" + std::string(context_for_errors) + ")");
+    throw std::runtime_error("MoonshineTTS: invalid voice header (" +
+                             std::string(context_for_errors) + ")");
   }
   const size_t n = static_cast<size_t>(r) * static_cast<size_t>(c);
   const size_t need = 12 + n * sizeof(float);
   if (size < need) {
-    throw std::runtime_error("MoonshineTTS: truncated voice data (" + std::string(context_for_errors) + ")");
+    throw std::runtime_error("MoonshineTTS: truncated voice data (" +
+                             std::string(context_for_errors) + ")");
   }
   out_flat.resize(n);
   std::memcpy(out_flat.data(), data + 12, n * sizeof(float));
@@ -591,28 +666,24 @@ void read_kokorovoice_bytes(const uint8_t* data, size_t size, std::string_view c
   cols = c;
 }
 
-void read_kokorovoice(const std::filesystem::path& path, std::vector<float>& out_flat, uint32_t& rows,
+void read_kokorovoice(const std::filesystem::path& path,
+                      std::vector<float>& out_flat, uint32_t& rows,
                       uint32_t& cols) {
   std::ifstream f(path, std::ios::binary);
   if (!f) {
-    throw std::runtime_error("MoonshineTTS: cannot open voice file " + path.string());
+    throw std::runtime_error("MoonshineTTS: cannot open voice file " +
+                             path.string());
   }
-  std::vector<uint8_t> buf((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-  read_kokorovoice_bytes(buf.data(), buf.size(), path.string(), out_flat, rows, cols);
-}
-
-Ort::SessionOptions make_ort_options(const std::vector<std::string>& names) {
-  (void)names;
-  Ort::SessionOptions opts;
-  opts.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-  opts.SetIntraOpNumThreads(0);
-  opts.SetInterOpNumThreads(0);
-  return opts;
+  std::vector<uint8_t> buf((std::istreambuf_iterator<char>(f)),
+                           std::istreambuf_iterator<char>());
+  read_kokorovoice_bytes(buf.data(), buf.size(), path.string(), out_flat, rows,
+                         cols);
 }
 
 }  // namespace
 
-bool kokoro_tts_lang_supported(std::string_view lang_cli, const MoonshineG2POptions& g2p_opt) {
+bool kokoro_tts_lang_supported(std::string_view lang_cli,
+                               const MoonshineG2POptions& g2p_opt) {
   return kokoro_tts_lang_supported_inner(lang_cli, g2p_opt);
 }
 
@@ -626,7 +697,8 @@ std::string ascii_lowercase_copy(std::string_view s) {
   return o;
 }
 
-std::filesystem::path tts_map_path(const FileInformationMap& m, std::string_view canonical_key) {
+std::filesystem::path tts_map_path(const FileInformationMap& m,
+                                   std::string_view canonical_key) {
   const std::string k(canonical_key);
   const auto it = m.entries.find(k);
   if (it == m.entries.end()) {
@@ -635,7 +707,8 @@ std::filesystem::path tts_map_path(const FileInformationMap& m, std::string_view
   return it->second.path;
 }
 
-PiperTTSOptions make_piper_options(std::string_view language, const MoonshineTTSOptions& opt) {
+PiperTTSOptions make_piper_options(std::string_view language,
+                                   const MoonshineTTSOptions& opt) {
   PiperTTSOptions p;
   p.lang = std::string(language);
   const std::string onnx_key(kTtsPiperOnnxKey);
@@ -647,39 +720,45 @@ PiperTTSOptions make_piper_options(std::string_view language, const MoonshineTTS
   }
   const std::string onnx_json_key(kTtsPiperOnnxJsonKey);
   if (opt.files.entries.find(onnx_json_key) != opt.files.entries.end()) {
-    const std::filesystem::path jr = opt.tts_relative_path(kTtsPiperOnnxJsonKey);
+    const std::filesystem::path jr =
+        opt.tts_relative_path(kTtsPiperOnnxJsonKey);
     if (!jr.empty()) {
       p.explicit_onnx_json_path = jr;
     }
   }
   const std::string pv_key(kTtsPiperVoicesKey);
-  if (p.explicit_onnx_path.empty() && opt.files.entries.find(pv_key) != opt.files.entries.end()) {
+  if (p.explicit_onnx_path.empty() &&
+      opt.files.entries.find(pv_key) != opt.files.entries.end()) {
     const std::filesystem::path vr = opt.tts_relative_path(kTtsPiperVoicesKey);
     if (!vr.empty()) {
       p.voices_dir = resolve_path_under_root(opt.g2p_options.g2p_root, vr);
     }
   }
   const std::string pvj_key(kTtsPiperVoicesJsonKey);
-  if (p.explicit_onnx_path.empty() && opt.files.entries.find(pvj_key) != opt.files.entries.end()) {
-    const std::filesystem::path vjr = opt.tts_relative_path(kTtsPiperVoicesJsonKey);
+  if (p.explicit_onnx_path.empty() &&
+      opt.files.entries.find(pvj_key) != opt.files.entries.end()) {
+    const std::filesystem::path vjr =
+        opt.tts_relative_path(kTtsPiperVoicesJsonKey);
     if (!vjr.empty()) {
-      p.voices_json_dir = resolve_path_under_root(opt.g2p_options.g2p_root, vjr);
+      p.voices_json_dir =
+          resolve_path_under_root(opt.g2p_options.g2p_root, vjr);
     }
   }
   p.onnx_model = opt.voice;
   p.speed = opt.speed;
   p.g2p_options = opt.g2p_options;
   p.ort_provider_names = opt.ort_provider_names;
-  p.piper_normalize_audio = opt.piper_normalize_audio;
-  p.piper_output_volume = opt.piper_output_volume;
+  p.coreml_cache_dir = opt.coreml_cache_dir;
+  p.normalize_audio = opt.normalize_audio;
+  p.output_volume = opt.output_volume;
   p.piper_noise_scale_override = opt.piper_noise_scale_override;
   p.piper_noise_w_override = opt.piper_noise_w_override;
   p.tts_asset_files = opt.files;
   return p;
 }
 
-std::vector<std::string> kokoro_vocoder_dependency_keys_with_options(std::string_view language,
-                                                                     const MoonshineTTSOptions& opt) {
+std::vector<std::string> kokoro_vocoder_dependency_keys_with_options(
+    std::string_view language, const MoonshineTTSOptions& opt) {
   MoonshineG2POptions g2p = opt.g2p_options;
   if (g2p.g2p_root.empty()) {
     g2p.g2p_root = std::filesystem::current_path();
@@ -689,26 +768,28 @@ std::vector<std::string> kokoro_vocoder_dependency_keys_with_options(std::string
   const std::string lk = normalize_lang_key(language);
   resolve_lang_for_kokoro(lk, g2p, profile, g2p_dialect, opt.voice);
   maybe_align_en_profile_for_kokoro_voice(opt.voice, profile, g2p_dialect);
-  std::filesystem::path model_path =
-      resolve_path_under_root(g2p.g2p_root, tts_map_path(opt.files, kTtsKokoroModelOnnxKey));
+  std::filesystem::path model_path = resolve_path_under_root(
+      g2p.g2p_root, tts_map_path(opt.files, kTtsKokoroModelOnnxKey));
   resolve_disk_model_file_path(model_path);
   const std::filesystem::path voices_dir = model_path.parent_path() / "voices";
-  // Dependency keys must name the *requested* voice even when the .kokorovoice file is not on disk yet
-  // (select_voice_id falls back to the default when missing, which would break download prefetch).
+  // Dependency keys must name the *requested* voice even when the .kokorovoice
+  // file is not on disk yet (select_voice_id falls back to the default when
+  // missing, which would break download prefetch).
   const std::string req = trim_ascii_ws_copy(opt.voice);
   std::string vid;
   if (!req.empty() && voice_prefix_ok(profile.kokoro_lang, req)) {
     vid = req;
   } else {
-    vid = select_voice_id(profile.kokoro_lang, opt.voice, profile.default_voice, voices_dir, &opt.files,
-                          g2p.g2p_root);
+    vid = select_voice_id(profile.kokoro_lang, opt.voice, profile.default_voice,
+                          voices_dir, &opt.files, g2p.g2p_root);
   }
-  return {std::string(kTtsKokoroModelOnnxKey), std::string(kTtsKokoroConfigJsonKey),
+  return {std::string(kTtsKokoroModelOnnxKey),
+          std::string(kTtsKokoroConfigJsonKey),
           std::string("kokoro/voices/") + vid + ".kokorovoice"};
 }
 
-std::vector<std::pair<std::string, bool>> list_kokoro_voices_with_availability(const std::string& lk,
-                                                                               const MoonshineTTSOptions& opt) {
+std::vector<std::pair<std::string, bool>> list_kokoro_voices_with_availability(
+    const std::string& lk, const MoonshineTTSOptions& opt) {
   MoonshineG2POptions g2p = opt.g2p_options;
   if (g2p.g2p_root.empty()) {
     g2p.g2p_root = std::filesystem::current_path();
@@ -719,8 +800,8 @@ std::vector<std::pair<std::string, bool>> list_kokoro_voices_with_availability(c
   maybe_align_en_profile_for_kokoro_voice(opt.voice, profile, g2p_dialect);
   MoonshineTTSOptions opt_scan = opt;
   opt_scan.g2p_options = g2p;
-  std::filesystem::path model_path =
-      resolve_path_under_root(g2p.g2p_root, tts_map_path(opt_scan.files, kTtsKokoroModelOnnxKey));
+  std::filesystem::path model_path = resolve_path_under_root(
+      g2p.g2p_root, tts_map_path(opt_scan.files, kTtsKokoroModelOnnxKey));
   resolve_disk_model_file_path(model_path);
   const std::filesystem::path voices_dir = model_path.parent_path() / "voices";
 
@@ -730,7 +811,8 @@ std::vector<std::pair<std::string, bool>> list_kokoro_voices_with_availability(c
     if (!voice_prefix_ok(profile.kokoro_lang, id)) {
       continue;
     }
-    by_id[id] = kokoro_voice_asset_exists(id, voices_dir, &opt_scan.files, g2p.g2p_root);
+    by_id[id] = kokoro_voice_asset_exists(id, voices_dir, &opt_scan.files,
+                                          g2p.g2p_root);
   }
 
   auto consider_extra = [&](const std::string& id) {
@@ -740,7 +822,8 @@ std::vector<std::pair<std::string, bool>> list_kokoro_voices_with_availability(c
     if (by_id.find(id) != by_id.end()) {
       return;
     }
-    by_id[id] = kokoro_voice_asset_exists(id, voices_dir, &opt_scan.files, g2p.g2p_root);
+    by_id[id] = kokoro_voice_asset_exists(id, voices_dir, &opt_scan.files,
+                                          g2p.g2p_root);
   };
 
   if (std::filesystem::is_directory(voices_dir)) {
@@ -764,10 +847,12 @@ std::vector<std::pair<std::string, bool>> list_kokoro_voices_with_availability(c
     if (key.compare(0, k_prefix.size(), k_prefix) != 0) {
       continue;
     }
-    if (key.compare(key.size() - k_suffix.size(), k_suffix.size(), k_suffix) != 0) {
+    if (key.compare(key.size() - k_suffix.size(), k_suffix.size(), k_suffix) !=
+        0) {
       continue;
     }
-    consider_extra(key.substr(k_prefix.size(), key.size() - k_prefix.size() - k_suffix.size()));
+    consider_extra(key.substr(k_prefix.size(),
+                              key.size() - k_prefix.size() - k_suffix.size()));
   }
 
   std::vector<std::pair<std::string, bool>> out;
@@ -778,8 +863,8 @@ std::vector<std::pair<std::string, bool>> list_kokoro_voices_with_availability(c
   return out;
 }
 
-std::vector<std::string> piper_vocoder_dependency_keys_with_options(std::string_view language,
-                                                                    const MoonshineTTSOptions& opt) {
+std::vector<std::string> piper_vocoder_dependency_keys_with_options(
+    std::string_view language, const MoonshineTTSOptions& opt) {
   const std::string onnx_key(kTtsPiperOnnxKey);
   const std::string json_key(kTtsPiperOnnxJsonKey);
   if (opt.files.entries.find(onnx_key) != opt.files.entries.end()) {
@@ -791,10 +876,85 @@ std::vector<std::string> piper_vocoder_dependency_keys_with_options(std::string_
   }
   std::string o;
   std::string j;
-  if (piper_default_model_bundle_relative_paths(language, g2p, &o, &j, opt.voice)) {
+  if (piper_default_model_bundle_relative_paths(language, g2p, &o, &j,
+                                                opt.voice)) {
     return {std::move(o), std::move(j)};
   }
   return {};
+}
+
+ZipVoiceTTSOptions make_zipvoice_options(std::string_view language,
+                                         const MoonshineTTSOptions& opt) {
+  ZipVoiceTTSOptions z;
+  z.lang = std::string(language);
+  z.speed = opt.speed;
+  z.g2p_options = opt.g2p_options;
+  z.ort_provider_names = opt.ort_provider_names;
+  z.coreml_cache_dir = opt.coreml_cache_dir;
+  z.normalize_audio = opt.normalize_audio;
+  z.output_volume = opt.output_volume;
+  z.distill = opt.zipvoice_distill;
+  z.num_step = opt.zipvoice_num_step;
+  z.guidance_scale = opt.zipvoice_guidance_scale;
+  z.t_shift = opt.zipvoice_t_shift;
+  z.clone_sample_rate = opt.zipvoice_clone_sample_rate;
+  z.clone_transcript = opt.zipvoice_clone_transcript;
+  z.tts_asset_files = opt.files;
+  z.voice_id = opt.voice;  // engine prefix already stripped
+  const auto it =
+      opt.files.entries.find(std::string(kTtsZipVoiceCloneAudioKey));
+  if (it != opt.files.entries.end() && it->second.memory != nullptr &&
+      it->second.memory_size >= sizeof(float)) {
+    const size_t n = it->second.memory_size / sizeof(float);
+    z.clone_pcm.resize(n);
+    std::memcpy(z.clone_pcm.data(), it->second.memory, n * sizeof(float));
+  }
+  return z;
+}
+
+std::vector<std::string> zipvoice_vocoder_dependency_keys() {
+  return {std::string(kTtsZipVoiceTextEncoderKey),
+          std::string(kTtsZipVoiceFmDecoderKey),
+          std::string(kTtsZipVoiceVocoderKey),
+          std::string(kTtsZipVoiceTokensKey),
+          std::string(kTtsZipVoiceModelJsonKey)};
+}
+
+bool zipvoice_asset_present(const MoonshineTTSOptions& opt,
+                            std::string_view key) {
+  const std::string k(key);
+  const auto it = opt.files.entries.find(k);
+  if (it != opt.files.entries.end() && it->second.memory != nullptr &&
+      it->second.memory_size > 0) {
+    return true;
+  }
+  std::filesystem::path p =
+      (it != opt.files.entries.end() && !it->second.path.empty())
+          ? resolve_path_under_root(opt.g2p_options.g2p_root, it->second.path)
+          : resolve_path_under_root(opt.g2p_options.g2p_root,
+                                    std::filesystem::path(k));
+  resolve_disk_model_file_path(p);
+  return std::filesystem::is_regular_file(p);
+}
+
+bool zipvoice_assets_available(const MoonshineTTSOptions& opt) {
+  return zipvoice_asset_present(opt, kTtsZipVoiceTextEncoderKey) &&
+         zipvoice_asset_present(opt, kTtsZipVoiceFmDecoderKey) &&
+         zipvoice_asset_present(opt, kTtsZipVoiceVocoderKey) &&
+         zipvoice_asset_present(opt, kTtsZipVoiceTokensKey);
+}
+
+std::vector<std::pair<std::string, bool>>
+list_zipvoice_voices_with_availability(const MoonshineTTSOptions& opt) {
+  const bool available = zipvoice_assets_available(opt);
+  size_t count = 0;
+  const ZipVoiceBuiltinVoice* voices = zipvoice_builtin_voices(&count);
+  std::vector<std::pair<std::string, bool>> out;
+  out.reserve(count);
+  for (size_t i = 0; i < count; ++i) {
+    out.emplace_back(std::string(voices[i].id), available);
+  }
+  return out;
 }
 
 struct KokoroTtsEngine {
@@ -804,7 +964,8 @@ struct KokoroTtsEngine {
   FileInformationMap tts_files_;
   Ort::Env env_{ORT_LOGGING_LEVEL_WARNING, "moonshine_tts"};
   Ort::Session session_{nullptr};
-  Ort::MemoryInfo mem_{Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)};
+  Ort::MemoryInfo mem_{
+      Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)};
 
   std::unordered_map<std::string, int> vocab_{};
   std::unordered_set<std::string> vocab_keys_{};
@@ -814,15 +975,19 @@ struct KokoroTtsEngine {
 
   std::string voice_id_{};
   double speed_ = 1.0;
-  /// ``speed`` ONNX input element type from the loaded graph (FP32 community ONNX vs double local export).
-  ONNXTensorElementDataType speed_elem_type_ = ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE;
+  bool normalize_audio_ = true;
+  float output_volume_ = 1.F;
+  /// ``speed`` ONNX input element type from the loaded graph (FP32 community
+  /// ONNX vs double local export).
+  ONNXTensorElementDataType speed_elem_type_ =
+      ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE;
   char kokoro_lang_ = 'a';
   LangProfile profile_{};
   std::string g2p_dialect_{};
   MoonshineG2POptions g2p_opt_{};
   std::unique_ptr<MoonshineG2P> g2p_{};
-  /// Hugging Face ``onnx-community/Kokoro-82M-v1.0-ONNX`` quantized graph names the style vector ``style``;
-  /// local torch exports use ``ref_s``.
+  /// Hugging Face ``onnx-community/Kokoro-82M-v1.0-ONNX`` quantized graph names
+  /// the style vector ``style``; local torch exports use ``ref_s``.
   std::string style_input_name_ = "ref_s";
   bool log_profiling_ = false;
 
@@ -844,8 +1009,9 @@ struct KokoroTtsEngine {
   }
 
   void detect_speed_input_element_type() {
-    // Kokoro ONNX convention: inputs [0]=input_ids, [1]=ref_s|style, [2]=speed. Community HF models use
-    // float32 speed [1]; local torch exports use double scalar.
+    // Kokoro ONNX convention: inputs [0]=input_ids, [1]=ref_s|style, [2]=speed.
+    // Community HF models use float32 speed [1]; local torch exports use double
+    // scalar.
     const size_t n_in = session_.GetInputCount();
     if (n_in < 3) {
       return;
@@ -855,40 +1021,55 @@ struct KokoroTtsEngine {
       return;
     }
     const auto tinfo = ti.GetTensorTypeAndShapeInfo();
-    speed_elem_type_ = static_cast<ONNXTensorElementDataType>(tinfo.GetElementType());
+    speed_elem_type_ =
+        static_cast<ONNXTensorElementDataType>(tinfo.GetElementType());
   }
 
   double speed() const { return speed_; }
 
   void set_speed(double s) {
     if (!(s > 0.0) || !std::isfinite(s)) {
-      throw std::runtime_error("MoonshineTTS: speed must be a positive finite number");
+      throw std::runtime_error(
+          "MoonshineTTS: speed must be a positive finite number");
     }
     speed_ = s;
   }
+
+  bool normalize_audio() const { return normalize_audio_; }
+  void set_normalize_audio(bool on) { normalize_audio_ = on; }
+  float output_volume() const { return output_volume_; }
+  void set_output_volume(float v) { output_volume_ = v; }
 
   explicit KokoroTtsEngine(std::string_view language, MoonshineTTSOptions opt) {
     log_profiling_ = opt.log_profiling;
     TIMER_START_IF(log_profiling_, kokoro_engine_init);
     if (!(opt.speed > 0.0) || !std::isfinite(opt.speed)) {
-      throw std::runtime_error("MoonshineTTS: speed must be a positive finite number");
+      throw std::runtime_error(
+          "MoonshineTTS: speed must be a positive finite number");
     }
     speed_ = opt.speed;
+    normalize_audio_ = opt.normalize_audio;
+    output_volume_ = opt.output_volume;
     g2p_opt_ = std::move(opt.g2p_options);
     tts_files_ = std::move(opt.files);
     const std::filesystem::path& root = g2p_opt_.g2p_root;
-    model_path_ = resolve_path_under_root(root, tts_map_path(tts_files_, kTtsKokoroModelOnnxKey));
+    model_path_ = resolve_path_under_root(
+        root, tts_map_path(tts_files_, kTtsKokoroModelOnnxKey));
     resolve_disk_model_file_path(model_path_);
-    config_path_ = resolve_path_under_root(root, tts_map_path(tts_files_, kTtsKokoroConfigJsonKey));
+    config_path_ = resolve_path_under_root(
+        root, tts_map_path(tts_files_, kTtsKokoroConfigJsonKey));
     voices_dir_ = model_path_.parent_path() / "voices";
 
     LOGF_IF(log_profiling_, "KokoroTtsEngine: model='%s', config='%s'",
             model_path_.c_str(), config_path_.c_str());
 
-    const auto mit = tts_files_.entries.find(std::string(kTtsKokoroModelOnnxKey));
-    const auto cit = tts_files_.entries.find(std::string(kTtsKokoroConfigJsonKey));
+    const auto mit =
+        tts_files_.entries.find(std::string(kTtsKokoroModelOnnxKey));
+    const auto cit =
+        tts_files_.entries.find(std::string(kTtsKokoroConfigJsonKey));
     if (mit == tts_files_.entries.end() || cit == tts_files_.entries.end()) {
-      throw std::runtime_error("MoonshineTTS: missing Kokoro file map entries (model/config keys)");
+      throw std::runtime_error(
+          "MoonshineTTS: missing Kokoro file map entries (model/config keys)");
     }
     FileInformation& model_fi = mit->second;
     FileInformation& cfg_fi = cit->second;
@@ -901,14 +1082,17 @@ struct KokoroTtsEngine {
     cfg_fi.load(&cfg_buf, &cfg_len);
     if (cfg_len == 0) {
       cfg_fi.free();
-      throw std::runtime_error("MoonshineTTS: empty Kokoro config (" + config_path_.string() + ")");
+      throw std::runtime_error("MoonshineTTS: empty Kokoro config (" +
+                               config_path_.string() + ")");
     }
     {
-      const std::string cfg_str(reinterpret_cast<const char*>(cfg_buf), cfg_len);
+      const std::string cfg_str(reinterpret_cast<const char*>(cfg_buf),
+                                cfg_len);
       nlohmann::json j = nlohmann::json::parse(cfg_str);
       if (!j.contains("vocab") || !j["vocab"].is_object()) {
         cfg_fi.free();
-        throw std::runtime_error("MoonshineTTS: config.json missing vocab object");
+        throw std::runtime_error(
+            "MoonshineTTS: config.json missing vocab object");
       }
       for (auto it = j["vocab"].begin(); it != j["vocab"].end(); ++it) {
         const std::string key = it.key();
@@ -917,7 +1101,8 @@ struct KokoroTtsEngine {
       }
     }
     cfg_fi.free();
-    LOGF_IF(log_profiling_, "KokoroTtsEngine: loaded vocab with %zu tokens", vocab_.size());
+    LOGF_IF(log_profiling_, "KokoroTtsEngine: loaded vocab with %zu tokens",
+            vocab_.size());
     TIMER_END_IF(log_profiling_, kokoro_load_config);
 
     TIMER_START_IF(log_profiling_, kokoro_load_onnx);
@@ -926,14 +1111,17 @@ struct KokoroTtsEngine {
     model_fi.load(&onnx_buf, &onnx_len);
     if (onnx_len == 0) {
       model_fi.free();
-      throw std::runtime_error("MoonshineTTS: empty Kokoro ONNX (" + model_path_.string() + ")");
+      throw std::runtime_error("MoonshineTTS: empty Kokoro ONNX (" +
+                               model_path_.string() + ")");
     }
-    Ort::SessionOptions session_opts = make_ort_options(opt.ort_provider_names);
-    ort_add_external_initializer_files_for_onnx_model_buffer(session_opts, tts_files_,
-                                                               kTtsKokoroModelOnnxKey);
+    Ort::SessionOptions session_opts =
+        make_ort_session_options(opt.ort_provider_names, opt.coreml_cache_dir);
+    ort_add_external_initializer_files_for_onnx_model_buffer(
+        session_opts, tts_files_, kTtsKokoroModelOnnxKey);
     session_ = Ort::Session(env_, onnx_buf, onnx_len, session_opts);
     model_fi.free();
-    LOGF_IF(log_profiling_, "KokoroTtsEngine: ONNX model loaded (%zu bytes)", onnx_len);
+    LOGF_IF(log_profiling_, "KokoroTtsEngine: ONNX model loaded (%zu bytes)",
+            onnx_len);
     TIMER_END_IF(log_profiling_, kokoro_load_onnx);
 
     detect_kokoro_style_input_name();
@@ -943,34 +1131,39 @@ struct KokoroTtsEngine {
     maybe_align_en_profile_for_kokoro_voice(opt.voice, profile_, g2p_dialect_);
     kokoro_lang_ = profile_.kokoro_lang;
 
-    LOGF_IF(log_profiling_, "KokoroTtsEngine: language='%.*s', g2p_dialect='%s', kokoro_lang='%c'",
-            (int)std::string_view(language).size(), std::string_view(language).data(),
-            g2p_dialect_.c_str(), kokoro_lang_);
+    LOGF_IF(
+        log_profiling_,
+        "KokoroTtsEngine: language='%.*s', g2p_dialect='%s', kokoro_lang='%c'",
+        (int)std::string_view(language).size(),
+        std::string_view(language).data(), g2p_dialect_.c_str(), kokoro_lang_);
 
     TIMER_START_IF(log_profiling_, kokoro_g2p_init);
     g2p_ = std::make_unique<MoonshineG2P>(g2p_dialect_, g2p_opt_);
     TIMER_END_IF(log_profiling_, kokoro_g2p_init);
 
-    voice_id_ = select_voice_id(kokoro_lang_, opt.voice, profile_.default_voice, voices_dir_, &tts_files_,
-                                g2p_opt_.g2p_root);
+    voice_id_ = select_voice_id(kokoro_lang_, opt.voice, profile_.default_voice,
+                                voices_dir_, &tts_files_, g2p_opt_.g2p_root);
     LOGF_IF(log_profiling_, "KokoroTtsEngine: voice='%s', speed=%.2f",
             voice_id_.c_str(), speed_);
 
     TIMER_START_IF(log_profiling_, kokoro_load_voice);
     reload_voice_tensor();
-    LOGF_IF(log_profiling_, "KokoroTtsEngine: voice tensor %ux%u", voice_rows_, voice_cols_);
+    LOGF_IF(log_profiling_, "KokoroTtsEngine: voice tensor %ux%u", voice_rows_,
+            voice_cols_);
     TIMER_END_IF(log_profiling_, kokoro_load_voice);
 
     TIMER_END_IF(log_profiling_, kokoro_engine_init);
   }
 
   void reload_voice_tensor() {
-    const std::string vk = std::string("kokoro/voices/") + voice_id_ + ".kokorovoice";
+    const std::string vk =
+        std::string("kokoro/voices/") + voice_id_ + ".kokorovoice";
     const auto vit = tts_files_.entries.find(vk);
     if (vit != tts_files_.entries.end()) {
       FileInformation& vf = vit->second;
       if (vf.memory == nullptr || vf.memory_size == 0) {
-        vf.path = resolve_path_under_root(g2p_opt_.g2p_root, tts_map_path(tts_files_, vk));
+        vf.path = resolve_path_under_root(g2p_opt_.g2p_root,
+                                          tts_map_path(tts_files_, vk));
       }
       const uint8_t* vb = nullptr;
       size_t vz = 0;
@@ -979,21 +1172,24 @@ struct KokoroTtsEngine {
       vf.free();
       return;
     }
-    const auto path =
-        resolve_path_under_root(g2p_opt_.g2p_root, tts_map_path(tts_files_, vk));
+    const auto path = resolve_path_under_root(g2p_opt_.g2p_root,
+                                              tts_map_path(tts_files_, vk));
     if (!std::filesystem::is_regular_file(path)) {
       const auto pt = voices_dir_ / (voice_id_ + ".pt");
       std::ostringstream msg;
       msg << "MoonshineTTS: missing voice file " << path.string();
       if (std::filesystem::is_regular_file(pt)) {
-        msg << "\n  Export from PyTorch voice pack:\n  python scripts/export_kokoro_voice_for_cpp.py \""
+        msg << "\n  Export from PyTorch voice pack:\n  python "
+               "scripts/export_kokoro_voice_for_cpp.py \""
             << pt.string() << "\" \"" << path.string() << '"';
       } else {
         msg << "\n  Install voices under " << voices_dir_.string()
             << " (e.g. python scripts/download_kokoro_onnx.py --out-dir "
             << model_path_.parent_path().string() << " --voices " << voice_id_
-            << "), then export:\n  python scripts/export_kokoro_voice_for_cpp.py \""
-            << (voices_dir_ / (voice_id_ + ".pt")).string() << "\" \"" << path.string() << '"';
+            << "), then export:\n  python "
+               "scripts/export_kokoro_voice_for_cpp.py \""
+            << (voices_dir_ / (voice_id_ + ".pt")).string() << "\" \""
+            << path.string() << '"';
       }
       throw std::runtime_error(msg.str());
     }
@@ -1011,7 +1207,8 @@ struct KokoroTtsEngine {
     }
 
     TIMER_START_IF(log_profiling_, kokoro_normalize_ipa);
-    std::string phonemes = normalize_ipa_to_kokoro(ipa, kokoro_lang_, vocab_keys_);
+    std::string phonemes =
+        normalize_ipa_to_kokoro(ipa, kokoro_lang_, vocab_keys_);
     TIMER_END_IF(log_profiling_, kokoro_normalize_ipa);
     if (phonemes.empty()) {
       return {};
@@ -1020,11 +1217,11 @@ struct KokoroTtsEngine {
     if (chunks.empty()) {
       return {};
     }
-    LOGF_IF(log_profiling_, "KokoroTtsEngine::synthesize: %zu phoneme chunk(s), "
+    LOGF_IF(log_profiling_,
+            "KokoroTtsEngine::synthesize: %zu phoneme chunk(s), "
             "phonemes='%.*s'%s",
-            chunks.size(),
-            (int)std::min(phonemes.size(), (size_t)300), phonemes.c_str(),
-            phonemes.size() > 300 ? "..." : "");
+            chunks.size(), (int)std::min(phonemes.size(), (size_t)300),
+            phonemes.c_str(), phonemes.size() > 300 ? "..." : "");
 
     std::vector<float> wave_all;
     wave_all.reserve(chunks.size() * 8192);
@@ -1039,37 +1236,43 @@ struct KokoroTtsEngine {
       }
       std::vector<int64_t> ids = phoneme_str_to_input_ids(piece, vocab_);
       if (ids.size() > 512) {
-        throw std::runtime_error("MoonshineTTS: phoneme token sequence too long for Kokoro (>512)");
+        throw std::runtime_error(
+            "MoonshineTTS: phoneme token sequence too long for Kokoro (>512)");
       }
-      LOGF_IF(log_profiling_, "KokoroTtsEngine::synthesize: chunk %zu/%zu, %zu tokens",
-              ci + 1, chunks.size(), ids.size());
+      LOGF_IF(log_profiling_,
+              "KokoroTtsEngine::synthesize: chunk %zu/%zu, %zu tokens", ci + 1,
+              chunks.size(), ids.size());
 
       const int64_t ntok = static_cast<int64_t>(ids.size());
       const std::array<int64_t, 2> shape_ids{1, ntok};
 
       const std::u32string pu = utf8_str_to_u32(piece);
       const size_t ncp = std::max<size_t>(pu.size(), 1);
-      const size_t idx =
-          std::min(ncp - 1, static_cast<size_t>(voice_rows_ > 0 ? voice_rows_ - 1 : 0));
+      const size_t idx = std::min(
+          ncp - 1, static_cast<size_t>(voice_rows_ > 0 ? voice_rows_ - 1 : 0));
       const size_t off = idx * static_cast<size_t>(voice_cols_);
       std::vector<float> ref_row(voice_cols_);
       if (off + voice_cols_ > voice_.size()) {
-        throw std::runtime_error("MoonshineTTS: voice tensor index out of range");
+        throw std::runtime_error(
+            "MoonshineTTS: voice tensor index out of range");
       }
       std::copy(voice_.begin() + static_cast<std::ptrdiff_t>(off),
-                voice_.begin() + static_cast<std::ptrdiff_t>(off + voice_cols_), ref_row.begin());
-      const std::array<int64_t, 2> shape_ref{1, static_cast<int64_t>(voice_cols_)};
+                voice_.begin() + static_cast<std::ptrdiff_t>(off + voice_cols_),
+                ref_row.begin());
+      const std::array<int64_t, 2> shape_ref{1,
+                                             static_cast<int64_t>(voice_cols_)};
 
       std::vector<Ort::Value> inputs;
       inputs.push_back(Ort::Value::CreateTensor<int64_t>(
           mem_, ids.data(), ids.size(), shape_ids.data(), shape_ids.size()));
-      inputs.push_back(Ort::Value::CreateTensor<float>(
-          mem_, ref_row.data(), ref_row.size(), shape_ref.data(), shape_ref.size()));
+      inputs.push_back(
+          Ort::Value::CreateTensor<float>(mem_, ref_row.data(), ref_row.size(),
+                                          shape_ref.data(), shape_ref.size()));
       if (speed_elem_type_ == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
         float speed_f = static_cast<float>(speed_);
         const std::array<int64_t, 1> shape_speed{1};
-        inputs.push_back(
-            Ort::Value::CreateTensor<float>(mem_, &speed_f, 1, shape_speed.data(), 1));
+        inputs.push_back(Ort::Value::CreateTensor<float>(
+            mem_, &speed_f, 1, shape_speed.data(), 1));
       } else {
         double speed_val = speed_;
         inputs.push_back(
@@ -1078,7 +1281,8 @@ struct KokoroTtsEngine {
 
       TIMER_START_IF(log_profiling_, kokoro_onnx_run);
       Ort::RunOptions run_opts{nullptr};
-      auto outputs = session_.Run(run_opts, in_names, inputs.data(), inputs.size(), out_names, 1);
+      auto outputs = session_.Run(run_opts, in_names, inputs.data(),
+                                  inputs.size(), out_names, 1);
       TIMER_END_IF(log_profiling_, kokoro_onnx_run);
 
       const Ort::Value& wav = outputs[0];
@@ -1091,11 +1295,15 @@ struct KokoroTtsEngine {
       for (size_t i = 0; i < n_el; ++i) {
         wave_all.push_back(wptr[i]);
       }
-      LOGF_IF(log_profiling_, "KokoroTtsEngine::synthesize: chunk %zu produced %zu samples",
+      LOGF_IF(log_profiling_,
+              "KokoroTtsEngine::synthesize: chunk %zu produced %zu samples",
               ci + 1, n_el);
     }
 
-    LOGF_IF(log_profiling_, "KokoroTtsEngine::synthesize: total %zu samples (%.2fs at %dHz)",
+    apply_synthesis_output_effects(wave_all, normalize_audio_, output_volume_);
+
+    LOGF_IF(log_profiling_,
+            "KokoroTtsEngine::synthesize: total %zu samples (%.2fs at %dHz)",
             wave_all.size(),
             static_cast<double>(wave_all.size()) / MoonshineTTS::kSampleRateHz,
             MoonshineTTS::kSampleRateHz);
@@ -1107,6 +1315,7 @@ struct KokoroTtsEngine {
 struct MoonshineTTS::Impl {
   std::unique_ptr<KokoroTtsEngine> kokoro_;
   std::unique_ptr<PiperTTS> piper_;
+  std::unique_ptr<ZipVoiceTTS> zipvoice_;
   std::mutex synth_mu_;
   bool log_profiling_ = false;
 
@@ -1121,7 +1330,8 @@ struct MoonshineTTS::Impl {
       }
       const bool is_tts_only =
           (map_key.size() >= 7 && map_key.compare(0, 7, "kokoro/") == 0) ||
-          (map_key.size() >= 6 && map_key.compare(0, 6, "piper/") == 0);
+          (map_key.size() >= 6 && map_key.compare(0, 6, "piper/") == 0) ||
+          (map_key.size() >= 9 && map_key.compare(0, 9, "zipvoice/") == 0);
       if (is_tts_only) {
         opt.files.entries[map_key] = fi;
       } else {
@@ -1135,24 +1345,36 @@ struct MoonshineTTS::Impl {
       opt.g2p_options.log_profiling = true;
     }
     opt.apply_voice_engine_prefix();
-    std::string eng = ascii_lowercase_copy(trim_ascii_ws_copy(opt.vocoder_engine));
+    std::string eng =
+        ascii_lowercase_copy(trim_ascii_ws_copy(opt.vocoder_engine));
     if (eng.empty()) {
       eng = "auto";
     }
-    if (eng != "kokoro" && eng != "piper" && eng != "auto") {
+    if (eng != "kokoro" && eng != "piper" && eng != "zipvoice" &&
+        eng != "auto") {
       throw std::runtime_error(
-          "MoonshineTTS: vocoder_engine must be kokoro, piper, or auto (got \"" + eng + "\")");
+          "MoonshineTTS: vocoder_engine must be kokoro, piper, zipvoice, or "
+          "auto (got \"" +
+          eng + "\")");
     }
-    const bool kokoro_ok = kokoro_tts_lang_supported_inner(language, opt.g2p_options);
-    const bool use_kokoro = (eng == "kokoro") || (eng == "auto" && kokoro_ok);
+    const bool kokoro_ok =
+        kokoro_tts_lang_supported_inner(language, opt.g2p_options);
+    const bool use_zipvoice = (eng == "zipvoice");
+    const bool use_kokoro =
+        !use_zipvoice && ((eng == "kokoro") || (eng == "auto" && kokoro_ok));
 
-    LOGF_IF(log_profiling_, "MoonshineTTS: language='%.*s', vocoder_engine='%s' (resolved=%s), voice='%s'",
-            (int)std::string_view(language).size(), std::string_view(language).data(),
-            opt_in.vocoder_engine.c_str(),
-            use_kokoro ? "kokoro" : "piper",
+    LOGF_IF(log_profiling_,
+            "MoonshineTTS: language='%.*s', vocoder_engine='%s' (resolved=%s), "
+            "voice='%s'",
+            (int)std::string_view(language).size(),
+            std::string_view(language).data(), opt_in.vocoder_engine.c_str(),
+            use_zipvoice ? "zipvoice" : (use_kokoro ? "kokoro" : "piper"),
             opt.voice.c_str());
 
-    if (use_kokoro) {
+    if (use_zipvoice) {
+      zipvoice_ =
+          std::make_unique<ZipVoiceTTS>(make_zipvoice_options(language, opt));
+    } else if (use_kokoro) {
       kokoro_ = std::make_unique<KokoroTtsEngine>(language, std::move(opt));
     } else {
       TIMER_START_IF(log_profiling_, piper_init);
@@ -1163,6 +1385,9 @@ struct MoonshineTTS::Impl {
   }
 
   std::vector<float> synthesize_unlocked(std::string_view text) {
+    if (zipvoice_) {
+      return zipvoice_->synthesize(text);
+    }
     if (kokoro_) {
       return kokoro_->synthesize(text);
     }
@@ -1181,36 +1406,62 @@ struct MoonshineTTS::Impl {
     return synthesize_unlocked(text);
   }
 
-  std::vector<float> synthesize_with_speed_override(std::string_view text, double speed) {
+  std::vector<float> synthesize_with_overrides(std::string_view text,
+                                               const SynthesisOverrides& ov) {
     std::lock_guard<std::mutex> lock(synth_mu_);
-    double prev = 0.0;
-    if (kokoro_) {
-      prev = kokoro_->speed();
-      kokoro_->set_speed(speed);
-    } else {
-      prev = piper_->speed();
-      piper_->set_speed(speed);
+    if (zipvoice_) {
+      const double prev_speed = zipvoice_->speed();
+      const bool prev_normalize = zipvoice_->normalize_audio();
+      const float prev_volume = zipvoice_->output_volume();
+      const auto apply_zv = [&](double speed, bool normalize, float volume) {
+        zipvoice_->set_speed(speed);
+        zipvoice_->set_normalize_audio(normalize);
+        zipvoice_->set_output_volume(volume);
+      };
+      apply_zv(ov.speed.value_or(prev_speed),
+               ov.normalize_audio.value_or(prev_normalize),
+               ov.output_volume.value_or(prev_volume));
+      try {
+        std::vector<float> wave = synthesize_unlocked(text);
+        apply_zv(prev_speed, prev_normalize, prev_volume);
+        return wave;
+      } catch (...) {
+        apply_zv(prev_speed, prev_normalize, prev_volume);
+        throw;
+      }
     }
+    const double prev_speed = kokoro_ ? kokoro_->speed() : piper_->speed();
+    const bool prev_normalize =
+        kokoro_ ? kokoro_->normalize_audio() : piper_->normalize_audio();
+    const float prev_volume =
+        kokoro_ ? kokoro_->output_volume() : piper_->output_volume();
+    const auto apply = [&](double speed, bool normalize, float volume) {
+      if (kokoro_) {
+        kokoro_->set_speed(speed);
+        kokoro_->set_normalize_audio(normalize);
+        kokoro_->set_output_volume(volume);
+      } else {
+        piper_->set_speed(speed);
+        piper_->set_normalize_audio(normalize);
+        piper_->set_output_volume(volume);
+      }
+    };
+    apply(ov.speed.value_or(prev_speed),
+          ov.normalize_audio.value_or(prev_normalize),
+          ov.output_volume.value_or(prev_volume));
     try {
       std::vector<float> wave = synthesize_unlocked(text);
-      if (kokoro_) {
-        kokoro_->set_speed(prev);
-      } else {
-        piper_->set_speed(prev);
-      }
+      apply(prev_speed, prev_normalize, prev_volume);
       return wave;
     } catch (...) {
-      if (kokoro_) {
-        kokoro_->set_speed(prev);
-      } else {
-        piper_->set_speed(prev);
-      }
+      apply(prev_speed, prev_normalize, prev_volume);
       throw;
     }
   }
 };
 
-MoonshineTTS::MoonshineTTS(std::string_view language, const MoonshineTTSOptions& opt)
+MoonshineTTS::MoonshineTTS(std::string_view language,
+                           const MoonshineTTSOptions& opt)
     : impl_(std::make_unique<Impl>(language, opt)) {}
 
 MoonshineTTS::~MoonshineTTS() = default;
@@ -1218,7 +1469,9 @@ MoonshineTTS::~MoonshineTTS() = default;
 MoonshineTTS::MoonshineTTS(MoonshineTTS&&) noexcept = default;
 MoonshineTTS& MoonshineTTS::operator=(MoonshineTTS&&) noexcept = default;
 
-std::vector<float> MoonshineTTS::synthesize(std::string_view text) { return impl_->synthesize(text); }
+std::vector<float> MoonshineTTS::synthesize(std::string_view text) {
+  return impl_->synthesize(text);
+}
 
 std::vector<float> MoonshineTTS::synthesize(
     std::string_view text,
@@ -1226,15 +1479,18 @@ std::vector<float> MoonshineTTS::synthesize(
   if (option_overrides.empty()) {
     return synthesize(text);
   }
-  const std::optional<double> sp = parse_speed_override_from_pairs(option_overrides);
-  if (!sp.has_value()) {
+  const SynthesisOverrides ov =
+      parse_synthesis_overrides_from_pairs(option_overrides);
+  if (ov.empty()) {
     return synthesize(text);
   }
-  return impl_->synthesize_with_speed_override(text, *sp);
+  return impl_->synthesize_with_overrides(text, ov);
 }
 
-void write_wav_mono_pcm16(const std::filesystem::path& path, const std::vector<float>& samples) {
-  // parent_path() is empty for plain filenames like "out.wav"; create_directories("") throws on some libstdc++.
+void write_wav_mono_pcm16(const std::filesystem::path& path,
+                          const std::vector<float>& samples) {
+  // parent_path() is empty for plain filenames like "out.wav";
+  // create_directories("") throws on some libstdc++.
   const std::filesystem::path parent = path.parent_path();
   if (!parent.empty()) {
     std::filesystem::create_directories(parent);
@@ -1248,7 +1504,8 @@ void write_wav_mono_pcm16(const std::filesystem::path& path, const std::vector<f
     x = std::max(-1.f, std::min(1.f, x));
     pcm[i] = static_cast<int16_t>(std::lrint(x * 32767.f));
   }
-  const uint32_t sample_rate = static_cast<uint32_t>(MoonshineTTS::kSampleRateHz);
+  const uint32_t sample_rate =
+      static_cast<uint32_t>(MoonshineTTS::kSampleRateHz);
   const uint32_t num_samples = static_cast<uint32_t>(pcm.size());
   const uint32_t byte_rate = sample_rate * 2;
   const uint16_t block_align = 2;
@@ -1257,7 +1514,8 @@ void write_wav_mono_pcm16(const std::filesystem::path& path, const std::vector<f
 
   std::ofstream out(path, std::ios::binary);
   if (!out) {
-    throw std::runtime_error("write_wav_mono_pcm16: cannot open " + path.string());
+    throw std::runtime_error("write_wav_mono_pcm16: cannot open " +
+                             path.string());
   }
   auto w4 = [&out](const char* s) { out.write(s, 4); };
   auto u32 = [&out](uint32_t v) {
@@ -1299,12 +1557,16 @@ std::vector<std::string> moonshine_catalog_tts_vocoder_only_dependency_keys(
     opt.g2p_options.g2p_root = std::filesystem::current_path();
   }
   opt.apply_voice_engine_prefix();
-  std::string eng = ascii_lowercase_copy(trim_ascii_ws_copy(opt.vocoder_engine));
+  std::string eng =
+      ascii_lowercase_copy(trim_ascii_ws_copy(opt.vocoder_engine));
   if (eng.empty()) {
     eng = "auto";
   }
-  if (eng != "kokoro" && eng != "piper" && eng != "auto") {
+  if (eng != "kokoro" && eng != "piper" && eng != "zipvoice" && eng != "auto") {
     return {};
+  }
+  if (eng == "zipvoice") {
+    return zipvoice_vocoder_dependency_keys();
   }
   const std::string lk = normalize_lang_key(lang_cli);
   const bool kokoro_ok = kokoro_tts_lang_supported_inner(lk, opt.g2p_options);
@@ -1315,16 +1577,21 @@ std::vector<std::string> moonshine_catalog_tts_vocoder_only_dependency_keys(
   return piper_vocoder_dependency_keys_with_options(lk, opt);
 }
 
-std::vector<std::string> moonshine_catalog_tts_vocoder_only_dependency_keys(std::string_view lang_cli) {
-  return moonshine_catalog_tts_vocoder_only_dependency_keys(lang_cli, MoonshineTTSOptions{});
+std::vector<std::string> moonshine_catalog_tts_vocoder_only_dependency_keys(
+    std::string_view lang_cli) {
+  return moonshine_catalog_tts_vocoder_only_dependency_keys(
+      lang_cli, MoonshineTTSOptions{});
 }
 
-std::vector<std::string> moonshine_catalog_all_tts_vocoder_dependency_keys_union() {
-  const std::vector<std::string> tags = moonshine_asset_catalog_all_registered_language_tags();
+std::vector<std::string>
+moonshine_catalog_all_tts_vocoder_dependency_keys_union() {
+  const std::vector<std::string> tags =
+      moonshine_asset_catalog_all_registered_language_tags();
   std::unordered_set<std::string> seen;
   std::vector<std::string> out;
   for (const std::string& tag : tags) {
-    for (std::string p : moonshine_catalog_tts_vocoder_only_dependency_keys(tag)) {
+    for (std::string p :
+         moonshine_catalog_tts_vocoder_only_dependency_keys(tag)) {
       if (seen.insert(p).second) {
         out.push_back(std::move(p));
       }
@@ -1333,19 +1600,29 @@ std::vector<std::string> moonshine_catalog_all_tts_vocoder_dependency_keys_union
   return out;
 }
 
-std::vector<MoonshineTtsVoiceAvailability> moonshine_list_tts_voices_with_availability(
-    std::string_view language_cli, const MoonshineTTSOptions& opt_in) {
+std::vector<MoonshineTtsVoiceAvailability>
+moonshine_list_tts_voices_with_availability(std::string_view language_cli,
+                                            const MoonshineTTSOptions& opt_in) {
   MoonshineTTSOptions opt = opt_in;
   if (opt.g2p_options.g2p_root.empty()) {
     opt.g2p_options.g2p_root = std::filesystem::current_path();
   }
   opt.apply_voice_engine_prefix();
-  std::string eng = ascii_lowercase_copy(trim_ascii_ws_copy(opt.vocoder_engine));
+  std::string eng =
+      ascii_lowercase_copy(trim_ascii_ws_copy(opt.vocoder_engine));
   if (eng.empty()) {
     eng = "auto";
   }
-  if (eng != "kokoro" && eng != "piper" && eng != "auto") {
+  if (eng != "kokoro" && eng != "piper" && eng != "zipvoice" && eng != "auto") {
     return {};
+  }
+  if (eng == "zipvoice") {
+    std::vector<MoonshineTtsVoiceAvailability> zv;
+    for (const auto& pr : list_zipvoice_voices_with_availability(opt)) {
+      zv.push_back(MoonshineTtsVoiceAvailability{
+          std::string("zipvoice_") + pr.first, pr.second});
+    }
+    return zv;
   }
   const std::string lk = normalize_lang_key(language_cli);
   const bool kokoro_ok = kokoro_tts_lang_supported_inner(lk, opt.g2p_options);
@@ -1358,27 +1635,44 @@ std::vector<MoonshineTtsVoiceAvailability> moonshine_list_tts_voices_with_availa
     opt_p.voice.clear();
     if (kokoro_ok) {
       for (const auto& pr : list_kokoro_voices_with_availability(lk, opt_k)) {
-        out.push_back(MoonshineTtsVoiceAvailability{std::string("kokoro_") + pr.first, pr.second});
+        out.push_back(MoonshineTtsVoiceAvailability{
+            std::string("kokoro_") + pr.first, pr.second});
       }
     }
-    for (const auto& pr :
-         piper_list_voices_with_availability(make_piper_options(std::string(language_cli), opt_p))) {
-      out.push_back(MoonshineTtsVoiceAvailability{std::string("piper_") + pr.first, pr.second});
+    for (const auto& pr : piper_list_voices_with_availability(
+             make_piper_options(std::string(language_cli), opt_p))) {
+      out.push_back(MoonshineTtsVoiceAvailability{
+          std::string("piper_") + pr.first, pr.second});
     }
-    std::sort(out.begin(), out.end(),
-              [](const MoonshineTtsVoiceAvailability& a, const MoonshineTtsVoiceAvailability& b) {
-                return a.id < b.id;
-              });
+    // ZipVoice zero-shot cloning voices are English-only; surface them under
+    // the auto catalog so a
+    // ``zipvoice_*`` voice validates without the caller having to pin the
+    // engine first.
+    if (lk.rfind("en", 0) == 0) {
+      MoonshineTTSOptions opt_z = opt;
+      opt_z.voice.clear();
+      for (const auto& pr : list_zipvoice_voices_with_availability(opt_z)) {
+        out.push_back(MoonshineTtsVoiceAvailability{
+            std::string("zipvoice_") + pr.first, pr.second});
+      }
+    }
+    std::sort(
+        out.begin(), out.end(),
+        [](const MoonshineTtsVoiceAvailability& a,
+           const MoonshineTtsVoiceAvailability& b) { return a.id < b.id; });
     return out;
   }
   if (use_kokoro) {
     for (const auto& pr : list_kokoro_voices_with_availability(lk, opt)) {
-      out.push_back(MoonshineTtsVoiceAvailability{std::string("kokoro_") + pr.first, pr.second});
+      out.push_back(MoonshineTtsVoiceAvailability{
+          std::string("kokoro_") + pr.first, pr.second});
     }
     return out;
   }
-  for (const auto& pr : piper_list_voices_with_availability(make_piper_options(std::string(language_cli), opt))) {
-    out.push_back(MoonshineTtsVoiceAvailability{std::string("piper_") + pr.first, pr.second});
+  for (const auto& pr : piper_list_voices_with_availability(
+           make_piper_options(std::string(language_cli), opt))) {
+    out.push_back(MoonshineTtsVoiceAvailability{
+        std::string("piper_") + pr.first, pr.second});
   }
   return out;
 }

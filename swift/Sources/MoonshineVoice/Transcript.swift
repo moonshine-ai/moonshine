@@ -12,6 +12,28 @@ public struct WordTiming {
     public let confidence: Float
 }
 
+/// One contiguous span of speech within a line attributed to a single
+/// speaker. Only populated when the `identify_speakers` option is enabled.
+///
+/// Spans for recent audio are mutable: streaming diarization re-clusters a
+/// sliding window (`diarization_cluster_window_sec`, default 120s) as more
+/// speech arrives. Assignments for older audio are frozen. Watch
+/// `TranscriptLine.haveSpeakersChanged` to detect revisions.
+public struct SpeakerSpan {
+    /// Time offset from the start of the audio or stream in seconds.
+    public let startTime: Float
+    /// Length of the span in seconds.
+    public let duration: Float
+    /// Stable identifier for the speaker within this stream.
+    public let speakerId: UInt64
+    /// The order the speaker first appeared in the transcript, starting at 0.
+    public let speakerIndex: UInt32
+    /// UTF-8 byte offset into the line text where this span begins (inclusive).
+    public let startChar: UInt64
+    /// UTF-8 byte offset into the line text where this span ends (exclusive).
+    public let endChar: UInt64
+}
+
 /// A single line of transcription.
 public struct TranscriptLine {
     /// UTF-8 encoded transcription text.
@@ -38,14 +60,16 @@ public struct TranscriptLine {
     /// Whether the text of the line has changed since the previous call (streaming only).
     public let hasTextChanged: Bool
 
-    /// Whether a speaker ID has been calculated for the line.
-    public let hasSpeakerId: Bool
+    /// Whether the speaker spans of the line have changed since the previous
+    /// call. Unlike the other change flags, this can fire for lines that are
+    /// already complete, since diarization refines speaker assignments
+    /// retroactively as more audio arrives.
+    public let haveSpeakersChanged: Bool
 
-    /// The speaker ID for the line.
-    public let speakerId: UInt64
-
-    /// The order the speaker appeared in the current transcript.
-    public let speakerIndex: UInt32
+    /// Speaker spans covering this line, ordered by start time and clipped to
+    /// the line's time range. Empty unless the `identify_speakers` option is
+    /// enabled and speech has been attributed to a speaker.
+    public let speakerSpans: [SpeakerSpan]
     
     /// Audio data for this line, if available.
     public let audioData: [Float]?
@@ -62,9 +86,8 @@ public struct TranscriptLine {
         isUpdated: Bool = false,
         isNew: Bool = false,
         hasTextChanged: Bool = false,
-        hasSpeakerId: Bool = false,
-        speakerId: UInt64 = 0,
-        speakerIndex: UInt32 = 0,
+        haveSpeakersChanged: Bool = false,
+        speakerSpans: [SpeakerSpan] = [],
         audioData: [Float]? = nil,
         words: [WordTiming] = []
     ) {
@@ -76,15 +99,17 @@ public struct TranscriptLine {
         self.isUpdated = isUpdated
         self.isNew = isNew
         self.hasTextChanged = hasTextChanged
-        self.hasSpeakerId = hasSpeakerId
-        self.speakerId = speakerId
-        self.speakerIndex = speakerIndex
+        self.haveSpeakersChanged = haveSpeakersChanged
+        self.speakerSpans = speakerSpans
         self.audioData = audioData
         self.words = words
     }
 
     public var description: String {
-        return "TranscriptLine(text: \(text), startTime: \(startTime), duration: \(duration), lineId: \(lineId), isComplete: \(isComplete), isUpdated: \(isUpdated), isNew: \(isNew), hasTextChanged: \(hasTextChanged), hasSpeakerId: \(hasSpeakerId), speakerId: \(speakerId), speakerIndex: \(speakerIndex))"
+        let spans = speakerSpans.map {
+            "(start: \($0.startTime), duration: \($0.duration), speakerId: \($0.speakerId), speakerIndex: \($0.speakerIndex))"
+        }.joined(separator: ", ")
+        return "TranscriptLine(text: \(text), startTime: \(startTime), duration: \(duration), lineId: \(lineId), isComplete: \(isComplete), isUpdated: \(isUpdated), isNew: \(isNew), hasTextChanged: \(hasTextChanged), haveSpeakersChanged: \(haveSpeakersChanged), speakerSpans: [\(spans)])"
     }
 }
 

@@ -20,14 +20,13 @@ ${REPO_ROOT_DIR}/core/bin-tokenizer/build/bin-tokenizer-test
 ${REPO_ROOT_DIR}/core/third-party/onnxruntime/build/onnxruntime-test
 ${REPO_ROOT_DIR}/core/moonshine-utils/build/debug-utils-test
 ${REPO_ROOT_DIR}/core/moonshine-utils/build/string-utils-test
+${REPO_ROOT_DIR}/core/ort-utils/build/ort-utils-ep-test
 ${REPO_ROOT_DIR}/core/build/resampler-test
 ${REPO_ROOT_DIR}/core/build/voice-activity-detector-test
 ${REPO_ROOT_DIR}/core/build/transcriber-test
 ${REPO_ROOT_DIR}/core/build/moonshine-c-api-test
 ${REPO_ROOT_DIR}/core/build/moonshine-cpp-test
 ${REPO_ROOT_DIR}/core/build/cosine-distance-test
-${REPO_ROOT_DIR}/core/build/speaker-embedding-model-test
-${REPO_ROOT_DIR}/core/build/online-clusterer-test
 ${REPO_ROOT_DIR}/core/build/word-alignment-test
 
 # Run this test in a temporary directory to ensure no file assets are being accessed
@@ -49,6 +48,8 @@ if [[ ! -x "${MOONSHINE_TTS_BUILD_DIR}/utf8_utils_test" ]]; then
 fi
 
 "${MOONSHINE_TTS_BUILD_DIR}/utf8_utils_test"
+"${MOONSHINE_TTS_BUILD_DIR}/moonshine_g2p_options_test"
+"${MOONSHINE_TTS_BUILD_DIR}/moonshine_tts_options_test"
 "${MOONSHINE_TTS_BUILD_DIR}/german_rule_g2p_test"
 "${MOONSHINE_TTS_BUILD_DIR}/dutch_rule_g2p_test"
 "${MOONSHINE_TTS_BUILD_DIR}/italian_rule_g2p_test"

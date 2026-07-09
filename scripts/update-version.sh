@@ -25,6 +25,7 @@ KNOWN_FILES=(
 	./scripts/publish-binary.sh
 	./scripts/publish-binary.bat
 	./scripts/publish-examples.sh
+	./scripts/publish-examples.bat
 	./scripts/test-examples.sh
 	./examples/c++/download-library.sh
 	./examples/c++/README.md
@@ -50,7 +51,6 @@ done < <(grep -rlI \
   --exclude=spanish-unicode-tables.cpp \
   --exclude=russian.cpp \
   --exclude=arabic-ipa.cpp \
-  --exclude=speaker-embedding-model-data.cpp \
   --exclude=moonshine-cpp-test.cpp \
   --exclude=.env \
   --exclude=icon_mic.xml \
@@ -60,6 +60,10 @@ done < <(grep -rlI \
   --exclude=zh_hans.txt \
   --exclude=ipa-postprocess.cpp \
   --exclude=*.tsv \
+  --exclude=ko_kr.txt \
+  --exclude=vad_mel_tables.cc \
+  --exclude=mel_tables.cc \
+  --exclude=zipvoice-voices-data.cpp \
   "$OLD_VERSION" .)
 for FILE in "${ACTUAL_FILES[@]}"; do
 	echo "Checking file '$FILE'"

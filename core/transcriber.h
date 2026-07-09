@@ -12,12 +12,10 @@
 
 #include "moonshine-model.h"
 #include "moonshine-streaming-model.h"
-#include "voice-activity-detector.h"
-#include "speaker-embedding-model.h"
-#include "speaker-embedding-model-data.h"
-#include "online-clusterer.h"
+#include "speaker-diarizer.h"
 #include "spelling-fusion.h"
 #include "spelling-model.h"
+#include "voice-activity-detector.h"
 #include "word-alignment.h"
 
 // Whenever this struct is modified, the following files must be updated:
@@ -36,11 +34,14 @@ struct TranscriberLine {
   bool just_updated;
   bool is_new;
   bool has_text_changed;
-  bool has_speaker_id;
+  bool have_speakers_changed;
   uint64_t id;
   uint32_t last_transcription_latency_ms;
-  uint64_t speaker_id;
-  uint32_t speaker_index;
+  // Speaker spans covering this line, clipped to the line's time range.
+  // Unlike the other line contents, these can be revised even after the line
+  // is complete, since the diarization algorithm refines speaker assignments
+  // as more audio arrives. Empty when identify_speakers is disabled.
+  std::vector<SpeakerTurn> speaker_spans;
   std::vector<TranscriberWord> words;
 
   TranscriberLine();
@@ -59,6 +60,10 @@ struct TranscriptStreamOutput {
   std::vector<std::vector<transcript_word_t>> output_words;
   // Storage for word text strings (must outlive the transcript_word_t pointers)
   std::vector<std::vector<std::string>> output_word_texts;
+  // Storage for speaker span C structs — one vector per line, kept alive
+  // alongside output_lines so that transcript_line_t.speaker_spans pointers
+  // remain valid.
+  std::vector<std::vector<speaker_span_t>> output_speaker_spans;
   std::mutex mutex;
 
   struct transcript_t transcript = {.lines = nullptr, .line_count = 0};
@@ -78,6 +83,10 @@ class TranscriberStream {
   std::vector<float> save_input_data;
   int32_t last_save_sample_rate = 0;
   int32_t stream_id = -1;
+
+  // Stream handle in the transcriber's SpeakerDiarizer, or -1 when speaker
+  // identification is disabled.
+  int32_t diarizer_stream_id = -1;
 
   TranscriberStream(VoiceActivityDetector *vad, int32_t stream_id,
                     const std::string &save_input_wav_path = "");
@@ -123,17 +132,29 @@ struct TranscriberOptions {
   std::string spelling_model_path;
   const uint8_t *spelling_model_data = nullptr;
   size_t spelling_model_data_size = 0;
-  bool identify_speakers = true;
+  // Speaker identification runs the cpp-annote diarization pipeline (a port
+  // of pyannote community-1) alongside transcription. It's off by default
+  // because it adds a significant amount of compute to transcribe calls.
+  bool identify_speakers = false;
   float transcription_interval = 0.5f;
-  float vad_threshold = 0.5f;  
+  float vad_threshold = 0.5f;
   float vad_window_duration = 0.5f;
   int32_t vad_hop_size = 512;
   size_t vad_look_behind_sample_count = 8192;
   float vad_max_segment_duration = 15.0f;
   float max_tokens_per_second = 6.5f;
-  float speaker_id_cluster_threshold = 0.6f;
+  // Minimum seconds of new audio between diarization re-clustering passes.
+  float diarization_cluster_cadence = 2.0f;
+  // Seconds between diarization segmentation/embedding model runs. Zero
+  // means use the model default (1 second).
+  float diarization_analyze_cadence = 0.0f;
+  // Maximum seconds of audio history fed to VBx per refresh. Zero means
+  // unlimited. Default 120 bounds compute on long streaming sessions.
+  float diarization_cluster_window_sec = 120.0f;
   std::string save_input_wav_path = "";
   bool log_ort_run = false;
+  std::vector<std::string> ort_provider_names{};
+  std::string coreml_cache_dir{};
   bool return_audio_data = true;
   bool log_output_text = false;
   bool word_timestamps = false;
@@ -152,9 +173,9 @@ class Transcriber {
   MoonshineStreamingState streaming_state;
   std::mutex streaming_model_mutex;
 
-  SpeakerEmbeddingModel *speaker_embedding_model;
-  std::mutex speaker_embedding_model_mutex;
-  OnlineClusterer *online_clusterer;
+  // Diarization engine shared across all streams; only constructed when
+  // options.identify_speakers is true.
+  SpeakerDiarizer *speaker_diarizer;
   // Spelling-mode auxiliaries. Both are constructed lazily: the model
   // is only spun up when the caller passes a path or buffer, and the
   // matcher is essentially free (just a couple of static-table view
@@ -162,8 +183,6 @@ class Transcriber {
   SpellingModel *spelling_model = nullptr;
   std::mutex spelling_model_mutex;
   SpellingMatcher spelling_matcher;
-  uint32_t next_speaker_index = 0;
-  std::map<uint64_t, uint32_t> speaker_index_map;
 
   // Track current segment for incremental processing
   uint64_t current_streaming_segment_id = UINT64_MAX;
@@ -208,6 +227,13 @@ class Transcriber {
       const std::vector<VoiceActivitySegment> &segments,
       TranscriberStream *stream, uint32_t flags,
       struct transcript_t **out_transcript);
+
+  // Clips the given diarization turns to each line's time range and stores
+  // the resulting spans on the lines, marking have_speakers_changed on any
+  // line whose spans differ from the previous set. Can update completed
+  // lines. Returns true if any line changed.
+  static bool apply_speaker_turns_to_lines(
+      const std::vector<SpeakerTurn> &turns, TranscriptStreamOutput *output);
 
   // Apply the alphanumeric-spelling fusion to a single line's text in
   // place. Returns true iff the fuser produced a CHARACTER result (in

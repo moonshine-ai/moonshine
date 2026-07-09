@@ -172,10 +172,18 @@ To make the streaming results easier to work with we offer some guarantees:
    collision. Currently these IDs are in ascending order in any one transcript,
    but this is not guaranteed and should not be relied on.
 
- - The speaker ID is another 64-bit randomly-generated number, used to identify
-   the calculated speaker of the line, for diarization purposes. This is not
-   available until the line has accumulated enough audio data to be confident
-   in the speaker identification, or if the line is complete.
+ - When speaker identification is enabled (the opt-in ``identify_speakers``
+   option), each line carries an array of speaker spans describing who was
+   talking during which parts of the line, including UTF-8 character ranges
+   into the line text. Word timestamps are enabled automatically in this mode.
+   Speaker IDs are 64-bit
+   randomly-generated numbers that are stable for a given speaker within a
+   stream, and speaker indices count speakers in order of first appearance.
+   Unlike the text and timing of a line, speaker spans for recent audio are
+   *mutable*: streaming diarization re-clusters a sliding window
+   (``diarization_cluster_window_sec``, default 120s) as more speech arrives;
+   assignments for older audio are frozen. The ``have_speakers_changed`` flag is
+   set on a line whenever its spans changed since the previous call.
 
 See the stream transcription examples below for more details on what this
 means in practice.
@@ -192,6 +200,31 @@ struct transcript_word_t {
   float end;
   /* Model confidence score, 0.0 to 1.0. */
   float confidence;
+};
+
+/* One contiguous span of speech within a line attributed to a single
+   speaker. Only populated when the identify_speakers option is enabled.
+   Spans can be revised on any transcription call, even for lines that are
+   already complete; see the have_speakers_changed flag on
+   transcript_line_t. Character ranges use UTF-8 byte offsets into the line
+   text; word_timestamps are enabled automatically when identify_speakers is
+   on. */
+struct speaker_span_t {
+  /* Time offset from the start of the array or stream in seconds. */
+  float start_time;
+  /* Length of the span in seconds. */
+  float duration;
+  /* Stable identifier for the speaker within this stream. */
+  uint64_t speaker_id;
+  /* The order the speaker first appeared in the transcript, starting at 0. */
+  uint32_t speaker_index;
+  /* UTF-8 byte offset into the line's text where this span begins (inclusive).
+     Only meaningful when identify_speakers is enabled; word_timestamps are
+     turned on automatically in that case. Both zero when unknown. */
+  uint64_t start_char;
+  /* UTF-8 byte offset into the line's text where this span ends (exclusive).
+     Both zero when unknown. */
+  uint64_t end_char;
 };
 
 /* Information about a single “line” of a transcript. */
@@ -220,12 +253,17 @@ struct transcript_line_t {
   /* Streaming-only: Whether the text of the line has changed since the previous
    * call to transcribe_stream_chunk. */
   int8_t has_text_changed;
-  /* Whether a speaker ID has been calculated for the line. */
-  int8_t has_speaker_id;
-  /* The speaker ID for the line. */
-  uint64_t speaker_id;
-  /* What order the speaker appeared in the current transcript. */
-  uint32_t speaker_index;
+  /* Whether the speaker spans of the line have changed since the previous
+   * call to transcribe_stream_chunk. Unlike the other change flags, this can
+   * fire for lines that are already complete, since diarization refines
+   * speaker assignments retroactively as more audio arrives. */
+  int8_t have_speakers_changed;
+  /* Speaker spans covering this line, ordered by start time and clipped to
+   * the line's time range. NULL unless the identify_speakers option is
+   * enabled and speech has been attributed to a speaker. */
+  const struct speaker_span_t *speaker_spans;
+  /* Number of entries in the speaker_spans array. */
+  uint64_t speaker_span_count;
   /* Streaming-only: The latency of the last transcription in milliseconds. */
   uint32_t last_transcription_latency_ms;
   /* Word-level timestamps. NULL if word_timestamps option is not enabled. */
@@ -279,7 +317,26 @@ MOONSHINE_EXPORT const char *moonshine_transcript_to_string(
    example MOONSHINE_MODEL_ARCH_BASE or MOONSHINE_MODEL_ARCH_TINY_STREAMING.
 
    The `options` parameter is used to set any custom options for the
-   transcriber. Pass ``"spelling_model_path"`` with a path to a
+   transcriber. Recognized options include ``log_ort_run`` (bool),
+   ``ort_providers`` (comma-separated execution provider names such as
+   ``CoreML,CPU`` on macOS or ``NNAPI,CPU`` on Android; default is CPU-only),
+   and ``coreml_cache_dir`` (directory for CoreML compiled model cache).
+   Pass ``identify_speakers`` (bool, default false) to enable speaker
+   diarization: each line then carries a ``speaker_spans`` array describing
+   who spoke when, including UTF-8 character ranges into the line text.
+   This also enables word timestamps automatically. This runs the cpp-annote
+   diarization pipeline (a port of
+   pyannote community-1) inline inside transcription calls, which adds
+   significant compute, and re-clustering cost grows with session length unless
+   bounded by ``diarization_cluster_window_sec``.
+   ``diarization_cluster_cadence`` (float seconds, default 2.0) sets the
+   minimum interval between re-clustering passes - raise it to reduce cost on
+   long sessions - ``diarization_analyze_cadence`` (float seconds,
+   default 0 = model default of 1.0) sets the interval between
+   segmentation/embedding model runs, and ``diarization_cluster_window_sec``
+   (float seconds, default 120.0) limits how much audio history VBx
+   re-clustering considers on each refresh (0 = unlimited full history).
+   Pass ``"spelling_model_path"`` with a path to a
    spelling-CNN ``.ort`` file (e.g.
    ``https://download.moonshine.ai/model/spelling-en/spelling_cnn.ort``)
    to enable alphanumeric spelling fusion via
@@ -430,8 +487,14 @@ MOONSHINE_EXPORT int32_t moonshine_transcribe_without_streaming(
    since the last call to moonshine_transcribe_stream. You can use this as a
    "dirty flag" to determine how to update your UI in a minimal way, touching
    only the elements that have changed. Updated lines only appear at the end of
-   the list of lines, and once the `is_complete` flag is set to 1 for a line, it
-   will never be updated again.
+   the list of lines, and once the `is_complete` flag is set to 1 for a line,
+   its text and timing will never change again.
+
+   The one exception is speaker information: when the `identify_speakers`
+   option is enabled, speaker spans for recent audio can be revised on any call
+   to moonshine_transcribe_stream, since diarization re-clusters a sliding
+   window of recent speech. Older assignments are frozen. Watch the
+   `have_speakers_changed` flag to detect these revisions.
 */
 
 /* Creates a stream. This function returns a handle to the stream, which can be
@@ -672,6 +735,17 @@ MOONSHINE_EXPORT int32_t moonshine_calculate_embedding_distance(
    choice (and other TTS paths via ``moonshine_option_t`` as documented for
    ``MoonshineTTSOptions``). ``engine`` / ``vocoder_engine`` options are
    ignored.
+
+   ZipVoice (zero-shot voice cloning) is selected with ``voice`` =
+   ``zipvoice_<id>`` for a built-in VCTK reference voice (e.g.
+   ``zipvoice_american_female``, ``zipvoice_indian_male``), or a bare
+   ``zipvoice`` together with a caller-supplied reference clip via
+   ``moonshine_create_tts_synthesizer_from_memory`` (key
+   ``zipvoice/clone_audio``). ZipVoice model assets
+   (``zipvoice/text_encoder.ort``, ``zipvoice/fm_decoder.ort``,
+   ``zipvoice/vocoder.ort``, ``zipvoice/tokens.txt``,
+   ``zipvoice/model.json``) are resolved under ``g2p_root`` or supplied in
+   memory. English only for now.
 */
 MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_files(
     const char *language, const char **filenames, uint64_t filenames_count,
@@ -686,7 +760,15 @@ MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_files(
    ``filenames[i]`` is the canonical ``MoonshineTTSOptions::files`` key (e.g.
    ``kokoro/model.onnx``, ``kokoro/config.json``,
    ``kokoro/voices/af_heart.kokorovoice``,
-   ``piper/onnx``, ``piper/onnx.json``). When ``memory[i]`` is non-NULL and
+   ``piper/onnx``, ``piper/onnx.json``, ``zipvoice/text_encoder.ort``,
+   ``zipvoice/fm_decoder.ort``, ``zipvoice/vocoder.ort``,
+   ``zipvoice/tokens.txt``, ``zipvoice/model.json``). For ZipVoice a
+   caller-supplied reference clip is passed as key ``zipvoice/clone_audio``
+   (raw little-endian float32 mono PCM); set ``zipvoice_clone_sample_rate`` and,
+   optionally, ``zipvoice_clone_transcript``. When the transcript is omitted,
+   pass ``zipvoice_asr_transcriber_handle=<handle>`` (an existing transcriber
+   from ``moonshine_create_transcriber_*``) to auto-transcribe the clip with
+   Moonshine ASR. When ``memory[i]`` is non-NULL and
    ``memory_sizes[i]`` > 0, that buffer is used as the asset bytes; the library
    does not copy it—keep the buffers valid until
    ``moonshine_free_tts_synthesizer``. When ``memory[i]`` is NULL or

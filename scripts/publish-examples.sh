@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
-VERSION="0.0.60"
+VERSION="0.0.65"
 
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR="$(dirname "${SCRIPTS_DIR}")"
@@ -20,6 +20,9 @@ EXAMPLES_DIR="${REPO_ROOT_DIR}/examples"
 for PLATFORM_PATH in "${EXAMPLES_DIR}"/*; do
 	[[ -d "${PLATFORM_PATH}" ]] || continue
 	PLATFORM="$(basename "${PLATFORM_PATH}")"
+	if [[ "${PLATFORM}" == "windows" ]]; then
+		continue
+	fi
 	for PROJECT_PATH in "${PLATFORM_PATH}"/*; do
 		[[ -d "${PROJECT_PATH}" ]] || continue
 		NAME="$(basename "${PROJECT_PATH}")"

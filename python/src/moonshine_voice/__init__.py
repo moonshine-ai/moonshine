@@ -17,6 +17,7 @@ from moonshine_voice.errors import (
 
 from moonshine_voice.moonshine_api import (
     ModelArch,
+    SpeakerSpan,
     Transcript,
     TranscriptLine,
     model_arch_to_string,
@@ -92,6 +93,7 @@ def __getattr__(name):
         "LineStarted",
         "LineUpdated",
         "LineTextChanged",
+        "LineSpeakersChanged",
         "LineCompleted",
         "Error",
     ):
@@ -104,6 +106,7 @@ def __getattr__(name):
                 LineStarted,
                 LineUpdated,
                 LineTextChanged,
+                LineSpeakersChanged,
                 LineCompleted,
                 Error,
             )
@@ -116,6 +119,7 @@ def __getattr__(name):
             globals()["LineStarted"] = LineStarted
             globals()["LineUpdated"] = LineUpdated
             globals()["LineTextChanged"] = LineTextChanged
+            globals()["LineSpeakersChanged"] = LineSpeakersChanged
             globals()["LineCompleted"] = LineCompleted
             globals()["Error"] = Error
             _transcriber_imported = True
@@ -131,11 +135,12 @@ def __getattr__(name):
         return globals()[name]
 
     # Lazy import TTS / G2P
-    if name == "TextToSpeech":
+    if name in ("TextToSpeech", "list_output_devices"):
         if not _tts_imported:
-            from moonshine_voice.tts import TextToSpeech
+            from moonshine_voice.tts import TextToSpeech, list_output_devices
 
             globals()["TextToSpeech"] = TextToSpeech
+            globals()["list_output_devices"] = list_output_devices
             _tts_imported = True
         return globals()[name]
 
@@ -277,6 +282,7 @@ __all__ = [
     "Transcriber",
     "MicTranscriber",
     "ModelArch",
+    "SpeakerSpan",
     "TranscriptLine",
     "Transcript",
     "Stream",
@@ -285,6 +291,7 @@ __all__ = [
     "LineStarted",
     "LineUpdated",
     "LineTextChanged",
+    "LineSpeakersChanged",
     "LineCompleted",
     "Error",
     "IntentRecognizer",
@@ -315,6 +322,7 @@ __all__ = [
     "get_embedding_model_variants",
     # TTS / G2P
     "TextToSpeech",
+    "list_output_devices",
     "GraphemeToPhonemizer",
     "TTS_CDN_BASE_URL",
     "tts_asset_cache_path",

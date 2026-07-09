@@ -1,23 +1,23 @@
 #include "french.h"
-#include "french-compound-map.h"
-
-#include "french-internal.h"
-#include "g2p-word-log.h"
-#include "ipa-symbols.h"
-#include "utf8-utils.h"
 
 #include <algorithm>
 #include <array>
 #include <cctype>
 #include <fstream>
 #include <istream>
-#include <sstream>
 #include <regex>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
+
+#include "french-compound-map.h"
+#include "french-internal.h"
+#include "g2p-word-log.h"
+#include "ipa-symbols.h"
+#include "utf8-utils.h"
 
 namespace moonshine_tts {
 namespace {
@@ -29,50 +29,52 @@ using moonshine_tts::utf8_decode_at;
 
 char32_t french_tolower_cp(char32_t c) {
   switch (c) {
-  case U'À':
-    return U'à';
-  case U'Â':
-    return U'â';
-  case U'Ä':
-    return U'ä';
-  case U'É':
-    return U'é';
-  case U'È':
-    return U'è';
-  case U'Ê':
-    return U'ê';
-  case U'Ë':
-    return U'ë';
-  case U'Î':
-    return U'î';
-  case U'Ï':
-    return U'ï';
-  case U'Ô':
-    return U'ô';
-  case U'Ö':
-    return U'ö';
-  case U'Ù':
-    return U'ù';
-  case U'Û':
-    return U'û';
-  case U'Ü':
-    return U'ü';
-  case U'Ÿ':
-    return U'ÿ';
-  case U'Ç':
-    return U'ç';
-  case U'Œ':
-    return U'œ';
-  case U'Æ':
-    return U'æ';
-  default:
-    break;
+    case U'À':
+      return U'à';
+    case U'Â':
+      return U'â';
+    case U'Ä':
+      return U'ä';
+    case U'É':
+      return U'é';
+    case U'È':
+      return U'è';
+    case U'Ê':
+      return U'ê';
+    case U'Ë':
+      return U'ë';
+    case U'Î':
+      return U'î';
+    case U'Ï':
+      return U'ï';
+    case U'Ô':
+      return U'ô';
+    case U'Ö':
+      return U'ö';
+    case U'Ù':
+      return U'ù';
+    case U'Û':
+      return U'û';
+    case U'Ü':
+      return U'ü';
+    case U'Ÿ':
+      return U'ÿ';
+    case U'Ç':
+      return U'ç';
+    case U'Œ':
+      return U'œ';
+    case U'Æ':
+      return U'æ';
+    default:
+      break;
   }
   if (c >= U'A' && c <= U'Z') {
     return c + 32;
   }
-  // Latin-1 uppercase letters (Python ``str.lower``); skip × (U+00D7) and ß (lowercase only).
-  if ((c >= U'\u00C0' && c <= U'\u00D6') || (c >= U'\u00D8' && c <= U'\u00DE')) {
+  // Latin-1 uppercase letters (Python ``str.lower``); skip × (U+00D7) and ß
+  // (lowercase only).
+  if ((c >= U'\u00C0' && c <= U'\u00D6') ||
+      (c >= U'\u00D8' && c <= U'\u00DE')) {
     return c + 32;
   }
   return c;
@@ -83,9 +85,10 @@ bool is_french_key_cp(char32_t c) {
   if (c >= U'a' && c <= U'z') {
     return true;
   }
-  return c == U'à' || c == U'â' || c == U'ä' || c == U'é' || c == U'è' || c == U'ê' || c == U'ë' ||
-         c == U'ï' || c == U'î' || c == U'ô' || c == U'ù' || c == U'û' || c == U'ü' || c == U'ÿ' ||
-         c == U'ç' || c == U'œ' || c == U'æ' || c == U'\'' || c == U'-';
+  return c == U'à' || c == U'â' || c == U'ä' || c == U'é' || c == U'è' ||
+         c == U'ê' || c == U'ë' || c == U'ï' || c == U'î' || c == U'ô' ||
+         c == U'ù' || c == U'û' || c == U'ü' || c == U'ÿ' || c == U'ç' ||
+         c == U'œ' || c == U'æ' || c == U'\'' || c == U'-';
 }
 
 std::string normalize_lookup_key_utf8(const std::string& word) {
@@ -104,7 +107,8 @@ std::string normalize_lookup_key_utf8(const std::string& word) {
   return out;
 }
 
-// Python ``re.UNICODE`` word chars in U+00AA..U+00FF (excludes × U+00D7 and ÷ U+00F7).
+// Python ``re.UNICODE`` word chars in U+00AA..U+00FF (excludes × U+00D7 and ÷
+// U+00F7).
 bool is_latin1_supplement_python_word_char(char32_t cp) {
   if (cp < U'\u00AA' || cp > U'\u00FF') {
     return false;
@@ -121,24 +125,30 @@ bool is_latin1_supplement_python_word_char(char32_t cp) {
   if (cp >= U'\u00F8' && cp <= U'\u00FF') {
     return true;
   }
-  return cp == U'\u00AA' || cp == U'\u00B2' || cp == U'\u00B3' || cp == U'\u00B5' || cp == U'\u00B9' ||
-         cp == U'\u00BA' || cp == U'\u00BC' || cp == U'\u00BD' || cp == U'\u00BE';
+  return cp == U'\u00AA' || cp == U'\u00B2' || cp == U'\u00B3' ||
+         cp == U'\u00B5' || cp == U'\u00B9' || cp == U'\u00BA' ||
+         cp == U'\u00BC' || cp == U'\u00BD' || cp == U'\u00BE';
 }
 
-// Letterlike math symbols that are ``\w`` in Python 3 (e.g. U+2102 ℂ) but never appear in French lookup keys.
+// Letterlike math symbols that are ``\w`` in Python 3 (e.g. U+2102 ℂ) but never
+// appear in French lookup keys.
 constexpr std::array<char32_t, 46> kLetterlikeWordChars = {
-    U'\u2102', U'\u2107', U'\u210A', U'\u210B', U'\u210C', U'\u210D', U'\u210E', U'\u210F', U'\u2110', U'\u2111',
-    U'\u2112', U'\u2113', U'\u2115', U'\u2119', U'\u211A', U'\u211B', U'\u211C', U'\u211D', U'\u2124', U'\u2126',
-    U'\u2128', U'\u212A', U'\u212B', U'\u212C', U'\u212D', U'\u212F', U'\u2130', U'\u2131', U'\u2132', U'\u2133',
-    U'\u2134', U'\u2135', U'\u2136', U'\u2137', U'\u2138', U'\u2139', U'\u213C', U'\u213D', U'\u213E', U'\u213F',
-    U'\u2145', U'\u2146', U'\u2147', U'\u2148', U'\u2149', U'\u214E'};
+    U'\u2102', U'\u2107', U'\u210A', U'\u210B', U'\u210C', U'\u210D', U'\u210E',
+    U'\u210F', U'\u2110', U'\u2111', U'\u2112', U'\u2113', U'\u2115', U'\u2119',
+    U'\u211A', U'\u211B', U'\u211C', U'\u211D', U'\u2124', U'\u2126', U'\u2128',
+    U'\u212A', U'\u212B', U'\u212C', U'\u212D', U'\u212F', U'\u2130', U'\u2131',
+    U'\u2132', U'\u2133', U'\u2134', U'\u2135', U'\u2136', U'\u2137', U'\u2138',
+    U'\u2139', U'\u213C', U'\u213D', U'\u213E', U'\u213F', U'\u2145', U'\u2146',
+    U'\u2147', U'\u2148', U'\u2149', U'\u214E'};
 
 bool is_letterlike_math_word_char(char32_t cp) {
-  return std::binary_search(kLetterlikeWordChars.begin(), kLetterlikeWordChars.end(), cp);
+  return std::binary_search(kLetterlikeWordChars.begin(),
+                            kLetterlikeWordChars.end(), cp);
 }
 
 bool is_french_word_char(char32_t cp) {
-  // Match Python ``[\w'-]+``: only ASCII apostrophe is in-word; U+2019 is punctuation (typographic ’).
+  // Match Python ``[\w'-]+``: only ASCII apostrophe is in-word; U+2019 is
+  // punctuation (typographic ’).
   if (cp == U'-' || cp == U'\'') {
     return true;
   }
@@ -158,9 +168,10 @@ bool is_french_word_char(char32_t cp) {
   if (cl >= U'a' && cl <= U'z') {
     return true;
   }
-  return cl == U'à' || cl == U'â' || cl == U'ä' || cl == U'é' || cl == U'è' || cl == U'ê' || cl == U'ë' ||
-         cl == U'ï' || cl == U'î' || cl == U'ô' || cl == U'ù' || cl == U'û' || cl == U'ü' || cl == U'ÿ' ||
-         cl == U'ç' || cl == U'œ' || cl == U'æ';
+  return cl == U'à' || cl == U'â' || cl == U'ä' || cl == U'é' || cl == U'è' ||
+         cl == U'ê' || cl == U'ë' || cl == U'ï' || cl == U'î' || cl == U'ô' ||
+         cl == U'ù' || cl == U'û' || cl == U'ü' || cl == U'ÿ' || cl == U'ç' ||
+         cl == U'œ' || cl == U'æ';
 }
 
 std::string to_lower_ascii(std::string_view w) {
@@ -184,7 +195,8 @@ std::string to_lower_pos_inventory_utf8(const std::string& word) {
   return out;
 }
 
-void load_french_lexicon_stream(std::istream& in, std::unordered_map<std::string, std::string>& out_lex) {
+void load_french_lexicon_stream(
+    std::istream& in, std::unordered_map<std::string, std::string>& out_lex) {
   std::unordered_map<std::string, std::pair<std::string, bool>> tmp;
   std::string line;
   while (std::getline(in, line)) {
@@ -211,15 +223,17 @@ void load_french_lexicon_stream(std::istream& in, std::unordered_map<std::string
   }
   out_lex.clear();
   for (auto& e : tmp) {
-    out_lex.emplace(std::move(e.first), std::move(e.second.first));
+    out_lex.emplace(e.first, std::move(e.second.first));
   }
 }
 
-void load_french_lexicon_file(const std::filesystem::path& path,
-                              std::unordered_map<std::string, std::string>& out_lex) {
+void load_french_lexicon_file(
+    const std::filesystem::path& path,
+    std::unordered_map<std::string, std::string>& out_lex) {
   std::ifstream in(path);
   if (!in) {
-    throw std::runtime_error("French G2P: cannot read lexicon " + path.generic_string());
+    throw std::runtime_error("French G2P: cannot read lexicon " +
+                             path.generic_string());
   }
   load_french_lexicon_stream(in, out_lex);
 }
@@ -228,7 +242,8 @@ std::string parse_first_csv_field(std::string_view line) {
   if (line.empty()) {
     return {};
   }
-  if (line[0] == '\xEF' && line.size() >= 3 && line[1] == '\xBB' && line[2] == '\xBF') {
+  if (line[0] == '\xEF' && line.size() >= 3 && line[1] == '\xBB' &&
+      line[2] == '\xBF') {
     line.remove_prefix(3);
   }
   if (!line.empty() && line[0] == '"') {
@@ -248,11 +263,13 @@ std::string parse_first_csv_field(std::string_view line) {
     return trim_ascii_ws_copy(out);
   }
   const size_t comma = line.find(',');
-  return trim_ascii_ws_copy(line.substr(0, comma == std::string::npos ? line.size() : comma));
+  return trim_ascii_ws_copy(
+      line.substr(0, comma == std::string::npos ? line.size() : comma));
 }
 
-void load_french_pos_csv_stream(std::istream& in, const std::string& cat_upper,
-                                std::unordered_map<std::string, std::unordered_set<std::string>>& out) {
+void load_french_pos_csv_stream(
+    std::istream& in, const std::string& cat_upper,
+    std::unordered_map<std::string, std::unordered_set<std::string>>& out) {
   std::string header;
   if (!std::getline(in, header)) {
     return;
@@ -274,8 +291,9 @@ void load_french_pos_csv_stream(std::istream& in, const std::string& cat_upper,
   }
 }
 
-void load_french_pos_dir(const std::filesystem::path& dir,
-                         std::unordered_map<std::string, std::unordered_set<std::string>>& out) {
+void load_french_pos_dir(
+    const std::filesystem::path& dir,
+    std::unordered_map<std::string, std::unordered_set<std::string>>& out) {
   out.clear();
   if (!std::filesystem::is_directory(dir)) {
     return;
@@ -320,13 +338,14 @@ void load_french_pos_from_csv_utf8_map(
   }
 }
 
-const std::array<const char*, 10> kDigitWord = {"zéro", "un",   "deux",  "trois", "quatre",
-                                                "cinq", "six",  "sept",  "huit",  "neuf"};
+const std::array<const char*, 10> kDigitWord = {
+    "zéro", "un",  "deux", "trois", "quatre",
+    "cinq", "six", "sept", "huit",  "neuf"};
 
-const std::array<const char*, 17> kUnits = {"zéro",     "un",        "deux",      "trois",     "quatre",
-                                            "cinq",     "six",       "sept",      "huit",      "neuf",
-                                            "dix",      "onze",      "douze",     "treize",    "quatorze",
-                                            "quinze",   "seize"};
+const std::array<const char*, 17> kUnits = {
+    "zéro",  "un",     "deux",     "trois",  "quatre", "cinq",
+    "six",   "sept",   "huit",     "neuf",   "dix",    "onze",
+    "douze", "treize", "quatorze", "quinze", "seize"};
 
 std::vector<std::string> below_100(int n) {
   if (n < 0 || n >= 100) {
@@ -387,7 +406,8 @@ std::vector<std::string> below_100(int n) {
   if (u < 17) {
     return {std::string("quatre-vingt-") + kUnits[static_cast<size_t>(u)]};
   }
-  return {std::string("quatre-vingt-dix-") + kUnits[static_cast<size_t>(u - 10)]};
+  return {std::string("quatre-vingt-dix-") +
+          kUnits[static_cast<size_t>(u - 10)]};
 }
 
 std::vector<std::string> below_1000(int n) {
@@ -503,7 +523,8 @@ std::string expand_digit_tokens_in_text(const std::string& text) {
   size_t pos = 0;
   for (; it != end; ++it) {
     const std::smatch& m = *it;
-    out.append(text, pos, static_cast<size_t>(m.position() - static_cast<long>(pos)));
+    out.append(text, pos,
+               static_cast<size_t>(m.position() - static_cast<long>(pos)));
     const std::string rep = expand_cardinal_digits_to_french_words(m.str());
     out += rep;
     pos = static_cast<size_t>(m.position() + static_cast<long>(m.length()));
@@ -512,35 +533,39 @@ std::string expand_digit_tokens_in_text(const std::string& text) {
   return out;
 }
 
-const std::unordered_map<std::string, std::string>& cardinal_compound_ipa_map() {
+const std::unordered_map<std::string, std::string>&
+cardinal_compound_ipa_map() {
   return french_compound_map::cardinal_compound_ipa_entries();
 }
 
 const std::unordered_set<std::string>& h_aspire_set() {
   static const std::unordered_set<std::string> kSet = {
-      "hareng",     "harpagon",   "harpe",        "hargneux",     "hargneusement", "hautain",
-      "haut",       "hâte",       "haïr",         "haï",          "haïe",          "haïes",
-      "haïs",       "héros",      "héroïne",      "hérisson",     "hérésie",       "hiérarchie",
-      "hollande",   "honte",      "honteux",      "huit",         "huitième",      "humble",
-      "humour",     "hurler",     "hutte"};
+      "hareng",   "harpagon", "harpe",      "hargneux", "hargneusement",
+      "hautain",  "haut",     "hâte",       "haïr",     "haï",
+      "haïe",     "haïes",    "haïs",       "héros",    "héroïne",
+      "hérisson", "hérésie",  "hiérarchie", "hollande", "honte",
+      "honteux",  "huit",     "huitième",   "humble",   "humour",
+      "hurler",   "hutte"};
   return kSet;
 }
 
 const std::unordered_set<std::string>& closed_liaison_determiners() {
   static const std::unordered_set<std::string> kSet = {
-      "les",    "des",     "ces",      "mes",     "tes",      "ses",     "nos",      "vos",
-      "leurs",  "aux",     "quelques", "plusieurs", "certains", "certaines"};
+      "les", "des",   "ces", "mes",      "tes",       "ses",      "nos",
+      "vos", "leurs", "aux", "quelques", "plusieurs", "certains", "certaines"};
   return kSet;
 }
 
 const std::vector<std::string>& pos_scan_order() {
-  static const std::vector<std::string> kOrder = {"DET", "PRON", "PREP", "CONJ", "ADJ", "ADV", "VERB",
-                                                  "NOUN"};
+  static const std::vector<std::string> kOrder = {
+      "DET", "PRON", "PREP", "CONJ", "ADJ", "ADV", "VERB", "NOUN"};
   return kOrder;
 }
 
 std::vector<std::string> categories_for_form(
-    const std::string& word, const std::unordered_map<std::string, std::unordered_set<std::string>>& inv) {
+    const std::string& word,
+    const std::unordered_map<std::string, std::unordered_set<std::string>>&
+        inv) {
   const std::string k = to_lower_pos_inventory_utf8(word);
   std::vector<std::string> found;
   for (const std::string& cat : pos_scan_order()) {
@@ -617,12 +642,13 @@ std::string strip_stress(std::string_view ipa) {
 // Longest-first nucleus prefixes (UTF-8 byte strings).
 const std::vector<std::string>& french_nucleus_prefixes() {
   static const std::vector<std::string> kPrefixes = {
-      "ɑ̃", "ɛ̃", "ɔ̃", "œ̃", "ə", "ɛ", "œ", "ø", "ɔ", "ɑ", "æ", "ɜ",
-      "a",  "e",  "i",  "o",  "u", "y", "ɪ", "ʊ"};
+      "ɑ̃", "ɛ̃", "ɔ̃", "œ̃", "ə", "ɛ", "œ", "ø", "ɔ", "ɑ",
+      "æ", "ɜ", "a", "e", "i", "o", "u", "y", "ɪ", "ʊ"};
   return kPrefixes;
 }
 
-std::vector<std::pair<size_t, size_t>> french_nucleus_spans(const std::string& ipa_no_stress) {
+std::vector<std::pair<size_t, size_t>> french_nucleus_spans(
+    const std::string& ipa_no_stress) {
   std::vector<std::pair<size_t, size_t>> spans;
   size_t i = 0;
   const size_t n = ipa_no_stress.size();
@@ -643,15 +669,18 @@ std::vector<std::pair<size_t, size_t>> french_nucleus_spans(const std::string& i
   return spans;
 }
 
-std::string replace_suffix_once(std::string ipa, std::string_view old_s, std::string_view new_s) {
+std::string replace_suffix_once(std::string ipa, std::string_view old_s,
+                                std::string_view new_s) {
   const size_t pos = ipa.rfind(old_s);
   if (pos == std::string::npos) {
     return ipa;
   }
-  return ipa.substr(0, pos) + std::string(new_s) + ipa.substr(pos + old_s.size());
+  return ipa.substr(0, pos) + std::string(new_s) +
+         ipa.substr(pos + old_s.size());
 }
 
-std::optional<std::string> nasal_liaison_transform(const std::string& word, const std::string& ipa) {
+std::optional<std::string> nasal_liaison_transform(const std::string& word,
+                                                   const std::string& ipa) {
   const std::string w = to_lower_ascii(word);
   const std::string s = strip_stress(ipa);
   if ((w == "mon" || w == "ton" || w == "son" || w == "bon") && s.size() >= 4 &&
@@ -661,7 +690,8 @@ std::optional<std::string> nasal_liaison_transform(const std::string& word, cons
   if (w == "un" && s.size() >= 4 && s.compare(s.size() - 4, 4, "œ̃") == 0) {
     return replace_suffix_once(ipa, "œ̃", "œn");
   }
-  if ((w == "aucun" || w == "aucune") && s.size() >= 4 && s.compare(s.size() - 4, 4, "œ̃") == 0) {
+  if ((w == "aucun" || w == "aucune") && s.size() >= 4 &&
+      s.compare(s.size() - 4, 4, "œ̃") == 0) {
     return replace_suffix_once(ipa, "œ̃", "œn");
   }
   if (w == "en" && s.size() >= 4 && s.compare(s.size() - 4, 4, "ɑ̃") == 0) {
@@ -679,9 +709,10 @@ std::string ortho_for_liaison(std::string_view word) {
     size_t adv = 0;
     utf8_decode_at(w, i, cp, adv);
     const char32_t cl = french_tolower_cp(cp);
-    if ((cl >= U'a' && cl <= U'z') || cl == U'-' || cl == U'à' || cl == U'â' || cl == U'ä' || cl == U'é' ||
-        cl == U'è' || cl == U'ê' || cl == U'ë' || cl == U'ï' || cl == U'î' || cl == U'ô' || cl == U'ù' ||
-        cl == U'û' || cl == U'ü' || cl == U'ÿ' || cl == U'ç' || cl == U'œ' || cl == U'æ') {
+    if ((cl >= U'a' && cl <= U'z') || cl == U'-' || cl == U'à' || cl == U'â' ||
+        cl == U'ä' || cl == U'é' || cl == U'è' || cl == U'ê' || cl == U'ë' ||
+        cl == U'ï' || cl == U'î' || cl == U'ô' || cl == U'ù' || cl == U'û' ||
+        cl == U'ü' || cl == U'ÿ' || cl == U'ç' || cl == U'œ' || cl == U'æ') {
       utf8_append_codepoint(out, cl);
     }
     i += adv;
@@ -705,7 +736,8 @@ bool utf8_last_cp(const std::string& s, char32_t& out_cp) {
   return false;
 }
 
-std::optional<std::string> orthographic_liaison_consonant(std::string_view word) {
+std::optional<std::string> orthographic_liaison_consonant(
+    std::string_view word) {
   std::string w = ortho_for_liaison(word);
   if (w.empty()) {
     return std::nullopt;
@@ -721,8 +753,9 @@ std::optional<std::string> orthographic_liaison_consonant(std::string_view word)
   }
   const char last = w.back();
   static const std::unordered_map<char, const char*> cmap = {
-      {'s', "z"}, {'x', "z"}, {'z', "z"}, {'d', "t"}, {'t', "t"}, {'n', "n"}, {'r', "ʁ"}, {'l', "l"},
-      {'f', "v"}, {'c', "k"}, {'p', "p"}, {'g', "ɡ"}, {'m', "m"}, {'b', "b"},
+      {'s', "z"}, {'x', "z"}, {'z', "z"}, {'d', "t"}, {'t', "t"},
+      {'n', "n"}, {'r', "ʁ"}, {'l', "l"}, {'f', "v"}, {'c', "k"},
+      {'p', "p"}, {'g', "ɡ"}, {'m', "m"}, {'b', "b"},
   };
   const auto it = cmap.find(last);
   if (it == cmap.end()) {
@@ -748,47 +781,47 @@ bool ipa_starts_with_vowel_sound(std::string_view ipa_sv) {
         return true;
       }
       switch (cp1) {
-      case U'a':
-      case U'e':
-      case U'i':
-      case U'o':
-      case U'u':
-      case U'y':
-      case U'ø':
-      case U'œ':
-      case U'ɔ':
-      case U'ɑ':
-      case U'ɛ':
-      case U'ɜ':
-      case U'ɪ':
-      case U'ʊ':
-        return true;
-      default:
-        break;
+        case U'a':
+        case U'e':
+        case U'i':
+        case U'o':
+        case U'u':
+        case U'y':
+        case U'ø':
+        case U'œ':
+        case U'ɔ':
+        case U'ɑ':
+        case U'ɛ':
+        case U'ɜ':
+        case U'ɪ':
+        case U'ʊ':
+          return true;
+        default:
+          break;
       }
     }
     return false;
   }
   switch (cp0) {
-  case U'a':
-  case U'e':
-  case U'i':
-  case U'o':
-  case U'u':
-  case U'y':
-  case U'ø':
-  case U'œ':
-  case U'ɔ':
-  case U'ɑ':
-  case U'ɛ':
-  case U'ə':
-  case U'ɜ':
-  case U'ɪ':
-  case U'ʊ':
-  case U'ɶ':
-    return true;
-  default:
-    break;
+    case U'a':
+    case U'e':
+    case U'i':
+    case U'o':
+    case U'u':
+    case U'y':
+    case U'ø':
+    case U'œ':
+    case U'ɔ':
+    case U'ɑ':
+    case U'ɛ':
+    case U'ə':
+    case U'ɜ':
+    case U'ɪ':
+    case U'ʊ':
+    case U'ɶ':
+      return true;
+    default:
+      break;
   }
   if (adv0 < s.size()) {
     char32_t cp1 = 0;
@@ -796,18 +829,18 @@ bool ipa_starts_with_vowel_sound(std::string_view ipa_sv) {
     utf8_decode_at(s, adv0, cp1, adv1);
     if (cp1 == U'\u0303') {
       switch (cp0) {
-      case U'a':
-      case U'ɔ':
-      case U'o':
-      case U'œ':
-      case U'e':
-      case U'ɛ':
-      case U'i':
-      case U'ɑ':
-      case U'u':
-        return true;
-      default:
-        break;
+        case U'a':
+        case U'ɔ':
+        case U'o':
+        case U'œ':
+        case U'e':
+        case U'ɛ':
+        case U'i':
+        case U'ɑ':
+        case U'u':
+          return true;
+        default:
+          break;
       }
     }
   }
@@ -831,57 +864,57 @@ bool ipa_ends_with_audible_consonant(std::string_view ipa_sv) {
     return false;
   }
   switch (cp) {
-  case U'a':
-  case U'e':
-  case U'i':
-  case U'o':
-  case U'u':
-  case U'y':
-  case U'ø':
-  case U'œ':
-  case U'ɔ':
-  case U'ɑ':
-  case U'ɛ':
-  case U'ə':
-  case U'ɜ':
-  case U'ɪ':
-  case U'ʊ':
-  case U'ɶ':
-    return false;
-  default:
-    break;
+    case U'a':
+    case U'e':
+    case U'i':
+    case U'o':
+    case U'u':
+    case U'y':
+    case U'ø':
+    case U'œ':
+    case U'ɔ':
+    case U'ɑ':
+    case U'ɛ':
+    case U'ə':
+    case U'ɜ':
+    case U'ɪ':
+    case U'ʊ':
+    case U'ɶ':
+      return false;
+    default:
+      break;
   }
   switch (cp) {
-  case U'b':
-  case U'd':
-  case U'f':
-  case U'ɡ':
-  case U'ɟ':
-  case U'h':
-  case U'j':
-  case U'k':
-  case U'l':
-  case U'm':
-  case U'n':
-  case U'p':
-  case U'q':
-  case U'ʁ':
-  case U'r':
-  case U's':
-  case U't':
-  case U'v':
-  case U'z':
-  case U'ʃ':
-  case U'ʒ':
-  case U'ɲ':
-  case U'ŋ':
-  case U'w':
-  case U'ɥ':
-  case U'ç':
-  case U'c':
-    return true;
-  default:
-    return false;
+    case U'b':
+    case U'd':
+    case U'f':
+    case U'ɡ':
+    case U'ɟ':
+    case U'h':
+    case U'j':
+    case U'k':
+    case U'l':
+    case U'm':
+    case U'n':
+    case U'p':
+    case U'q':
+    case U'ʁ':
+    case U'r':
+    case U's':
+    case U't':
+    case U'v':
+    case U'z':
+    case U'ʃ':
+    case U'ʒ':
+    case U'ɲ':
+    case U'ŋ':
+    case U'w':
+    case U'ɥ':
+    case U'ç':
+    case U'c':
+      return true;
+    default:
+      return false;
   }
 }
 
@@ -889,7 +922,8 @@ enum class LiaisonStrength { kNone, kOptional, kObligatory };
 
 LiaisonStrength liaison_strength_fn(const std::optional<std::string>& pos_left,
                                     const std::optional<std::string>& pos_right,
-                                    const std::string& wleft, const std::string& /*wright*/,
+                                    const std::string& wleft,
+                                    const std::string& /*wright*/,
                                     bool optional_register_formal) {
   const std::string wl = to_lower_ascii(wleft);
   if (pos_left == "CONJ" && wl == "et") {
@@ -924,13 +958,16 @@ LiaisonStrength liaison_strength_fn(const std::optional<std::string>& pos_left,
     return LiaisonStrength::kObligatory;
   }
   if (*pos_left == "DET" && *pos_right == "ADV") {
-    return optional_register_formal ? LiaisonStrength::kOptional : LiaisonStrength::kNone;
+    return optional_register_formal ? LiaisonStrength::kOptional
+                                    : LiaisonStrength::kNone;
   }
   if (*pos_left == "PREP") {
-    return optional_register_formal ? LiaisonStrength::kOptional : LiaisonStrength::kNone;
+    return optional_register_formal ? LiaisonStrength::kOptional
+                                    : LiaisonStrength::kNone;
   }
   if (*pos_left == "ADJ" && *pos_right == "NOUN") {
-    return optional_register_formal ? LiaisonStrength::kOptional : LiaisonStrength::kNone;
+    return optional_register_formal ? LiaisonStrength::kOptional
+                                    : LiaisonStrength::kNone;
   }
   if (*pos_left == "CONJ") {
     return LiaisonStrength::kNone;
@@ -938,9 +975,10 @@ LiaisonStrength liaison_strength_fn(const std::optional<std::string>& pos_left,
   return LiaisonStrength::kNone;
 }
 
-std::pair<std::string, std::string> apply_liaison_pair(std::string ipa_left, const std::string& ipa_right,
-                                                       const std::string& wleft, const std::string& wright,
-                                                       LiaisonStrength strength) {
+std::pair<std::string, std::string> apply_liaison_pair(
+    std::string ipa_left, const std::string& ipa_right,
+    const std::string& wleft, const std::string& wright,
+    LiaisonStrength strength) {
   if (strength == LiaisonStrength::kNone) {
     return {ipa_left, ipa_right};
   }
@@ -968,14 +1006,16 @@ std::pair<std::string, std::string> apply_liaison_pair(std::string ipa_left, con
   while (!tail.empty() && (tail.back() == ' ' || tail.back() == '\t')) {
     tail.pop_back();
   }
-  if (tail.size() >= c->size() && tail.compare(tail.size() - c->size(), c->size(), *c) == 0) {
+  if (tail.size() >= c->size() &&
+      tail.compare(tail.size() - c->size(), c->size(), *c) == 0) {
     return {ipa_left, ipa_right};
   }
   return {ipa_left + *c, ipa_right};
 }
 
-std::optional<std::string> lookup_lexicon(const std::unordered_map<std::string, std::string>& lex,
-                                         const std::string& key) {
+std::optional<std::string> lookup_lexicon(
+    const std::unordered_map<std::string, std::string>& lex,
+    const std::string& key) {
   const auto it = lex.find(key);
   if (it != lex.end()) {
     return it->second;
@@ -991,7 +1031,8 @@ std::optional<std::string> lookup_lexicon(const std::unordered_map<std::string, 
 }
 
 const std::unordered_map<std::string, std::string>& heteronym_default_ipa() {
-  static const std::unordered_map<std::string, std::string> kMap = {{"est", "ɛ"}, {"a", "a"}};
+  static const std::unordered_map<std::string, std::string> kMap = {
+      {"est", "ɛ"}, {"a", "a"}};
   return kMap;
 }
 
@@ -1043,32 +1084,37 @@ std::string FrenchRuleG2p::ensure_french_nuclear_stress(std::string ipa) {
   return s.substr(0, start) + kPrimaryStressUtf8 + s.substr(start);
 }
 
-FrenchRuleG2p::FrenchRuleG2p(std::filesystem::path dict_tsv, std::filesystem::path csv_dir)
+FrenchRuleG2p::FrenchRuleG2p(std::filesystem::path dict_tsv,
+                             std::filesystem::path csv_dir)
     : FrenchRuleG2p(std::move(dict_tsv), std::move(csv_dir), Options{}) {}
 
-FrenchRuleG2p::FrenchRuleG2p(std::filesystem::path dict_tsv, std::filesystem::path csv_dir, Options options)
+FrenchRuleG2p::FrenchRuleG2p(std::filesystem::path dict_tsv,
+                             std::filesystem::path csv_dir, Options options)
     : options_(options), csv_dir_(std::move(csv_dir)) {
   load_french_lexicon_file(dict_tsv, lexicon_);
   load_french_pos_dir(csv_dir_, pos_by_cat_);
 }
 
-FrenchRuleG2p::FrenchRuleG2p(std::string dict_tsv_utf8, std::filesystem::path csv_dir, Options options)
+FrenchRuleG2p::FrenchRuleG2p(std::string dict_tsv_utf8,
+                             std::filesystem::path csv_dir, Options options)
     : options_(options), csv_dir_(std::move(csv_dir)) {
   std::istringstream in(std::move(dict_tsv_utf8));
   load_french_lexicon_stream(in, lexicon_);
   load_french_pos_dir(csv_dir_, pos_by_cat_);
 }
 
-FrenchRuleG2p::FrenchRuleG2p(std::string dict_tsv_utf8,
-                             std::unordered_map<std::string, std::string> pos_csv_utf8_by_cat_upper,
-                             Options options)
+FrenchRuleG2p::FrenchRuleG2p(
+    std::string dict_tsv_utf8,
+    std::unordered_map<std::string, std::string> pos_csv_utf8_by_cat_upper,
+    Options options)
     : options_(options), csv_dir_{} {
   std::istringstream in(std::move(dict_tsv_utf8));
   load_french_lexicon_stream(in, lexicon_);
   load_french_pos_from_csv_utf8_map(pos_csv_utf8_by_cat_upper, pos_by_cat_);
 }
 
-std::string FrenchRuleG2p::finalize_word_ipa(std::string ipa, bool from_compound) const {
+std::string FrenchRuleG2p::finalize_word_ipa(std::string ipa,
+                                             bool from_compound) const {
   if (!options_.with_stress) {
     return strip_stress(ipa);
   }
@@ -1078,12 +1124,14 @@ std::string FrenchRuleG2p::finalize_word_ipa(std::string ipa, bool from_compound
   return ipa;
 }
 
-std::string FrenchRuleG2p::word_to_ipa_impl(const std::string& raw_word, bool expand_digits) const {
+std::string FrenchRuleG2p::word_to_ipa_impl(const std::string& raw_word,
+                                            bool expand_digits) const {
   const std::string wraw = trim_ascii_ws_copy(raw_word);
   if (wraw.empty()) {
     return "";
   }
-  if (expand_digits && options_.expand_cardinal_digits && is_all_ascii_digits(wraw)) {
+  if (expand_digits && options_.expand_cardinal_digits &&
+      is_all_ascii_digits(wraw)) {
     const std::string phrase = expand_cardinal_digits_to_french_words(wraw);
     if (phrase != wraw) {
       return text_to_ipa_impl(phrase, false, nullptr);
@@ -1124,12 +1172,14 @@ std::string FrenchRuleG2p::word_to_ipa(const std::string& word) const {
   return word_to_ipa_impl(word, options_.expand_cardinal_digits);
 }
 
-std::string FrenchRuleG2p::text_to_ipa(std::string text, std::vector<G2pWordLog>* per_word_log) {
+std::string FrenchRuleG2p::text_to_ipa(std::string text,
+                                       std::vector<G2pWordLog>* per_word_log) {
   return text_to_ipa_impl(text, options_.expand_cardinal_digits, per_word_log);
 }
 
-std::string FrenchRuleG2p::text_to_ipa_impl(const std::string& text, bool expand_digits,
-                                            std::vector<G2pWordLog>* per_word_log) const {
+std::string FrenchRuleG2p::text_to_ipa_impl(
+    const std::string& text, bool expand_digits,
+    std::vector<G2pWordLog>* per_word_log) const {
   std::string work = text;
   if (expand_digits && options_.expand_cardinal_digits) {
     work = expand_digit_tokens_in_text(work);
@@ -1180,7 +1230,8 @@ std::string FrenchRuleG2p::text_to_ipa_impl(const std::string& text, bool expand
     pos += adv;
     while (pos < n) {
       utf8_decode_at(work, pos, cp, adv);
-      if (is_french_word_char(cp) || cp == U' ' || cp == U'\t' || cp == U'\n' || cp == U'\r') {
+      if (is_french_word_char(cp) || cp == U' ' || cp == U'\t' || cp == U'\n' ||
+          cp == U'\r') {
         break;
       }
       pos += adv;
@@ -1208,7 +1259,8 @@ std::string FrenchRuleG2p::text_to_ipa_impl(const std::string& text, bool expand
     } else {
       const std::string wl = to_lower_ascii(w);
       const auto dit = pos_by_cat_.find("DET");
-      const bool in_det = dit != pos_by_cat_.end() && dit->second.count(wl) != 0u;
+      const bool in_det =
+          dit != pos_by_cat_.end() && dit->second.count(wl) != 0u;
       if (closed_liaison_determiners().count(wl) != 0u || in_det) {
         prev_pos = "DET";
       } else {
@@ -1229,16 +1281,19 @@ std::string FrenchRuleG2p::text_to_ipa_impl(const std::string& text, bool expand
       std::string left = ipas[i].value_or("");
       if (i + 1 < words.size()) {
         const std::string& right_ipa = ipas[i + 1].value_or("");
-        LiaisonStrength st = liaison_strength_fn(poses[i], poses[i + 1], words[i], words[i + 1],
-                                                 options_.liaison_optional);
-        if (st == LiaisonStrength::kNone && to_lower_ascii(words[i]) == "et" && !poses[i].has_value()) {
+        LiaisonStrength st =
+            liaison_strength_fn(poses[i], poses[i + 1], words[i], words[i + 1],
+                                options_.liaison_optional);
+        if (st == LiaisonStrength::kNone && to_lower_ascii(words[i]) == "et" &&
+            !poses[i].has_value()) {
           st = LiaisonStrength::kObligatory;
         }
         if (st == LiaisonStrength::kOptional && !options_.liaison_optional) {
           st = LiaisonStrength::kNone;
         }
         if (st != LiaisonStrength::kNone) {
-          auto pr = apply_liaison_pair(std::move(left), right_ipa, words[i], words[i + 1], st);
+          auto pr = apply_liaison_pair(std::move(left), right_ipa, words[i],
+                                       words[i + 1], st);
           left = std::move(pr.first);
         }
       }
@@ -1254,8 +1309,11 @@ std::string FrenchRuleG2p::text_to_ipa_impl(const std::string& text, bool expand
   bool prev_was_word = false;
   for (const Tok& t : tokens) {
     if (t.is_word) {
-      const std::string ipa_w = wi < ipa_by_idx.size() ? ipa_by_idx[wi] : std::string{};
-      const std::string kw = wi < words.size() ? normalize_lookup_key_utf8(words[wi]) : std::string{};
+      const std::string ipa_w =
+          wi < ipa_by_idx.size() ? ipa_by_idx[wi] : std::string{};
+      const std::string kw = wi < words.size()
+                                 ? normalize_lookup_key_utf8(words[wi])
+                                 : std::string{};
       if (per_word_log != nullptr) {
         per_word_log->push_back(
             G2pWordLog{t.s, kw, G2pWordPath::kRuleBasedG2p, ipa_w});
@@ -1267,7 +1325,9 @@ std::string FrenchRuleG2p::text_to_ipa_impl(const std::string& text, bool expand
       ++wi;
       prev_was_word = true;
     } else if (!t.s.empty() &&
-               std::all_of(t.s.begin(), t.s.end(), [](unsigned char c) { return std::isspace(c) != 0; })) {
+               std::all_of(t.s.begin(), t.s.end(), [](unsigned char c) {
+                 return std::isspace(c) != 0;
+               })) {
       out.push_back(' ');
       prev_was_word = false;
     } else {

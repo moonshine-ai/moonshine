@@ -18,7 +18,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * On-device text-to-speech via the Moonshine native API (Kokoro / Piper under a {@code g2p_root} tree).
+ * On-device text-to-speech via the Moonshine native API (Kokoro / Piper / ZipVoice under a
+ * {@code g2p_root} tree). Select ZipVoice zero-shot voice cloning with a {@code voice=zipvoice_<id>}
+ * option (built-in reference voice) or {@link #fromZipVoiceClone} (your own reference clip).
  *
  * <p>This mirrors the Python {@code moonshine_voice.TextToSpeech} surface for create / {@link #synthesize}
  * / {@link #close}, without any automatic asset download. Populate {@code g2p_root} on disk (or use
@@ -136,6 +138,41 @@ public class TextToSpeech {
             throw new RuntimeException(JNI.moonshineErrorToString(h));
         }
         return new TextToSpeech(language, h);
+    }
+
+    /**
+     * ZipVoice zero-shot voice cloning from an in-memory reference clip (mono float PCM in -1..1).
+     *
+     * <p>To use a built-in reference voice instead, pass {@code voice=zipvoice_<id>} (e.g.
+     * {@code zipvoice_american_female}) via the {@code options} of the normal constructors.
+     *
+     * @param clonePcm        Reference clip to clone as mono float PCM.
+     * @param sampleRateHz    Sample rate of {@code clonePcm}.
+     * @param cloneTranscript Transcript of the clip (may be {@code null}/empty; cloning quality is better with it).
+     * @param g2pRoot         Directory containing the ZipVoice model assets.
+     */
+    public static TextToSpeech fromZipVoiceClone(String language, float[] clonePcm, int sampleRateHz,
+            @Nullable String cloneTranscript, String g2pRoot, @Nullable List<TranscriberOption> options) {
+        List<TranscriberOption> opts = new ArrayList<>();
+        if (options != null) {
+            opts.addAll(options);
+        }
+        opts.add(new TranscriberOption("voice", "zipvoice"));
+        opts.add(new TranscriberOption("zipvoice_clone_sample_rate", Integer.toString(sampleRateHz)));
+        if (cloneTranscript != null && !cloneTranscript.isEmpty()) {
+            opts.add(new TranscriberOption("zipvoice_clone_transcript", cloneTranscript));
+        }
+        return fromMemory(language, new String[]{"zipvoice/clone_audio"},
+                new byte[][]{floatPcmToLeBytes(clonePcm)}, g2pRoot, opts);
+    }
+
+    private static byte[] floatPcmToLeBytes(float[] pcm) {
+        java.nio.ByteBuffer bb = java.nio.ByteBuffer.allocate(pcm.length * 4)
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        for (float v : pcm) {
+            bb.putFloat(v);
+        }
+        return bb.array();
     }
 
     private TextToSpeech(String language, int handle) {

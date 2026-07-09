@@ -36,7 +36,8 @@ bool is_all_ascii_digits(std::string_view s) {
   return true;
 }
 
-// --- Stress stripping (NFD): remove common stress marks, keep U+0308 (ї vs і) --------------------
+// --- Stress stripping (NFD): remove common stress marks, keep U+0308 (ї vs і)
+// --------------------
 
 std::string utf8_nfc_utf8proc(const std::string& s) {
   utf8proc_uint8_t* p =
@@ -50,7 +51,8 @@ std::string utf8_nfc_utf8proc(const std::string& s) {
 }
 
 std::string ukrainian_strip_stress_marks_utf8(std::string s) {
-  utf8proc_uint8_t* nfd = utf8proc_NFD(reinterpret_cast<const utf8proc_uint8_t*>(s.c_str()));
+  utf8proc_uint8_t* nfd =
+      utf8proc_NFD(reinterpret_cast<const utf8proc_uint8_t*>(s.c_str()));
   if (nfd == nullptr) {
     return s;
   }
@@ -75,7 +77,8 @@ std::string ukrainian_strip_stress_marks_utf8(std::string s) {
 }
 
 std::u32string utf8_to_u32_nfc(const std::string& s) {
-  utf8proc_uint8_t* nfc = utf8proc_NFC(reinterpret_cast<const utf8proc_uint8_t*>(s.c_str()));
+  utf8proc_uint8_t* nfc =
+      utf8proc_NFC(reinterpret_cast<const utf8proc_uint8_t*>(s.c_str()));
   if (nfc == nullptr) {
     return utf8_str_to_u32(s);
   }
@@ -88,24 +91,31 @@ std::u32string ukrainian_lower_u32(const std::u32string& s) {
   std::u32string o;
   o.reserve(s.size());
   for (char32_t c : s) {
-    const utf8proc_int32_t lo = utf8proc_tolower(static_cast<utf8proc_int32_t>(c));
+    const utf8proc_int32_t lo =
+        utf8proc_tolower(static_cast<utf8proc_int32_t>(c));
     o.push_back(static_cast<char32_t>(lo));
   }
   return o;
 }
 
-// --- Ukrainian cardinals (UTF-8 words) --------------------------------------------------------
+// --- Ukrainian cardinals (UTF-8 words)
+// --------------------------------------------------------
 
-const char* kDigitWord[10] = {"нуль", "один", "два", "три", "чотири", "п'ять", "шість", "сім", "вісім", "дев'ять"};
+const char* kDigitWord[10] = {"нуль",  "один",  "два", "три",   "чотири",
+                              "п'ять", "шість", "сім", "вісім", "дев'ять"};
 
-const char* kTeens[10] = {"десять",      "одинадцять", "дванадцять", "тринадцять", "чотирнадцять",
-                          "п'ятнадцять", "шістнадцять", "сімнадцять", "вісімнадцять", "дев'ятнадцять"};
+const char* kTeens[10] = {"десять",       "одинадцять",   "дванадцять",
+                          "тринадцять",   "чотирнадцять", "п'ятнадцять",
+                          "шістнадцять",  "сімнадцять",   "вісімнадцять",
+                          "дев'ятнадцять"};
 
-const char* kTens[10] = {"",         "",          "двадцять", "тридцять", "сорок",      "п'ятдесят",
-                         "шістдесят", "сімдесят", "вісімдесят", "дев'яносто"};
+const char* kTens[10] = {"",           "",          "двадцять",  "тридцять",
+                         "сорок",      "п'ятдесят", "шістдесят", "сімдесят",
+                         "вісімдесят", "дев'яносто"};
 
-const char* kHundreds[10] = {"",        "сто",     "двісті", "триста", "чотириста", "п'ятсот",
-                             "шістсот", "сімсот", "вісімсот", "дев'ятсот"};
+const char* kHundreds[10] = {"",          "сто",      "двісті",  "триста",
+                             "чотириста", "п'ятсот",  "шістсот", "сімсот",
+                             "вісімсот",  "дев'ятсот"};
 
 std::string thousand_noun_utf8(int h) {
   if (h % 100 == 11 || h % 100 == 12 || h % 100 == 13 || h % 100 == 14) {
@@ -292,7 +302,8 @@ std::string expand_cardinal_digits_to_ukrainian_words(std::string_view s) {
 }
 
 std::string expand_ukrainian_digit_tokens_in_text(std::string text) {
-  static const std::regex range_re(R"(\b(\d+)-(\d+)\b)", std::regex::ECMAScript);
+  static const std::regex range_re(R"(\b(\d+)-(\d+)\b)",
+                                   std::regex::ECMAScript);
   static const std::regex dig_re(R"(\b\d+\b)", std::regex::ECMAScript);
   std::string out;
   std::sregex_iterator it(text.begin(), text.end(), range_re);
@@ -300,7 +311,8 @@ std::string expand_ukrainian_digit_tokens_in_text(std::string text) {
   size_t pos = 0;
   for (; it != end; ++it) {
     const std::smatch& m = *it;
-    out.append(text, pos, static_cast<size_t>(m.position() - static_cast<long>(pos)));
+    out.append(text, pos,
+               static_cast<size_t>(m.position() - static_cast<long>(pos)));
     out += expand_cardinal_digits_to_ukrainian_words(m.str(1));
     out += " - ";
     out += expand_cardinal_digits_to_ukrainian_words(m.str(2));
@@ -313,7 +325,8 @@ std::string expand_ukrainian_digit_tokens_in_text(std::string text) {
   std::sregex_iterator it2(text.begin(), text.end(), dig_re);
   for (; it2 != end; ++it2) {
     const std::smatch& m = *it2;
-    out.append(text, pos, static_cast<size_t>(m.position() - static_cast<long>(pos)));
+    out.append(text, pos,
+               static_cast<size_t>(m.position() - static_cast<long>(pos)));
     out += expand_cardinal_digits_to_ukrainian_words(m.str());
     pos = static_cast<size_t>(m.position() + static_cast<long>(m.length()));
   }
@@ -321,10 +334,12 @@ std::string expand_ukrainian_digit_tokens_in_text(std::string text) {
   return out;
 }
 
-// --- G2P ---------------------------------------------------------------------------------------
+// --- G2P
+// ---------------------------------------------------------------------------------------
 
 bool is_vowel_letter(char32_t c) {
-  static const std::unordered_set<char32_t> k{U'а', U'е', U'є', U'и', U'і', U'ї', U'о', U'у', U'ю', U'я'};
+  static const std::unordered_set<char32_t> k{U'а', U'е', U'є', U'и', U'і',
+                                              U'ї', U'о', U'у', U'ю', U'я'};
   return k.count(c) != 0;
 }
 
@@ -339,8 +354,9 @@ bool is_hard_no_pal(char32_t c) {
 }
 
 bool is_palatalizable(char32_t c) {
-  static const std::unordered_set<char32_t> k{U'б', U'в', U'г', U'ґ', U'д', U'з', U'к', U'л', U'м',
-                                              U'н', U'п', U'р', U'с', U'т', U'ф', U'х', U'ц'};
+  static const std::unordered_set<char32_t> k{
+      U'б', U'в', U'г', U'ґ', U'д', U'з', U'к', U'л', U'м',
+      U'н', U'п', U'р', U'с', U'т', U'ф', U'х', U'ц'};
   return k.count(c) != 0;
 }
 
@@ -354,7 +370,8 @@ std::optional<size_t> next_letter_index(const std::u32string& w, size_t start) {
   return std::nullopt;
 }
 
-std::pair<bool, size_t> peek_apostrophe_soft_vowel(const std::u32string& w, size_t cons_end) {
+std::pair<bool, size_t> peek_apostrophe_soft_vowel(const std::u32string& w,
+                                                   size_t cons_end) {
   size_t j = cons_end + 1;
   if (j >= w.size() || w[j] != U'\'') {
     return {false, 0};
@@ -386,7 +403,8 @@ std::string v_allophone(const std::u32string& w, size_t i) {
 
 bool ends_with_palatal_suffix(const std::string& p) {
   static const char kSuf[] = {'\xCA', '\xB2'};
-  return p.size() >= 2 && p[p.size() - 2] == kSuf[0] && p[p.size() - 1] == kSuf[1];
+  return p.size() >= 2 && p[p.size() - 2] == kSuf[0] &&
+         p[p.size() - 1] == kSuf[1];
 }
 
 bool is_vowel_ipa_piece(const std::string& p) {
@@ -422,7 +440,8 @@ bool piece_ends_palatalized_consonant(const std::vector<std::string>& pieces) {
     if (is_vowel_ipa_piece(p)) {
       continue;
     }
-    if (p == "dʒ" || p == "dz" || p == "tʃ" || p == "ts" || p == "ʃtʃ" || p == "ʒ" || p == "ʃ") {
+    if (p == "dʒ" || p == "dz" || p == "tʃ" || p == "ts" || p == "ʃtʃ" ||
+        p == "ʒ" || p == "ʃ") {
       return false;
     }
     return ends_with_palatal_suffix(p);
@@ -436,22 +455,21 @@ void palatalize_last(std::vector<std::string>& pieces) {
     if (p.empty()) {
       continue;
     }
-    if (p == "dʒ" || p == "dz" || p == "tʃ" || p == "ts" || p == "ʃtʃ" || p == "ʒ" || p == "ʃ") {
+    if (p == "dʒ" || p == "dz" || p == "tʃ" || p == "ts" || p == "ʃtʃ" ||
+        p == "ʒ" || p == "ʃ") {
       return;
     }
     if (ends_with_palatal_suffix(p)) {
       return;
     }
-    p += std::string{'\xCA', '\xB2'};  // U+02B2 modifier letter j (palatalization)
+    p += std::string{'\xCA',
+                     '\xB2'};  // U+02B2 modifier letter j (palatalization)
     return;
   }
 }
 
-std::string vowel_ipa(char32_t ch,
-                      bool force_j,
-                      bool after_vowel_letter,
-                      bool word_onset,
-                      const std::vector<std::string>& pieces) {
+std::string vowel_ipa(char32_t ch, bool force_j, bool after_vowel_letter,
+                      bool word_onset, const std::vector<std::string>& pieces) {
   if (force_j || word_onset || after_vowel_letter) {
     if (ch == U'я') {
       return "ja";
@@ -500,7 +518,8 @@ std::string vowel_ipa(char32_t ch,
 }
 
 bool ipa_vowel_char(char32_t c) {
-  return c == U'a' || c == U'e' || c == U'i' || c == U'o' || c == U'u' || c == U'\u025B' || c == U'\u026A';
+  return c == U'a' || c == U'e' || c == U'i' || c == U'o' || c == U'u' ||
+         c == U'\u025B' || c == U'\u026A';
 }
 
 std::string u32_to_utf8(const std::u32string& s) {
@@ -540,58 +559,62 @@ std::string insert_primary_stress_penultimate(const std::string& ipa_utf8) {
   if (syll_starts.empty()) {
     return ipa_utf8;
   }
-  const size_t stress_at = syll_starts.size() == 1 ? syll_starts[0] : syll_starts[syll_starts.size() - 2];
+  const size_t stress_at = syll_starts.size() == 1
+                               ? syll_starts[0]
+                               : syll_starts[syll_starts.size() - 2];
   std::u32string out;
-  out.insert(out.end(), u.begin(), u.begin() + static_cast<std::ptrdiff_t>(stress_at));
+  out.insert(out.end(), u.begin(),
+             u.begin() + static_cast<std::ptrdiff_t>(stress_at));
   out.push_back(0x02C8);
-  out.insert(out.end(), u.begin() + static_cast<std::ptrdiff_t>(stress_at), u.end());
+  out.insert(out.end(), u.begin() + static_cast<std::ptrdiff_t>(stress_at),
+             u.end());
   return u32_to_utf8(out);
 }
 
 std::string base_cons_ipa(char32_t c) {
   switch (c) {
-  case U'б':
-    return "b";
-  case U'п':
-    return "p";
-  case U'м':
-    return "m";
-  case U'ф':
-    return "f";
-  case U'г':
-    return "ɦ";
-  case U'ґ':
-    return "ɡ";
-  case U'д':
-    return "d";
-  case U'т':
-    return "t";
-  case U'н':
-    return "n";
-  case U'л':
-    return "l";
-  case U'р':
-    return "ɾ";
-  case U'с':
-    return "s";
-  case U'з':
-    return "z";
-  case U'ж':
-    return "ʒ";
-  case U'ш':
-    return "ʃ";
-  case U'ч':
-    return "tʃ";
-  case U'щ':
-    return "ʃtʃ";
-  case U'ц':
-    return "ts";
-  case U'к':
-    return "k";
-  case U'х':
-    return "x";
-  default:
-    return "";
+    case U'б':
+      return "b";
+    case U'п':
+      return "p";
+    case U'м':
+      return "m";
+    case U'ф':
+      return "f";
+    case U'г':
+      return "ɦ";
+    case U'ґ':
+      return "ɡ";
+    case U'д':
+      return "d";
+    case U'т':
+      return "t";
+    case U'н':
+      return "n";
+    case U'л':
+      return "l";
+    case U'р':
+      return "ɾ";
+    case U'с':
+      return "s";
+    case U'з':
+      return "z";
+    case U'ж':
+      return "ʒ";
+    case U'ш':
+      return "ʃ";
+    case U'ч':
+      return "tʃ";
+    case U'щ':
+      return "ʃtʃ";
+    case U'ц':
+      return "ts";
+    case U'к':
+      return "k";
+    case U'х':
+      return "x";
+    default:
+      return "";
   }
 }
 
@@ -645,7 +668,8 @@ std::string word_to_ipa_inner(const std::u32string& w0, bool with_stress) {
       if (force_j_vowel) {
         force_j_vowel = false;
       }
-      pieces.emplace_back(vowel_ipa(ch, fj, prev_was_vowel_letter, word_onset, pieces));
+      pieces.emplace_back(
+          vowel_ipa(ch, fj, prev_was_vowel_letter, word_onset, pieces));
       ++i;
       word_onset = false;
       prev_was_vowel_letter = true;
@@ -663,7 +687,8 @@ std::string word_to_ipa_inner(const std::u32string& w0, bool with_stress) {
     const char32_t next_ch = ni.has_value() ? w[*ni] : U'\0';
 
     bool will_palatalize = false;
-    if (!prev_hard_affricate && !apostrophe_block && is_palatalizable(ch) && !is_hard_no_pal(ch)) {
+    if (!prev_hard_affricate && !apostrophe_block && is_palatalizable(ch) &&
+        !is_hard_no_pal(ch)) {
       if (is_soft_vowel(next_ch) || next_ch == U'і') {
         will_palatalize = true;
       }
@@ -706,8 +731,10 @@ std::u32string filter_uk_word_chars(const std::u32string& w) {
       o.push_back(U'\'');
       continue;
     }
-    const auto cat = static_cast<utf8proc_category_t>(utf8proc_category(static_cast<utf8proc_int32_t>(c)));
-    if (cat == UTF8PROC_CATEGORY_LL || cat == UTF8PROC_CATEGORY_LU || cat == UTF8PROC_CATEGORY_LT) {
+    const auto cat = static_cast<utf8proc_category_t>(
+        utf8proc_category(static_cast<utf8proc_int32_t>(c)));
+    if (cat == UTF8PROC_CATEGORY_LL || cat == UTF8PROC_CATEGORY_LU ||
+        cat == UTF8PROC_CATEGORY_LT) {
       o.push_back(c);
     }
   }
@@ -721,20 +748,25 @@ bool is_ukrainian_word_char(char32_t cp) {
   if (cp == U'_') {
     return true;
   }
-  const auto cat = static_cast<utf8proc_category_t>(utf8proc_category(static_cast<utf8proc_int32_t>(cp)));
+  const auto cat = static_cast<utf8proc_category_t>(
+      utf8proc_category(static_cast<utf8proc_int32_t>(cp)));
   if (cat == UTF8PROC_CATEGORY_ND) {
     return true;
   }
-  return cat == UTF8PROC_CATEGORY_LL || cat == UTF8PROC_CATEGORY_LU || cat == UTF8PROC_CATEGORY_LT ||
-         cat == UTF8PROC_CATEGORY_LM || cat == UTF8PROC_CATEGORY_LO;
+  return cat == UTF8PROC_CATEGORY_LL || cat == UTF8PROC_CATEGORY_LU ||
+         cat == UTF8PROC_CATEGORY_LT || cat == UTF8PROC_CATEGORY_LM ||
+         cat == UTF8PROC_CATEGORY_LO;
 }
 
 bool is_space_cp(char32_t cp) {
-  return cp == U' ' || cp == U'\t' || cp == U'\n' || cp == U'\r' || cp == U'\f' || cp == U'\v' ||
-         utf8proc_category(static_cast<utf8proc_int32_t>(cp)) == UTF8PROC_CATEGORY_ZS;
+  return cp == U' ' || cp == U'\t' || cp == U'\n' || cp == U'\r' ||
+         cp == U'\f' || cp == U'\v' ||
+         utf8proc_category(static_cast<utf8proc_int32_t>(cp)) ==
+             UTF8PROC_CATEGORY_ZS;
 }
 
-std::string word_to_ipa_from_utf32_word(const std::u32string& letters, bool with_stress) {
+std::string word_to_ipa_from_utf32_word(const std::u32string& letters,
+                                        bool with_stress) {
   if (letters.empty()) {
     return "";
   }
@@ -746,7 +778,8 @@ std::string hyphen_join_word_ipas(const std::string& tok, bool with_stress) {
   size_t a = 0;
   while (a < tok.size()) {
     const size_t dash = tok.find('-', a);
-    const std::string part = tok.substr(a, dash == std::string::npos ? std::string::npos : dash - a);
+    const std::string part =
+        tok.substr(a, dash == std::string::npos ? std::string::npos : dash - a);
     std::u32string w = utf8_to_u32_nfc(part);
     w = ukrainian_lower_u32(w);
     w = utf8_str_to_u32(ukrainian_strip_stress_marks_utf8(u32_to_utf8(w)));
@@ -781,7 +814,8 @@ std::string UkrainianRuleG2p::word_to_ipa(const std::string& word) const {
   if (options_.expand_cardinal_digits && is_all_ascii_digits(wraw)) {
     const std::string phrase = expand_cardinal_digits_to_ukrainian_words(wraw);
     if (phrase != wraw) {
-      return UkrainianRuleG2p(Options{.with_stress = options_.with_stress, .expand_cardinal_digits = false})
+      return UkrainianRuleG2p(Options{.with_stress = options_.with_stress,
+                                      .expand_cardinal_digits = false})
           .text_to_ipa(phrase, nullptr);
     }
     return wraw;
@@ -795,8 +829,8 @@ std::string UkrainianRuleG2p::word_to_ipa(const std::string& word) const {
   return hyphen_join_word_ipas(wraw, options_.with_stress);
 }
 
-std::string UkrainianRuleG2p::text_to_ipa_no_expand(const std::string& text,
-                                                     std::vector<G2pWordLog>* per_word_log) const {
+std::string UkrainianRuleG2p::text_to_ipa_no_expand(
+    const std::string& text, std::vector<G2pWordLog>* per_word_log) const {
   std::string out;
   size_t pos = 0;
   const size_t n = text.size();
@@ -826,10 +860,13 @@ std::string UkrainianRuleG2p::text_to_ipa_no_expand(const std::string& text,
         pos += adv;
       }
       const std::string tok = text.substr(start, pos - start);
-      std::string wipa = UkrainianRuleG2p(Options{.with_stress = options_.with_stress, .expand_cardinal_digits = false})
-                             .word_to_ipa(tok);
+      std::string wipa =
+          UkrainianRuleG2p(Options{.with_stress = options_.with_stress,
+                                   .expand_cardinal_digits = false})
+              .word_to_ipa(tok);
       if (per_word_log != nullptr) {
-        per_word_log->push_back(G2pWordLog{tok, tok, G2pWordPath::kRuleBasedG2p, std::move(wipa)});
+        per_word_log->push_back(
+            G2pWordLog{tok, tok, G2pWordPath::kRuleBasedG2p, std::move(wipa)});
         out += per_word_log->back().ipa;
       } else {
         out += wipa;
@@ -869,7 +906,8 @@ std::string UkrainianRuleG2p::text_to_ipa_no_expand(const std::string& text,
   return collapsed;
 }
 
-std::string UkrainianRuleG2p::text_to_ipa(std::string text, std::vector<G2pWordLog>* per_word_log) {
+std::string UkrainianRuleG2p::text_to_ipa(
+    std::string text, std::vector<G2pWordLog>* per_word_log) {
   if (options_.expand_cardinal_digits) {
     text = expand_ukrainian_digit_tokens_in_text(std::move(text));
   }
@@ -887,19 +925,21 @@ bool dialect_resolves_to_ukrainian_rules(std::string_view dialect_id) {
   return false;
 }
 
-std::string ukrainian_word_to_ipa(const std::string& word, bool with_stress, bool expand_cardinal_digits) {
+std::string ukrainian_word_to_ipa(const std::string& word, bool with_stress,
+                                  bool expand_cardinal_digits) {
   UkrainianRuleG2p::Options o;
   o.with_stress = with_stress;
   o.expand_cardinal_digits = expand_cardinal_digits;
-  return UkrainianRuleG2p(std::move(o)).word_to_ipa(word);
+  return UkrainianRuleG2p(o).word_to_ipa(word);
 }
 
 std::string ukrainian_text_to_ipa(const std::string& text, bool with_stress,
-                                  std::vector<G2pWordLog>* per_word_log, bool expand_cardinal_digits) {
+                                  std::vector<G2pWordLog>* per_word_log,
+                                  bool expand_cardinal_digits) {
   UkrainianRuleG2p::Options o;
   o.with_stress = with_stress;
   o.expand_cardinal_digits = expand_cardinal_digits;
-  return UkrainianRuleG2p(std::move(o)).text_to_ipa(text, per_word_log);
+  return UkrainianRuleG2p(o).text_to_ipa(text, per_word_log);
 }
 
 }  // namespace moonshine_tts

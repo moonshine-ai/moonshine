@@ -1,0 +1,75 @@
+# clang-tidy configuration for the Moonshine core library.
+#
+# The goal is high-signal reliability checks (memory safety, bounds, undefined
+# behaviour) without the noise of full "modernize"/naming enforcement, keeping
+# with our "C++ as a better C" style (see STYLE_GUIDE.md). This runs as part of
+# scripts/reliability.sh against the compile_commands.json produced by a
+# MOONSHINE_RELIABILITY=ON build.
+#
+# Third-party and vendored code (third-party/, cpp-annote/) is excluded via
+# HeaderFilterRegex below and by the source-file selection in the script; we do
+# not modify or lint vendored sources.
+---
+Checks: >
+  -*,
+  bugprone-*,
+  cert-*,
+  clang-analyzer-*,
+  misc-misplaced-const,
+  misc-uniqueptr-reset-release,
+  performance-move-const-arg,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -bugprone-macro-parentheses,
+  -bugprone-reserved-identifier,
+  -cert-dcl37-c,
+  -cert-dcl51-cpp,
+  -cert-err33-c,
+  -cert-err58-cpp,
+  -clang-analyzer-cplusplus.NewDeleteLeaks,
+  -clang-analyzer-unix.Malloc,
+  -clang-analyzer-optin.performance.Padding
+
+# clang-analyzer-* runs the path-sensitive clang static analyzer engine through
+# clang-tidy, which lets us keep its high-signal checks (null dereference,
+# uninitialized reads, use-after-free) while dropping the checkers that flood
+# this codebase with false positives: the leak checkers cannot reason about the
+# onnxruntime C-API ownership handoff or doctest's allocations (they produced
+# >1200 bogus "memory leak" reports in a standalone scan-build run), and Padding
+# is a micro-optimisation, not a reliability signal.
+#
+# The whole cppcoreguidelines module is deliberately *off* (along with a handful
+# of bugprone/cert checks) because those checks are structural noise for a
+# codebase that intentionally uses C++ as "a better C" (see STYLE_GUIDE.md): they
+# swamped the real findings (~2800 hits, cut to ~150) without surfacing bugs.
+#   * cppcoreguidelines-pro-bounds-* (pointer-arithmetic, array-to-pointer-decay,
+#     constant-array-index): buffer/pointer math is intrinsic to this style.
+#   * cppcoreguidelines-pro-type-{reinterpret,cstyle}-cast + narrowing-conversions:
+#     C-style casts and int/size_t narrowing are pervasive and deliberate here.
+#   * cert-err33-c: mostly ignored printf/fwrite/ORT-release return values.
+#   * bugprone-macro-parentheses: hygiene nits in fixed macros.
+#   * bugprone-reserved-identifier / cert-dcl37-c / cert-dcl51-cpp: the code uses
+#     leading-underscore member names (_tensor, _shape) by convention.
+# This loses no safety coverage: bounds/overflow/UB bugs are caught at runtime by
+# ASan/UBSan + _GLIBCXX_ASSERTIONS, and reinterpret_cast / C-allocation are gated
+# by scripts/check-banned-constructs.sh.
+
+# Surface diagnostics from first-party core headers only. HeaderFilterRegex is an
+# allow-list (all core/*.h), and ExcludeHeaderFilterRegex then subtracts vendored
+# trees regardless of how the include path is spelled -- e.g. doctest pulled in as
+# core/<mod>/../third-party/doctest/doctest.h, which otherwise slipped past a
+# pure allow-list and produced spurious warnings inside doctest itself.
+HeaderFilterRegex: '.*/core/.*\.(h|hpp)$'
+ExcludeHeaderFilterRegex: '.*/(third-party|cpp-annote)/.*'
+
+WarningsAsErrors: ''
+
+FormatStyle: file
+
+CheckOptions:
+  # Our LOG/LOGF macros embed __func__; inside a lambda that expands to
+  # "operator()", which bugprone-lambda-function-name flags. IgnoreMacros skips
+  # the macro-driven cases (there is no hand-written __func__ to fix there) while
+  # still catching a literal __func__ typed directly inside a lambda body.
+  bugprone-lambda-function-name.IgnoreMacros: 'true'

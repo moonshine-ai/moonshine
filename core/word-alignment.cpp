@@ -10,12 +10,15 @@
 // DTW (Dynamic Time Warping)
 
 void dtw(const std::vector<float>& cost_matrix, int N, int M,
-     std::vector<int>& text_indices_out, std::vector<int>& time_indices_out) {
+         std::vector<int>& text_indices_out,
+         std::vector<int>& time_indices_out) {
   // Cumulative cost matrix D of size (N+1) x (M+1), initialized to infinity
-  std::vector<float> D((N + 1) * (M + 1), std::numeric_limits<float>::infinity());
+  std::vector<float> D((N + 1) * (M + 1),
+                       std::numeric_limits<float>::infinity());
   D[0 * (M + 1) + 0] = 0.0f;
 
-  // Trace matrix of size N x M, stores which predecessor was chosen (0, 1, or 2)
+  // Trace matrix of size N x M, stores which predecessor was chosen (0, 1, or
+  // 2)
   std::vector<int> trace(N * M, 0);
 
   for (int i = 0; i < N; i++) {
@@ -24,9 +27,11 @@ void dtw(const std::vector<float>& cost_matrix, int N, int M,
       //   0: diagonal (i, j)     -> D[i][j]
       //   1: vertical (i, j+1)   -> D[i][j+1]
       //   2: horizontal (i+1, j) -> D[i+1][j]
-      float c0 = D[i * (M + 1) + j];         // diagonal
-      float c1 = D[i * (M + 1) + (j + 1)];   // vertical (text advances, time stays)
-      float c2 = D[(i + 1) * (M + 1) + j];   // horizontal (time advances, text stays)
+      float c0 = D[i * (M + 1) + j];  // diagonal
+      float c1 =
+          D[i * (M + 1) + (j + 1)];  // vertical (text advances, time stays)
+      float c2 =
+          D[(i + 1) * (M + 1) + j];  // horizontal (time advances, text stays)
 
       int argmin;
       float min_val;
@@ -91,7 +96,8 @@ static float compute_median(std::vector<float>& window) {
   return window[n / 2];
 }
 
-void median_filter(std::vector<float>& data, int channels, int height, int width, int filter_width) {
+void median_filter(std::vector<float>& data, int channels, int height,
+                   int width, int filter_width) {
   if (filter_width <= 1) {
     return;
   }
@@ -156,10 +162,8 @@ static bool token_starts_new_word(BinTokenizer* tokenizer, int token_id) {
   }
   const std::vector<uint8_t>& bytes = tokenizer->tokens_to_bytes[token_id];
   // The UTF-8 encoding of U+2581 is 0xE2 0x96 0x81 (3 bytes)
-  if (bytes.size() >= 3 &&
-    bytes[0] == 0xE2 &&
-    bytes[1] == 0x96 &&
-    bytes[2] == 0x81) {
+  if (bytes.size() >= 3 && bytes[0] == 0xE2 && bytes[1] == 0x96 &&
+      bytes[2] == 0x81) {
     return true;
   }
   return false;
@@ -167,25 +171,26 @@ static bool token_starts_new_word(BinTokenizer* tokenizer, int token_id) {
 
 // Helper: decode a list of token IDs to text.
 
-static std::string decode_tokens(BinTokenizer* tokenizer, const std::vector<int>& token_ids) {
+static std::string decode_tokens(BinTokenizer* tokenizer,
+                                 const std::vector<int>& token_ids) {
   return tokenizer->tokens_to_text(token_ids, true);
 }
 
 // align_words: main entry point
 
-std::vector<TranscriberWord> align_words(
-  const float* cross_attention_data,
-  int num_layers, int num_heads, int num_tokens, int encoder_frames,
-  const std::vector<int>& tokens,
-  float time_per_frame,
-  BinTokenizer* tokenizer) {
-
+std::vector<TranscriberWord> align_words(const float* cross_attention_data,
+                                         int num_layers, int num_heads,
+                                         int num_tokens, int encoder_frames,
+                                         const std::vector<int>& tokens,
+                                         float time_per_frame,
+                                         BinTokenizer* tokenizer) {
   if (!cross_attention_data || num_tokens <= 0 || encoder_frames <= 0) {
     return {};
   }
 
   int total_heads = num_layers * num_heads;
-  int n_steps = num_tokens;  // number of decode steps (rows in attention matrix)
+  int n_steps =
+      num_tokens;  // number of decode steps (rows in attention matrix)
 
   // -----------------------------------------------------------------------
   // Step 1: Copy cross_attention_data into a working buffer
@@ -201,7 +206,8 @@ std::vector<TranscriberWord> align_words(
   // For each head h, for each token position t:
   //   Compute mean and std across encoder_frames, then normalize.
   // Actually the Python code normalizes per head with axis=-1 and keepdims,
-  // which means for each (head, token_position), normalize across encoder_frames.
+  // which means for each (head, token_position), normalize across
+  // encoder_frames.
   // -----------------------------------------------------------------------
   for (int h = 0; h < total_heads; h++) {
     for (int t = 0; t < n_steps; t++) {
@@ -340,7 +346,8 @@ std::vector<TranscriberWord> align_words(
       continue;
     }
 
-    // Find all DTW path entries where text_indices matches any of this word's step indices
+    // Find all DTW path entries where text_indices matches any of this word's
+    // step indices
     int min_frame = encoder_frames;  // will track minimum time frame
     int max_frame = -1;              // will track maximum time frame
 

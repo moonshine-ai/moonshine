@@ -11,6 +11,7 @@ from pathlib import Path
 from moonshine_voice.moonshine_api import (
     _MoonshineLib,
     ModelArch,
+    SpeakerSpan,
     Transcript,
     TranscriptLine,
     TranscriptC,
@@ -47,6 +48,18 @@ class LineUpdated(TranscriptEvent):
 @dataclass
 class LineTextChanged(TranscriptEvent):
     """Event emitted when the text of a transcription line changes."""
+
+    pass
+
+
+@dataclass
+class LineSpeakersChanged(TranscriptEvent):
+    """Event emitted when the speaker spans of a transcription line change.
+
+    Only fired when the ``identify_speakers`` option is enabled. Note that
+    this can fire for lines that are already complete, since diarization
+    refines speaker assignments retroactively as more audio arrives.
+    """
 
     pass
 
@@ -264,6 +277,23 @@ class Transcriber:
                         )
                     )
 
+            # Extract speaker spans if available
+            speaker_spans = None
+            if line_c.speaker_spans and line_c.speaker_span_count > 0:
+                speaker_spans = []
+                for j in range(line_c.speaker_span_count):
+                    span_c = line_c.speaker_spans[j]
+                    speaker_spans.append(
+                        SpeakerSpan(
+                            start_time=span_c.start_time,
+                            duration=span_c.duration,
+                            speaker_id=span_c.speaker_id,
+                            speaker_index=span_c.speaker_index,
+                            start_char=span_c.start_char,
+                            end_char=span_c.end_char,
+                        )
+                    )
+
             line = TranscriptLine(
                 text=text,
                 start_time=line_c.start_time,
@@ -273,9 +303,8 @@ class Transcriber:
                 is_updated=bool(line_c.is_updated),
                 is_new=bool(line_c.is_new),
                 has_text_changed=bool(line_c.has_text_changed),
-                has_speaker_id=bool(line_c.has_speaker_id),
-                speaker_id=line_c.speaker_id,
-                speaker_index=line_c.speaker_index,
+                have_speakers_changed=bool(line_c.have_speakers_changed),
+                speaker_spans=speaker_spans,
                 audio_data=audio_data,
                 last_transcription_latency_ms=line_c.last_transcription_latency_ms,
                 words=words,
@@ -381,6 +410,13 @@ class TranscriptEventListener(ABC):
 
     def on_line_text_changed(self, event: LineTextChanged) -> None:
         """Called when the text of a transcription line changes."""
+        pass
+
+    def on_line_speakers_changed(self, event: LineSpeakersChanged) -> None:
+        """Called when the speaker spans of a transcription line change.
+
+        Can be called for lines that are already complete.
+        """
         pass
 
     def on_line_completed(self, event: LineCompleted) -> None:
@@ -547,6 +583,8 @@ class Stream:
                 self._emit(LineUpdated(line=line, stream_handle=self._handle))
             if line.has_text_changed:
                 self._emit(LineTextChanged(line=line, stream_handle=self._handle))
+            if line.have_speakers_changed:
+                self._emit(LineSpeakersChanged(line=line, stream_handle=self._handle))
             if line.is_complete and line.is_updated:
                 self._emit(LineCompleted(line=line, stream_handle=self._handle))
 
@@ -562,6 +600,8 @@ class Stream:
                         listener.on_line_updated(event)
                     elif isinstance(event, LineTextChanged):
                         listener.on_line_text_changed(event)
+                    elif isinstance(event, LineSpeakersChanged):
+                        listener.on_line_speakers_changed(event)
                     elif isinstance(event, LineCompleted):
                         listener.on_line_completed(event)
                     elif isinstance(event, Error):
@@ -642,12 +682,119 @@ if __name__ == "__main__":
         "--quiet", action="store_true", help="Quiet output"
     )
     parser.add_argument(
-        "--no-speaker-ids", action="store_true", help="Don't show speaker IDs"
+        "--speaker-ids",
+        action="store_true",
+        help="Run speaker diarization and print a speaker-labeled conversation summary at the end",
     )
     parser.add_argument(
         "--word-timestamps", action="store_true", help="Show word timestamps"
     )
     args = parser.parse_args()
+
+    def span_text_from_words(line: TranscriptLine, span: SpeakerSpan) -> str:
+        """Map words onto this span by maximum temporal overlap."""
+        span_end = span.start_time + span.duration
+        words = []
+        for word in line.words or []:
+            overlap = min(word.end, span_end) - max(word.start, span.start_time)
+            if overlap > 0.0:
+                words.append((overlap, word.start, word.word))
+        words.sort(key=lambda item: (item[1], -item[0]))
+        return " ".join(word for _, _, word in words).strip()
+
+    def assign_words_to_spans(
+        line: TranscriptLine, spans: List[SpeakerSpan]
+    ) -> List[str]:
+        """Give each word to the span it overlaps most, so text is not duplicated."""
+        buckets: List[List[str]] = [[] for _ in spans]
+        for word in line.words or []:
+            best_index = None
+            best_overlap = 0.0
+            for index, span in enumerate(spans):
+                span_end = span.start_time + span.duration
+                overlap = min(word.end, span_end) - max(word.start, span.start_time)
+                if overlap > best_overlap:
+                    best_overlap = overlap
+                    best_index = index
+            if best_index is not None and best_overlap > 0.0:
+                buckets[best_index].append(word.word)
+        return [" ".join(words).strip() for words in buckets]
+
+    def span_text(
+        line: TranscriptLine,
+        span: SpeakerSpan,
+        *,
+        span_index: int,
+        span_texts: Optional[List[str]] = None,
+    ) -> str:
+        if span_texts is not None and span_index < len(span_texts):
+            snippet = span_texts[span_index].strip()
+            if snippet:
+                return snippet
+        if span.end_char > span.start_char:
+            raw = line.text.encode("utf-8")
+            snippet = raw[span.start_char : span.end_char].decode("utf-8").strip()
+            if snippet:
+                return snippet
+        return span_text_from_words(line, span)
+
+    def format_span_line(span: SpeakerSpan, text: str) -> str:
+        if text:
+            return f"Speaker {span.speaker_index}: {text}"
+        return (
+            f"Speaker {span.speaker_index} "
+            f"[{span.start_time:.2f}s +{span.duration:.2f}s]"
+        )
+
+    def format_line_by_speaker_spans(line: TranscriptLine) -> List[str]:
+        """Split one VAD line into one output row per speaker span."""
+        text = (line.text or "").strip()
+        spans = line.speaker_spans or []
+        if not text or not spans:
+            return [text] if text else []
+
+        span_texts = assign_words_to_spans(line, spans)
+
+        if len(spans) == 1:
+            snippet = span_text(line, spans[0], span_index=0, span_texts=span_texts)
+            return [format_span_line(spans[0], snippet or text)]
+
+        rows = []
+        for index, span in enumerate(spans):
+            rows.append(
+                format_span_line(
+                    span,
+                    span_text(line, span, span_index=index, span_texts=span_texts),
+                )
+            )
+        return rows
+
+    def format_conversation_with_speakers(transcript: Transcript) -> str:
+        """Build a transcript with one row per speaker span, in time order."""
+        entries: List[tuple[float, str]] = []
+        for line in transcript.lines:
+            text = (line.text or "").strip()
+            spans = line.speaker_spans or []
+            if not spans:
+                if text:
+                    entries.append((line.start_time, text))
+                continue
+            for index, span in enumerate(spans):
+                span_texts = assign_words_to_spans(line, spans)
+                entries.append(
+                    (
+                        span.start_time,
+                        format_span_line(
+                            span,
+                            span_text(
+                                line, span, span_index=index, span_texts=span_texts
+                            ),
+                        ),
+                    )
+                )
+
+        entries.sort(key=lambda item: item[0])
+        return "\n".join(row for _, row in entries)
 
     if args.model_path is not None:
         model_path = args.model_path
@@ -673,6 +820,9 @@ if __name__ == "__main__":
     if args.word_timestamps:
         options["word_timestamps"] = "true"
 
+    if args.speaker_ids:
+        options["identify_speakers"] = "true"
+
     transcriber = Transcriber(
         model_path=model_path, model_arch=model_arch, options=options
     )
@@ -685,24 +835,40 @@ if __name__ == "__main__":
                 print(f"Line started: {event.line.text}", file=sys.stderr)
 
         def on_line_text_changed(self, event: LineTextChanged):
-            if event.line.has_speaker_id and not args.no_speaker_ids:
-                speaker_prefix = f". Speaker #{event.line.speaker_index}"
-            else:
-                speaker_prefix = ""
             if not args.quiet:
-                print(f"Line text changed{speaker_prefix}: {event.line.text}", file=sys.stderr)
+                print(f"Line text changed: {event.line.text}", file=sys.stderr)
+
+        def on_line_speakers_changed(self, event: LineSpeakersChanged):
+            if not args.quiet and args.speaker_ids:
+                spans = ", ".join(str(span) for span in event.line.speaker_spans or [])
+                print(
+                    f"Line speakers changed: [{spans}] {event.line.text}",
+                    file=sys.stderr,
+                )
 
         def on_line_completed(self, event: LineCompleted):
-            if args.no_speaker_ids:
-                speaker_prefix = ""
+            if args.quiet:
+                return
+            if args.speaker_ids and event.line.speaker_spans:
+                for row in format_line_by_speaker_spans(event.line):
+                    print(row, file=sys.stderr)
+                if args.word_timestamps:
+                    for word in event.line.words or []:
+                        print(
+                            f"  {word.word} [{word.start:.3f}s - {word.end:.3f}s] "
+                            f"(conf: {word.confidence:.2f})",
+                            file=sys.stderr,
+                        )
+            elif args.word_timestamps:
+                print(event.line.text, file=sys.stderr)
+                for word in event.line.words or []:
+                    print(
+                        f"  {word.word} [{word.start:.3f}s - {word.end:.3f}s] "
+                        f"(conf: {word.confidence:.2f})",
+                        file=sys.stderr,
+                    )
             else:
-                speaker_prefix = f"Speaker #{event.line.speaker_index}: "
-            if args.word_timestamps:
-                for word in event.line.words:
-                    print(f"  {word.word} [{word.start:.3f}s - {word.end:.3f}s] (conf: {word.confidence:.2f})", file=sys.stderr)
-            else:
-                print(f"{speaker_prefix}{event.line.text}", file=sys.stderr)
-
+                print(event.line.text, file=sys.stderr)
 
     listener = TestListener()
     transcriber.add_listener(listener)
@@ -717,5 +883,10 @@ if __name__ == "__main__":
         chunk = audio_data[i : i + chunk_size]
         transcriber.add_audio(chunk, sample_rate)
 
-    transcriber.stop()
+    transcript = transcriber.stop()
+    if args.speaker_ids and transcript is not None:
+        conversation = format_conversation_with_speakers(transcript)
+        if conversation:
+            print("--- Conversation (speaker IDs) ---", file=sys.stderr)
+            print(conversation, file=sys.stderr)
     transcriber.close()

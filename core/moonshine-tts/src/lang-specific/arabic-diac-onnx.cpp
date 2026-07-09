@@ -1,10 +1,7 @@
 #include "arabic-diac-onnx.h"
-#include "g2p-path.h"
-#include "moonshine-g2p-options.h"
-#include "ort-onnx-external-data.h"
-#include "utf8-utils.h"
 
 #include <nlohmann/json.h>
+#include <onnxruntime_cxx_api.h>
 
 #include <array>
 #include <cctype>
@@ -21,7 +18,11 @@
 #include <unordered_map>
 #include <vector>
 
-#include <onnxruntime_cxx_api.h>
+#include "g2p-path.h"
+#include "moonshine-g2p-options.h"
+#include "ort-onnx-external-data.h"
+#include "ort-session-options.h"
+#include "utf8-utils.h"
 
 extern "C" {
 #include <utf8proc.h>
@@ -30,31 +31,33 @@ extern "C" {
 namespace moonshine_tts {
 namespace ar_wp {
 
-Ort::SessionOptions make_ar_ort_options(bool use_cuda) {
-  Ort::SessionOptions session_options;
-  session_options.SetIntraOpNumThreads(1);
-  session_options.SetInterOpNumThreads(1);
-  (void)use_cuda;
-  return session_options;
-}
-
-std::unique_ptr<Ort::Session> open_ar_session(Ort::Env& env, const std::filesystem::path& model_path,
-                                              bool use_cuda) {
+std::unique_ptr<Ort::Session> open_ar_session(
+    Ort::Env& env, const std::filesystem::path& model_path,
+    const std::vector<std::string>& ort_providers,
+    const std::string& coreml_cache_dir) {
 #ifdef _WIN32
   const std::wstring w = model_path.wstring();
-  return std::make_unique<Ort::Session>(env, w.c_str(), make_ar_ort_options(use_cuda));
+  return std::make_unique<Ort::Session>(
+      env, w.c_str(),
+      make_g2p_ort_session_options(ort_providers, coreml_cache_dir));
 #else
   const std::string u8 = model_path.string();
-  return std::make_unique<Ort::Session>(env, u8.c_str(), make_ar_ort_options(use_cuda));
+  return std::make_unique<Ort::Session>(
+      env, u8.c_str(),
+      make_g2p_ort_session_options(ort_providers, coreml_cache_dir));
 #endif
 }
 
-std::unique_ptr<Ort::Session> open_ar_session_memory(Ort::Env& env, const void* data, size_t len,
-                                                     bool use_cuda, const MoonshineG2POptions* opt,
-                                                     std::string_view model_map_key) {
-  Ort::SessionOptions so = make_ar_ort_options(use_cuda);
+std::unique_ptr<Ort::Session> open_ar_session_memory(
+    Ort::Env& env, const void* data, size_t len,
+    const std::vector<std::string>& ort_providers,
+    const std::string& coreml_cache_dir, const MoonshineG2POptions* opt,
+    std::string_view model_map_key) {
+  Ort::SessionOptions so =
+      make_g2p_ort_session_options(ort_providers, coreml_cache_dir);
   if (opt != nullptr && !model_map_key.empty()) {
-    ort_add_external_initializer_files_for_onnx_model_buffer(so, opt->files, model_map_key);
+    ort_add_external_initializer_files_for_onnx_model_buffer(so, opt->files,
+                                                             model_map_key);
   }
   return std::make_unique<Ort::Session>(env, data, len, so);
 }
@@ -69,8 +72,10 @@ std::string slurp_utf8_file_ar(const std::filesystem::path& p) {
   return oss.str();
 }
 
-bool bundle_load_utf8_ar(const MoonshineG2POptions* opt, std::string_view bundle_key, std::string_view file,
-                         const std::filesystem::path& disk_dir, std::string& out) {
+bool bundle_load_utf8_ar(const MoonshineG2POptions* opt,
+                         std::string_view bundle_key, std::string_view file,
+                         const std::filesystem::path& disk_dir,
+                         std::string& out) {
   if (opt && !bundle_key.empty()) {
     const std::string ak = g2p_bundle_file_key(bundle_key, file);
     if (opt->asset_is_available(ak)) {
@@ -86,8 +91,10 @@ bool bundle_load_utf8_ar(const MoonshineG2POptions* opt, std::string_view bundle
   return false;
 }
 
-bool bundle_load_binary_ar(const MoonshineG2POptions* opt, std::string_view bundle_key, std::string_view file,
-                           const std::filesystem::path& disk_dir, std::vector<std::uint8_t>& out) {
+bool bundle_load_binary_ar(const MoonshineG2POptions* opt,
+                           std::string_view bundle_key, std::string_view file,
+                           const std::filesystem::path& disk_dir,
+                           std::vector<std::uint8_t>& out) {
   if (opt && !bundle_key.empty()) {
     const std::string ak = g2p_bundle_file_key(bundle_key, file);
     if (opt->asset_is_available(ak)) {
@@ -111,7 +118,8 @@ bool bundle_load_binary_ar(const MoonshineG2POptions* opt, std::string_view bund
   }
   out.resize(static_cast<size_t>(sz));
   if (!out.empty()) {
-    in.read(reinterpret_cast<char*>(out.data()), static_cast<std::streamsize>(out.size()));
+    in.read(reinterpret_cast<char*>(out.data()),
+            static_cast<std::streamsize>(out.size()));
   }
   return true;
 }
@@ -138,10 +146,12 @@ std::string u32_to_utf8(const std::u32string& s) {
 }
 
 bool is_space_u32(char32_t c) {
-  if (c == U' ' || c == U'\t' || c == U'\n' || c == U'\r' || c == U'\f' || c == U'\v') {
+  if (c == U' ' || c == U'\t' || c == U'\n' || c == U'\r' || c == U'\f' ||
+      c == U'\v') {
     return true;
   }
-  return utf8proc_category(static_cast<utf8proc_int32_t>(c)) == UTF8PROC_CATEGORY_ZS;
+  return utf8proc_category(static_cast<utf8proc_int32_t>(c)) ==
+         UTF8PROC_CATEGORY_ZS;
 }
 
 bool is_control_u32(char32_t c) {
@@ -149,22 +159,23 @@ bool is_control_u32(char32_t c) {
     return false;
   }
   const auto cat = utf8proc_category(static_cast<utf8proc_int32_t>(c));
-  return cat == UTF8PROC_CATEGORY_CC || cat == UTF8PROC_CATEGORY_CF || cat == UTF8PROC_CATEGORY_CN ||
-         cat == UTF8PROC_CATEGORY_CO;
+  return cat == UTF8PROC_CATEGORY_CC || cat == UTF8PROC_CATEGORY_CF ||
+         cat == UTF8PROC_CATEGORY_CN || cat == UTF8PROC_CATEGORY_CO;
 }
 
 bool is_punctuation_u32(char32_t c) {
   const std::uint32_t cp = static_cast<std::uint32_t>(c);
-  if ((33 <= cp && cp <= 47) || (58 <= cp && cp <= 64) || (91 <= cp && cp <= 96) ||
-      (123 <= cp && cp <= 126)) {
+  if ((33 <= cp && cp <= 47) || (58 <= cp && cp <= 64) ||
+      (91 <= cp && cp <= 96) || (123 <= cp && cp <= 126)) {
     return true;
   }
   const char* cat = utf8proc_category_string(static_cast<utf8proc_int32_t>(c));
   return cat != nullptr && cat[0] == 'P';
 }
 
-/// ``token_word_group_indices`` uses :func:`_is_punct_char` (Unicode **P** categories only), not the
-/// broader BERT ``_is_punctuation`` (ASCII ranges include ``~`` as Sm).
+/// ``token_word_group_indices`` uses :func:`_is_punct_char` (Unicode **P**
+/// categories only), not the broader BERT ``_is_punctuation`` (ASCII ranges
+/// include ``~`` as Sm).
 bool is_punct_char_word_group_u32(char32_t c) {
   const char* cat = utf8proc_category_string(static_cast<utf8proc_int32_t>(c));
   return cat != nullptr && cat[0] == 'P';
@@ -172,14 +183,17 @@ bool is_punct_char_word_group_u32(char32_t c) {
 
 bool is_chinese_char(std::uint32_t cp) {
   return (0x4E00u <= cp && cp <= 0x9FFFu) || (0x3400u <= cp && cp <= 0x4DBFu) ||
-         (0x20000u <= cp && cp <= 0x2A6DFu) || (0x2A700u <= cp && cp <= 0x2B73Fu) ||
-         (0x2B740u <= cp && cp <= 0x2B81Fu) || (0x2B820u <= cp && cp <= 0x2CEAFu) ||
+         (0x20000u <= cp && cp <= 0x2A6DFu) ||
+         (0x2A700u <= cp && cp <= 0x2B73Fu) ||
+         (0x2B740u <= cp && cp <= 0x2B81Fu) ||
+         (0x2B820u <= cp && cp <= 0x2CEAFu) ||
          (0xF900u <= cp && cp <= 0xFAFFu) || (0x2F800u <= cp && cp <= 0x2FA1Fu);
 }
 
 std::u32string u32_nfc(const std::u32string& s) {
   std::string utf8 = u32_to_utf8(s);
-  utf8proc_uint8_t* nfc = utf8proc_NFC(reinterpret_cast<const utf8proc_uint8_t*>(utf8.c_str()));
+  utf8proc_uint8_t* nfc =
+      utf8proc_NFC(reinterpret_cast<const utf8proc_uint8_t*>(utf8.c_str()));
   if (nfc == nullptr) {
     return s;
   }
@@ -190,7 +204,8 @@ std::u32string u32_nfc(const std::u32string& s) {
 
 std::u32string strip_mn_nfd(const std::u32string& s) {
   std::string utf8 = u32_to_utf8(s);
-  utf8proc_uint8_t* nfd = utf8proc_NFD(reinterpret_cast<const utf8proc_uint8_t*>(utf8.c_str()));
+  utf8proc_uint8_t* nfd =
+      utf8proc_NFD(reinterpret_cast<const utf8proc_uint8_t*>(utf8.c_str()));
   if (nfd == nullptr) {
     return s;
   }
@@ -199,7 +214,8 @@ std::u32string strip_mn_nfd(const std::u32string& s) {
   std::u32string u = utf8_to_u32(nfd_str);
   std::u32string out;
   for (char32_t cp : u) {
-    if (utf8proc_category(static_cast<utf8proc_int32_t>(cp)) != UTF8PROC_CATEGORY_MN) {
+    if (utf8proc_category(static_cast<utf8proc_int32_t>(cp)) !=
+        UTF8PROC_CATEGORY_MN) {
       out.push_back(cp);
     }
   }
@@ -209,7 +225,8 @@ std::u32string strip_mn_nfd(const std::u32string& s) {
 std::u32string to_lower_u32(const std::u32string& s) {
   std::u32string out;
   for (char32_t cp : s) {
-    out.push_back(static_cast<char32_t>(utf8proc_tolower(static_cast<utf8proc_int32_t>(cp))));
+    out.push_back(static_cast<char32_t>(
+        utf8proc_tolower(static_cast<utf8proc_int32_t>(cp))));
   }
   return out;
 }
@@ -301,7 +318,8 @@ struct BasicTokCfg {
   std::optional<bool> strip_accents;
 };
 
-std::u32string normalization_ref_u32(const std::u32string& text_u32, const BasicTokCfg& cfg) {
+std::u32string normalization_ref_u32(const std::u32string& text_u32,
+                                     const BasicTokCfg& cfg) {
   std::u32string t = clean_text_u32(text_u32);
   if (cfg.tokenize_chinese_chars) {
     t = tokenize_chinese_chars_u32(t);
@@ -309,14 +327,15 @@ std::u32string normalization_ref_u32(const std::u32string& text_u32, const Basic
   return u32_nfc(t);
 }
 
-std::vector<std::u32string> basic_tokenize_u32(const std::u32string& original_text_u32,
-                                                 const BasicTokCfg& cfg) {
+std::vector<std::u32string> basic_tokenize_u32(
+    const std::u32string& original_text_u32, const BasicTokCfg& cfg) {
   std::u32string text = clean_text_u32(original_text_u32);
   if (cfg.tokenize_chinese_chars) {
     text = tokenize_chinese_chars_u32(text);
   }
   std::u32string unicode_normalized = u32_nfc(text);
-  std::vector<std::u32string> orig_tokens = split_u32_whitespace(unicode_normalized);
+  std::vector<std::u32string> orig_tokens =
+      split_u32_whitespace(unicode_normalized);
   std::vector<std::u32string> split_tokens;
   for (std::u32string token : orig_tokens) {
     if (cfg.do_lower_case) {
@@ -340,24 +359,27 @@ std::vector<std::u32string> basic_tokenize_u32(const std::u32string& original_te
   return split_u32_whitespace(joined);
 }
 
-void align_basic_tokens_u32(const std::u32string& ref, const std::vector<std::u32string>& basic_tokens) {
+void align_basic_tokens_u32(const std::u32string& ref,
+                            const std::vector<std::u32string>& basic_tokens) {
   std::size_t cursor = 0;
   for (const std::u32string& btok : basic_tokens) {
     while (cursor < ref.size() && ref[cursor] == U' ') {
       ++cursor;
     }
-    if (cursor + btok.size() > ref.size() || ref.compare(cursor, btok.size(), btok) != 0) {
-      throw std::runtime_error("Arabic WordPiece: basic token alignment failed at offset " +
-                               std::to_string(cursor));
+    if (cursor + btok.size() > ref.size() ||
+        ref.compare(cursor, btok.size(), btok) != 0) {
+      throw std::runtime_error(
+          "Arabic WordPiece: basic token alignment failed at offset " +
+          std::to_string(cursor));
     }
     cursor += btok.size();
   }
 }
 
-std::vector<std::u32string> wordpiece_tokenize_u32(const std::u32string& token,
-                                                   const std::unordered_map<std::string, int64_t>& vocab,
-                                                   const std::string& unk_token_utf8,
-                                                   int max_input_chars_per_word) {
+std::vector<std::u32string> wordpiece_tokenize_u32(
+    const std::u32string& token,
+    const std::unordered_map<std::string, int64_t>& vocab,
+    const std::string& unk_token_utf8, int max_input_chars_per_word) {
   std::vector<std::u32string> output_tokens;
   for (const std::u32string& wt : split_u32_whitespace(token)) {
     if (wt.size() > static_cast<size_t>(max_input_chars_per_word)) {
@@ -372,8 +394,9 @@ std::vector<std::u32string> wordpiece_tokenize_u32(const std::u32string& token,
       std::size_t end = chars.size();
       std::string cur_substr;
       while (start < end) {
-        std::u32string piece_u32(chars.begin() + static_cast<std::ptrdiff_t>(start),
-                                 chars.begin() + static_cast<std::ptrdiff_t>(end));
+        std::u32string piece_u32(
+            chars.begin() + static_cast<std::ptrdiff_t>(start),
+            chars.begin() + static_cast<std::ptrdiff_t>(end));
         std::string substr = u32_to_utf8(piece_u32);
         if (start > 0) {
           substr = "##" + substr;
@@ -394,7 +417,8 @@ std::vector<std::u32string> wordpiece_tokenize_u32(const std::u32string& token,
     if (is_bad) {
       output_tokens.push_back(utf8_to_u32(unk_token_utf8));
     } else {
-      output_tokens.insert(output_tokens.end(), sub_tokens.begin(), sub_tokens.end());
+      output_tokens.insert(output_tokens.end(), sub_tokens.begin(),
+                           sub_tokens.end());
     }
   }
   return output_tokens;
@@ -407,14 +431,14 @@ struct EncodedWp {
   std::vector<std::vector<int>> word_groups;
 };
 
-EncodedWp encode_bert_wordpiece(const std::u32string& text_u32,
-                                const std::unordered_map<std::string, int64_t>& vocab,
-                                const BasicTokCfg& basic_cfg,
-                                const std::string& unk_utf8,
-                                const std::string& cls_utf8,
-                                const std::string& sep_utf8) {
+EncodedWp encode_bert_wordpiece(
+    const std::u32string& text_u32,
+    const std::unordered_map<std::string, int64_t>& vocab,
+    const BasicTokCfg& basic_cfg, const std::string& unk_utf8,
+    const std::string& cls_utf8, const std::string& sep_utf8) {
   const std::u32string ref = normalization_ref_u32(text_u32, basic_cfg);
-  std::vector<std::u32string> basic_tokens = basic_tokenize_u32(text_u32, basic_cfg);
+  std::vector<std::u32string> basic_tokens =
+      basic_tokenize_u32(text_u32, basic_cfg);
   align_basic_tokens_u32(ref, basic_tokens);
 
   std::vector<std::tuple<std::u32string, int, int>> aligned;
@@ -485,92 +509,98 @@ EncodedWp encode_bert_wordpiece(const std::u32string& text_u32,
   all_tokens.insert(all_tokens.end(), tokens_utf8.begin(), tokens_utf8.end());
   all_tokens.push_back(sep_utf8);
 
-  auto token_word_group_indices = [&](const std::vector<std::string>& tokens,
-                                      const std::vector<std::pair<int, int>>& offsets,
-                                      const std::u32string& ref_text, const std::string& cls_t,
-                                      const std::string& sep_t) {
-    struct Idx {
-      int i;
-      int s;
-      int e;
-    };
-    std::vector<Idx> idxs;
-    for (std::size_t ti = 0; ti < tokens.size(); ++ti) {
-      const std::string& tok = tokens[ti];
-      const int s = offsets[ti].first;
-      const int e = offsets[ti].second;
-      if (tok == cls_t || tok == sep_t || (s == 0 && e == 0)) {
-        continue;
-      }
-      idxs.push_back({static_cast<int>(ti), s, e});
-    }
-    std::vector<std::vector<int>> groups;
-    std::vector<Idx> cur;
-    auto u32_ref = ref_text;
-    auto gap_str = [&](int pe, int s) {
-      if (pe >= s) {
-        return std::u32string{};
-      }
-      return u32_ref.substr(static_cast<std::size_t>(pe), static_cast<std::size_t>(s - pe));
-    };
-    auto u32_strip_empty = [](std::u32string g) {
-      std::size_t a = 0;
-      std::size_t b = g.size();
-      while (a < b && is_space_u32(g[a])) {
-        ++a;
-      }
-      while (b > a && is_space_u32(g[b - 1])) {
-        --b;
-      }
-      return g.substr(a, b - a);
-    };
-    for (const Idx& item : idxs) {
-      if (cur.empty()) {
-        cur.push_back(item);
-        continue;
-      }
-      const int pe = cur.back().e;
-      const int s = item.s;
-      const std::u32string gap = gap_str(pe, s);
-      const bool new_word = !gap.empty() && u32_strip_empty(gap).empty();
-      const char32_t last_ch = (pe > 0) ? u32_ref[static_cast<std::size_t>(pe - 1)] : U'\0';
-      const char32_t first_ch =
-          (s < static_cast<int>(u32_ref.size())) ? u32_ref[static_cast<std::size_t>(s)] : U'\0';
-      const bool punct_break =
-          (pe > 0) && !is_punct_char_word_group_u32(last_ch) && is_punct_char_word_group_u32(first_ch);
-      if (new_word || punct_break) {
-        std::vector<int> g;
-        for (const Idx& t : cur) {
-          g.push_back(t.i);
+  auto token_word_group_indices =
+      [&](const std::vector<std::string>& tokens,
+          const std::vector<std::pair<int, int>>& offsets,
+          const std::u32string& ref_text, const std::string& cls_t,
+          const std::string& sep_t) {
+        struct Idx {
+          int i;
+          int s;
+          int e;
+        };
+        std::vector<Idx> idxs;
+        for (std::size_t ti = 0; ti < tokens.size(); ++ti) {
+          const std::string& tok = tokens[ti];
+          const int s = offsets[ti].first;
+          const int e = offsets[ti].second;
+          if (tok == cls_t || tok == sep_t || (s == 0 && e == 0)) {
+            continue;
+          }
+          idxs.push_back({static_cast<int>(ti), s, e});
         }
-        groups.push_back(std::move(g));
-        cur = {item};
-      } else {
-        cur.push_back(item);
-      }
-    }
-    if (!cur.empty()) {
-      std::vector<int> g;
-      for (const Idx& t : cur) {
-        g.push_back(t.i);
-      }
-      groups.push_back(std::move(g));
-    }
-    return groups;
-  };
+        std::vector<std::vector<int>> groups;
+        std::vector<Idx> cur;
+        auto u32_ref = ref_text;
+        auto gap_str = [&](int pe, int s) {
+          if (pe >= s) {
+            return std::u32string{};
+          }
+          return u32_ref.substr(static_cast<std::size_t>(pe),
+                                static_cast<std::size_t>(s - pe));
+        };
+        auto u32_strip_empty = [](std::u32string g) {
+          std::size_t a = 0;
+          std::size_t b = g.size();
+          while (a < b && is_space_u32(g[a])) {
+            ++a;
+          }
+          while (b > a && is_space_u32(g[b - 1])) {
+            --b;
+          }
+          return g.substr(a, b - a);
+        };
+        for (const Idx& item : idxs) {
+          if (cur.empty()) {
+            cur.push_back(item);
+            continue;
+          }
+          const int pe = cur.back().e;
+          const int s = item.s;
+          const std::u32string gap = gap_str(pe, s);
+          const bool new_word = !gap.empty() && u32_strip_empty(gap).empty();
+          const char32_t last_ch =
+              (pe > 0) ? u32_ref[static_cast<std::size_t>(pe - 1)] : U'\0';
+          const char32_t first_ch = (s < static_cast<int>(u32_ref.size()))
+                                        ? u32_ref[static_cast<std::size_t>(s)]
+                                        : U'\0';
+          const bool punct_break = (pe > 0) &&
+                                   !is_punct_char_word_group_u32(last_ch) &&
+                                   is_punct_char_word_group_u32(first_ch);
+          if (new_word || punct_break) {
+            std::vector<int> g;
+            for (const Idx& t : cur) {
+              g.push_back(t.i);
+            }
+            groups.push_back(std::move(g));
+            cur = {item};
+          } else {
+            cur.push_back(item);
+          }
+        }
+        if (!cur.empty()) {
+          std::vector<int> g;
+          for (const Idx& t : cur) {
+            g.push_back(t.i);
+          }
+          groups.push_back(std::move(g));
+        }
+        return groups;
+      };
 
-  std::vector<std::vector<int>> groups =
-      token_word_group_indices(all_tokens, all_offsets, ref, cls_utf8, sep_utf8);
+  std::vector<std::vector<int>> groups = token_word_group_indices(
+      all_tokens, all_offsets, ref, cls_utf8, sep_utf8);
 
   EncodedWp out;
   out.input_ids = std::move(all_ids);
   out.offsets_cp = std::move(all_offsets);
-  out.ref_u32 = std::move(ref);
+  out.ref_u32 = ref;
   out.word_groups = std::move(groups);
   return out;
 }
 
-std::unordered_map<std::string, int64_t> load_vocab_txt_stream(std::istream& in) {
+std::unordered_map<std::string, int64_t> load_vocab_txt_stream(
+    std::istream& in) {
   std::unordered_map<std::string, int64_t> vocab;
   std::string line;
   int64_t index = 0;
@@ -584,7 +614,8 @@ std::unordered_map<std::string, int64_t> load_vocab_txt_stream(std::istream& in)
   return vocab;
 }
 
-std::unordered_map<std::string, int64_t> load_vocab_txt(const std::filesystem::path& p) {
+std::unordered_map<std::string, int64_t> load_vocab_txt(
+    const std::filesystem::path& p) {
   std::ifstream in(p);
   if (!in) {
     throw std::runtime_error("cannot open vocab: " + p.string());
@@ -592,31 +623,49 @@ std::unordered_map<std::string, int64_t> load_vocab_txt(const std::filesystem::p
   return load_vocab_txt_stream(in);
 }
 
-std::unordered_map<std::string, int64_t> load_vocab_txt_string(std::string_view utf8) {
+std::unordered_map<std::string, int64_t> load_vocab_txt_string(
+    std::string_view utf8) {
   const std::string buf(utf8);
   std::istringstream in(buf);
   return load_vocab_txt_stream(in);
 }
 
-
 std::unordered_map<std::string, std::string> build_label_to_diac_utf8() {
   std::unordered_map<std::string, std::string> m;
   m[std::string("X")] = "";
-  m[std::string("\xd8\xaa\xd8\xb7\xd9\x88\xd9\x8a\xd9\x84", 10)] = std::string("\xd9\x80", 2);
-  m[std::string("\xd8\xb3\xd9\x83\xd9\x88\xd9\x86", 8)] = std::string("\xd9\x92", 2);
+  m[std::string("\xd8\xaa\xd8\xb7\xd9\x88\xd9\x8a\xd9\x84", 10)] =
+      std::string("\xd9\x80", 2);
+  m[std::string("\xd8\xb3\xd9\x83\xd9\x88\xd9\x86", 8)] =
+      std::string("\xd9\x92", 2);
   m[std::string("\xd8\xb4\xd8\xaf\xd8\xa9", 6)] = std::string("\xd9\x91", 2);
-  m[std::string("\xd8\xb4\xd8\xaf\xd8\xa9\x20\xd8\xb6\xd9\x85\xd8\xa9", 13)] = std::string("\xd9\x91\xd9\x8f", 4);
-  m[std::string("\xd8\xb4\xd8\xaf\xd8\xa9\x20\xd8\xb6\xd9\x85\xd8\xaa\xd8\xa7\xd9\x86", 17)] = std::string("\xd9\x91\xd9\x8c", 4);
-  m[std::string("\xd8\xb4\xd8\xaf\xd8\xa9\x20\xd9\x81\xd8\xaa\xd8\xad\xd8\xa9", 15)] = std::string("\xd9\x91\xd9\x8e", 4);
-  m[std::string("\xd8\xb4\xd8\xaf\xd8\xa9\x20\xd9\x81\xd8\xaa\xd8\xad\xd8\xaa\xd8\xa7\xd9\x86", 19)] = std::string("\xd9\x91\xd9\x8b", 4);
-  m[std::string("\xd8\xb4\xd8\xaf\xd8\xa9\x20\xd9\x83\xd8\xb3\xd8\xb1\xd8\xa9", 15)] = std::string("\xd9\x91\xd9\x90", 4);
-  m[std::string("\xd8\xb4\xd8\xaf\xd8\xa9\x20\xd9\x83\xd8\xb3\xd8\xb1\xd8\xaa\xd8\xa7\xd9\x86", 19)] = std::string("\xd9\x91\xd9\x8d", 4);
+  m[std::string("\xd8\xb4\xd8\xaf\xd8\xa9\x20\xd8\xb6\xd9\x85\xd8\xa9", 13)] =
+      std::string("\xd9\x91\xd9\x8f", 4);
+  m[std::string(
+      "\xd8\xb4\xd8\xaf\xd8\xa9\x20\xd8\xb6\xd9\x85\xd8\xaa\xd8\xa7\xd9\x86",
+      17)] = std::string("\xd9\x91\xd9\x8c", 4);
+  m[std::string("\xd8\xb4\xd8\xaf\xd8\xa9\x20\xd9\x81\xd8\xaa\xd8\xad\xd8\xa9",
+                15)] = std::string("\xd9\x91\xd9\x8e", 4);
+  m[std::string(
+      "\xd8\xb4\xd8\xaf\xd8\xa9\x20\xd9\x81\xd8\xaa\xd8\xad\xd8\xaa\xd8\xa7\xd9"
+      "\x86",
+      19)] = std::string("\xd9\x91\xd9\x8b", 4);
+  m[std::string("\xd8\xb4\xd8\xaf\xd8\xa9\x20\xd9\x83\xd8\xb3\xd8\xb1\xd8\xa9",
+                15)] = std::string("\xd9\x91\xd9\x90", 4);
+  m[std::string(
+      "\xd8\xb4\xd8\xaf\xd8\xa9\x20\xd9\x83\xd8\xb3\xd8\xb1\xd8\xaa\xd8\xa7\xd9"
+      "\x86",
+      19)] = std::string("\xd9\x91\xd9\x8d", 4);
   m[std::string("\xd8\xb6\xd9\x85\xd8\xa9", 6)] = std::string("\xd9\x8f", 2);
-  m[std::string("\xd8\xb6\xd9\x85\xd8\xaa\xd8\xa7\xd9\x86", 10)] = std::string("\xd9\x8c", 2);
-  m[std::string("\xd9\x81\xd8\xaa\xd8\xad\xd8\xa9", 8)] = std::string("\xd9\x8e", 2);
-  m[std::string("\xd9\x81\xd8\xaa\xd8\xad\xd8\xaa\xd8\xa7\xd9\x86", 12)] = std::string("\xd9\x8b", 2);
-  m[std::string("\xd9\x83\xd8\xb3\xd8\xb1\xd8\xa9", 8)] = std::string("\xd9\x90", 2);
-  m[std::string("\xd9\x83\xd8\xb3\xd8\xb1\xd8\xaa\xd8\xa7\xd9\x86", 12)] = std::string("\xd9\x8d", 2);
+  m[std::string("\xd8\xb6\xd9\x85\xd8\xaa\xd8\xa7\xd9\x86", 10)] =
+      std::string("\xd9\x8c", 2);
+  m[std::string("\xd9\x81\xd8\xaa\xd8\xad\xd8\xa9", 8)] =
+      std::string("\xd9\x8e", 2);
+  m[std::string("\xd9\x81\xd8\xaa\xd8\xad\xd8\xaa\xd8\xa7\xd9\x86", 12)] =
+      std::string("\xd9\x8b", 2);
+  m[std::string("\xd9\x83\xd8\xb3\xd8\xb1\xd8\xa9", 8)] =
+      std::string("\xd9\x90", 2);
+  m[std::string("\xd9\x83\xd8\xb3\xd8\xb1\xd8\xaa\xd8\xa7\xd9\x86", 12)] =
+      std::string("\xd9\x8d", 2);
   return m;
 }
 
@@ -634,7 +683,8 @@ bool is_arabic_anchor_char(char32_t c) {
   return false;
 }
 
-std::optional<int> anchor_index_for_span(const std::u32string& ref, int s, int e) {
+std::optional<int> anchor_index_for_span(const std::u32string& ref, int s,
+                                         int e) {
   int best = -1;
   for (int k = s; k < e && k < static_cast<int>(ref.size()); ++k) {
     if (is_arabic_anchor_char(ref[static_cast<std::size_t>(k)])) {
@@ -657,8 +707,9 @@ std::u32string strip_arabic_diacritics_u32(const std::u32string& s) {
     if (o == 0x670u) {
       continue;
     }
-    if (utf8proc_category(static_cast<utf8proc_int32_t>(ch)) == UTF8PROC_CATEGORY_MN && o >= 0x0600u &&
-        o <= 0x06FFu) {
+    if (utf8proc_category(static_cast<utf8proc_int32_t>(ch)) ==
+            UTF8PROC_CATEGORY_MN &&
+        o >= 0x0600u && o <= 0x06FFu) {
       continue;
     }
     out.push_back(ch);
@@ -669,18 +720,28 @@ std::u32string strip_arabic_diacritics_u32(const std::u32string& s) {
 }  // namespace ar_wp
 
 ArabicDiacOnnx::ArabicDiacOnnx(std::filesystem::path model_dir, bool use_cuda)
-    : ArabicDiacOnnx(nullptr, std::string_view{}, std::move(model_dir), use_cuda) {}
+    : ArabicDiacOnnx(nullptr, std::string_view{}, std::move(model_dir),
+                     use_cuda) {}
 
-ArabicDiacOnnx::ArabicDiacOnnx(const MoonshineG2POptions* opt, std::string_view onnx_bundle_key,
-                               std::filesystem::path model_dir_fallback, bool use_cuda)
+ArabicDiacOnnx::ArabicDiacOnnx(const MoonshineG2POptions* opt,
+                               std::string_view onnx_bundle_key,
+                               std::filesystem::path model_dir_fallback,
+                               bool use_cuda)
     : env_(ORT_LOGGING_LEVEL_WARNING, "moonshine_ar_diac"),
       mem_(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)),
       model_dir_(std::move(model_dir_fallback)) {
+  (void)use_cuda;
+  const std::vector<std::string> ort_providers =
+      opt != nullptr ? opt->ort_provider_names : std::vector<std::string>{};
+  const std::string coreml_cache_dir =
+      opt != nullptr ? opt->coreml_cache_dir : std::string{};
   label_to_diac_ = ar_wp::build_label_to_diac_utf8();
   std::string meta_json;
-  if (!ar_wp::bundle_load_utf8_ar(opt, onnx_bundle_key, "meta.json", model_dir_, meta_json)) {
-    throw std::runtime_error("ArabicDiacOnnx: missing meta.json (memory or disk under " +
-                             model_dir_.string() + ")");
+  if (!ar_wp::bundle_load_utf8_ar(opt, onnx_bundle_key, "meta.json", model_dir_,
+                                  meta_json)) {
+    throw std::runtime_error(
+        "ArabicDiacOnnx: missing meta.json (memory or disk under " +
+        model_dir_.string() + ")");
   }
   const nlohmann::json meta = nlohmann::json::parse(meta_json);
   for (const auto& s : meta.at("id2label")) {
@@ -688,25 +749,31 @@ ArabicDiacOnnx::ArabicDiacOnnx(const MoonshineG2POptions* opt, std::string_view 
   }
   pad_id_ = meta.value("pad_token_id", 0);
   max_sequence_length_ = meta.value("max_sequence_length", 512);
-  const std::string onnx_name = meta.value("onnx_model_file", std::string("model.ort"));
-  if (!ar_wp::bundle_load_utf8_ar(opt, onnx_bundle_key, "vocab.txt", model_dir_, cached_vocab_txt_)) {
+  const std::string onnx_name =
+      meta.value("onnx_model_file", std::string("model.ort"));
+  if (!ar_wp::bundle_load_utf8_ar(opt, onnx_bundle_key, "vocab.txt", model_dir_,
+                                  cached_vocab_txt_)) {
     throw std::runtime_error("ArabicDiacOnnx: missing vocab.txt");
   }
-  if (!ar_wp::bundle_load_utf8_ar(opt, onnx_bundle_key, "tokenizer_config.json", model_dir_,
-                                  cached_tokenizer_cfg_json_)) {
+  if (!ar_wp::bundle_load_utf8_ar(opt, onnx_bundle_key, "tokenizer_config.json",
+                                  model_dir_, cached_tokenizer_cfg_json_)) {
     throw std::runtime_error("ArabicDiacOnnx: missing tokenizer_config.json");
   }
-  if (ar_wp::bundle_load_binary_ar(opt, onnx_bundle_key, onnx_name, model_dir_, onnx_model_storage_) &&
+  if (ar_wp::bundle_load_binary_ar(opt, onnx_bundle_key, onnx_name, model_dir_,
+                                   onnx_model_storage_) &&
       !onnx_model_storage_.empty()) {
-    const std::string model_map_key = g2p_bundle_file_key(onnx_bundle_key, onnx_name);
-    session_ = ar_wp::open_ar_session_memory(env_, onnx_model_storage_.data(),
-                                             onnx_model_storage_.size(), use_cuda, opt, model_map_key);
+    const std::string model_map_key =
+        g2p_bundle_file_key(onnx_bundle_key, onnx_name);
+    session_ = ar_wp::open_ar_session_memory(
+        env_, onnx_model_storage_.data(), onnx_model_storage_.size(),
+        ort_providers, coreml_cache_dir, opt, model_map_key);
   } else {
     const auto onnx_path = resolve_prefer_ort_model(model_dir_, onnx_name);
     if (!std::filesystem::is_regular_file(onnx_path)) {
       throw std::runtime_error("ArabicDiacOnnx: missing " + onnx_path.string());
     }
-    session_ = ar_wp::open_ar_session(env_, onnx_path, use_cuda);
+    session_ = ar_wp::open_ar_session(env_, onnx_path, ort_providers,
+                                      coreml_cache_dir);
   }
   {
     Ort::AllocatorWithDefaultOptions alloc;
@@ -732,7 +799,8 @@ std::string ArabicDiacOnnx::diacritize(std::string_view text_utf8) const {
   if (cached_vocab_txt_.empty() || cached_tokenizer_cfg_json_.empty()) {
     throw std::runtime_error("ArabicDiacOnnx: tokenizer assets not loaded");
   }
-  const std::unordered_map<std::string, int64_t> vocab = ar_wp::load_vocab_txt_string(cached_vocab_txt_);
+  const std::unordered_map<std::string, int64_t> vocab =
+      ar_wp::load_vocab_txt_string(cached_vocab_txt_);
   const nlohmann::json cfg = nlohmann::json::parse(cached_tokenizer_cfg_json_);
   ar_wp::BasicTokCfg bcfg;
   bcfg.do_lower_case = cfg.value("do_lower_case", false);
@@ -744,17 +812,19 @@ std::string ArabicDiacOnnx::diacritize(std::string_view text_utf8) const {
   const std::string cls_utf8 = cfg.at("cls_token").get<std::string>();
   const std::string sep_utf8 = cfg.at("sep_token").get<std::string>();
 
-  ar_wp::EncodedWp enc =
-      ar_wp::encode_bert_wordpiece(ar_wp::utf8_to_u32(und), vocab, bcfg, unk_utf8, cls_utf8, sep_utf8);
+  ar_wp::EncodedWp enc = ar_wp::encode_bert_wordpiece(
+      ar_wp::utf8_to_u32(und), vocab, bcfg, unk_utf8, cls_utf8, sep_utf8);
   if (static_cast<int>(enc.input_ids.size()) > max_sequence_length_) {
     const int keep = max_sequence_length_ - 2;
     const int64_t cls_id = enc.input_ids.front();
     const int64_t sep_id = enc.input_ids.back();
-    std::vector<int64_t> inner(enc.input_ids.begin() + 1, enc.input_ids.end() - 1);
+    std::vector<int64_t> inner(enc.input_ids.begin() + 1,
+                               enc.input_ids.end() - 1);
     if (static_cast<int>(inner.size()) > keep) {
       inner.resize(static_cast<std::size_t>(keep));
     }
-    std::vector<std::pair<int, int>> inner_off(enc.offsets_cp.begin() + 1, enc.offsets_cp.end() - 1);
+    std::vector<std::pair<int, int>> inner_off(enc.offsets_cp.begin() + 1,
+                                               enc.offsets_cp.end() - 1);
     if (static_cast<int>(inner_off.size()) > keep) {
       inner_off.resize(static_cast<std::size_t>(keep));
     }
@@ -764,7 +834,8 @@ std::string ArabicDiacOnnx::diacritize(std::string_view text_utf8) const {
     enc.input_ids.push_back(sep_id);
     enc.offsets_cp.clear();
     enc.offsets_cp.push_back({0, 0});
-    enc.offsets_cp.insert(enc.offsets_cp.end(), inner_off.begin(), inner_off.end());
+    enc.offsets_cp.insert(enc.offsets_cp.end(), inner_off.begin(),
+                          inner_off.end());
     enc.offsets_cp.push_back({0, 0});
   }
 
@@ -786,8 +857,8 @@ std::string ArabicDiacOnnx::diacritize(std::string_view text_utf8) const {
 
   const char* in_names[] = {"input_ids", "attention_mask"};
   const char* out_names[] = {logits_output_name_.c_str()};
-  auto outputs = session_->Run(Ort::RunOptions{nullptr}, in_names, inputs.data(), inputs.size(),
-                               out_names, 1);
+  auto outputs = session_->Run(Ort::RunOptions{nullptr}, in_names,
+                               inputs.data(), inputs.size(), out_names, 1);
   const float* logits = outputs[0].GetTensorData<float>();
   const auto info = outputs[0].GetTensorTypeAndShapeInfo();
   const auto oshape = info.GetShape();
@@ -796,7 +867,8 @@ std::string ArabicDiacOnnx::diacritize(std::string_view text_utf8) const {
   }
   const int64_t num_labels = oshape[2];
   if (num_labels != static_cast<int64_t>(id2label_.size())) {
-    throw std::runtime_error("ArabicDiacOnnx: logits last dim != id2label size");
+    throw std::runtime_error(
+        "ArabicDiacOnnx: logits last dim != id2label size");
   }
 
   const std::u32string& ref = enc.ref_u32;
@@ -808,7 +880,8 @@ std::string ArabicDiacOnnx::diacritize(std::string_view text_utf8) const {
       continue;
     }
     int best = 0;
-    const std::size_t base = static_cast<std::size_t>(ti) * static_cast<std::size_t>(num_labels);
+    const std::size_t base =
+        static_cast<std::size_t>(ti) * static_cast<std::size_t>(num_labels);
     float best_v = logits[base];
     for (int64_t j = 1; j < num_labels; ++j) {
       const float v = logits[base + static_cast<std::size_t>(j)];
@@ -844,7 +917,8 @@ std::string ArabicDiacOnnx::diacritize(std::string_view text_utf8) const {
   }
   std::u32string nfc_u = ar_wp::utf8_to_u32(out_utf8);
   std::string nfc8 = ar_wp::u32_to_utf8(nfc_u);
-  utf8proc_uint8_t* nfc = utf8proc_NFC(reinterpret_cast<const utf8proc_uint8_t*>(nfc8.c_str()));
+  utf8proc_uint8_t* nfc =
+      utf8proc_NFC(reinterpret_cast<const utf8proc_uint8_t*>(nfc8.c_str()));
   if (nfc == nullptr) {
     return nfc8;
   }

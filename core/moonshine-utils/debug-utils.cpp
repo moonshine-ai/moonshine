@@ -9,39 +9,40 @@
 #include <numeric>
 
 #if defined(__APPLE__)
-#include <execinfo.h>
 #include <cxxabi.h>
+#include <execinfo.h>
 #endif
 
 void log_backtrace() {
   // Only supported on Apple platforms for now
 #if defined(__APPLE__)
   const int max_frames = 100;
-  void* callstack[max_frames];
+  void *callstack[max_frames];
   int frames = backtrace(callstack, max_frames);
-  char** symbols = backtrace_symbols(callstack, frames);
+  char **symbols = backtrace_symbols(callstack, frames);
 
   LOGF("Backtrace (%d frames):", frames);
 
   for (int i = 0; i < frames; ++i) {
-      std::string symbol_str(symbols[i]);
+    std::string symbol_str(symbols[i]);
 
-      // Attempt to demangle the C++ symbol name
-      size_t begin = symbol_str.find_first_of('(');
-      size_t end = symbol_str.find_last_of('+');
-      if (begin != std::string::npos && end != std::string::npos && begin < end) {
-          std::string mangled_name = symbol_str.substr(begin + 1, end - begin - 1);
-          int status;
-          char* demangled_name = abi::__cxa_demangle(mangled_name.c_str(), nullptr, nullptr, &status);
+    // Attempt to demangle the C++ symbol name
+    size_t begin = symbol_str.find_first_of('(');
+    size_t end = symbol_str.find_last_of('+');
+    if (begin != std::string::npos && end != std::string::npos && begin < end) {
+      std::string mangled_name = symbol_str.substr(begin + 1, end - begin - 1);
+      int status;
+      char *demangled_name =
+          abi::__cxa_demangle(mangled_name.c_str(), nullptr, nullptr, &status);
 
-          if (status == 0) {
-              LOGF("%d: %s [0x%lx]", i, demangled_name, (uintptr_t)callstack[i]);
-              std::free(demangled_name);
-              continue; // Continue to next frame
-          }
+      if (status == 0) {
+        LOGF("%d: %s [0x%lx]", i, demangled_name, (uintptr_t)callstack[i]);
+        std::free(demangled_name);
+        continue;  // Continue to next frame
       }
-      // Fallback for non-c++ or failed demangling
-      LOGF("%d: %s", i, symbol_str.c_str());
+    }
+    // Fallback for non-c++ or failed demangling
+    LOGF("%d: %s", i, symbol_str.c_str());
   }
 
   std::free(symbols);
@@ -137,17 +138,45 @@ bool load_wav_data(const char *path, float **out_float_data,
     return false;
   }
 
+  // The data chunk size comes straight from the (untrusted) file header, so a
+  // corrupt or malicious WAV can claim a chunk far larger than the file. Clamp
+  // it to the bytes actually present before allocating, otherwise the malloc
+  // below can request gigabytes and OOM the process.
+  const long data_start = std::ftell(file);
+  if (data_start < 0 || std::fseek(file, 0, SEEK_END) != 0) {
+    std::fclose(file);
+    std::fprintf(stderr, "Failed to determine WAV data size\n");
+    return false;
+  }
+  const long file_end = std::ftell(file);
+  if (file_end < data_start || std::fseek(file, data_start, SEEK_SET) != 0) {
+    std::fclose(file);
+    std::fprintf(stderr, "Failed to seek to WAV data\n");
+    return false;
+  }
+  const size_t available_bytes = static_cast<size_t>(file_end - data_start);
+  const size_t bytes_per_sample = bits_per_sample / 8;
+  if (chunk_size > available_bytes) {
+    chunk_size = static_cast<uint32_t>(available_bytes);
+  }
+
   // Read PCM data
-  size_t num_samples = chunk_size / (bits_per_sample / 8);
+  size_t num_samples = chunk_size / bytes_per_sample;
   if (num_samples == 0) {
     std::fclose(file);
     std::fprintf(stderr, "No samples found\n");
     return false;
   }
   float *result_data = (float *)malloc(num_samples * sizeof(float));
+  if (result_data == nullptr) {
+    std::fclose(file);
+    std::fprintf(stderr, "Failed to allocate %zu samples\n", num_samples);
+    return false;
+  }
   for (size_t i = 0; i < num_samples; ++i) {
     int16_t sample = 0;
     if (std::fread(&sample, sizeof(int16_t), 1, file) != 1) {
+      free(result_data);
       std::fclose(file);
       std::fprintf(stderr, "Failed to read sample %zu\n", i);
       return false;

@@ -1,7 +1,7 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
-#include <doctest/doctest.h>
-
 #include "file-information.h"
+
+#include <doctest/doctest.h>
 
 #include <vector>
 
@@ -33,7 +33,8 @@ TEST_CASE("FileInformationMap erase_key") {
 }
 
 TEST_CASE("FileInformationMap::parse_file_list") {
-  std::vector<std::pair<std::string, std::string>> keys{{"asset_a", "sub/a.txt"}, {"asset_b", "b.txt"}};
+  std::vector<std::pair<std::string, std::string>> keys{
+      {"asset_a", "sub/a.txt"}, {"asset_b", "b.txt"}};
   std::vector<uint8_t*> ptrs;
   std::vector<size_t> sizes;
   uint8_t blob[] = {1, 2, 3};
@@ -58,7 +59,8 @@ TEST_CASE("FileInformationMap::parse_file_list") {
 
 TEST_CASE("FileInformationMap::parse_file_list null key_list throws") {
   FileInformationMap m;
-  CHECK_THROWS_AS(m.parse_file_list(nullptr, nullptr, nullptr, "/x"), std::runtime_error);
+  CHECK_THROWS_AS(m.parse_file_list(nullptr, nullptr, nullptr, "/x"),
+                  std::runtime_error);
 }
 
 TEST_CASE("FileInformationMap::parse_file_list memory size mismatch throws") {
@@ -66,5 +68,6 @@ TEST_CASE("FileInformationMap::parse_file_list memory size mismatch throws") {
   std::vector<uint8_t*> ptrs{nullptr};
   std::vector<size_t> sizes{1, 2};
   FileInformationMap m;
-  CHECK_THROWS_AS(m.parse_file_list(&keys, &ptrs, &sizes, "/x"), std::runtime_error);
+  CHECK_THROWS_AS(m.parse_file_list(&keys, &ptrs, &sizes, "/x"),
+                  std::runtime_error);
 }

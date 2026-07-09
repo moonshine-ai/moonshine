@@ -12,6 +12,10 @@
 #include "debug-utils.h"
 #include "onnxruntime_c_api.h"
 
+struct OrtExecutionProviderOptions {
+  const char *coreml_cache_dir = nullptr;
+};
+
 #define RETURN_ON_ORT_ERROR(ort_api, expr)                     \
   do {                                                         \
     OrtStatus *onnx_status = (expr);                           \
@@ -86,5 +90,41 @@ OrtStatus *ort_run(const OrtApi *ort_api, OrtSession *session,
                    const char *const *output_names, size_t output_names_len,
                    OrtValue **outputs, const char *session_name,
                    bool log_ort_run);
+
+// Reliability-only escape hatch: when the MOONSHINE_ORT_SINGLE_THREAD
+// environment variable is set to a non-empty value other than "0", force this
+// session to run entirely on the calling thread (intra-op = inter-op = 1,
+// sequential execution) so onnxruntime spawns no internal thread pool.
+//
+// This is intended solely for running the library under ThreadSanitizer, whose
+// interceptors deadlock inside onnxruntime's uninstrumented thread-pool
+// synchronization. Production builds never set the variable, so this is a no-op
+// there with zero performance impact. Call immediately after
+// CreateSessionOptions.
+void ort_maybe_force_single_thread(const OrtApi *ort_api,
+                                   OrtSessionOptions *session_options);
+
+std::vector<std::string> ort_parse_provider_names(const std::string &csv);
+
+OrtStatus *ort_append_execution_providers(
+    const OrtApi *ort_api, OrtSessionOptions *session_options,
+    const std::vector<std::string> &provider_names,
+    const OrtExecutionProviderOptions *config);
+
+inline void ort_configure_execution_providers(
+    const OrtApi *ort_api, OrtSessionOptions *session_options,
+    const std::vector<std::string> &provider_names,
+    const std::string &coreml_cache_dir) {
+  if (provider_names.empty()) {
+    return;
+  }
+  OrtExecutionProviderOptions config{};
+  if (!coreml_cache_dir.empty()) {
+    config.coreml_cache_dir = coreml_cache_dir.c_str();
+  }
+  LOG_ORT_ERROR(ort_api,
+                ort_append_execution_providers(ort_api, session_options,
+                                               provider_names, &config));
+}
 
 #endif

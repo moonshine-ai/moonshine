@@ -1,0 +1,13 @@
+{
+  "arch": "cnn",
+  "sample_rate": 16000,
+  "n_mels": 32,
+  "window_frames": 16,
+  "hop_length": 512,
+  "n_fft": 512,
+  "f_min": 20.0,
+  "f_max": 8000.0,
+  "window_samples": 8192,
+  "input_name": "log_mel",
+  "output_name": "speech_logit"
+}

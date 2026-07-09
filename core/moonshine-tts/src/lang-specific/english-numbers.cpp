@@ -8,15 +8,16 @@
 namespace moonshine_tts {
 namespace {
 
-const char* kUnits[] = {"ˈzɪroʊ", "wˈʌn", "tˈu", "θɹˈi", "fˈɔɹ", "fˈaɪv",
-                        "sˈɪks", "sˈɛvən", "ˈeɪt", "nˈaɪn"};
-const char* kTeens[] = {"tˈɛn",      "ɪlˈɛvən",   "twˈɛlv",    "θɝˈtin",   "fɔɹˈtin",
-                        "fˈɪftin",  "sˈɪkstin",  "sˈɛvəntin", "ˈeɪtin",   "nˈaɪntin"};
-const char* kTens[] = {nullptr, nullptr, "twˈɛnti", "θˈɝdi", "fˈɔɹti", "fˈɪfti",
-                       "sˈɪksti", "sˈɛvənti", "ˈeɪti", "nˈaɪnti"};
+const char* kUnits[] = {"ˈzɪroʊ", "wˈʌn",  "tˈu",    "θɹˈi", "fˈɔɹ",
+                        "fˈaɪv",  "sˈɪks", "sˈɛvən", "ˈeɪt", "nˈaɪn"};
+const char* kTeens[] = {"tˈɛn",    "ɪlˈɛvən", "twˈɛlv",   "θɝˈtin",
+                        "fɔɹˈtin", "fˈɪftin", "sˈɪkstin", "sˈɛvəntin",
+                        "ˈeɪtin",  "nˈaɪntin"};
+const char* kTens[] = {nullptr,  nullptr,   "twˈɛnti",  "θˈɝdi", "fˈɔɹti",
+                       "fˈɪfti", "sˈɪksti", "sˈɛvənti", "ˈeɪti", "nˈaɪnti"};
 
-const char* kDigitByDigit[] = {"ˈzɪroʊ", "ˈwʌn", "ˈtu", "ˈθɹi", "ˈfɔɹ", "ˈfaɪv",
-                               "ˈsɪks", "ˈsɛvən", "ˈeɪt", "ˈnaɪn"};
+const char* kDigitByDigit[] = {"ˈzɪroʊ", "ˈwʌn",  "ˈtu",    "ˈθɹi", "ˈfɔɹ",
+                               "ˈfaɪv",  "ˈsɪks", "ˈsɛvən", "ˈeɪt", "ˈnaɪn"};
 
 std::string digit_sequence_ipa(std::string_view digits) {
   std::string out;
@@ -178,7 +179,9 @@ std::optional<std::string> integer_decimal_string_ipa(std::string s) {
     }
     return prefix_neg(left + "ˌˈpɔɪntˌ" + digit_sequence_ipa(frac));
   }
-  if (!std::all_of(s.begin(), s.end(), [](char c) { return std::isdigit(static_cast<unsigned char>(c)); })) {
+  if (!std::all_of(s.begin(), s.end(), [](char c) {
+        return std::isdigit(static_cast<unsigned char>(c));
+      })) {
     return std::nullopt;
   }
   if (s.size() > 1 && s[0] == '0') {

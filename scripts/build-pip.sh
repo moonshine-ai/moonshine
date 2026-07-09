@@ -17,6 +17,11 @@ fi
 cmake ..
 cmake --build . --config Release
 
+# Drop stale native libs from other platforms (e.g. macOS dylibs left in the
+# tree when this script runs inside Docker with the host repo bind-mounted).
+rm -f ${PYTHON_DIR}/src/moonshine_voice/libmoonshine.* \
+	${PYTHON_DIR}/src/moonshine_voice/libonnxruntime.*
+
 cp ${CORE_BUILD_DIR}/libmoonshine.* ${PYTHON_DIR}/src/moonshine_voice/
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -77,8 +82,8 @@ else
 fi
 
 # Build platform-specific wheel (PEP 517 avoids deprecated setup.py install paths)
-# rm -rf dist/* wheelhouse/*
-# uv build --wheel --out-dir dist
+rm -rf dist/* wheelhouse/*
+uv build --wheel --out-dir dist
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
 	# Target manylinux_2_34 for wider compatibility (default would be 2_39 on newer images)
 	auditwheel repair dist/moonshine_voice-*.whl -w dist/ --plat "manylinux_${LINUX_VERSION}_${ARCH}"
@@ -86,5 +91,5 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
 fi
 
 if [[ "$1" == "upload" ]]; then
-	twine upload dist/*
+	twine upload --verbose --skip-existing dist/*
 fi

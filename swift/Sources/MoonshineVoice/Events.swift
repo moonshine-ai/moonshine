@@ -42,6 +42,20 @@ public struct LineTextChanged: TranscriptEvent {
     }
 }
 
+/// Event emitted when the speaker spans of a transcription line change.
+/// Only fired when the `identify_speakers` option is enabled. Note that this
+/// can fire for lines that are already complete, since diarization refines
+/// speaker assignments retroactively as more audio arrives.
+public struct LineSpeakersChanged: TranscriptEvent {
+    public let line: TranscriptLine
+    public let streamHandle: Int32
+    
+    public init(line: TranscriptLine, streamHandle: Int32) {
+        self.line = line
+        self.streamHandle = streamHandle
+    }
+}
+
 /// Event emitted when a transcription line is completed.
 public struct LineCompleted: TranscriptEvent {
     public let line: TranscriptLine

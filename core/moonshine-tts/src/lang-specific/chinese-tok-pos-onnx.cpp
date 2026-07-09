@@ -1,16 +1,12 @@
 #include "chinese-tok-pos-onnx.h"
-#include "g2p-path.h"
-#include "moonshine-g2p-options.h"
-#include "ort-onnx-external-data.h"
-#include "utf8-utils.h"
 
 #include <nlohmann/json.h>
 
 #include <algorithm>
-#include <cctype>
-#include <cstdint>
 #include <array>
+#include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <fstream>
 #include <limits>
 #include <optional>
@@ -19,6 +15,12 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "g2p-path.h"
+#include "moonshine-g2p-options.h"
+#include "ort-onnx-external-data.h"
+#include "ort-session-options.h"
+#include "utf8-utils.h"
+
 extern "C" {
 #include <utf8proc.h>
 }
@@ -26,31 +28,33 @@ extern "C" {
 namespace moonshine_tts {
 namespace {
 
-Ort::SessionOptions make_session_options(bool use_cuda) {
-  Ort::SessionOptions session_options;
-  session_options.SetIntraOpNumThreads(1);
-  session_options.SetInterOpNumThreads(1);
-  (void)use_cuda;
-  return session_options;
-}
-
-std::unique_ptr<Ort::Session> open_session(Ort::Env& env, const std::filesystem::path& model_path,
-                                           bool use_cuda) {
+std::unique_ptr<Ort::Session> open_session(
+    Ort::Env& env, const std::filesystem::path& model_path,
+    const std::vector<std::string>& ort_providers,
+    const std::string& coreml_cache_dir) {
 #ifdef _WIN32
   const std::wstring w = model_path.wstring();
-  return std::make_unique<Ort::Session>(env, w.c_str(), make_session_options(use_cuda));
+  return std::make_unique<Ort::Session>(
+      env, w.c_str(),
+      make_g2p_ort_session_options(ort_providers, coreml_cache_dir));
 #else
   const std::string u8 = model_path.string();
-  return std::make_unique<Ort::Session>(env, u8.c_str(), make_session_options(use_cuda));
+  return std::make_unique<Ort::Session>(
+      env, u8.c_str(),
+      make_g2p_ort_session_options(ort_providers, coreml_cache_dir));
 #endif
 }
 
-std::unique_ptr<Ort::Session> open_session_memory(Ort::Env& env, const void* data, size_t len,
-                                                  bool use_cuda, const MoonshineG2POptions* opt,
-                                                  std::string_view model_map_key) {
-  Ort::SessionOptions so = make_session_options(use_cuda);
+std::unique_ptr<Ort::Session> open_session_memory(
+    Ort::Env& env, const void* data, size_t len,
+    const std::vector<std::string>& ort_providers,
+    const std::string& coreml_cache_dir, const MoonshineG2POptions* opt,
+    std::string_view model_map_key) {
+  Ort::SessionOptions so =
+      make_g2p_ort_session_options(ort_providers, coreml_cache_dir);
   if (opt != nullptr && !model_map_key.empty()) {
-    ort_add_external_initializer_files_for_onnx_model_buffer(so, opt->files, model_map_key);
+    ort_add_external_initializer_files_for_onnx_model_buffer(so, opt->files,
+                                                             model_map_key);
   }
   return std::make_unique<Ort::Session>(env, data, len, so);
 }
@@ -65,7 +69,8 @@ std::string slurp_utf8_file(const std::filesystem::path& p) {
   return oss.str();
 }
 
-bool bundle_load_utf8(const MoonshineG2POptions* opt, std::string_view bundle_key, std::string_view file,
+bool bundle_load_utf8(const MoonshineG2POptions* opt,
+                      std::string_view bundle_key, std::string_view file,
                       const std::filesystem::path& disk_dir, std::string& out) {
   if (opt && !bundle_key.empty()) {
     const std::string ak = g2p_bundle_file_key(bundle_key, file);
@@ -82,8 +87,10 @@ bool bundle_load_utf8(const MoonshineG2POptions* opt, std::string_view bundle_ke
   return false;
 }
 
-bool bundle_load_binary(const MoonshineG2POptions* opt, std::string_view bundle_key, std::string_view file,
-                        const std::filesystem::path& disk_dir, std::vector<std::uint8_t>& out) {
+bool bundle_load_binary(const MoonshineG2POptions* opt,
+                        std::string_view bundle_key, std::string_view file,
+                        const std::filesystem::path& disk_dir,
+                        std::vector<std::uint8_t>& out) {
   if (opt && !bundle_key.empty()) {
     const std::string ak = g2p_bundle_file_key(bundle_key, file);
     if (opt->asset_is_available(ak)) {
@@ -107,7 +114,8 @@ bool bundle_load_binary(const MoonshineG2POptions* opt, std::string_view bundle_
   }
   out.resize(static_cast<size_t>(sz));
   if (!out.empty()) {
-    in.read(reinterpret_cast<char*>(out.data()), static_cast<std::streamsize>(out.size()));
+    in.read(reinterpret_cast<char*>(out.data()),
+            static_cast<std::streamsize>(out.size()));
   }
   return true;
 }
@@ -134,10 +142,12 @@ std::string u32_to_utf8(const std::u32string& s) {
 }
 
 bool is_space_u32(char32_t c) {
-  if (c == U' ' || c == U'\t' || c == U'\n' || c == U'\r' || c == U'\f' || c == U'\v') {
+  if (c == U' ' || c == U'\t' || c == U'\n' || c == U'\r' || c == U'\f' ||
+      c == U'\v') {
     return true;
   }
-  return utf8proc_category(static_cast<utf8proc_int32_t>(c)) == UTF8PROC_CATEGORY_ZS;
+  return utf8proc_category(static_cast<utf8proc_int32_t>(c)) ==
+         UTF8PROC_CATEGORY_ZS;
 }
 
 bool is_control_u32(char32_t c) {
@@ -145,22 +155,23 @@ bool is_control_u32(char32_t c) {
     return false;
   }
   const auto cat = utf8proc_category(static_cast<utf8proc_int32_t>(c));
-  return cat == UTF8PROC_CATEGORY_CC || cat == UTF8PROC_CATEGORY_CF || cat == UTF8PROC_CATEGORY_CN ||
-         cat == UTF8PROC_CATEGORY_CO;
+  return cat == UTF8PROC_CATEGORY_CC || cat == UTF8PROC_CATEGORY_CF ||
+         cat == UTF8PROC_CATEGORY_CN || cat == UTF8PROC_CATEGORY_CO;
 }
 
 bool is_punctuation_u32(char32_t c) {
   const std::uint32_t cp = static_cast<std::uint32_t>(c);
-  if ((33 <= cp && cp <= 47) || (58 <= cp && cp <= 64) || (91 <= cp && cp <= 96) ||
-      (123 <= cp && cp <= 126)) {
+  if ((33 <= cp && cp <= 47) || (58 <= cp && cp <= 64) ||
+      (91 <= cp && cp <= 96) || (123 <= cp && cp <= 126)) {
     return true;
   }
   const char* cat = utf8proc_category_string(static_cast<utf8proc_int32_t>(c));
   return cat != nullptr && cat[0] == 'P';
 }
 
-/// ``token_word_group_indices`` uses :func:`_is_punct_char` (Unicode **P** categories only), not the
-/// broader BERT ``_is_punctuation`` (ASCII ranges include ``~`` as Sm).
+/// ``token_word_group_indices`` uses :func:`_is_punct_char` (Unicode **P**
+/// categories only), not the broader BERT ``_is_punctuation`` (ASCII ranges
+/// include ``~`` as Sm).
 bool is_punct_char_word_group_u32(char32_t c) {
   const char* cat = utf8proc_category_string(static_cast<utf8proc_int32_t>(c));
   return cat != nullptr && cat[0] == 'P';
@@ -168,14 +179,17 @@ bool is_punct_char_word_group_u32(char32_t c) {
 
 bool is_chinese_char(std::uint32_t cp) {
   return (0x4E00u <= cp && cp <= 0x9FFFu) || (0x3400u <= cp && cp <= 0x4DBFu) ||
-         (0x20000u <= cp && cp <= 0x2A6DFu) || (0x2A700u <= cp && cp <= 0x2B73Fu) ||
-         (0x2B740u <= cp && cp <= 0x2B81Fu) || (0x2B820u <= cp && cp <= 0x2CEAFu) ||
+         (0x20000u <= cp && cp <= 0x2A6DFu) ||
+         (0x2A700u <= cp && cp <= 0x2B73Fu) ||
+         (0x2B740u <= cp && cp <= 0x2B81Fu) ||
+         (0x2B820u <= cp && cp <= 0x2CEAFu) ||
          (0xF900u <= cp && cp <= 0xFAFFu) || (0x2F800u <= cp && cp <= 0x2FA1Fu);
 }
 
 std::u32string u32_nfc(const std::u32string& s) {
   std::string utf8 = u32_to_utf8(s);
-  utf8proc_uint8_t* nfc = utf8proc_NFC(reinterpret_cast<const utf8proc_uint8_t*>(utf8.c_str()));
+  utf8proc_uint8_t* nfc =
+      utf8proc_NFC(reinterpret_cast<const utf8proc_uint8_t*>(utf8.c_str()));
   if (nfc == nullptr) {
     return s;
   }
@@ -186,7 +200,8 @@ std::u32string u32_nfc(const std::u32string& s) {
 
 std::u32string strip_mn_nfd(const std::u32string& s) {
   std::string utf8 = u32_to_utf8(s);
-  utf8proc_uint8_t* nfd = utf8proc_NFD(reinterpret_cast<const utf8proc_uint8_t*>(utf8.c_str()));
+  utf8proc_uint8_t* nfd =
+      utf8proc_NFD(reinterpret_cast<const utf8proc_uint8_t*>(utf8.c_str()));
   if (nfd == nullptr) {
     return s;
   }
@@ -195,7 +210,8 @@ std::u32string strip_mn_nfd(const std::u32string& s) {
   std::u32string u = utf8_to_u32(nfd_str);
   std::u32string out;
   for (char32_t cp : u) {
-    if (utf8proc_category(static_cast<utf8proc_int32_t>(cp)) != UTF8PROC_CATEGORY_MN) {
+    if (utf8proc_category(static_cast<utf8proc_int32_t>(cp)) !=
+        UTF8PROC_CATEGORY_MN) {
       out.push_back(cp);
     }
   }
@@ -205,7 +221,8 @@ std::u32string strip_mn_nfd(const std::u32string& s) {
 std::u32string to_lower_u32(const std::u32string& s) {
   std::u32string out;
   for (char32_t cp : s) {
-    out.push_back(static_cast<char32_t>(utf8proc_tolower(static_cast<utf8proc_int32_t>(cp))));
+    out.push_back(static_cast<char32_t>(
+        utf8proc_tolower(static_cast<utf8proc_int32_t>(cp))));
   }
   return out;
 }
@@ -297,14 +314,16 @@ struct BasicTokCfg {
   std::optional<bool> strip_accents;
 };
 
-std::u32string normalization_ref_u32(const std::u32string& text_u32, const BasicTokCfg& cfg) {
+std::u32string normalization_ref_u32(const std::u32string& text_u32,
+                                     const BasicTokCfg& cfg) {
   std::u32string t = clean_text_u32(text_u32);
   if (cfg.tokenize_chinese_chars) {
     t = tokenize_chinese_chars_u32(t);
   }
   t = u32_nfc(t);
-  // Mirror the lowercasing / accent-stripping that basic_tokenize_u32 applies to each token,
-  // so that align_basic_tokens_u32 can match the lowered tokens against this reference.
+  // Mirror the lowercasing / accent-stripping that basic_tokenize_u32 applies
+  // to each token, so that align_basic_tokens_u32 can match the lowered tokens
+  // against this reference.
   if (cfg.do_lower_case) {
     t = to_lower_u32(t);
     if (!cfg.strip_accents.has_value() || *cfg.strip_accents) {
@@ -316,14 +335,15 @@ std::u32string normalization_ref_u32(const std::u32string& text_u32, const Basic
   return t;
 }
 
-std::vector<std::u32string> basic_tokenize_u32(const std::u32string& original_text_u32,
-                                                 const BasicTokCfg& cfg) {
+std::vector<std::u32string> basic_tokenize_u32(
+    const std::u32string& original_text_u32, const BasicTokCfg& cfg) {
   std::u32string text = clean_text_u32(original_text_u32);
   if (cfg.tokenize_chinese_chars) {
     text = tokenize_chinese_chars_u32(text);
   }
   std::u32string unicode_normalized = u32_nfc(text);
-  std::vector<std::u32string> orig_tokens = split_u32_whitespace(unicode_normalized);
+  std::vector<std::u32string> orig_tokens =
+      split_u32_whitespace(unicode_normalized);
   std::vector<std::u32string> split_tokens;
   for (std::u32string token : orig_tokens) {
     if (cfg.do_lower_case) {
@@ -347,24 +367,27 @@ std::vector<std::u32string> basic_tokenize_u32(const std::u32string& original_te
   return split_u32_whitespace(joined);
 }
 
-void align_basic_tokens_u32(const std::u32string& ref, const std::vector<std::u32string>& basic_tokens) {
+void align_basic_tokens_u32(const std::u32string& ref,
+                            const std::vector<std::u32string>& basic_tokens) {
   std::size_t cursor = 0;
   for (const std::u32string& btok : basic_tokens) {
     while (cursor < ref.size() && ref[cursor] == U' ') {
       ++cursor;
     }
-    if (cursor + btok.size() > ref.size() || ref.compare(cursor, btok.size(), btok) != 0) {
-      throw std::runtime_error("Chinese WordPiece: basic token alignment failed at offset " +
-                               std::to_string(cursor));
+    if (cursor + btok.size() > ref.size() ||
+        ref.compare(cursor, btok.size(), btok) != 0) {
+      throw std::runtime_error(
+          "Chinese WordPiece: basic token alignment failed at offset " +
+          std::to_string(cursor));
     }
     cursor += btok.size();
   }
 }
 
-std::vector<std::u32string> wordpiece_tokenize_u32(const std::u32string& token,
-                                                   const std::unordered_map<std::string, int64_t>& vocab,
-                                                   const std::string& unk_token_utf8,
-                                                   int max_input_chars_per_word) {
+std::vector<std::u32string> wordpiece_tokenize_u32(
+    const std::u32string& token,
+    const std::unordered_map<std::string, int64_t>& vocab,
+    const std::string& unk_token_utf8, int max_input_chars_per_word) {
   std::vector<std::u32string> output_tokens;
   for (const std::u32string& wt : split_u32_whitespace(token)) {
     if (wt.size() > static_cast<size_t>(max_input_chars_per_word)) {
@@ -379,8 +402,9 @@ std::vector<std::u32string> wordpiece_tokenize_u32(const std::u32string& token,
       std::size_t end = chars.size();
       std::string cur_substr;
       while (start < end) {
-        std::u32string piece_u32(chars.begin() + static_cast<std::ptrdiff_t>(start),
-                                 chars.begin() + static_cast<std::ptrdiff_t>(end));
+        std::u32string piece_u32(
+            chars.begin() + static_cast<std::ptrdiff_t>(start),
+            chars.begin() + static_cast<std::ptrdiff_t>(end));
         std::string substr = u32_to_utf8(piece_u32);
         if (start > 0) {
           substr = "##" + substr;
@@ -401,7 +425,8 @@ std::vector<std::u32string> wordpiece_tokenize_u32(const std::u32string& token,
     if (is_bad) {
       output_tokens.push_back(utf8_to_u32(unk_token_utf8));
     } else {
-      output_tokens.insert(output_tokens.end(), sub_tokens.begin(), sub_tokens.end());
+      output_tokens.insert(output_tokens.end(), sub_tokens.begin(),
+                           sub_tokens.end());
     }
   }
   return output_tokens;
@@ -414,14 +439,14 @@ struct EncodedWp {
   std::vector<std::vector<int>> word_groups;
 };
 
-EncodedWp encode_bert_wordpiece(const std::u32string& text_u32,
-                                const std::unordered_map<std::string, int64_t>& vocab,
-                                const BasicTokCfg& basic_cfg,
-                                const std::string& unk_utf8,
-                                const std::string& cls_utf8,
-                                const std::string& sep_utf8) {
+EncodedWp encode_bert_wordpiece(
+    const std::u32string& text_u32,
+    const std::unordered_map<std::string, int64_t>& vocab,
+    const BasicTokCfg& basic_cfg, const std::string& unk_utf8,
+    const std::string& cls_utf8, const std::string& sep_utf8) {
   const std::u32string ref = normalization_ref_u32(text_u32, basic_cfg);
-  std::vector<std::u32string> basic_tokens = basic_tokenize_u32(text_u32, basic_cfg);
+  std::vector<std::u32string> basic_tokens =
+      basic_tokenize_u32(text_u32, basic_cfg);
   align_basic_tokens_u32(ref, basic_tokens);
 
   std::vector<std::tuple<std::u32string, int, int>> aligned;
@@ -492,92 +517,98 @@ EncodedWp encode_bert_wordpiece(const std::u32string& text_u32,
   all_tokens.insert(all_tokens.end(), tokens_utf8.begin(), tokens_utf8.end());
   all_tokens.push_back(sep_utf8);
 
-  auto token_word_group_indices = [&](const std::vector<std::string>& tokens,
-                                      const std::vector<std::pair<int, int>>& offsets,
-                                      const std::u32string& ref_text, const std::string& cls_t,
-                                      const std::string& sep_t) {
-    struct Idx {
-      int i;
-      int s;
-      int e;
-    };
-    std::vector<Idx> idxs;
-    for (std::size_t ti = 0; ti < tokens.size(); ++ti) {
-      const std::string& tok = tokens[ti];
-      const int s = offsets[ti].first;
-      const int e = offsets[ti].second;
-      if (tok == cls_t || tok == sep_t || (s == 0 && e == 0)) {
-        continue;
-      }
-      idxs.push_back({static_cast<int>(ti), s, e});
-    }
-    std::vector<std::vector<int>> groups;
-    std::vector<Idx> cur;
-    auto u32_ref = ref_text;
-    auto gap_str = [&](int pe, int s) {
-      if (pe >= s) {
-        return std::u32string{};
-      }
-      return u32_ref.substr(static_cast<std::size_t>(pe), static_cast<std::size_t>(s - pe));
-    };
-    auto u32_strip_empty = [](std::u32string g) {
-      std::size_t a = 0;
-      std::size_t b = g.size();
-      while (a < b && is_space_u32(g[a])) {
-        ++a;
-      }
-      while (b > a && is_space_u32(g[b - 1])) {
-        --b;
-      }
-      return g.substr(a, b - a);
-    };
-    for (const Idx& item : idxs) {
-      if (cur.empty()) {
-        cur.push_back(item);
-        continue;
-      }
-      const int pe = cur.back().e;
-      const int s = item.s;
-      const std::u32string gap = gap_str(pe, s);
-      const bool new_word = !gap.empty() && u32_strip_empty(gap).empty();
-      const char32_t last_ch = (pe > 0) ? u32_ref[static_cast<std::size_t>(pe - 1)] : U'\0';
-      const char32_t first_ch =
-          (s < static_cast<int>(u32_ref.size())) ? u32_ref[static_cast<std::size_t>(s)] : U'\0';
-      const bool punct_break =
-          (pe > 0) && !is_punct_char_word_group_u32(last_ch) && is_punct_char_word_group_u32(first_ch);
-      if (new_word || punct_break) {
-        std::vector<int> g;
-        for (const Idx& t : cur) {
-          g.push_back(t.i);
+  auto token_word_group_indices =
+      [&](const std::vector<std::string>& tokens,
+          const std::vector<std::pair<int, int>>& offsets,
+          const std::u32string& ref_text, const std::string& cls_t,
+          const std::string& sep_t) {
+        struct Idx {
+          int i;
+          int s;
+          int e;
+        };
+        std::vector<Idx> idxs;
+        for (std::size_t ti = 0; ti < tokens.size(); ++ti) {
+          const std::string& tok = tokens[ti];
+          const int s = offsets[ti].first;
+          const int e = offsets[ti].second;
+          if (tok == cls_t || tok == sep_t || (s == 0 && e == 0)) {
+            continue;
+          }
+          idxs.push_back({static_cast<int>(ti), s, e});
         }
-        groups.push_back(std::move(g));
-        cur = {item};
-      } else {
-        cur.push_back(item);
-      }
-    }
-    if (!cur.empty()) {
-      std::vector<int> g;
-      for (const Idx& t : cur) {
-        g.push_back(t.i);
-      }
-      groups.push_back(std::move(g));
-    }
-    return groups;
-  };
+        std::vector<std::vector<int>> groups;
+        std::vector<Idx> cur;
+        auto u32_ref = ref_text;
+        auto gap_str = [&](int pe, int s) {
+          if (pe >= s) {
+            return std::u32string{};
+          }
+          return u32_ref.substr(static_cast<std::size_t>(pe),
+                                static_cast<std::size_t>(s - pe));
+        };
+        auto u32_strip_empty = [](std::u32string g) {
+          std::size_t a = 0;
+          std::size_t b = g.size();
+          while (a < b && is_space_u32(g[a])) {
+            ++a;
+          }
+          while (b > a && is_space_u32(g[b - 1])) {
+            --b;
+          }
+          return g.substr(a, b - a);
+        };
+        for (const Idx& item : idxs) {
+          if (cur.empty()) {
+            cur.push_back(item);
+            continue;
+          }
+          const int pe = cur.back().e;
+          const int s = item.s;
+          const std::u32string gap = gap_str(pe, s);
+          const bool new_word = !gap.empty() && u32_strip_empty(gap).empty();
+          const char32_t last_ch =
+              (pe > 0) ? u32_ref[static_cast<std::size_t>(pe - 1)] : U'\0';
+          const char32_t first_ch = (s < static_cast<int>(u32_ref.size()))
+                                        ? u32_ref[static_cast<std::size_t>(s)]
+                                        : U'\0';
+          const bool punct_break = (pe > 0) &&
+                                   !is_punct_char_word_group_u32(last_ch) &&
+                                   is_punct_char_word_group_u32(first_ch);
+          if (new_word || punct_break) {
+            std::vector<int> g;
+            for (const Idx& t : cur) {
+              g.push_back(t.i);
+            }
+            groups.push_back(std::move(g));
+            cur = {item};
+          } else {
+            cur.push_back(item);
+          }
+        }
+        if (!cur.empty()) {
+          std::vector<int> g;
+          for (const Idx& t : cur) {
+            g.push_back(t.i);
+          }
+          groups.push_back(std::move(g));
+        }
+        return groups;
+      };
 
-  std::vector<std::vector<int>> groups =
-      token_word_group_indices(all_tokens, all_offsets, ref, cls_utf8, sep_utf8);
+  std::vector<std::vector<int>> groups = token_word_group_indices(
+      all_tokens, all_offsets, ref, cls_utf8, sep_utf8);
 
   EncodedWp out;
   out.input_ids = std::move(all_ids);
   out.offsets_cp = std::move(all_offsets);
-  out.ref_u32 = std::move(ref);
+  out.ref_u32 = ref;
   out.word_groups = std::move(groups);
   return out;
 }
 
-std::unordered_map<std::string, int64_t> load_vocab_txt_stream(std::istream& in) {
+std::unordered_map<std::string, int64_t> load_vocab_txt_stream(
+    std::istream& in) {
   std::unordered_map<std::string, int64_t> vocab;
   std::string line;
   int64_t index = 0;
@@ -591,7 +622,8 @@ std::unordered_map<std::string, int64_t> load_vocab_txt_stream(std::istream& in)
   return vocab;
 }
 
-std::unordered_map<std::string, int64_t> load_vocab_txt_string(std::string_view utf8) {
+std::unordered_map<std::string, int64_t> load_vocab_txt_string(
+    std::string_view utf8) {
   const std::string buf(utf8);
   std::istringstream in(buf);
   return load_vocab_txt_stream(in);
@@ -631,8 +663,10 @@ bool cjk_tokpos_preferred_chunk_break_cp(char32_t c) {
 }
 
 template <typename EncodeFn>
-std::size_t cjk_tokpos_chunk_exclusive_end(const std::u32string& full, std::size_t cp_start,
-                                           std::int64_t max_seq_len, EncodeFn&& encode_chunk) {
+std::size_t cjk_tokpos_chunk_exclusive_end(const std::u32string& full,
+                                           std::size_t cp_start,
+                                           std::int64_t max_seq_len,
+                                           EncodeFn&& encode_chunk) {
   if (cp_start >= full.size()) {
     return cp_start;
   }
@@ -667,23 +701,36 @@ std::size_t cjk_tokpos_chunk_exclusive_end(const std::u32string& full, std::size
 
 }  // namespace
 
-std::filesystem::path default_chinese_tok_pos_model_dir(const std::filesystem::path& g2p_data_root) {
+std::filesystem::path default_chinese_tok_pos_model_dir(
+    const std::filesystem::path& g2p_data_root) {
   return g2p_data_root / "zh_hans" / "roberta_chinese_base_upos_onnx";
 }
 
-ChineseTokPosOnnx::ChineseTokPosOnnx(std::filesystem::path model_dir, bool use_cuda)
-    : ChineseTokPosOnnx(nullptr, std::string_view{}, std::move(model_dir), use_cuda) {}
+ChineseTokPosOnnx::ChineseTokPosOnnx(std::filesystem::path model_dir,
+                                     bool use_cuda)
+    : ChineseTokPosOnnx(nullptr, std::string_view{}, std::move(model_dir),
+                        use_cuda) {}
 
-ChineseTokPosOnnx::ChineseTokPosOnnx(const MoonshineG2POptions* opt, std::string_view onnx_bundle_key,
-                                    std::filesystem::path model_dir_fallback, bool use_cuda)
+ChineseTokPosOnnx::ChineseTokPosOnnx(const MoonshineG2POptions* opt,
+                                     std::string_view onnx_bundle_key,
+                                     std::filesystem::path model_dir_fallback,
+                                     bool use_cuda)
     : env_(ORT_LOGGING_LEVEL_WARNING, "moonshine_chinese_tok_pos"),
       mem_(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)),
       model_dir_(std::move(model_dir_fallback)) {
+  (void)use_cuda;
   const MoonshineG2POptions* opt_ptr = opt;
+  const std::vector<std::string> ort_providers =
+      opt_ptr != nullptr ? opt_ptr->ort_provider_names
+                         : std::vector<std::string>{};
+  const std::string coreml_cache_dir =
+      opt_ptr != nullptr ? opt_ptr->coreml_cache_dir : std::string{};
   std::string meta_json;
-  if (!bundle_load_utf8(opt_ptr, onnx_bundle_key, "meta.json", model_dir_, meta_json)) {
-    throw std::runtime_error("ChineseTokPosOnnx: missing meta.json (memory or disk under " +
-                             model_dir_.string() + ")");
+  if (!bundle_load_utf8(opt_ptr, onnx_bundle_key, "meta.json", model_dir_,
+                        meta_json)) {
+    throw std::runtime_error(
+        "ChineseTokPosOnnx: missing meta.json (memory or disk under " +
+        model_dir_.string() + ")");
   }
   const nlohmann::json meta = nlohmann::json::parse(meta_json);
   for (const auto& s : meta.at("id2label")) {
@@ -691,25 +738,32 @@ ChineseTokPosOnnx::ChineseTokPosOnnx(const MoonshineG2POptions* opt, std::string
   }
   pad_id_ = meta.value("pad_token_id", 1);
   max_sequence_length_ = meta.value("max_sequence_length", 512);
-  const std::string onnx_name = meta.value("onnx_model_file", std::string("model.ort"));
-  if (!bundle_load_utf8(opt_ptr, onnx_bundle_key, "vocab.txt", model_dir_, cached_vocab_txt_)) {
+  const std::string onnx_name =
+      meta.value("onnx_model_file", std::string("model.ort"));
+  if (!bundle_load_utf8(opt_ptr, onnx_bundle_key, "vocab.txt", model_dir_,
+                        cached_vocab_txt_)) {
     throw std::runtime_error("ChineseTokPosOnnx: missing vocab.txt");
   }
-  if (!bundle_load_utf8(opt_ptr, onnx_bundle_key, "tokenizer_config.json", model_dir_,
-                        cached_tokenizer_cfg_json_)) {
-    throw std::runtime_error("ChineseTokPosOnnx: missing tokenizer_config.json");
+  if (!bundle_load_utf8(opt_ptr, onnx_bundle_key, "tokenizer_config.json",
+                        model_dir_, cached_tokenizer_cfg_json_)) {
+    throw std::runtime_error(
+        "ChineseTokPosOnnx: missing tokenizer_config.json");
   }
-  if (bundle_load_binary(opt_ptr, onnx_bundle_key, onnx_name, model_dir_, onnx_model_storage_) &&
+  if (bundle_load_binary(opt_ptr, onnx_bundle_key, onnx_name, model_dir_,
+                         onnx_model_storage_) &&
       !onnx_model_storage_.empty()) {
-    const std::string model_map_key = g2p_bundle_file_key(onnx_bundle_key, onnx_name);
-    session_ = open_session_memory(env_, onnx_model_storage_.data(), onnx_model_storage_.size(),
-                                   use_cuda, opt_ptr, model_map_key);
+    const std::string model_map_key =
+        g2p_bundle_file_key(onnx_bundle_key, onnx_name);
+    session_ = open_session_memory(env_, onnx_model_storage_.data(),
+                                   onnx_model_storage_.size(), ort_providers,
+                                   coreml_cache_dir, opt_ptr, model_map_key);
   } else {
     const auto onnx_path = resolve_prefer_ort_model(model_dir_, onnx_name);
     if (!std::filesystem::is_regular_file(onnx_path)) {
-      throw std::runtime_error("ChineseTokPosOnnx: missing " + onnx_path.string());
+      throw std::runtime_error("ChineseTokPosOnnx: missing " +
+                               onnx_path.string());
     }
-    session_ = open_session(env_, onnx_path, use_cuda);
+    session_ = open_session(env_, onnx_path, ort_providers, coreml_cache_dir);
   }
   {
     Ort::AllocatorWithDefaultOptions alloc;
@@ -730,7 +784,8 @@ std::string ChineseTokPosOnnx::format_annotated_line(
   return s;
 }
 
-std::vector<std::pair<std::string, std::string>> ChineseTokPosOnnx::annotate(std::string_view text_utf8) {
+std::vector<std::pair<std::string, std::string>> ChineseTokPosOnnx::annotate(
+    std::string_view text_utf8) {
   std::string trimmed = trim_ascii_ws_copy(text_utf8);
   if (trimmed.empty()) {
     return {};
@@ -739,7 +794,8 @@ std::vector<std::pair<std::string, std::string>> ChineseTokPosOnnx::annotate(std
   if (cached_vocab_txt_.empty() || cached_tokenizer_cfg_json_.empty()) {
     throw std::runtime_error("ChineseTokPosOnnx: tokenizer assets not loaded");
   }
-  const std::unordered_map<std::string, int64_t> vocab = load_vocab_txt_string(cached_vocab_txt_);
+  const std::unordered_map<std::string, int64_t> vocab =
+      load_vocab_txt_string(cached_vocab_txt_);
   const nlohmann::json cfg = nlohmann::json::parse(cached_tokenizer_cfg_json_);
   BasicTokCfg bcfg;
   bcfg.do_lower_case = cfg.value("do_lower_case", true);
@@ -753,20 +809,22 @@ std::vector<std::pair<std::string, std::string>> ChineseTokPosOnnx::annotate(std
 
   const std::u32string full_u32 = utf8_to_u32(trimmed);
   auto encode_chunk = [&](const std::u32string& chunk_u32) {
-    return encode_bert_wordpiece(chunk_u32, vocab, bcfg, unk_utf8, cls_utf8, sep_utf8);
+    return encode_bert_wordpiece(chunk_u32, vocab, bcfg, unk_utf8, cls_utf8,
+                                 sep_utf8);
   };
 
   std::vector<std::pair<std::string, std::string>> all_pairs;
   std::size_t cp_start = 0;
   while (cp_start < full_u32.size()) {
     const std::size_t cp_end = cjk_tokpos_chunk_exclusive_end(
-        full_u32, cp_start, static_cast<std::int64_t>(max_sequence_length_), encode_chunk);
+        full_u32, cp_start, static_cast<std::int64_t>(max_sequence_length_),
+        encode_chunk);
     if (cp_end <= cp_start) {
       break;
     }
     EncodedWp enc =
-        encode_bert_wordpiece(full_u32.substr(cp_start, cp_end - cp_start), vocab, bcfg, unk_utf8,
-                              cls_utf8, sep_utf8);
+        encode_bert_wordpiece(full_u32.substr(cp_start, cp_end - cp_start),
+                              vocab, bcfg, unk_utf8, cls_utf8, sep_utf8);
 
     const int64_t T = static_cast<int64_t>(enc.input_ids.size());
     std::vector<int64_t> ids = enc.input_ids;
@@ -786,8 +844,8 @@ std::vector<std::pair<std::string, std::string>> ChineseTokPosOnnx::annotate(std
 
     const char* in_names[] = {"input_ids", "attention_mask"};
     const char* out_names[] = {logits_output_name_.c_str()};
-    auto outputs = session_->Run(Ort::RunOptions{nullptr}, in_names, inputs.data(), inputs.size(),
-                                 out_names, 1);
+    auto outputs = session_->Run(Ort::RunOptions{nullptr}, in_names,
+                                 inputs.data(), inputs.size(), out_names, 1);
     const float* logits = outputs[0].GetTensorData<float>();
     const auto info = outputs[0].GetTensorTypeAndShapeInfo();
     const auto oshape = info.GetShape();
@@ -796,7 +854,8 @@ std::vector<std::pair<std::string, std::string>> ChineseTokPosOnnx::annotate(std
     }
     const int64_t num_labels = oshape[2];
     if (num_labels != static_cast<int64_t>(id2label_.size())) {
-      throw std::runtime_error("ChineseTokPosOnnx: logits last dim != id2label size");
+      throw std::runtime_error(
+          "ChineseTokPosOnnx: logits last dim != id2label size");
     }
 
     std::vector<std::pair<std::string, std::string>> chunk_pairs;
@@ -811,10 +870,12 @@ std::vector<std::pair<std::string, std::string>> ChineseTokPosOnnx::annotate(std
       }
       std::string surf;
       for (const auto& sp : cur_spans) {
-        surf += u32_to_utf8(ref.substr(static_cast<std::size_t>(sp.first),
-                                       static_cast<std::size_t>(sp.second - sp.first)));
+        surf += u32_to_utf8(
+            ref.substr(static_cast<std::size_t>(sp.first),
+                       static_cast<std::size_t>(sp.second - sp.first)));
       }
-      chunk_pairs.emplace_back(std::move(surf), cur_tag.empty() ? std::string("X") : cur_tag);
+      chunk_pairs.emplace_back(std::move(surf),
+                               cur_tag.empty() ? std::string("X") : cur_tag);
       cur_spans.clear();
       cur_tag.clear();
     };
@@ -827,7 +888,8 @@ std::vector<std::pair<std::string, std::string>> ChineseTokPosOnnx::annotate(std
       const int s = enc.offsets_cp[static_cast<std::size_t>(ti)].first;
       const int e = enc.offsets_cp[static_cast<std::size_t>(ti)].second;
       int best = 0;
-      const std::size_t base = static_cast<std::size_t>(ti) * static_cast<std::size_t>(num_labels);
+      const std::size_t base =
+          static_cast<std::size_t>(ti) * static_cast<std::size_t>(num_labels);
       float best_v = logits[base];
       for (int64_t j = 1; j < num_labels; ++j) {
         const float v = logits[base + static_cast<std::size_t>(j)];
@@ -855,7 +917,8 @@ std::vector<std::pair<std::string, std::string>> ChineseTokPosOnnx::annotate(std
       } else {
         flush();
         chunk_pairs.emplace_back(
-            u32_to_utf8(ref.substr(static_cast<std::size_t>(s), static_cast<std::size_t>(e - s))),
+            u32_to_utf8(ref.substr(static_cast<std::size_t>(s),
+                                   static_cast<std::size_t>(e - s))),
             lab);
       }
     }

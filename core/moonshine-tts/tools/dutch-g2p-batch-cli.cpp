@@ -1,7 +1,6 @@
-// Dutch rule + lexicon G2P (no ONNX). Batch mode: one input line -> one IPA line on stdout.
-// For parity checks vs Python without spawning one process per phrase.
-#include "dutch.h"
-
+// Dutch rule + lexicon G2P (no ONNX). Batch mode: one input line -> one IPA
+// line on stdout. For parity checks vs Python without spawning one process per
+// phrase.
 #include <cctype>
 #include <filesystem>
 #include <iostream>
@@ -9,25 +8,32 @@
 #include <string>
 #include <vector>
 
+#include "dutch.h"
+
 namespace {
 
 void usage(const char* argv0) {
-  std::cerr
-      << "Usage: " << argv0
-      << " [--dict PATH] [--no-stress] [--syllable-initial-stress] [--no-expand-digits]\n"
-      << "       [--whole-stdin] [TEXT...]\n"
-      << "  With no TEXT: read stdin line-by-line; each non-empty line is phonemized; "
-         "empty lines print an empty line.\n"
-      << "  With TEXT...: join arguments with spaces, phonemize once, print one line.\n"
-      << "  --whole-stdin: read entire stdin as one string (newlines kept) and phonemize once.\n"
-      << "  Default dict: data/nl/dict.tsv (relative to cwd).\n";
+  std::cerr << "Usage: " << argv0
+            << " [--dict PATH] [--no-stress] [--syllable-initial-stress] "
+               "[--no-expand-digits]\n"
+            << "       [--whole-stdin] [TEXT...]\n"
+            << "  With no TEXT: read stdin line-by-line; each non-empty line "
+               "is phonemized; "
+               "empty lines print an empty line.\n"
+            << "  With TEXT...: join arguments with spaces, phonemize once, "
+               "print one line.\n"
+            << "  --whole-stdin: read entire stdin as one string (newlines "
+               "kept) and phonemize once.\n"
+            << "  Default dict: data/nl/dict.tsv (relative to cwd).\n";
 }
 
 std::string trim_sv(std::string s) {
-  while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front())) != 0) {
+  while (!s.empty() &&
+         std::isspace(static_cast<unsigned char>(s.front())) != 0) {
     s.erase(s.begin());
   }
-  while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back())) != 0) {
+  while (!s.empty() &&
+         std::isspace(static_cast<unsigned char>(s.back())) != 0) {
     s.pop_back();
   }
   return s;
@@ -42,7 +48,8 @@ std::string read_all_stdin() {
 }  // namespace
 
 int main(int argc, char** argv) {
-  std::filesystem::path dict_path = std::filesystem::path("data") / "nl" / "dict.tsv";
+  std::filesystem::path dict_path =
+      std::filesystem::path("data") / "nl" / "dict.tsv";
   moonshine_tts::DutchRuleG2p::Options opt;
   bool whole_stdin = false;
   std::vector<std::string> parts;

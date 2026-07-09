@@ -1,19 +1,22 @@
-// Stand-alone Portuguese rule + lexicon G2P (no ONNX). Mirrors ``portuguese_rule_g2p.py`` CLI subset.
-#include "portuguese.h"
-
+// Stand-alone Portuguese rule + lexicon G2P (no ONNX). Mirrors
+// ``portuguese_rule_g2p.py`` CLI subset.
 #include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "portuguese.h"
+
 namespace {
 
 void usage(const char* argv0) {
   std::cerr << "Usage: " << argv0
-            << " [--dict PATH] [--portugal] [--no-stress] [--syllable-initial-stress] [--keep-syllable-dots] "
+            << " [--dict PATH] [--portugal] [--no-stress] "
+               "[--syllable-initial-stress] [--keep-syllable-dots] "
                "[--no-expand-digits] [--stdin] [TEXT...]\n"
-            << "  Default dict: data/pt_br/dict.tsv (use --portugal for data/pt_pt/dict.tsv).\n";
+            << "  Default dict: data/pt_br/dict.tsv (use --portugal for "
+               "data/pt_pt/dict.tsv).\n";
 }
 
 std::string read_all_stdin() {
@@ -25,7 +28,8 @@ std::string read_all_stdin() {
 }  // namespace
 
 int main(int argc, char** argv) {
-  std::filesystem::path dict_path = std::filesystem::path("data") / "pt_br" / "dict.tsv";
+  std::filesystem::path dict_path =
+      std::filesystem::path("data") / "pt_br" / "dict.tsv";
   bool is_portugal = false;
   moonshine_tts::PortugueseRuleG2p::Options opt;
   bool force_stdin = false;

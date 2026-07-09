@@ -6,7 +6,7 @@ enable_testing()
 
 set(CMAKE_CXX_STANDARD 20)
 
-set(MOONSHINE_VERSION "0.0.60")
+set(MOONSHINE_VERSION "0.0.65")
 
 # Ensure the standard is strictly enforced (optional, but recommended)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,12 +17,44 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 if (NOT WIN32)
   add_compile_options(-Wall -Wextra -pedantic -Werror)
 endif()
-# Enable this to catch memory leaks and access violations.
-# This is only supported on Linux.
-# if(LINUX)
-#     add_compile_options(-fsanitize=address -fno-omit-frame-pointer -g)
-#     add_link_options(-fsanitize=address -fno-omit-frame-pointer)
-# endif()
+
+# Opt-in reliability build (Linux/Clang): a sanitizer build plus a compile-
+# commands database for clang-tidy, and (for the address build) the fuzzing
+# harnesses under reliability/. This is OFF by default and is never used for
+# release builds, so production binaries, their performance, and the set of
+# runtime dependencies shipped to library users are all unaffected.
+# See core/STYLE_GUIDE.md and scripts/reliability.sh.
+option(MOONSHINE_RELIABILITY
+    "Build with sanitizers and fuzzing support (Linux/Clang only)" OFF)
+# Which sanitizer(s) to build with. "address,undefined" (default) is the ASan +
+# UBSan build that also carries the libFuzzer harnesses; "thread" is a separate
+# ThreadSanitizer build for the data-race stage (TSan cannot be combined with
+# ASan, so scripts/reliability-remote.sh builds it into its own directory).
+set(MOONSHINE_SANITIZER "address,undefined" CACHE STRING
+    "Sanitizer set for MOONSHINE_RELIABILITY builds (address,undefined|thread)")
+if (MOONSHINE_RELIABILITY)
+    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+    add_compile_options(
+        -fsanitize=${MOONSHINE_SANITIZER}
+        -fsanitize-ignorelist=${CMAKE_CURRENT_LIST_DIR}/reliability/sanitizer-ignorelist.txt
+        -fno-omit-frame-pointer
+        -fno-sanitize-recover=all
+        -g
+        # Lightweight libstdc++ precondition checks (bounds on vector/string
+        # operator[], .front()/.back(), invalid iterator ranges, etc.). These
+        # catch logic out-of-bounds that ASan misses when the bad index still
+        # lands inside the same heap allocation. Unlike _GLIBCXX_DEBUG this does
+        # not change container ABI, so it coexists with the prebuilt onnxruntime.
+        -D_GLIBCXX_ASSERTIONS
+        # The vendored doctest header pulls in <ciso646>, which very recent
+        # libstdc++ versions flag with a deprecation "#warning". We must not edit
+        # third-party code, so keep -Werror everywhere except for that directive
+        # class; real first-party warnings still fail the build. (Quoted so CMake
+        # does not treat the leading '#' as a comment.)
+        "-Wno-error=#warnings"
+    )
+    add_link_options(-fsanitize=${MOONSHINE_SANITIZER})
+endif()
 
 include(${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/find-ort-library-path.cmake)
 
@@ -59,14 +91,61 @@ set(MOONSHINE_SRC_FILES
     transcriber.cpp
     gemma-embedding-model.cpp
     intent-recognizer.cpp
-    speaker-embedding-model.cpp
-    speaker-embedding-model-data.cpp
+    speaker-diarizer.cpp
     spelling-fusion.cpp
     spelling-fusion-data.cpp
     spelling-model.cpp
-    online-clusterer.cpp
     word-alignment.cpp
 )
+
+# cpp-annote speaker diarization library (vendored, see cpp-annote/README.md).
+# Its bundled dependencies (Eigen, kaldi-native-fbank, kissfft) live under
+# third-party/ alongside the other vendored libraries. Compiled directly into
+# the moonshine target so that static framework/library merging on iOS and
+# Windows picks it up without extra archives.
+set(CPP_ANNOTE_DIR ${CMAKE_CURRENT_LIST_DIR}/cpp-annote)
+set(THIRD_PARTY_DIR ${CMAKE_CURRENT_LIST_DIR}/third-party)
+set(CPP_ANNOTE_SRC_FILES
+    ${CPP_ANNOTE_DIR}/src/cpp-annote.cpp
+    ${CPP_ANNOTE_DIR}/src/cpp-annote-streaming.cpp
+    ${CPP_ANNOTE_DIR}/src/community1_cpp_annote_embedded.cpp
+    ${CPP_ANNOTE_DIR}/src/community1_ort_embedded.cpp
+    ${CPP_ANNOTE_DIR}/src/compute_fbank.cpp
+    ${CPP_ANNOTE_DIR}/src/embedding_ort_infer.cpp
+    ${CPP_ANNOTE_DIR}/src/filter_train.cpp
+    ${CPP_ANNOTE_DIR}/src/clustering_vbx.cpp
+    ${CPP_ANNOTE_DIR}/src/plda_vbx.cpp
+    ${CPP_ANNOTE_DIR}/src/scipy_linkage.cpp
+    ${CPP_ANNOTE_DIR}/src/parity_log.cpp
+    ${THIRD_PARTY_DIR}/kissfft/kiss_fft.c
+    ${THIRD_PARTY_DIR}/kissfft/kiss_fftr.c
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/feature-fbank.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/feature-functions.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/feature-mfcc.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/feature-raw-audio-samples.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/feature-window.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/istft.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/kaldi-math.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/mel-computations.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/online-feature.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/rfft.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/stft.cc
+    ${THIRD_PARTY_DIR}/kaldi-native-fbank/csrc/whisper-feature.cc
+)
+# Vendored code isn't held to the project's warning settings, and Eigen is
+# restricted to its MPL2-licensed subset.
+if (WIN32)
+    set_source_files_properties(${CPP_ANNOTE_SRC_FILES} PROPERTIES
+        COMPILE_OPTIONS "/w"
+        COMPILE_DEFINITIONS "EIGEN_MPL2_ONLY=1"
+    )
+else()
+    set_source_files_properties(${CPP_ANNOTE_SRC_FILES} PROPERTIES
+        COMPILE_OPTIONS "-w"
+        COMPILE_DEFINITIONS "EIGEN_MPL2_ONLY=1"
+    )
+endif()
+list(APPEND MOONSHINE_SRC_FILES ${CPP_ANNOTE_SRC_FILES})
 
 # Build as STATIC framework for iOS/Swift (shared frameworks cannot be embedded)
 # Build as SHARED library for other platforms
@@ -102,6 +181,9 @@ target_include_directories(moonshine PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
     ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
     ${CMAKE_CURRENT_LIST_DIR}/third-party/utf-8/
+    ${CPP_ANNOTE_DIR}/src
+    ${THIRD_PARTY_DIR}
+    ${THIRD_PARTY_DIR}/kissfft
 )
 
 # Extra static archives merged into moonshine.framework (iOS / Swift xcframework).
@@ -191,6 +273,21 @@ if(MOONSHINE_TTS_BUILD_ONNX)
     moonshine_tts_set_ort_rpath(moonshine)
     if(WIN32)
         copy_onnxruntime_dll(moonshine)
+    endif()
+    # Windows static lib: merge TTS archives into moonshine.lib so release consumers
+    # only need moonshine.lib plus the existing public dependency libs.
+    if(WIN32 AND NOT MOONSHINE_BUILD_SHARED)
+        add_custom_command(TARGET moonshine POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E echo "Merging TTS static libraries into moonshine.lib..."
+            COMMAND lib /OUT:"$<TARGET_FILE:moonshine>.merged"
+                "$<TARGET_FILE:moonshine_tts_utf8proc>"
+                "$<TARGET_FILE:moonshine_tts_core>"
+                "$<TARGET_FILE:moonshine_tts_ort>"
+                "$<TARGET_FILE:moonshine>"
+            COMMAND ${CMAKE_COMMAND} -E remove "$<TARGET_FILE:moonshine>"
+            COMMAND ${CMAKE_COMMAND} -E rename "$<TARGET_FILE:moonshine>.merged" "$<TARGET_FILE:moonshine>"
+            COMMENT "Merging TTS archives into moonshine.lib"
+        )
     endif()
 else()
     target_compile_definitions(moonshine PRIVATE MOONSHINE_C_API_MOONSHINE_TTS=0)
@@ -430,6 +527,34 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
         )
     endif()
 
+    # Multi-threaded stress test for the transcriber's thread-safe API. Built
+    # only for the opt-in reliability build (it exists to give ThreadSanitizer
+    # real cross-thread contention to analyse), so normal builds are unchanged.
+    if (MOONSHINE_RELIABILITY)
+        find_package(Threads REQUIRED)
+        add_executable(transcriber-concurrency-test
+            transcriber-concurrency-test.cpp
+            transcriber.cpp voice-activity-detector.cpp resampler.cpp)
+        set_target_properties(transcriber-concurrency-test PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED YES
+            CXX_EXTENSIONS NO
+        )
+        target_include_directories(transcriber-concurrency-test PRIVATE
+            ${CMAKE_CURRENT_LIST_DIR}
+            ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+            ${CMAKE_CURRENT_LIST_DIR}/ort-utils
+            ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
+            ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
+            ${CMAKE_CURRENT_LIST_DIR}/third-party/utf-8/
+            ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+        )
+        target_link_libraries(transcriber-concurrency-test PRIVATE
+            moonshine
+            Threads::Threads
+        )
+    endif()
+
     add_executable(word-alignment-test word-alignment-test.cpp)
     set_target_properties(word-alignment-test PROPERTIES
         CXX_STANDARD 20
@@ -537,42 +662,6 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
         )
     endif()
 
-    add_executable(speaker-embedding-model-test speaker-embedding-model-test.cpp speaker-embedding-model.cpp resampler.cpp)
-    set_target_properties(speaker-embedding-model-test PROPERTIES
-        CXX_STANDARD 20
-        CXX_STANDARD_REQUIRED YES
-        CXX_EXTENSIONS NO
-    )
-    target_include_directories(speaker-embedding-model-test PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}
-        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
-        ${CMAKE_CURRENT_LIST_DIR}/ort-utils
-        ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
-        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
-    )
-
-    copy_onnxruntime_dll(speaker-embedding-model-test)
-
-    if (IOS OR MOONSHINE_BUILD_SWIFT)
-        set_target_properties(speaker-embedding-model-test PROPERTIES
-            MACOSX_BUNDLE TRUE
-            MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.speaker-embedding-model-test"
-            MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
-            MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
-        )
-        target_link_libraries(speaker-embedding-model-test PRIVATE
-            moonshine
-            ${ONNXRUNTIME_LIB_PATH}
-            "-framework CoreFoundation"
-            "-framework Foundation"
-        )
-    else()
-        target_link_libraries(speaker-embedding-model-test PRIVATE
-            moonshine
-            ${ONNXRUNTIME_LIB_PATH}
-        )
-    endif()
-
     add_executable(spelling-model-test spelling-model-test.cpp spelling-model.cpp spelling-fusion.cpp spelling-fusion-data.cpp)
     set_target_properties(spelling-model-test PROPERTIES
         CXX_STANDARD 20
@@ -609,18 +698,23 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
         )
     endif()
 
-    add_executable(online-clusterer-test online-clusterer-test.cpp online-clusterer.cpp)
-    set_target_properties(online-clusterer-test PROPERTIES
-        CXX_STANDARD 20
-        CXX_STANDARD_REQUIRED YES
-        CXX_EXTENSIONS NO
-    )
-    target_include_directories(online-clusterer-test PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}
-        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
-        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
-    )
-    target_link_libraries(online-clusterer-test PRIVATE
-        moonshine
+endif()
+
+# Style enforcement: banned constructs must not creep back into first-party
+# code. Registered as a ctest so `ctest -R check-banned-constructs` (and the
+# reliability script) fail if a banned pattern appears. See core/STYLE_GUIDE.md.
+add_test(
+    NAME check-banned-constructs
+    COMMAND bash ${CMAKE_CURRENT_LIST_DIR}/../scripts/check-banned-constructs.sh
+    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/..
+)
+
+# Fuzzing harnesses are only configured for the opt-in address/UBSan reliability
+# build. libFuzzer's runtime is built for the ASan-style build; the ThreadSanitizer
+# build (MOONSHINE_SANITIZER=thread) skips them entirely.
+if (MOONSHINE_RELIABILITY AND MOONSHINE_SANITIZER MATCHES "address")
+    add_subdirectory(
+        ${CMAKE_CURRENT_LIST_DIR}/reliability
+        ${CMAKE_CURRENT_LIST_DIR}/reliability/build
     )
 endif()

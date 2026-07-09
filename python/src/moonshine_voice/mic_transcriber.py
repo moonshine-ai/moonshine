@@ -190,8 +190,15 @@ if __name__ == "__main__":
         # Assume we're on a terminal, and so we can use a carriage return to
         # overwrite the last line with the latest text.
         def update_last_terminal_line(self, line: TranscriptLine):
-            if line.has_speaker_id:
-                speaker_prefix = f"Speaker #{line.speaker_index}: "
+            if line.speaker_spans:
+                # Use the speaker with the most speech time within the line.
+                durations = {}
+                for span in line.speaker_spans:
+                    durations[span.speaker_index] = (
+                        durations.get(span.speaker_index, 0.0) + span.duration
+                    )
+                dominant = max(durations, key=durations.get)
+                speaker_prefix = f"Speaker #{dominant}: "
             else:
                 speaker_prefix = ""
             new_text = f"{speaker_prefix}{line.text}"

@@ -1,7 +1,7 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
-#include <doctest/doctest.h>
-
 #include "text-normalize.h"
+
+#include <doctest/doctest.h>
 
 using namespace moonshine_tts;
 
