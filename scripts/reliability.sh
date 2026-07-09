@@ -7,8 +7,8 @@
 #      uncommitted changes are exercised), preserving the box's large model /
 #      test assets.
 #   3. Runs scripts/reliability-remote.sh there (ASan/UBSan build + test suite,
-#      clang-tidy, a ThreadSanitizer rebuild + threaded tests, and time-boxed
-#      per-module fuzzing).
+#      clang-tidy, a ThreadSanitizer rebuild + threaded tests, a long-stream
+#      memory regression test, and time-boxed per-module fuzzing).
 #   4. Copies logs and any crash reproducers back to core/reliability/artifacts.
 #
 # The whole run is designed to finish within a few hours (tune FUZZ_SECONDS).

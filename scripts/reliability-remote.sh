@@ -24,6 +24,11 @@
 #   TSAN_TEST_TIMEOUT  per-TSan-test wall-clock limit in seconds (default 600);
 #                      a timeout is always a hard failure so a hang can't stall
 #                      the pipeline for hours
+#   STREAM_MEMORY_TEST_TIMEOUT  wall-clock limit for transcriber-streaming-
+#                      memory-test (default 900)
+#   MOONSHINE_STREAM_MEMORY_AUDIO_SECONDS  audio seconds fed by that test
+#                      (default 120); forwarded to the test binary
+#   MOONSHINE_STREAM_MEMORY_TEST_DISABLE  1 => skip the streaming memory test
 #   CC / CXX       compilers (default clang / clang++, required for libFuzzer)
 #   JOBS           parallel build jobs (default: nproc)
 set -uo pipefail
@@ -46,6 +51,7 @@ CHECK_TIDY="${SCRIPTS_DIR}/check-clang-tidy.sh"
 TSAN="${TSAN:-1}"
 TSAN_STRICT="${TSAN_STRICT:-0}"
 TSAN_TEST_TIMEOUT="${TSAN_TEST_TIMEOUT:-600}"
+STREAM_MEMORY_TEST_TIMEOUT="${STREAM_MEMORY_TEST_TIMEOUT:-900}"
 CC="${CC:-clang}"
 CXX="${CXX:-clang++}"
 JOBS="${JOBS:-$(nproc 2>/dev/null || echo 4)}"
@@ -190,6 +196,31 @@ run_test word-alignment  "${BUILD_DIR}/word-alignment-test"
 run_test spelling-fusion "${BUILD_DIR}/spelling-fusion-test"
 run_test voice-activity  "${BUILD_DIR}/voice-activity-detector-test"
 run_test transcriber     "${BUILD_DIR}/transcriber-test"
+if [[ "${MOONSHINE_STREAM_MEMORY_TEST_DISABLE:-0}" != "1" ]]; then
+  echo "  run  transcriber-streaming-memory (timeout ${STREAM_MEMORY_TEST_TIMEOUT}s)"
+  stream_memory_rc=0
+  if command -v timeout >/dev/null 2>&1; then
+    ( cd "${TEST_WORKDIR}" && \
+      MOONSHINE_STREAM_MEMORY_AUDIO_SECONDS="${MOONSHINE_STREAM_MEMORY_AUDIO_SECONDS:-120}" \
+      timeout -k 30 "${STREAM_MEMORY_TEST_TIMEOUT}" \
+        "${BUILD_DIR}/transcriber-streaming-memory-test" ) \
+      >"${ARTIFACTS_DIR}/test-transcriber-streaming-memory.log" 2>&1 \
+      || stream_memory_rc=$?
+  else
+    ( cd "${TEST_WORKDIR}" && \
+      MOONSHINE_STREAM_MEMORY_AUDIO_SECONDS="${MOONSHINE_STREAM_MEMORY_AUDIO_SECONDS:-120}" \
+      "${BUILD_DIR}/transcriber-streaming-memory-test" ) \
+      >"${ARTIFACTS_DIR}/test-transcriber-streaming-memory.log" 2>&1 \
+      || stream_memory_rc=$?
+  fi
+  if [[ "${stream_memory_rc}" == "124" || "${stream_memory_rc}" == "137" ]]; then
+    record_failure "test:transcriber-streaming-memory timed out after ${STREAM_MEMORY_TEST_TIMEOUT}s (see artifacts/test-transcriber-streaming-memory.log)"
+  elif [[ "${stream_memory_rc}" != "0" ]]; then
+    record_failure "test:transcriber-streaming-memory (see artifacts/test-transcriber-streaming-memory.log)"
+  fi
+else
+  echo "  skip transcriber-streaming-memory (MOONSHINE_STREAM_MEMORY_TEST_DISABLE=1)"
+fi
 run_test moonshine-c-api "${BUILD_DIR}/moonshine-c-api-test"
 run_test moonshine-cpp   "${BUILD_DIR}/moonshine-cpp-test"
 
