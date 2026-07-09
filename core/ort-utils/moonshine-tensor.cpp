@@ -22,6 +22,9 @@ extern "C" void moonshine_free_tensor_list(
     DEBUG_FREE(tensor_list->tensors[i]->data);
     DEBUG_FREE(tensor_list->tensors[i]);
   }
-  DEBUG_FREE(tensor_list->tensors);
+  // tensors is a moonshine_tensor_t**; cast to void* explicitly so the
+  // multilevel pointer decay is intentional (bugprone-multi-level-implicit-
+  // pointer-conversion) rather than an accidental implicit conversion.
+  DEBUG_FREE((void *)tensor_list->tensors);
   DEBUG_FREE(tensor_list);
 }

@@ -20,7 +20,8 @@
 #   RELIABILITY_HOST   SSH host of the Linux x86 box (default: petes-alienware-pc)
 #   REMOTE_DIR         repo path on that box, relative to $HOME (default: moonshine)
 #   FUZZ_SECONDS       seconds per fuzz target (default 900 => ~1h of fuzzing)
-#   TIDY_STRICT        1 => clang-tidy findings fail the run (default 0)
+#   TIDY_UPDATE_BASELINE 1 => regenerate core/.clang-tidy-baseline from this run
+#                        (copied back locally to commit) instead of gating on it
 #   TSAN               1 => run the ThreadSanitizer stage (default 1); 0 to skip
 #   TSAN_STRICT        1 => TSan findings fail the run (default 0, advisory)
 #   FORMAT_STRICT      1 => formatting drift fails the run (default 0, advisory).
@@ -34,7 +35,7 @@ CORE_DIR="${REPO_ROOT_DIR}/core"
 RELIABILITY_HOST="${RELIABILITY_HOST:-petes-alienware-pc}"
 REMOTE_DIR="${REMOTE_DIR:-moonshine}"
 FUZZ_SECONDS="${FUZZ_SECONDS:-900}"
-TIDY_STRICT="${TIDY_STRICT:-0}"
+TIDY_UPDATE_BASELINE="${TIDY_UPDATE_BASELINE:-0}"
 TSAN="${TSAN:-1}"
 TSAN_STRICT="${TSAN_STRICT:-0}"
 FORMAT_STRICT="${FORMAT_STRICT:-0}"
@@ -87,7 +88,7 @@ echo ""
 echo "=== Running remote reliability checks ==="
 remote_status=0
 ssh "${RELIABILITY_HOST}" \
-  "cd '${REMOTE_DIR}' && FUZZ_SECONDS='${FUZZ_SECONDS}' TIDY_STRICT='${TIDY_STRICT}' TSAN='${TSAN}' TSAN_STRICT='${TSAN_STRICT}' bash scripts/reliability-remote.sh" \
+  "cd '${REMOTE_DIR}' && FUZZ_SECONDS='${FUZZ_SECONDS}' TIDY_UPDATE_BASELINE='${TIDY_UPDATE_BASELINE}' TSAN='${TSAN}' TSAN_STRICT='${TSAN_STRICT}' bash scripts/reliability-remote.sh" \
   || remote_status=$?
 
 echo ""
@@ -97,6 +98,16 @@ rsync -az \
   "${RELIABILITY_HOST}:${REMOTE_DIR}/core/reliability/artifacts/" \
   "${CORE_DIR}/reliability/artifacts/" \
   || echo "warning: no artifacts to copy back" >&2
+
+# When regenerating the baseline, pull the freshly written file back so it can be
+# committed. On normal (gating) runs the baseline flows box-ward only.
+if [[ "${TIDY_UPDATE_BASELINE}" == "1" ]]; then
+  echo "--- copying regenerated clang-tidy baseline back ---"
+  rsync -az \
+    "${RELIABILITY_HOST}:${REMOTE_DIR}/core/.clang-tidy-baseline" \
+    "${CORE_DIR}/.clang-tidy-baseline" \
+    || echo "warning: could not copy clang-tidy baseline back" >&2
+fi
 
 if [[ "${remote_status}" -eq 0 ]]; then
   echo ""

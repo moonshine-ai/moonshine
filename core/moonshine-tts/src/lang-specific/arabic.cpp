@@ -101,7 +101,7 @@ ArabicRuleG2p::ArabicRuleG2p(std::filesystem::path onnx_model_dir,
                              std::filesystem::path dict_tsv, bool use_cuda)
     : diac_(std::make_unique<ArabicDiacOnnx>(std::move(onnx_model_dir),
                                              use_cuda)),
-      lex_(load_lex_first_tsv(std::move(dict_tsv))) {}
+      lex_(load_lex_first_tsv(dict_tsv)) {}
 
 ArabicRuleG2p::ArabicRuleG2p(std::filesystem::path onnx_model_dir,
                              std::string dict_tsv_utf8, bool use_cuda)
@@ -117,7 +117,7 @@ ArabicRuleG2p::ArabicRuleG2p(const MoonshineG2POptions& opt,
                              std::filesystem::path dict_tsv, bool use_cuda)
     : diac_(std::make_unique<ArabicDiacOnnx>(
           &opt, kG2pArabicOnnxDirKey, std::move(onnx_model_dir), use_cuda)),
-      lex_(load_lex_first_tsv(std::move(dict_tsv))) {}
+      lex_(load_lex_first_tsv(dict_tsv)) {}
 
 ArabicRuleG2p::ArabicRuleG2p(const MoonshineG2POptions& opt,
                              std::filesystem::path onnx_model_dir,

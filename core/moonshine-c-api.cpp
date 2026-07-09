@@ -1044,7 +1044,7 @@ int32_t moonshine_text_to_speech(int32_t tts_synthesizer_handle,
             option.name != nullptr ? std::string(option.name) : std::string();
         const std::string value =
             option.value != nullptr ? std::string(option.value) : std::string();
-        tts_pairs.emplace_back(std::move(name), std::move(value));
+        tts_pairs.emplace_back(name, value);
       }
     }
     const std::vector<float> wave = tts_pairs.empty()

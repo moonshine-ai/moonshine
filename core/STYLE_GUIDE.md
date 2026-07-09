@@ -66,7 +66,7 @@ Third-party and vendored code (`core/third-party/` and `core/cpp-annote/`) is
 | Container bounds / preconditions | `-D_GLIBCXX_ASSERTIONS` (reliability build only) |
 | Data races | ThreadSanitizer build (`-DMOONSHINE_SANITIZER=thread`) driving `transcriber-concurrency-test` (many parallel streams), run by `scripts/reliability.sh`. TSan runs with `MOONSHINE_ORT_SINGLE_THREAD=1` so onnxruntime stays on the calling thread (its uninstrumented pool otherwise deadlocks TSan); first-party locking is still exercised. |
 | Per-module robustness | libFuzzer targets in `core/reliability/` |
-| Reliability lints + static analysis | `core/.clang-tidy` (bounds, `reinterpret_cast`, bugprone, and the `clang-analyzer-*` path-sensitive engine) |
+| Reliability lints + static analysis | `core/.clang-tidy` (`bugprone-*`, `cert-*`, and the `clang-analyzer-*` path-sensitive engine), gated against `core/.clang-tidy-baseline` so only *new* findings fail the run (see below) |
 
 ### The banned-constructs baseline
 
@@ -82,6 +82,16 @@ Third-party and vendored code (`core/third-party/` and `core/cpp-annote/`) is
 
 The `core/reliability/` fuzz harnesses are test-only tooling and are exempt from
 the banned-construct rules.
+
+### The clang-tidy baseline
+
+clang-tidy runs on the reliability box and its findings are compared against
+`core/.clang-tidy-baseline` by `scripts/check-clang-tidy.sh`. Each baseline line
+is an accepted `"<check-name>\t<file>"` pair; the reliability run fails only when
+a pair appears that is *not* in the baseline (a newly introduced problem). This
+keeps the gate strict for new code while tolerating the curated set of existing
+findings that are benign for our style. After an intentional change, refresh it
+with `TIDY_UPDATE_BASELINE=1 scripts/reliability.sh` and commit the result.
 
 ## Running the checks
 

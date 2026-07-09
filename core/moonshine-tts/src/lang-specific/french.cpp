@@ -223,7 +223,7 @@ void load_french_lexicon_stream(
   }
   out_lex.clear();
   for (auto& e : tmp) {
-    out_lex.emplace(std::move(e.first), std::move(e.second.first));
+    out_lex.emplace(e.first, std::move(e.second.first));
   }
 }
 

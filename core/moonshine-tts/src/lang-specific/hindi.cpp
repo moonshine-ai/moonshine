@@ -505,7 +505,7 @@ void load_hindi_lexicon_stream(
 }
 
 HindiRuleG2p::HindiRuleG2p(std::filesystem::path dict_tsv, Options options)
-    : options_(std::move(options)) {
+    : options_(options) {
   if (!std::filesystem::is_regular_file(dict_tsv)) {
     throw std::runtime_error("Hindi G2P: lexicon not found at " +
                              dict_tsv.generic_string());
@@ -519,7 +519,7 @@ HindiRuleG2p::HindiRuleG2p(std::filesystem::path dict_tsv, Options options)
 }
 
 HindiRuleG2p::HindiRuleG2p(std::string dict_tsv_utf8, Options options)
-    : options_(std::move(options)) {
+    : options_(options) {
   std::istringstream in(std::move(dict_tsv_utf8));
   load_hindi_lexicon_stream(in, lexicon_);
 }
@@ -626,7 +626,7 @@ std::string hindi_text_to_ipa(const std::string& text, bool with_stress,
   o.expand_cardinal_digits = expand_cardinal_digits;
   const std::filesystem::path path =
       dict_tsv.empty() ? builtin_hindi_dict_path() : dict_tsv;
-  HindiRuleG2p g(path, std::move(o));
+  HindiRuleG2p g(path, o);
   return g.text_to_ipa(text, per_word_log);
 }
 

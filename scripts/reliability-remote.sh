@@ -10,12 +10,15 @@
 #   2. Run the core test suite under the sanitizers.
 #   3. ThreadSanitizer: build the threaded tests into a separate build dir with
 #      -DMOONSHINE_SANITIZER=thread and run them (advisory unless TSAN_STRICT=1).
-#   4. Run clang-tidy on first-party sources (advisory unless TIDY_STRICT=1).
+#   4. Run clang-tidy on first-party sources and fail on any finding that is NOT
+#      already recorded in core/.clang-tidy-baseline (i.e. newly introduced).
 #   5. Fuzz each per-module target for FUZZ_SECONDS, saving any crash reproducers.
 #
 # Environment:
 #   FUZZ_SECONDS   seconds per fuzz target (default 900)
-#   TIDY_STRICT    1 => clang-tidy findings fail the run (default 0, advisory)
+#   TIDY_UPDATE_BASELINE  1 => regenerate core/.clang-tidy-baseline from this run
+#                         instead of gating against it (commit the result). Never
+#                         fails the run. Default 0.
 #   TSAN           1 => run the ThreadSanitizer stage (default 1); 0 to skip
 #   TSAN_STRICT    1 => TSan findings fail the run (default 0, advisory)
 #   TSAN_TEST_TIMEOUT  per-TSan-test wall-clock limit in seconds (default 600);
@@ -37,7 +40,9 @@ ORT_LIB_DIR="${CORE_DIR}/third-party/onnxruntime/lib/linux/x86_64"
 TSAN_SUPPRESSIONS="${CORE_DIR}/reliability/tsan-suppressions.txt"
 
 FUZZ_SECONDS="${FUZZ_SECONDS:-900}"
-TIDY_STRICT="${TIDY_STRICT:-0}"
+TIDY_UPDATE_BASELINE="${TIDY_UPDATE_BASELINE:-0}"
+TIDY_BASELINE="${CORE_DIR}/.clang-tidy-baseline"
+CHECK_TIDY="${SCRIPTS_DIR}/check-clang-tidy.sh"
 TSAN="${TSAN:-1}"
 TSAN_STRICT="${TSAN_STRICT:-0}"
 TSAN_TEST_TIMEOUT="${TSAN_TEST_TIMEOUT:-600}"
@@ -189,8 +194,14 @@ run_test moonshine-c-api "${BUILD_DIR}/moonshine-c-api-test"
 run_test moonshine-cpp   "${BUILD_DIR}/moonshine-cpp-test"
 
 # ---------------------------------------------------------------------------
-# 3. clang-tidy (advisory unless TIDY_STRICT=1).
+# 3. clang-tidy, gated against core/.clang-tidy-baseline.
 # ---------------------------------------------------------------------------
+# run-clang-tidy exits 0 even when it reports warnings (nothing is promoted to an
+# error via WarningsAsErrors), so we cannot rely on its exit code. Instead we
+# always capture its output and diff the findings against a committed baseline of
+# known-accepted pairs: a NEW (check, file) pair fails the whole run, existing
+# ones do not. Regenerate the baseline with TIDY_UPDATE_BASELINE=1.
+#
 # Ubuntu's clang-tidy package installs version-suffixed binaries (clang-tidy-21,
 # run-clang-tidy-21) and does not always create the plain symlinks, so resolve
 # both, preferring the unversioned names and falling back to recent versions.
@@ -208,15 +219,29 @@ if [[ -n "${CLANG_TIDY_BIN}" && -n "${RUN_CLANG_TIDY_BIN}" ]]; then
   # third-party headers quiet. -clang-tidy-binary pins the matching (possibly
   # version-suffixed) clang-tidy so run-clang-tidy does not look for a plain one.
   TIDY_REGEX='core/(moonshine-utils|ort-utils|bin-tokenizer)/|core/[^/]*\.(cpp|cc)$|core/moonshine-tts/src/'
-  if "${RUN_CLANG_TIDY_BIN}" -clang-tidy-binary "${CLANG_TIDY_BIN}" \
+  # Capture output regardless of exit status (warnings do not set it).
+  "${RUN_CLANG_TIDY_BIN}" -clang-tidy-binary "${CLANG_TIDY_BIN}" \
         -p "${BUILD_DIR}" -quiet "${TIDY_REGEX}" \
-        >"${ARTIFACTS_DIR}/clang-tidy.log" 2>&1; then
-    echo "  clang-tidy: clean"
-  else
-    if [[ "${TIDY_STRICT}" == "1" ]]; then
-      record_failure "clang-tidy (see artifacts/clang-tidy.log)"
+        >"${ARTIFACTS_DIR}/clang-tidy.log" 2>&1 || true
+  if [[ "${TIDY_UPDATE_BASELINE}" == "1" ]]; then
+    if bash "${CHECK_TIDY}" --log "${ARTIFACTS_DIR}/clang-tidy.log" \
+          --baseline "${TIDY_BASELINE}" --repo-root "${REPO_ROOT_DIR}" --update; then
+      echo "  clang-tidy: baseline regenerated (commit core/.clang-tidy-baseline)"
     else
-      echo "  clang-tidy: findings recorded (advisory) in artifacts/clang-tidy.log"
+      record_failure "clang-tidy baseline update failed (see stderr above)"
+    fi
+  else
+    tidy_rc=0
+    bash "${CHECK_TIDY}" --log "${ARTIFACTS_DIR}/clang-tidy.log" \
+        --baseline "${TIDY_BASELINE}" --repo-root "${REPO_ROOT_DIR}" || tidy_rc=$?
+    if [[ "${tidy_rc}" == "0" ]]; then
+      echo "  clang-tidy: no new findings"
+    elif [[ "${tidy_rc}" == "1" ]]; then
+      record_failure "clang-tidy: new findings vs baseline (see output above + artifacts/clang-tidy.log)"
+    else
+      # rc 2 == usage/environment problem (e.g. python3 or baseline missing). Do
+      # not silently pass: a broken gate is itself a reliability failure.
+      record_failure "clang-tidy gate could not run (see output above)"
     fi
   fi
 else

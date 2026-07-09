@@ -658,7 +658,7 @@ std::optional<RuleBasedG2pInstance> try_turkish(
   RuleBasedG2pInstance out;
   out.canonical_dialect_id = "tr-TR";
   out.kind = RuleBasedG2pKind::Turkish;
-  out.engine = std::make_unique<TurkishRuleG2p>(std::move(to));
+  out.engine = std::make_unique<TurkishRuleG2p>(to);
   return out;
 }
 
@@ -673,7 +673,7 @@ std::optional<RuleBasedG2pInstance> try_ukrainian(
   RuleBasedG2pInstance out;
   out.canonical_dialect_id = "uk-UA";
   out.kind = RuleBasedG2pKind::Ukrainian;
-  out.engine = std::make_unique<UkrainianRuleG2p>(std::move(uo));
+  out.engine = std::make_unique<UkrainianRuleG2p>(uo);
   return out;
 }
 

@@ -241,7 +241,7 @@ void load_russian_lexicon_stream(
   }
   out_lex.clear();
   for (auto& e : tmp) {
-    out_lex.emplace(std::move(e.first), std::move(e.second.first));
+    out_lex.emplace(e.first, std::move(e.second.first));
   }
 }
 
@@ -992,7 +992,7 @@ RussianRuleG2p::RussianRuleG2p(std::filesystem::path dict_tsv)
 
 RussianRuleG2p::RussianRuleG2p(std::filesystem::path dict_tsv, Options options)
     : options_(options) {
-  load_russian_lexicon_file(std::move(dict_tsv), lexicon_);
+  load_russian_lexicon_file(dict_tsv, lexicon_);
 }
 
 RussianRuleG2p::RussianRuleG2p(std::string dict_tsv_utf8, Options options)

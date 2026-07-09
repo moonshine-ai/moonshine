@@ -602,7 +602,7 @@ EncodedWp encode_bert_wordpiece(
   EncodedWp out;
   out.input_ids = std::move(all_ids);
   out.offsets_cp = std::move(all_offsets);
-  out.ref_u32 = std::move(ref);
+  out.ref_u32 = ref;
   out.word_groups = std::move(groups);
   return out;
 }
