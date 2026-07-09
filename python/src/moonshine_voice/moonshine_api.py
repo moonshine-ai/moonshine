@@ -127,6 +127,42 @@ class TranscriptC(ctypes.Structure):
     ]
 
 
+def _require_struct_size(name, struct, expected, note=""):
+    """Fail fast if a ctypes struct drifts from the compiled C ABI.
+
+    A mismatch here means the Python binding walks native arrays with the
+    wrong stride, which crashes with SIGSEGV instead of a clear error (see
+    https://github.com/moonshine-ai/moonshine/issues/158). We only enforce on
+    the 64-bit ABI these sizes were computed for; other ABIs (32-bit pointers,
+    different size_t) legitimately produce different sizes and are skipped
+    rather than misdiagnosed as binding drift.
+    """
+    actual = ctypes.sizeof(struct)
+    if actual != expected:
+        detail = f" {note}" if note else ""
+        raise ImportError(
+            f"moonshine_voice ABI mismatch: {name} is {actual} bytes but the "
+            f"compiled C ABI expects {expected} bytes. This usually means the "
+            f"installed Python binding is out of sync with libmoonshine. "
+            f"(sizeof void*={ctypes.sizeof(ctypes.c_void_p)}, "
+            f"size_t={ctypes.sizeof(ctypes.c_size_t)}){detail}"
+        )
+
+
+# Only the LP64/LLP64 layout (8-byte pointers and size_t) that these expected
+# sizes were derived from is validated; skip other ABIs to avoid false alarms.
+if ctypes.sizeof(ctypes.c_void_p) == 8 and ctypes.sizeof(ctypes.c_size_t) == 8:
+    _require_struct_size("TranscriptWordC", TranscriptWordC, 24)
+    _require_struct_size("SpeakerSpanC", SpeakerSpanC, 40)
+    _require_struct_size(
+        "TranscriptLineC",
+        TranscriptLineC,
+        88,
+        "See https://github.com/moonshine-ai/moonshine/issues/158",
+    )
+    _require_struct_size("TranscriptC", TranscriptC, 16)
+
+
 class TranscriberOptionC(ctypes.Structure):
     """C structure for moonshine_option_t."""
 
