@@ -108,12 +108,16 @@ if [[ ! -f "${BASELINE}" ]]; then
 fi
 
 # Strip comments/blank lines from the baseline, then report any current pair that
-# is absent from it. comm needs both inputs sorted (extract_keys already sorts).
+# is absent from it. comm needs both inputs sorted in the *same* collation order.
+# extract_keys sorts with Python's sorted() (code-point / byte order), so we must
+# sort (and diff) the baseline with LC_ALL=C too -- a locale-aware sort orders
+# punctuation like '-' vs '.' differently, which makes comm bail out
+# ("file N is not in sorted order") and emit bogus "new" findings.
 BASE_KEYS="$(mktemp)"
 trap 'rm -f "${CURRENT}" "${BASE_KEYS}"' EXIT
-grep -v -e '^#' -e '^[[:space:]]*$' "${BASELINE}" | sort -u >"${BASE_KEYS}"
+grep -v -e '^#' -e '^[[:space:]]*$' "${BASELINE}" | LC_ALL=C sort -u >"${BASE_KEYS}"
 
-NEW="$(comm -13 "${BASE_KEYS}" "${CURRENT}")"
+NEW="$(LC_ALL=C comm -13 "${BASE_KEYS}" "${CURRENT}")"
 if [[ -n "${NEW}" ]]; then
   new_count="$(printf '%s\n' "${NEW}" | grep -c . || true)"
   echo "check-clang-tidy: ${new_count} NEW clang-tidy finding(s) not in the baseline:" >&2
