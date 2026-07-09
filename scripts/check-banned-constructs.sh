@@ -11,9 +11,10 @@
 #      string functions that have safe, bounded replacements.
 #
 #   2. Baseline gate (regression only): owning new/delete, C allocation calls,
-#      and reinterpret_cast are tolerated where they already exist (recorded in
-#      core/.banned-constructs-allowlist) but blocked in any file not on that
-#      list. As modules are cleaned up, regenerate the baseline with
+#      reinterpret_cast, and non-standard compiler builtins (__builtin_*, a
+#      GCC/Clang extension MSVC rejects) are tolerated where they already exist
+#      (recorded in core/.banned-constructs-allowlist) but blocked in any file
+#      not on that list. As modules are cleaned up, regenerate the baseline with
 #      `scripts/check-banned-constructs.sh --update-baseline` to lock in the
 #      improvement.
 #
@@ -39,11 +40,16 @@ fi
 HARD_PATTERN='\b(strcpy|strcat|sprintf|vsprintf|gets|strncpy|strncat)[[:space:]]*\('
 
 # Baseline-gated categories (name and regex).
-BASELINE_NAMES=(reinterpret_cast c_alloc raw_new_delete)
+BASELINE_NAMES=(reinterpret_cast c_alloc raw_new_delete compiler_builtin)
 BASELINE_PATTERNS=(
   'reinterpret_cast'
   '\b(malloc|calloc|realloc|free)[[:space:]]*\('
   '\b(new|delete)\b'
+  # GCC/Clang __builtin_* functions are not standard C++ and fail to compile
+  # under MSVC (used for the Windows build). Match calls (trailing paren) so a
+  # mention in a comment does not trip the gate. Prefer a portable helper or,
+  # if genuinely needed, guard with #ifdef and add the file to the allowlist.
+  '__builtin_[A-Za-z0-9_]+[[:space:]]*\('
 )
 
 # Collect first-party C/C++ sources, excluding vendored trees, build output,

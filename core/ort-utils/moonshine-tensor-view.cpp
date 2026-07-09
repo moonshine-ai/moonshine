@@ -1,5 +1,6 @@
 #include "moonshine-tensor-view.h"
 
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <list>
@@ -8,6 +9,19 @@
 #include "ort-utils.h"
 
 namespace {
+
+// Portable checked multiply for size_t: returns false on overflow (leaving
+// *out untouched), otherwise stores a * b. We avoid __builtin_mul_overflow
+// because it is a GCC/Clang extension that MSVC (the Windows build compiler)
+// does not provide; the division-based test is standard C++ and exact for the
+// non-negative operands used here.
+bool checked_mul(size_t a, size_t b, size_t *out) {
+  if (b != 0 && a > SIZE_MAX / b) {
+    return false;
+  }
+  *out = a * b;
+  return true;
+}
 
 moonshine_tensor_t *moonshine_tensor_from_shape_and_dtype(
     const std::vector<int64_t> &shape, uint32_t dtype,
@@ -25,9 +39,34 @@ moonshine_tensor_t *moonshine_tensor_from_shape_and_dtype(
               shape.size() * sizeof(int64_t));
   moonshine_tensor->shape_count = shape.size();
   const size_t bytes_per_element = moonshine_dtype_to_bytes_per_element(dtype);
-  const size_t element_count = std::accumulate(shape.begin(), shape.end(), 1,
-                                               std::multiplies<int64_t>());
-  const size_t data_size_in_bytes = element_count * bytes_per_element;
+  // Guard against integer overflow from a crafted or oversized shape. The
+  // previous std::accumulate multiplied the dimensions as signed int64, which
+  // is undefined behaviour on overflow and can wrap to a small element count --
+  // yielding a small allocation that the memcpy below would then overrun.
+  // Accumulate in size_t with checked multiplication and reject negative dims.
+  size_t element_count = 1;
+  for (const int64_t dim : shape) {
+    if (dim < 0) {
+      fprintf(stderr, "Negative tensor dimension %lld\n",
+              static_cast<long long>(dim));
+      DEBUG_FREE(moonshine_tensor->shape);
+      DEBUG_FREE(moonshine_tensor);
+      return nullptr;
+    }
+    if (!checked_mul(element_count, static_cast<size_t>(dim), &element_count)) {
+      fprintf(stderr, "Tensor element count overflows size_t\n");
+      DEBUG_FREE(moonshine_tensor->shape);
+      DEBUG_FREE(moonshine_tensor);
+      return nullptr;
+    }
+  }
+  size_t data_size_in_bytes = 0;
+  if (!checked_mul(element_count, bytes_per_element, &data_size_in_bytes)) {
+    fprintf(stderr, "Tensor byte size overflows size_t\n");
+    DEBUG_FREE(moonshine_tensor->shape);
+    DEBUG_FREE(moonshine_tensor);
+    return nullptr;
+  }
   moonshine_tensor->data =
       static_cast<uint8_t *>(DEBUG_CALLOC(data_size_in_bytes, 1));
   if (data_to_copy != nullptr) {
@@ -251,29 +290,6 @@ size_t moonshine_dtype_to_bytes_per_element(uint32_t moonshine_dtype) {
   ONNXTensorElementDataType ort_dtype =
       moonshine_dtype_to_ort_dtype(moonshine_dtype);
   return ort_dtype_to_bytes_per_element(ort_dtype);
-}
-
-moonshine_tensor_t *moonshine_tensor_from_shape_and_dtype(
-    const std::vector<int64_t> &shape, uint32_t dtype,
-    const void *data_to_copy) {
-  moonshine_tensor_t *moonshine_tensor = static_cast<moonshine_tensor_t *>(
-      DEBUG_CALLOC(1, sizeof(moonshine_tensor_t)));
-  moonshine_tensor->dtype = dtype;
-  moonshine_tensor->shape =
-      static_cast<int64_t *>(DEBUG_CALLOC(shape.size(), sizeof(int64_t)));
-  std::memcpy(moonshine_tensor->shape, shape.data(),
-              shape.size() * sizeof(int64_t));
-  moonshine_tensor->shape_count = shape.size();
-  const size_t bytes_per_element = moonshine_dtype_to_bytes_per_element(dtype);
-  const size_t element_count = std::accumulate(shape.begin(), shape.end(), 1,
-                                               std::multiplies<int64_t>());
-  const size_t data_size_in_bytes = element_count * bytes_per_element;
-  moonshine_tensor->data =
-      static_cast<uint8_t *>(DEBUG_CALLOC(data_size_in_bytes, 1));
-  if (data_to_copy != nullptr) {
-    std::memcpy(moonshine_tensor->data, data_to_copy, data_size_in_bytes);
-  }
-  return moonshine_tensor;
 }
 
 MoonshineTensorView *moonshine_tensor_from_token_vector(

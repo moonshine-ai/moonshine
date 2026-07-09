@@ -72,3 +72,20 @@ moonshine_add_fuzzer(fuzz_string_utils
 target_include_directories(fuzz_string_utils PRIVATE
     ${CORE_DIR}/moonshine-utils
 )
+
+# Tensor view: shape/dtype/data construction turns an attacker-influenced shape
+# into a size computation, an allocation, and a memcpy. This module is coupled
+# to onnxruntime, so rather than list its sources we link the already-built
+# ort-utils static library (which pulls in onnxruntime + moonshine-utils); the
+# harness runs under the inherited ASan/UBSan flags.
+moonshine_add_fuzzer(fuzz_tensor_view
+    fuzz-tensor-view.cpp
+)
+target_include_directories(fuzz_tensor_view PRIVATE
+    ${CORE_DIR}/ort-utils
+    ${CORE_DIR}/moonshine-utils
+    ${CORE_DIR}/third-party/onnxruntime/include
+)
+target_link_libraries(fuzz_tensor_view PRIVATE
+    ort-utils
+)
