@@ -1,18 +1,19 @@
 #include "moonshine-g2p-options.h"
 
-#include "moonshine-asset-catalog.h"
-#include "g2p-path.h"
-#include "ort-utils.h"
-#include "string-utils.h"
-
 #include <filesystem>
 #include <unordered_set>
+
+#include "g2p-path.h"
+#include "moonshine-asset-catalog.h"
+#include "ort-utils.h"
+#include "string-utils.h"
 
 namespace moonshine_tts {
 
 namespace {
 
-std::optional<std::filesystem::path> optional_path_from_string(const std::string& value) {
+std::optional<std::filesystem::path> optional_path_from_string(
+    const std::string& value) {
   const std::string t = trim(value);
   if (t.empty()) {
     return std::nullopt;
@@ -20,7 +21,8 @@ std::optional<std::filesystem::path> optional_path_from_string(const std::string
   return std::filesystem::path(t);
 }
 
-void set_canonical_file(FileInformationMap& files, std::string_view canonical_key,
+void set_canonical_file(FileInformationMap& files,
+                        std::string_view canonical_key,
                         const std::string& value) {
   const auto p = optional_path_from_string(value);
   if (!p) {
@@ -103,7 +105,8 @@ bool is_known_g2p_option(std::string_view key) {
   return kKnown.find(std::string(key)) != kKnown.end();
 }
 
-void prepare_g2p_file_information_path(FileInformation& fi, const std::filesystem::path& g2p_root) {
+void prepare_g2p_file_information_path(FileInformation& fi,
+                                       const std::filesystem::path& g2p_root) {
   if (fi.memory != nullptr && fi.memory_size > 0) {
     return;
   }
@@ -115,8 +118,9 @@ void prepare_g2p_file_information_path(FileInformation& fi, const std::filesyste
   }
   if (fi.memory == nullptr || fi.memory_size == 0) {
     const std::string fn = fi.path.filename().string();
-    const bool model_ext = (fn.size() >= 5 && fn.compare(fn.size() - 5, 5, ".onnx") == 0) ||
-                           (fn.size() >= 4 && fn.compare(fn.size() - 4, 4, ".ort") == 0);
+    const bool model_ext =
+        (fn.size() >= 5 && fn.compare(fn.size() - 5, 5, ".onnx") == 0) ||
+        (fn.size() >= 4 && fn.compare(fn.size() - 4, 4, ".ort") == 0);
     if (model_ext) {
       resolve_disk_model_file_path(fi.path);
     }
@@ -129,7 +133,8 @@ MoonshineG2POptions::MoonshineG2POptions() {
   moonshine_asset_catalog_populate_default_g2p_files(files);
 }
 
-std::filesystem::path MoonshineG2POptions::relative_asset_path(std::string_view canonical_key) const {
+std::filesystem::path MoonshineG2POptions::relative_asset_path(
+    std::string_view canonical_key) const {
   const std::string k(canonical_key);
   const auto it = files.entries.find(k);
   if (it == files.entries.end()) {
@@ -138,8 +143,8 @@ std::filesystem::path MoonshineG2POptions::relative_asset_path(std::string_view 
   return it->second.path;
 }
 
-std::optional<std::filesystem::path> MoonshineG2POptions::optional_override_path(
-    std::string_view map_key) const {
+std::optional<std::filesystem::path>
+MoonshineG2POptions::optional_override_path(std::string_view map_key) const {
   const std::string k(map_key);
   const auto it = files.entries.find(k);
   if (it == files.entries.end()) {
@@ -151,7 +156,8 @@ std::optional<std::filesystem::path> MoonshineG2POptions::optional_override_path
   return it->second.path;
 }
 
-bool MoonshineG2POptions::asset_is_available(std::string_view canonical_key) const {
+bool MoonshineG2POptions::asset_is_available(
+    std::string_view canonical_key) const {
   const std::string k(canonical_key);
   FileInformation fi;
   if (const auto it = files.entries.find(k); it != files.entries.end()) {
@@ -166,7 +172,8 @@ bool MoonshineG2POptions::asset_is_available(std::string_view canonical_key) con
   return std::filesystem::is_regular_file(fi.path);
 }
 
-std::vector<uint8_t> MoonshineG2POptions::read_binary_asset(std::string_view canonical_key) const {
+std::vector<uint8_t> MoonshineG2POptions::read_binary_asset(
+    std::string_view canonical_key) const {
   const std::string k(canonical_key);
   FileInformation fi;
   if (const auto it = files.entries.find(k); it != files.entries.end()) {
@@ -183,7 +190,8 @@ std::vector<uint8_t> MoonshineG2POptions::read_binary_asset(std::string_view can
   return out;
 }
 
-std::string MoonshineG2POptions::read_utf8_asset(std::string_view canonical_key) const {
+std::string MoonshineG2POptions::read_utf8_asset(
+    std::string_view canonical_key) const {
   std::vector<uint8_t> raw = read_binary_asset(canonical_key);
   return std::string(reinterpret_cast<const char*>(raw.data()), raw.size());
 }
@@ -313,7 +321,9 @@ void MoonshineG2POptions::parse_options(
     } else if (key == "log_profiling") {
       log_profiling = bool_from_string(v);
     } else {
-      throw std::logic_error("MoonshineG2POptions::parse_options: unhandled option '" + name + "'");
+      throw std::logic_error(
+          "MoonshineG2POptions::parse_options: unhandled option '" + name +
+          "'");
     }
   }
 }

@@ -88,7 +88,8 @@ TEST_CASE("intent-recognizer unit tests") {
       CHECK(ranked[i - 1].second >= ranked[i].second);
     }
 
-    auto strict = recognizer.rank_intents("completely unrelated text", 0.99f, 6);
+    auto strict =
+        recognizer.rank_intents("completely unrelated text", 0.99f, 6);
     CHECK(strict.empty());
   }
 
@@ -232,8 +233,7 @@ TEST_CASE("intent-recognizer precision/recall with GemmaEmbeddingModel") {
     PrecisionRecallResult results;
 
     for (const auto &test_case : test_cases) {
-      auto ranked =
-          recognizer.rank_intents(test_case.utterance, threshold, 1);
+      auto ranked = recognizer.rank_intents(test_case.utterance, threshold, 1);
 
       bool expected_match = !test_case.expected_intent.empty();
       bool matched = !ranked.empty();
@@ -565,8 +565,8 @@ TEST_CASE("C API moonshine_calculate_intent_embedding") {
     REQUIRE(embedding != nullptr);
     REQUIRE(embedding_size > 0);
 
-    err = moonshine_register_intent(handle, "turn on the lights",
-                                    embedding, embedding_size, 0);
+    err = moonshine_register_intent(handle, "turn on the lights", embedding,
+                                    embedding_size, 0);
     CHECK(err == MOONSHINE_ERROR_NONE);
     moonshine_free_intent_embedding(embedding);
 
@@ -587,9 +587,7 @@ TEST_CASE("C API moonshine_calculate_intent_embedding") {
 }
 
 TEST_CASE("C API moonshine_free_intent_embedding") {
-  SUBCASE("safe on nullptr") {
-    moonshine_free_intent_embedding(nullptr);
-  }
+  SUBCASE("safe on nullptr") { moonshine_free_intent_embedding(nullptr); }
 
   SUBCASE("frees malloc-allocated buffer") {
     float *buf = static_cast<float *>(std::malloc(768 * sizeof(float)));
@@ -619,8 +617,8 @@ TEST_CASE("C API moonshine_calculate_embedding_distance") {
     REQUIRE(emb != nullptr);
 
     float similarity = 0.0f;
-    err = moonshine_calculate_embedding_distance(handle, emb, emb,
-                                                  emb_size, &similarity);
+    err = moonshine_calculate_embedding_distance(handle, emb, emb, emb_size,
+                                                 &similarity);
     CHECK(err == MOONSHINE_ERROR_NONE);
     CHECK(similarity > 0.99f);
     moonshine_free_intent_embedding(emb);
@@ -630,17 +628,17 @@ TEST_CASE("C API moonshine_calculate_embedding_distance") {
     float *emb_a = nullptr;
     float *emb_b = nullptr;
     uint64_t size_a = 0, size_b = 0;
-    moonshine_calculate_intent_embedding(handle, "turn on the lights",
-                                         &emb_a, &size_a, nullptr);
-    moonshine_calculate_intent_embedding(handle, "switch on the lamps",
-                                         &emb_b, &size_b, nullptr);
+    moonshine_calculate_intent_embedding(handle, "turn on the lights", &emb_a,
+                                         &size_a, nullptr);
+    moonshine_calculate_intent_embedding(handle, "switch on the lamps", &emb_b,
+                                         &size_b, nullptr);
     REQUIRE(emb_a != nullptr);
     REQUIRE(emb_b != nullptr);
     REQUIRE(size_a == size_b);
 
     float similarity = 0.0f;
-    int32_t err = moonshine_calculate_embedding_distance(
-        handle, emb_a, emb_b, size_a, &similarity);
+    int32_t err = moonshine_calculate_embedding_distance(handle, emb_a, emb_b,
+                                                         size_a, &similarity);
     CHECK(err == MOONSHINE_ERROR_NONE);
     CHECK(similarity > 0.7f);
     moonshine_free_intent_embedding(emb_a);
@@ -651,8 +649,8 @@ TEST_CASE("C API moonshine_calculate_embedding_distance") {
     float *emb_a = nullptr;
     float *emb_b = nullptr;
     uint64_t size_a = 0, size_b = 0;
-    moonshine_calculate_intent_embedding(handle, "turn on the lights",
-                                         &emb_a, &size_a, nullptr);
+    moonshine_calculate_intent_embedding(handle, "turn on the lights", &emb_a,
+                                         &size_a, nullptr);
     moonshine_calculate_intent_embedding(handle, "the stock market crashed",
                                          &emb_b, &size_b, nullptr);
     REQUIRE(emb_a != nullptr);
@@ -660,8 +658,8 @@ TEST_CASE("C API moonshine_calculate_embedding_distance") {
     REQUIRE(size_a == size_b);
 
     float similarity = 0.0f;
-    int32_t err = moonshine_calculate_embedding_distance(
-        handle, emb_a, emb_b, size_a, &similarity);
+    int32_t err = moonshine_calculate_embedding_distance(handle, emb_a, emb_b,
+                                                         size_a, &similarity);
     CHECK(err == MOONSHINE_ERROR_NONE);
     CHECK(similarity < 0.5f);
     moonshine_free_intent_embedding(emb_a);
@@ -686,24 +684,24 @@ TEST_CASE("C API moonshine_calculate_embedding_distance") {
 
   SUBCASE("null out_similarity returns error") {
     float dummy = 1.0f;
-    int32_t err = moonshine_calculate_embedding_distance(
-        handle, &dummy, &dummy, 1, nullptr);
+    int32_t err = moonshine_calculate_embedding_distance(handle, &dummy, &dummy,
+                                                         1, nullptr);
     CHECK(err == MOONSHINE_ERROR_INVALID_ARGUMENT);
   }
 
   SUBCASE("zero embedding_size returns error") {
     float dummy = 1.0f;
     float similarity = 0.0f;
-    int32_t err = moonshine_calculate_embedding_distance(
-        handle, &dummy, &dummy, 0, &similarity);
+    int32_t err = moonshine_calculate_embedding_distance(handle, &dummy, &dummy,
+                                                         0, &similarity);
     CHECK(err == MOONSHINE_ERROR_INVALID_ARGUMENT);
   }
 
   SUBCASE("invalid handle returns error") {
     float dummy = 1.0f;
     float similarity = 0.0f;
-    int32_t err = moonshine_calculate_embedding_distance(
-        -1, &dummy, &dummy, 1, &similarity);
+    int32_t err = moonshine_calculate_embedding_distance(-1, &dummy, &dummy, 1,
+                                                         &similarity);
     CHECK(err == MOONSHINE_ERROR_INVALID_HANDLE);
   }
 

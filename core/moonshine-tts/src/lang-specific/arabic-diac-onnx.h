@@ -15,12 +15,16 @@ namespace moonshine_tts {
 
 struct MoonshineG2POptions;
 
-/// BERT token-classification tashkīl (Arabert-style), mirroring :class:`arabic_diac_onnx_infer.ArabicDiacOnnx`.
+/// BERT token-classification tashkīl (Arabert-style), mirroring
+/// :class:`arabic_diac_onnx_infer.ArabicDiacOnnx`.
 class ArabicDiacOnnx {
  public:
-  explicit ArabicDiacOnnx(std::filesystem::path model_dir, bool use_cuda = false);
-  ArabicDiacOnnx(const MoonshineG2POptions* opt, std::string_view onnx_bundle_key,
-                 std::filesystem::path model_dir_fallback, bool use_cuda = false);
+  explicit ArabicDiacOnnx(std::filesystem::path model_dir,
+                          bool use_cuda = false);
+  ArabicDiacOnnx(const MoonshineG2POptions* opt,
+                 std::string_view onnx_bundle_key,
+                 std::filesystem::path model_dir_fallback,
+                 bool use_cuda = false);
   ~ArabicDiacOnnx();
 
   ArabicDiacOnnx(const ArabicDiacOnnx&) = delete;
@@ -28,8 +32,8 @@ class ArabicDiacOnnx {
   ArabicDiacOnnx(ArabicDiacOnnx&&) noexcept = default;
   ArabicDiacOnnx& operator=(ArabicDiacOnnx&&) noexcept = default;
 
-  /// Return NFC Arabic with predicted harakāt (partial model + same heuristics as Python post-process
-  /// applied separately in :class:`ArabicRuleG2p`).
+  /// Return NFC Arabic with predicted harakāt (partial model + same heuristics
+  /// as Python post-process applied separately in :class:`ArabicRuleG2p`).
   std::string diacritize(std::string_view text_utf8) const;
 
   const std::filesystem::path& model_dir() const { return model_dir_; }

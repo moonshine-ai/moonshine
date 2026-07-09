@@ -101,8 +101,8 @@ TEST_CASE("spelling-model: predict on bundled clips") {
     const char *expected_char;
   };
   const std::vector<Clip> clips = {
-      {"a", "a"},  {"b", "b"},     {"c", "c"},   {"five", "5"},
-      {"nine", "9"}, {"zero", "0"},
+      {"a", "a"},    {"b", "b"},    {"c", "c"},
+      {"five", "5"}, {"nine", "9"}, {"zero", "0"},
   };
   size_t correct = 0;
   size_t evaluated = 0;

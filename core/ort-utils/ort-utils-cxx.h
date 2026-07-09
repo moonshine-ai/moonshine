@@ -8,8 +8,7 @@ inline void ort_append_execution_providers(
     Ort::SessionOptions &opts, const std::vector<std::string> &names,
     const OrtExecutionProviderOptions &config = {}) {
   const OrtApi *api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
-  OrtStatus *status =
-      ort_append_execution_providers(api, opts, names, &config);
+  OrtStatus *status = ort_append_execution_providers(api, opts, names, &config);
   Ort::ThrowOnError(status);
 }
 

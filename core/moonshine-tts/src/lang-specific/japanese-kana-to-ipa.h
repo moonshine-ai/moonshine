@@ -6,7 +6,8 @@
 
 namespace moonshine_tts {
 
-/// NFKC katakana/hiragana (and prolonged mark) → IPA, matching ``japanese_kana_to_ipa.py``.
+/// NFKC katakana/hiragana (and prolonged mark) → IPA, matching
+/// ``japanese_kana_to_ipa.py``.
 std::string katakana_hiragana_to_ipa(std::string_view utf8);
 
 bool japanese_is_kana_only(std::string_view utf8);

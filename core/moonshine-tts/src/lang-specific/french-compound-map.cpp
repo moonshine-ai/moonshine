@@ -2,7 +2,8 @@
 
 namespace moonshine_tts::french_compound_map {
 
-const std::unordered_map<std::string, std::string>& cardinal_compound_ipa_entries() {
+const std::unordered_map<std::string, std::string>&
+cardinal_compound_ipa_entries() {
   static const std::unordered_map<std::string, std::string> kMap = {
       {"cinquante", "sɛ̃kˈɑ̃t"},
       {"cinquante-cinq", "sɛ̃kˈɑ̃tsˈɛ̃k"},

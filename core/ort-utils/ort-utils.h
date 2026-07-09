@@ -109,8 +109,9 @@ inline void ort_configure_execution_providers(
   if (!coreml_cache_dir.empty()) {
     config.coreml_cache_dir = coreml_cache_dir.c_str();
   }
-  LOG_ORT_ERROR(ort_api, ort_append_execution_providers(ort_api, session_options,
-                                                          provider_names, &config));
+  LOG_ORT_ERROR(ort_api,
+                ort_append_execution_providers(ort_api, session_options,
+                                               provider_names, &config));
 }
 
 #endif

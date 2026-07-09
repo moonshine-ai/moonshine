@@ -1,16 +1,17 @@
 #include "moonshine-tts-options.h"
 
-#include "ort-utils.h"
-#include "string-utils.h"
-
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
 #include <string_view>
 
+#include "ort-utils.h"
+#include "string-utils.h"
+
 namespace moonshine_tts {
 
-void apply_synthesis_output_effects(std::vector<float>& audio, bool normalize_audio, float volume) {
+void apply_synthesis_output_effects(std::vector<float>& audio,
+                                    bool normalize_audio, float volume) {
   if (normalize_audio) {
     float max_val = 0.F;
     for (float x : audio) {
@@ -36,8 +37,10 @@ void apply_synthesis_output_effects(std::vector<float>& audio, bool normalize_au
 }
 
 MoonshineTTSOptions::MoonshineTTSOptions() {
-  files.set_path(kTtsKokoroModelOnnxKey, std::filesystem::path{kTtsKokoroModelOnnxKey});
-  files.set_path(kTtsKokoroConfigJsonKey, std::filesystem::path{kTtsKokoroConfigJsonKey});
+  files.set_path(kTtsKokoroModelOnnxKey,
+                 std::filesystem::path{kTtsKokoroModelOnnxKey});
+  files.set_path(kTtsKokoroConfigJsonKey,
+                 std::filesystem::path{kTtsKokoroConfigJsonKey});
 }
 
 void MoonshineTTSOptions::apply_voice_engine_prefix() {
@@ -59,13 +62,15 @@ void MoonshineTTSOptions::apply_voice_engine_prefix() {
     vocoder_engine = "zipvoice";
     voice = trim(voice.substr(k_z.size()));
   } else if (low == "zipvoice") {
-    // Bare engine selector with no built-in id: caller supplies a clone reference clip.
+    // Bare engine selector with no built-in id: caller supplies a clone
+    // reference clip.
     vocoder_engine = "zipvoice";
     voice.clear();
   }
 }
 
-std::filesystem::path MoonshineTTSOptions::tts_relative_path(std::string_view canonical_key) const {
+std::filesystem::path MoonshineTTSOptions::tts_relative_path(
+    std::string_view canonical_key) const {
   const std::string k(canonical_key);
   const auto it = files.entries.find(k);
   if (it == files.entries.end()) {
@@ -75,8 +80,8 @@ std::filesystem::path MoonshineTTSOptions::tts_relative_path(std::string_view ca
 }
 
 void MoonshineTTSOptions::parse_options(
-    const std::vector<std::pair<std::string, std::string>>& options, std::string* cli_language,
-    bool* language_was_set) {
+    const std::vector<std::pair<std::string, std::string>>& options,
+    std::string* cli_language, bool* language_was_set) {
   std::vector<std::pair<std::string, std::string>> g2p_pairs;
   g2p_pairs.reserve(options.size());
 
@@ -96,10 +101,11 @@ void MoonshineTTSOptions::parse_options(
       // Deprecated: cwd-based asset discovery was removed; value ignored.
     } else if (key == "lang" || key == "language") {
       if (!cli_language) {
-        throw std::runtime_error(
-            "MoonshineTTSOptions: option \"" + name +
-            "\" is invalid without a language output pointer; use parse_options(options, &lang, "
-            "&lang_set) or pass the language to MoonshineTTS(language, options).");
+        throw std::runtime_error("MoonshineTTSOptions: option \"" + name +
+                                 "\" is invalid without a language output "
+                                 "pointer; use parse_options(options, &lang, "
+                                 "&lang_set) or pass the language to "
+                                 "MoonshineTTS(language, options).");
       }
       *cli_language = trim(value);
       if (language_was_set) {
@@ -137,7 +143,8 @@ void MoonshineTTSOptions::parse_options(
       } else {
         files.set_path(kTtsPiperOnnxKey, std::filesystem::path(t));
       }
-    } else if (key == "piper_onnx_json" || key == "piper_model_json" || key == "piper_onnx_config") {
+    } else if (key == "piper_onnx_json" || key == "piper_model_json" ||
+               key == "piper_onnx_config") {
       const std::string t = trim(value);
       if (t.empty()) {
         files.erase_key(std::string(kTtsPiperOnnxJsonKey));
@@ -159,7 +166,8 @@ void MoonshineTTSOptions::parse_options(
         files.set_path(kTtsPiperVoicesJsonKey, std::filesystem::path(t));
       }
     } else if (key == "engine" || key == "vocoder_engine") {
-      // Deprecated: vocoder is selected via voice prefix (kokoro_* / piper_*). Ignored for compatibility.
+      // Deprecated: vocoder is selected via voice prefix (kokoro_* / piper_*).
+      // Ignored for compatibility.
       (void)value;
     } else if (key == "output" || key == "o") {
       output_path = std::filesystem::path(trim(value));
@@ -167,23 +175,30 @@ void MoonshineTTSOptions::parse_options(
       normalize_audio = bool_from_string(value.c_str());
     } else if (key == "output_volume" || key == "piper_output_volume") {
       output_volume = float_from_string(value.c_str());
-    } else if (key == "piper_noise_scale" || key == "piper_noise_scale_override") {
+    } else if (key == "piper_noise_scale" ||
+               key == "piper_noise_scale_override") {
       const std::string t = trim(value);
       piper_noise_scale_override =
-          t.empty() ? std::nullopt : std::optional<float>(float_from_string(t.c_str()));
+          t.empty() ? std::nullopt
+                    : std::optional<float>(float_from_string(t.c_str()));
     } else if (key == "piper_noise_w" || key == "piper_noise_w_override") {
       const std::string t = trim(value);
       piper_noise_w_override =
-          t.empty() ? std::nullopt : std::optional<float>(float_from_string(t.c_str()));
-    } else if (key == "zipvoice_clone_transcript" || key == "clone_transcript") {
+          t.empty() ? std::nullopt
+                    : std::optional<float>(float_from_string(t.c_str()));
+    } else if (key == "zipvoice_clone_transcript" ||
+               key == "clone_transcript") {
       zipvoice_clone_transcript = value;
-    } else if (key == "zipvoice_clone_sample_rate" || key == "clone_sample_rate") {
+    } else if (key == "zipvoice_clone_sample_rate" ||
+               key == "clone_sample_rate") {
       const std::string t = trim(value);
       if (!t.empty()) {
-        zipvoice_clone_sample_rate = static_cast<int>(float_from_string(t.c_str()));
+        zipvoice_clone_sample_rate =
+            static_cast<int>(float_from_string(t.c_str()));
       }
     } else if (key == "zipvoice_model" || key == "zipvoice_model_name") {
-      // ``zipvoice`` (full) vs ``zipvoice_distill`` (default). Only changes sampling defaults.
+      // ``zipvoice`` (full) vs ``zipvoice_distill`` (default). Only changes
+      // sampling defaults.
       zipvoice_distill = (trim(to_lowercase(value)) != "zipvoice");
     } else if (key == "zipvoice_distill") {
       zipvoice_distill = bool_from_string(value.c_str());

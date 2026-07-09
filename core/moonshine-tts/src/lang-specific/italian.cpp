@@ -1,26 +1,26 @@
 #include "italian.h"
 
-#include "g2p-word-log.h"
-#include "ipa-symbols.h"
-#include "german.h"
-#include "utf8-utils.h"
-
 #include <algorithm>
-#include <clocale>
 #include <cctype>
+#include <clocale>
 #include <cstdint>
 #include <cwctype>
-#include <limits>
 #include <fstream>
 #include <istream>
-#include <sstream>
+#include <limits>
 #include <regex>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+#include "g2p-word-log.h"
+#include "german.h"
+#include "ipa-symbols.h"
+#include "utf8-utils.h"
 
 namespace moonshine_tts {
 namespace {
@@ -34,33 +34,34 @@ using moonshine_tts::utf8_decode_at;
 
 char32_t italian_tolower_cp(char32_t c) {
   switch (c) {
-  case U'À':
-    return U'à';
-  case U'È':
-    return U'è';
-  case U'É':
-    return U'é';
-  case U'Ì':
-    return U'ì';
-  case U'Í':
-    return U'í';
-  case U'Î':
-    return U'î';
-  case U'Ò':
-    return U'ò';
-  case U'Ó':
-    return U'ó';
-  case U'Ù':
-    return U'ù';
-  case U'Ú':
-    return U'ú';
-  default:
-    break;
+    case U'À':
+      return U'à';
+    case U'È':
+      return U'è';
+    case U'É':
+      return U'é';
+    case U'Ì':
+      return U'ì';
+    case U'Í':
+      return U'í';
+    case U'Î':
+      return U'î';
+    case U'Ò':
+      return U'ò';
+    case U'Ó':
+      return U'ó';
+    case U'Ù':
+      return U'ù';
+    case U'Ú':
+      return U'ú';
+    default:
+      break;
   }
   if (c >= U'A' && c <= U'Z') {
     return c + 32;
   }
-  if ((c >= U'\u00C0' && c <= U'\u00D6') || (c >= U'\u00D8' && c <= U'\u00DE')) {
+  if ((c >= U'\u00C0' && c <= U'\u00D6') ||
+      (c >= U'\u00D8' && c <= U'\u00DE')) {
     return c + 32;
   }
   return c;
@@ -77,8 +78,8 @@ bool is_italian_lexicon_key_cp(char32_t c) {
   if (c == U'\'' || c == U'-') {
     return true;
   }
-  return c == U'à' || c == U'è' || c == U'é' || c == U'ì' || c == U'í' || c == U'î' || c == U'ò' ||
-         c == U'ó' || c == U'ù' || c == U'ú';
+  return c == U'à' || c == U'è' || c == U'é' || c == U'ì' || c == U'í' ||
+         c == U'î' || c == U'ò' || c == U'ó' || c == U'ù' || c == U'ú';
 }
 
 std::string normalize_lookup_key_utf8(const std::string& word) {
@@ -113,7 +114,8 @@ std::string utf8_lowercase_italian(const std::string& word) {
   return out;
 }
 
-void load_italian_lexicon_stream(std::istream& in, std::unordered_map<std::string, std::string>& out_lex) {
+void load_italian_lexicon_stream(
+    std::istream& in, std::unordered_map<std::string, std::string>& out_lex) {
   std::unordered_map<std::string, std::pair<std::string, bool>> tmp;
   std::string line;
   while (std::getline(in, line)) {
@@ -144,11 +146,13 @@ void load_italian_lexicon_stream(std::istream& in, std::unordered_map<std::strin
   }
 }
 
-void load_italian_lexicon_file(const std::filesystem::path& path,
-                               std::unordered_map<std::string, std::string>& out_lex) {
+void load_italian_lexicon_file(
+    const std::filesystem::path& path,
+    std::unordered_map<std::string, std::string>& out_lex) {
   std::ifstream in(path);
   if (!in) {
-    throw std::runtime_error("Italian G2P: cannot read lexicon " + path.generic_string());
+    throw std::runtime_error("Italian G2P: cannot read lexicon " +
+                             path.generic_string());
   }
   load_italian_lexicon_stream(in, out_lex);
 }
@@ -167,22 +171,17 @@ bool is_all_ascii_digits(std::string_view s) {
   return true;
 }
 
-static const char* kDigitWord[10] = {"zero", "uno", "due", "tre", "quattro", "cinque",
-                                     "sei", "sette", "otto", "nove"};
+static const char* kDigitWord[10] = {"zero",    "uno",    "due", "tre",
+                                     "quattro", "cinque", "sei", "sette",
+                                     "otto",    "nove"};
 
 std::string under_100(int n) {
-  static const char* teens[] = {nullptr,
-                                "undici",
-                                "dodici",
-                                "tredici",
-                                "quattordici",
-                                "quindici",
-                                "sedici",
-                                "diciassette",
-                                "diciotto",
-                                "diciannove"};
-  static const char* tens[] = {"", "", "venti", "trenta", "quaranta", "cinquanta",
-                               "sessanta", "settanta", "ottanta", "novanta"};
+  static const char* teens[] = {
+      nullptr,    "undici", "dodici",      "tredici",  "quattordici",
+      "quindici", "sedici", "diciassette", "diciotto", "diciannove"};
+  static const char* tens[] = {"",         "",          "venti",    "trenta",
+                               "quaranta", "cinquanta", "sessanta", "settanta",
+                               "ottanta",  "novanta"};
   if (n < 0 || n >= 100) {
     throw std::out_of_range("under_100");
   }
@@ -234,7 +233,8 @@ std::string under_100(int n) {
 }
 
 std::string hundred_head(int h) {
-  static const char* stems[] = {"due", "tre", "quattro", "cinque", "sei", "sette", "otto", "nove"};
+  static const char* stems[] = {"due", "tre",   "quattro", "cinque",
+                                "sei", "sette", "otto",    "nove"};
   if (h == 1) {
     return "cento";
   }
@@ -302,8 +302,9 @@ void append_thousands_multiplier(int q, std::vector<std::string>& out) {
     return;
   }
   if (q < 10) {
-    static const char* fused[] = {"duemila", "tremila", "quattromila", "cinquemila", "seimila",
-                                    "settemila", "ottomila", "novemila"};
+    static const char* fused[] = {"duemila",    "tremila", "quattromila",
+                                  "cinquemila", "seimila", "settemila",
+                                  "ottomila",   "novemila"};
     out.emplace_back(fused[q - 2]);
     return;
   }
@@ -363,7 +364,8 @@ std::string expand_cardinal_digits_to_italian_words(std::string_view s) {
 }
 
 std::string expand_digit_tokens_in_text(std::string text) {
-  static const std::regex range_re(R"(\b(\d+)-(\d+)\b)", std::regex::ECMAScript);
+  static const std::regex range_re(R"(\b(\d+)-(\d+)\b)",
+                                   std::regex::ECMAScript);
   static const std::regex dig_re(R"(\b\d+\b)", std::regex::ECMAScript);
   std::string out;
   std::sregex_iterator it(text.begin(), text.end(), range_re);
@@ -371,7 +373,8 @@ std::string expand_digit_tokens_in_text(std::string text) {
   size_t pos = 0;
   for (; it != end; ++it) {
     const std::smatch& m = *it;
-    out.append(text, pos, static_cast<size_t>(m.position() - static_cast<long>(pos)));
+    out.append(text, pos,
+               static_cast<size_t>(m.position() - static_cast<long>(pos)));
     out += expand_cardinal_digits_to_italian_words(m.str(1));
     out += " - ";
     out += expand_cardinal_digits_to_italian_words(m.str(2));
@@ -384,7 +387,8 @@ std::string expand_digit_tokens_in_text(std::string text) {
   std::sregex_iterator it2(text.begin(), text.end(), dig_re);
   for (; it2 != end; ++it2) {
     const std::smatch& m = *it2;
-    out.append(text, pos, static_cast<size_t>(m.position() - static_cast<long>(pos)));
+    out.append(text, pos,
+               static_cast<size_t>(m.position() - static_cast<long>(pos)));
     out += expand_cardinal_digits_to_italian_words(m.str());
     pos = static_cast<size_t>(m.position() + static_cast<long>(m.length()));
   }
@@ -417,33 +421,33 @@ std::string u32_to_utf8(const std::u32string& s) {
 
 bool is_vowel_ch(char32_t c) {
   c = italian_tolower_cp(c);
-  return c == U'a' || c == U'e' || c == U'i' || c == U'o' || c == U'u' || c == U'à' ||
-         c == U'è' || c == U'é' || c == U'ì' || c == U'í' || c == U'î' || c == U'ò' || c == U'ó' ||
-         c == U'ù' || c == U'ú';
+  return c == U'a' || c == U'e' || c == U'i' || c == U'o' || c == U'u' ||
+         c == U'à' || c == U'è' || c == U'é' || c == U'ì' || c == U'í' ||
+         c == U'î' || c == U'ò' || c == U'ó' || c == U'ù' || c == U'ú';
 }
 
 char32_t strip_accent_letter(char32_t c) {
   c = italian_tolower_cp(c);
   switch (c) {
-  case U'à':
-  case U'á':
-    return U'a';
-  case U'è':
-  case U'é':
-  case U'ê':
-    return U'e';
-  case U'ì':
-  case U'í':
-  case U'î':
-    return U'i';
-  case U'ò':
-  case U'ó':
-    return U'o';
-  case U'ù':
-  case U'ú':
-    return U'u';
-  default:
-    return c;
+    case U'à':
+    case U'á':
+      return U'a';
+    case U'è':
+    case U'é':
+    case U'ê':
+      return U'e';
+    case U'ì':
+    case U'í':
+    case U'î':
+      return U'i';
+    case U'ò':
+    case U'ó':
+      return U'o';
+    case U'ù':
+    case U'ú':
+      return U'u';
+    default:
+      return c;
   }
 }
 
@@ -458,7 +462,8 @@ bool should_hiatus_it(char32_t a, char32_t b) {
   }
   const char32_t ba = strip_accent_letter(al);
   const char32_t bb = strip_accent_letter(bl);
-  if ((ba == U'a' || ba == U'e' || ba == U'o') && (bb == U'a' || bb == U'e' || bb == U'o')) {
+  if ((ba == U'a' || ba == U'e' || ba == U'o') &&
+      (bb == U'a' || bb == U'e' || bb == U'o')) {
     return true;
   }
   if ((ba == U'i' || ba == U'u') && (bb == U'a' || bb == U'e' || bb == U'o')) {
@@ -476,7 +481,8 @@ bool should_hiatus_it(char32_t a, char32_t b) {
   return true;
 }
 
-void vowel_nucleus_spans(const std::u32string& w, std::vector<std::pair<size_t, size_t>>& spans) {
+void vowel_nucleus_spans(const std::u32string& w,
+                         std::vector<std::pair<size_t, size_t>>& spans) {
   spans.clear();
   size_t i = 0;
   const size_t n = w.size();
@@ -501,10 +507,11 @@ void vowel_nucleus_spans(const std::u32string& w, std::vector<std::pair<size_t, 
 }
 
 bool valid_onset2(char a, char b) {
-  static const char* pairs[] = {"bl", "br", "cl", "cr", "dr", "fl", "fr", "gl", "gr",
-                                "pl", "pr", "tr", "ch"};
-  const char buf[3] = {static_cast<char>(std::tolower(static_cast<unsigned char>(a))),
-                       static_cast<char>(std::tolower(static_cast<unsigned char>(b))), 0};
+  static const char* pairs[] = {"bl", "br", "cl", "cr", "dr", "fl", "fr",
+                                "gl", "gr", "pl", "pr", "tr", "ch"};
+  const char buf[3] = {
+      static_cast<char>(std::tolower(static_cast<unsigned char>(a))),
+      static_cast<char>(std::tolower(static_cast<unsigned char>(b))), 0};
   for (const char* p : pairs) {
     if (buf[0] == p[0] && buf[1] == p[1]) {
       return true;
@@ -513,7 +520,8 @@ bool valid_onset2(char a, char b) {
   return false;
 }
 
-void split_intervocalic_cluster(const std::string& cluster, std::string& coda, std::string& onset) {
+void split_intervocalic_cluster(const std::string& cluster, std::string& coda,
+                                std::string& onset) {
   coda.clear();
   onset.clear();
   if (cluster.empty()) {
@@ -533,14 +541,16 @@ void split_intervocalic_cluster(const std::string& cluster, std::string& coda, s
   onset = cluster.substr(cluster.size() - 1);
 }
 
-std::vector<std::u32string> italian_orthographic_syllables_u32(std::u32string w) {
+std::vector<std::u32string> italian_orthographic_syllables_u32(
+    std::u32string w) {
   for (char32_t& c : w) {
     c = italian_tolower_cp(c);
   }
   std::u32string filt;
   for (char32_t c : w) {
-    if (c == U'-' || (c >= U'a' && c <= U'z') || c == U'à' || c == U'è' || c == U'é' ||
-        c == U'ì' || c == U'í' || c == U'î' || c == U'ò' || c == U'ó' || c == U'ù' || c == U'ú') {
+    if (c == U'-' || (c >= U'a' && c <= U'z') || c == U'à' || c == U'è' ||
+        c == U'é' || c == U'ì' || c == U'í' || c == U'î' || c == U'ò' ||
+        c == U'ó' || c == U'ù' || c == U'ú') {
       filt.push_back(c);
     }
   }
@@ -607,8 +617,8 @@ std::vector<std::u32string> italian_orthographic_syllables_u32(std::u32string w)
 
 bool accented_vowel_in_u32(char32_t c) {
   c = italian_tolower_cp(c);
-  return c == U'à' || c == U'è' || c == U'é' || c == U'ì' || c == U'í' || c == U'ò' || c == U'ó' ||
-         c == U'ù' || c == U'ú' || c == U'î';
+  return c == U'à' || c == U'è' || c == U'é' || c == U'ì' || c == U'í' ||
+         c == U'ò' || c == U'ó' || c == U'ù' || c == U'ú' || c == U'î';
 }
 
 size_t default_stressed_syllable_index(const std::vector<std::u32string>& syls,
@@ -646,7 +656,8 @@ size_t default_stressed_syllable_index(const std::vector<std::u32string>& syls,
     return 0;
   }
   const char32_t last = strip_accent_letter(tail.back());
-  if (last == U'a' || last == U'e' || last == U'i' || last == U'o' || last == U'u') {
+  if (last == U'a' || last == U'e' || last == U'i' || last == U'o' ||
+      last == U'u') {
     return n >= 2 ? n - 2 : 0;
   }
   return n - 1;
@@ -669,8 +680,8 @@ std::string insert_primary_stress_before_vowel(std::string ipa) {
     char32_t cp = 0;
     size_t adv = 0;
     utf8_decode_at(ipa, i, cp, adv);
-    if (cp == U'a' || cp == U'e' || cp == U'i' || cp == U'o' || cp == U'u' || cp == U'ɛ' ||
-        cp == U'ɔ') {
+    if (cp == U'a' || cp == U'e' || cp == U'i' || cp == U'o' || cp == U'u' ||
+        cp == U'ɛ' || cp == U'ɔ') {
       ipa.insert(i, kPri);
       return ipa;
     }
@@ -696,11 +707,12 @@ bool ei_e_accent(char32_t c) {
   return c == U'e' || c == U'é' || c == U'è';
 }
 
-// After c/g (and related digraphs): letters that palatalize, matching Python ``in "eiéè"``
-// (the character set is e, i, é, è — e.g. syllable "ci" → /t͡ʃ/).
+// After c/g (and related digraphs): letters that palatalize, matching Python
+// ``in "eiéè"`` (the character set is e, i, é, è — e.g. syllable "ci" → /t͡ʃ/).
 bool italian_cg_palatal_letter(char32_t c) {
   c = italian_tolower_cp(c);
-  return c == U'e' || c == U'é' || c == U'è' || c == U'i' || c == U'ì' || c == U'í' || c == U'î';
+  return c == U'e' || c == U'é' || c == U'è' || c == U'i' || c == U'ì' ||
+         c == U'í' || c == U'î';
 }
 
 std::string letters_to_ipa_no_stress(const std::u32string& su) {
@@ -719,12 +731,14 @@ std::string letters_to_ipa_no_stress(const std::u32string& su) {
       i += 2;
       continue;
     }
-    if (i + 2 < n && su[i] == U'c' && su[i + 1] == U'c' && italian_cg_palatal_letter(su[i + 2])) {
+    if (i + 2 < n && su[i] == U'c' && su[i + 1] == U'c' &&
+        italian_cg_palatal_letter(su[i + 2])) {
       out.append("tt\xCD\xA1\xCA\x83");  // tt͡ʃ
       i += 3;
       continue;
     }
-    if (i + 2 < n && su[i] == U'g' && su[i + 1] == U'g' && italian_cg_palatal_letter(su[i + 2])) {
+    if (i + 2 < n && su[i] == U'g' && su[i + 1] == U'g' &&
+        italian_cg_palatal_letter(su[i + 2])) {
       out.append("dd\xCD\xA1\xCA\x92");  // dd͡ʒ
       i += 3;
       continue;
@@ -734,7 +748,8 @@ std::string letters_to_ipa_no_stress(const std::u32string& su) {
       i += 2;
       continue;
     }
-    if (i + 2 < n && su[i] == U'g' && su[i + 1] == U'l' && italian_tolower_cp(su[i + 2]) == U'i') {
+    if (i + 2 < n && su[i] == U'g' && su[i + 1] == U'l' &&
+        italian_tolower_cp(su[i + 2]) == U'i') {
       const char32_t nxt = (i + 3 < n) ? italian_tolower_cp(su[i + 3]) : U'\0';
       const std::u32string vow_after = U"aeiouàèéìòóù";
       if (nxt == U'\0' || vow_after.find(nxt) != std::u32string::npos) {
@@ -753,19 +768,22 @@ std::string letters_to_ipa_no_stress(const std::u32string& su) {
       i += 2;
       continue;
     }
-    if (i + 2 < n && su[i] == U'g' && su[i + 1] == U'h' && italian_cg_palatal_letter(su[i + 2])) {
+    if (i + 2 < n && su[i] == U'g' && su[i + 1] == U'h' &&
+        italian_cg_palatal_letter(su[i + 2])) {
       out += "\xC9\xA1";  // ɡ
       i += 3;
       continue;
     }
-    if (i + 2 < n && su[i] == U's' && su[i + 1] == U'c' && italian_cg_palatal_letter(su[i + 2])) {
+    if (i + 2 < n && su[i] == U's' && su[i + 1] == U'c' &&
+        italian_cg_palatal_letter(su[i + 2])) {
       out += "\xCA\x83";  // ʃ
       i += 3;
       continue;
     }
     if (i + 2 < n && su[i] == U's' && su[i + 1] == U'c') {
       const char32_t t = italian_tolower_cp(su[i + 2]);
-      if (t == U'a' || t == U'o' || t == U'u' || t == U'à' || t == U'ò' || t == U'ù') {
+      if (t == U'a' || t == U'o' || t == U'u' || t == U'à' || t == U'ò' ||
+          t == U'ù') {
         out += "sk";
         i += 3;
         continue;
@@ -776,17 +794,20 @@ std::string letters_to_ipa_no_stress(const std::u32string& su) {
       i += 2;
       continue;
     }
-    if (i + 2 < n && su[i] == U'g' && su[i + 1] == U'u' && italian_cg_palatal_letter(su[i + 2])) {
+    if (i + 2 < n && su[i] == U'g' && su[i + 1] == U'u' &&
+        italian_cg_palatal_letter(su[i + 2])) {
       out += "\xC9\xA1";
       i += 2;
       continue;
     }
-    if (i + 2 < n && su[i] == U'c' && su[i + 1] == U'i' && is_vowel_ch(su[i + 2])) {
+    if (i + 2 < n && su[i] == U'c' && su[i + 1] == U'i' &&
+        is_vowel_ch(su[i + 2])) {
       out.append("t\xCD\xA1\xCA\x83");
       i += 2;
       continue;
     }
-    if (i + 2 < n && su[i] == U'g' && su[i + 1] == U'i' && is_vowel_ch(su[i + 2])) {
+    if (i + 2 < n && su[i] == U'g' && su[i + 1] == U'i' &&
+        is_vowel_ch(su[i + 2])) {
       out.append("d\xCD\xA1\xCA\x92");
       i += 2;
       continue;
@@ -806,12 +827,14 @@ std::string letters_to_ipa_no_stress(const std::u32string& su) {
       ++i;
       continue;
     }
-    if (i + 1 < n && ch == italian_tolower_cp(su[i + 1]) && ch != U'a' && ch != U'e' && ch != U'i' &&
-        ch != U'o' && ch != U'u' && ch != U'à' && ch != U'è' && ch != U'é' && ch != U'ì' &&
-        ch != U'í' && ch != U'î' && ch != U'ò' && ch != U'ó' && ch != U'ù' && ch != U'ú') {
+    if (i + 1 < n && ch == italian_tolower_cp(su[i + 1]) && ch != U'a' &&
+        ch != U'e' && ch != U'i' && ch != U'o' && ch != U'u' && ch != U'à' &&
+        ch != U'è' && ch != U'é' && ch != U'ì' && ch != U'í' && ch != U'î' &&
+        ch != U'ò' && ch != U'ó' && ch != U'ù' && ch != U'ú') {
       const char32_t cl = ch;
-      if (cl == U'b' || cl == U'c' || cl == U'd' || cl == U'f' || cl == U'g' || cl == U'l' ||
-          cl == U'm' || cl == U'n' || cl == U'p' || cl == U's' || cl == U't' || cl == U'v') {
+      if (cl == U'b' || cl == U'c' || cl == U'd' || cl == U'f' || cl == U'g' ||
+          cl == U'l' || cl == U'm' || cl == U'n' || cl == U'p' || cl == U's' ||
+          cl == U't' || cl == U'v') {
         std::string bit;
         utf8_append_codepoint(bit, cl);
         out += bit;
@@ -886,12 +909,14 @@ std::string letters_to_ipa_no_stress(const std::u32string& su) {
       const char32_t cl = italian_tolower_cp(su[i]);
       if (i + 1 < n && is_vowel_ch(su[i + 1])) {
         const char32_t nxt = italian_tolower_cp(su[i + 1]);
-        if ((cl == U'a' || cl == U'à') && (nxt == U'u' || nxt == U'ù' || nxt == U'ú')) {
+        if ((cl == U'a' || cl == U'à') &&
+            (nxt == U'u' || nxt == U'ù' || nxt == U'ú')) {
           out += "aw";
           i += 2;
           continue;
         }
-        if ((cl == U'a' || cl == U'à') && (nxt == U'i' || nxt == U'ì' || nxt == U'í')) {
+        if ((cl == U'a' || cl == U'à') &&
+            (nxt == U'i' || nxt == U'ì' || nxt == U'í')) {
           out += "aj";
           i += 2;
           continue;
@@ -901,7 +926,8 @@ std::string letters_to_ipa_no_stress(const std::u32string& su) {
           i += 2;
           continue;
         }
-        if ((cl == U'o' || cl == U'ó' || cl == U'ò') && (nxt == U'i' || nxt == U'ì' || nxt == U'í')) {
+        if ((cl == U'o' || cl == U'ó' || cl == U'ò') &&
+            (nxt == U'i' || nxt == U'ì' || nxt == U'í')) {
           out += "oj";
           i += 2;
           continue;
@@ -911,7 +937,8 @@ std::string letters_to_ipa_no_stress(const std::u32string& su) {
           i += 2;
           continue;
         }
-        if ((cl == U'o' || cl == U'ó' || cl == U'ò') && (nxt == U'u' || nxt == U'ù' || nxt == U'ú')) {
+        if ((cl == U'o' || cl == U'ó' || cl == U'ò') &&
+            (nxt == U'u' || nxt == U'ù' || nxt == U'ú')) {
           out += "ow";
           i += 2;
           continue;
@@ -937,8 +964,8 @@ std::string letters_to_ipa_no_stress(const std::u32string& su) {
       ++i;
       continue;
     }
-    if (ch == U'b' || ch == U'd' || ch == U'f' || ch == U'l' || ch == U'm' || ch == U'n' ||
-        ch == U'p' || ch == U'r' || ch == U't' || ch == U'v') {
+    if (ch == U'b' || ch == U'd' || ch == U'f' || ch == U'l' || ch == U'm' ||
+        ch == U'n' || ch == U'p' || ch == U'r' || ch == U't' || ch == U'v') {
       std::string bit;
       utf8_append_codepoint(bit, ch);
       out += bit;
@@ -958,9 +985,9 @@ std::string rules_word_to_ipa_utf8(const std::string& raw, bool with_stress) {
     size_t adv = 0;
     utf8_decode_at(raw, ii, cp, adv);
     const char32_t cl = italian_tolower_cp(cp);
-    if (cl == U'-' || (cl >= U'a' && cl <= U'z') || cl == U'à' || cl == U'è' || cl == U'é' ||
-        cl == U'ì' || cl == U'í' || cl == U'î' || cl == U'ò' || cl == U'ó' || cl == U'ù' ||
-        cl == U'ú' || (cl >= U'A' && cl <= U'Z')) {
+    if (cl == U'-' || (cl >= U'a' && cl <= U'z') || cl == U'à' || cl == U'è' ||
+        cl == U'é' || cl == U'ì' || cl == U'í' || cl == U'î' || cl == U'ò' ||
+        cl == U'ó' || cl == U'ù' || cl == U'ú' || (cl >= U'A' && cl <= U'Z')) {
       w.push_back(cl);
     }
     ii += adv;
@@ -972,8 +999,9 @@ std::string rules_word_to_ipa_utf8(const std::string& raw, bool with_stress) {
   if (syls.empty()) {
     return "";
   }
-  const size_t stress_idx =
-      with_stress ? default_stressed_syllable_index(syls, w) : static_cast<size_t>(-1);
+  const size_t stress_idx = with_stress
+                                ? default_stressed_syllable_index(syls, w)
+                                : static_cast<size_t>(-1);
   std::string acc;
   for (size_t idx = 0; idx < syls.size(); ++idx) {
     std::string chunk = letters_to_ipa_no_stress(syls[idx]);
@@ -987,21 +1015,53 @@ std::string rules_word_to_ipa_utf8(const std::string& raw, bool with_stress) {
 
 const std::unordered_map<std::string, std::string>& function_word_ipa() {
   static const std::unordered_map<std::string, std::string> m = {
-      {"e", "e"},       {"ed", "ed"},     {"o", "o"},       {"a", "a"},
-      {"i", "i"},       {"il", "il"},     {"lo", "lo"},     {"la", "la"},
-      {"le", "le"},     {"gli", "\xCA\x8Ei"},  {"un", "un"},
-      {"uno", kPri + "uno"}, {"una", kPri + "una"}, {"di", "di"}, {"da", "da"},
-      {"in", "in"},     {"su", "su"},     {"per", "per"},   {"tra", "tra"},
-      {"fra", "fra"},   {"del", "del"},   {"della", kPri + "d\xC9\x9Blla"},
-      {"delle", kPri + "d\xC9\x9Blle"}, {"dei", kPri + "dei"},
-      {"degli", kPri + "de\xCA\x8E\xCA\x8Ei"}, {"al", "al"},
-      {"allo", kPri + "allo"}, {"alla", kPri + "alla"}, {"ai", "ai"},
-      {"agli", kPri + "a\xCA\x8E\xCA\x8Ei"}, {"alle", kPri + "alle"},
-      {"nel", "nel"},   {"nello", kPri + "n\xC9\x9Bllo"}, {"nella", kPri + "n\xC9\x9Blla"},
-      {"nell", "n\xC9\x9Bll"}, {"sul", "sul"}, {"sullo", kPri + "sullo"},
-      {"sulla", kPri + "sulla"}, {"col", "kol"}, {"coi", kPri + "koi"},
-      {"ci", "t\xCD\xA1\xCA\x83i"}, {"vi", "vi"}, {"si", "si"}, {"ti", "ti"},
-      {"mi", "mi"},     {"non", "non"},   {"che", "ke"}};
+      {"e", "e"},
+      {"ed", "ed"},
+      {"o", "o"},
+      {"a", "a"},
+      {"i", "i"},
+      {"il", "il"},
+      {"lo", "lo"},
+      {"la", "la"},
+      {"le", "le"},
+      {"gli", "\xCA\x8Ei"},
+      {"un", "un"},
+      {"uno", kPri + "uno"},
+      {"una", kPri + "una"},
+      {"di", "di"},
+      {"da", "da"},
+      {"in", "in"},
+      {"su", "su"},
+      {"per", "per"},
+      {"tra", "tra"},
+      {"fra", "fra"},
+      {"del", "del"},
+      {"della", kPri + "d\xC9\x9Blla"},
+      {"delle", kPri + "d\xC9\x9Blle"},
+      {"dei", kPri + "dei"},
+      {"degli", kPri + "de\xCA\x8E\xCA\x8Ei"},
+      {"al", "al"},
+      {"allo", kPri + "allo"},
+      {"alla", kPri + "alla"},
+      {"ai", "ai"},
+      {"agli", kPri + "a\xCA\x8E\xCA\x8Ei"},
+      {"alle", kPri + "alle"},
+      {"nel", "nel"},
+      {"nello", kPri + "n\xC9\x9Bllo"},
+      {"nella", kPri + "n\xC9\x9Blla"},
+      {"nell", "n\xC9\x9Bll"},
+      {"sul", "sul"},
+      {"sullo", kPri + "sullo"},
+      {"sulla", kPri + "sulla"},
+      {"col", "kol"},
+      {"coi", kPri + "koi"},
+      {"ci", "t\xCD\xA1\xCA\x83i"},
+      {"vi", "vi"},
+      {"si", "si"},
+      {"ti", "ti"},
+      {"mi", "mi"},
+      {"non", "non"},
+      {"che", "ke"}};
   return m;
 }
 
@@ -1018,12 +1078,14 @@ bool is_italian_word_char(char32_t cp) {
   if (cp <= 0x7Fu) {
     return std::isalpha(static_cast<unsigned char>(cp)) != 0;
   }
-  // Match Python ``_ITALIAN_WORD_PATTERN`` (``[\w\-]+`` with re.UNICODE): letters + numbers.
+  // Match Python ``_ITALIAN_WORD_PATTERN`` (``[\w\-]+`` with re.UNICODE):
+  // letters + numbers.
   static const bool utf8_ctype = []() {
     return std::setlocale(LC_CTYPE, "C.UTF-8") != nullptr ||
            std::setlocale(LC_CTYPE, "en_US.UTF-8") != nullptr;
   }();
-  if (utf8_ctype && cp <= static_cast<char32_t>(std::numeric_limits<wint_t>::max())) {
+  if (utf8_ctype &&
+      cp <= static_cast<char32_t>(std::numeric_limits<wint_t>::max())) {
     const wint_t w = static_cast<wint_t>(cp);
     if (std::iswalpha(w) != 0 || std::iswdigit(w) != 0) {
       return true;
@@ -1033,11 +1095,12 @@ bool is_italian_word_char(char32_t cp) {
   if (cp >= U'a' && cp <= U'z') {
     return true;
   }
-  return cp == U'à' || cp == U'è' || cp == U'é' || cp == U'ì' || cp == U'í' || cp == U'î' ||
-         cp == U'ò' || cp == U'ó' || cp == U'ù' || cp == U'ú';
+  return cp == U'à' || cp == U'è' || cp == U'é' || cp == U'ì' || cp == U'í' ||
+         cp == U'î' || cp == U'ò' || cp == U'ó' || cp == U'ù' || cp == U'ú';
 }
 
-bool try_consume_italian_word(const std::string& text, size_t pos, size_t& out_end) {
+bool try_consume_italian_word(const std::string& text, size_t pos,
+                              size_t& out_end) {
   if (pos >= text.size()) {
     return false;
   }
@@ -1103,7 +1166,8 @@ ItalianRuleG2p::ItalianRuleG2p(std::string dict_tsv_utf8, Options options)
   load_italian_lexicon_stream(in, lexicon_);
 }
 
-std::string ItalianRuleG2p::finalize_ipa(std::string ipa, bool from_lexicon) const {
+std::string ItalianRuleG2p::finalize_ipa(std::string ipa,
+                                         bool from_lexicon) const {
   if (!options_.with_stress) {
     erase_utf8_substr(ipa, kPri);
     erase_utf8_substr(ipa, kSec);
@@ -1160,7 +1224,8 @@ std::string ItalianRuleG2p::lookup_or_rules(const std::string& raw_word) const {
   if (fi != fw.end()) {
     return finalize_ipa(fi->second, false);
   }
-  return finalize_ipa(rules_word_to_ipa_utf8(raw_word, options_.with_stress), false);
+  return finalize_ipa(rules_word_to_ipa_utf8(raw_word, options_.with_stress),
+                      false);
 }
 
 std::string ItalianRuleG2p::word_to_ipa(const std::string& word) const {
@@ -1176,7 +1241,8 @@ std::string ItalianRuleG2p::word_to_ipa(const std::string& word) const {
     return wraw;
   }
   if (!options_.expand_cardinal_digits) {
-    static const std::regex dig_pass(R"(^[0-9]+(?:-[0-9]+)*$)", std::regex::ECMAScript);
+    static const std::regex dig_pass(R"(^[0-9]+(?:-[0-9]+)*$)",
+                                     std::regex::ECMAScript);
     if (std::regex_match(wraw, dig_pass)) {
       return wraw;
     }
@@ -1184,8 +1250,8 @@ std::string ItalianRuleG2p::word_to_ipa(const std::string& word) const {
   return lookup_or_rules(wraw);
 }
 
-std::string ItalianRuleG2p::text_to_ipa_no_expand(const std::string& text,
-                                                    std::vector<G2pWordLog>* per_word_log) const {
+std::string ItalianRuleG2p::text_to_ipa_no_expand(
+    const std::string& text, std::vector<G2pWordLog>* per_word_log) const {
   std::string out;
   size_t pos = 0;
   const size_t n = text.size();
@@ -1210,7 +1276,8 @@ std::string ItalianRuleG2p::text_to_ipa_no_expand(const std::string& text,
       const std::string k = normalize_lookup_key_utf8(tok);
       std::string wipa = word_to_ipa(tok);
       if (per_word_log != nullptr) {
-        per_word_log->push_back(G2pWordLog{tok, k, G2pWordPath::kRuleBasedG2p, wipa});
+        per_word_log->push_back(
+            G2pWordLog{tok, k, G2pWordPath::kRuleBasedG2p, wipa});
         out += per_word_log->back().ipa;
       } else {
         out += wipa;
@@ -1223,8 +1290,8 @@ std::string ItalianRuleG2p::text_to_ipa_no_expand(const std::string& text,
     while (pos < n) {
       utf8_decode_at(text, pos, cp, adv);
       size_t tmp = 0;
-      if (try_consume_italian_word(text, pos, tmp) || cp == U' ' || cp == U'\t' || cp == U'\n' ||
-          cp == U'\r') {
+      if (try_consume_italian_word(text, pos, tmp) || cp == U' ' ||
+          cp == U'\t' || cp == U'\n' || cp == U'\r') {
         break;
       }
       pos += adv;
@@ -1253,7 +1320,8 @@ std::string ItalianRuleG2p::text_to_ipa_no_expand(const std::string& text,
   return collapsed;
 }
 
-std::string ItalianRuleG2p::text_to_ipa(std::string text, std::vector<G2pWordLog>* per_word_log) {
+std::string ItalianRuleG2p::text_to_ipa(std::string text,
+                                        std::vector<G2pWordLog>* per_word_log) {
   if (options_.expand_cardinal_digits) {
     text = expand_digit_tokens_in_text(std::move(text));
   }
@@ -1272,7 +1340,8 @@ std::vector<std::string> ItalianRuleG2p::dialect_ids() {
   return dedupe_dialect_ids_preserve_first({"it", "it-IT", "it_it", "italian"});
 }
 
-std::filesystem::path resolve_italian_dict_path(const std::filesystem::path& model_root) {
+std::filesystem::path resolve_italian_dict_path(
+    const std::filesystem::path& model_root) {
   return model_root / "it" / "dict.tsv";
 }
 

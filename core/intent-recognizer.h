@@ -71,7 +71,8 @@ class IntentRecognizer {
    * @param embedding Optional pre-computed embedding (NULL to auto-compute).
    * @param embedding_size Number of floats in the embedding array.
    * @param priority Higher priority intents rank above lower priority ones
-   *                 within the tolerance threshold, even if similarity is lower.
+   *                 within the tolerance threshold, even if similarity is
+   * lower.
    */
   void register_intent(const std::string &trigger_phrase,
                        const float *embedding, uint64_t embedding_size,

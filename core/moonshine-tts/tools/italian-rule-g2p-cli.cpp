@@ -1,19 +1,22 @@
-// Stand-alone Italian rule + lexicon G2P (no ONNX). Mirrors ``italian_rule_g2p.py`` CLI subset.
-#include "italian.h"
-
+// Stand-alone Italian rule + lexicon G2P (no ONNX). Mirrors
+// ``italian_rule_g2p.py`` CLI subset.
 #include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "italian.h"
+
 namespace {
 
 void usage(const char* argv0) {
-  std::cerr << "Usage: " << argv0
-            << " [--dict PATH] [--no-stress] [--syllable-initial-stress] [--no-expand-digits] [--stdin] "
-               "[TEXT...]\n"
-            << "  Default dict: data/it/dict.tsv (relative to current directory).\n";
+  std::cerr
+      << "Usage: " << argv0
+      << " [--dict PATH] [--no-stress] [--syllable-initial-stress] "
+         "[--no-expand-digits] [--stdin] "
+         "[TEXT...]\n"
+      << "  Default dict: data/it/dict.tsv (relative to current directory).\n";
 }
 
 std::string read_all_stdin() {
@@ -25,7 +28,8 @@ std::string read_all_stdin() {
 }  // namespace
 
 int main(int argc, char** argv) {
-  std::filesystem::path dict_path = std::filesystem::path("data") / "it" / "dict.tsv";
+  std::filesystem::path dict_path =
+      std::filesystem::path("data") / "it" / "dict.tsv";
   moonshine_tts::ItalianRuleG2p::Options opt;
   bool force_stdin = false;
   std::vector<std::string> parts;

@@ -1,7 +1,4 @@
 // CLI: Moonshine G2P + Kokoro or Piper ONNX → WAV (via MoonshineTTS).
-#include "moonshine-tts.h"
-#include "utf8-utils.h"
-
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -10,36 +7,55 @@
 #include <utility>
 #include <vector>
 
+#include "moonshine-tts.h"
+#include "utf8-utils.h"
+
 namespace {
 
 void usage(const char* argv0) {
   std::cerr
       << "Usage: " << argv0
       << " [--model-root DIR] [--kokoro-dir DIR] "
-         "[--piper-onnx PATH.onnx] [--piper-onnx-json PATH.onnx.json] [--piper-voices-dir DIR] "
+         "[--piper-onnx PATH.onnx] [--piper-onnx-json PATH.onnx.json] "
+         "[--piper-voices-dir DIR] "
          "[--piper-voices-json-dir DIR] "
-         "[--lang LANG] [--voice ID] [--speed N] [-o out.wav] [--text \"...\"] [TEXT...]\n"
-      << "  G2P + layout: if ``--model-root`` is omitted, the process current working directory is the "
-         "asset root (``kokoro/``, ``ja/``, ``en_us/``, …); relative paths resolve from there only.\n"
-      << "  Default vocoder: Kokoro when the language is supported, otherwise Piper (same as "
+         "[--lang LANG] [--voice ID] [--speed N] [-o out.wav] [--text \"...\"] "
+         "[TEXT...]\n"
+      << "  G2P + layout: if ``--model-root`` is omitted, the process current "
+         "working directory is the "
+         "asset root (``kokoro/``, ``ja/``, ``en_us/``, …); relative paths "
+         "resolve from there only.\n"
+      << "  Default vocoder: Kokoro when the language is supported, otherwise "
+         "Piper (same as "
          "``MoonshineTTSOptions::vocoder_engine=auto``).\n"
-      << "  kokoro: ``kokoro/`` under model root (or ``--kokoro-dir`` override).\n"
-      << "  piper: ``<subdir>/piper-voices`` under model root (or ``--piper-voices-dir`` / "
-         "``--piper-voices-json-dir`` for split ONNX vs JSON trees, or ``--piper-onnx`` + "
+      << "  kokoro: ``kokoro/`` under model root (or ``--kokoro-dir`` "
+         "override).\n"
+      << "  piper: ``<subdir>/piper-voices`` under model root (or "
+         "``--piper-voices-dir`` / "
+         "``--piper-voices-json-dir`` for split ONNX vs JSON trees, or "
+         "``--piper-onnx`` + "
          "``--piper-onnx-json`` for explicit files).\n"
-      << "  If --lang is omitted, a simple script heuristic picks ja (kana), ko (Hangul), else en_us.\n"
-      << "  Custom layouts: set ``MoonshineTTSOptions::g2p_options.g2p_root`` in C++.\n"
-      << "  Export Kokoro voices: python scripts/export_kokoro_voice_for_cpp.py --voices-dir voices/\n"
-      << "  Piper voices: python scripts/download_piper_voices_for_g2p.py (copy/sync to <model-root>/*/piper-voices).\n"
-      << "  --lang: Kokoro supports en_us, es, …, fr, ja, zh (and Spanish dialect ids); other tags use Piper "
+      << "  If --lang is omitted, a simple script heuristic picks ja (kana), "
+         "ko (Hangul), else en_us.\n"
+      << "  Custom layouts: set ``MoonshineTTSOptions::g2p_options.g2p_root`` "
+         "in C++.\n"
+      << "  Export Kokoro voices: python "
+         "scripts/export_kokoro_voice_for_cpp.py --voices-dir voices/\n"
+      << "  Piper voices: python scripts/download_piper_voices_for_g2p.py "
+         "(copy/sync to <model-root>/*/piper-voices).\n"
+      << "  --lang: Kokoro supports en_us, es, …, fr, ja, zh (and Spanish "
+         "dialect ids); other tags use Piper "
          "by default.\n"
-      << "  --voice: prefix with ``kokoro_`` or ``piper_`` to choose the backend, then the Kokoro id or Piper ONNX "
-         "stem (e.g. ``kokoro_af_heart``, ``piper_de_DE-thorsten-medium``). Without a prefix, the default backend "
+      << "  --voice: prefix with ``kokoro_`` or ``piper_`` to choose the "
+         "backend, then the Kokoro id or Piper ONNX "
+         "stem (e.g. ``kokoro_af_heart``, ``piper_de_DE-thorsten-medium``). "
+         "Without a prefix, the default backend "
          "uses the id/stem as today (e.g. ``af_heart`` with Kokoro on en_us).\n"
       << "  Default output: out.wav. Default text if none: \"Hello world\".\n";
 }
 
-/// When the user does not pass ``--lang``, infer a tag so Japanese text does not run through English G2P / ``af_heart``.
+/// When the user does not pass ``--lang``, infer a tag so Japanese text does
+/// not run through English G2P / ``af_heart``.
 std::optional<std::string> infer_lang_from_text_utf8(const std::string& text) {
   for (size_t i = 0; i < text.size();) {
     char32_t cp = 0;
@@ -138,7 +154,8 @@ int main(int argc, char** argv) {
   if (!lang_set) {
     if (const auto inferred = infer_lang_from_text_utf8(text)) {
       lang = *inferred;
-      std::cerr << "moonshine-tts: inferred --lang " << lang << " from input text "
+      std::cerr << "moonshine-tts: inferred --lang " << lang
+                << " from input text "
                    "(set --lang explicitly to override).\n";
     }
   }
@@ -151,8 +168,8 @@ int main(int argc, char** argv) {
       return 1;
     }
     write_wav_mono_pcm16(opt.output_path, wav);
-    std::cout << "Wrote " << opt.output_path << " (" << wav.size() << " samples, "
-              << MoonshineTTS::kSampleRateHz << " Hz)\n";
+    std::cout << "Wrote " << opt.output_path << " (" << wav.size()
+              << " samples, " << MoonshineTTS::kSampleRateHz << " Hz)\n";
   } catch (const std::exception& e) {
     std::cerr << "Error: " << e.what() << '\n';
     return 1;

@@ -1,7 +1,7 @@
 #include "moonshine-c-api.h"
 
-#include <array>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -21,8 +21,10 @@ namespace {
 
 std::filesystem::path find_de_piper_voices_dir() {
   const std::filesystem::path candidates[] = {
-      std::filesystem::path("core") / "moonshine-tts" / "data" / "de" / "piper-voices",
-      std::filesystem::path("..") / "core" / "moonshine-tts" / "data" / "de" / "piper-voices",
+      std::filesystem::path("core") / "moonshine-tts" / "data" / "de" /
+          "piper-voices",
+      std::filesystem::path("..") / "core" / "moonshine-tts" / "data" / "de" /
+          "piper-voices",
   };
   for (const auto& c : candidates) {
     if (std::filesystem::is_directory(c)) {
@@ -37,10 +39,12 @@ std::vector<uint8_t> read_binary_file(const std::filesystem::path& p) {
   if (!f) {
     return {};
   }
-  return std::vector<uint8_t>((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  return std::vector<uint8_t>((std::istreambuf_iterator<char>(f)),
+                              std::istreambuf_iterator<char>());
 }
 
-/// Resolve ``moonshine-tts/data`` for tests run from ``test-assets/``, repo root, or ``core/build``.
+/// Resolve ``moonshine-tts/data`` for tests run from ``test-assets/``, repo
+/// root, or ``core/build``.
 std::optional<std::filesystem::path> find_moonshine_tts_data_dir() {
   namespace fs = std::filesystem;
   const fs::path cwd = fs::current_path();
@@ -69,22 +73,23 @@ void free_phonemes_output(const char* ipa) {
   std::free(const_cast<char*>(ipa));
 }
 
-/// Creates a phonemizer with ``g2p_root`` = *data_root*, runs ``text`` → IPA, frees output.
-void grapheme_phonemizer_smoke(const std::filesystem::path& data_root, const char* language,
-                               const char* text) {
+/// Creates a phonemizer with ``g2p_root`` = *data_root*, runs ``text`` → IPA,
+/// frees output.
+void grapheme_phonemizer_smoke(const std::filesystem::path& data_root,
+                               const char* language, const char* text) {
   const std::string g2p_root_str = data_root.string();
   const moonshine_option_t opts[] = {
       {"g2p_root", g2p_root_str.c_str()},
       {"log_profiling", "true"},
   };
   const uint64_t n_opt = sizeof(opts) / sizeof(opts[0]);
-  int32_t h = moonshine_create_grapheme_to_phonemizer_from_files(language, nullptr, 0, opts, n_opt,
-                                                                 MOONSHINE_HEADER_VERSION);
+  int32_t h = moonshine_create_grapheme_to_phonemizer_from_files(
+      language, nullptr, 0, opts, n_opt, MOONSHINE_HEADER_VERSION);
   REQUIRE(h >= 0);
   const char* ipa = nullptr;
   uint64_t phoneme_count = 0;
-  REQUIRE(moonshine_text_to_phonemes(h, text, nullptr, 0, &ipa, &phoneme_count) ==
-          MOONSHINE_ERROR_NONE);
+  REQUIRE(moonshine_text_to_phonemes(h, text, nullptr, 0, &ipa,
+                                     &phoneme_count) == MOONSHINE_ERROR_NONE);
   REQUIRE(phoneme_count > 1);
   REQUIRE(ipa != nullptr);
   REQUIRE(std::strlen(ipa) > 0);
@@ -95,7 +100,8 @@ void grapheme_phonemizer_smoke(const std::filesystem::path& data_root, const cha
 struct GraphemePhonemizerLangCase {
   const char* language;
   const char* text;
-  /// If non-null, skip the case when this path is not a regular file under the data root.
+  /// If non-null, skip the case when this path is not a regular file under the
+  /// data root.
   const char* required_relative_file;
 };
 
@@ -105,7 +111,7 @@ TEST_CASE("moonshine-test-v2") {
   SUBCASE("transcribe-complete") {
     std::string wav_path = "two_cities.wav";
     REQUIRE(std::filesystem::exists(wav_path));
-    float *wav_data = nullptr;
+    float* wav_data = nullptr;
     size_t wav_data_size = 0;
     int32_t wav_sample_rate = 0;
     REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
@@ -122,7 +128,7 @@ TEST_CASE("moonshine-test-v2") {
         MOONSHINE_HEADER_VERSION);
     REQUIRE(transcriber_handle >= 0);
 
-    struct transcript_t *transcript = nullptr;
+    struct transcript_t* transcript = nullptr;
     int32_t transcribe_error = moonshine_transcribe_without_streaming(
         transcriber_handle, wav_data, wav_data_size, wav_sample_rate, 0,
         &transcript);
@@ -130,7 +136,7 @@ TEST_CASE("moonshine-test-v2") {
     REQUIRE(transcript != nullptr);
     REQUIRE(transcript->line_count > 0);
     for (size_t i = 0; i < transcript->line_count; i++) {
-      const struct transcript_line_t &line = transcript->lines[i];
+      const struct transcript_line_t& line = transcript->lines[i];
       REQUIRE(line.text != nullptr);
       REQUIRE(line.audio_data != nullptr);
       REQUIRE(line.audio_data_count > 0);
@@ -148,7 +154,7 @@ TEST_CASE("moonshine-test-v2") {
   SUBCASE("transcribe-stream") {
     std::string wav_path = "two_cities.wav";
     REQUIRE(std::filesystem::exists(wav_path));
-    float *wav_data = nullptr;
+    float* wav_data = nullptr;
     size_t wav_data_size = 0;
     int32_t wav_sample_rate = 0;
     REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
@@ -175,7 +181,7 @@ TEST_CASE("moonshine-test-v2") {
     int32_t start_error = moonshine_start_stream(transcriber_handle, stream_id);
     REQUIRE(start_error == MOONSHINE_ERROR_NONE);
 
-    struct transcript_t *transcript = nullptr;
+    struct transcript_t* transcript = nullptr;
     const float chunk_duration_seconds = 0.0723f;
     const size_t chunk_size =
         (size_t)(chunk_duration_seconds * wav_sample_rate);
@@ -183,7 +189,7 @@ TEST_CASE("moonshine-test-v2") {
     const size_t samples_between_transcriptions =
         (size_t)(wav_sample_rate * 0.481f);
     for (size_t i = 0; i < wav_data_size; i += chunk_size) {
-      const float *chunk_data = wav_data + i;
+      const float* chunk_data = wav_data + i;
       const size_t chunk_data_size = std::min(chunk_size, wav_data_size - i);
       moonshine_transcribe_add_audio_to_stream(transcriber_handle, stream_id,
                                                chunk_data, chunk_data_size,
@@ -199,7 +205,7 @@ TEST_CASE("moonshine-test-v2") {
       REQUIRE(transcript != nullptr);
       bool any_updated_lines = false;
       for (size_t j = 0; j < transcript->line_count; j++) {
-        const struct transcript_line_t &line = transcript->lines[j];
+        const struct transcript_line_t& line = transcript->lines[j];
         REQUIRE(line.text != nullptr);
         REQUIRE(line.audio_data != nullptr);
         REQUIRE(line.audio_data_count > 0);
@@ -241,7 +247,7 @@ TEST_CASE("moonshine-test-v2") {
   SUBCASE("transcribe-complete-from-memory") {
     std::string wav_path = "two_cities.wav";
     REQUIRE(std::filesystem::exists(wav_path));
-    float *wav_data = nullptr;
+    float* wav_data = nullptr;
     size_t wav_data_size = 0;
     int32_t wav_sample_rate = 0;
     REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
@@ -284,7 +290,7 @@ TEST_CASE("moonshine-test-v2") {
         model_arch, options, options_count, MOONSHINE_HEADER_VERSION);
     REQUIRE(transcriber_handle >= 0);
 
-    struct transcript_t *transcript = nullptr;
+    struct transcript_t* transcript = nullptr;
     int32_t transcribe_error = moonshine_transcribe_without_streaming(
         transcriber_handle, wav_data, wav_data_size, wav_sample_rate, 0,
         &transcript);
@@ -292,7 +298,7 @@ TEST_CASE("moonshine-test-v2") {
     REQUIRE(transcript != nullptr);
     REQUIRE(transcript->line_count > 0);
     for (size_t i = 0; i < transcript->line_count; i++) {
-      const struct transcript_line_t &line = transcript->lines[i];
+      const struct transcript_line_t& line = transcript->lines[i];
       REQUIRE(line.text != nullptr);
       REQUIRE(line.audio_data == nullptr);
       REQUIRE(line.audio_data_count == 0);
@@ -307,7 +313,7 @@ TEST_CASE("moonshine-test-v2") {
   SUBCASE("transcribe-without-streaming-skip-transcription") {
     std::string wav_path = "two_cities.wav";
     REQUIRE(std::filesystem::exists(wav_path));
-    float *wav_data = nullptr;
+    float* wav_data = nullptr;
     size_t wav_data_size = 0;
     int32_t wav_sample_rate = 0;
     REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
@@ -328,7 +334,7 @@ TEST_CASE("moonshine-test-v2") {
         MOONSHINE_HEADER_VERSION);
     REQUIRE(transcriber_handle >= 0);
 
-    struct transcript_t *transcript = nullptr;
+    struct transcript_t* transcript = nullptr;
     int32_t transcribe_error = moonshine_transcribe_without_streaming(
         transcriber_handle, wav_data, wav_data_size, wav_sample_rate, 0,
         &transcript);
@@ -336,7 +342,7 @@ TEST_CASE("moonshine-test-v2") {
     REQUIRE(transcript != nullptr);
     REQUIRE(transcript->line_count > 0);
     for (size_t i = 0; i < transcript->line_count; i++) {
-      const struct transcript_line_t &line = transcript->lines[i];
+      const struct transcript_line_t& line = transcript->lines[i];
       REQUIRE(line.text == nullptr);
       REQUIRE(line.audio_data != nullptr);
       REQUIRE(line.audio_data_count > 0);
@@ -351,7 +357,7 @@ TEST_CASE("moonshine-test-v2") {
   SUBCASE("transcribe-without-streaming-vad-threshold-0") {
     std::string wav_path = "beckett.wav";
     REQUIRE(std::filesystem::exists(wav_path));
-    float *wav_data = nullptr;
+    float* wav_data = nullptr;
     size_t wav_data_size = 0;
     int32_t wav_sample_rate = 0;
     REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
@@ -372,14 +378,14 @@ TEST_CASE("moonshine-test-v2") {
         MOONSHINE_HEADER_VERSION);
     REQUIRE(transcriber_handle >= 0);
 
-    struct transcript_t *transcript = nullptr;
+    struct transcript_t* transcript = nullptr;
     int32_t transcribe_error = moonshine_transcribe_without_streaming(
         transcriber_handle, wav_data, wav_data_size, wav_sample_rate, 0,
         &transcript);
     REQUIRE(transcribe_error == MOONSHINE_ERROR_NONE);
     REQUIRE(transcript != nullptr);
     REQUIRE(transcript->line_count == 1);
-    const struct transcript_line_t &line = transcript->lines[0];
+    const struct transcript_line_t& line = transcript->lines[0];
     REQUIRE(line.text != nullptr);
     REQUIRE(line.audio_data != nullptr);
     const int32_t hop_size = 256;
@@ -448,7 +454,7 @@ TEST_CASE("moonshine-test-v2") {
     // the regular transcription output.
     std::string wav_path = "two_cities.wav";
     REQUIRE(std::filesystem::exists(wav_path));
-    float *wav_data = nullptr;
+    float* wav_data = nullptr;
     size_t wav_data_size = 0;
     int32_t wav_sample_rate = 0;
     REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
@@ -460,7 +466,7 @@ TEST_CASE("moonshine-test-v2") {
         root_model_path.c_str(), model_arch, nullptr, 0,
         MOONSHINE_HEADER_VERSION);
     REQUIRE(transcriber_handle >= 0);
-    struct transcript_t *transcript = nullptr;
+    struct transcript_t* transcript = nullptr;
     int32_t err = moonshine_transcribe_without_streaming(
         transcriber_handle, wav_data, wav_data_size, wav_sample_rate,
         MOONSHINE_FLAG_SPELLING_MODE, &transcript);
@@ -484,7 +490,7 @@ TEST_CASE("moonshine-test-v2") {
       MESSAGE("skip: alphanumeric clip not in test-assets");
       return;
     }
-    float *wav_data = nullptr;
+    float* wav_data = nullptr;
     size_t wav_data_size = 0;
     int32_t wav_sample_rate = 0;
     REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
@@ -500,14 +506,14 @@ TEST_CASE("moonshine-test-v2") {
         root_model_path.c_str(), model_arch, options, options_count,
         MOONSHINE_HEADER_VERSION);
     REQUIRE(transcriber_handle >= 0);
-    struct transcript_t *transcript = nullptr;
+    struct transcript_t* transcript = nullptr;
     int32_t err = moonshine_transcribe_without_streaming(
         transcriber_handle, wav_data, wav_data_size, wav_sample_rate,
         MOONSHINE_FLAG_SPELLING_MODE, &transcript);
     REQUIRE(err == MOONSHINE_ERROR_NONE);
     REQUIRE(transcript != nullptr);
     REQUIRE(transcript->line_count >= 1);
-    const transcript_line_t &line = transcript->lines[0];
+    const transcript_line_t& line = transcript->lines[0];
     REQUIRE(line.text != nullptr);
     // We expect the matcher (or fusion) to resolve to "a" given the
     // recording is the speaker saying the letter "a".
@@ -534,9 +540,9 @@ TEST_CASE("moonshine-test-v2") {
     };
     const uint64_t options_count = sizeof(options) / sizeof(options[0]);
     int32_t tts_synthesizer_handle =
-        moonshine_create_tts_synthesizer_from_files(
-            "en_us", nullptr, 0, options, options_count,
-            MOONSHINE_HEADER_VERSION);
+        moonshine_create_tts_synthesizer_from_files("en_us", nullptr, 0,
+                                                    options, options_count,
+                                                    MOONSHINE_HEADER_VERSION);
     REQUIRE(tts_synthesizer_handle >= 0);
   }
   SUBCASE("tts-synthesizer-per-call-speed-kokoro") {
@@ -561,7 +567,8 @@ TEST_CASE("moonshine-test-v2") {
     float* a0 = nullptr;
     uint64_t n0 = 0;
     int32_t sr0 = 0;
-    REQUIRE(moonshine_text_to_speech(h, text, nullptr, 0, &a0, &n0, &sr0) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_text_to_speech(h, text, nullptr, 0, &a0, &n0, &sr0) ==
+            MOONSHINE_ERROR_NONE);
     REQUIRE(n0 > 2000);
     REQUIRE(a0 != nullptr);
     std::free(a0);
@@ -569,16 +576,18 @@ TEST_CASE("moonshine-test-v2") {
     float* a1 = nullptr;
     uint64_t n1 = 0;
     int32_t sr1 = 0;
-    REQUIRE(moonshine_text_to_speech(h, text, fast_opts,
-                                     static_cast<uint64_t>(sizeof(fast_opts) / sizeof(fast_opts[0])),
-                                     &a1, &n1, &sr1) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_text_to_speech(
+                h, text, fast_opts,
+                static_cast<uint64_t>(sizeof(fast_opts) / sizeof(fast_opts[0])),
+                &a1, &n1, &sr1) == MOONSHINE_ERROR_NONE);
     REQUIRE(a1 != nullptr);
     CHECK(n1 < n0);
     std::free(a1);
     float* a2 = nullptr;
     uint64_t n2 = 0;
     int32_t sr2 = 0;
-    REQUIRE(moonshine_text_to_speech(h, text, nullptr, 0, &a2, &n2, &sr2) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_text_to_speech(h, text, nullptr, 0, &a2, &n2, &sr2) ==
+            MOONSHINE_ERROR_NONE);
     CHECK(n2 == n0);
     if (a2 != nullptr) {
       std::free(a2);
@@ -611,7 +620,8 @@ TEST_CASE("moonshine-test-v2") {
     if (onnx_data.empty() || json_data.empty()) {
       return;
     }
-    std::array<std::string, 2> keys = {std::string("piper/onnx"), std::string("piper/onnx.json")};
+    std::array<std::string, 2> keys = {std::string("piper/onnx"),
+                                       std::string("piper/onnx.json")};
     const char* filenames[2] = {keys[0].c_str(), keys[1].c_str()};
     const uint8_t* mem_ptrs[2] = {onnx_data.data(), json_data.data()};
     const uint64_t mem_sizes[2] = {static_cast<uint64_t>(onnx_data.size()),
@@ -629,14 +639,14 @@ TEST_CASE("moonshine-test-v2") {
         {"model_root", g2p_root_str.c_str()},
     };
     int32_t h = moonshine_create_tts_synthesizer_from_memory(
-        "de", filenames, 2, mem_ptrs, mem_sizes, opts, sizeof(opts) / sizeof(opts[0]),
-        MOONSHINE_HEADER_VERSION);
+        "de", filenames, 2, mem_ptrs, mem_sizes, opts,
+        sizeof(opts) / sizeof(opts[0]), MOONSHINE_HEADER_VERSION);
     REQUIRE(h >= 0);
     float* audio = nullptr;
     uint64_t audio_n = 0;
     int32_t sr = 0;
-    REQUIRE(moonshine_text_to_speech(h, "Hallo", nullptr, 0, &audio, &audio_n, &sr) ==
-            MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_text_to_speech(h, "Hallo", nullptr, 0, &audio, &audio_n,
+                                     &sr) == MOONSHINE_ERROR_NONE);
     REQUIRE(audio_n > 0);
     REQUIRE(audio != nullptr);
     std::free(audio);
@@ -650,7 +660,8 @@ TEST_CASE("grapheme-to-phonemizer-c-api") {
         {"g2p_root", "."},
     };
     const int32_t h = moonshine_create_grapheme_to_phonemizer_from_files(
-        "en_us", nullptr, 1, opts, sizeof(opts) / sizeof(opts[0]), MOONSHINE_HEADER_VERSION);
+        "en_us", nullptr, 1, opts, sizeof(opts) / sizeof(opts[0]),
+        MOONSHINE_HEADER_VERSION);
     CHECK(h == MOONSHINE_ERROR_INVALID_ARGUMENT);
   }
 
@@ -664,7 +675,9 @@ TEST_CASE("grapheme-to-phonemizer-c-api") {
   SUBCASE("text-to-phonemes-invalid-arguments") {
     const auto data_root = find_moonshine_tts_data_dir();
     if (!data_root) {
-      MESSAGE("skip: moonshine-tts data directory not found (run from test-assets or set cwd)");
+      MESSAGE(
+          "skip: moonshine-tts data directory not found (run from test-assets "
+          "or set cwd)");
       return;
     }
     const std::string g2p_root_str = data_root->string();
@@ -672,13 +685,16 @@ TEST_CASE("grapheme-to-phonemizer-c-api") {
         {"g2p_root", g2p_root_str.c_str()},
     };
     int32_t h = moonshine_create_grapheme_to_phonemizer_from_files(
-        "en_us", nullptr, 0, opts, sizeof(opts) / sizeof(opts[0]), MOONSHINE_HEADER_VERSION);
+        "en_us", nullptr, 0, opts, sizeof(opts) / sizeof(opts[0]),
+        MOONSHINE_HEADER_VERSION);
     REQUIRE(h >= 0);
     const char* ipa = nullptr;
     uint64_t phoneme_count = 0;
-    CHECK(moonshine_text_to_phonemes(h, nullptr, nullptr, 0, &ipa, &phoneme_count) ==
+    CHECK(moonshine_text_to_phonemes(h, nullptr, nullptr, 0, &ipa,
+                                     &phoneme_count) ==
           MOONSHINE_ERROR_INVALID_ARGUMENT);
-    CHECK(moonshine_text_to_phonemes(h, "hi", nullptr, 0, nullptr, &phoneme_count) ==
+    CHECK(moonshine_text_to_phonemes(h, "hi", nullptr, 0, nullptr,
+                                     &phoneme_count) ==
           MOONSHINE_ERROR_INVALID_ARGUMENT);
     moonshine_free_grapheme_to_phonemizer(h);
   }
@@ -696,20 +712,25 @@ TEST_CASE("grapheme-to-phonemizer-c-api") {
         {"fr", "bonjour", "fr/dict.tsv"},
         {"nl", "hallo", "nl/dict.tsv"},
         {"it", "ciao", "it/dict.tsv"},
-        {"ru", "\xd0\xbf\xd1\x80\xd0\xb8\xd0\xb2\xd0\xb5\xd1\x82", "ru/dict.tsv"},
+        {"ru", "\xd0\xbf\xd1\x80\xd0\xb8\xd0\xb2\xd0\xb5\xd1\x82",
+         "ru/dict.tsv"},
         {"vi", "xin", "vi/dict.tsv"},
         {"ko", "\xec\x95\x88\xeb\x85\x95", "ko/dict.tsv"},
         {"pt_br", "ol\xc3\xa1", "pt_br/dict.tsv"},
         {"pt_pt", "ol\xc3\xa1", "pt_pt/dict.tsv"},
         {"tr", "merhaba", nullptr},
         {"uk", "\xd0\xbf\xd1\x80\xd1\x96\xd0\xb2\xd1\x96\xd1\x82", nullptr},
-        {"hi", "\xe0\xa4\xa8\xe0\xa4\xae\xe0\xa4\xb8\xe0\xa5\x8d\xe0\xa4\xa4\xe0\xa5\x87", "hi/dict.tsv"},
+        {"hi",
+         "\xe0\xa4\xa8\xe0\xa4\xae\xe0\xa4\xb8\xe0\xa5\x8d\xe0\xa4\xa4\xe0\xa5"
+         "\x87",
+         "hi/dict.tsv"},
     };
     namespace fs = std::filesystem;
     for (const auto& c : kCases) {
       if (c.required_relative_file != nullptr &&
           !fs::is_regular_file(*data_root / c.required_relative_file)) {
-        MESSAGE("skip language ", c.language, ": missing ", c.required_relative_file);
+        MESSAGE("skip language ", c.language, ": missing ",
+                c.required_relative_file);
         continue;
       }
       INFO("grapheme phonemizer language: " << c.language);
@@ -748,7 +769,9 @@ TEST_CASE("grapheme-to-phonemizer-c-api") {
       MESSAGE("skip: Japanese ONNX bundle or dict not present");
       return;
     }
-    grapheme_phonemizer_smoke(*data_root, "ja", "\xe3\x81\x93\xe3\x82\x93\xe3\x81\xab\xe3\x81\xa1\xe3\x81\xaf");
+    grapheme_phonemizer_smoke(
+        *data_root, "ja",
+        "\xe3\x81\x93\xe3\x82\x93\xe3\x81\xab\xe3\x81\xa1\xe3\x81\xaf");
   }
 
   SUBCASE("arabic-when-onnx-bundle-present") {
@@ -765,51 +788,66 @@ TEST_CASE("grapheme-to-phonemizer-c-api") {
       MESSAGE("skip: Arabic ONNX bundle or dict not present");
       return;
     }
-    grapheme_phonemizer_smoke(*data_root, "ar_msa", "\xd9\x85\xd8\xb1\xd8\xad\xd8\xa8\xd8\xa7");
+    grapheme_phonemizer_smoke(*data_root, "ar_msa",
+                              "\xd9\x85\xd8\xb1\xd8\xad\xd8\xa8\xd8\xa7");
   }
 }
 
 TEST_CASE("moonshine-tts-g2p-dependency-api") {
   SUBCASE("null-output-pointer") {
-    CHECK(moonshine_get_g2p_dependencies("en_us", nullptr, 0, nullptr) == MOONSHINE_ERROR_INVALID_ARGUMENT);
-    CHECK(moonshine_get_tts_dependencies("en_us", nullptr, 0, nullptr) == MOONSHINE_ERROR_INVALID_ARGUMENT);
-    CHECK(moonshine_get_tts_voices("en_us", nullptr, 0, nullptr) == MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(moonshine_get_g2p_dependencies("en_us", nullptr, 0, nullptr) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(moonshine_get_tts_dependencies("en_us", nullptr, 0, nullptr) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(moonshine_get_tts_voices("en_us", nullptr, 0, nullptr) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
   }
 
   SUBCASE("options-count-without-options-pointer") {
     char* out = nullptr;
-    CHECK(moonshine_get_g2p_dependencies("en_us", nullptr, 1, &out) == MOONSHINE_ERROR_INVALID_ARGUMENT);
-    CHECK(moonshine_get_tts_dependencies("en_us", nullptr, 1, &out) == MOONSHINE_ERROR_INVALID_ARGUMENT);
-    CHECK(moonshine_get_tts_voices("en_us", nullptr, 1, &out) == MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(moonshine_get_g2p_dependencies("en_us", nullptr, 1, &out) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(moonshine_get_tts_dependencies("en_us", nullptr, 1, &out) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(moonshine_get_tts_voices("en_us", nullptr, 1, &out) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
   }
 
   SUBCASE("g2p-empty-means-all-languages") {
     char* out = nullptr;
-    REQUIRE(moonshine_get_g2p_dependencies("", nullptr, 0, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_g2p_dependencies("", nullptr, 0, &out) ==
+            MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string csv(out);
     CHECK(csv.find("de/dict.tsv") != std::string::npos);
     CHECK(csv.find("en_us/dict_filtered_heteronyms.tsv") != std::string::npos);
     CHECK(csv.find("fr/adj.csv") != std::string::npos);
-    CHECK(csv.find("zh_hans/roberta_chinese_base_upos_onnx/model.onnx") != std::string::npos);
-    CHECK(csv.find("zh_hans/roberta_chinese_base_upos_onnx/model.ort") == std::string::npos);
-    CHECK(csv.find("ja/roberta_japanese_char_luw_upos_onnx/model.ort") != std::string::npos);
+    CHECK(csv.find("zh_hans/roberta_chinese_base_upos_onnx/model.onnx") !=
+          std::string::npos);
+    CHECK(csv.find("zh_hans/roberta_chinese_base_upos_onnx/model.ort") ==
+          std::string::npos);
+    CHECK(csv.find("ja/roberta_japanese_char_luw_upos_onnx/model.ort") !=
+          std::string::npos);
     std::free(out);
   }
 
   SUBCASE("g2p-arabic-onnx-model-key-matches-meta-onnx-filename") {
     char* out = nullptr;
-    REQUIRE(moonshine_get_g2p_dependencies("ar_msa", nullptr, 0, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_g2p_dependencies("ar_msa", nullptr, 0, &out) ==
+            MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string csv(out);
-    CHECK(csv.find("ar_msa/arabertv02_tashkeel_fadel_onnx/model.onnx") != std::string::npos);
-    CHECK(csv.find("ar_msa/arabertv02_tashkeel_fadel_onnx/model.ort") == std::string::npos);
+    CHECK(csv.find("ar_msa/arabertv02_tashkeel_fadel_onnx/model.onnx") !=
+          std::string::npos);
+    CHECK(csv.find("ar_msa/arabertv02_tashkeel_fadel_onnx/model.ort") ==
+          std::string::npos);
     std::free(out);
   }
 
   SUBCASE("g2p-french-lists-pos-csv-files-not-directory-prefix") {
     char* out = nullptr;
-    REQUIRE(moonshine_get_g2p_dependencies("fr", nullptr, 0, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_g2p_dependencies("fr", nullptr, 0, &out) ==
+            MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string csv(out);
     CHECK(csv.find("fr/dict.tsv") != std::string::npos);
@@ -822,7 +860,8 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
 
   SUBCASE("g2p-single-language") {
     char* out = nullptr;
-    REQUIRE(moonshine_get_g2p_dependencies("de", nullptr, 0, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_g2p_dependencies("de", nullptr, 0, &out) ==
+            MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     CHECK(std::string(out) == "de/dict.tsv");
     std::free(out);
@@ -830,14 +869,16 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
 
   SUBCASE("g2p-unsupported-language") {
     char* out = nullptr;
-    CHECK(moonshine_get_g2p_dependencies("zzz_not_a_supported_language", nullptr, 0, &out) ==
+    CHECK(moonshine_get_g2p_dependencies("zzz_not_a_supported_language",
+                                         nullptr, 0, &out) ==
           MOONSHINE_ERROR_INVALID_ARGUMENT);
     CHECK(out == nullptr);
   }
 
   SUBCASE("g2p-multiple-languages") {
     char* out = nullptr;
-    REQUIRE(moonshine_get_g2p_dependencies("en_us, de", nullptr, 0, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_g2p_dependencies("en_us, de", nullptr, 0, &out) ==
+            MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string csv(out);
     CHECK(csv.find("en_us/dict_filtered_heteronyms.tsv") != std::string::npos);
@@ -851,7 +892,8 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
         {"oov_onnx_override", "/nonexistent/oov.onnx"},
     };
     char* out = nullptr;
-    REQUIRE(moonshine_get_g2p_dependencies("de", opts, 1, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_g2p_dependencies("de", opts, 1, &out) ==
+            MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     CHECK(std::string(out).find("oov_onnx_override") != std::string::npos);
     std::free(out);
@@ -859,20 +901,23 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
 
   SUBCASE("tts-json-single-language") {
     char* out = nullptr;
-    REQUIRE(moonshine_get_tts_dependencies("en_us", nullptr, 0, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_tts_dependencies("en_us", nullptr, 0, &out) ==
+            MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.size() >= 2);
     CHECK(json.front() == '[');
     CHECK(json.back() == ']');
     CHECK(json.find("\"kokoro/model.onnx\"") != std::string::npos);
-    CHECK(json.find("\"en_us/dict_filtered_heteronyms.tsv\"") != std::string::npos);
+    CHECK(json.find("\"en_us/dict_filtered_heteronyms.tsv\"") !=
+          std::string::npos);
     std::free(out);
   }
 
   SUBCASE("tts-empty-all-languages-json") {
     char* out = nullptr;
-    REQUIRE(moonshine_get_tts_dependencies("", nullptr, 0, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_tts_dependencies("", nullptr, 0, &out) ==
+            MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.front() == '[');
@@ -882,18 +927,21 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
 
   SUBCASE("tts-unsupported-language") {
     char* out = nullptr;
-    CHECK(moonshine_get_tts_dependencies("zzz_not_a_supported_language", nullptr, 0, &out) ==
+    CHECK(moonshine_get_tts_dependencies("zzz_not_a_supported_language",
+                                         nullptr, 0, &out) ==
           MOONSHINE_ERROR_INVALID_ARGUMENT);
     CHECK(out == nullptr);
   }
 
   SUBCASE("tts-multiple-languages") {
     char* out = nullptr;
-    REQUIRE(moonshine_get_tts_dependencies("en_us,de", nullptr, 0, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_tts_dependencies("en_us,de", nullptr, 0, &out) ==
+            MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.find("\"de/dict.tsv\"") != std::string::npos);
-    CHECK(json.find("\"en_us/dict_filtered_heteronyms.tsv\"") != std::string::npos);
+    CHECK(json.find("\"en_us/dict_filtered_heteronyms.tsv\"") !=
+          std::string::npos);
     CHECK(json.find("piper-voices") != std::string::npos);
     std::free(out);
   }
@@ -903,7 +951,8 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
         {"voice", "piper_en_us-test-voice"},
     };
     char* out = nullptr;
-    REQUIRE(moonshine_get_tts_dependencies("en_us", opts, 1, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_tts_dependencies("en_us", opts, 1, &out) ==
+            MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.find("piper-voices") != std::string::npos);
@@ -916,7 +965,8 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
         {"voice", "kokoro_ff_siwis"},
     };
     char* out = nullptr;
-    REQUIRE(moonshine_get_tts_dependencies("fr", opts, 1, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_tts_dependencies("fr", opts, 1, &out) ==
+            MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.find("\"kokoro/model.onnx\"") != std::string::npos);
@@ -930,7 +980,8 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
         {"piper_onnx", "custom/model.onnx"},
     };
     char* out = nullptr;
-    REQUIRE(moonshine_get_tts_dependencies("de", opts, 2, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_tts_dependencies("de", opts, 2, &out) ==
+            MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.find("\"piper/onnx\"") != std::string::npos);
@@ -943,7 +994,8 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
         {"voice", "piper_de_DE-thorsten-medium"},
     };
     char* out = nullptr;
-    REQUIRE(moonshine_get_tts_dependencies("de", opts, 1, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_tts_dependencies("de", opts, 1, &out) ==
+            MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.find("de_DE-thorsten-medium.onnx") != std::string::npos);
@@ -961,7 +1013,8 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
         {"g2p_root", g2p_root_str.c_str()},
     };
     char* out = nullptr;
-    REQUIRE(moonshine_get_tts_voices("en_us", opts, 1, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_tts_voices("en_us", opts, 1, &out) ==
+            MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.front() == '{');
@@ -977,7 +1030,8 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
         {"g2p_root", "/tmp"},
     };
     char* out = nullptr;
-    REQUIRE(moonshine_get_tts_voices("en_us", opts, 1, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_tts_voices("en_us", opts, 1, &out) ==
+            MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.find("\"state\":\"missing\"") != std::string::npos);
@@ -987,8 +1041,8 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
 
   SUBCASE("tts-voices-unsupported-language") {
     char* out = nullptr;
-    CHECK(moonshine_get_tts_voices("zzz_not_a_supported_language", nullptr, 0, &out) ==
-          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(moonshine_get_tts_voices("zzz_not_a_supported_language", nullptr, 0,
+                                   &out) == MOONSHINE_ERROR_INVALID_ARGUMENT);
     CHECK(out == nullptr);
   }
 
@@ -1003,7 +1057,8 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
         {"g2p_root", g2p_root_str.c_str()},
     };
     char* out = nullptr;
-    REQUIRE(moonshine_get_tts_voices("de", opts, 1, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_tts_voices("de", opts, 1, &out) ==
+            MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.find("\"piper_de_DE-thorsten-medium\"") != std::string::npos);
@@ -1022,7 +1077,8 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
         {"g2p_root", g2p_root_str.c_str()},
     };
     char* out = nullptr;
-    REQUIRE(moonshine_get_tts_voices("en_us", opts, 1, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_tts_voices("en_us", opts, 1, &out) ==
+            MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.find("\"piper_en_US-saikat\"") != std::string::npos);
@@ -1035,7 +1091,8 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
         {"voice", "zipvoice_american_female"},
     };
     char* out = nullptr;
-    REQUIRE(moonshine_get_tts_dependencies("en_us", opts, 1, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_tts_dependencies("en_us", opts, 1, &out) ==
+            MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.find("\"zipvoice/text_encoder.ort\"") != std::string::npos);
@@ -1053,7 +1110,8 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
         {"g2p_root", "/tmp"},
     };
     char* out = nullptr;
-    REQUIRE(moonshine_get_tts_voices("en_us", opts, 2, &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_tts_voices("en_us", opts, 2, &out) ==
+            MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.find("\"zipvoice_american_female\"") != std::string::npos);
@@ -1065,9 +1123,9 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
   }
 }
 
-// Full ZipVoice synthesis needs the model bundle under ``<data>/zipvoice`` (not committed in bulk).
-// These cases exercise the built-in-voice and user-PCM paths when the assets are present, and skip
-// cleanly otherwise.
+// Full ZipVoice synthesis needs the model bundle under ``<data>/zipvoice`` (not
+// committed in bulk). These cases exercise the built-in-voice and user-PCM
+// paths when the assets are present, and skip cleanly otherwise.
 TEST_CASE("moonshine-tts-zipvoice-synthesis") {
   const auto data_root = find_moonshine_tts_data_dir();
   if (!data_root) {
@@ -1102,8 +1160,9 @@ TEST_CASE("moonshine-tts-zipvoice-synthesis") {
     float* audio = nullptr;
     uint64_t n = 0;
     int32_t sr = 0;
-    REQUIRE(moonshine_text_to_speech(h, "Hello there, this is a test.", nullptr, 0, &audio, &n, &sr) ==
-            MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_text_to_speech(h, "Hello there, this is a test.", nullptr,
+                                     0, &audio, &n,
+                                     &sr) == MOONSHINE_ERROR_NONE);
     CHECK(sr == 24000);
     CHECK(n > 0);
     if (audio != nullptr) {
@@ -1113,7 +1172,8 @@ TEST_CASE("moonshine-tts-zipvoice-synthesis") {
   }
 
   SUBCASE("user-pcm-with-explicit-transcript") {
-    // A short synthetic reference clip (silence + tone) suffices to exercise the memory + clone path.
+    // A short synthetic reference clip (silence + tone) suffices to exercise
+    // the memory + clone path.
     std::vector<float> pcm(24000, 0.f);
     for (size_t i = 0; i < pcm.size(); ++i) {
       pcm[i] = 0.05f * std::sin(2.0 * 3.14159265 * 150.0 * i / 24000.0);
@@ -1135,8 +1195,8 @@ TEST_CASE("moonshine-tts-zipvoice-synthesis") {
     float* audio = nullptr;
     uint64_t n = 0;
     int32_t sr = 0;
-    REQUIRE(moonshine_text_to_speech(h, "Testing one two three.", nullptr, 0, &audio, &n, &sr) ==
-            MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_text_to_speech(h, "Testing one two three.", nullptr, 0,
+                                     &audio, &n, &sr) == MOONSHINE_ERROR_NONE);
     CHECK(sr == 24000);
     if (audio != nullptr) {
       std::free(audio);

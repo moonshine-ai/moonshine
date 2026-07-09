@@ -79,9 +79,10 @@ int set_model_options_from_arch(MoonshineModel *model, int32_t model_arch) {
 }
 }  // namespace
 
-MoonshineModel::MoonshineModel(bool log_ort_run, float max_tokens_per_second,
-                               const std::vector<std::string> &ort_provider_names,
-                               const std::string &coreml_cache_dir)
+MoonshineModel::MoonshineModel(
+    bool log_ort_run, float max_tokens_per_second,
+    const std::vector<std::string> &ort_provider_names,
+    const std::string &coreml_cache_dir)
     : encoder_session(nullptr),
       decoder_session(nullptr),
       tokenizer(nullptr),
@@ -117,8 +118,8 @@ MoonshineModel::MoonshineModel(bool log_ort_run, float max_tokens_per_second,
                 ort_api->AddSessionConfigEntry(
                     ort_session_options, "session.disable_prepacking", "1"));
   LOG_ORT_ERROR(ort_api, ort_api->DisableCpuMemArena(ort_session_options));
-  ort_configure_execution_providers(ort_api, ort_session_options, ort_provider_names,
-                                    coreml_cache_dir);
+  ort_configure_execution_providers(ort_api, ort_session_options,
+                                    ort_provider_names, coreml_cache_dir);
 }
 
 MoonshineModel::~MoonshineModel() {
@@ -605,29 +606,28 @@ int MoonshineModel::compute_word_timestamps(
     // The buffer was collected as: for each decode step, for each layer:
     //   [heads, 1, enc_len] → H*E floats
     // So layout is: [step0_L0, step0_L1, ..., step0_L5, step1_L0, ...]
-    // We need: [L*H, total_steps, E] (layers*heads contiguous, then steps, then enc)
-    // Rearrange from [total_steps, L, H, E] to [L, H, total_steps, E]
+    // We need: [L*H, total_steps, E] (layers*heads contiguous, then steps, then
+    // enc) Rearrange from [total_steps, L, H, E] to [L, H, total_steps, E]
     size_t per_layer_step = H * E;
     std::vector<float> rearranged(L * H * total_steps * E);
     for (int s = 0; s < total_steps; s++) {
       for (int l = 0; l < L; l++) {
         // Source: step s, layer l → offset (s*L + l) * H * E
-        // Dest: layer l, all heads, step s → offset (l * H * total_steps + s) * E
-        // Actually for align_words: [L*H, total_steps, E]
-        // So dest for layer l, head h, step s = ((l*H + h) * total_steps + s) * E
+        // Dest: layer l, all heads, step s → offset (l * H * total_steps + s) *
+        // E Actually for align_words: [L*H, total_steps, E] So dest for layer
+        // l, head h, step s = ((l*H + h) * total_steps + s) * E
         const float *src =
             last_cross_attention_buffer.data() + (s * L + l) * per_layer_step;
         for (int h = 0; h < H; h++) {
-          float *dst =
-              rearranged.data() + ((l * H + h) * total_steps + s) * E;
+          float *dst = rearranged.data() + ((l * H + h) * total_steps + s) * E;
           memcpy(dst, src + h * E, E * sizeof(float));
         }
       }
     }
 
     float time_per_frame = audio_duration / static_cast<float>(E);
-    words_out = align_words(rearranged.data(), L, H, total_steps, E,
-                            tokens_int, time_per_frame, tokenizer);
+    words_out = align_words(rearranged.data(), L, H, total_steps, E, tokens_int,
+                            time_per_frame, tokenizer);
     last_cross_attention_buffer.clear();
     last_cross_attn_steps = 0;
     return 0;
@@ -647,17 +647,17 @@ int MoonshineModel::compute_word_timestamps(
 
   int64_t num_tokens = static_cast<int64_t>(last_tokens.size());
   std::vector<int64_t> input_ids_shape = {1, num_tokens};
-  std::vector<int64_t> enc_shape = {1, static_cast<int64_t>(last_encoder_frames),
+  std::vector<int64_t> enc_shape = {1,
+                                    static_cast<int64_t>(last_encoder_frames),
                                     static_cast<int64_t>(encoder_dim)};
 
   OrtValue *input_ids_tensor = nullptr;
   RETURN_ON_ORT_ERROR(
-      ort_api,
-      ort_api->CreateTensorWithDataAsOrtValue(
-          ort_memory_info, last_tokens.data(),
-          last_tokens.size() * sizeof(int64_t), input_ids_shape.data(),
-          input_ids_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64,
-          &input_ids_tensor));
+      ort_api, ort_api->CreateTensorWithDataAsOrtValue(
+                   ort_memory_info, last_tokens.data(),
+                   last_tokens.size() * sizeof(int64_t), input_ids_shape.data(),
+                   input_ids_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64,
+                   &input_ids_tensor));
 
   OrtValue *enc_tensor = nullptr;
   RETURN_ON_ORT_ERROR(
@@ -673,13 +673,14 @@ int MoonshineModel::compute_word_timestamps(
   RETURN_ON_ORT_ERROR(ort_api, ort_api->SessionGetOutputCount(
                                    alignment_session, &align_output_count));
 
-  std::vector<const char *> input_names = {"input_ids", "encoder_hidden_states"};
+  std::vector<const char *> input_names = {"input_ids",
+                                           "encoder_hidden_states"};
   std::vector<char *> output_names_alloc(align_output_count);
   for (size_t i = 0; i < align_output_count; i++) {
-    RETURN_ON_ORT_ERROR(ort_api,
-                        ort_api->SessionGetOutputName(
-                            alignment_session, i, &ort_string_allocator->base,
-                            &output_names_alloc[i]));
+    RETURN_ON_ORT_ERROR(
+        ort_api, ort_api->SessionGetOutputName(alignment_session, i,
+                                               &ort_string_allocator->base,
+                                               &output_names_alloc[i]));
   }
   std::vector<const char *> output_names(align_output_count);
   for (size_t i = 0; i < align_output_count; i++) {
@@ -689,9 +690,9 @@ int MoonshineModel::compute_word_timestamps(
   OrtValue *inputs[] = {input_ids_tensor, enc_tensor};
   std::vector<OrtValue *> outputs(align_output_count, nullptr);
 
-  OrtStatus *status = ORT_RUN(ort_api, alignment_session, input_names.data(),
-                              inputs, 2, output_names.data(),
-                              align_output_count, outputs.data());
+  OrtStatus *status =
+      ORT_RUN(ort_api, alignment_session, input_names.data(), inputs, 2,
+              output_names.data(), align_output_count, outputs.data());
 
   ort_api->ReleaseValue(input_ids_tensor);
   ort_api->ReleaseValue(enc_tensor);
@@ -728,9 +729,8 @@ int MoonshineModel::compute_word_timestamps(
   RETURN_ON_ORT_ERROR(ort_api,
                       ort_api->GetDimensionsCount(attn_info, &attn_ndims));
   std::vector<int64_t> attn_shape(attn_ndims);
-  RETURN_ON_ORT_ERROR(
-      ort_api,
-      ort_api->GetDimensions(attn_info, attn_shape.data(), attn_ndims));
+  RETURN_ON_ORT_ERROR(ort_api, ort_api->GetDimensions(
+                                   attn_info, attn_shape.data(), attn_ndims));
   ort_api->ReleaseTensorTypeAndShapeInfo(attn_info);
 
   int num_heads = static_cast<int>(attn_shape[1]);
@@ -764,9 +764,9 @@ int MoonshineModel::compute_word_timestamps(
 
   float time_per_frame = audio_duration / static_cast<float>(enc_len);
 
-  words_out = align_words(cross_attention_data.data(), attn_layers, num_heads,
-                          dec_len, enc_len, tokens_int, time_per_frame,
-                          tokenizer);
+  words_out =
+      align_words(cross_attention_data.data(), attn_layers, num_heads, dec_len,
+                  enc_len, tokens_int, time_per_frame, tokenizer);
 
   return 0;
 }

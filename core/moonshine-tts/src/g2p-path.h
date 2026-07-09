@@ -7,10 +7,11 @@
 
 namespace moonshine_tts {
 
-/// If ``path`` is absolute, returns it unchanged. If ``root`` is empty, returns ``path`` (relative to
-/// the process working directory). Otherwise returns ``root / path``.
-inline std::filesystem::path resolve_path_under_root(const std::filesystem::path& root,
-                                                      const std::filesystem::path& path) {
+/// If ``path`` is absolute, returns it unchanged. If ``root`` is empty, returns
+/// ``path`` (relative to the process working directory). Otherwise returns
+/// ``root / path``.
+inline std::filesystem::path resolve_path_under_root(
+    const std::filesystem::path& root, const std::filesystem::path& path) {
   if (path.empty()) {
     return path;
   }
@@ -23,10 +24,11 @@ inline std::filesystem::path resolve_path_under_root(const std::filesystem::path
   return root / path;
 }
 
-/// Prefer ``stem.ort`` when present, else ``stem.onnx`` (``basename`` may end with ``.ort`` or ``.onnx``).
-/// If neither exists, returns ``dir / basename`` (caller may use this in error messages).
-inline std::filesystem::path resolve_prefer_ort_model(const std::filesystem::path& dir,
-                                                      std::string_view basename) {
+/// Prefer ``stem.ort`` when present, else ``stem.onnx`` (``basename`` may end
+/// with ``.ort`` or ``.onnx``). If neither exists, returns ``dir / basename``
+/// (caller may use this in error messages).
+inline std::filesystem::path resolve_prefer_ort_model(
+    const std::filesystem::path& dir, std::string_view basename) {
   namespace fs = std::filesystem;
   const std::string b(basename);
   std::string stem;
@@ -48,8 +50,9 @@ inline std::filesystem::path resolve_prefer_ort_model(const std::filesystem::pat
   return dir / b;
 }
 
-/// For a path whose basename ends with ``.ort`` or ``.onnx``, set ``path`` to the existing sibling
-/// preferring ``stem.ort`` over ``stem.onnx`` when both are present.
+/// For a path whose basename ends with ``.ort`` or ``.onnx``, set ``path`` to
+/// the existing sibling preferring ``stem.ort`` over ``stem.onnx`` when both
+/// are present.
 inline void resolve_disk_model_file_path(std::filesystem::path& path) {
   namespace fs = std::filesystem;
   if (path.empty()) {

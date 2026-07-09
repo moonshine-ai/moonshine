@@ -1,10 +1,5 @@
 #include "chinese.h"
 
-#include "g2p-path.h"
-#include "g2p-word-log.h"
-#include "chinese-numbers.h"
-#include "utf8-utils.h"
-
 #include <cctype>
 #include <cstdint>
 #include <fstream>
@@ -17,16 +12,23 @@
 #include <unordered_set>
 #include <utility>
 
+#include "chinese-numbers.h"
+#include "g2p-path.h"
+#include "g2p-word-log.h"
+#include "utf8-utils.h"
+
 namespace moonshine_tts {
 namespace {
 
 std::string trim_copy_line(std::string_view s) {
   size_t a = 0;
   size_t b = s.size();
-  while (a < b && (std::isspace(static_cast<unsigned char>(s[a])) != 0 || s[a] == '\r')) {
+  while (a < b && (std::isspace(static_cast<unsigned char>(s[a])) != 0 ||
+                   s[a] == '\r')) {
     ++a;
   }
-  while (b > a && (std::isspace(static_cast<unsigned char>(s[b - 1])) != 0 || s[b - 1] == '\r')) {
+  while (b > a && (std::isspace(static_cast<unsigned char>(s[b - 1])) != 0 ||
+                   s[b - 1] == '\r')) {
     --b;
   }
   return std::string(s.substr(a, b - a));
@@ -41,7 +43,9 @@ bool is_cjk_cp(char32_t cp) {
 
 bool is_ascii_digit_cp(char32_t cp) { return cp >= U'0' && cp <= U'9'; }
 
-bool is_fullwidth_digit_cp(char32_t cp) { return cp >= U'\uFF10' && cp <= U'\uFF19'; }
+bool is_fullwidth_digit_cp(char32_t cp) {
+  return cp >= U'\uFF10' && cp <= U'\uFF19';
+}
 
 bool token_has_g2p_content(const std::string& tok) {
   for (size_t i = 0; i < tok.size();) {
@@ -66,27 +70,31 @@ bool pos_in_set(std::string_view p, const std::unordered_set<std::string>& s) {
 }
 
 const std::unordered_set<std::string>& skip_phonetic_pos() {
-  static const std::unordered_set<std::string> k{"PU", "SP", "URL", "EM", "NOI", "PUNCT", "SYM", "X"};
+  static const std::unordered_set<std::string> k{"PU",  "SP",    "URL", "EM",
+                                                 "NOI", "PUNCT", "SYM", "X"};
   return k;
 }
 
 const std::unordered_set<std::string>& verb_like_pos() {
   static const std::unordered_set<std::string> k{
-      "VV",  "VA",  "VE",  "VC",  "LB",  "BA",  "SB",  "MSP", "AS",  "DER", "DEV", "DEC",
-      "VERB", "AUX", "ADV"};
+      "VV", "VA",  "VE",  "VC",  "LB",   "BA",  "SB", "MSP",
+      "AS", "DER", "DEV", "DEC", "VERB", "AUX", "ADV"};
   return k;
 }
 
 const std::unordered_set<std::string>& noun_like_pos() {
-  static const std::unordered_set<std::string> k{"NN",  "NR",  "NT",  "LC",  "OD",  "M",   "CD",
-                                                 "DT",  "PN",  "NOUN", "PROPN", "ADJ", "DET",
-                                                 "PRON", "NUM"};
+  static const std::unordered_set<std::string> k{
+      "NN", "NR",   "NT",    "LC",  "OD",  "M",    "CD", "DT",
+      "PN", "NOUN", "PROPN", "ADJ", "DET", "PRON", "NUM"};
   return k;
 }
 
-bool ipa_contains(const std::string& ipa, std::string_view sub) { return ipa.find(sub) != std::string::npos; }
+bool ipa_contains(const std::string& ipa, std::string_view sub) {
+  return ipa.find(sub) != std::string::npos;
+}
 
-bool try_consume_g2p_token(const std::string& text, size_t pos, size_t& out_end) {
+bool try_consume_g2p_token(const std::string& text, size_t pos,
+                           size_t& out_end) {
   char32_t cp = 0;
   size_t adv = 0;
   if (!utf8_decode_at(text, pos, cp, adv)) {
@@ -117,7 +125,9 @@ bool try_consume_g2p_token(const std::string& text, size_t pos, size_t& out_end)
     utf8_decode_at(text, p, cp, adv);
   }
 
-  const auto is_d = [](char32_t c) { return is_ascii_digit_cp(c) || is_fullwidth_digit_cp(c); };
+  const auto is_d = [](char32_t c) {
+    return is_ascii_digit_cp(c) || is_fullwidth_digit_cp(c);
+  };
 
   if (is_d(cp)) {
     bool seen_dot = false;
@@ -178,7 +188,9 @@ bool try_consume_g2p_token(const std::string& text, size_t pos, size_t& out_end)
   return false;
 }
 
-void load_chinese_lexicon_stream(std::istream& in, std::unordered_map<std::string, std::vector<std::string>>& lex) {
+void load_chinese_lexicon_stream(
+    std::istream& in,
+    std::unordered_map<std::string, std::vector<std::string>>& lex) {
   std::string line;
   while (std::getline(in, line)) {
     const std::string t = trim_copy_line(line);
@@ -202,15 +214,18 @@ void load_chinese_lexicon_stream(std::istream& in, std::unordered_map<std::strin
 
 ChineseRuleG2p::ChineseRuleG2p(std::filesystem::path dict_tsv) {
   if (!std::filesystem::is_regular_file(dict_tsv)) {
-    throw std::runtime_error("Chinese G2P: lexicon not found: " + dict_tsv.generic_string());
+    throw std::runtime_error("Chinese G2P: lexicon not found: " +
+                             dict_tsv.generic_string());
   }
   std::ifstream in(dict_tsv);
   if (!in) {
-    throw std::runtime_error("Chinese G2P: failed to open " + dict_tsv.generic_string());
+    throw std::runtime_error("Chinese G2P: failed to open " +
+                             dict_tsv.generic_string());
   }
   load_chinese_lexicon_stream(in, lex_);
   if (lex_.empty()) {
-    throw std::runtime_error("Chinese G2P: empty lexicon: " + dict_tsv.generic_string());
+    throw std::runtime_error("Chinese G2P: empty lexicon: " +
+                             dict_tsv.generic_string());
   }
 }
 
@@ -222,9 +237,9 @@ ChineseRuleG2p::ChineseRuleG2p(std::string dict_tsv_utf8) {
   }
 }
 
-std::string ChineseRuleG2p::disambiguate_heteronym(std::string_view word,
-                                                     std::string_view pos,
-                                                     const std::vector<std::string>& readings) const {
+std::string ChineseRuleG2p::disambiguate_heteronym(
+    std::string_view word, std::string_view pos,
+    const std::vector<std::string>& readings) const {
   if (readings.empty()) {
     return "";
   }
@@ -255,7 +270,8 @@ std::string ChineseRuleG2p::disambiguate_heteronym(std::string_view word,
   }
   if (w == "\xe4\xba\x86") {  // 了
     for (const std::string& r : readings) {
-      if (ipa_contains(r, "l\xc9\xa4") && !ipa_contains(r, "lj\xc9\x91\xca\x8a")) {  // lɤ, ljɑʊ
+      if (ipa_contains(r, "l\xc9\xa4") &&
+          !ipa_contains(r, "lj\xc9\x91\xca\x8a")) {  // lɤ, ljɑʊ
         if (p == "AS" || p == "SP" || p == "ETC" || p == "PART") {
           return r;
         }
@@ -292,14 +308,15 @@ std::string ChineseRuleG2p::disambiguate_heteronym(std::string_view word,
   }
   if (w == "\xe7\x9d\x80") {  // 着
     for (const std::string& r : readings) {
-        if (ipa_contains(r, "\xca\x88\xca\x82\xc9\x91\xca\x8a")) {  // ʈʂɑʊ
+      if (ipa_contains(r, "\xca\x88\xca\x82\xc9\x91\xca\x8a")) {  // ʈʂɑʊ
         if (pos_in_set(p, verb_like_pos())) {
           return r;
         }
       }
     }
     for (const std::string& r : readings) {
-      if (ipa_contains(r, "\xca\x88\xca\x82\xc9\xa4") || ipa_contains(r, "\xca\x88\xca\x82u\xc9\x94")) {
+      if (ipa_contains(r, "\xca\x88\xca\x82\xc9\xa4") ||
+          ipa_contains(r, "\xca\x88\xca\x82u\xc9\x94")) {
         if (p == "AS" || p == "MSP" || p == "ETC" || p == "PART") {
           return r;
         }
@@ -351,7 +368,8 @@ std::string ChineseRuleG2p::disambiguate_heteronym(std::string_view word,
     }
     if (pos_in_set(p, noun_like_pos())) {
       for (const std::string& r : readings) {
-        if (ipa_contains(r, "\xca\x88\xca\x82\xc9\x91\xc5\x8b") && !ipa_contains(r, "\xca\x82\xca\xb0")) {
+        if (ipa_contains(r, "\xca\x88\xca\x82\xc9\x91\xc5\x8b") &&
+            !ipa_contains(r, "\xca\x82\xca\xb0")) {
           return r;
         }
       }
@@ -367,7 +385,8 @@ std::string ChineseRuleG2p::disambiguate_heteronym(std::string_view word,
       }
     }
     for (const std::string& r : readings) {
-      if (r.rfind("\xca\x82u\xcb\xa5\xcb\xa9", 0) == 0 && !ipa_contains(r, "\xca\x82u\xc9\x94") &&
+      if (r.rfind("\xca\x82u\xcb\xa5\xcb\xa9", 0) == 0 &&
+          !ipa_contains(r, "\xca\x82u\xc9\x94") &&
           !ipa_contains(r, "ts\xca\xb0")) {
         if (pos_in_set(p, noun_like_pos())) {
           return r;
@@ -419,7 +438,8 @@ std::string ChineseRuleG2p::char_fallback_ipa(std::string_view word) const {
   return han_reading_to_ipa(word);
 }
 
-std::string ChineseRuleG2p::g2p_word_impl(std::string_view word, std::string_view pos) const {
+std::string ChineseRuleG2p::g2p_word_impl(std::string_view word,
+                                          std::string_view pos) const {
   const std::string w = trim_copy_line(word);
   if (w.empty()) {
     return "";
@@ -469,11 +489,13 @@ std::string ChineseRuleG2p::word_to_ipa(std::string_view word) const {
   return g2p_word_impl(word, "");
 }
 
-std::string ChineseRuleG2p::word_to_ipa_with_pos(std::string_view word, std::string_view pos) const {
+std::string ChineseRuleG2p::word_to_ipa_with_pos(std::string_view word,
+                                                 std::string_view pos) const {
   return g2p_word_impl(word, pos);
 }
 
-std::string ChineseRuleG2p::text_to_ipa(std::string text, std::vector<G2pWordLog>* per_word_log) {
+std::string ChineseRuleG2p::text_to_ipa(std::string text,
+                                        std::vector<G2pWordLog>* per_word_log) {
   std::string out;
   size_t pos = 0;
   const size_t n = text.size();
@@ -527,7 +549,8 @@ bool dialect_resolves_to_chinese_rules(std::string_view dialect_id) {
   if (s.empty()) {
     return false;
   }
-  return s == "zh" || s == "zh-hans" || s == "zh-cn" || s == "zt" || s == "cmn" || s == "chinese";
+  return s == "zh" || s == "zh-hans" || s == "zh-cn" || s == "zt" ||
+         s == "cmn" || s == "chinese";
 }
 
 std::vector<std::string> ChineseRuleG2p::dialect_ids() {
@@ -535,11 +558,13 @@ std::vector<std::string> ChineseRuleG2p::dialect_ids() {
       {"zh", "zh-Hans", "zh_CN", "zh-CN", "zh_hans", "zt", "cmn", "Chinese"});
 }
 
-std::filesystem::path resolve_chinese_dict_path(const std::filesystem::path& model_root) {
+std::filesystem::path resolve_chinese_dict_path(
+    const std::filesystem::path& model_root) {
   return model_root / "zh_hans" / "dict.tsv";
 }
 
-std::filesystem::path resolve_chinese_onnx_model_dir(const std::filesystem::path& model_root) {
+std::filesystem::path resolve_chinese_onnx_model_dir(
+    const std::filesystem::path& model_root) {
   return model_root / "zh_hans" / "roberta_chinese_base_upos_onnx";
 }
 

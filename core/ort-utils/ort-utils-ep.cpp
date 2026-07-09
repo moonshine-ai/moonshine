@@ -1,6 +1,5 @@
-#include "ort-utils.h"
-
 #include "cpu_provider_factory.h"
+#include "ort-utils.h"
 
 #if defined(__ANDROID__)
 #include "nnapi_provider_factory.h"
@@ -80,8 +79,7 @@ OrtStatus *append_one_provider(const OrtApi *ort_api,
         session_options, provider_name, nullptr, nullptr, 0);
 #else
     return make_invalid_argument_status(
-        ort_api,
-        "CoreML execution provider is not available on this platform");
+        ort_api, "CoreML execution provider is not available on this platform");
 #endif
   }
 
@@ -90,8 +88,7 @@ OrtStatus *append_one_provider(const OrtApi *ort_api,
     return OrtSessionOptionsAppendExecutionProvider_Nnapi(session_options, 0);
 #else
     return make_invalid_argument_status(
-        ort_api,
-        "NNAPI execution provider is not available on this platform");
+        ort_api, "NNAPI execution provider is not available on this platform");
 #endif
   }
 
@@ -111,9 +108,8 @@ std::vector<std::string> ort_parse_provider_names(const std::string &csv) {
   size_t start = 0;
   while (start <= csv.size()) {
     const size_t comma = csv.find(',', start);
-    const std::string token =
-        trim_copy(csv.substr(start, comma == std::string::npos ? std::string::npos
-                                                             : comma - start));
+    const std::string token = trim_copy(csv.substr(
+        start, comma == std::string::npos ? std::string::npos : comma - start));
     if (token.empty()) {
       throw std::invalid_argument(
           "ort_providers contains an empty provider name");

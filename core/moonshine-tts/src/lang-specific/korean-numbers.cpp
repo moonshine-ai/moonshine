@@ -1,5 +1,4 @@
 #include "korean-numbers.h"
-#include "utf8-utils.h"
 
 #include <cctype>
 #include <cstring>
@@ -9,22 +8,23 @@
 #include <string_view>
 #include <vector>
 
+#include "utf8-utils.h"
+
 namespace moonshine_tts {
 namespace {
 
 constexpr std::uint64_t kMaxCardinal = 10000000000000000ULL;  // 10^16
 
-constexpr const char* kSino[] = {"영", "일", "이", "삼", "사", "오", "육", "칠", "팔", "구"};
+constexpr const char* kSino[] = {"영", "일", "이", "삼", "사",
+                                 "오", "육", "칠", "팔", "구"};
 
-bool is_ascii_digit(char c) {
-  return c >= '0' && c <= '9';
-}
+bool is_ascii_digit(char c) { return c >= '0' && c <= '9'; }
 
 bool thousands_lookahead_ok(std::string_view suf) {
   size_t pos = 0;
   const size_t n = suf.size();
-  while (pos + 3 <= n && is_ascii_digit(suf[pos]) && is_ascii_digit(suf[pos + 1]) &&
-         is_ascii_digit(suf[pos + 2])) {
+  while (pos + 3 <= n && is_ascii_digit(suf[pos]) &&
+         is_ascii_digit(suf[pos + 1]) && is_ascii_digit(suf[pos + 2])) {
     pos += 3;
     if (pos == n) {
       return true;
@@ -131,7 +131,9 @@ bool parse_uint_strict(std::string_view sv, std::uint64_t& out) {
       return false;
     }
     const int d = c - '0';
-    if (v > (std::numeric_limits<std::uint64_t>::max() - static_cast<unsigned>(d)) / 10ULL) {
+    if (v >
+        (std::numeric_limits<std::uint64_t>::max() - static_cast<unsigned>(d)) /
+            10ULL) {
       return false;
     }
     v = v * 10ULL + static_cast<std::uint64_t>(d);
@@ -183,8 +185,8 @@ std::string int_to_sino_korean_hangul(std::uint64_t n) {
   return parts;
 }
 
-std::optional<std::vector<std::string>> korean_reading_fragments_from_ascii_numeral_token(
-    std::string_view token) {
+std::optional<std::vector<std::string>>
+korean_reading_fragments_from_ascii_numeral_token(std::string_view token) {
   const std::string raw = normalize_numeral_token_string(token);
   if (raw.empty()) {
     return std::nullopt;
@@ -215,8 +217,10 @@ std::optional<std::vector<std::string>> korean_reading_fragments_from_ascii_nume
   std::vector<std::string> frags;
 
   if (dot_or_comma != std::string::npos) {
-    const std::string_view whole = std::string_view(raw).substr(i, dot_or_comma - i);
-    const std::string_view frac = std::string_view(raw).substr(dot_or_comma + 1);
+    const std::string_view whole =
+        std::string_view(raw).substr(i, dot_or_comma - i);
+    const std::string_view frac =
+        std::string_view(raw).substr(dot_or_comma + 1);
     if (whole.empty() && frac.empty()) {
       return std::nullopt;
     }
@@ -234,7 +238,8 @@ std::optional<std::vector<std::string>> korean_reading_fragments_from_ascii_nume
         return std::nullopt;
       }
     }
-    std::string body = int_to_sino_korean_hangul(wv) + "점" + hangul_digits_only(frac);
+    std::string body =
+        int_to_sino_korean_hangul(wv) + "점" + hangul_digits_only(frac);
     if (neg) {
       frags.push_back("마이너스");
       frags.push_back(std::move(body));

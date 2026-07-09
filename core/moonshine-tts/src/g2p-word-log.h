@@ -6,19 +6,22 @@
 
 namespace moonshine_tts {
 
-// How a surface word was converted to IPA in ``MoonshineG2P`` / ``EnglishRuleG2p`` pipelines.
+// How a surface word was converted to IPA in ``MoonshineG2P`` /
+// ``EnglishRuleG2p`` pipelines.
 enum class G2pWordPath {
-  kSkippedEmptyKey,  // normalize_word_for_lookup produced nothing
+  kSkippedEmptyKey,        // normalize_word_for_lookup produced nothing
   kTokenNotLocatedInText,  // could not align token in full text (skipped)
   kRuleBasedG2p,  // language-specific rule engine (e.g. Spanish grapheme rules)
   kDictUnambiguous,  // exactly one CMUdict pronunciation
-  kDictHeteronym,  // reserved (English heteronym ONNX removed)
-  kDictFirstAlternativeNoHeteronymModel,  // multiple pronunciations; no model — first alt
-  kOovModel,  // OOV ONNX produced phoneme tokens
-  kOovModelNoOutput,  // OOV ran but produced no non-empty IPA
+  kDictHeteronym,    // reserved (English heteronym ONNX removed)
+  kDictFirstAlternativeNoHeteronymModel,  // multiple pronunciations; no model —
+                                          // first alt
+  kOovModel,           // OOV ONNX produced phoneme tokens
+  kOovModelNoOutput,   // OOV ran but produced no non-empty IPA
   kUnknownNoOovModel,  // not in dict and no OOV model loaded
-  kEnglishNumber,  // ``english_number_token_ipa``
-  kOovHandRules,  // English grapheme OOV rules (after empty ONNX output or no ONNX)
+  kEnglishNumber,      // ``english_number_token_ipa``
+  kOovHandRules,  // English grapheme OOV rules (after empty ONNX output or no
+                  // ONNX)
 };
 
 const char* g2p_word_path_tag(G2pWordPath path);

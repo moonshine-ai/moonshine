@@ -1,7 +1,8 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+#include "heteronym-context.h"
+
 #include <doctest/doctest.h>
 
-#include "heteronym-context.h"
 #include "utf8-utils.h"
 
 using namespace moonshine_tts;

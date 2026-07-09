@@ -5,15 +5,14 @@
 #include <stdint.h>
 
 #include <mutex>
+#include <string>
+#include <vector>
 
 #include "bin-tokenizer.h"
 #include "moonshine-c-api.h"
 #include "moonshine-ort-allocator.h"
 #include "onnxruntime_c_api.h"
 #include "word-alignment.h"
-
-#include <string>
-#include <vector>
 
 struct MoonshineModel {
   const OrtApi *ort_api;
@@ -58,7 +57,8 @@ struct MoonshineModel {
   int last_encoder_frames = 0;
   std::vector<int64_t> last_tokens;
 
-  // Single-pass attention collection (when decoder has cross_attentions outputs)
+  // Single-pass attention collection (when decoder has cross_attentions
+  // outputs)
   std::vector<float> last_cross_attention_buffer;
   int last_cross_attn_heads = 0;
   int last_cross_attn_enc_len = 0;

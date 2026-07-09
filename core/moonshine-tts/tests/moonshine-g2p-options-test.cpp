@@ -1,41 +1,49 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
-#include <doctest/doctest.h>
-
 #include "moonshine-g2p-options.h"
+
+#include <doctest/doctest.h>
 
 #include <filesystem>
 #include <string>
 #include <utility>
 #include <vector>
 
-using moonshine_tts::MoonshineG2POptions;
 using moonshine_tts::kG2pEnglishDictKey;
 using moonshine_tts::kG2pFrenchCsvDirKey;
 using moonshine_tts::kG2pFrenchDictKey;
 using moonshine_tts::kG2pGermanDictKey;
 using moonshine_tts::kG2pOovOnnxOverrideKey;
 using moonshine_tts::kG2pPortugueseDictOverrideKey;
+using moonshine_tts::MoonshineG2POptions;
 
 TEST_CASE("MoonshineG2POptions default constructor seeds canonical file keys") {
   MoonshineG2POptions o;
   CHECK(o.files.contains(std::string(kG2pGermanDictKey)));
-  CHECK(o.relative_asset_path(kG2pGermanDictKey) == std::filesystem::path{kG2pGermanDictKey});
-  CHECK(o.relative_asset_path(kG2pFrenchDictKey) == std::filesystem::path{kG2pFrenchDictKey});
-  CHECK(o.relative_asset_path(kG2pFrenchCsvDirKey) == std::filesystem::path{kG2pFrenchCsvDirKey});
-  CHECK(o.relative_asset_path(kG2pEnglishDictKey) == std::filesystem::path{kG2pEnglishDictKey});
-  CHECK_FALSE(o.optional_override_path(kG2pPortugueseDictOverrideKey).has_value());
+  CHECK(o.relative_asset_path(kG2pGermanDictKey) ==
+        std::filesystem::path{kG2pGermanDictKey});
+  CHECK(o.relative_asset_path(kG2pFrenchDictKey) ==
+        std::filesystem::path{kG2pFrenchDictKey});
+  CHECK(o.relative_asset_path(kG2pFrenchCsvDirKey) ==
+        std::filesystem::path{kG2pFrenchCsvDirKey});
+  CHECK(o.relative_asset_path(kG2pEnglishDictKey) ==
+        std::filesystem::path{kG2pEnglishDictKey});
+  CHECK_FALSE(
+      o.optional_override_path(kG2pPortugueseDictOverrideKey).has_value());
   CHECK_FALSE(o.optional_override_path(kG2pOovOnnxOverrideKey).has_value());
 }
 
-TEST_CASE("MoonshineG2POptions relative_asset_path falls back when key absent") {
+TEST_CASE(
+    "MoonshineG2POptions relative_asset_path falls back when key absent") {
   MoonshineG2POptions o;
   o.files.erase_key(std::string(kG2pGermanDictKey));
-  CHECK(o.relative_asset_path(kG2pGermanDictKey) == std::filesystem::path{kG2pGermanDictKey});
+  CHECK(o.relative_asset_path(kG2pGermanDictKey) ==
+        std::filesystem::path{kG2pGermanDictKey});
 }
 
 TEST_CASE("MoonshineG2POptions parse_options rejects unknown keys") {
   MoonshineG2POptions o;
-  CHECK_THROWS_AS(o.parse_options({{"not_a_valid_g2p_option", "1"}}), std::runtime_error);
+  CHECK_THROWS_AS(o.parse_options({{"not_a_valid_g2p_option", "1"}}),
+                  std::runtime_error);
 }
 
 TEST_CASE("MoonshineG2POptions parse_options accepts every known option") {
@@ -104,19 +112,23 @@ TEST_CASE("MoonshineG2POptions parse_options accepts every known option") {
   CHECK(o.ort_provider_names[1] == "cpu");
   CHECK(o.coreml_cache_dir == "/tmp/coreml-cache");
   CHECK(o.german_vocoder_stress == false);
-  CHECK(o.relative_asset_path(kG2pGermanDictKey) == std::filesystem::path{"custom/de.tsv"});
-  CHECK(o.relative_asset_path(kG2pFrenchCsvDirKey) == std::filesystem::path{"custom/frdir"});
+  CHECK(o.relative_asset_path(kG2pGermanDictKey) ==
+        std::filesystem::path{"custom/de.tsv"});
+  CHECK(o.relative_asset_path(kG2pFrenchCsvDirKey) ==
+        std::filesystem::path{"custom/frdir"});
   CHECK(*o.optional_override_path(kG2pPortugueseDictOverrideKey) ==
         std::filesystem::path{"custom/pt.tsv"});
   CHECK(*o.optional_override_path(kG2pOovOnnxOverrideKey) ==
         std::filesystem::path{"custom/oov.onnx"});
 }
 
-TEST_CASE("MoonshineG2POptions parse_options empty path clears canonical entry") {
+TEST_CASE(
+    "MoonshineG2POptions parse_options empty path clears canonical entry") {
   MoonshineG2POptions o;
   o.parse_options({{"german_dict_path", " "}});
   CHECK_FALSE(o.files.contains(std::string(kG2pGermanDictKey)));
-  CHECK(o.relative_asset_path(kG2pGermanDictKey) == std::filesystem::path{kG2pGermanDictKey});
+  CHECK(o.relative_asset_path(kG2pGermanDictKey) ==
+        std::filesystem::path{kG2pGermanDictKey});
 }
 
 TEST_CASE("MoonshineG2POptions option names are case-insensitive") {

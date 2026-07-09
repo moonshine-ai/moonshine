@@ -1,10 +1,11 @@
 #include "json-config.h"
 
-#include "constants.h"
+#include <nlohmann/json.h>
 
 #include <fstream>
-#include <nlohmann/json.h>
 #include <stdexcept>
+
+#include "constants.h"
 
 namespace moonshine_tts {
 
@@ -24,14 +25,18 @@ void validate_header(const nlohmann::json& cfg, const std::string& expect_kind,
                      std::string_view source_label) {
   if (!cfg.contains("config_schema_version") ||
       cfg["config_schema_version"].get<int>() != kConfigOnnxSchemaVersion) {
-    throw std::runtime_error("unsupported config_schema_version in " + std::string(source_label));
+    throw std::runtime_error("unsupported config_schema_version in " +
+                             std::string(source_label));
   }
-  if (!cfg.contains("model_kind") || cfg["model_kind"].get<std::string>() != expect_kind) {
-    throw std::runtime_error("model_kind mismatch in " + std::string(source_label));
+  if (!cfg.contains("model_kind") ||
+      cfg["model_kind"].get<std::string>() != expect_kind) {
+    throw std::runtime_error("model_kind mismatch in " +
+                             std::string(source_label));
   }
 }
 
-std::unordered_map<std::string, int64_t> json_object_to_string_int_map(const nlohmann::json& o) {
+std::unordered_map<std::string, int64_t> json_object_to_string_int_map(
+    const nlohmann::json& o) {
   std::unordered_map<std::string, int64_t> m;
   for (auto it = o.begin(); it != o.end(); ++it) {
     m[it.key()] = it.value().get<int64_t>();
@@ -39,7 +44,8 @@ std::unordered_map<std::string, int64_t> json_object_to_string_int_map(const nlo
   return m;
 }
 
-std::vector<std::string> stoi_to_itos(const std::unordered_map<std::string, int64_t>& stoi) {
+std::vector<std::string> stoi_to_itos(
+    const std::unordered_map<std::string, int64_t>& stoi) {
   int64_t mx = -1;
   for (const auto& [_, v] : stoi) {
     mx = std::max(mx, v);
@@ -55,7 +61,8 @@ std::vector<std::string> stoi_to_itos(const std::unordered_map<std::string, int6
 
 }  // namespace
 
-OovOnnxTables load_oov_tables_from_json(const nlohmann::json& cfg, std::string_view source_label) {
+OovOnnxTables load_oov_tables_from_json(const nlohmann::json& cfg,
+                                        std::string_view source_label) {
   validate_header(cfg, "oov", source_label);
   const nlohmann::json& char_j = cfg["char_vocab"];
   const nlohmann::json& phon_j = cfg["phoneme_vocab"];
@@ -80,9 +87,11 @@ OovOnnxTables load_oov_tables_from_json(const nlohmann::json& cfg, std::string_v
 
 OovOnnxTables load_oov_tables(const std::filesystem::path& model_onnx_path) {
   const std::filesystem::path parent = model_onnx_path.parent_path();
-  const std::filesystem::path merged = parent / std::string(kConfigOnnxFileName);
+  const std::filesystem::path merged =
+      parent / std::string(kConfigOnnxFileName);
   if (!std::filesystem::exists(merged)) {
-    throw std::runtime_error("onnx-config.json not found at " + merged.generic_string());
+    throw std::runtime_error("onnx-config.json not found at " +
+                             merged.generic_string());
   }
   const nlohmann::json cfg = read_json_file(merged);
   return load_oov_tables_from_json(cfg, merged.generic_string());

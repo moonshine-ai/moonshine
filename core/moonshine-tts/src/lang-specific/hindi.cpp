@@ -1,18 +1,19 @@
 #include "hindi.h"
-#include "hindi-numbers.h"
-#include "g2p-word-log.h"
-#include "utf8-utils.h"
 
 #include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <istream>
-#include <sstream>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
+
+#include "g2p-word-log.h"
+#include "hindi-numbers.h"
+#include "utf8-utils.h"
 
 extern "C" {
 #include <utf8proc.h>
@@ -52,44 +53,46 @@ struct Syllable {
 
 const std::unordered_map<char32_t, std::string>& indep_vowel_map() {
   static const std::unordered_map<char32_t, std::string> m{
-      {0x0905, "ə"},  {0x0906, "aː"}, {0x0907, "ɪ"},  {0x0908, "iː"}, {0x0909, "ʊ"},
-      {0x090A, "uː"}, {0x090F, "eː"}, {0x0910, "ɛː"}, {0x0913, "oː"}, {0x0914, "ɔː"},
+      {0x0905, "ə"},  {0x0906, "aː"}, {0x0907, "ɪ"},  {0x0908, "iː"},
+      {0x0909, "ʊ"},  {0x090A, "uː"}, {0x090F, "eː"}, {0x0910, "ɛː"},
+      {0x0913, "oː"}, {0x0914, "ɔː"},
   };
   return m;
 }
 
 const std::unordered_map<char32_t, std::string>& matra_map() {
   static const std::unordered_map<char32_t, std::string> m{
-      {0x093E, "aː"}, {0x093F, "ɪ"},  {0x0940, "iː"}, {0x0941, "ʊ"},  {0x0942, "uː"},
-      {0x0947, "eː"}, {0x0948, "ɛː"}, {0x094B, "oː"}, {0x094C, "ɔː"},
+      {0x093E, "aː"}, {0x093F, "ɪ"},  {0x0940, "iː"},
+      {0x0941, "ʊ"},  {0x0942, "uː"}, {0x0947, "eː"},
+      {0x0948, "ɛː"}, {0x094B, "oː"}, {0x094C, "ɔː"},
   };
   return m;
 }
 
 const std::unordered_map<char32_t, std::string>& base_cons_map() {
   static const std::unordered_map<char32_t, std::string> m{
-      {0x0915, "k"},   {0x0916, "kʰ"},  {0x0917, "g"},   {0x0918, "gʰ"}, {0x0919, "ŋ"},
-      {0x091A, "tʃ"},  {0x091B, "tʃʰ"}, {0x091C, "dʒ"},  {0x091D, "dʒʰ"}, {0x091E, "ɲ"},
-      {0x091F, "ʈ"},   {0x0920, "ʈʰ"},  {0x0921, "ɖ"},   {0x0922, "ɖʰ"}, {0x0923, "ɳ"},
-      {0x0924, "t"},   {0x0925, "tʰ"},  {0x0926, "d"},   {0x0927, "dʰ"}, {0x0928, "n"},
-      {0x092A, "p"},   {0x092B, "pʰ"},  {0x092C, "b"},   {0x092D, "bʰ"}, {0x092E, "m"},
-      {0x092F, "j"},   {0x0930, "r"},   {0x0932, "l"},   {0x0933, "ɭ"},  {0x0935, "ʋ"},
-      {0x0936, "ʃ"},   {0x0937, "ʂ"},   {0x0938, "s"},   {0x0939, "ɦ"},
+      {0x0915, "k"},   {0x0916, "kʰ"}, {0x0917, "g"},   {0x0918, "gʰ"},
+      {0x0919, "ŋ"},   {0x091A, "tʃ"}, {0x091B, "tʃʰ"}, {0x091C, "dʒ"},
+      {0x091D, "dʒʰ"}, {0x091E, "ɲ"},  {0x091F, "ʈ"},   {0x0920, "ʈʰ"},
+      {0x0921, "ɖ"},   {0x0922, "ɖʰ"}, {0x0923, "ɳ"},   {0x0924, "t"},
+      {0x0925, "tʰ"},  {0x0926, "d"},  {0x0927, "dʰ"},  {0x0928, "n"},
+      {0x092A, "p"},   {0x092B, "pʰ"}, {0x092C, "b"},   {0x092D, "bʰ"},
+      {0x092E, "m"},   {0x092F, "j"},  {0x0930, "r"},   {0x0932, "l"},
+      {0x0933, "ɭ"},   {0x0935, "ʋ"},  {0x0936, "ʃ"},   {0x0937, "ʂ"},
+      {0x0938, "s"},   {0x0939, "ɦ"},
   };
   return m;
 }
 
 const std::unordered_map<char32_t, std::string>& nukta_override_map() {
   static const std::unordered_map<char32_t, std::string> m{
-      {0x0915, "q"}, {0x0916, "x"}, {0x0917, "ɣ"}, {0x091C, "z"},
+      {0x0915, "q"}, {0x0916, "x"},  {0x0917, "ɣ"}, {0x091C, "z"},
       {0x0921, "ɽ"}, {0x0922, "ɽʰ"}, {0x092B, "f"},
   };
   return m;
 }
 
-bool is_devanagari_digit(char32_t cp) {
-  return cp >= 0x0966 && cp <= 0x096F;
-}
+bool is_devanagari_digit(char32_t cp) { return cp >= 0x0966 && cp <= 0x096F; }
 
 bool is_consonant(char32_t cp) {
   return base_cons_map().find(cp) != base_cons_map().end();
@@ -116,19 +119,25 @@ std::string nasal_for_place(std::string_view first_onset) {
   }
   // UTF-8 bytes for IPA (must match ``base_cons_map`` literals in this TU).
   // Palatal / postalveolar (before plain ``t`` / ``d`` prefix checks).
-  if (sv_starts_with(first_onset, "t\xCA\x83") || sv_starts_with(first_onset, "t\xCA\x83\xCA\xB0") ||
-      sv_starts_with(first_onset, "d\xCA\x92") || sv_starts_with(first_onset, "d\xCA\x92\xCA\xB0")) {
+  if (sv_starts_with(first_onset, "t\xCA\x83") ||
+      sv_starts_with(first_onset, "t\xCA\x83\xCA\xB0") ||
+      sv_starts_with(first_onset, "d\xCA\x92") ||
+      sv_starts_with(first_onset, "d\xCA\x92\xCA\xB0")) {
     return "\xC9\xB2";  // ɲ (matches Python: ʃ alone → final ``n``)
   }
   if (first_onset == "\xC9\xB2") {
     return "\xC9\xB2";
   }
-  if (sv_starts_with(first_onset, "k") || sv_starts_with(first_onset, "g") || first_onset == "q") {
+  if (sv_starts_with(first_onset, "k") || sv_starts_with(first_onset, "g") ||
+      first_onset == "q") {
     return "\xC5\x8B";
   }
-  if (sv_starts_with(first_onset, "\xCA\x88") || sv_starts_with(first_onset, "\xCA\x88\xCA\xB0") ||
-      sv_starts_with(first_onset, "\xC9\x96") || sv_starts_with(first_onset, "\xC9\x96\xCA\xB0") ||
-      sv_starts_with(first_onset, "\xC9\xB3") || sv_starts_with(first_onset, "\xC9\xBD") ||
+  if (sv_starts_with(first_onset, "\xCA\x88") ||
+      sv_starts_with(first_onset, "\xCA\x88\xCA\xB0") ||
+      sv_starts_with(first_onset, "\xC9\x96") ||
+      sv_starts_with(first_onset, "\xC9\x96\xCA\xB0") ||
+      sv_starts_with(first_onset, "\xC9\xB3") ||
+      sv_starts_with(first_onset, "\xC9\xBD") ||
       sv_starts_with(first_onset, "\xC9\xBD\xCA\xB0")) {
     return "\xC9\xB3";  // ɳ
   }
@@ -148,7 +157,8 @@ int syllable_weight(const Syllable& s) {
     return 0;
   }
   const std::string& v = *s.vowel;
-  if (v == "aː" || v == "iː" || v == "uː" || v == "eː" || v == "oː" || v == "ɛː" || v == "ɔː") {
+  if (v == "aː" || v == "iː" || v == "uː" || v == "eː" || v == "oː" ||
+      v == "ɛː" || v == "ɔː") {
     return 2;
   }
   return 1;
@@ -200,20 +210,22 @@ void apply_schwa_syncope(std::vector<Syllable>& syls) {
   for (size_t i = 0; i + 1 < syls.size(); ++i) {
     Syllable& a = syls[i];
     const Syllable& b = syls[i + 1];
-    if (!a.vowel.has_value() || *a.vowel != "ə" || !a.inherent_schwa || b.onset.empty()) {
+    if (!a.vowel.has_value() || *a.vowel != "ə" || !a.inherent_schwa ||
+        b.onset.empty()) {
       continue;
     }
     const std::string& bo = b.onset[0];
     const std::string_view bov = bo;
-    if (sv_starts_with(bov, "dʒ") || sv_starts_with(bov, "tʃ") || sv_starts_with(bov, "ʃ") ||
-        bo == "ɲ") {
+    if (sv_starts_with(bov, "dʒ") || sv_starts_with(bov, "tʃ") ||
+        sv_starts_with(bov, "ʃ") || bo == "ɲ") {
       a.vowel = "";
       a.inherent_schwa = false;
     }
   }
 }
 
-std::optional<std::vector<Syllable>> parse_devanagari_to_syllables(const std::string& word) {
+std::optional<std::vector<Syllable>> parse_devanagari_to_syllables(
+    const std::string& word) {
   const std::string s = utf8_nfc_utf8proc(word);
   const std::u32string cps = utf8_str_to_u32(s);
   const size_t n = cps.size();
@@ -343,7 +355,8 @@ std::optional<std::vector<Syllable>> parse_devanagari_to_syllables(const std::st
   return out;
 }
 
-std::string render_syllables(const std::vector<Syllable>& syls, bool with_stress) {
+std::string render_syllables(const std::vector<Syllable>& syls,
+                             bool with_stress) {
   if (syls.empty()) {
     return "";
   }
@@ -411,10 +424,11 @@ std::string render_syllables(const std::vector<Syllable>& syls, bool with_stress
 void strip_edges_punct(std::string_view w, std::string& core) {
   const std::u32string u = utf8_str_to_u32(std::string(w));
   auto punct_cp = [](char32_t cp) {
-    const auto c =
-        static_cast<utf8proc_category_t>(utf8proc_category(static_cast<utf8proc_int32_t>(cp)));
-    return c == UTF8PROC_CATEGORY_PO || c == UTF8PROC_CATEGORY_PD || c == UTF8PROC_CATEGORY_PE ||
-           c == UTF8PROC_CATEGORY_PI || c == UTF8PROC_CATEGORY_PS || c == UTF8PROC_CATEGORY_PF ||
+    const auto c = static_cast<utf8proc_category_t>(
+        utf8proc_category(static_cast<utf8proc_int32_t>(cp)));
+    return c == UTF8PROC_CATEGORY_PO || c == UTF8PROC_CATEGORY_PD ||
+           c == UTF8PROC_CATEGORY_PE || c == UTF8PROC_CATEGORY_PI ||
+           c == UTF8PROC_CATEGORY_PS || c == UTF8PROC_CATEGORY_PF ||
            c == UTF8PROC_CATEGORY_PC;
   };
   size_t a = 0;
@@ -462,7 +476,8 @@ std::filesystem::path builtin_hindi_dict_path() {
 HindiRuleG2p::HindiRuleG2p(std::filesystem::path dict_tsv)
     : HindiRuleG2p(std::move(dict_tsv), Options{}) {}
 
-void load_hindi_lexicon_stream(std::istream& in, std::unordered_map<std::string, std::string>& lexicon) {
+void load_hindi_lexicon_stream(
+    std::istream& in, std::unordered_map<std::string, std::string>& lexicon) {
   std::string line;
   while (std::getline(in, line)) {
     if (!line.empty() && (line.back() == '\r' || line.back() == '\n')) {
@@ -475,8 +490,10 @@ void load_hindi_lexicon_stream(std::istream& in, std::unordered_map<std::string,
     if (tab == std::string::npos) {
       continue;
     }
-    std::string surf = trim_ascii_ws_copy(std::string_view(line).substr(0, tab));
-    std::string ipa_val = trim_ascii_ws_copy(std::string_view(line).substr(tab + 1));
+    std::string surf =
+        trim_ascii_ws_copy(std::string_view(line).substr(0, tab));
+    std::string ipa_val =
+        trim_ascii_ws_copy(std::string_view(line).substr(tab + 1));
     if (surf.empty()) {
       continue;
     }
@@ -490,11 +507,13 @@ void load_hindi_lexicon_stream(std::istream& in, std::unordered_map<std::string,
 HindiRuleG2p::HindiRuleG2p(std::filesystem::path dict_tsv, Options options)
     : options_(std::move(options)) {
   if (!std::filesystem::is_regular_file(dict_tsv)) {
-    throw std::runtime_error("Hindi G2P: lexicon not found at " + dict_tsv.generic_string());
+    throw std::runtime_error("Hindi G2P: lexicon not found at " +
+                             dict_tsv.generic_string());
   }
   std::ifstream in(dict_tsv);
   if (!in) {
-    throw std::runtime_error("Hindi G2P: cannot open " + dict_tsv.generic_string());
+    throw std::runtime_error("Hindi G2P: cannot open " +
+                             dict_tsv.generic_string());
   }
   load_hindi_lexicon_stream(in, lexicon_);
 }
@@ -529,8 +548,8 @@ std::string HindiRuleG2p::g2p_single_word(std::string_view word) const {
   return render_syllables(syls, options_.with_stress);
 }
 
-std::string HindiRuleG2p::text_to_ipa_no_expand(std::string text,
-                                                 std::vector<G2pWordLog>* per_word_log) const {
+std::string HindiRuleG2p::text_to_ipa_no_expand(
+    std::string text, std::vector<G2pWordLog>* per_word_log) const {
   (void)per_word_log;
   const std::string raw = utf8_nfc_utf8proc(trim_ascii_ws_copy(text));
   if (raw.empty()) {
@@ -549,7 +568,8 @@ std::string HindiRuleG2p::text_to_ipa_no_expand(std::string text,
       std::string core;
       strip_edges_punct(w, core);
       if (all_ascii_digits_sv(core)) {
-        const std::string expanded = expand_cardinal_digits_to_hindi_words(core);
+        const std::string expanded =
+            expand_cardinal_digits_to_hindi_words(core);
         std::istringstream iss2(expanded);
         std::string frag;
         while (iss2 >> frag) {
@@ -571,7 +591,8 @@ std::string HindiRuleG2p::text_to_ipa_no_expand(std::string text,
   return out;
 }
 
-std::string HindiRuleG2p::text_to_ipa(std::string text, std::vector<G2pWordLog>* per_word_log) {
+std::string HindiRuleG2p::text_to_ipa(std::string text,
+                                      std::vector<G2pWordLog>* per_word_log) {
   if (options_.expand_cardinal_digits) {
     text = expand_hindi_digit_tokens_in_text(std::move(text));
     text = expand_devanagari_digit_runs_in_text(std::move(text));
@@ -591,13 +612,15 @@ bool dialect_resolves_to_hindi_rules(std::string_view dialect_id) {
   return s == "hi" || s == "hi-in" || s == "hindi";
 }
 
-std::filesystem::path resolve_hindi_dict_path(const std::filesystem::path& model_root) {
+std::filesystem::path resolve_hindi_dict_path(
+    const std::filesystem::path& model_root) {
   return model_root / "hi" / "dict.tsv";
 }
 
 std::string hindi_text_to_ipa(const std::string& text, bool with_stress,
-                                std::vector<G2pWordLog>* per_word_log, bool expand_cardinal_digits,
-                                const std::filesystem::path& dict_tsv) {
+                              std::vector<G2pWordLog>* per_word_log,
+                              bool expand_cardinal_digits,
+                              const std::filesystem::path& dict_tsv) {
   HindiRuleG2p::Options o;
   o.with_stress = with_stress;
   o.expand_cardinal_digits = expand_cardinal_digits;

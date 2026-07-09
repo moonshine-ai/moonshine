@@ -1,18 +1,21 @@
-// Stand-alone German rule + lexicon G2P (no ONNX). Mirrors ``german_rule_g2p.py`` CLI subset.
-#include "german.h"
-
+// Stand-alone German rule + lexicon G2P (no ONNX). Mirrors
+// ``german_rule_g2p.py`` CLI subset.
 #include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "german.h"
+
 namespace {
 
 void usage(const char* argv0) {
   std::cerr << "Usage: " << argv0
-            << " [--dict PATH] [--no-stress] [--syllable-initial-stress] [--stdin] [TEXT...]\n"
-            << "  Default dict: models/de/dict.tsv (relative to current directory).\n";
+            << " [--dict PATH] [--no-stress] [--syllable-initial-stress] "
+               "[--stdin] [TEXT...]\n"
+            << "  Default dict: models/de/dict.tsv (relative to current "
+               "directory).\n";
 }
 
 std::string read_all_stdin() {
@@ -24,7 +27,8 @@ std::string read_all_stdin() {
 }  // namespace
 
 int main(int argc, char** argv) {
-  std::filesystem::path dict_path = std::filesystem::path("models") / "de" / "dict.tsv";
+  std::filesystem::path dict_path =
+      std::filesystem::path("models") / "de" / "dict.tsv";
   moonshine_tts::GermanRuleG2p::Options opt;
   bool force_stdin = false;
   std::vector<std::string> parts;

@@ -224,9 +224,8 @@ struct TranscriptLine {
       words.reserve(line_c.word_count);
       for (uint64_t i = 0; i < line_c.word_count; i++) {
         const auto &w = line_c.words[i];
-        words.emplace_back(
-            w.text ? std::string(w.text) : std::string(),
-            w.start, w.end, w.confidence);
+        words.emplace_back(w.text ? std::string(w.text) : std::string(),
+                           w.start, w.end, w.confidence);
       }
     }
   }
@@ -537,8 +536,8 @@ class Transcriber {
   /// entries to the C API.
   /// @throws MoonshineException if the transcriber cannot be loaded
   Transcriber(
-      const std::string &modelPath, ModelArch modelArch,
-      double updateInterval, const std::string &spellingModelPath,
+      const std::string &modelPath, ModelArch modelArch, double updateInterval,
+      const std::string &spellingModelPath,
       const std::vector<std::pair<std::string, std::string>> &options = {});
 
   /// Initialize a transcriber from in-memory model buffers. Buffers
@@ -661,7 +660,8 @@ class Transcriber {
   friend class Stream;
 };
 
-/* --------------------------- TTS DATA STRUCTURES --------------------------- */
+/* --------------------------- TTS DATA STRUCTURES ---------------------------
+ */
 
 /// Result of a text-to-speech synthesis operation
 struct TtsSynthesisResult {
@@ -675,7 +675,8 @@ struct TtsSynthesisResult {
       : samples(std::move(samples)), sampleRateHz(sampleRateHz) {}
 };
 
-/* ----------------------------- TEXT TO SPEECH ------------------------------- */
+/* ----------------------------- TEXT TO SPEECH -------------------------------
+ */
 
 /// Text-to-speech synthesizer
 ///
@@ -763,7 +764,8 @@ class TextToSpeech {
   void checkError(int32_t error) const;
 };
 
-/* ------------------------- GRAPHEME TO PHONEMIZER -------------------------- */
+/* ------------------------- GRAPHEME TO PHONEMIZER --------------------------
+ */
 
 /// Grapheme-to-phoneme converter
 ///
@@ -857,7 +859,7 @@ class IntentRecognizer {
   /// Load an embedding model from disk.
   /// @throws MoonshineException if the model cannot be loaded
   IntentRecognizer(const std::string &model_path, EmbeddingModelArch arch,
-                     const std::string &model_variant = "q4");
+                   const std::string &model_variant = "q4");
 
   ~IntentRecognizer();
 
@@ -869,19 +871,20 @@ class IntentRecognizer {
 
   /// Register a canonical phrase to match against.
   /// @param canonical_phrase The phrase to register.
-  /// @param embedding Optional pre-computed embedding (nullptr to auto-compute).
+  /// @param embedding Optional pre-computed embedding (nullptr to
+  /// auto-compute).
   /// @param embedding_size Number of floats in the embedding array.
   /// @param priority Higher priority intents rank above lower ones.
   /// @throws MoonshineException on failure
   void registerIntent(const std::string &canonical_phrase,
-                      float *embedding = nullptr,
-                      uint64_t embedding_size = 0,
+                      float *embedding = nullptr, uint64_t embedding_size = 0,
                       int32_t priority = 0);
 
   /// Remove a phrase. Returns false if it was not registered.
   bool unregisterIntent(const std::string &canonical_phrase);
 
-  /// Rank registered intents by similarity (see ``moonshine_get_closest_intents``).
+  /// Rank registered intents by similarity (see
+  /// ``moonshine_get_closest_intents``).
   std::vector<IntentMatch> getClosestIntents(const std::string &utterance,
                                              float tolerance_threshold);
 
@@ -1217,8 +1220,7 @@ inline Transcriber::Transcriber(
       modelPath_(modelPath),
       modelArch_(modelArch),
       updateInterval_(updateInterval) {
-  detail::OptionsBuffer buf =
-      detail::buildOptions(spellingModelPath, options);
+  detail::OptionsBuffer buf = detail::buildOptions(spellingModelPath, options);
   handle_ = moonshine_load_transcriber_from_files(
       modelPath.c_str(), static_cast<uint32_t>(modelArch),
       buf.options.empty() ? nullptr : buf.options.data(),
@@ -1229,15 +1231,15 @@ inline Transcriber::Transcriber(
 inline Transcriber Transcriber::loadFromMemory(
     const uint8_t *encoderData, size_t encoderDataSize,
     const uint8_t *decoderData, size_t decoderDataSize,
-    const uint8_t *tokenizerData, size_t tokenizerDataSize,
-    ModelArch modelArch, double updateInterval,
-    const uint8_t *spellingModelData, size_t spellingModelDataSize,
+    const uint8_t *tokenizerData, size_t tokenizerDataSize, ModelArch modelArch,
+    double updateInterval, const uint8_t *spellingModelData,
+    size_t spellingModelDataSize,
     const std::vector<std::pair<std::string, std::string>> &options) {
   detail::OptionsBuffer buf = detail::buildOptions("", options);
   int32_t handle = moonshine_load_transcriber_from_memory(
-      encoderData, encoderDataSize, decoderData, decoderDataSize,
-      tokenizerData, tokenizerDataSize, spellingModelData,
-      spellingModelDataSize, static_cast<uint32_t>(modelArch),
+      encoderData, encoderDataSize, decoderData, decoderDataSize, tokenizerData,
+      tokenizerDataSize, spellingModelData, spellingModelDataSize,
+      static_cast<uint32_t>(modelArch),
       buf.options.empty() ? nullptr : buf.options.data(),
       static_cast<uint64_t>(buf.options.size()), MOONSHINE_HEADER_VERSION);
   if (handle < 0) {
@@ -1385,8 +1387,7 @@ inline void Stream::checkError(int32_t error) const {
 
 // TextToSpeech implementation
 inline TextToSpeech::TextToSpeech(
-    const std::string &language,
-    const std::vector<moonshine_option_t> &options)
+    const std::string &language, const std::vector<moonshine_option_t> &options)
     : handle_(-1), language_(language) {
   handle_ = moonshine_create_tts_synthesizer_from_files(
       language.c_str(), nullptr, 0, options.empty() ? nullptr : options.data(),
@@ -1412,8 +1413,7 @@ inline TextToSpeech &TextToSpeech::operator=(TextToSpeech &&other) {
 }
 
 inline TtsSynthesisResult TextToSpeech::synthesize(
-    const std::string &text,
-    const std::vector<moonshine_option_t> &options) {
+    const std::string &text, const std::vector<moonshine_option_t> &options) {
   if (handle_ < 0) {
     throw MoonshineException("TextToSpeech is not initialized");
   }
@@ -1489,8 +1489,7 @@ inline void TextToSpeech::checkError(int32_t error) const {
 
 // GraphemeToPhonemizer implementation
 inline GraphemeToPhonemizer::GraphemeToPhonemizer(
-    const std::string &language,
-    const std::vector<moonshine_option_t> &options)
+    const std::string &language, const std::vector<moonshine_option_t> &options)
     : handle_(-1), language_(language) {
   handle_ = moonshine_create_grapheme_to_phonemizer_from_files(
       language.c_str(), nullptr, 0, options.empty() ? nullptr : options.data(),
@@ -1500,8 +1499,7 @@ inline GraphemeToPhonemizer::GraphemeToPhonemizer(
 
 inline GraphemeToPhonemizer::~GraphemeToPhonemizer() { close(); }
 
-inline GraphemeToPhonemizer::GraphemeToPhonemizer(
-    GraphemeToPhonemizer &&other)
+inline GraphemeToPhonemizer::GraphemeToPhonemizer(GraphemeToPhonemizer &&other)
     : handle_(other.handle_), language_(std::move(other.language_)) {
   other.handle_ = -1;
 }
@@ -1518,8 +1516,7 @@ inline GraphemeToPhonemizer &GraphemeToPhonemizer::operator=(
 }
 
 inline std::string GraphemeToPhonemizer::toIpa(
-    const std::string &text,
-    const std::vector<moonshine_option_t> &options) {
+    const std::string &text, const std::vector<moonshine_option_t> &options) {
   if (handle_ < 0) {
     throw MoonshineException("GraphemeToPhonemizer is not initialized");
   }
@@ -1570,8 +1567,8 @@ inline void GraphemeToPhonemizer::checkError(int32_t error) const {
 }
 
 inline IntentRecognizer::IntentRecognizer(const std::string &model_path,
-                                           EmbeddingModelArch arch,
-                                           const std::string &model_variant)
+                                          EmbeddingModelArch arch,
+                                          const std::string &model_variant)
     : handle_(-1) {
   handle_ = moonshine_create_intent_recognizer(
       model_path.c_str(), static_cast<uint32_t>(arch), model_variant.c_str());
@@ -1604,8 +1601,7 @@ inline void IntentRecognizer::registerIntent(
 
 inline bool IntentRecognizer::unregisterIntent(
     const std::string &canonical_phrase) {
-  int32_t err =
-      moonshine_unregister_intent(handle_, canonical_phrase.c_str());
+  int32_t err = moonshine_unregister_intent(handle_, canonical_phrase.c_str());
   if (err == MOONSHINE_ERROR_NONE) {
     return true;
   }

@@ -1,8 +1,4 @@
 #include "arabic.h"
-#include "arabic-ipa.h"
-#include "g2p-path.h"
-#include "moonshine-g2p-options.h"
-#include "utf8-utils.h"
 
 #include <algorithm>
 #include <cctype>
@@ -11,14 +7,21 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "arabic-ipa.h"
+#include "g2p-path.h"
+#include "moonshine-g2p-options.h"
+#include "utf8-utils.h"
+
 namespace moonshine_tts {
 
 namespace {
 
-std::filesystem::path absolute_model_root_ar(const std::filesystem::path& model_root) {
+std::filesystem::path absolute_model_root_ar(
+    const std::filesystem::path& model_root) {
   if (model_root.is_relative()) {
     std::error_code ec;
-    std::filesystem::path p = std::filesystem::weakly_canonical(std::filesystem::absolute(model_root), ec);
+    std::filesystem::path p = std::filesystem::weakly_canonical(
+        std::filesystem::absolute(model_root), ec);
     if (!ec) {
       return p;
     }
@@ -45,7 +48,8 @@ bool has_arabic_script(std::string_view s) {
   return false;
 }
 
-std::unordered_map<std::string, std::string> load_lex_first_tsv_stream(std::istream& in) {
+std::unordered_map<std::string, std::string> load_lex_first_tsv_stream(
+    std::istream& in) {
   std::unordered_map<std::string, std::string> lex;
   std::string line;
   while (std::getline(in, line)) {
@@ -77,7 +81,8 @@ std::unordered_map<std::string, std::string> load_lex_first_tsv_stream(std::istr
   return lex;
 }
 
-std::unordered_map<std::string, std::string> load_lex_first_tsv(const std::filesystem::path& p) {
+std::unordered_map<std::string, std::string> load_lex_first_tsv(
+    const std::filesystem::path& p) {
   std::ifstream in(p);
   if (!in) {
     return {};
@@ -92,26 +97,33 @@ std::string strip_lex_ipa_segment_dots(std::string ipa) {
 
 }  // namespace
 
-ArabicRuleG2p::ArabicRuleG2p(std::filesystem::path onnx_model_dir, std::filesystem::path dict_tsv,
-                             bool use_cuda)
-    : diac_(std::make_unique<ArabicDiacOnnx>(std::move(onnx_model_dir), use_cuda)),
+ArabicRuleG2p::ArabicRuleG2p(std::filesystem::path onnx_model_dir,
+                             std::filesystem::path dict_tsv, bool use_cuda)
+    : diac_(std::make_unique<ArabicDiacOnnx>(std::move(onnx_model_dir),
+                                             use_cuda)),
       lex_(load_lex_first_tsv(std::move(dict_tsv))) {}
 
-ArabicRuleG2p::ArabicRuleG2p(std::filesystem::path onnx_model_dir, std::string dict_tsv_utf8,
-                             bool use_cuda)
-    : diac_(std::make_unique<ArabicDiacOnnx>(std::move(onnx_model_dir), use_cuda)), lex_() {
+ArabicRuleG2p::ArabicRuleG2p(std::filesystem::path onnx_model_dir,
+                             std::string dict_tsv_utf8, bool use_cuda)
+    : diac_(std::make_unique<ArabicDiacOnnx>(std::move(onnx_model_dir),
+                                             use_cuda)),
+      lex_() {
   std::istringstream in(std::move(dict_tsv_utf8));
   lex_ = load_lex_first_tsv_stream(in);
 }
 
-ArabicRuleG2p::ArabicRuleG2p(const MoonshineG2POptions& opt, std::filesystem::path onnx_model_dir,
+ArabicRuleG2p::ArabicRuleG2p(const MoonshineG2POptions& opt,
+                             std::filesystem::path onnx_model_dir,
                              std::filesystem::path dict_tsv, bool use_cuda)
-    : diac_(std::make_unique<ArabicDiacOnnx>(&opt, kG2pArabicOnnxDirKey, std::move(onnx_model_dir), use_cuda)),
+    : diac_(std::make_unique<ArabicDiacOnnx>(
+          &opt, kG2pArabicOnnxDirKey, std::move(onnx_model_dir), use_cuda)),
       lex_(load_lex_first_tsv(std::move(dict_tsv))) {}
 
-ArabicRuleG2p::ArabicRuleG2p(const MoonshineG2POptions& opt, std::filesystem::path onnx_model_dir,
+ArabicRuleG2p::ArabicRuleG2p(const MoonshineG2POptions& opt,
+                             std::filesystem::path onnx_model_dir,
                              std::string dict_tsv_utf8, bool use_cuda)
-    : diac_(std::make_unique<ArabicDiacOnnx>(&opt, kG2pArabicOnnxDirKey, std::move(onnx_model_dir), use_cuda)),
+    : diac_(std::make_unique<ArabicDiacOnnx>(
+          &opt, kG2pArabicOnnxDirKey, std::move(onnx_model_dir), use_cuda)),
       lex_() {
   std::istringstream in(std::move(dict_tsv_utf8));
   lex_ = load_lex_first_tsv_stream(in);
@@ -127,15 +139,18 @@ bool dialect_resolves_to_arabic_rules(std::string_view dialect_id) {
   if (s.empty()) {
     return false;
   }
-  return s == "ar" || s == "ar-msa" || s == "ar_msa" || s == "arabic" || s == "msa";
+  return s == "ar" || s == "ar-msa" || s == "ar_msa" || s == "arabic" ||
+         s == "msa";
 }
 
-std::filesystem::path resolve_arabic_dict_path(const std::filesystem::path& model_root) {
+std::filesystem::path resolve_arabic_dict_path(
+    const std::filesystem::path& model_root) {
   const std::filesystem::path base = absolute_model_root_ar(model_root);
   return base / "ar_msa" / "dict.tsv";
 }
 
-std::filesystem::path resolve_arabic_onnx_model_dir(const std::filesystem::path& model_root) {
+std::filesystem::path resolve_arabic_onnx_model_dir(
+    const std::filesystem::path& model_root) {
   const std::filesystem::path base = absolute_model_root_ar(model_root);
   return base / "ar_msa" / "arabertv02_tashkeel_fadel_onnx";
 }
@@ -151,11 +166,13 @@ std::string ArabicRuleG2p::g2p_word(std::string_view word_utf8) {
     return strip_lex_ipa_segment_dots(it->second);
   }
   const std::string diac = diac_->diacritize(w);
-  const std::string filled = arabic_msa_apply_onnx_partial_postprocess_utf8(diac);
+  const std::string filled =
+      arabic_msa_apply_onnx_partial_postprocess_utf8(diac);
   return arabic_msa_word_to_ipa_with_assimilation_utf8(filled, w);
 }
 
-std::string ArabicRuleG2p::text_to_ipa(std::string text, std::vector<G2pWordLog>* per_word_log) {
+std::string ArabicRuleG2p::text_to_ipa(std::string text,
+                                       std::vector<G2pWordLog>* per_word_log) {
   (void)per_word_log;
   std::string raw = trim_ascii_ws_copy(text);
   if (raw.empty()) {
@@ -164,14 +181,16 @@ std::string ArabicRuleG2p::text_to_ipa(std::string text, std::vector<G2pWordLog>
   std::vector<std::string> ipa_words;
   std::size_t i = 0;
   while (i < raw.size()) {
-    while (i < raw.size() && std::isspace(static_cast<unsigned char>(raw[i])) != 0) {
+    while (i < raw.size() &&
+           std::isspace(static_cast<unsigned char>(raw[i])) != 0) {
       ++i;
     }
     if (i >= raw.size()) {
       break;
     }
     std::size_t j = i;
-    while (j < raw.size() && std::isspace(static_cast<unsigned char>(raw[j])) == 0) {
+    while (j < raw.size() &&
+           std::isspace(static_cast<unsigned char>(raw[j])) == 0) {
       ++j;
     }
     const std::string tok = raw.substr(i, j - i);

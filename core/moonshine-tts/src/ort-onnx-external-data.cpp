@@ -7,9 +7,9 @@
 
 namespace moonshine_tts {
 
-void ort_add_external_initializer_files_for_onnx_model_buffer(Ort::SessionOptions& opts,
-                                                              const FileInformationMap& files,
-                                                              std::string_view model_map_key) {
+void ort_add_external_initializer_files_for_onnx_model_buffer(
+    Ort::SessionOptions& opts, const FileInformationMap& files,
+    std::string_view model_map_key) {
   std::string data_key;
   if (model_map_key.size() >= 4 &&
       model_map_key.compare(model_map_key.size() - 4, 4, ".ort") == 0) {
@@ -30,7 +30,8 @@ void ort_add_external_initializer_files_for_onnx_model_buffer(Ort::SessionOption
   if (fi.memory == nullptr || fi.memory_size == 0) {
     return;
   }
-  const std::string ort_basename = std::filesystem::path(data_key).filename().string();
+  const std::string ort_basename =
+      std::filesystem::path(data_key).filename().string();
   std::vector<std::basic_string<ORTCHAR_T>> names;
 #ifdef _WIN32
   names.emplace_back(ort_basename.begin(), ort_basename.end());

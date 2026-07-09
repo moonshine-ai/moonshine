@@ -1,9 +1,5 @@
 #include "dutch.h"
 
-#include "g2p-word-log.h"
-#include "ipa-symbols.h"
-#include "utf8-utils.h"
-
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -19,6 +15,10 @@
 #include <utility>
 #include <vector>
 
+#include "g2p-word-log.h"
+#include "ipa-symbols.h"
+#include "utf8-utils.h"
+
 namespace moonshine_tts {
 namespace {
 
@@ -30,73 +30,75 @@ using moonshine_tts::utf8_decode_at;
 
 char32_t dutch_unicode_tolower_cp(char32_t c) {
   switch (c) {
-  case U'À':
-    return U'à';
-  case U'Á':
-    return U'á';
-  case U'Â':
-    return U'â';
-  case U'Ã':
-    return U'ã';
-  case U'Ä':
-    return U'ä';
-  case U'Å':
-    return U'å';
-  case U'É':
-    return U'é';
-  case U'È':
-    return U'è';
-  case U'Ê':
-    return U'ê';
-  case U'Ë':
-    return U'ë';
-  case U'Í':
-    return U'í';
-  case U'Ì':
-    return U'ì';
-  case U'Î':
-    return U'î';
-  case U'Ï':
-    return U'ï';
-  case U'Ó':
-    return U'ó';
-  case U'Ò':
-    return U'ò';
-  case U'Ô':
-    return U'ô';
-  case U'Õ':
-    return U'õ';
-  case U'Ö':
-    return U'ö';
-  case U'Ú':
-    return U'ú';
-  case U'Ù':
-    return U'ù';
-  case U'Û':
-    return U'û';
-  case U'Ü':
-    return U'ü';
-  case U'Ý':
-    return U'ý';
-  case U'Ÿ':
-    return U'ÿ';
-  case U'Ç':
-    return U'ç';
-  case U'Ñ':
-    return U'ñ';
-  default:
-    break;
+    case U'À':
+      return U'à';
+    case U'Á':
+      return U'á';
+    case U'Â':
+      return U'â';
+    case U'Ã':
+      return U'ã';
+    case U'Ä':
+      return U'ä';
+    case U'Å':
+      return U'å';
+    case U'É':
+      return U'é';
+    case U'È':
+      return U'è';
+    case U'Ê':
+      return U'ê';
+    case U'Ë':
+      return U'ë';
+    case U'Í':
+      return U'í';
+    case U'Ì':
+      return U'ì';
+    case U'Î':
+      return U'î';
+    case U'Ï':
+      return U'ï';
+    case U'Ó':
+      return U'ó';
+    case U'Ò':
+      return U'ò';
+    case U'Ô':
+      return U'ô';
+    case U'Õ':
+      return U'õ';
+    case U'Ö':
+      return U'ö';
+    case U'Ú':
+      return U'ú';
+    case U'Ù':
+      return U'ù';
+    case U'Û':
+      return U'û';
+    case U'Ü':
+      return U'ü';
+    case U'Ý':
+      return U'ý';
+    case U'Ÿ':
+      return U'ÿ';
+    case U'Ç':
+      return U'ç';
+    case U'Ñ':
+      return U'ñ';
+    default:
+      break;
   }
   if (c >= U'A' && c <= U'Z') {
     return c + 32;
   }
-  if ((c >= U'\u00C0' && c <= U'\u00D6') || (c >= U'\u00D8' && c <= U'\u00DE')) {
+  if ((c >= U'\u00C0' && c <= U'\u00D6') ||
+      (c >= U'\u00D8' && c <= U'\u00DE')) {
     return c + 32;
   }
   return c;
 }
 
-/// Fold to ``a-z`` + hyphen for TSV keys (mirrors Python ``normalize_lexicon_key`` intent).
+/// Fold to ``a-z`` + hyphen for TSV keys (mirrors Python
+/// ``normalize_lexicon_key`` intent).
 void append_lexicon_folded(std::string& out, char32_t cl) {
   if (cl == U'-') {
     out.push_back('-');
@@ -107,51 +109,51 @@ void append_lexicon_folded(std::string& out, char32_t cl) {
     return;
   }
   switch (cl) {
-  case U'à':
-  case U'á':
-  case U'â':
-  case U'ã':
-  case U'ä':
-  case U'å':
-    out.push_back('a');
-    return;
-  case U'è':
-  case U'é':
-  case U'ê':
-  case U'ë':
-    out.push_back('e');
-    return;
-  case U'ì':
-  case U'í':
-  case U'î':
-  case U'ï':
-    out.push_back('i');
-    return;
-  case U'ò':
-  case U'ó':
-  case U'ô':
-  case U'õ':
-  case U'ö':
-    out.push_back('o');
-    return;
-  case U'ù':
-  case U'ú':
-  case U'û':
-  case U'ü':
-    out.push_back('u');
-    return;
-  case U'ý':
-  case U'ÿ':
-    out.push_back('y');
-    return;
-  case U'ç':
-    out.push_back('c');
-    return;
-  case U'ñ':
-    out.push_back('n');
-    return;
-  default:
-    return;
+    case U'à':
+    case U'á':
+    case U'â':
+    case U'ã':
+    case U'ä':
+    case U'å':
+      out.push_back('a');
+      return;
+    case U'è':
+    case U'é':
+    case U'ê':
+    case U'ë':
+      out.push_back('e');
+      return;
+    case U'ì':
+    case U'í':
+    case U'î':
+    case U'ï':
+      out.push_back('i');
+      return;
+    case U'ò':
+    case U'ó':
+    case U'ô':
+    case U'õ':
+    case U'ö':
+      out.push_back('o');
+      return;
+    case U'ù':
+    case U'ú':
+    case U'û':
+    case U'ü':
+      out.push_back('u');
+      return;
+    case U'ý':
+    case U'ÿ':
+      out.push_back('y');
+      return;
+    case U'ç':
+      out.push_back('c');
+      return;
+    case U'ñ':
+      out.push_back('n');
+      return;
+    default:
+      return;
   }
 }
 
@@ -180,8 +182,9 @@ bool is_grapheme_char(char32_t cl) {
   if (cl >= U'a' && cl <= U'z') {
     return true;
   }
-  return cl == U'á' || cl == U'é' || cl == U'í' || cl == U'ó' || cl == U'ú' || cl == U'à' ||
-         cl == U'è' || cl == U'ê' || cl == U'ë' || cl == U'ï' || cl == U'ö' || cl == U'ü';
+  return cl == U'á' || cl == U'é' || cl == U'í' || cl == U'ó' || cl == U'ú' ||
+         cl == U'à' || cl == U'è' || cl == U'ê' || cl == U'ë' || cl == U'ï' ||
+         cl == U'ö' || cl == U'ü';
 }
 
 std::u32string normalize_grapheme_key_u32(const std::string& word) {
@@ -203,12 +206,12 @@ std::u32string normalize_grapheme_key_u32(const std::string& word) {
   return out;
 }
 
-static const char* kDigitWord[] = {"nul",  "een",  "twee", "drie", "vier",
-                                   "vijf", "zes",  "zeven", "acht", "negen"};
+static const char* kDigitWord[] = {"nul",  "een", "twee",  "drie", "vier",
+                                   "vijf", "zes", "zeven", "acht", "negen"};
 
 static const char* kTeenWord(int n) {
-  static const char* w[] = {"dertien", "veertien", "vijftien", "zestien", "zeventien", "achttien",
-                            "negentien"};
+  static const char* w[] = {"dertien",   "veertien", "vijftien", "zestien",
+                            "zeventien", "achttien", "negentien"};
   if (n >= 13 && n <= 19) {
     return w[n - 13];
   }
@@ -219,15 +222,17 @@ std::string join_unit_tens(int u, std::string_view tens_word) {
   if (u == 0) {
     return std::string(tens_word);
   }
-  static const char* stem[] = {"een", "twee", "drie", "vier", "vijf", "zes", "zeven", "acht", "negen"};
+  static const char* stem[] = {"een", "twee",  "drie", "vier", "vijf",
+                               "zes", "zeven", "acht", "negen"};
   std::string r = stem[u - 1];
   r += "en";
   r += tens_word;
   return r;
 }
 
-static const char* kTens[] = {"", "", "twintig", "dertig", "veertig", "vijftig",
-                              "zestig", "zeventig", "tachtig", "negentig"};
+static const char* kTens[] = {"",        "",        "twintig", "dertig",
+                              "veertig", "vijftig", "zestig",  "zeventig",
+                              "tachtig", "negentig"};
 
 std::string below_100(int n) {
   if (n < 0 || n >= 100) {
@@ -257,7 +262,8 @@ std::string below_1000_spaced(int n) {
   }
   const int h = n / 100;
   const int r = n % 100;
-  std::string head = (h == 1) ? "honderd" : (std::string(kDigitWord[h]) + "honderd");
+  std::string head =
+      (h == 1) ? "honderd" : (std::string(kDigitWord[h]) + "honderd");
   if (r == 0) {
     return head;
   }
@@ -265,8 +271,9 @@ std::string below_1000_spaced(int n) {
 }
 
 // For 1100–1999: n/100 is 11..19 (``elfhonderd`` … ``negentienhonderd``).
-static const char* kTeenHundred[] = {"elf",     "twaalf",  "dertien", "veertien", "vijftien",
-                                     "zestien", "zeventien", "achttien", "negentien"};
+static const char* kTeenHundred[] = {"elf",       "twaalf",   "dertien",
+                                     "veertien",  "vijftien", "zestien",
+                                     "zeventien", "achttien", "negentien"};
 
 std::string from_1000_to_9999(int n) {
   if (n < 1000 || n > 9999) {
@@ -361,9 +368,7 @@ std::string expand_cardinal_digits_to_dutch_words(std::string_view sv) {
   return below_1_000_000_v2(static_cast<int>(n));
 }
 
-bool is_ascii_digit(char c) {
-  return c >= '0' && c <= '9';
-}
+bool is_ascii_digit(char c) { return c >= '0' && c <= '9'; }
 
 bool is_latin1_supplement_python_word_char(char32_t cp) {
   if (cp < U'\u00AA' || cp > U'\u00FF') {
@@ -381,23 +386,28 @@ bool is_latin1_supplement_python_word_char(char32_t cp) {
   if (cp >= U'\u00F8' && cp <= U'\u00FF') {
     return true;
   }
-  return cp == U'\u00AA' || cp == U'\u00B2' || cp == U'\u00B3' || cp == U'\u00B5' || cp == U'\u00B9' ||
-         cp == U'\u00BA' || cp == U'\u00BC' || cp == U'\u00BD' || cp == U'\u00BE';
+  return cp == U'\u00AA' || cp == U'\u00B2' || cp == U'\u00B3' ||
+         cp == U'\u00B5' || cp == U'\u00B9' || cp == U'\u00BA' ||
+         cp == U'\u00BC' || cp == U'\u00BD' || cp == U'\u00BE';
 }
 
 constexpr std::array<char32_t, 46> kLetterlikeWordChars = {
-    U'\u2102', U'\u2107', U'\u210A', U'\u210B', U'\u210C', U'\u210D', U'\u210E', U'\u210F', U'\u2110', U'\u2111',
-    U'\u2112', U'\u2113', U'\u2115', U'\u2119', U'\u211A', U'\u211B', U'\u211C', U'\u211D', U'\u2124', U'\u2126',
-    U'\u2128', U'\u212A', U'\u212B', U'\u212C', U'\u212D', U'\u212F', U'\u2130', U'\u2131', U'\u2132', U'\u2133',
-    U'\u2134', U'\u2135', U'\u2136', U'\u2137', U'\u2138', U'\u2139', U'\u213C', U'\u213D', U'\u213E', U'\u213F',
-    U'\u2145', U'\u2146', U'\u2147', U'\u2148', U'\u2149', U'\u214E'};
+    U'\u2102', U'\u2107', U'\u210A', U'\u210B', U'\u210C', U'\u210D', U'\u210E',
+    U'\u210F', U'\u2110', U'\u2111', U'\u2112', U'\u2113', U'\u2115', U'\u2119',
+    U'\u211A', U'\u211B', U'\u211C', U'\u211D', U'\u2124', U'\u2126', U'\u2128',
+    U'\u212A', U'\u212B', U'\u212C', U'\u212D', U'\u212F', U'\u2130', U'\u2131',
+    U'\u2132', U'\u2133', U'\u2134', U'\u2135', U'\u2136', U'\u2137', U'\u2138',
+    U'\u2139', U'\u213C', U'\u213D', U'\u213E', U'\u213F', U'\u2145', U'\u2146',
+    U'\u2147', U'\u2148', U'\u2149', U'\u214E'};
 
 bool is_letterlike_math_word_char(char32_t cp) {
-  return std::binary_search(kLetterlikeWordChars.begin(), kLetterlikeWordChars.end(), cp);
+  return std::binary_search(kLetterlikeWordChars.begin(),
+                            kLetterlikeWordChars.end(), cp);
 }
 
 bool is_dutch_word_char(char32_t cp) {
-  // Match Python 3 ``re.UNICODE`` ``\\w``: ASCII apostrophe is not a word char (so ``nazi's`` → nazi, ', s).
+  // Match Python 3 ``re.UNICODE`` ``\\w``: ASCII apostrophe is not a word char
+  // (so ``nazi's`` → nazi, ', s).
   if (cp == U'-') {
     return true;
   }
@@ -417,10 +427,11 @@ bool is_dutch_word_char(char32_t cp) {
   if (cl >= U'a' && cl <= U'z') {
     return true;
   }
-  return cl == U'à' || cl == U'â' || cl == U'ä' || cl == U'é' || cl == U'è' || cl == U'ê' || cl == U'ë' ||
-         cl == U'ï' || cl == U'î' || cl == U'ô' || cl == U'ù' || cl == U'û' || cl == U'ü' || cl == U'ÿ' ||
-         cl == U'ç' || cl == U'œ' || cl == U'æ' || cl == U'á' || cl == U'í' || cl == U'ó' || cl == U'ú' ||
-         cl == U'ñ' || cl == U'ý';
+  return cl == U'à' || cl == U'â' || cl == U'ä' || cl == U'é' || cl == U'è' ||
+         cl == U'ê' || cl == U'ë' || cl == U'ï' || cl == U'î' || cl == U'ô' ||
+         cl == U'ù' || cl == U'û' || cl == U'ü' || cl == U'ÿ' || cl == U'ç' ||
+         cl == U'œ' || cl == U'æ' || cl == U'á' || cl == U'í' || cl == U'ó' ||
+         cl == U'ú' || cl == U'ñ' || cl == U'ý';
 }
 
 size_t prev_utf8_index(const std::string& t, size_t byte_i) {
@@ -478,7 +489,8 @@ std::string expand_digit_tokens_in_text(std::string_view text_sv) {
     while (j < n && is_ascii_digit(static_cast<unsigned char>(text[j]))) {
       ++j;
     }
-    if (j < n && text[j] == '-' && j + 1 < n && is_ascii_digit(static_cast<unsigned char>(text[j + 1]))) {
+    if (j < n && text[j] == '-' && j + 1 < n &&
+        is_ascii_digit(static_cast<unsigned char>(text[j + 1]))) {
       size_t mid = j;
       size_t k = j + 1;
       while (k < n && is_ascii_digit(static_cast<unsigned char>(text[k]))) {
@@ -514,7 +526,8 @@ bool digit_pass_through_pattern(std::string_view raw) {
     if (!is_ascii_digit(static_cast<unsigned char>(raw[p]))) {
       return false;
     }
-    while (p < raw.size() && is_ascii_digit(static_cast<unsigned char>(raw[p]))) {
+    while (p < raw.size() &&
+           is_ascii_digit(static_cast<unsigned char>(raw[p]))) {
       ++p;
     }
     if (p >= raw.size()) {
@@ -540,9 +553,10 @@ bool all_ascii_digits_string(const std::string& s) {
   return true;
 }
 
-std::string apply_lexicon_ipa_postprocess(std::string ipa, std::string_view word_key) {
+std::string apply_lexicon_ipa_postprocess(std::string ipa,
+                                          std::string_view word_key) {
   static const std::string kArch{"\xC9\x91r.\xCA\x92i\xCB\x90"};  // ɑr.ʒiː
-  static const std::string kArchRep{"\xC9\x91r.xi"};               // ɑr.xi
+  static const std::string kArchRep{"\xC9\x91r.xi"};              // ɑr.xi
   for (;;) {
     const size_t p = ipa.find(kArch);
     if (p == std::string::npos) {
@@ -555,11 +569,13 @@ std::string apply_lexicon_ipa_postprocess(std::string ipa, std::string_view word
     if (ipa.size() >= 1 && ipa[0] == 'x') {
       ipa.replace(0, 1, kGh);
     } else if (ipa.size() >= kPrimaryStressUtf8.size() + 1 &&
-               ipa.compare(0, kPrimaryStressUtf8.size(), kPrimaryStressUtf8) == 0 &&
+               ipa.compare(0, kPrimaryStressUtf8.size(), kPrimaryStressUtf8) ==
+                   0 &&
                ipa[kPrimaryStressUtf8.size()] == 'x') {
       ipa.replace(kPrimaryStressUtf8.size(), 1, kGh);
     } else if (ipa.size() >= kSecondaryStressUtf8.size() + 1 &&
-               ipa.compare(0, kSecondaryStressUtf8.size(), kSecondaryStressUtf8) == 0 &&
+               ipa.compare(0, kSecondaryStressUtf8.size(),
+                           kSecondaryStressUtf8) == 0 &&
                ipa[kSecondaryStressUtf8.size()] == 'x') {
       ipa.replace(kSecondaryStressUtf8.size(), 1, kGh);
     }
@@ -570,7 +586,8 @@ std::string apply_lexicon_ipa_postprocess(std::string ipa, std::string_view word
 const std::unordered_map<std::string, std::string>& oov_supplement_ipa() {
   static const std::unordered_map<std::string, std::string> m = {
       {"architecten", "\xC9\x91r.xi\xCB\x88t\xC9\x9Bkt\xC9\x99n"},
-      {"rijksarchitect", "\xCB\x88r\xC9\x9Biks.\xC9\x91r.xi.\xCB\x88t\xC9\x9Bkt"},
+      {"rijksarchitect",
+       "\xCB\x88r\xC9\x9Biks.\xC9\x91r.xi.\xCB\x88t\xC9\x9Bkt"},
       {"naziheerschappij",
        "\xCB\x88"
        "na\xCB\x90"
@@ -593,24 +610,19 @@ const std::unordered_map<std::string, std::string>& oov_supplement_ipa() {
 
 const std::unordered_map<std::string, std::string>& function_word_ipa() {
   static const std::unordered_map<std::string, std::string> m = {
-      {"de", "d\xC9\x99"},
-      {"het", "\xC9\xA6\xC9\x99t"},
-      {"een", "\xC9\x99n"},
-      {"te", "t\xC9\x99"},
-      {"je", "j\xC9\x99"},
-      {"ze", "z\xC9\x99"},
-      {"we", "\xCA\x8B\xC9\x99"},
-      {"me", "m\xC9\x99"},
-      {"mijn", "m\xC9\x9Bin"},
-      {"zijn", "z\xC9\x9Bin"},
-      {"hij", "\xC9\xA6\xC9\x9Bi"},
-      {"wij", "\xCA\x8B\xC9\x9Bi"},
+      {"de", "d\xC9\x99"},          {"het", "\xC9\xA6\xC9\x99t"},
+      {"een", "\xC9\x99n"},         {"te", "t\xC9\x99"},
+      {"je", "j\xC9\x99"},          {"ze", "z\xC9\x99"},
+      {"we", "\xCA\x8B\xC9\x99"},   {"me", "m\xC9\x99"},
+      {"mijn", "m\xC9\x9Bin"},      {"zijn", "z\xC9\x9Bin"},
+      {"hij", "\xC9\xA6\xC9\x9Bi"}, {"wij", "\xCA\x8B\xC9\x9Bi"},
       {"jij", "j\xC9\x9Bi"},
   };
   return m;
 }
 
-void load_dutch_lexicon_stream(std::istream& in, std::unordered_map<std::string, std::string>& out_map) {
+void load_dutch_lexicon_stream(
+    std::istream& in, std::unordered_map<std::string, std::string>& out_map) {
   struct Slot {
     std::string ipa;
     bool from_lower = false;
@@ -625,8 +637,10 @@ void load_dutch_lexicon_stream(std::istream& in, std::unordered_map<std::string,
     if (tab == std::string::npos) {
       continue;
     }
-    std::string surf = trim_ascii_ws_copy(std::string_view(line).substr(0, tab));
-    std::string ipa = trim_ascii_ws_copy(std::string_view(line).substr(tab + 1));
+    std::string surf =
+        trim_ascii_ws_copy(std::string_view(line).substr(0, tab));
+    std::string ipa =
+        trim_ascii_ws_copy(std::string_view(line).substr(tab + 1));
     if (surf.empty()) {
       continue;
     }
@@ -661,44 +675,48 @@ void load_dutch_lexicon_stream(std::istream& in, std::unordered_map<std::string,
   }
 }
 
-void load_dutch_lexicon_file(const std::filesystem::path& path,
-                             std::unordered_map<std::string, std::string>& out_map) {
+void load_dutch_lexicon_file(
+    const std::filesystem::path& path,
+    std::unordered_map<std::string, std::string>& out_map) {
   std::ifstream in(path);
   if (!in) {
-    throw std::runtime_error("Dutch lexicon: cannot open " + path.generic_string());
+    throw std::runtime_error("Dutch lexicon: cannot open " +
+                             path.generic_string());
   }
   load_dutch_lexicon_stream(in, out_map);
 }
 
 bool is_vowel_letter32(char32_t c) {
-  if (c == U'a' || c == U'e' || c == U'i' || c == U'o' || c == U'u' || c == U'y') {
+  if (c == U'a' || c == U'e' || c == U'i' || c == U'o' || c == U'u' ||
+      c == U'y') {
     return true;
   }
-  return c == U'á' || c == U'é' || c == U'í' || c == U'ó' || c == U'ú' || c == U'à' || c == U'è' ||
-         c == U'ê' || c == U'ë' || c == U'ï' || c == U'ö' || c == U'ü';
+  return c == U'á' || c == U'é' || c == U'í' || c == U'ó' || c == U'ú' ||
+         c == U'à' || c == U'è' || c == U'ê' || c == U'ë' || c == U'ï' ||
+         c == U'ö' || c == U'ü';
 }
 
 char32_t strip_to_plain_vowel(char32_t c) {
   switch (c) {
-  case U'á':
-  case U'à':
-    return U'a';
-  case U'é':
-  case U'è':
-  case U'ê':
-  case U'ë':
-    return U'e';
-  case U'í':
-  case U'ï':
-    return U'i';
-  case U'ó':
-  case U'ö':
-    return U'o';
-  case U'ú':
-  case U'ü':
-    return U'u';
-  default:
-    return c;
+    case U'á':
+    case U'à':
+      return U'a';
+    case U'é':
+    case U'è':
+    case U'ê':
+    case U'ë':
+      return U'e';
+    case U'í':
+    case U'ï':
+      return U'i';
+    case U'ó':
+    case U'ö':
+      return U'o';
+    case U'ú':
+    case U'ü':
+      return U'u';
+    default:
+      return c;
   }
 }
 
@@ -711,8 +729,8 @@ bool word_has_written_stress_u32(const std::u32string& w) {
   return false;
 }
 
-std::optional<size_t> stressed_syllable_from_acute(const std::vector<std::u32string>& syllables,
-                                                   const std::u32string& w) {
+std::optional<size_t> stressed_syllable_from_acute(
+    const std::vector<std::u32string>& syllables, const std::u32string& w) {
   (void)w;
   for (size_t i = 0; i < syllables.size(); ++i) {
     for (char32_t c : syllables[i]) {
@@ -724,11 +742,13 @@ std::optional<size_t> stressed_syllable_from_acute(const std::vector<std::u32str
   return std::nullopt;
 }
 
-std::vector<std::pair<size_t, size_t>> dutch_vowel_nucleus_spans(const std::u32string& w) {
+std::vector<std::pair<size_t, size_t>> dutch_vowel_nucleus_spans(
+    const std::u32string& w) {
   static const std::pair<const char32_t*, int> kPat[] = {
-      {U"aai", 3}, {U"eeu", 3}, {U"oei", 3}, {U"ieu", 3}, {U"ij", 2}, {U"ei", 2},
-      {U"au", 2},  {U"ou", 2},  {U"ui", 2},  {U"eu", 2},  {U"aa", 2}, {U"ee", 2},
-      {U"oo", 2},  {U"uu", 2},  {U"oe", 2},  {U"ai", 2},  {U"ie", 2},
+      {U"aai", 3}, {U"eeu", 3}, {U"oei", 3}, {U"ieu", 3}, {U"ij", 2},
+      {U"ei", 2},  {U"au", 2},  {U"ou", 2},  {U"ui", 2},  {U"eu", 2},
+      {U"aa", 2},  {U"ee", 2},  {U"oo", 2},  {U"uu", 2},  {U"oe", 2},
+      {U"ai", 2},  {U"ie", 2},
   };
   std::vector<std::pair<size_t, size_t>> spans;
   size_t i = 0;
@@ -770,7 +790,8 @@ std::vector<std::pair<size_t, size_t>> dutch_vowel_nucleus_spans(const std::u32s
   return spans;
 }
 
-std::vector<std::u32string> dutch_orthographic_syllables_u32(const std::u32string& word) {
+std::vector<std::u32string> dutch_orthographic_syllables_u32(
+    const std::u32string& word) {
   std::u32string w = word;
   while (!w.empty() && w.front() == U'-') {
     w.erase(w.begin());
@@ -826,26 +847,29 @@ std::vector<std::u32string> dutch_orthographic_syllables_u32(const std::u32strin
       syllables.push_back(std::move(cur));
     }
   }
-  syllables.erase(std::remove_if(syllables.begin(), syllables.end(),
-                                 [](const std::u32string& sy) { return sy.empty(); }),
-                  syllables.end());
+  syllables.erase(
+      std::remove_if(syllables.begin(), syllables.end(),
+                     [](const std::u32string& sy) { return sy.empty(); }),
+      syllables.end());
   return syllables;
 }
 
 size_t unstressed_prefix_len_u32(const std::u32string& wl) {
   static const std::u32string prefs[] = {
-      U"tegen", U"tussen", U"door", U"voor", U"ver", U"her", U"ont", U"in", U"op", U"af",
-      U"uit",   U"aan",    U"be",   U"ge",   U"er",  U"te",
+      U"tegen", U"tussen", U"door", U"voor", U"ver", U"her", U"ont", U"in",
+      U"op",    U"af",     U"uit",  U"aan",  U"be",  U"ge",  U"er",  U"te",
   };
   for (const auto& p : prefs) {
-    if (wl.size() > p.size() && wl.compare(0, p.size(), p) == 0 && wl[p.size()] != U'-') {
+    if (wl.size() > p.size() && wl.compare(0, p.size(), p) == 0 &&
+        wl[p.size()] != U'-') {
       return p.size();
     }
   }
   return 0;
 }
 
-size_t default_stress_syllable_index(const std::vector<std::u32string>& syls, const std::u32string& w) {
+size_t default_stress_syllable_index(const std::vector<std::u32string>& syls,
+                                     const std::u32string& w) {
   if (syls.empty()) {
     return 0;
   }
@@ -868,13 +892,14 @@ size_t default_stress_syllable_index(const std::vector<std::u32string>& syls, co
     return wl32.size() > suf.size() + 1 && wl32.size() >= suf.size() &&
            wl32.compare(wl32.size() - suf.size(), suf.size(), suf) == 0;
   };
-  if (ends_with(U"atie") || ends_with(U"iteit") || ends_with(U"isme") || ends_with(U"eerd") ||
-      ends_with(U"eren")) {
+  if (ends_with(U"atie") || ends_with(U"iteit") || ends_with(U"isme") ||
+      ends_with(U"eerd") || ends_with(U"eren")) {
     return n - 1;
   }
   const size_t plen = unstressed_prefix_len_u32(wl32);
   if (plen > 0) {
-    if (!syls[0].empty() && syls[0][0] == U'g' && syls[0].size() > 2 && syls[0][1] == U'e') {
+    if (!syls[0].empty() && syls[0][0] == U'g' && syls[0].size() > 2 &&
+        syls[0][1] == U'e') {
       return 0;
     }
     size_t acc = 0;
@@ -891,29 +916,29 @@ size_t default_stress_syllable_index(const std::vector<std::u32string>& syls, co
 std::string insert_primary_stress_before_vowel_dutch(std::string s) {
   erase_utf8_substr(s, kPrimaryStressUtf8);
   static const char* const kPat[] = {
-      "\xC9\x9Bi",       // ɛi
-      "\xCA\x8Cu",       // ʌu
-      "\xCA\x8Cy",       // ʌy
-      "\xC3\xB8\xCB\x90",  // øː
+      "\xC9\x9Bi",          // ɛi
+      "\xCA\x8Cu",          // ʌu
+      "\xCA\x8Cy",          // ʌy
+      "\xC3\xB8\xCB\x90",   // øː
       "a\xC9\xAA\xCC\xAF",  // aɪ̯
-      "i\xCB\x90",       // iː
-      "e\xCB\x90",       // eː
-      "a\xCB\x90",       // aː
-      "o\xCB\x90",       // oː
-      "u\xCB\x90",       // uː
-      "y\xCB\x90",       // yː
-      "\xC9\xAA",        // ɪ
-      "\xCA\x8F",        // ʏ
+      "i\xCB\x90",          // iː
+      "e\xCB\x90",          // eː
+      "a\xCB\x90",          // aː
+      "o\xCB\x90",          // oː
+      "u\xCB\x90",          // uː
+      "y\xCB\x90",          // yː
+      "\xC9\xAA",           // ɪ
+      "\xCA\x8F",           // ʏ
       "y",
-      "\xC3\xB8",        // ø
+      "\xC3\xB8",  // ø
       "a",
-      "\xC9\x9B",        // ɛ
-      "\xC9\x99",        // ə
+      "\xC9\x9B",  // ɛ
+      "\xC9\x99",  // ə
       "i",
       "o",
-      "\xC9\x94",        // ɔ
+      "\xC9\x94",  // ɔ
       "u",
-      "\xC9\x91",        // ɑ
+      "\xC9\x91",  // ɑ
   };
   size_t pos = 0;
   while (pos < s.size()) {
@@ -933,9 +958,9 @@ std::string insert_primary_stress_before_vowel_dutch(std::string s) {
 
 bool ipa_starts_with_nucleus_dutch(std::string_view rest) {
   static const std::string_view kNuc[] = {
-      "\xC9\x9Bi",       // ɛi
-      "\xCA\x8Cu",       // ʌu
-      "\xCA\x8Cy",       // ʌy
+      "\xC9\x9Bi",  // ɛi
+      "\xCA\x8Cu",  // ʌu
+      "\xCA\x8Cy",  // ʌy
       "a\xC9\xAA\xCC\xAF",
       "i\xCB\x90",
       "e\xCB\x90",
@@ -994,7 +1019,8 @@ size_t ipa_skip_pre_nucleus_dutch(std::string_view s, size_t j) {
   if (ipa_starts_with_nucleus_dutch(s.substr(j))) {
     return j;
   }
-  static const std::string_view kCons[] = {"t\xCD\xA1\xCA\x83", "t\xCA\x83", "t\xCD\xA1s"};
+  static const std::string_view kCons[] = {"t\xCD\xA1\xCA\x83", "t\xCA\x83",
+                                           "t\xCD\xA1s"};
   for (std::string_view p : kCons) {
     if (s.size() - j >= p.size() && s.substr(j, p.size()) == p) {
       return j + p.size();
@@ -1026,36 +1052,38 @@ std::string final_devoice_obstruents(std::string ipa) {
   utf8_decode_at(ipa, pos, cp, adv);
   std::string rep;
   switch (cp) {
-  case U'b':
-    rep = "p";
-    break;
-  case U'd':
-    rep = "t";
-    break;
-  case U'\u0261':
-    rep = "k";
-    break;
-  case U'v':
-    rep = "f";
-    break;
-  case U'z':
-    rep = "s";
-    break;
-  case U'\u0263':
-    rep = "x";
-    break;
-  case U'\u0292':
-    rep = "\xCA\x83";
-    break;
-  default:
-    return ipa;
+    case U'b':
+      rep = "p";
+      break;
+    case U'd':
+      rep = "t";
+      break;
+    case U'\u0261':
+      rep = "k";
+      break;
+    case U'v':
+      rep = "f";
+      break;
+    case U'z':
+      rep = "s";
+      break;
+    case U'\u0263':
+      rep = "x";
+      break;
+    case U'\u0292':
+      rep = "\xCA\x83";
+      break;
+    default:
+      return ipa;
   }
   ipa.replace(pos, adv, rep);
   return ipa;
 }
 
-std::string letters_to_ipa_no_stress(const std::u32string& syl_in, const std::u32string& full_word_nh,
-                                     const std::u32string& hyphen_word, size_t span_start) {
+std::string letters_to_ipa_no_stress(const std::u32string& syl_in,
+                                     const std::u32string& full_word_nh,
+                                     const std::u32string& hyphen_word,
+                                     size_t span_start) {
   std::u32string s = syl_in;
   for (char32_t& c : s) {
     c = dutch_unicode_tolower_cp(c);
@@ -1132,7 +1160,8 @@ std::string letters_to_ipa_no_stress(const std::u32string& syl_in, const std::u3
       i += 3;
       continue;
     }
-    if (i + 2 <= n && ((s[i] == U'a' && s[i + 1] == U'u') || (s[i] == U'o' && s[i + 1] == U'u'))) {
+    if (i + 2 <= n && ((s[i] == U'a' && s[i + 1] == U'u') ||
+                       (s[i] == U'o' && s[i + 1] == U'u'))) {
       append("\xCA\x8Cu");
       i += 2;
       continue;
@@ -1180,7 +1209,8 @@ std::string letters_to_ipa_no_stress(const std::u32string& syl_in, const std::u3
     if (i + 2 <= n && s[i] == U'i' && s[i + 1] == U'e') {
       const bool past_ie = (i + 2 >= n);
       const char32_t nxt = past_ie ? U'\0' : s[i + 2];
-      // Python: ``nxt in "tsd"`` is True when *nxt* is ``""`` (empty substring quirk).
+      // Python: ``nxt in "tsd"`` is True when *nxt* is ``""`` (empty substring
+      // quirk).
       const bool nxt_in_tsd =
           past_ie || nxt == U't' || nxt == U's' || nxt == U'd';
       const bool cond2 = (i + 3 >= n) || !is_vowel_letter32(s[i + 3]);
@@ -1209,7 +1239,8 @@ std::string letters_to_ipa_no_stress(const std::u32string& syl_in, const std::u3
     }
     if (ch == U'c' && i + 1 < n) {
       const char32_t v = s[i + 1];
-      if (v == U'e' || v == U'i' || v == U'é' || v == U'è' || v == U'ê' || v == U'ë') {
+      if (v == U'e' || v == U'i' || v == U'é' || v == U'è' || v == U'ê' ||
+          v == U'ë') {
         append("s");
         ++i;
         continue;
@@ -1303,38 +1334,38 @@ std::string letters_to_ipa_no_stress(const std::u32string& syl_in, const std::u3
       continue;
     }
     switch (ch) {
-    case U'b':
-      append("b");
-      break;
-    case U'd':
-      append("d");
-      break;
-    case U'f':
-      append("f");
-      break;
-    case U'k':
-      append("k");
-      break;
-    case U'l':
-      append("l");
-      break;
-    case U'm':
-      append("m");
-      break;
-    case U'n':
-      append("n");
-      break;
-    case U'p':
-      append("p");
-      break;
-    case U't':
-      append("t");
-      break;
-    default:
-      break;
+      case U'b':
+        append("b");
+        break;
+      case U'd':
+        append("d");
+        break;
+      case U'f':
+        append("f");
+        break;
+      case U'k':
+        append("k");
+        break;
+      case U'l':
+        append("l");
+        break;
+      case U'm':
+        append("m");
+        break;
+      case U'n':
+        append("n");
+        break;
+      case U'p':
+        append("p");
+        break;
+      case U't':
+        append("t");
+        break;
+      default:
+        break;
     }
-    if (ch == U'b' || ch == U'd' || ch == U'f' || ch == U'k' || ch == U'l' || ch == U'm' || ch == U'n' ||
-        ch == U'p' || ch == U't') {
+    if (ch == U'b' || ch == U'd' || ch == U'f' || ch == U'k' || ch == U'l' ||
+        ch == U'm' || ch == U'n' || ch == U'p' || ch == U't') {
       ++i;
       continue;
     }
@@ -1364,13 +1395,18 @@ std::string letters_to_ipa_no_stress(const std::u32string& syl_in, const std::u3
   static const std::string kGhSuffix{"\xC9\xA3"};
   static const std::string kScriptGSuffix{"\xC9\xA1"};
   if (stem.size() >= 3) {
-    const bool lijk = stem.size() >= 5 && stem.substr(stem.size() - 4) == U"lijk";
+    const bool lijk =
+        stem.size() >= 5 && stem.substr(stem.size() - 4) == U"lijk";
     if (!lijk && stem[stem.size() - 2] == U'i' && stem.back() == U'g') {
-      if (out.size() >= kGhSuffix.size() && out.compare(out.size() - kGhSuffix.size(), kGhSuffix.size(), kGhSuffix) == 0) {
+      if (out.size() >= kGhSuffix.size() &&
+          out.compare(out.size() - kGhSuffix.size(), kGhSuffix.size(),
+                      kGhSuffix) == 0) {
         out.replace(out.size() - kGhSuffix.size(), kGhSuffix.size(), "x");
       } else if (out.size() >= kScriptGSuffix.size() &&
-                 out.compare(out.size() - kScriptGSuffix.size(), kScriptGSuffix.size(), kScriptGSuffix) == 0) {
-        out.replace(out.size() - kScriptGSuffix.size(), kScriptGSuffix.size(), "x");
+                 out.compare(out.size() - kScriptGSuffix.size(),
+                             kScriptGSuffix.size(), kScriptGSuffix) == 0) {
+        out.replace(out.size() - kScriptGSuffix.size(), kScriptGSuffix.size(),
+                    "x");
       }
     }
   }
@@ -1387,7 +1423,8 @@ std::u32string strip_hyphens_u32(const std::u32string& w) {
   return o;
 }
 
-std::string rules_word_to_ipa_utf8(const std::string& raw_word, bool with_stress) {
+std::string rules_word_to_ipa_utf8(const std::string& raw_word,
+                                   bool with_stress) {
   const std::u32string w = normalize_grapheme_key_u32(raw_word);
   if (w.empty()) {
     return "";
@@ -1397,8 +1434,8 @@ std::string rules_word_to_ipa_utf8(const std::string& raw_word, bool with_stress
   if (syls.empty()) {
     return "";
   }
-  const size_t stress_idx =
-      with_stress ? default_stress_syllable_index(syls, w) : static_cast<size_t>(-1);
+  const size_t stress_idx = with_stress ? default_stress_syllable_index(syls, w)
+                                        : static_cast<size_t>(-1);
   size_t offset = 0;
   std::string ipa;
   for (size_t idx = 0; idx < syls.size(); ++idx) {
@@ -1418,7 +1455,8 @@ std::string rules_word_to_ipa_utf8(const std::string& raw_word, bool with_stress
 
 }  // namespace
 
-std::filesystem::path resolve_dutch_dict_path(const std::filesystem::path& model_root) {
+std::filesystem::path resolve_dutch_dict_path(
+    const std::filesystem::path& model_root) {
   return model_root / "nl" / "dict.tsv";
 }
 
@@ -1478,18 +1516,22 @@ std::string DutchRuleG2p::normalize_ipa_stress_for_vocoder(std::string ipa) {
   return out;
 }
 
-DutchRuleG2p::DutchRuleG2p(std::filesystem::path dict_tsv) : DutchRuleG2p(std::move(dict_tsv), Options{}) {}
+DutchRuleG2p::DutchRuleG2p(std::filesystem::path dict_tsv)
+    : DutchRuleG2p(std::move(dict_tsv), Options{}) {}
 
-DutchRuleG2p::DutchRuleG2p(std::filesystem::path dict_tsv, Options options) : options_(options) {
+DutchRuleG2p::DutchRuleG2p(std::filesystem::path dict_tsv, Options options)
+    : options_(options) {
   load_dutch_lexicon_file(std::move(dict_tsv), lexicon_);
 }
 
-DutchRuleG2p::DutchRuleG2p(std::string dict_tsv_utf8, Options options) : options_(options) {
+DutchRuleG2p::DutchRuleG2p(std::string dict_tsv_utf8, Options options)
+    : options_(options) {
   std::istringstream in(std::move(dict_tsv_utf8));
   load_dutch_lexicon_stream(in, lexicon_);
 }
 
-std::string DutchRuleG2p::finalize_ipa(std::string ipa, bool from_lexicon) const {
+std::string DutchRuleG2p::finalize_ipa(std::string ipa,
+                                       bool from_lexicon) const {
   if (!options_.with_stress) {
     erase_utf8_substr(ipa, kPrimaryStressUtf8);
     erase_utf8_substr(ipa, kSecondaryStressUtf8);
@@ -1578,8 +1620,8 @@ std::string DutchRuleG2p::word_to_ipa(const std::string& word) const {
   return lookup_or_rules(wraw);
 }
 
-std::string DutchRuleG2p::text_to_ipa_no_expand(const std::string& text,
-                                                 std::vector<G2pWordLog>* per_word_log) const {
+std::string DutchRuleG2p::text_to_ipa_no_expand(
+    const std::string& text, std::vector<G2pWordLog>* per_word_log) const {
   std::string out;
   size_t pos = 0;
   const size_t n = text.size();
@@ -1624,7 +1666,8 @@ std::string DutchRuleG2p::text_to_ipa_no_expand(const std::string& text,
     pos += adv;
     while (pos < n) {
       utf8_decode_at(text, pos, cp, adv);
-      if (is_dutch_word_char(cp) || cp == U' ' || cp == U'\t' || cp == U'\n' || cp == U'\r') {
+      if (is_dutch_word_char(cp) || cp == U' ' || cp == U'\t' || cp == U'\n' ||
+          cp == U'\r') {
         break;
       }
       pos += adv;
@@ -1653,9 +1696,11 @@ std::string DutchRuleG2p::text_to_ipa_no_expand(const std::string& text,
   return collapsed;
 }
 
-std::string DutchRuleG2p::text_to_ipa(std::string text, std::vector<G2pWordLog>* per_word_log) {
+std::string DutchRuleG2p::text_to_ipa(std::string text,
+                                      std::vector<G2pWordLog>* per_word_log) {
   if (options_.expand_cardinal_digits) {
-    return text_to_ipa_no_expand(expand_digit_tokens_in_text(std::move(text)), per_word_log);
+    return text_to_ipa_no_expand(expand_digit_tokens_in_text(std::move(text)),
+                                 per_word_log);
   }
   return text_to_ipa_no_expand(text, per_word_log);
 }

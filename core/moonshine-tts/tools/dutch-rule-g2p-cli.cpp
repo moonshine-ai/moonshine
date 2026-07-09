@@ -1,19 +1,22 @@
-// Stand-alone Dutch rule + lexicon G2P (no ONNX). Mirrors ``dutch_rule_g2p.py`` CLI subset.
-#include "dutch.h"
-
+// Stand-alone Dutch rule + lexicon G2P (no ONNX). Mirrors ``dutch_rule_g2p.py``
+// CLI subset.
 #include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "dutch.h"
+
 namespace {
 
 void usage(const char* argv0) {
-  std::cerr << "Usage: " << argv0
-            << " [--dict PATH] [--no-stress] [--syllable-initial-stress] [--no-expand-digits] [--stdin] "
-               "[TEXT...]\n"
-            << "  Default dict: data/nl/dict.tsv (relative to current directory).\n";
+  std::cerr
+      << "Usage: " << argv0
+      << " [--dict PATH] [--no-stress] [--syllable-initial-stress] "
+         "[--no-expand-digits] [--stdin] "
+         "[TEXT...]\n"
+      << "  Default dict: data/nl/dict.tsv (relative to current directory).\n";
 }
 
 std::string read_all_stdin() {
@@ -25,7 +28,8 @@ std::string read_all_stdin() {
 }  // namespace
 
 int main(int argc, char** argv) {
-  std::filesystem::path dict_path = std::filesystem::path("data") / "nl" / "dict.tsv";
+  std::filesystem::path dict_path =
+      std::filesystem::path("data") / "nl" / "dict.tsv";
   moonshine_tts::DutchRuleG2p::Options opt;
   bool force_stdin = false;
   std::vector<std::string> parts;
