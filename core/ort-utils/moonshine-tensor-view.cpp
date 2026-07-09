@@ -99,6 +99,12 @@ MoonshineTensorView::~MoonshineTensorView() { moonshine_free_tensor(_tensor); }
 
 MoonshineTensorView &MoonshineTensorView::operator=(
     const MoonshineTensorView &other) {
+  // Guard against self-assignment: without this, freeing _tensor below would
+  // invalidate other._tensor (they alias) and the rebuild would read freed
+  // memory. Flagged by clang-tidy bugprone-unhandled-self-assignment.
+  if (this == &other) {
+    return *this;
+  }
   moonshine_free_tensor(_tensor);
 
   _shape = other._shape;

@@ -77,7 +77,7 @@ void load_pt_lexicon_stream(std::istream& in,
   }
   out.clear();
   for (auto& e : tmp) {
-    out.emplace(std::move(e.first), std::move(e.second.first));
+    out.emplace(e.first, std::move(e.second.first));
   }
 }
 
@@ -412,7 +412,7 @@ PortugueseRuleG2p::PortugueseRuleG2p(std::filesystem::path dict_tsv,
                                      bool is_portugal, Options options)
     : is_portugal_(is_portugal), options_(options) {
   dialect_id_ = is_portugal ? "pt-PT" : "pt-BR";
-  load_pt_lexicon_file(std::move(dict_tsv), lexicon_);
+  load_pt_lexicon_file(dict_tsv, lexicon_);
 }
 
 PortugueseRuleG2p::PortugueseRuleG2p(std::string dict_tsv_utf8,

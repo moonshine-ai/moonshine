@@ -803,7 +803,7 @@ void load_german_lexicon_stream(
   out_map.clear();
   out_map.reserve(tmp.size());
   for (auto& e : tmp) {
-    out_map.emplace(std::move(e.first), std::move(e.second.ipa));
+    out_map.emplace(e.first, std::move(e.second.ipa));
   }
 }
 
@@ -1067,7 +1067,7 @@ GermanRuleG2p::GermanRuleG2p(std::filesystem::path dict_tsv)
 
 GermanRuleG2p::GermanRuleG2p(std::filesystem::path dict_tsv, Options options)
     : options_(options) {
-  load_german_lexicon_file(std::move(dict_tsv), lexicon_);
+  load_german_lexicon_file(dict_tsv, lexicon_);
 }
 
 GermanRuleG2p::GermanRuleG2p(std::string dict_tsv_utf8, Options options)

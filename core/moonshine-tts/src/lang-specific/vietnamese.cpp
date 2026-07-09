@@ -896,7 +896,6 @@ std::string VietnameseRuleG2p::text_to_ipa(
       continue;
     }
     if (t.find('-') != std::string::npos && t.front() != '-') {
-      std::string part;
       std::vector<std::string> subs;
       for (size_t i = 0; i <= t.size();) {
         const size_t j = t.find('-', i);

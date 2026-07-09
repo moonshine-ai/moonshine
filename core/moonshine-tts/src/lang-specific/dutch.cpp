@@ -671,7 +671,7 @@ void load_dutch_lexicon_stream(
   out_map.clear();
   out_map.reserve(tmp.size());
   for (auto& e : tmp) {
-    out_map.emplace(std::move(e.first), std::move(e.second.ipa));
+    out_map.emplace(e.first, std::move(e.second.ipa));
   }
 }
 
@@ -1521,7 +1521,7 @@ DutchRuleG2p::DutchRuleG2p(std::filesystem::path dict_tsv)
 
 DutchRuleG2p::DutchRuleG2p(std::filesystem::path dict_tsv, Options options)
     : options_(options) {
-  load_dutch_lexicon_file(std::move(dict_tsv), lexicon_);
+  load_dutch_lexicon_file(dict_tsv, lexicon_);
 }
 
 DutchRuleG2p::DutchRuleG2p(std::string dict_tsv_utf8, Options options)

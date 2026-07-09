@@ -717,7 +717,7 @@ std::string turkish_word_to_ipa(const std::string& word, bool with_stress,
   TurkishRuleG2p::Options o;
   o.with_stress = with_stress;
   o.expand_cardinal_digits = expand_cardinal_digits;
-  return TurkishRuleG2p(std::move(o)).word_to_ipa(word);
+  return TurkishRuleG2p(o).word_to_ipa(word);
 }
 
 std::string turkish_text_to_ipa(const std::string& text, bool with_stress,
@@ -726,7 +726,7 @@ std::string turkish_text_to_ipa(const std::string& text, bool with_stress,
   TurkishRuleG2p::Options o;
   o.with_stress = with_stress;
   o.expand_cardinal_digits = expand_cardinal_digits;
-  return TurkishRuleG2p(std::move(o)).text_to_ipa(text, per_word_log);
+  return TurkishRuleG2p(o).text_to_ipa(text, per_word_log);
 }
 
 }  // namespace moonshine_tts

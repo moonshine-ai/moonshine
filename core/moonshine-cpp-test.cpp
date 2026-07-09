@@ -282,8 +282,16 @@ TEST_CASE("moonshine-cpp-test") {
     REQUIRE(listener.updated_count >= listener.started_count);
   }
   SUBCASE("g2p") {
-    std::string text = "Hello! This is a test of the Moonshine text to speech.";
     std::string root_model_path = "../core/moonshine-tts/data/";
+    // The English G2P lexicon lives under the large (git-LFS) TTS data tree,
+    // which isn't always present -- e.g. the reliability box intentionally skips
+    // syncing moonshine-tts/data. Match the sibling data-dependent subcases and
+    // skip rather than throw when the lexicon is absent.
+    if (!file_exists(root_model_path + "en_us/dict_filtered_heteronyms.tsv")) {
+      MESSAGE("skip: en_us G2P lexicon not in moonshine-tts/data");
+      return;
+    }
+    std::string text = "Hello! This is a test of the Moonshine text to speech.";
     moonshine::GraphemeToPhonemizer g2p(
         "en_us", {
                      {"g2p_root", root_model_path.c_str()},

@@ -930,7 +930,7 @@ std::string ukrainian_word_to_ipa(const std::string& word, bool with_stress,
   UkrainianRuleG2p::Options o;
   o.with_stress = with_stress;
   o.expand_cardinal_digits = expand_cardinal_digits;
-  return UkrainianRuleG2p(std::move(o)).word_to_ipa(word);
+  return UkrainianRuleG2p(o).word_to_ipa(word);
 }
 
 std::string ukrainian_text_to_ipa(const std::string& text, bool with_stress,
@@ -939,7 +939,7 @@ std::string ukrainian_text_to_ipa(const std::string& text, bool with_stress,
   UkrainianRuleG2p::Options o;
   o.with_stress = with_stress;
   o.expand_cardinal_digits = expand_cardinal_digits;
-  return UkrainianRuleG2p(std::move(o)).text_to_ipa(text, per_word_log);
+  return UkrainianRuleG2p(o).text_to_ipa(text, per_word_log);
 }
 
 }  // namespace moonshine_tts
