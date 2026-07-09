@@ -50,3 +50,4 @@ text-to-speech
 transcriber
 build-*/
 /eval-results.txt
+.vscode/
