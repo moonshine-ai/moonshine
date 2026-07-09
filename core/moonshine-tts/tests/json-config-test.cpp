@@ -1,7 +1,7 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
-#include <doctest/doctest.h>
-
 #include "json-config.h"
+
+#include <doctest/doctest.h>
 
 #include <filesystem>
 #include <fstream>

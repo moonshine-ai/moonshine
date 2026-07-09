@@ -1,5 +1,7 @@
 #include "ort-utils.h"
 
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
 
 #ifndef _WIN32
@@ -87,6 +89,18 @@ int ort_session_from_memory(const OrtApi *ort_api, OrtEnv *env,
       ort_api, ort_api->CreateSessionFromArray(env, data, data_size,
                                                session_options, session));
   return 0;
+}
+
+void ort_maybe_force_single_thread(const OrtApi *ort_api,
+                                   OrtSessionOptions *session_options) {
+  const char *flag = std::getenv("MOONSHINE_ORT_SINGLE_THREAD");
+  if (flag == nullptr || flag[0] == '\0' || std::strcmp(flag, "0") == 0) {
+    return;
+  }
+  LOG_ORT_ERROR(ort_api, ort_api->SetIntraOpNumThreads(session_options, 1));
+  LOG_ORT_ERROR(ort_api, ort_api->SetInterOpNumThreads(session_options, 1));
+  LOG_ORT_ERROR(ort_api, ort_api->SetSessionExecutionMode(session_options,
+                                                          ORT_SEQUENTIAL));
 }
 
 #if defined(ANDROID)

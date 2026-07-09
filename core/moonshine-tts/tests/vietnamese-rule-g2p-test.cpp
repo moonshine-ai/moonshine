@@ -6,10 +6,10 @@
 #include "moonshine-g2p.h"
 #endif
 
-#include "rule-g2p-test-support.h"
-
 #include <filesystem>
 #include <string>
+
+#include "rule-g2p-test-support.h"
 
 namespace r = moonshine_tts::rule_g2p_test;
 
@@ -45,7 +45,8 @@ TEST_CASE("vietnamese: lexicon line with data/vi/dict.tsv") {
     return;
   }
   moonshine_tts::VietnameseRuleG2p g(dict);
-  CHECK(g.text_to_ipa("tổ chức") == "to\xCB\xA7\xCB\xA9\xCB\xA8 c\xC9\xAFk\xCB\xA6\xCB\xA5");
+  CHECK(g.text_to_ipa("tổ chức") ==
+        "to\xCB\xA7\xCB\xA9\xCB\xA8 c\xC9\xAFk\xCB\xA6\xCB\xA5");
   // UTF-8 for U+0111 U+1ED9 (độ) — must hit ``dict.tsv`` not OOV rules.
   const std::string do_nang = "\xc4\x91\xe1\xbb\x99";
   CHECK(g.word_to_ipa(do_nang) == "do\xcb\xa8\xcb\x80\xcb\xa9\xca\x94");
@@ -62,6 +63,7 @@ TEST_CASE("vietnamese: MoonshineG2P vi-VN") {
   moonshine_tts::MoonshineG2P g("vi-VN", std::move(opt));
   CHECK(g.dialect_id() == "vi-VN");
   CHECK(g.uses_vietnamese_rules());
-  CHECK(g.text_to_ipa("tổ chức") == "to\xCB\xA7\xCB\xA9\xCB\xA8 c\xC9\xAFk\xCB\xA6\xCB\xA5");
+  CHECK(g.text_to_ipa("tổ chức") ==
+        "to\xCB\xA7\xCB\xA9\xCB\xA8 c\xC9\xAFk\xCB\xA6\xCB\xA5");
 }
 #endif

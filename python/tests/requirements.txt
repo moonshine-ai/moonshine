@@ -1,0 +1,2 @@
+pytest>=8.0
+nbmake>=1.5

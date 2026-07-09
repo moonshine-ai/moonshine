@@ -1,12 +1,11 @@
-#include "french-internal.h"
-
-#include "ipa-symbols.h"
-#include "utf8-utils.h"
-
 #include <cctype>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#include "french-internal.h"
+#include "ipa-symbols.h"
+#include "utf8-utils.h"
 
 namespace moonshine_tts::french_detail {
 namespace {
@@ -17,44 +16,44 @@ using moonshine_tts::utf8_decode_at;
 
 char32_t french_tolower_cp(char32_t c) {
   switch (c) {
-  case U'À':
-    return U'à';
-  case U'Â':
-    return U'â';
-  case U'Ä':
-    return U'ä';
-  case U'É':
-    return U'é';
-  case U'È':
-    return U'è';
-  case U'Ê':
-    return U'ê';
-  case U'Ë':
-    return U'ë';
-  case U'Î':
-    return U'î';
-  case U'Ï':
-    return U'ï';
-  case U'Ô':
-    return U'ô';
-  case U'Ö':
-    return U'ö';
-  case U'Ù':
-    return U'ù';
-  case U'Û':
-    return U'û';
-  case U'Ü':
-    return U'ü';
-  case U'Ÿ':
-    return U'ÿ';
-  case U'Ç':
-    return U'ç';
-  case U'Œ':
-    return U'œ';
-  case U'Æ':
-    return U'æ';
-  default:
-    break;
+    case U'À':
+      return U'à';
+    case U'Â':
+      return U'â';
+    case U'Ä':
+      return U'ä';
+    case U'É':
+      return U'é';
+    case U'È':
+      return U'è';
+    case U'Ê':
+      return U'ê';
+    case U'Ë':
+      return U'ë';
+    case U'Î':
+      return U'î';
+    case U'Ï':
+      return U'ï';
+    case U'Ô':
+      return U'ô';
+    case U'Ö':
+      return U'ö';
+    case U'Ù':
+      return U'ù';
+    case U'Û':
+      return U'û';
+    case U'Ü':
+      return U'ü';
+    case U'Ÿ':
+      return U'ÿ';
+    case U'Ç':
+      return U'ç';
+    case U'Œ':
+      return U'œ';
+    case U'Æ':
+      return U'æ';
+    default:
+      break;
   }
   if (c >= U'A' && c <= U'Z') {
     return c + 32;
@@ -67,9 +66,10 @@ bool is_allowed_ortho_cp(char32_t c) {
   if (c >= U'a' && c <= U'z') {
     return true;
   }
-  return c == U'à' || c == U'â' || c == U'ä' || c == U'é' || c == U'è' || c == U'ê' || c == U'ë' ||
-         c == U'ï' || c == U'î' || c == U'ô' || c == U'ù' || c == U'û' || c == U'ü' || c == U'ÿ' ||
-         c == U'ç' || c == U'œ' || c == U'æ';
+  return c == U'à' || c == U'â' || c == U'ä' || c == U'é' || c == U'è' ||
+         c == U'ê' || c == U'ë' || c == U'ï' || c == U'î' || c == U'ô' ||
+         c == U'ù' || c == U'û' || c == U'ü' || c == U'ÿ' || c == U'ç' ||
+         c == U'œ' || c == U'æ';
 }
 
 std::u32string letters_only_u32(const std::string& raw) {
@@ -89,31 +89,31 @@ std::u32string letters_only_u32(const std::string& raw) {
 
 bool v_u32(char32_t ch) {
   switch (ch) {
-  case U'a':
-  case U'à':
-  case U'â':
-  case U'ä':
-  case U'e':
-  case U'é':
-  case U'è':
-  case U'ê':
-  case U'ë':
-  case U'i':
-  case U'ï':
-  case U'î':
-  case U'o':
-  case U'ô':
-  case U'ö':
-  case U'u':
-  case U'ù':
-  case U'û':
-  case U'ü':
-  case U'y':
-  case U'œ':
-  case U'æ':
-    return true;
-  default:
-    return false;
+    case U'a':
+    case U'à':
+    case U'â':
+    case U'ä':
+    case U'e':
+    case U'é':
+    case U'è':
+    case U'ê':
+    case U'ë':
+    case U'i':
+    case U'ï':
+    case U'î':
+    case U'o':
+    case U'ô':
+    case U'ö':
+    case U'u':
+    case U'ù':
+    case U'û':
+    case U'ü':
+    case U'y':
+    case U'œ':
+    case U'æ':
+      return true;
+    default:
+      return false;
   }
 }
 
@@ -143,22 +143,22 @@ std::string insert_stress_final_syllable(std::string ipa) {
     size_t adv = 0;
     utf8_decode_at(ipa, p, cp, adv);
     switch (cp) {
-    case U'a':
-    case U'e':
-    case U'i':
-    case U'o':
-    case U'u':
-    case U'y':
-    case U'ø':
-    case U'œ':
-    case U'ɔ':
-    case U'ɑ':
-    case U'ɛ':
-    case U'ə':
-    case U'ɜ':
-      return ipa.substr(0, p) + kPrimaryStressUtf8 + ipa.substr(p);
-    default:
-      break;
+      case U'a':
+      case U'e':
+      case U'i':
+      case U'o':
+      case U'u':
+      case U'y':
+      case U'ø':
+      case U'œ':
+      case U'ɔ':
+      case U'ɑ':
+      case U'ɛ':
+      case U'ə':
+      case U'ɜ':
+        return ipa.substr(0, p) + kPrimaryStressUtf8 + ipa.substr(p);
+      default:
+        break;
     }
     j = p;
   }
@@ -177,32 +177,32 @@ bool prev_is_nucleus_idx(const std::string& s, int idx) {
   size_t adv = 0;
   utf8_decode_at(s, i, cp, adv);
   switch (cp) {
-  case U'a':
-  case U'e':
-  case U'é':
-  case U'è':
-  case U'ê':
-  case U'ë':
-  case U'i':
-  case U'o':
-  case U'u':
-  case U'y':
-  case U'ø':
-  case U'œ':
-  case U'ɔ':
-  case U'ɑ':
-  case U'ɛ':
-  case U'ə':
-  case U'ɜ':
-  case U'ɪ':
-  case U'ʊ':
-  case U'ʁ':
-  case U'j':
-  case U'w':
-  case U'ɥ':
-    return true;
-  default:
-    break;
+    case U'a':
+    case U'e':
+    case U'é':
+    case U'è':
+    case U'ê':
+    case U'ë':
+    case U'i':
+    case U'o':
+    case U'u':
+    case U'y':
+    case U'ø':
+    case U'œ':
+    case U'ɔ':
+    case U'ɑ':
+    case U'ɛ':
+    case U'ə':
+    case U'ɜ':
+    case U'ɪ':
+    case U'ʊ':
+    case U'ʁ':
+    case U'j':
+    case U'w':
+    case U'ɥ':
+      return true;
+    default:
+      break;
   }
   if (i + 2 < s.size() && static_cast<unsigned char>(s[i]) == 0xCC &&
       static_cast<unsigned char>(s[i + 1]) == 0x83) {
@@ -239,7 +239,8 @@ size_t utf8_prev_cp_start(const std::string& s, size_t cp_start) {
   return std::string::npos;
 }
 
-std::string trim_final_by_orthography(std::string ipa, const std::u32string& ortho_full) {
+std::string trim_final_by_orthography(std::string ipa,
+                                      const std::u32string& ortho_full) {
   std::u32string o = ortho_full;
   while (!o.empty() && o.back() == U'e') {
     o.pop_back();
@@ -338,7 +339,9 @@ std::string scan_graphemes(const std::u32string& w) {
     return !v_u32(w[j]);
   };
 
-  auto append_utf8 = [](std::vector<std::string>& o, const char* utf8_lit) { o.emplace_back(utf8_lit); };
+  auto append_utf8 = [](std::vector<std::string>& o, const char* utf8_lit) {
+    o.emplace_back(utf8_lit);
+  };
 
   while (i < n) {
     const char32_t ch = w[i];
@@ -469,7 +472,8 @@ std::string scan_graphemes(const std::u32string& w) {
       i += 2;
       continue;
     }
-    if ((peek_eq(w, i, "in") || peek_eq(w, i, "im") || peek_eq(w, i, "yn") || peek_eq(w, i, "ym")) &&
+    if ((peek_eq(w, i, "in") || peek_eq(w, i, "im") || peek_eq(w, i, "yn") ||
+         peek_eq(w, i, "ym")) &&
         next_not_vowel(i + 2)) {
       append_utf8(out, "ɛ̃");
       i += 2;
@@ -493,8 +497,8 @@ std::string scan_graphemes(const std::u32string& w) {
     }
     if (ch == U'g' && i + 1 < n && w[i + 1] == U'u' && i + 2 < n) {
       const char32_t e2 = w[i + 2];
-      if (e2 == U'e' || e2 == U'é' || e2 == U'è' || e2 == U'ê' || e2 == U'ë' || e2 == U'i' ||
-          e2 == U'ï' || e2 == U'y') {
+      if (e2 == U'e' || e2 == U'é' || e2 == U'è' || e2 == U'ê' || e2 == U'ë' ||
+          e2 == U'i' || e2 == U'ï' || e2 == U'y') {
         append_utf8(out, "ɡ");
         i += 2;
         continue;
@@ -536,8 +540,8 @@ std::string scan_graphemes(const std::u32string& w) {
     if (ch == U'c') {
       if (i + 1 < n) {
         const char32_t nx = w[i + 1];
-        if (nx == U'e' || nx == U'é' || nx == U'è' || nx == U'ê' || nx == U'ë' || nx == U'i' ||
-            nx == U'ï' || nx == U'y') {
+        if (nx == U'e' || nx == U'é' || nx == U'è' || nx == U'ê' ||
+            nx == U'ë' || nx == U'i' || nx == U'ï' || nx == U'y') {
           append_utf8(out, "s");
         } else {
           append_utf8(out, "k");
@@ -551,8 +555,8 @@ std::string scan_graphemes(const std::u32string& w) {
     if (ch == U'g') {
       if (i + 1 < n) {
         const char32_t nx = w[i + 1];
-        if (nx == U'e' || nx == U'é' || nx == U'è' || nx == U'ê' || nx == U'ë' || nx == U'i' ||
-            nx == U'ï' || nx == U'y') {
+        if (nx == U'e' || nx == U'é' || nx == U'è' || nx == U'ê' ||
+            nx == U'ë' || nx == U'i' || nx == U'ï' || nx == U'y') {
           append_utf8(out, "ʒ");
         } else {
           append_utf8(out, "ɡ");
@@ -586,24 +590,25 @@ std::string scan_graphemes(const std::u32string& w) {
           utf8_decode_at(last, p, lcp, adv);
           static const std::string kTilde = "\xCC\x83";
           switch (lcp) {
-          case U'a':
-          case U'e':
-          case U'i':
-          case U'o':
-          case U'u':
-          case U'y':
-          case U'ø':
-          case U'œ':
-          case U'ɔ':
-          case U'ɑ':
-          case U'ɛ':
-          case U'ə':
-            z_link = true;
-            break;
-          default:
-            break;
+            case U'a':
+            case U'e':
+            case U'i':
+            case U'o':
+            case U'u':
+            case U'y':
+            case U'ø':
+            case U'œ':
+            case U'ɔ':
+            case U'ɑ':
+            case U'ɛ':
+            case U'ə':
+              z_link = true;
+              break;
+            default:
+              break;
           }
-          if (last.size() >= 2 && last.compare(last.size() - 2, 2, kTilde) == 0) {
+          if (last.size() >= 2 &&
+              last.compare(last.size() - 2, 2, kTilde) == 0) {
             z_link = true;
           }
         }
@@ -658,9 +663,10 @@ std::string scan_graphemes(const std::u32string& w) {
     }
 
     static const std::unordered_map<char32_t, const char*> cons = {
-        {U'b', "b"}, {U'd', "d"}, {U'f', "f"}, {U'j', "ʒ"}, {U'k', "k"}, {U'l', "l"}, {U'm', "m"},
-        {U'n', "n"}, {U'p', "p"}, {U'q', "k"}, {U'r', "ʁ"}, {U's', "s"}, {U't', "t"},
-        {U'v', "v"}, {U'w', "w"}, {U'z', "z"},
+        {U'b', "b"}, {U'd', "d"}, {U'f', "f"}, {U'j', "ʒ"},
+        {U'k', "k"}, {U'l', "l"}, {U'm', "m"}, {U'n', "n"},
+        {U'p', "p"}, {U'q', "k"}, {U'r', "ʁ"}, {U's', "s"},
+        {U't', "t"}, {U'v', "v"}, {U'w', "w"}, {U'z', "z"},
     };
     const auto it = cons.find(ch);
     if (it != cons.end()) {
@@ -683,10 +689,12 @@ std::string scan_graphemes(const std::u32string& w) {
 
 std::string oov_word_to_ipa(const std::string& word, bool with_stress) {
   std::string raw = word;
-  while (!raw.empty() && std::isspace(static_cast<unsigned char>(raw.front())) != 0) {
+  while (!raw.empty() &&
+         std::isspace(static_cast<unsigned char>(raw.front())) != 0) {
     raw.erase(raw.begin());
   }
-  while (!raw.empty() && std::isspace(static_cast<unsigned char>(raw.back())) != 0) {
+  while (!raw.empty() &&
+         std::isspace(static_cast<unsigned char>(raw.back())) != 0) {
     raw.pop_back();
   }
   if (raw.empty()) {

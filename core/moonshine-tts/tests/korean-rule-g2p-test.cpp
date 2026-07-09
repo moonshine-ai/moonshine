@@ -7,10 +7,10 @@
 #include "moonshine-g2p.h"
 #endif
 
-#include "rule-g2p-test-support.h"
-
 #include <filesystem>
 #include <string>
+
+#include "rule-g2p-test-support.h"
 
 namespace r = moonshine_tts::rule_g2p_test;
 
@@ -31,9 +31,12 @@ TEST_CASE("korean: dialect_resolves_to_korean_rules") {
   CHECK_FALSE(dialect_resolves_to_korean_rules("ja"));
 }
 
-TEST_CASE("korean: normalize strips all combining marks including tense and unreleased") {
+TEST_CASE(
+    "korean: normalize strips all combining marks including tense and "
+    "unreleased") {
   using moonshine_tts::KoreanRuleG2p;
-  // ha̠ + k̚ + k͈jo — NFD has combining on first vowel; all MN chars stripped (U+0320, U+031A, U+0348).
+  // ha̠ + k̚ + k͈jo — NFD has combining on first vowel; all MN chars stripped
+  // (U+0320, U+031A, U+0348).
   const std::string in =
       "ha"
       "\xCC\xA0"
@@ -42,16 +45,23 @@ TEST_CASE("korean: normalize strips all combining marks including tense and unre
       "k"
       "\xCD\x88"
       "jo";
-  CHECK(KoreanRuleG2p::normalize_korean_ipa(in) == "h\xC9\x90kkjo");  // all combining marks stripped; a→ɐ
-  CHECK(KoreanRuleG2p::normalize_korean_ipa("ku\xC5\x8Bmu\xC9\xAD") == "\xC9\xA1u\xC5\x8Bmu\xC9\xAB");  // ɭ → ɫ; k → ɡ (lenis voicing)
+  CHECK(KoreanRuleG2p::normalize_korean_ipa(in) ==
+        "h\xC9\x90kkjo");  // all combining marks stripped; a→ɐ
+  CHECK(KoreanRuleG2p::normalize_korean_ipa("ku\xC5\x8Bmu\xC9\xAD") ==
+        "\xC9\xA1u\xC5\x8Bmu\xC9\xAB");  // ɭ → ɫ; k → ɡ (lenis voicing)
   // Exact dict.tsv entries that produce U+FFFD in the log:
-  CHECK(KoreanRuleG2p::normalize_korean_ipa("wa\xCC\xA0") == "w\xC9\x90");  // wa̠ → wɐ
-  CHECK(KoreanRuleG2p::normalize_korean_ipa("ta\xCC\xA0") == "d\xC9\x90");  // ta̠ → dɐ (t→d lenis voicing)
-  CHECK(KoreanRuleG2p::normalize_korean_ipa("a\xCC\xA0ma\xCC\xA0") == "\xC9\x90m\xC9\x90");  // a̠ma̠ → ɐmɐ
+  CHECK(KoreanRuleG2p::normalize_korean_ipa("wa\xCC\xA0") ==
+        "w\xC9\x90");  // wa̠ → wɐ
+  CHECK(KoreanRuleG2p::normalize_korean_ipa("ta\xCC\xA0") ==
+        "d\xC9\x90");  // ta̠ → dɐ (t→d lenis voicing)
+  CHECK(KoreanRuleG2p::normalize_korean_ipa("a\xCC\xA0ma\xCC\xA0") ==
+        "\xC9\x90m\xC9\x90");  // a̠ma̠ → ɐmɐ
   // 없다: ˈɘːp̚t͈a̠
   CHECK(KoreanRuleG2p::normalize_korean_ipa(
-      "\xCB\x88\xC9\x98\xCB\x90p\xCC\x9At\xCD\x88""a\xCC\xA0") ==
-      "\xCB\x88\xCA\x8Cpt\xC9\x90");  // ˈɘːp̚t͈a̠ → ˈʌptɐ (ɘ→ʌ, ː removed, marks stripped, a→ɐ)
+            "\xCB\x88\xC9\x98\xCB\x90p\xCC\x9At\xCD\x88"
+            "a\xCC\xA0") ==
+        "\xCB\x88\xCA\x8Cpt\xC9\x90");  // ˈɘːp̚t͈a̠ → ˈʌptɐ (ɘ→ʌ, ː removed, marks
+                                        // stripped, a→ɐ)
 }
 
 TEST_CASE("korean: int_to_sino_korean_hangul") {
@@ -86,7 +96,8 @@ TEST_CASE("korean: korean_reading_fragments_from_ascii_numeral_token") {
   const auto e = korean_reading_fragments_from_ascii_numeral_token("007");
   REQUIRE(e.has_value());
   CHECK((*e)[0] == "영영칠");
-  CHECK_FALSE(korean_reading_fragments_from_ascii_numeral_token("12a").has_value());
+  CHECK_FALSE(
+      korean_reading_fragments_from_ascii_numeral_token("12a").has_value());
 }
 
 TEST_CASE("korean: G2P examples with data/ko/dict.tsv") {
@@ -95,15 +106,24 @@ TEST_CASE("korean: G2P examples with data/ko/dict.tsv") {
     return;
   }
   moonshine_tts::KoreanRuleG2p g(dict);
-  // ˈ = U+02C8 (CB 88), ɫ = U+026B (C9 AB), ɾ = U+027E (C9 BE), ɐ = U+0250 (C9 90)
-  // Stress ˈ is repositioned after onset, before nucleus; a→ɐ for Korean ㅏ.
-  CHECK(g.text_to_ipa("\xEB\x8B\xAD\xEC\x9D\xB4") == "d\xCB\x88\xC9\x90\xC9\xABqi");  // 닭이 → dˈɐɫqi (linked ㄱ onset after vowel → q)
-  CHECK(g.text_to_ipa("\xEB\x8B\xAB\xEB\x8A\x94") == "d\xCB\x88\xC9\x90nn\xC9\xAF""n");   // 닫는 → dˈɐnnɯn (lexicon)
-  // 007 → 영영칠 (rule-based 3 syls): syl0 ˈ after j glide, syl2 ˌ before nucleus
-  // 영(i=0): null onset + j + ˈ + ʌ + ŋ; 영(i=1): null + jʌ + ŋ; 칠(i=2): tʃh + ˌ + i + ɫ
-  CHECK(g.text_to_ipa("007") == "j\xCB\x88\xCA\x8C\xC5\x8Bj\xCA\x8C\xC5\x8Bt\xCA\x83h\xCB\x8Ci\xC9\xAB");
+  // ˈ = U+02C8 (CB 88), ɫ = U+026B (C9 AB), ɾ = U+027E (C9 BE), ɐ = U+0250 (C9
+  // 90) Stress ˈ is repositioned after onset, before nucleus; a→ɐ for Korean
+  // ㅏ.
+  CHECK(g.text_to_ipa("\xEB\x8B\xAD\xEC\x9D\xB4") ==
+        "d\xCB\x88\xC9\x90\xC9\xABqi");  // 닭이 → dˈɐɫqi (linked ㄱ onset after
+                                         // vowel → q)
+  CHECK(g.text_to_ipa("\xEB\x8B\xAB\xEB\x8A\x94") ==
+        "d\xCB\x88\xC9\x90nn\xC9\xAF"
+        "n");  // 닫는 → dˈɐnnɯn (lexicon)
+  // 007 → 영영칠 (rule-based 3 syls): syl0 ˈ after j glide, syl2 ˌ before
+  // nucleus 영(i=0): null onset + j + ˈ + ʌ + ŋ; 영(i=1): null + jʌ + ŋ;
+  // 칠(i=2): tʃh + ˌ + i + ɫ
+  CHECK(
+      g.text_to_ipa("007") ==
+      "j\xCB\x88\xCA\x8C\xC5\x8Bj\xCA\x8C\xC5\x8Bt\xCA\x83h\xCB\x8Ci\xC9\xAB");
   // 3.14 → 삼점일사 (rule-based 4 syls): sˈɐm + dʑʌm + ˌiɫ + sɐ (a→ɐ for ㅏ)
-  CHECK(g.text_to_ipa("3.14") == "s\xCB\x88\xC9\x90md\xCA\x91\xCA\x8Cm\xCB\x8Ci\xC9\xABs\xC9\x90");
+  CHECK(g.text_to_ipa("3.14") ==
+        "s\xCB\x88\xC9\x90md\xCA\x91\xCA\x8Cm\xCB\x8Ci\xC9\xABs\xC9\x90");
   moonshine_tts::KoreanRuleG2p::Options no_dig;
   no_dig.expand_cardinal_digits = false;
   moonshine_tts::KoreanRuleG2p g2(dict, no_dig);

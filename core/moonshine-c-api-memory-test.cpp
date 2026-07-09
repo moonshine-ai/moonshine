@@ -1,11 +1,10 @@
-// Integration test: TTS from memory while CWD is an empty sandbox (no repo data).
-// Usage: moonshine-c-api-memory-test <ABSOLUTE_PATH_TO_DATA_DIR>
-// Example: moonshine-c-api-memory-test /Users/you/projects/moonshine/core/moonshine-tts/data
+// Integration test: TTS from memory while CWD is an empty sandbox (no repo
+// data). Usage: moonshine-c-api-memory-test <ABSOLUTE_PATH_TO_DATA_DIR>
+// Example: moonshine-c-api-memory-test
+// /Users/you/projects/moonshine/core/moonshine-tts/data
 //
 #define DOCTEST_CONFIG_IMPLEMENT
 #include <doctest.h>
-
-#include "moonshine-c-api.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -19,6 +18,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "moonshine-c-api.h"
 
 #if defined(_WIN32)
 #include <process.h>
@@ -35,7 +36,8 @@ std::vector<uint8_t> read_binary_file(const std::filesystem::path& p) {
   if (!f) {
     return {};
   }
-  return std::vector<uint8_t>((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  return std::vector<uint8_t>((std::istreambuf_iterator<char>(f)),
+                              std::istreambuf_iterator<char>());
 }
 
 // Kokoro voice ids use a two-letter family prefix (e.g. af_alloy -> en_us).
@@ -85,7 +87,8 @@ const char* sample_text_for_kokoro_lang(const char* lang) {
     return "Bonjour";
   }
   if (std::strcmp(lang, "hi") == 0) {
-    return "\xe0\xa4\xa8\xe0\xa4\xae\xe0\xa4\xb8\xe0\xa5\x8d\xe0\xa4\xa4\xe0\xa5\x87";
+    return "\xe0\xa4\xa8\xe0\xa4\xae\xe0\xa4\xb8\xe0\xa5\x8d\xe0\xa4\xa4\xe0"
+           "\xa5\x87";
   }
   if (std::strcmp(lang, "it") == 0) {
     return "Ciao";
@@ -102,9 +105,11 @@ const char* sample_text_for_kokoro_lang(const char* lang) {
   return "Hello";
 }
 
-/// Subtrees needed for Kokoro + rule G2P (Spanish is rule-only; no lexicon files).
-void append_files_under(const std::filesystem::path& root, const std::filesystem::path& sub,
-                        std::vector<std::pair<std::string, std::vector<uint8_t>>>& out) {
+/// Subtrees needed for Kokoro + rule G2P (Spanish is rule-only; no lexicon
+/// files).
+void append_files_under(
+    const std::filesystem::path& root, const std::filesystem::path& sub,
+    std::vector<std::pair<std::string, std::vector<uint8_t>>>& out) {
   namespace fs = std::filesystem;
   const fs::path base = root / sub;
   if (!fs::exists(base)) {
@@ -132,16 +137,19 @@ void append_files_under(const std::filesystem::path& root, const std::filesystem
   }
 }
 
-void build_kokoro_g2p_memory_bundle(const std::filesystem::path& data_root,
-                                    std::vector<std::pair<std::string, std::vector<uint8_t>>>& out) {
+void build_kokoro_g2p_memory_bundle(
+    const std::filesystem::path& data_root,
+    std::vector<std::pair<std::string, std::vector<uint8_t>>>& out) {
   out.clear();
   append_files_under(data_root, "kokoro", out);
-  out.erase(std::remove_if(out.begin(), out.end(),
-                           [](const std::pair<std::string, std::vector<uint8_t>>& pr) {
-                             return pr.first.rfind("kokoro/voices/", 0) == 0;
-                           }),
+  out.erase(std::remove_if(
+                out.begin(), out.end(),
+                [](const std::pair<std::string, std::vector<uint8_t>>& pr) {
+                  return pr.first.rfind("kokoro/voices/", 0) == 0;
+                }),
             out.end());
-  static const char* kLangDirs[] = {"en_us", "en_gb", "es", "fr", "hi", "it", "pt_br", "ja", "zh_hans"};
+  static const char* kLangDirs[] = {"en_us", "en_gb", "es", "fr",     "hi",
+                                    "it",    "pt_br", "ja", "zh_hans"};
   for (const char* d : kLangDirs) {
     append_files_under(data_root, d, out);
   }
@@ -149,7 +157,9 @@ void build_kokoro_g2p_memory_bundle(const std::filesystem::path& data_root,
 
 }  // namespace
 
-TEST_CASE("moonshine-c-api-memory: Kokoro every voice uses only buffers; CWD has no data tree") {
+TEST_CASE(
+    "moonshine-c-api-memory: Kokoro every voice uses only buffers; CWD has no "
+    "data tree") {
   REQUIRE_FALSE(g_data_root.empty());
   REQUIRE(std::filesystem::is_directory(g_data_root));
 
@@ -166,11 +176,13 @@ TEST_CASE("moonshine-c-api-memory: Kokoro every voice uses only buffers; CWD has
   const fs::path voices_dir = g_data_root / "kokoro" / "voices";
   REQUIRE(std::filesystem::is_directory(voices_dir));
 
-  auto model_key_it =
-      std::find_if(bundle.begin(), bundle.end(), [](const auto& pr) { return pr.first == "kokoro/model.onnx"; });
+  auto model_key_it = std::find_if(
+      bundle.begin(), bundle.end(),
+      [](const auto& pr) { return pr.first == "kokoro/model.onnx"; });
   if (model_key_it == bundle.end()) {
-    model_key_it =
-        std::find_if(bundle.begin(), bundle.end(), [](const auto& pr) { return pr.first == "kokoro/model.ort"; });
+    model_key_it = std::find_if(
+        bundle.begin(), bundle.end(),
+        [](const auto& pr) { return pr.first == "kokoro/model.ort"; });
   }
   REQUIRE(model_key_it != bundle.end());
   REQUIRE_FALSE(model_key_it->second.empty());
@@ -185,8 +197,9 @@ TEST_CASE("moonshine-c-api-memory: Kokoro every voice uses only buffers; CWD has
       continue;
     }
     const std::string stem = p.stem().string();
-    REQUIRE_MESSAGE(kokoro_lang_for_voice_stem(stem) != nullptr,
-                    "Unrecognized Kokoro voice id (add prefix mapping): " << stem);
+    REQUIRE_MESSAGE(
+        kokoro_lang_for_voice_stem(stem) != nullptr,
+        "Unrecognized Kokoro voice id (add prefix mapping): " << stem);
     voice_stems.push_back(stem);
   }
   std::sort(voice_stems.begin(), voice_stems.end());
@@ -209,7 +222,8 @@ TEST_CASE("moonshine-c-api-memory: Kokoro every voice uses only buffers; CWD has
       mem_ptrs.push_back(pr.second.data());
       mem_sizes.push_back(static_cast<uint64_t>(pr.second.size()));
     }
-    const std::string vkey = std::string("kokoro/voices/") + voice + ".kokorovoice";
+    const std::string vkey =
+        std::string("kokoro/voices/") + voice + ".kokorovoice";
     voice_scratch.push_back(read_binary_file(g_data_root / vkey));
     REQUIRE_FALSE(voice_scratch.back().empty());
     keys_storage.push_back(vkey);
@@ -232,14 +246,16 @@ TEST_CASE("moonshine-c-api-memory: Kokoro every voice uses only buffers; CWD has
     const uint64_t n_opts = sizeof(opts) / sizeof(opts[0]);
 
     int32_t h = moonshine_create_tts_synthesizer_from_memory(
-        lang, filenames.data(), static_cast<uint64_t>(filenames.size()), mem_ptrs.data(), mem_sizes.data(),
-        opts, n_opts, MOONSHINE_HEADER_VERSION);
+        lang, filenames.data(), static_cast<uint64_t>(filenames.size()),
+        mem_ptrs.data(), mem_sizes.data(), opts, n_opts,
+        MOONSHINE_HEADER_VERSION);
     REQUIRE(h >= 0);
     float* audio = nullptr;
     uint64_t audio_n = 0;
     int32_t sr = 0;
     const char* text = sample_text_for_kokoro_lang(lang);
-    REQUIRE(moonshine_text_to_speech(h, text, nullptr, 0, &audio, &audio_n, &sr) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_text_to_speech(h, text, nullptr, 0, &audio, &audio_n,
+                                     &sr) == MOONSHINE_ERROR_NONE);
     REQUIRE(audio_n > 0);
     REQUIRE(audio != nullptr);
     std::free(audio);
@@ -249,30 +265,34 @@ TEST_CASE("moonshine-c-api-memory: Kokoro every voice uses only buffers; CWD has
 
 int main(int argc, char** argv) {
   if (argc < 2) {
-    std::cerr << "Usage: " << (argc > 0 ? argv[0] : "moonshine-c-api-memory-test")
+    std::cerr << "Usage: "
+              << (argc > 0 ? argv[0] : "moonshine-c-api-memory-test")
               << " <absolute-path-to-moonshine-tts-data>\n"
               << "  (the directory that contains kokoro/, en_us/, etc. — e.g. "
                  ".../moonshine/core/moonshine-tts/data)\n";
     return 2;
   }
   std::error_code ec;
-  g_data_root = std::filesystem::weakly_canonical(std::filesystem::path(argv[1]), ec);
+  g_data_root =
+      std::filesystem::weakly_canonical(std::filesystem::path(argv[1]), ec);
   if (ec || !std::filesystem::is_directory(g_data_root)) {
     std::cerr << "Invalid or missing data directory: " << argv[1] << '\n'
-              << "  Pass the real absolute path to core/moonshine-tts/data in your clone "
+              << "  Pass the real absolute path to core/moonshine-tts/data in "
+                 "your clone "
                  "(not a documentation placeholder).\n";
     return 2;
   }
 
   namespace fs = std::filesystem;
   const unsigned salt = static_cast<unsigned>(std::time(nullptr)) ^
-                         static_cast<unsigned>(std::random_device{}()) ^
+                        static_cast<unsigned>(std::random_device{}()) ^
 #if defined(_WIN32)
-                         static_cast<unsigned>(_getpid());
+                        static_cast<unsigned>(_getpid());
 #else
-                         static_cast<unsigned>(getpid());
+                        static_cast<unsigned>(getpid());
 #endif
-  const fs::path sandbox = fs::temp_directory_path() / ("moonshine_c_api_mem_" + std::to_string(salt));
+  const fs::path sandbox = fs::temp_directory_path() /
+                           ("moonshine_c_api_mem_" + std::to_string(salt));
   fs::create_directories(sandbox);
   fs::current_path(sandbox);
 
@@ -284,7 +304,8 @@ int main(int argc, char** argv) {
   }
 
   doctest::Context ctx;
-  ctx.applyCommandLine(static_cast<int>(doctest_argv.size()), doctest_argv.data());
+  ctx.applyCommandLine(static_cast<int>(doctest_argv.size()),
+                       doctest_argv.data());
   const int r = ctx.run();
   std::filesystem::remove_all(sandbox, ec);
   return r;

@@ -7,6 +7,9 @@
 - [Quickstart](#quickstart)
 - [When should you choose Moonshine over Whisper?](#when-should-you-choose-moonshine-over-whisper)
 - [Using the Library](#using-the-library)
+  - [Speech to Text](#getting-started-with-transcription)
+  - [Text to Speech](#getting-started-with-text-to-speech)
+  - [Conversational Agents](#getting-started-with-a-conversational-agent)
 - [Models](#models)
 - [API Reference](#api-reference)
 - [Support](#support)
@@ -14,13 +17,13 @@
 - [Acknowledgements](#acknowledgements)
 - [License](#license)
 
-[Moonshine](https://moonshine.ai) Voice is an open source AI toolkit for developers building real-time voice applications.
+[Moonshine](https://moonshine.ai) Voice is an open source AI toolkit for developers building real-time voice agents and applications.
 
 - Everything runs on-device, so it's fast, private, and you don't need an account, credit card, or API keys.
 - The framework and models are optimized for live streaming applications, offering low latency responses by doing a lot of the work while the user is still talking.
 - All speech to text models are based on our [cutting edge research](https://arxiv.org/abs/2602.12241) and trained from scratch, so we can offer [higher accuracy than Whisper Large V3 at the top end](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard), down to tiny 26MB models for constrained deployments.
-- It's easy to integrate across platforms, with the same library running on [Python](#python), [iOS](#ios), [Android](#android), [MacOS](#macos), [Linux](#linux), [Windows](#windows), [Raspberry Pis](#raspberry-pi), [IoT devices](https://www.linkedin.com/posts/petewarden_most-of-the-recent-news-about-ai-seems-to-activity-7384664255242932224-v6Mr/), and wearables.
-- Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, text to speech, speaker identification (diarization) and command recognition, so you don't need to be an expert to build a voice application.
+- It's easy to integrate across platforms, with the same library running on [Python](#python), [iOS](#ios), [Android](#android), [MacOS](#macos), [Linux](#linux), [Windows](#windows), [Raspberry Pis](#raspberry-pi), [IoT devices](https://www.linkedin.com/posts/petewarden_most-of-the-recent-news-about-ai-seems-to-activity-7384664255242932224-v6Mr/), [microcontrollers](micro/README.md), [DSPs](micro/README.md), and wearables.
+- Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, text to speech, voice cloning, speaker identification (diarization), command recognition, and [conversational agents](#getting-started-with-a-conversational-agent), so you can build your voice application with a single library.
 - It supports multiple languages, including English, Spanish, Mandarin, Japanese, Korean, Vietnamese, Ukrainian, and Arabic for STT, and English, Spanish, Arabic, German, French, Hindi, Italian, Japanese, Korean, Dutch, Portuguese, Russian, Turkish, Ukrainian, Vietnamese, and Mandarin for TTS.
   
 ## Quickstart
@@ -31,6 +34,7 @@ Example apps for iOS, Android, macOS, Windows, and Raspberry Pi are published on
 
 ### Python
 
+<!-- doc-test: parse-only -->
 ```bash
 pip install moonshine-voice
 python -m moonshine_voice.mic_transcriber --language en
@@ -38,12 +42,14 @@ python -m moonshine_voice.mic_transcriber --language en
 
 Listens to the microphone and prints updates to the transcript as they come in.
 
+<!-- doc-test: parse-only -->
 ```bash
 python -m moonshine_voice.intent_recognizer
 ```
 
 Listens for user-defined action phrases, like "Turn on the lights", using semantic matching so natural language variations are recognized. For more, check out [our "Getting Started" Colab notebook](https://bit.ly/moonshine-colab) and [video](https://www.youtube.com/watch?v=WH-AGvHmtoM).
 
+<!-- doc-test: parse-only -->
 ```bash
 python -m moonshine_voice.tts --language en_us --text "Hello world"
 ```
@@ -62,6 +68,7 @@ Download [github.com/moonshine-ai/moonshine/releases/latest/download/android-Tra
 
 [Download](https://github.com/moonshine-ai/moonshine/archive/refs/heads/main.zip) or `git clone` this repository and then run:
 
+<!-- doc-test: skip -->
 ```bash
 cd core
 mkdir -p build
@@ -81,29 +88,21 @@ Download [github.com/moonshine-ai/moonshine/releases/latest/download/macos-MicTr
 
 Download [github.com/moonshine-ai/moonshine/releases/latest/download/windows-cli-transcriber.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/windows-cli-transcriber.tar.gz), extract it, and then open the `cli-transcriber\cli-transcriber.vcxproj` project in Visual Studio.
 
-[Install Moonshine in Python](#python) for model downloading.
-
-In the terminal:
-
-```batch
-pip install moonshine-voice
-cd examples\windows\cli-transcriber
-.\download-lib.bat
-msbuild cli-transcriber.sln /p:Configuration=Release /p:Platform=x64
-python -m moonshine_voice.download --language en
-x64\Release\cli-transcriber.exe --model-path <path from the download command> --model-arch <number from the download command>
-```
+It's a self-contained archive that includes the library and model, so Ctrl+Shift+B or F7 will build the executable.
 
 ### Raspberry Pi
 
 You'll need a USB microphone plugged in to get audio input, but the Python pip package has been optimized for the Pi, so you can run:
 
+<!-- doc-test: skip -->
 ```bash
  sudo pip install --break-system-packages moonshine-voice
  python -m moonshine_voice.mic_transcriber --language en
 ```
 
 I've recorded [a screencast on YouTube](https://www.youtube.com/watch?v=NNcqx1wFxl0) to help you get started, and you can also download [github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz) for some fun, Pi-specific examples. [The README](examples/raspberry-pi/my-dalek/README.md) has information about using a virtual environment for the Python install if you don't want to use `--break-system-packages`.
+
+You can look at [github.com/moonshine-ai/pi-help-bot](https://github.com/moonshine-ai/pi-help-bot) for a more advanced example.
 
 ## When should you choose Moonshine over Whisper?
 
@@ -154,8 +153,13 @@ The Moonshine API is designed to take care of the details around capturing and t
 - [Concepts](#concepts)
 - [Getting Started with Transcription](#getting-started-with-transcription)
   - [Transcription Event Flow](#transcription-event-flow)
-- [Getting Started with Command Recognition](#getting-started-with-command-recognition)
+- [Getting Started with a Conversational Agent](#getting-started-with-a-conversational-agent)
+  - [Agent Setup](#agent-setup)
 - [Getting Started with Text to Speech](#getting-started-with-text-to-speech)
+  - [Voice Samples](#voice-samples)
+    - [ZipVoice](#zipvoice)
+    - [Kokoro](#kokoro)
+    - [Piper TTS](#piper-tts)
   - [Converting Graphemes to Phonemes](#converting-graphemes-to-phonemes)
 - [Examples](#examples)
 - [Adding the Library to your own App](#adding-the-library-to-your-own-app)
@@ -214,6 +218,10 @@ A [**TranscriptEventListener**](python/src/moonshine_voice/transcriber.py#L266) 
 An [**IntentRecognizer**](python/src/moonshine_voice/intent_recognizer.py#L44) is a type of TranscriptEventListener that allows you to invoke different callback functions when preprogrammed intents are detected. This is useful for building voice command recognition features.
 
 A [**TextToSpeech**](python/src/moonshine_voice/tts.py#L20) object synthesizes audio for playback to the user.
+
+A [**DialogFlow**](python/src/moonshine_voice/dialog_flow.py#L453) object manages conversations between the user and an agent.
+
+A [**Dialog**](python/src/moonshine_voice/dialog_flow.py#L335) object is created for each conversational exchange, and allows the agent to hold a multi-step discussion with the user.
 
 ### Getting Started with Transcription
 
@@ -286,12 +294,13 @@ We also offer a specialization of the base `Transcriber` class called `MicTransc
 
 #### Transcription Event Flow
 
-The main communication channel between the library and your application is through events that are passed to any listener functions you have registered. There are four major event types:
+The main communication channel between the library and your application is through events that are passed to any listener functions you have registered. There are five major event types:
 
 - `LineStarted`. This is sent to listeners when the beginning of a new speech segment is detected. It may or may not contain any text, but since it's dispatched near the start of an utterance, that text is likely to change over time.
 - `LineUpdated`. Called whenever any of the information about a line changes, including the duration, audio data, and text.
 - `LineTextChanged`. Called only when the text associated with a line is updated. This is a subset of `LineUpdated` that focuses on the common need to refresh the text shown to users as often as possible to keep the experience interactive.
-- `LineCompleted`. Sent when we detect that someone has paused speaking, and we've ended the current segment. The line data structure has the final values for the text, duration, and speaker ID.
+- `LineSpeakersChanged`. Only fired when the opt-in `identify_speakers` option is enabled. Called when the speaker spans attached to a line change. Unlike the other line events, this can fire for lines that are already complete, because the diarization algorithm keeps refining its speaker assignments as more audio arrives.
+- `LineCompleted`. Sent when we detect that someone has paused speaking, and we've ended the current segment. The line data structure has the final values for the text and duration.
 
 We offer some guarantees about these events:
 
@@ -300,85 +309,175 @@ We offer some guarantees about these events:
 - `LineUpdated` and `LineTextChanged` will only ever be called after the `LineStarted` and before the `LineCompleted` events for a segment.
 - Those update events are not guaranteed to be called (and in practice can be disabled by setting `update_interval` to a very large value).
 - There will only be one line active at any one time for any given stream.
-- Once `LineCompleted` has been called, the library will never alter that line's data again.
+- Once `LineCompleted` has been called, the library will never alter that line's text, timing, or audio data again. The one exception is the line's speaker spans: when `identify_speakers` is enabled, those can be revised for recent audio (signaled by `LineSpeakersChanged`), since diarization re-clusters a sliding window of recent speech. Assignments for audio older than `diarization_cluster_window_sec` are frozen.
 - If `stop()` is called on a transcriber or stream, any active lines will have `LineCompleted` called.
 - Each line has a 64-bit `lineId` that is designed to be unique enough to avoid collisions.
 - This `lineId` remains the same for the line over time, from the first `LineStarted` event onwards.
 
-### Getting Started with Command Recognition
+### Getting Started with a Conversational Agent
 
-If you want your application to respond when users talk, you need to understand what they're saying. The previous generation of voice interfaces could only recognize speech that was phrased in exactly the form they expected. For example "Alexa, turn on living-room lights" might work, but "Alexa, lights on in the living room please" might not. The general problem of figuring out what a user wants from natural speech is known as intent recognition. There have been decades of research into this area, but the rise of transformer-based LLMs has given us new tools. We have integrated some of these advances into Moonshine Voice's command recognition API.
+Many applications need a voice agent that can understand what users are saying and respond appropriately. To make this as straightforward as possible, we let you define different conversational flows. A flow can be as simple as responding to a query, or be a multi-step, branching conversation that takes actions.
 
-The basic idea is that your application registers some general actions you're interested in, like "Turn the lights on" or "Move left", and then Moonshine sends an event when the user says something that matches the meaning of those phrases. It works a lot like a graphical user interface - you define a button (action) and an event callback that is triggered when the user presses that button.
+To define these flows, you used a [`DialogFlow`](#dialogflow) object, with callbacks that take [`Dialog`](#dialog) arguments. Here's an example of a simple flow, taken from the [github.com/moonshine-ai/pi-help-bot](https://github.com/moonshine-ai/pi-help-bot) sample code:
 
-To give it a try for yourself, run this built-in example:
+```python
+    def report_ip_address(d: Dialog):
+        ip = _find_local_ip()
+        if ip is None:
+            yield d.say("Sorry, I couldn't find a local IP address.")
+            return
+        speech_ip = re.sub(r"(\d)", r"\1 ", ip.replace(".", " dot "))
+        yield d.say([
+            f"Okay. Your local IP address is {speech_ip}. ",
+            f"To repeat, that's {speech_ip}."
+        ])
 
+    dialog_flow.register_flow("What is my IP address?", report_ip_address)
+```
+
+This registers the `report_ip_address()` function to be called whenever the user says anything similar to "What is my IP address?". The matching is done semantically, so alternative phrasings like "Tell me your IP address" or "Can you tell me the local IP address?" should trigger it too. You can register as many top-level conversation starters as you'd like, the system will listen out and route to the closest in meaning.
+
+The function itself receives a `Dialog` argument that represents the current conversational exchange. In this simple case we don't need any additional input from the user so we just use it to `say()` the information that was requested. We break the IP address into separate words for each digit for clarity, and replace the connecting periods with explicit "dot"s, so that 192.178.4.72 becomes "1 9 2 dot 1 7 8 dot 4 dot 72", since that's the conventional way to articulate them in speech.
+
+For more complex conversations, like setting up a new wifi network, you can define multiple steps and branch points directly in Python:
+
+```python
+    def connect_to_wifi(d: Dialog):
+        input_ssid = yield d.ask("What's the name of your Wi-Fi network? Say list if you want to pick from a list or spell if you want to spell out the start of the name")
+        input_ssid = input_ssid.strip()
+
+        networks = _scan_wifi_networks()
+
+        if input_ssid.lower().strip(string.punctuation) == "list":
+            yield d.say("Say yes to the network you want to connect to.")
+            for network in networks:
+                if (yield d.confirm(f"{network}?")):
+                    input_ssid = network
+                    break
+        elif input_ssid.lower().strip(string.punctuation) == "spell":
+            input_ssid = yield d.ask("Spell out the start of the network name.", mode=SPELLED)
+
+        found_ssid = fuzzy_match_network(input_ssid, networks)
+        if found_ssid is None:
+            yield d.say(f"Sorry, I couldn't find a matching network for {input_ssid}.")
+            return
+
+        password = yield d.ask(
+            f"Please spell the Wi-Fi password for {found_ssid} one character at a time, and say done when finished.",
+            mode=SPELLED,
+        )
+
+        yield d.say(f"Connecting to {found_ssid}.")
+
+        try:
+            result = subprocess.run(
+                ["sudo", "nmcli", "device", "wifi",
+                    "connect", found_ssid, "password", password],
+                capture_output=True, text=True, timeout=30,
+            )
+        except FileNotFoundError:
+            yield d.say("Sorry, network manager was not found on this system.")
+            return
+        except subprocess.TimeoutExpired:
+            yield d.say("Sorry, the connection attempt timed out.")
+            return
+
+        if result.returncode == 0:
+            yield d.say(f"Connected to {found_ssid}.")
+        else:
+            print(f"[ERROR] nmcli stderr: {result.stderr}", file=sys.stderr)
+            yield d.say(
+                f"Sorry, I wasn't able to connect to {found_ssid}. "
+                "Please check the network name and password and try again."
+            )
+
+    dialog_flow.register_flow("Connect to Wi-Fi", connect_to_wifi)
+```
+
+The first thing the function does is ask the user to give them the name of the network they want to join, through the call:
+
+```python
+input_ssid = yield d.ask("What's the name of your Wi-Fi network?...")
+```
+
+The Dialog class lets you ask users questions and will return the string containing the what they said in response. The only unusual feature here, compared to regular Python code, is the `yield` keyword. Because it may take some time for the user to respond, we call yield to hand back control to the main script until their response has been received. This is a general pattern for `DialogFlow` and you'll see it wherever we're waiting for the user to say something, to avoid blocking.
+
+```python
+        if input_ssid.lower().strip(string.punctuation) == "list":
+            yield d.say("Say yes to the network you want to connect to.")
+            for network in networks:
+                if (yield d.confirm(f"{network}?")):
+                    input_ssid = network
+                    break
+```
+
+Our example application supports a few different input methods - running through a list of networks, spelling out the first few letters, or saying the name. Here we implement the list approach by looping through all the available networks and asking the user whether each is the one they want. Here you can see that regular loops and conditional statements work as you'd expect in Python.
+
+For each network, we call `confirm()`, which asks a question and then waits for a positive or negative result. Like all matching in the system this is done semantically, so "okay", "affirmative", and "go ahead" will work as well as a straightforward "yes".
+
+```python
+        password = yield d.ask(
+            f"Please spell the Wi-Fi password for {found_ssid} one character at a time, and say done when finished.",
+            mode=SPELLED,
+        )
+```
+
+Password input is tricky, because they consist of arbitrary letters, digits, and symbols, and so they have to be spelled out by the user. Moonshine supports this through the `mode=SPELLED` argument. This asks the user to spell out each character, and uses a fine-tuned model to recognise what the user is saying for each. As well as supporting regular utterances like "aitch" or "capital zee", it also supports the NATO alphabet ("alpha", "bravo", etc) and even short descriptive phrases like "E as in elephant". It repeats back what it heard, and lets you delete mistakes.
+
+```python
+        try:
+            result = subprocess.run(
+                ["sudo", "nmcli", "device", "wifi",
+                    "connect", found_ssid, "password", password],
+                capture_output=True, text=True, timeout=30,
+            )
+        except FileNotFoundError:
+            yield d.say("Sorry, network manager was not found on this system.")
+            return
+        except subprocess.TimeoutExpired:
+            yield d.say("Sorry, the connection attempt timed out.")
+            return
+```
+
+The flow also works with other control structures like exception handlers, so you can specify your conversations using idiomatic code, even for error recovery.
+
+To give this a try for yourself, run this built-in example:
+
+<!-- doc-test: parse-only -->
 ```bash
-python -m moonshine_voice.intent_recognizer
+python -m moonshine_voice.dialog_flow
 ```
 
-This will present you with a menu of command phrases, and then start listening to the microphone. If you say something that's a variant on one of the phrases you'll see a "triggered" log message telling you which action was matched, along with how confident the system is in the match.
+### Agent Setup
 
-```bash
-📝 Let there be light.
-'TURN ON THE LIGHTS' triggered by 'Let there be light.' with 76% confidence
-```
-
-To show that you can modify these at run time, try supplying your own list of phrases as a comma-separated string argument to `--intents`.
-
-```bash
-python -m moonshine_voice.intent_recognizer --intents "Turn left, turn right, go backwards, go forward"
-```
-
-This could be the core command set to control a robot's movement for example. It's worth spending a bit of time experimenting with different wordings of the command phrases, and different variations on the user side, to get a feel for how the system works.
-
-Under the hood this is all accomplished using two main classes. We've met the `MicTranscriber` above, the new addition is `IntentRecognizer`. This listens to the results of the transcriber, fuzzily matches completed lines against any intents that have been registered with it, and calls back the client-supplied code.
-
-The fuzzy matching uses a sentence-embedding model based on Gemma300m, so the first step is downloading it and getting the path:
+An agent needs a speech-to-text `Transcriber` object to receive input, an `IntentRecognizer` to understand the input, and a `TextToSpeech` object to respond:
 
 ```python
-embedding_model_path, embedding_model_arch = get_embedding_model(
-    args.embedding_model, args.quantization
-)
+    embedding_model_path, embedding_model_arch = get_embedding_model()
+    intent_recognizer = IntentRecognizer(
+        model_path=embedding_model_path,
+        model_arch=embedding_model_arch
+    )
+
+    tts = TextToSpeech(args.tts_language)
+
+    model_path, model_arch = get_model_for_language(args.language)
+    mic_transcriber = MicTranscriber(
+        model_path=model_path, model_arch=model_arch
+    )
+
+    dialog_flow = DialogFlow(
+        tts=tts,
+        intent_recognizer=intent_recognizer
+    )
+    add_commands(dialog_flow, tts)
+
+    mic_transcriber.add_listener(dialog_flow)
+
+    mic_transcriber.start()
 ```
 
-Once we have the model's location, we create an `IntentRecognizer` using that path. The only other argument is the `threshold` we use for fuzzy matching. It's between 0 and 1, with low numbers producing more matches but at the cost of less accuracy, and vice versa for high values. The built-in default is 0.8 (fairly strict); the CLI `--threshold` flag overrides it.
-
-```python
-intent_recognizer = IntentRecognizer(
-    model_path=embedding_model_path,
-    model_arch=embedding_model_arch,
-    model_variant=args.quantization,
-    threshold=args.threshold,
-)
-```
-
-Next we tell the recognizer what kinds of phrases to listen out for, and what to do when there's a match. You can optionally pass a pre-computed embedding and/or a priority to `register_intent()`, but in the simplest case you just supply a phrase and a handler:
-
-```python
-def on_intent_triggered_on(trigger: str, utterance: str, similarity: float):
-    print(f"\n'{trigger.upper()}' triggered by '{utterance}' with {similarity:.0%} confidence")
-
-for intent in intents:
-    intent_recognizer.register_intent(intent, on_intent_triggered_on)
-```
-
-If you need to pre-compute an embedding (for example, to store it in a database or share it between sessions), use `calculate_embedding()`:
-
-```python
-embedding = intent_recognizer.calculate_embedding("turn on the lights")
-intent_recognizer.register_intent("turn on the lights", handler, embedding=embedding, priority=1)
-```
-
-The recognizer supports the transcript event listener interface, so the final stage is adding it as a listener to the `MicTranscriber`.
-
-```python
-mic_transcriber.add_listener(intent_recognizer)
-```
-
-Once you start the transcriber, it will listen out for any variations on the supplied phrases, and call `on_intent_triggered_on()` whenever there's a match.
-
-The current intent recognition is designed for full-sentence matching, which works well for straightforward commands, but we will be expanding into more advanced "slot filling" techniques in the future, to handle extracting the quantity from "I want ten bananas" for example.
+The `add_commands()` function calls `register_flow()` for all of the phrases the agent should recognize.
 
 ### Getting Started with Text to Speech
 
@@ -403,6 +502,7 @@ tts.stop()  # cancel remaining utterances and halt playback
 
 If you're on a machine without an audio output, or want to do further processing, you can retrieve the audio samples using the `synthesize()` method:
 
+<!-- doc-test: run -->
 ```python
 from moonshine_voice import TextToSpeech
 
@@ -412,6 +512,7 @@ audio_data, sample_rate = tts.synthesize("Howdy, partner")
 
 As you can see, text to speech supports multiple languages. To see which are available, run the `list_tts_languages()` function:
 
+<!-- doc-test: run -->
 ```python
 from moonshine_voice import list_tts_languages
 list_tts_languages()
@@ -421,6 +522,7 @@ list_tts_languages()
 
 For each language, you can list which voices are available:
 
+<!-- doc-test: run -->
 ```python
 from moonshine_voice import list_tts_voices
 
@@ -430,6 +532,77 @@ list_tts_voices("ru")
 ```
 
 If a voice is marked as `downloadable` that means if you pass it in to the `TextToSpeech` constructor then Moonshine will download it to a cache automatically (as long as the `download` argument is its default true) and will be available on your machine with no internet access required for subsequent calls.
+
+#### Voice Cloning
+
+The integrated [ZipVoice model](https://github.com/k2-fsa/ZipVoice) can imitate someone's voice, given a short audio clip. Pass the clip to the `TextToSpeech` constructor's `clone` argument, either as a path to a `.wav` file or as a `(pcm, sample_rate)` pair of mono float samples. You can also pass `clone_transcript`, the text spoken in the clip; when omitted, Moonshine auto-transcribes the clip with its ASR model before cloning (this takes a few extra seconds on first use):
+
+```python
+from moonshine_voice import TextToSpeech
+import importlib.resources;
+
+clone_path = importlib.resources.files("moonshine_voice.assets").joinpath("clone-test.wav")
+clone_transcript = "Ever tried. Ever failed. No matter. Try Again. Fail again. Fail better."
+
+tts = TextToSpeech(
+    "en-us",
+    clone=clone_path,
+    clone_transcript=clone_transcript,
+)
+tts.say("Ask not what your country can do for you, but what you can do for your country")
+tts.wait()
+```
+
+The ZipVoice engine is selected automatically when `clone` is set, so no `voice` argument is needed (passing a voice together with `clone` raises an error). 
+
+You can also try cloning from the command line. Since you won't always have easy access to a clean transcript of the speech you want to clone from, you can leave it out and have Moonshine automatically generate one, in both the API and command line.
+
+<!-- doc-test: parse-only -->
+```bash
+curl -O -L 'https://github.com/moonshine-ai/moonshine/raw/refs/heads/main/python/src/moonshine_voice/assets/clone-test.wav'
+
+python3 -m moonshine_voice.tts \
+  --clone clone-test.wav \
+  --text "I am so excited about Moonshine Voice's text to speech"
+```
+
+#### Voice Samples
+
+To help you choose a voice, here are sample clips of each one saying "Welcome to Moonshine Voice text to speech". Each entry is the voice name you can pass to the `TextToSpeech` constructor; click the ▶ next to it to hear it.
+
+##### ZipVoice
+
+These voices were created using the zero-shot voice cloning capabilities of [ZipVoice](https://github.com/k2-fsa/ZipVoice), a high-quality flow-matching TTS model from the k2-fsa team. It takes significantly longer to generate than Kokoro or PiperTTS, but offers [voice cloning](#voice-cloning) and more realistic speech.
+
+| | | |
+| --- | --- | --- |
+| `zipvoice_american_female` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_american_female.wav) | `zipvoice_american_male` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_american_male.wav) | `zipvoice_australian_male` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_australian_male.wav) |
+| `zipvoice_canadian_female` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_canadian_female.wav) | `zipvoice_canadian_male` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_canadian_male.wav) | `zipvoice_english_female` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_english_female.wav) |
+| `zipvoice_english_male` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_english_male.wav) | `zipvoice_indian_female` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_indian_female.wav) | `zipvoice_indian_male` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_indian_male.wav) |
+| `zipvoice_irish_female` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_irish_female.wav) | `zipvoice_irish_male` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_irish_male.wav) | `zipvoice_new_zealand_female` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_new_zealand_female.wav) |
+| `zipvoice_northern_irish_female` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_northern_irish_female.wav) | `zipvoice_south_african_female` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_south_african_female.wav) | `zipvoice_south_african_male` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_south_african_male.wav) |
+
+##### Kokoro
+
+These voices come from the excellent [Kokoro](https://github.com/hexgrad/kokoro) project, an 82-million-parameter open-weight TTS model that delivers quality comparable to much larger models.
+
+| American Female | American Male | British Female | British Male |
+| --- | --- | --- | --- |
+| `kokoro_af_alloy` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_alloy.wav) | `kokoro_am_adam` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_am_adam.wav) | `kokoro_bf_alice` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_bf_alice.wav) | `kokoro_bm_daniel` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_bm_daniel.wav) |
+| `kokoro_af_aoede` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_aoede.wav) | `kokoro_am_echo` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_am_echo.wav) | `kokoro_bf_emma` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_bf_emma.wav) | `kokoro_bm_fable` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_bm_fable.wav) |
+| `kokoro_af_bella` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_bella.wav) | `kokoro_am_eric` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_am_eric.wav) | `kokoro_bf_isabella` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_bf_isabella.wav) | `kokoro_bm_george` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_bm_george.wav) |
+| `kokoro_af_heart` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_heart.wav) | `kokoro_am_fenrir` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_am_fenrir.wav) | `kokoro_bf_lily` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_bf_lily.wav) | `kokoro_bm_lewis` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_bm_lewis.wav) |
+| `kokoro_af_jessica` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_jessica.wav) | `kokoro_am_liam` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_am_liam.wav) | | |
+| `kokoro_af_kore` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_kore.wav) | `kokoro_am_michael` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_am_michael.wav) | | |
+| `kokoro_af_nicole` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_nicole.wav) | `kokoro_am_onyx` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_am_onyx.wav) | | |
+| `kokoro_af_nova` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_nova.wav) | `kokoro_am_puck` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_am_puck.wav) | | |
+| `kokoro_af_river` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_river.wav) | `kokoro_am_santa` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_am_santa.wav) | | |
+| `kokoro_af_sarah` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_sarah.wav) | | | |
+| `kokoro_af_sky` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/kokoro_af_sky.wav) | | | |
+
+##### Piper TTS
+
+The [Piper](https://github.com/OHF-Voice/piper1-gpl) project provides over a hundred lightweight voices across all of the languages Moonshine supports, from many contributors — too many to sample here. You can listen to every Piper voice on the [Piper voice samples page](https://rhasspy.github.io/piper-samples/), and use any of them with Moonshine through the `piper_` voice names returned by `list_tts_voices()`.
 
 #### Converting Graphemes to Phonemes
 
@@ -467,6 +640,7 @@ Every language requires a different process to convert its written form into spe
 
 If you want access to just the grapheme to phoneme capability, without the speech synthesis, you can all it directly:
 
+<!-- doc-test: run -->
 ```python
 from moonshine_voice import GraphemeToPhonemizer
 
@@ -482,11 +656,11 @@ The [`examples`](examples/) folder has code samples organized by platform. We us
 
 - **[Android](examples/android/)**
   - [IntentRecognizer](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-IntentRecognizer.tar.gz)
-  - [TextToSpeech](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-TextToSpeech.tar.gz) — [`examples/android/TextToSpeech/`](examples/android/TextToSpeech/)
+  - [TextToSpeech](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-TextToSpeech.tar.gz)
   - [Transcriber](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-Transcriber.tar.gz)
 - **[Portable C++](examples/c++/README.md)**
-  - [`transcriber.cpp`](examples/c++/transcriber.cpp)
-  - [`text-to-speech.cpp`](examples/c++/text-to-speech.cpp)
+  - [transcriber.cpp](examples/c++/transcriber.cpp)
+  - [text-to-speech.cpp](examples/c++/text-to-speech.cpp)
 - **[iOS](examples/ios/)**
   - [IntentRecognizer](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-IntentRecognizer.tar.gz)
   - [TextToSpeech](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-TextToSpeech.tar.gz)
@@ -498,14 +672,21 @@ The [`examples`](examples/) folder has code samples organized by platform. We us
 - **[Windows](examples/windows/)**
   - [cli-transcriber](https://github.com/moonshine-ai/moonshine/releases/latest/download/windows-cli-transcriber.tar.gz)
 - **[Python](examples/python/)**
-  - [`basic_transcription.py`](examples/python/basic_transcription.py)
-  - [`mic_transcription.py`](examples/python/mic_transcription.py)
-  - [`intent_recognition.py`](examples/python/intent_recognition.py)
-  - [`ollama-voice/ollama_voice.py`](examples/python/ollama-voice/ollama_voice.py )
+  - [basic_transcription.py](examples/python/basic_transcription.py)
+  - [mic_transcription.py](examples/python/mic_transcription.py)
+  - [intent_recognition.py](examples/python/intent_recognition.py)
+  - [ollama-voice/ollama_voice.py](examples/python/ollama-voice/ollama_voice.py )
 - **[Raspberry Pi](examples/raspberry-pi/)**
   - [my-dalek](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz)
+  - [Pi Help Bot](https://github.com/moonshine-ai/pi-help-bot/archive/refs/heads/main.zip)
 
-The examples usually include one minimal project that just creates a transcriber and then feeds it data from a WAV file, and another that's pulling audio from a microphone using the platform's default framework for accessing audio devices. For Android, [`examples/android/IntentRecognizer`](examples/android/IntentRecognizer/) is a self-contained Gradle project you can copy out of the tree: it depends on **`ai.moonshine:moonshine-voice:0.0.60`** from Maven Central (includes `IntentRecognizer`) and bundles **small English streaming** ASR plus **embeddinggemma-300m** under `app/src/main/assets/` (Git LFS). Streaming weights are mirrored from assets to internal storage at runtime, then loaded with `MicTranscriber.loadFromFiles` and `MOONSHINE_MODEL_ARCH_SMALL_STREAMING`. [`examples/android/TextToSpeech`](examples/android/TextToSpeech/) is the same style of Gradle sample for on-device TTS: it uses the `TextToSpeech` class from **`moonshine-voice`** and bundles everything the default English voice needs to run fully offline — the **Kokoro** model, the `af_alloy` voice, and the `en_us` G2P + OOV files (`dict_filtered_heteronyms.tsv`, `g2p-config.json`, `oov/model.onnx`, `oov/onnx-config.json`) — under `app/src/main/assets/tts-data/` (Git LFS). Every other voice — the full Kokoro catalog and Piper voices across all supported languages — is resolved from `moonshine_get_tts_dependencies` and downloaded on demand from `https://download.moonshine.ai/tts/` the first time the user picks a voice that needs it, with a small progress indicator while assets are fetched. Downloads are cached under `filesDir`, so subsequent launches reuse them offline. [`examples/ios/TextToSpeech`](examples/ios/TextToSpeech/) follows the same pattern on Apple platforms: the Xcode project pulls **`MoonshineVoice`** from the Swift package and bundles the same Kokoro + `af_alloy` + `en_us` offline set under `tts-data/` (Git LFS). On first launch the bundled tree is staged into `Application Support/tts-data/`, then `TextToSpeech.getDependencies` is used to download any missing files from `https://download.moonshine.ai/tts/`, with a progress indicator in the UI. Switching to a different voice triggers the same on-demand download, and cached files are reused on subsequent launches.
+The examples usually include one minimal project that just creates a transcriber and then feeds it data from a WAV file, and another that's pulling audio from a microphone using the platform's default framework for accessing audio devices. For Android, [`examples/android/IntentRecognizer`](examples/android/IntentRecognizer/) is a self-contained Gradle project you can copy out of the tree: it depends on **`ai.moonshine:moonshine-voice:0.0.65`** from Maven Central (includes `IntentRecognizer`) and bundles **small English streaming** ASR plus **embeddinggemma-300m** under `app/src/main/assets/` (Git LFS). 
+
+Streaming weights are mirrored from assets to internal storage at runtime, then loaded with `MicTranscriber.loadFromFiles` and `MOONSHINE_MODEL_ARCH_SMALL_STREAMING`. [`examples/android/TextToSpeech`](examples/android/TextToSpeech/) is the same style of Gradle sample for on-device TTS: it uses the `TextToSpeech` class from **`moonshine-voice`** and bundles everything the default English voice needs to run fully offline — the **Kokoro** model, the `af_alloy` voice, and the `en_us` G2P + OOV files (`dict_filtered_heteronyms.tsv`, `g2p-config.json`, `oov/model.onnx`, `oov/onnx-config.json`) — under `app/src/main/assets/tts-data/` (Git LFS). 
+
+Every other voice — the full Kokoro catalog and Piper voices across all supported languages — is resolved from `moonshine_get_tts_dependencies` and downloaded on demand from `https://download.moonshine.ai/tts/` the first time the user picks a voice that needs it, with a small progress indicator while assets are fetched. Downloads are cached under `filesDir`, so subsequent launches reuse them offline. 
+
+[`examples/ios/TextToSpeech`](examples/ios/TextToSpeech/) follows the same pattern on Apple platforms: the Xcode project pulls **`MoonshineVoice`** from the Swift package and bundles the same Kokoro + `af_alloy` + `en_us` offline set under `tts-data/` (Git LFS). On first launch the bundled tree is staged into `Application Support/tts-data/`, then `TextToSpeech.getDependencies` is used to download any missing files from `https://download.moonshine.ai/tts/`, with a progress indicator in the UI. Switching to a different voice triggers the same on-demand download, and cached files are reused on subsequent launches.
 
 ### Adding the Library to your own App
 
@@ -523,9 +704,9 @@ For reference purposes you can find Xcode projects with these changes applied in
 
 #### Android
 
-On Android we publish [the package to Maven](https://mvnrepository.com/artifact/ai.moonshine/moonshine-voice). To include it in your project using Android Studio and Gradle, first add the version number you want to the `gradle/libs.versions.toml` file by inserting a line in the `[versions]` section, for example `moonshineVoice = "0.0.60"`. Then in the `[libraries]` part, add a reference to the package: `moonshine-voice = { group = "ai.moonshine", name = "moonshine-voice", version.ref = "moonshineVoice" }`.
+On Android we publish [the package to Maven](https://mvnrepository.com/artifact/ai.moonshine/moonshine-voice). To include it in your project using Android Studio and Gradle, first add the version number you want to the `gradle/libs.versions.toml` file by inserting a line in the `[versions]` section, for example `moonshineVoice = "0.0.65"`. Then in the `[libraries]` part, add a reference to the package: `moonshine-voice = { group = "ai.moonshine", name = "moonshine-voice", version.ref = "moonshineVoice" }`.
 
-Finally, in your `app/build.gradle.kts` add the library to the `dependencies` list: `implementation(libs.moonshine.voice)`. The [`examples/android/IntentRecognizer`](examples/android/IntentRecognizer/) and [`examples/android/TextToSpeech`](examples/android/TextToSpeech/) samples use the same coordinates (`moonshineVoice = "0.0.60"` in their catalogs).
+Finally, in your `app/build.gradle.kts` add the library to the `dependencies` list: `implementation(libs.moonshine.voice)`. The [`examples/android/IntentRecognizer`](examples/android/IntentRecognizer/) and [`examples/android/TextToSpeech`](examples/android/TextToSpeech/) samples use the same coordinates (`moonshineVoice = "0.0.65"` in their catalogs).
 
 #### Windows/C++
 
@@ -543,7 +724,7 @@ The library is designed to help you understand what's going wrong when you hit a
 
 If no errors are being reported but the quality of the transcription isn't what you expect, it's worth ruling out an issue with the audio data that the transcriber is receiving. To make this easier, you can pass in the `save_input_wav_path` option when you create a transcriber. That will save any audio received into .wav files in the folder you specify. Here's a Python example:
 
-```python
+```bash
 python -m moonshine_voice.transcriber --options='save_input_wav_path=.'
 ```
 
@@ -553,7 +734,8 @@ This will run test audio through a transcriber, and write out the audio it has r
 
 If you're running into errors it can be hard to keep track of the timeline of your interactions with the library. The `log_api_calls` option will print out the underlying API calls that have been triggered to the console, so you can investigate any ordering or timing issues.
 
-```python
+<!-- doc-test: skip -->
+```bash
 uv run -m moonshine_voice.transcriber --options='log_api_calls=true'
 ```
 
@@ -565,6 +747,7 @@ If you want to debug into the library internals, or add instrumentation to help 
 
 The core engine of the library is contained in the `core` folder of this repo. It's written in C++ with a C interface for easy integration with other languages. We use cmake to build on all our platforms, and so the easiest way to get started is something like this:
 
+<!-- doc-test: skip -->
 ```bash
 cd core
 mkdir -p build
@@ -594,20 +777,21 @@ If you want to call this library from a language we don't support, then you shou
 The easiest way to get the model files required for transcription is by using the Python download module. After [installing it](#python) run the downloader like this:
 
 ```bash
-python -m moonshine_voice.download --language en
+python -m moonshine_voice.download --stt --language en
 ```
 
 You can use either the two-letter code or the English name for the `language` argument. If you want to see which languages are supported by your current version they're [listed below](#available-models), or you can supply a bogus language as the argument to this command:
 
+<!-- doc-test: expect-error -->
 ```bash
-python -m moonshine_voice.download --language foo
+python -m moonshine_voice.download --stt --language foo
 ```
 
 You can also optionally request a specific model architecture using the `model-arch` flag, chosen from the numbers in [moonshine-c-api.h](/core/moonshine-c-api.h). If no architecture is set, the script will load the highest-quality model available.
 
 The download script will log the location of the downloaded model files and the model architecture, for example:
 
-```bash
+```text
 encoder_model.ort: 100%|███████████████████████████████████████████████████████| 29.9M/29.9M [00:00<00:00, 34.5MB/s]
 decoder_model_merged.ort: 100%|██████████████████████████████████████████████████| 104M/104M [00:02<00:00, 52.6MB/s]
 tokenizer.bin: 100%|█████████████████████████████████████████████████████████████| 244k/244k [00:00<00:00, 1.44MB/s]
@@ -623,11 +807,11 @@ The last two lines tell you which model architecture is being used, and where th
 
 The download module also helps you obtain the assets you need to recognize intent, primarily a sentence embedding model. 
 
-```python
+```bash
 python -m moonshine_voice.download --intent
 ```
 
-```bash
+```text
 model_q4.onnx: 100%|███████████████████████████████████████████████| 507k/507k [00:00<00:00, 4.59MB/s]
 model_q4.onnx_data: 100%|██████████████████████████████████████████| 188M/188M [00:06<00:00, 32.6MB/s]
 Embedding model path: /Users/petewarden/Library/Caches/moonshine_voice/download.moonshine.ai/model/embeddinggemma-300m
@@ -640,9 +824,11 @@ A large variety of models, dictionaries and other files are needed for TTS, and 
 
 ```bash
 python -m moonshine_voice.download --tts --root /tmp/tts-files/
+```
 
+```text
 dict_filtered_heteronyms.tsv: 100%|██████████████████████████████| 2.77M/2.77M [00:00<00:00, 15.5MB/s]
-g2p-config.json: 100%|██████████████████████████████████████████████| 60.0/60.0 [00:00<00:00, 160kB/s]
+g2p-config.json: 100%|██████████████████████████████████████████████| 60.0.65.0 [00:00<00:00, 160kB/s]
 model.onnx: 100%|████████████████████████████████████████████████| 20.9M/20.9M [00:00<00:00, 37.7MB/s]
 onnx-config.json: 100%|██████████████████████████████████████████| 4.53k/4.53k [00:00<00:00, 11.7MB/s]
 model.onnx: 100%|████████████████████████████████████████████████| 88.1M/88.1M [00:01<00:00, 85.6MB/s]
@@ -660,9 +846,10 @@ If you have an application that may be stored in an arbitrary location after ins
 
 The core library includes a benchmarking tool that simulates processing live audio by loading a .wav audio file and feeding it in chunks to the model. To run it:
 
-```
+<!-- doc-test: skip -->
+```bash
 cd core
-md build
+mkdir -p build
 cd build
 cmake ..
 cmake --build . --config Release
@@ -799,6 +986,8 @@ This documentation covers the Python API, but the same functions and classes are
   - [Stream](#stream)
   - [TranscriptEventListener](#transcripteventlistener)
   - [IntentRecognizer](#intentrecognizer)
+  - [DialogFlow](#dialogflow)
+  - [Dialog](#dialog)
   - [TextToSpeech](#texttospeech)
   - [GraphemeToPhonemizer](#graphemetophonemizer)
 
@@ -818,11 +1007,17 @@ Represents a single "line" or speech segment in a transcript. It includes inform
 - `is_new`: A boolean indicating whether the line has been added to the transcript by the last update call.
 - `has_text_changed`: A boolean that's set if the contents of the line's text was modified by the last transcript update. If this is set, `is_updated` will always be set too, but if other properties of the line (for example the duration or the audio data) have changed but the text remains the same, then `is_updated` can be true while `has_text_changed` is false.
 
-- `has_speaker_id`: Whether a speaker has been identified for this line. Unless the `identify_speakers` option passed to the Transcriber is set to false, this will always be true by the time the line is complete, and potentially it may be set earlier. The speaker identification process is still experimental, so the current accuracy may not be reliable enough for some applications.
+- `have_speakers_changed`: A boolean that's set if the line's speaker spans were revised by the last transcript update. Unlike the other change flags, this can be set for lines that are already complete, since the diarization algorithm keeps refining speaker assignments for recent audio. Only relevant when the `identify_speakers` option is enabled.
 
-- `speaker_id`: A unique-ish unsigned 64-bit integer that is designed for storage or used to identify the same speaker across multiple sessions.
+- `speaker_spans`: An array of speaker spans describing who was talking during which parts of the line, ordered by start time and clipped to the line's time range. Empty unless the opt-in `identify_speakers` option is enabled (which also turns on word timestamps automatically, since they are needed to map spans onto the line text). Each span has:
+    - `start_time`: A float giving the time offset in seconds from the start of the stream.
+    - `duration`: A float giving the length of the span in seconds.
+    - `speaker_id`: A unique-ish unsigned 64-bit integer that is stable for a given speaker within a stream, designed for storage or keeping track of speakers over time.
+    - `speaker_index`: An integer that represents the order in which the speaker first appeared in the transcript, to make it easy to give speakers default names like "Speaker 1:", etc.
+    - `start_char`: A UTF-8 byte offset into the line's `text` where this span begins (inclusive). Zero when unknown.
+    - `end_char`: A UTF-8 byte offset into the line's `text` where this span ends (exclusive). Slice with `text[start_char:end_char]` in Python. Both zero when the span could not be aligned to words yet.
 
-- `speaker_index`: An integer that represents the order in which the speaker appeared in the transcript, to make it easy to give speakers default names like "Speaker 1:", etc.
+  Be aware that speaker spans are *mutable*: the diarization algorithm re-clusters the entire audio history on a cadence, so the spans of any line - including completed ones - can move, merge, split, or change speaker on any transcription call. Watch the `have_speakers_changed` flag (or the `LineSpeakersChanged` event) to catch revisions.
 
 - `audio_data`: An array of 32-bit floats representing the raw audio data that the line is based on, as 16KHz mono PCM data between 0.0 and 1.0. This can be useful for further processing (for example to drive a visual indicator or to feed into a specialized speech to text model after the line is complete).
 
@@ -878,7 +1073,10 @@ Handles the speech to text pipeline.
     - `vad_window_duration`: The VAD runs every 30ms, but to get higher-confidence values we average the results over time. This value is the time in seconds to average over. The default is 0.5s, shorter durations will spot speech faster at the cost of lower accuracy, higher values may increase accuracy, but at the cost of missing shorter utterances.
     - `vad_look_behind_sample_count`: Because we're averaging over time, the mean VAD signal will lag behind the initial speech detection. To compensate for that, when speech is detected we pull in some of the audio immediately before the average passed the threshold. This value is the number of samples to prepend, and defaults to 8192 (all at 16KHz).
     - `vad_max_segment_duration`: It can be hard to find gaps in rapid-fire speech, but a lot of applications want their text in chunks that aren't endless. This option sets the longest duration a line can be before it's marked as complete and a new segment is started. The default is 15 seconds, and to increase the chance that a natural break is found, the `vad_threshold` is linearly decreased over time from two thirds of the maximum duration until the maximum is reached.
-    - `identify_speakers`: A boolean that controls whether to run the speaker identification stage in the pipeline.
+    - `identify_speakers`: A boolean (default false) that controls whether to run the speaker diarization stage of the pipeline. When enabled, each line carries a `speaker_spans` array describing who spoke when, including UTF-8 character ranges into the line text. Word timestamps are enabled automatically in this mode. This runs a C++ port of the [pyannote community-1 pipeline](https://github.com/moonshine-ai/cpp-annote) inline inside transcription calls, which adds significant compute. Streaming sessions bound VBx re-clustering to a sliding window (see `diarization_cluster_window_sec`); batch/one-shot transcription still uses full-history clustering. For tests, `test-assets/endgame_nagg_nell.wav` is a ~28 second synthetic two-speaker clip (ZipVoice TTS, Beckett's *Endgame* dialogue); regenerate it with `python3 scripts/generate-diarization-test-audio.py`.
+    - `diarization_cluster_cadence`: A float (default 2.0) giving the minimum number of seconds of new audio between diarization re-clustering passes. Raising this reduces compute on long sessions, at the cost of slower refinement of speaker assignments.
+    - `diarization_analyze_cadence`: A float (default 0, meaning the model default of 1.0) giving the number of seconds between diarization segmentation/embedding model runs.
+    - `diarization_cluster_window_sec`: A float (default 120.0) giving the maximum seconds of recent audio history fed to VBx on each streaming refresh. Older chunks are evicted from the cache and their speaker turns are frozen (no longer revised). Set to `0` for unlimited full-history re-clustering (higher quality on long sessions, but compute and memory grow with session length). Batch/one-shot diarization always uses full history regardless of this setting.
     - `return_audio_data`: By default the transcriber returns the segment of audio data corresponding to a line of text along with the transcription. You can disable this if you want to reduce memory overhead.
     - `log_output_text`: If this is enabled then the results of the speech to text model will be logged to the console.
 
@@ -948,6 +1146,87 @@ A specialized kind of event listener that you add as a listener to a `Transcribe
 - <a id="intentrecognizer-clear-intents"></a>`clear_intents()`: Removes all registered intents from the recognizer.
 - <a id="intentrecognizer-set-on-intent"></a>`set_on_intent()`: Sets a callable that is called when any registered action is triggered, not just a single command as for `register_intent()`.
 
+#### DialogFlow
+
+A runner that drives generator-based conversational flows. You register flow functions against trigger phrases, and the runner routes completed transcript lines either to its configured `IntentRecognizer` (when no flow is active) or to the currently suspended generator (when one is). It implements the [`TranscriptEventListener`](#transcripteventlistener) interface, so you attach it to a `Transcriber` or `MicTranscriber` with [`add_listener()`](#transcriber-add-listener) the same way you would an `IntentRecognizer`. See [Getting Started with a Conversational Agent](#getting-started-with-a-conversational-agent) for usage examples.
+
+A flow is an ordinary Python generator function that takes a [`Dialog`](#dialog) as its argument and yields prompt objects back to the runner. The runner carries out each prompt (speaking text, waiting for the user's response) and resumes the generator with the answer via `.send()`. This lets you write multi-step, branching conversations using regular Python control flow, including loops and exception handlers, without any async machinery. Trigger matching, confirmation, and option selection are all done semantically through the embedding model, so alternative phrasings will work without you needing to enumerate them.
+
+- <a id="dialogflow-init"></a>`__init__()`: Constructs the runner with optional TTS, intent recognizer, and audio plumbing hooks. All arguments are keyword-only.
+  - `tts`: An optional [`TextToSpeech`](#texttospeech) instance used to speak prompts. When set, the runner calls `tts.say(text)` and blocks on `tts.wait()` before resuming the flow. If `tts.play_success` and `tts.play_error` are available they're auto-wired as the recognition-cue beep callbacks.
+  - `intent_recognizer`: An optional [`IntentRecognizer`](#intentrecognizer) used to compute the embeddings that drive trigger-phrase matching against incoming utterances. Utterances that don't match any registered flow or global are also forwarded to this recognizer for app-level handling.
+  - `speak_fn`: Optional callable `(text) -> None` that speaks the text and blocks until playback finishes. Overrides `tts` when set, which is useful for tests and alternative TTS backends.
+  - `mute_fn`: Optional callable `(should_mute: bool) -> None` invoked before and after each spoken prompt so you can silence the microphone while the assistant is talking, to avoid the agent transcribing itself.
+  - `spelling_mode_fn`: Optional callable `(active: bool) -> None` invoked whenever the runner enters or leaves a `SPELLED` / `DIGITS` prompt. Wire this to the underlying transcriber's `set_transcribe_flags()` to flip `MOONSHINE_FLAG_SPELLING_MODE` on only while spelled input is expected, so the spelling-CNN fusion path is used for password and code dictation without perturbing free-form recognition.
+  - `success_beep_fn`: Optional callable `() -> None` played the moment a completed transcript line is recognized, just before any TTS response begins. Defaults to `tts.play_success()` when `tts` exposes one. Pass `lambda: None` to silence.
+  - `error_beep_fn`: Optional callable `() -> None` played when a completed transcript line isn't recognized: no trigger matched, no active flow could interpret it, and no global handler took it. Defaults to `tts.play_error()` when available.
+  - `trigger_threshold`: A float between 0 and 1 setting the minimum embedding-similarity score required for an utterance to count as matching a registered trigger phrase. Defaults to `0.7`.
+  - `spell_feedback`: A boolean (default `True`) that controls whether every character recognized during a `SPELLED` / `DIGITS` prompt is spoken back to the user as confirmation, along with `"deleting <character>"` for undo commands. Pass `False` to silence the character-by-character echo (for example when no TTS is wired up).
+  - `ignore_stt_during_tts`: A boolean (default `True`). When set, every utterance that arrives while the runner is mid-prompt (i.e. the TTS is actively speaking) is dropped before it can advance the flow, match a global trigger, or fall through to the intent recognizer. This guards against self-capture on devices with weak echo cancellation. Disable only when you have reliable echo cancellation and want barge-in.
+  - `log_io`: A boolean (default `False`). When enabled, every utterance the runner receives and every prompt the assistant speaks is logged to stderr in a clean `user: ...` / `assistant: ...` format. Distinct from `debug`: this is the user-facing dialogue transcript without the verbose internal trace.
+  - `debug`: A boolean (default `False`). When enabled, stage-transition traces with per-step and cumulative timings are written to stderr, which is useful for diagnosing latency or missing-beep issues.
+
+- <a id="dialogflow-register-flow"></a>`register_flow()`: Registers a flow generator function to be started whenever the trigger phrase is matched against an incoming utterance.
+  - `trigger_phrase`: A canonical phrase that is embedded once at registration time and compared against utterances via cosine similarity, so alternative phrasings of the same meaning will all start the flow.
+  - `flow`: A callable that takes a [`Dialog`](#dialog) and returns a generator yielding prompts. Typically a generator function.
+
+- <a id="dialogflow-unregister-flow"></a>`unregister_flow()`: Removes a previously registered flow. Returns `True` if a flow was removed, `False` otherwise.
+  - `trigger_phrase`: The trigger phrase used when the flow was registered.
+
+- <a id="dialogflow-register-global"></a>`register_global()`: Registers a phrase that is always live, even while a flow is running. Useful for commands like "cancel" or "start over" that should interrupt any in-progress conversation.
+  - `trigger_phrase`: The canonical phrase to match, in the same way as `register_flow()`.
+  - `handler`: A callable that takes the current [`Dialog`](#dialog) and returns an optional prompt to speak (or `None`). The handler can also call `d.cancel()` or `d.restart()` to abandon or reset the active flow.
+
+- <a id="dialogflow-process-utterance"></a>`process_utterance()`: Routes an utterance manually, without going through transcript events. Returns `True` if the utterance was consumed by a flow or a global handler, `False` otherwise. Useful for unit tests, or for driving the runner from input sources other than a `Transcriber`.
+  - `utterance`: The string to route.
+
+- <a id="dialogflow-cancel-active"></a>`cancel_active()`: Abandons the currently running flow, if any. Returns `True` if a flow was canceled.
+
+- <a id="dialogflow-say"></a>`say()`: Speaks `text` through the configured TTS, outside any flow. Useful for welcome messages, status announcements, and error notifications that don't need a full flow registration. Blocks until playback finishes, and shares the same playback path as in-flow prompts so `mute_fn` and self-capture suppression still apply.
+  - `text`: The string to speak.
+
+- `is_active`: A read-only boolean property that's `True` when a flow is currently in progress.
+- `active_trigger`: A read-only property returning the trigger phrase of the active flow, or `None` if no flow is running.
+- `registered_flows`: A read-only list of all registered flow trigger phrases.
+
+`DialogFlow` also implements the [`TranscriptEventListener`](#transcripteventlistener) interface, so once you attach it via `transcriber.add_listener(dialog_flow)`, completed lines are routed automatically through `process_utterance()` without you having to call it yourself.
+
+#### Dialog
+
+The context object passed as the first argument to every flow function. Each method returns a prompt object that the flow `yield`s back to the runner; the runner then carries out the prompt (speaking text, waiting for input) and sends the result, if any, back into the generator via `.send()`. `Dialog` itself performs no I/O, so flows can be unit-tested by constructing a `Dialog`, calling the flow function, and driving the resulting generator manually without any audio, TTS, or event loop.
+
+- `trigger_phrase`: The phrase that started the flow, available to the flow function as `d.trigger_phrase`.
+- `state`: A `dict` for the flow's own per-conversation state, initially empty.
+
+- <a id="dialog-say"></a>`say()`: Returns a prompt that, when yielded, speaks `text` and resumes the flow once playback has finished. The flow receives `None` from the `yield`.
+  - `text`: The string for the assistant to speak.
+  - `barge_in`: Reserved for future use; when supported, will allow the user to interrupt playback by speaking.
+
+- <a id="dialog-ask"></a>`ask()`: Returns a prompt that speaks a question and resumes the flow with the user's next utterance as a string.
+  - `prompt`: The string for the assistant to speak before listening.
+  - `mode`: One of `FREE` (free-form natural-language input, the default), `SPELLED` (the user dictates one character at a time, terminated by "done"/"stop"/"finish", with each character spoken back as feedback and support for NATO-alphabet style words and "delete"/"undo" commands), `DIGITS` (digits-only spelled input), or `PHRASE` (a single phrase). These constants are exported from the `moonshine_voice` package.
+  - `bias_terms`: Optional list of strings the recognizer should bias toward when interpreting the response.
+  - `timeout`: Seconds to wait for a response before reprompting. Defaults to 8 seconds.
+  - `no_input_reprompt`: Template used to reprompt the user when no input arrives within the timeout. `{prompt}` is substituted with the original prompt text. Pass `None` to skip the reprompt.
+  - `max_retries`: Number of times to reprompt before raising `NoInputError` into the flow. Defaults to 2.
+
+- <a id="dialog-confirm"></a>`confirm()`: Returns a prompt that asks a yes/no question and resumes the flow with a `bool`. Matching is semantic, so "okay", "affirmative", and "go ahead" all count as yes, and "no", "cancel", and "stop" count as no.
+  - `prompt`: The yes/no question for the assistant to speak.
+  - `timeout`: Seconds to wait for a response. Defaults to 6 seconds.
+  - `max_retries`: Number of reprompts before raising `NoMatchError` into the flow. Defaults to 1.
+
+- <a id="dialog-choose"></a>`choose()`: Returns a prompt that asks the user to pick from a set of named options and resumes the flow with the key of the matched option as a string. Each option key has a list of associated phrases; matching is done against the union of the key and its phrases using the embedding model.
+  - `prompt`: The string for the assistant to speak.
+  - `options`: A mapping of option keys to lists of associated phrases the user might say.
+  - `timeout`: Seconds to wait for a response. Defaults to 8 seconds.
+  - `max_retries`: Number of reprompts before raising `NoMatchError`. Defaults to 2.
+
+- <a id="dialog-cancel"></a>`cancel()`: Raises `DialogCancelled` into the generator to abandon the active flow entirely. Typically called from a global handler registered with `DialogFlow.register_global()`.
+
+- <a id="dialog-restart"></a>`restart()`: Raises `DialogRestart` into the generator to restart the active flow from the beginning. Typically called from a global handler.
+
+- <a id="dialog-replay-last-prompt"></a>`replay_last_prompt()`: Returns a `Say` prompt that re-speaks the most recent question. Intended for global "repeat" / "say that again" handlers; returns `None` if nothing has been spoken yet.
+
 #### TextToSpeech
 
 On-device text-to-speech using the Moonshine native stack (Kokoro and Piper vocoders plus per-language G2P assets). Required files are resolved from the CDN unless you pass `download=False` and supply a populated tree. Invalid language tags raise `MoonshineTtsLanguageError`; missing or unknown voices raise `MoonshineTtsVoiceError`. Playback failures from `say()` raise `MoonshineAudioOutputError` with a list of output devices when enumeration succeeds.
@@ -962,6 +1241,8 @@ Use `list_tts_languages()`, `list_tts_voices()`, and `get_tts_voice_catalog()` t
   - `options`: Optional mapping of string keys to strings, numbers, or booleans, passed through to the native option parser (see below). The Python binding always sets `g2p_root` to the resolved asset directory; do not rely on overriding that key for a different layout—use `asset_root` / `tts_root`-style options instead.
   - `asset_root`: Optional directory to use as the TTS cache or as the on-disk asset tree. When `download` is true, downloads go under this root when set; when false, this path must already contain the expected `g2p_root` layout.
   - `download`: When true (default), missing TTS assets are downloaded from `https://download.moonshine.ai/tts/`. When false, `asset_root` is required and must already contain the files the native layer expects.
+  - `clone`: Optional reference clip for ZipVoice voice cloning; either a path to a `.wav` file or a `(pcm, sample_rate)` pair of mono float PCM. When set, the ZipVoice engine is used automatically; passing `voice` together with `clone` raises an error.
+  - `clone_transcript`: Optional transcript of the `clone` clip (recommended for better cloning quality; requires `clone`).
 
 - `language`: Read-only property returning the normalized language tag in use.
 
@@ -992,7 +1273,9 @@ Use `list_tts_languages()`, `list_tts_voices()`, and `get_tts_voice_catalog()` t
 - `speed`: Speaking rate multiplier (floating-point).
 - `kokoro_dir`, `kokoro_model` / `kokoro_model_onnx`, `kokoro_config` / `kokoro_config_json`: Override paths for Kokoro ONNX and config within the asset tree.
 - `piper_onnx` / `piper_model_onnx`, `piper_onnx_json`, `piper_voices_dir` / `voices_dir`, `piper_voices_json_dir` / `voices_json_dir`: Override paths for Piper model, JSON sidecar, and voice directories.
-- `piper_normalize_audio`, `piper_output_volume`, `piper_noise_scale` / `piper_noise_scale_override`, `piper_noise_w` / `piper_noise_w_override`: Piper inference tuning (see native option parsing for types).
+- `normalize_audio` / `piper_normalize_audio` (legacy alias), `output_volume` / `piper_output_volume` (legacy alias): Shared post-synthesis effects applied to both Kokoro and Piper output (peak-normalize, apply gain, then clip to `[-1, 1]`).
+- `piper_noise_scale` / `piper_noise_scale_override`, `piper_noise_w` / `piper_noise_w_override`: Piper inference tuning (see native option parsing for types).
+- `zipvoice_clone_sample_rate` / `clone_sample_rate`, `zipvoice_clone_transcript` / `clone_transcript`: Sample rate and transcript for a caller-supplied ZipVoice reference clip (memory key `zipvoice/clone_audio`); the Python `clone` / `clone_transcript` constructor arguments set these for you.
 
 Additional keys are forwarded to the G2P option parser (language-specific ONNX overrides, feature flags, and so on).
 
@@ -1046,10 +1329,13 @@ We're grateful to:
 - [WikiPron](https://github.com/CUNY-CL/wikipron) (CUNY-CL) for Italian, Russian, and European Portuguese pronunciations.
 - [Koichi Yasuoka](https://huggingface.co/KoichiYasuoka) for the Hugging Face models [chinese-roberta-base-upos](https://huggingface.co/KoichiYasuoka/chinese-roberta-base-upos), [roberta-small-japanese-char-luw-upos](https://huggingface.co/KoichiYasuoka/roberta-small-japanese-char-luw-upos), and [roberta-base-korean-morph-upos](https://huggingface.co/KoichiYasuoka/roberta-base-korean-morph-upos).
 - [hexgrad/Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) and [onnx-community/Kokoro-82M-ONNX](https://huggingface.co/onnx-community/Kokoro-82M-ONNX) for Kokoro TTS weights and ONNX ([`core/moonshine-tts/data/kokoro`](core/moonshine-tts/data/kokoro)).
+- [PiperTTS](https://huggingface.co/rhasspy/piper-voices) for their excellent lightweight TTS models.
 - [MeloTTS](https://github.com/myshell-ai/MeloTTS) from [MyShell](https://myshell.ai) as reference for Korean Piper voice training ([`core/moonshine-tts/data/ko`](core/moonshine-tts/data/ko)).
 - [English Wiktionary](https://en.wiktionary.org/wiki/Wiktionary:Copyrights) and [hermitdave/FrequencyWords](https://github.com/hermitdave/FrequencyWords) for Hindi lexicon material ([`core/moonshine-tts/data/hi`](core/moonshine-tts/data/hi)).
 - [hbenbel/French-Dictionary](https://github.com/hbenbel/French-Dictionary) for related French liaison lexicon work ([`core/moonshine-tts/data/fr`](core/moonshine-tts/data/fr)).
 - [AbderrahmanSkiredj1/arabertv02_tashkeel_fadel](https://huggingface.co/AbderrahmanSkiredj1/arabertv02_tashkeel_fadel) for Arabic diacritization and [CAMeL Tools](https://camel-tools.readthedocs.io/) for optional Arabic MSA lexicon builds ([`core/moonshine-tts/data/ar_msa`](core/moonshine-tts/data/ar_msa)).
+- [ZipVoice](https://github.com/k2-fsa/ZipVoice) for their high-quality text to speech and voice cloning.
+- The team behind the [VCTK dataset](https://datashare.ed.ac.uk/collections/8f1b06bc-ec26-4b8d-ac4e-acb14537d811/search) at the University of Edinburgh for generously providing a rich source of voice styles.
 
 ## License
 
@@ -1057,6 +1343,8 @@ This code, apart from the source in `core/third-party`, is licensed under the MI
 
 The English-language models are also released under the MIT License. Models for other languages are released under the [Moonshine Community License](https://moonshine.ai), which is a non-commercial license.
 
-The code in `core/third-party` is licensed according to the terms of the open source projects it originates from, with details in a LICENSE file in each subfolder.
+The code in `core/third-party` is licensed according to the terms of the open source projects it originates from, with details in a LICENSE file in each subfolder. 
+
+The Eigen library is compiled with only the MPL-2.0 subset, all files with other licenses are removed.
 
 The text to speech and grapheme to phoneme models and data files are licensed under the terms listed in their readmes and their source repositories. Per-language details and regeneration notes live under [`core/moonshine-tts/data/`](core/moonshine-tts/data/README.md).

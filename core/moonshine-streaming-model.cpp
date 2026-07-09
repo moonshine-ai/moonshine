@@ -143,7 +143,9 @@ void MoonshineStreamingState::reset(const MoonshineStreamingConfig &cfg) {
  * ============================================================================
  */
 
-MoonshineStreamingModel::MoonshineStreamingModel(bool log_ort_run)
+MoonshineStreamingModel::MoonshineStreamingModel(
+    bool log_ort_run, const std::vector<std::string> &ort_provider_names,
+    const std::string &coreml_cache_dir)
     : frontend_session(nullptr),
       encoder_session(nullptr),
       adapter_session(nullptr),
@@ -161,8 +163,11 @@ MoonshineStreamingModel::MoonshineStreamingModel(bool log_ort_run)
   ort_allocator = new MoonshineOrtAllocator(ort_memory_info);
 
   LOG_ORT_ERROR(ort_api, ort_api->CreateSessionOptions(&ort_session_options));
+  ort_maybe_force_single_thread(ort_api, ort_session_options);
   LOG_ORT_ERROR(ort_api, ort_api->SetSessionGraphOptimizationLevel(
                              ort_session_options, ORT_ENABLE_ALL));
+  ort_configure_execution_providers(ort_api, ort_session_options,
+                                    ort_provider_names, coreml_cache_dir);
 
   memset(&config, 0, sizeof(config));
 }
@@ -927,9 +932,9 @@ int MoonshineStreamingModel::run_decoder_with_cross_kv(
   std::vector<char *> output_names_alloc(decoder_output_count);
   for (size_t i = 0; i < decoder_output_count; i++) {
     RETURN_ON_ORT_ERROR(ort_api,
-                        ort_api->SessionGetOutputName(
-                            decoder_kv_session, i, &ort_allocator->base,
-                            &output_names_alloc[i]));
+                        ort_api->SessionGetOutputName(decoder_kv_session, i,
+                                                      &ort_allocator->base,
+                                                      &output_names_alloc[i]));
     output_names_vec.push_back(output_names_alloc[i]);
   }
 
@@ -963,9 +968,9 @@ int MoonshineStreamingModel::run_decoder_with_cross_kv(
 
   // Copy logits [1, token_len, vocab_size]
   float *logits_data = nullptr;
-  RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(
-                                   outputs[output_index["logits"]],
-                                   (void **)&logits_data));
+  RETURN_ON_ORT_ERROR(
+      ort_api, ort_api->GetTensorMutableData(outputs[output_index["logits"]],
+                                             (void **)&logits_data));
 
   size_t total_logits = token_len * config.vocab_size;
   logits_out.resize(total_logits);
@@ -1020,10 +1025,11 @@ int MoonshineStreamingModel::run_decoder_with_cross_kv(
     ort_api->ReleaseTensorTypeAndShapeInfo(attn_info);
 
     // Shape: [batch, heads, seq_len, enc_len] or similar
-    int heads = (attn_ndims >= 2) ? static_cast<int>(attn_shape[1]) : config.nheads;
-    int enc_len = (attn_ndims >= 4) ? static_cast<int>(attn_shape[3])
-                : (attn_ndims >= 3) ? static_cast<int>(attn_shape[2])
-                : state->cross_len;
+    int heads =
+        (attn_ndims >= 2) ? static_cast<int>(attn_shape[1]) : config.nheads;
+    int enc_len = (attn_ndims >= 4)   ? static_cast<int>(attn_shape[3])
+                  : (attn_ndims >= 3) ? static_cast<int>(attn_shape[2])
+                                      : state->cross_len;
 
     float *attn_data = nullptr;
     RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(

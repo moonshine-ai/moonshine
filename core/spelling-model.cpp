@@ -92,15 +92,18 @@ std::vector<std::string> parse_class_list_json(const std::string &raw) {
 
 }  // namespace
 
-SpellingModel::SpellingModel(bool log_ort_run) : log_ort_run(log_ort_run) {
+SpellingModel::SpellingModel(bool log_ort_run,
+                             const std::vector<std::string> &ort_provider_names,
+                             const std::string &coreml_cache_dir)
+    : log_ort_run(log_ort_run),
+      ort_provider_names_(ort_provider_names),
+      coreml_cache_dir_(coreml_cache_dir) {
   ort_api_ = OrtGetApiBase()->GetApi(ORT_API_VERSION);
+  LOG_ORT_ERROR(ort_api_, ort_api_->CreateEnv(ORT_LOGGING_LEVEL_WARNING,
+                                              "SpellingModel", &ort_env_));
   LOG_ORT_ERROR(ort_api_,
-                ort_api_->CreateEnv(ORT_LOGGING_LEVEL_WARNING, "SpellingModel",
-                                    &ort_env_));
-  LOG_ORT_ERROR(ort_api_,
-                ort_api_->CreateCpuMemoryInfo(OrtDeviceAllocator,
-                                              OrtMemTypeDefault,
-                                              &ort_memory_info_));
+                ort_api_->CreateCpuMemoryInfo(
+                    OrtDeviceAllocator, OrtMemTypeDefault, &ort_memory_info_));
   initialize_session_options();
   apply_default_metadata();
 }
@@ -132,19 +135,23 @@ SpellingModel::~SpellingModel() {
 }
 
 void SpellingModel::initialize_session_options() {
-  LOG_ORT_ERROR(ort_api_, ort_api_->CreateSessionOptions(&ort_session_options_));
+  LOG_ORT_ERROR(ort_api_,
+                ort_api_->CreateSessionOptions(&ort_session_options_));
+  ort_maybe_force_single_thread(ort_api_, ort_session_options_);
   LOG_ORT_ERROR(ort_api_, ort_api_->SetSessionGraphOptimizationLevel(
                               ort_session_options_, ORT_ENABLE_EXTENDED));
-  LOG_ORT_ERROR(ort_api_, ort_api_->AddSessionConfigEntry(
-                              ort_session_options_,
-                              "session.load_model_format", "ORT"));
+  LOG_ORT_ERROR(ort_api_,
+                ort_api_->AddSessionConfigEntry(
+                    ort_session_options_, "session.load_model_format", "ORT"));
   LOG_ORT_ERROR(ort_api_, ort_api_->AddSessionConfigEntry(
                               ort_session_options_,
                               "session.use_ort_model_bytes_directly", "1"));
-  LOG_ORT_ERROR(ort_api_, ort_api_->AddSessionConfigEntry(
-                              ort_session_options_,
-                              "session.disable_prepacking", "1"));
+  LOG_ORT_ERROR(ort_api_,
+                ort_api_->AddSessionConfigEntry(
+                    ort_session_options_, "session.disable_prepacking", "1"));
   LOG_ORT_ERROR(ort_api_, ort_api_->DisableCpuMemArena(ort_session_options_));
+  ort_configure_execution_providers(ort_api_, ort_session_options_,
+                                    ort_provider_names_, coreml_cache_dir_);
 }
 
 void SpellingModel::apply_default_metadata() {
@@ -160,19 +167,18 @@ void SpellingModel::apply_default_metadata() {
 }
 
 int SpellingModel::load(const char *model_path) {
-  RETURN_ON_ERROR(ort_session_from_path(ort_api_, ort_env_,
-                                         ort_session_options_, model_path,
-                                         &ort_session_, &mmapped_data_,
-                                         &mmapped_data_size_));
+  RETURN_ON_ERROR(ort_session_from_path(
+      ort_api_, ort_env_, ort_session_options_, model_path, &ort_session_,
+      &mmapped_data_, &mmapped_data_size_));
   RETURN_ON_NULL(ort_session_);
   return populate_metadata_from_session();
 }
 
 int SpellingModel::load_from_memory(const uint8_t *model_data,
-                                     size_t model_data_size) {
+                                    size_t model_data_size) {
   RETURN_ON_ERROR(ort_session_from_memory(ort_api_, ort_env_,
-                                           ort_session_options_, model_data,
-                                           model_data_size, &ort_session_));
+                                          ort_session_options_, model_data,
+                                          model_data_size, &ort_session_));
   RETURN_ON_NULL(ort_session_);
   return populate_metadata_from_session();
 }
@@ -235,8 +241,8 @@ int SpellingModel::populate_metadata_from_session() {
 }
 
 int SpellingModel::predict(const float *audio, size_t audio_size,
-                            int32_t sample_rate,
-                            SpellingPrediction *out_prediction) {
+                           int32_t sample_rate,
+                           SpellingPrediction *out_prediction) {
   if (out_prediction == nullptr) return -1;
   if (ort_session_ == nullptr) return -1;
   if (audio == nullptr || audio_size == 0) return -1;
@@ -260,7 +266,8 @@ int SpellingModel::predict(const float *audio, size_t audio_size,
   MoonshineTensorView *input_view = new MoonshineTensorView(
       input_shape, ort_get_input_type(ort_api_, ort_session_, 0), clip.data(),
       input_name_.c_str());
-  OrtValue *input_value = input_view->create_ort_value(ort_api_, ort_memory_info_);
+  OrtValue *input_value =
+      input_view->create_ort_value(ort_api_, ort_memory_info_);
 
   const char *input_names[1] = {input_name_.c_str()};
   const char *output_names[1] = {output_name_.c_str()};

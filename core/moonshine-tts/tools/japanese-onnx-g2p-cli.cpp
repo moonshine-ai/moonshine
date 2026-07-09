@@ -1,15 +1,16 @@
-#include "japanese-onnx-g2p.h"
-
 #include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "japanese-onnx-g2p.h"
+
 namespace {
 
 void usage(const char* argv0) {
-  std::cerr << "Usage: " << argv0 << " [--model-dir PATH] [--dict PATH] [--stdin] [TEXT...]\n";
+  std::cerr << "Usage: " << argv0
+            << " [--model-dir PATH] [--dict PATH] [--stdin] [TEXT...]\n";
 }
 
 std::string read_all_stdin() {
@@ -21,8 +22,10 @@ std::string read_all_stdin() {
 }  // namespace
 
 int main(int argc, char** argv) {
-  std::filesystem::path model_dir = std::filesystem::path("data") / "ja" / "roberta_japanese_char_luw_upos_onnx";
-  std::filesystem::path dict_path = std::filesystem::path("data") / "ja" / "dict.tsv";
+  std::filesystem::path model_dir = std::filesystem::path("data") / "ja" /
+                                    "roberta_japanese_char_luw_upos_onnx";
+  std::filesystem::path dict_path =
+      std::filesystem::path("data") / "ja" / "dict.tsv";
   bool force_stdin = false;
   std::vector<std::string> parts;
 
@@ -56,7 +59,8 @@ int main(int argc, char** argv) {
   }
 
   try {
-    moonshine_tts::JapaneseOnnxG2p g2p(std::move(model_dir), std::move(dict_path), false);
+    moonshine_tts::JapaneseOnnxG2p g2p(std::move(model_dir),
+                                       std::move(dict_path), false);
     std::cout << g2p.text_to_ipa(text) << '\n';
   } catch (const std::exception& e) {
     std::cerr << "error: " << e.what() << '\n';

@@ -1,8 +1,10 @@
 """Text-to-speech via the Moonshine C API."""
 
+import ctypes
 import queue
 import sys
 import threading
+import time
 import traceback
 import wave
 from dataclasses import dataclass
@@ -12,6 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from moonshine_voice.download import (
     download_tts_assets,
     ensure_tts_voice_downloaded,
+    normalize_moonshine_language_tag,
     tts_asset_cache_path,
     validate_tts_language,
     validate_tts_voice_known,
@@ -45,57 +48,67 @@ class _PlayItem:
 
 @dataclass
 class _BeepRequest:
-    """Queued error-beep marker; routed through the say queue so it
-    plays in the same order as any in-flight :meth:`TextToSpeech.say`
-    calls rather than racing ahead on the play queue."""
+    """Queued beep marker; routed through the say queue so it plays in
+    the same order as any in-flight :meth:`TextToSpeech.say` calls
+    rather than racing ahead on the play queue.
+
+    ``kind`` selects which packaged WAV to play:
+
+    * ``"error"`` – ``assets/error.wav``, played to signal a
+      misrecognition or a rejected utterance.
+    * ``"success"`` – ``assets/success.wav``, played to signal a
+      recognized utterance, just before the TTS response.
+    """
     device: Optional[Union[int, str]]
+    kind: str = "error"
 
 
 _SHUTDOWN_SENTINEL = object()
 
-# Sample rate used for synthetically generated beeps.  22.05 kHz matches
-# the typical TTS output rate and is plenty for a short sine tone.
-_BEEP_SAMPLE_RATE = 22050
+# Beep WAVs shipped with the package.  The bundled clips are short,
+# pre-recorded cues that already include any lead-in / fade
+# the recording artist wanted; the runner just decodes and plays them
+# verbatim through the same pipeline as a synthesized utterance, so
+# the same device-resolution / resampling / mute path applies.
+_BEEP_ASSET_FILES: Dict[str, str] = {
+    "success": "success.wav",
+    "error": "error.wav",
+}
 
-# Cache of generated beep waveforms keyed by sample rate so we only pay
-# the numpy cost once per TextToSpeech lifetime.
-_ERROR_BEEP_CACHE: Dict[int, Any] = {}
+# Cache of decoded beep waveforms keyed by ``kind``.  Each entry is a
+# ``(samples_float32, sample_rate)`` pair — the WAVs ship at 48 kHz
+# and the runner converts to numpy float32 mono once per process,
+# so subsequent ``play_success`` / ``play_error`` calls only pay the
+# queue-handoff cost.  ``load_wav_file`` mixes stereo down to mono
+# automatically, which is exactly what the playback worker expects.
+_BEEP_CACHE: Dict[str, Tuple[Any, int]] = {}
 
 
-def _generate_error_beep_samples(np: Any, sample_rate: int) -> Any:
-    """Build a short, two-tone descending beep as float32 mono samples.
+def _load_beep_samples(np: Any, kind: str) -> Tuple[Any, int]:
+    """Return ``(samples_float32, sample_rate)`` for the named beep.
 
-    Shape:
-      * 660 Hz for 80 ms (with a 10 ms linear fade in/out to avoid clicks)
-      * 30 ms silence
-      * 440 Hz for 120 ms (same fade envelope)
-
-    Peak amplitude is held to ~0.25 so the beep is audible but not
-    startling next to normal-volume speech.
+    Loaded lazily from the packaged ``assets/<kind>.wav`` file the first
+    time it's requested and cached for the lifetime of the process.
+    Raises :class:`ValueError` for unknown kinds and lets file errors
+    from :func:`load_wav_file` propagate (so a missing asset is loud,
+    not silent — the symptom otherwise would be the same "no beep"
+    issue we just spent two iterations debugging).
     """
+    cached = _BEEP_CACHE.get(kind)
+    if cached is not None:
+        return cached
+    filename = _BEEP_ASSET_FILES.get(kind)
+    if filename is None:
+        raise ValueError(f"Unknown beep kind {kind!r}")
+    # Imported lazily to keep ``moonshine_voice.tts`` import-light
+    # for callers that never invoke ``play_success`` / ``play_error``.
+    from moonshine_voice.utils import get_assets_path, load_wav_file
 
-    def _tone(freq: float, duration_ms: int) -> Any:
-        n = int(sample_rate * duration_ms / 1000)
-        if n <= 0:
-            return np.zeros(0, dtype=np.float32)
-        t = np.arange(n, dtype=np.float32) / float(sample_rate)
-        wave = (0.25 * np.sin(2.0 * np.pi * freq * t)).astype(np.float32)
-        ramp_n = min(int(sample_rate * 0.010), n // 2)
-        if ramp_n > 0:
-            ramp = np.linspace(0.0, 1.0, ramp_n, dtype=np.float32)
-            wave[:ramp_n] *= ramp
-            wave[-ramp_n:] *= ramp[::-1]
-        return wave
-
-    gap = np.zeros(int(sample_rate * 0.030), dtype=np.float32)
-    return np.concatenate([_tone(660.0, 80), gap, _tone(440.0, 120)])
-
-
-def _get_error_beep_samples(np: Any, sample_rate: int) -> Any:
-    cached = _ERROR_BEEP_CACHE.get(sample_rate)
-    if cached is None:
-        cached = _generate_error_beep_samples(np, sample_rate)
-        _ERROR_BEEP_CACHE[sample_rate] = cached
+    path = get_assets_path() / filename
+    samples_list, sr = load_wav_file(path)
+    samples = np.asarray(samples_list, dtype=np.float32)
+    cached = (samples, int(sr))
+    _BEEP_CACHE[kind] = cached
     return cached
 
 
@@ -110,6 +123,96 @@ def _import_say_audio_deps():
             "(e.g. `pip install numpy sounddevice`)."
         ) from e
     return np, sd
+
+
+def _resolve_default_output_index(sd: Any) -> Optional[int]:
+    """Return PortAudio's current default output device index, if any.
+
+    Wraps ``sd.default.device`` because sounddevice exposes that as a
+    custom ``_InputOutputPair`` NamedTuple, *not* a plain ``tuple`` /
+    ``list``, so an ``isinstance(..., (tuple, list))`` check on it
+    misses and the diagnostic flag would silently never light up.
+    Falls back through several access patterns so a minor sounddevice
+    API change can't suppress the "current default" annotation.
+    """
+    try:
+        default_pair = sd.default.device
+    except Exception:
+        return None
+    try:
+        out_idx = default_pair[1]
+    except (TypeError, IndexError):
+        try:
+            out_idx = getattr(default_pair, "output", None)
+        except Exception:
+            out_idx = None
+        if out_idx is None:
+            try:
+                out_idx = int(default_pair)
+            except (TypeError, ValueError):
+                return None
+    if out_idx is None or out_idx == -1:
+        return None
+    try:
+        return int(out_idx)
+    except (TypeError, ValueError):
+        return None
+
+
+def list_output_devices() -> List[str]:
+    """Return human-readable output device descriptions for diagnostics.
+
+    Each entry is formatted ``"[idx] name (hostapi: NAME)"`` so a
+    caller can paste either the index or a substring of the name into
+    :class:`TextToSpeech`'s ``output_device`` argument (or the
+    ``--output-device`` flag of the CLI demo).  The first line of the
+    returned list flags PortAudio's default output device — on
+    Raspberry Pi this is often *not* the one with speakers attached
+    (e.g. HDMI when the user has wired up the 3.5 mm jack), and a
+    silent assistant with no errors in the logs is exactly the
+    symptom of the wrong device being selected.
+
+    Use :class:`TextToSpeech`'s ``output_device`` to pin to a
+    specific one when ``None`` (= host default) doesn't reach a
+    speaker.
+    """
+    _, sd = _import_say_audio_deps()
+    lines: List[str] = []
+    default_out = _resolve_default_output_index(sd)
+    try:
+        hostapis = list(sd.query_hostapis())
+    except Exception:
+        hostapis = []
+    try:
+        devices = sd.query_devices()
+    except Exception as e:
+        return [f"<sounddevice query_devices() failed: {e!r}>"]
+    for i, d in enumerate(devices):
+        try:
+            n_out = int(d.get("max_output_channels", 0) or 0)
+        except (TypeError, ValueError):
+            n_out = 0
+        if n_out <= 0:
+            continue
+        name = str(d.get("name", "") or "")
+        hostapi_idx = d.get("hostapi", -1)
+        hostapi_name = ""
+        try:
+            hostapi_name = hostapis[hostapi_idx]["name"]
+        except (IndexError, KeyError, TypeError):
+            pass
+        try:
+            sr = int(d.get("default_samplerate", 0) or 0)
+        except (TypeError, ValueError):
+            sr = 0
+        marker = "*" if i == default_out else " "
+        lines.append(
+            f"{marker} [{i}] {name} (hostapi: {hostapi_name or '?'}, "
+            f"channels: {n_out}, default_sr: {sr or '?'} Hz)"
+        )
+    if not lines:
+        lines.append("<no PortAudio output devices available>")
+    return lines
 
 
 def _say_enumerate_output_devices(sd) -> List[Tuple[int, str]]:
@@ -150,6 +253,170 @@ def _say_device_spec_key(device: Optional[Union[int, str]]) -> Tuple[Any, ...]:
         return ("idx", int(s, 10))
     except ValueError:
         return ("name", s.casefold())
+
+
+# Sample rates probed when the output device rejects the synthesizer's
+# native rate. 48 kHz is the modern default and is a clean 2x integer
+# upsample from the 24 kHz the C core emits, so we try it first. The rest
+# are common consumer-audio rates; selection prefers integer multiples
+# (or divisors) of the source rate and only falls back to the nearest
+# rate when no clean ratio is available.
+_RESAMPLE_CANDIDATES: Tuple[int, ...] = (
+    48000, 96000, 192000, 44100, 88200, 32000, 22050, 16000, 11025, 8000,
+)
+
+
+def _select_output_sample_rate(
+    sd: Any, *, device: Optional[int], source_sr: int,
+) -> Tuple[Optional[int], Optional[Exception]]:
+    """Pick the best output sample rate the device will actually open.
+
+    Returns ``(target_sr, last_error)``. ``target_sr`` is ``None`` if no
+    candidate rate works (in which case ``last_error`` is the PortAudio
+    error from the source-rate probe and useful for diagnostics).
+    Otherwise ``target_sr`` is:
+
+    1. ``source_sr`` if the device accepts it natively (no resampling),
+    2. 48000 Hz when supported (cleanest fallback for 24 kHz input),
+    3. otherwise the largest supported rate that is an integer multiple
+       or divisor of ``source_sr``,
+    4. otherwise the supported rate closest to ``source_sr``.
+
+    Probes that fail with ``paDeviceUnavailable`` (-9985) are retried
+    a few times with a short backoff: that error code is transient on
+    exclusive-access ALSA devices (e.g. USB DACs) when a previous
+    ``sd.play()`` stream hasn't fully released the device yet, and a
+    single failed probe shouldn't be enough to disqualify a rate the
+    device actually supports.
+    """
+    last_err: Optional[Exception] = None
+
+    def _try(sr: int) -> bool:
+        nonlocal last_err
+        # paDeviceUnavailable on Linux/ALSA after a just-finished play
+        # commonly clears within ~10-50 ms; give it up to ~200 ms total
+        # before believing the device really doesn't support this rate.
+        for attempt in range(5):
+            try:
+                sd.check_output_settings(
+                    samplerate=sr, channels=1, dtype="float32", device=device,
+                )
+                return True
+            except sd.PortAudioError as e:
+                last_err = e
+                # PortAudioError stores the numeric code in ``args[1]``
+                # for sounddevice; -9985 == paDeviceUnavailable.
+                code = e.args[1] if len(e.args) >= 2 else None
+                if code == -9985 and attempt < 4:
+                    time.sleep(0.05)
+                    continue
+                return False
+            except (OSError, ValueError) as e:
+                last_err = e
+                return False
+        return False
+
+    if _try(source_sr):
+        return source_sr, None
+    supported = [
+        sr for sr in _RESAMPLE_CANDIDATES
+        if sr != source_sr and _try(sr)
+    ]
+    if not supported:
+        return None, last_err
+    if 48000 in supported:
+        return 48000, last_err
+    multiples = [
+        sr for sr in supported
+        if sr % source_sr == 0 or source_sr % sr == 0
+    ]
+    if multiples:
+        return max(multiples), last_err
+    return min(supported, key=lambda sr: abs(sr - source_sr)), last_err
+
+
+def _resample_linear(
+    np: Any, samples: Any, source_sr: int, target_sr: int,
+) -> Any:
+    """Numpy-only linear-interpolation resample of mono float32 audio.
+
+    Linear interpolation is the highest-quality resampler we can build
+    without scipy; for clean integer ratios (e.g. 24 kHz -> 48 kHz) the
+    new sample positions land exactly between source samples, so the
+    interpolation error stays small.
+    """
+    if source_sr == target_sr or samples.size == 0:
+        return samples.astype(np.float32, copy=False)
+    n_src = int(samples.shape[0])
+    n_dst = max(1, int(round(n_src * target_sr / source_sr)))
+    if n_src == 1:
+        return np.full(n_dst, float(samples[0]), dtype=np.float32)
+    src_x = np.arange(n_src, dtype=np.float64)
+    dst_x = np.linspace(0.0, n_src - 1, n_dst, dtype=np.float64)
+    return np.interp(dst_x, src_x, samples).astype(np.float32)
+
+
+def _normalize_clone_argument(
+    clone: Union[str, Path, Tuple[Any, int]],
+) -> Tuple[Any, int]:
+    """Return ``(pcm, sample_rate)`` from a ``clone`` spec.
+
+    Accepts either a path to a WAV file on disk (``str`` / ``Path``), which is
+    decoded with :func:`moonshine_voice.utils.load_wav_file` (16/24-bit PCM,
+    stereo mixed down to mono), or a ``(pcm, sample_rate)`` pair where ``pcm``
+    is mono float PCM in ``[-1, 1]`` (any sequence or numpy array) and
+    ``sample_rate`` is in Hz.
+    """
+    if isinstance(clone, (str, Path)):
+        from moonshine_voice.utils import load_wav_file
+
+        return load_wav_file(clone)
+    if isinstance(clone, (tuple, list)) and len(clone) == 2:
+        pcm, sample_rate = clone
+        try:
+            rate = int(sample_rate)
+        except (TypeError, ValueError):
+            rate = 0
+        if rate > 0:
+            return pcm, rate
+    raise MoonshineError(
+        "clone must be a path to a .wav file or a (pcm, sample_rate) pair "
+        "(mono float PCM in [-1, 1] plus a positive sample rate in Hz)."
+    )
+
+
+def _autotranscribe_clone_pcm(
+    pcm: Any,
+    sample_rate: int,
+    *,
+    language: str = "en_us",
+) -> str:
+    """Transcribe a clone reference clip so ZipVoice gets text aligned with the audio."""
+    from moonshine_voice.download import ModelArch, get_model_for_language
+    from moonshine_voice.transcriber import Transcriber
+
+    model_path, model_arch = get_model_for_language(
+        language.split("_", 1)[0].split("-", 1)[0],
+        wanted_model_arch=ModelArch.BASE)
+    try:
+        import numpy as _np  # type: ignore
+        samples = _np.asarray(pcm, dtype=_np.float32).ravel().tolist()
+    except Exception:
+        samples = [float(x) for x in pcm]
+    with Transcriber(model_path=model_path, model_arch=model_arch) as tr:
+        transcript = tr.transcribe_without_streaming(samples, sample_rate=sample_rate)
+    parts = [
+        line.text.strip()
+        for line in transcript.lines
+        if line.text and line.text.strip()
+    ]
+    text = " ".join(parts).strip()
+    if not text:
+        raise MoonshineError(
+            "Could not auto-transcribe the clone reference clip; pass clone_transcript "
+            "with the text spoken in the clip."
+        )
+    return text
 
 
 def _say_resolve_output_index(
@@ -194,7 +461,14 @@ class TextToSpeech:
     voices reported as ``found`` for that language under the resolved asset root
     (`MoonshineTtsVoiceError` lists downloaded ids then catalog ids available for download).
     With ``download=True``, a voice that is catalogued but not yet on disk is downloaded automatically.
-    Use a ``kokoro_`` or ``piper_`` prefix on ``voice`` to pin the vocoder (e.g. ``kokoro_af_heart``).
+    Use a ``kokoro_``, ``piper_``, or ``zipvoice_`` prefix on ``voice`` to pin the vocoder (e.g.
+    ``kokoro_af_heart``, ``zipvoice_american_female``). ZipVoice is a zero-shot voice cloner: besides
+    the built-in ``zipvoice_<id>`` reference voices you can clone your own by passing ``clone`` —
+    either a path to a ``.wav`` file or a ``(pcm, sample_rate)`` pair of mono float PCM — along with
+    (recommended) ``clone_transcript``, the text spoken in the reference clip (when omitted, the clip
+    is auto-transcribed with Moonshine ASR before cloning). When ``clone`` is set
+    the ZipVoice engine is used automatically; passing ``voice`` together with ``clone``
+    raises `MoonshineError`.
     Use `list_tts_languages` and
     `list_tts_voices` (``present`` / ``downloadable``) or `get_tts_voice_catalog` to discover options.
     """
@@ -207,8 +481,42 @@ class TextToSpeech:
         options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
         asset_root: Optional[Path] = None,
         download: bool = True,
+        output_device: Optional[Union[int, str]] = None,
+        volume: Optional[float] = None,
+        debug: bool = False,
+        clone: Optional[Union[str, Path, Tuple[Any, int]]] = None,
+        clone_transcript: Optional[str] = None,
     ):
+        # ZipVoice zero-shot voice cloning: supply your own reference clip via ``clone`` (a .wav
+        # path or a ``(pcm, sample_rate)`` pair) with, ideally, ``clone_transcript``. When a
+        # reference clip is given the synthesizer is created from memory with the ``zipvoice``
+        # engine. Do not pass ``voice`` — the clone clip defines the voice.
         self._extra_options = dict(options) if options else {}
+        if clone_transcript is not None and clone is None:
+            raise MoonshineError(
+                "clone_transcript requires the clone argument to be set.")
+        if clone is not None:
+            explicit_voice = voice
+            if explicit_voice is None:
+                opt_voice = self._extra_options.get("voice")
+                if isinstance(opt_voice, str) and opt_voice.strip():
+                    explicit_voice = opt_voice.strip()
+            if explicit_voice is not None:
+                raise MoonshineError(
+                    f"Voice cloning uses the clone reference clip, but voice={explicit_voice!r} "
+                    "was also set. Omit the voice argument when clone is set."
+                )
+            clone_pcm, clone_sample_rate = _normalize_clone_argument(clone)
+            self._init_zipvoice_from_clone(
+                language,
+                asset_root=asset_root,
+                download=download,
+                clone_pcm=clone_pcm,
+                clone_sample_rate=clone_sample_rate,
+                clone_transcript=clone_transcript,
+            )
+            self._init_playback_state(output_device, volume, debug)
+            return
         if voice is None:
             opt_voice = self._extra_options.get("voice")
             if isinstance(opt_voice, str):
@@ -290,9 +598,22 @@ class TextToSpeech:
                     "utf-8") if msg else f"Failed to create TTS synthesizer ({handle})"
             )
         self._handle = handle
+        self._init_playback_state(output_device, volume, debug)
+
+    def _init_playback_state(
+        self,
+        output_device: Optional[Union[int, str]],
+        volume: Optional[float],
+        debug: bool,
+    ) -> None:
+        """Shared playback/queue state used by both the from-files and ZipVoice-from-memory paths."""
+        self._closed = False
         self._say_device_cache: Optional[Tuple[Tuple[Any, ...],
                                                Optional[int]]] = None
-        self._say_settings_ok: Optional[Tuple[Tuple[Any, ...], int]] = None
+        # ((spec_key, source_sr), target_sr) — target_sr equals source_sr
+        # when the device accepts the synthesizer rate natively; otherwise
+        # it's the resample target chosen by _select_output_sample_rate.
+        self._say_settings_ok: Optional[Tuple[Tuple[Tuple[Any, ...], int], int]] = None
 
         self._say_queue: queue.Queue = queue.Queue()
         self._play_queue: queue.Queue = queue.Queue(maxsize=1)
@@ -300,6 +621,199 @@ class TextToSpeech:
         self._synth_thread: Optional[threading.Thread] = None
         self._play_thread: Optional[threading.Thread] = None
         self._say_lock = threading.Lock()
+        self._output_device = output_device
+        self._volume = volume
+        self._debug = bool(debug)
+        self._log_start: Optional[float] = None
+        self._log_last: Optional[float] = None
+        self._log_lock = threading.Lock()
+        # Set on the first `_play_one` call to a one-line summary of which PortAudio device the runner
+        # actually opened. Only logged when ``debug=True`` (helps diagnose a silent setup with no
+        # errors in the logs, often a wrong-default-device problem on Raspberry Pi).
+        self._announced_resolved_device = False
+
+    def _init_zipvoice_from_clone(
+        self,
+        language: str,
+        *,
+        asset_root: Optional[Path],
+        download: bool,
+        clone_pcm: Any,
+        clone_sample_rate: int,
+        clone_transcript: Optional[str],
+    ) -> None:
+        """Create a ZipVoice synthesizer from an in-memory reference clip (mono float PCM)."""
+        import array as _array
+
+        self._extra_options.pop("voice", None)
+        self._language = normalize_moonshine_language_tag(language)
+        # Fetch the ZipVoice model assets (text encoder / fm decoder / vocoder / tokens / config).
+        if download:
+            self._asset_root = download_tts_assets(
+                self._language,
+                voice="zipvoice",
+                options=self._extra_options,
+                cache_root=Path(asset_root) if asset_root is not None else None,
+            )
+        else:
+            if asset_root is None:
+                raise MoonshineError(
+                    "When download=False, asset_root must point to a directory already "
+                    "populated with ZipVoice assets (g2p_root layout)."
+                )
+            self._asset_root = Path(asset_root).resolve()
+
+        # Coerce the reference clip to little-endian float32 bytes.
+        try:
+            import numpy as _np  # type: ignore
+            pcm = _np.asarray(clone_pcm, dtype="<f4").ravel()
+            pcm_bytes = pcm.tobytes()
+        except Exception:
+            arr = _array.array("f", [float(x) for x in clone_pcm])
+            pcm = None
+            pcm_bytes = arr.tobytes()
+
+        resolved_transcript = (
+            str(clone_transcript).strip()
+            if clone_transcript is not None and str(clone_transcript).strip()
+            else None
+        )
+        if resolved_transcript is None:
+            print(
+                "TextToSpeech: transcribing clone reference clip with Moonshine ASR…",
+                file=sys.stderr,
+                flush=True,
+            )
+            resolved_transcript = _autotranscribe_clone_pcm(
+                pcm if pcm is not None else clone_pcm,
+                clone_sample_rate,
+                language=self._language,
+            )
+            print(
+                f"TextToSpeech: clone transcript: {resolved_transcript!r}",
+                file=sys.stderr,
+                flush=True,
+            )
+
+        self._lib = _MoonshineLib().lib
+        self._voice = "zipvoice"
+
+        create_opts: Dict[str, Union[str, int, float, bool]] = dict(self._extra_options)
+        create_opts["voice"] = self._voice
+        create_opts["g2p_root"] = str(self._asset_root)
+        create_opts["zipvoice_clone_sample_rate"] = int(clone_sample_rate)
+        create_opts["zipvoice_clone_transcript"] = resolved_transcript
+        opt_arr, opt_n, _keep_opts = moonshine_options_array(create_opts)
+
+        filenames = (ctypes.c_char_p * 1)(b"zipvoice/clone_audio")
+        buf = (ctypes.c_uint8 * len(pcm_bytes)).from_buffer_copy(pcm_bytes)
+        self._clone_pcm_buf = buf  # keep alive for the synthesizer's lifetime
+        mem_ptrs = (ctypes.POINTER(ctypes.c_uint8) * 1)(
+            ctypes.cast(buf, ctypes.POINTER(ctypes.c_uint8))
+        )
+        mem_sizes = (ctypes.c_uint64 * 1)(len(pcm_bytes))
+
+        handle = self._lib.moonshine_create_tts_synthesizer_from_memory(
+            self._language.encode("utf-8"),
+            filenames,
+            1,
+            mem_ptrs,
+            mem_sizes,
+            opt_arr,
+            opt_n,
+            MOONSHINE_HEADER_VERSION,
+        )
+        if handle < 0:
+            msg = self._lib.moonshine_error_to_string(handle)
+            raise MoonshineError(
+                msg.decode("utf-8") if msg else f"Failed to create ZipVoice synthesizer ({handle})"
+            )
+        self._handle = handle
+
+    def _announce_resolved_device(self, sd: Any, resolved: Optional[int]) -> None:
+        """Print a one-liner identifying the PortAudio device we opened.
+
+        Emitted only when ``debug=True`` (silent during normal use). When enabled
+        it helps diagnose a silent runtime with no errors in the trace, which is
+        almost always the *wrong* PortAudio device being selected (e.g. HDMI on a
+        Pi when speakers are on the 3.5 mm jack); the log shows *which* device the
+        worker actually opened.
+
+        Includes the host-API name and the default sample rate the
+        device claims to support; on top of that, when the resolved
+        device is the host default we list the other available
+        outputs so the user can pin a specific one via
+        ``TextToSpeech(output_device=...)`` (or the CLI's
+        ``--output-device`` flag).
+
+        Only emitted when ``debug=True``; it is silent during normal use.
+        """
+        if not self._debug:
+            return
+        try:
+            if resolved is None:
+                idx = _resolve_default_output_index(sd)
+                origin = "host default"
+            else:
+                idx = resolved
+                origin = "explicit"
+            info = sd.query_devices(idx) if idx is not None else None
+            try:
+                hostapis = list(sd.query_hostapis())
+            except Exception:
+                hostapis = []
+            hostapi_name = ""
+            if info is not None:
+                try:
+                    hostapi_name = hostapis[info.get("hostapi", -1)]["name"]
+                except (IndexError, KeyError, TypeError):
+                    pass
+            name = info.get("name", "?") if info else "?"
+            default_sr = info.get("default_samplerate", "?") if info else "?"
+            print(
+                f"TextToSpeech: opening PortAudio output [{idx}] {name!r} "
+                f"({origin}, hostapi: {hostapi_name or '?'}, "
+                f"default_sr: {default_sr} Hz). "
+                f"If you don't hear anything, this may be the wrong "
+                f"device — list alternatives with "
+                f"`moonshine_voice.tts.list_output_devices()` and pin "
+                f"one via `TextToSpeech(output_device=...)`.",
+                file=sys.stderr,
+                flush=True,
+            )
+        except Exception as e:
+            print(
+                f"TextToSpeech: could not introspect resolved output "
+                f"device (resolved={resolved!r}): {e!r}",
+                file=sys.stderr,
+                flush=True,
+            )
+
+    def _log(self, msg: str) -> None:
+        """Emit a timestamped trace line to stderr when ``debug=True``.
+
+        Same shape as ``DialogFlow._log`` so traces from the two
+        components can be read together: each line shows the wall
+        time since the previous log line and since the first log
+        line of this instance.  Off by default — TTS traces are
+        verbose and only useful for diagnosing playback problems
+        (e.g. why a beep didn't seem to play).
+        """
+        if not self._debug:
+            return
+        with self._log_lock:
+            now = time.perf_counter()
+            if self._log_start is None:
+                self._log_start = now
+                self._log_last = now
+            delta_ms = (now - (self._log_last or now)) * 1000.0
+            total_ms = (now - (self._log_start or now)) * 1000.0
+            self._log_last = now
+            print(
+                f"[TextToSpeech +{delta_ms:7.1f}ms / {total_ms:8.1f}ms] {msg}",
+                file=sys.stderr,
+                flush=True,
+            )
 
     def _c_options_for_create(self) -> Dict[str, Union[str, int, float, bool]]:
         merged: Dict[str, Union[str, int, float, bool]] = dict(
@@ -333,8 +847,8 @@ class TextToSpeech:
         if speed is not None:
             options["speed"] = str(speed)
 
-        # if volume is not None:
-        #     options["volume"] = str(volume)
+        if volume is not None:
+            options["output_volume"] = str(volume)
 
         return moonshine_text_to_speech_samples(self._handle, text, options)
 
@@ -366,6 +880,12 @@ class TextToSpeech:
         """
         _import_say_audio_deps()
 
+        if self._output_device is not None:
+            device = self._output_device
+
+        if self._volume is not None:
+            volume = self._volume
+
         texts = text if isinstance(text, list) else [text]
         for t in texts:
             self._say_queue.put(_SayRequest(
@@ -382,21 +902,58 @@ class TextToSpeech:
         *,
         device: Optional[Union[int, str]] = None,
     ) -> None:
-        """Play a short two-tone "error" beep and return immediately.
+        """Play the bundled "error" beep and return immediately.
 
-        The beep is generated synthetically (no text synthesis, no
-        language or voice assets needed) and queued for playback through
-        the same pipeline as :meth:`say` — so if a previous ``say``
-        hasn't finished speaking yet the beep plays right after it,
-        rather than racing ahead.  Use :meth:`wait` / :meth:`is_talking`
-        to track playback.
+        Plays ``assets/error.wav`` queued through the same pipeline as
+        :meth:`say` — so if a previous ``say`` hasn't finished speaking
+        yet the beep plays right after it, rather than racing ahead.
+        Use :meth:`wait` / :meth:`is_talking` to track playback.
+
+        Pairs with :meth:`play_success`: callers that want audible
+        feedback for whether speech recognition succeeded can call
+        :meth:`play_success` on a recognized utterance and
+        :meth:`play_error` on an unrecognized one.
 
         ``device`` accepts the same values as :meth:`say` (``None`` =
-        host default, a PortAudio index, a decimal string index, or a
-        case-insensitive device-name substring).
+        constructor's ``output_device`` if set, otherwise host
+        default; a PortAudio index, a decimal string index, or a
+        case-insensitive device-name substring).  Honouring the
+        constructor's ``output_device`` here matches :meth:`say`'s
+        behaviour — without that, callers who pin a specific output
+        device for speech would get their cue beeps routed to the
+        host default and end up with audible speech but inaudible
+        beeps.
         """
         _import_say_audio_deps()
-        self._say_queue.put(_BeepRequest(device=device))
+        if device is None and self._output_device is not None:
+            device = self._output_device
+        self._log(f"play_error: enqueue (device={device!r})")
+        self._say_queue.put(_BeepRequest(device=device, kind="error"))
+        self._ensure_say_workers()
+
+    def play_success(
+        self,
+        *,
+        device: Optional[Union[int, str]] = None,
+    ) -> None:
+        """Play the bundled "success" beep and return immediately.
+
+        Counterpart to :meth:`play_error` for positive feedback: plays
+        ``assets/success.wav`` confirming that the most recent
+        utterance was recognized / accepted.  Same queueing rules as
+        :meth:`play_error` — decoded once, cached, and ordered
+        through the say queue so it never races ahead of an in-flight
+        :meth:`say`.
+
+        ``device`` accepts the same values as :meth:`say` and falls
+        back to the constructor's ``output_device`` when ``None``,
+        for the same reason as :meth:`play_error`.
+        """
+        _import_say_audio_deps()
+        if device is None and self._output_device is not None:
+            device = self._output_device
+        self._log(f"play_success: enqueue (device={device!r})")
+        self._say_queue.put(_BeepRequest(device=device, kind="success"))
         self._ensure_say_workers()
 
     def _ensure_say_workers(self) -> None:
@@ -436,15 +993,33 @@ class TextToSpeech:
 
             try:
                 if isinstance(req, _BeepRequest):
+                    self._log(
+                        f"synth_worker: dequeued beep kind={req.kind!r}"
+                    )
+                    samples, beep_sr = _load_beep_samples(np, req.kind)
                     item = _PlayItem(
-                        data=_get_error_beep_samples(np, _BEEP_SAMPLE_RATE),
-                        sample_rate=_BEEP_SAMPLE_RATE,
+                        data=samples,
+                        sample_rate=beep_sr,
                         device=req.device,
                     )
+                    self._log(
+                        f"synth_worker: beep ready ({req.kind!r}, "
+                        f"{len(item.data)} samples @ {item.sample_rate} Hz)"
+                    )
                 else:
+                    self._log(
+                        "synth_worker: dequeued say request"
+                        f" (text={(req.text or '')[:40]!r})"
+                    )
                     item = self._synthesize_one(req, np)
+                    self._log(
+                        f"synth_worker: synth done "
+                        f"({len(item.data)} samples @ {item.sample_rate} Hz)"
+                    )
                 if not self._say_stop_event.is_set():
+                    self._log("synth_worker: handing item to play_queue")
                     self._play_queue.put(item)
+                    self._log("synth_worker: item accepted by play_queue")
             except Exception:
                 print(
                     "TextToSpeech: synthesis worker dropped an utterance:",
@@ -464,7 +1039,7 @@ class TextToSpeech:
     # -- playback thread -----------------------------------------------------
 
     def _play_worker(self) -> None:
-        _, sd = _import_say_audio_deps()
+        np, sd = _import_say_audio_deps()
 
         while not self._say_stop_event.is_set():
             try:
@@ -481,7 +1056,7 @@ class TextToSpeech:
                 break
 
             try:
-                self._play_one(item, sd)
+                self._play_one(item, sd, np)
             except Exception:
                 print(
                     "TextToSpeech: playback worker failed to play an utterance:",
@@ -491,7 +1066,7 @@ class TextToSpeech:
             finally:
                 self._play_queue.task_done()
 
-    def _play_one(self, item: _PlayItem, sd: Any) -> None:
+    def _play_one(self, item: _PlayItem, sd: Any, np: Any) -> None:
         """Resolve the device and play a single synthesized utterance (runs on playback thread)."""
         spec_key = _say_device_spec_key(item.device)
         if isinstance(item.device, str):
@@ -519,36 +1094,116 @@ class TextToSpeech:
 
         resolved = self._say_device_cache[1]
 
+        if not self._announced_resolved_device:
+            self._announced_resolved_device = True
+            self._announce_resolved_device(sd, resolved)
+
         if self._say_stop_event.is_set():
             return
 
         settings_key = (spec_key, item.sample_rate)
-        if self._say_settings_ok != settings_key:
-            try:
-                sd.check_output_settings(
-                    samplerate=item.sample_rate,
-                    channels=1,
-                    dtype="float32",
-                    device=resolved,
-                )
-            except (sd.PortAudioError, OSError, ValueError) as e:
+        cached = self._say_settings_ok
+        if cached is not None and cached[0] == settings_key:
+            target_sr = cached[1]
+        else:
+            target_sr, last_err = _select_output_sample_rate(
+                sd, device=resolved, source_sr=item.sample_rate,
+            )
+            if target_sr is None:
                 outs = _say_enumerate_output_devices(sd)
+                tried = ", ".join(
+                    str(sr) for sr in (item.sample_rate,) + _RESAMPLE_CANDIDATES
+                )
+                err_suffix = f": {last_err}" if last_err is not None else ""
                 raise MoonshineAudioOutputError(
-                    f"Audio output cannot play {item.sample_rate} Hz mono float32 on the selected device: {e}",
+                    f"Audio output {resolved!r} rejected every probed sample rate "
+                    f"({tried} Hz) for mono float32{err_suffix}.",
                     available_outputs=_say_device_lines(outs),
-                ) from e
-            self._say_settings_ok = settings_key
+                ) from last_err
+            self._say_settings_ok = (settings_key, target_sr)
+            if target_sr != item.sample_rate:
+                print(
+                    f"TextToSpeech: output device does not support "
+                    f"{item.sample_rate} Hz; resampling to {target_sr} Hz.",
+                    file=sys.stderr,
+                )
 
         if self._say_stop_event.is_set():
             return
 
+        if target_sr != item.sample_rate:
+            data = _resample_linear(
+                np, item.data, item.sample_rate, target_sr)
+        else:
+            data = item.data
+
+        expected_duration_s = (len(data) / float(target_sr)) if target_sr else 0.0
+        self._log(
+            f"play_one: starting sd.play "
+            f"({len(data)} samples @ {target_sr} Hz, "
+            f"~{expected_duration_s * 1000.0:.1f} ms expected, "
+            f"device={resolved!r})"
+        )
+        t_start = time.perf_counter()
         try:
-            sd.play(item.data, item.sample_rate, device=resolved)
+            sd.play(data, target_sr, device=resolved)
+            t_after_play = time.perf_counter()
+            # Snapshot ``stream.active`` immediately after sd.play() so
+            # we can tell, after the fact, whether the playback ever
+            # actually started.  ``sd.play`` returns once the stream
+            # has been opened and ``start()`` has been called, but on
+            # some backends the driver takes a few ms to ramp up — for
+            # very short clips (like the ~160 ms success beep) the
+            # stream can transition False → True → False entirely
+            # between two polls of ``get_stream().active``, which
+            # makes the worker think the item was played even though
+            # nothing reached the speakers.  Logging the initial /
+            # final state plus elapsed time vs. expected duration
+            # makes that race visible.
+            try:
+                initial_active = bool(sd.get_stream().active)
+            except Exception:
+                initial_active = False
+            self._log(
+                f"play_one: sd.play returned in "
+                f"{(t_after_play - t_start) * 1000.0:.1f} ms; "
+                f"stream.active={initial_active}"
+            )
+            poll_count = 0
             while sd.get_stream().active:
+                poll_count += 1
                 if self._say_stop_event.is_set():
                     sd.stop()
+                    self._log(
+                        f"play_one: stop_event set after "
+                        f"{(time.perf_counter() - t_start) * 1000.0:.1f} ms; "
+                        f"calling sd.stop"
+                    )
                     return
                 self._say_stop_event.wait(timeout=0.05)
+            elapsed_ms = (time.perf_counter() - t_start) * 1000.0
+            self._log(
+                f"play_one: playback done after {elapsed_ms:.1f} ms "
+                f"(expected ~{expected_duration_s * 1000.0:.1f} ms, "
+                f"polls={poll_count})"
+            )
+            # Explicitly tear down the global play stream once the
+            # buffer is exhausted.  ``sd.play()`` leaves the stream
+            # *inactive but open* by default, which on Linux/ALSA
+            # exclusive-access devices (e.g. plain ``hw:`` USB DACs)
+            # means PortAudio keeps the device claimed.  The next
+            # ``sd.check_output_settings()`` then fails with
+            # ``paDeviceUnavailable`` for every probed rate, even
+            # rates the device just played at — and the play worker
+            # raises and drops the next utterance.  Calling
+            # ``sd.stop()`` here (with ``ignore_errors=True``)
+            # releases the device promptly.  ``sd.play()`` will
+            # transparently re-open it for the next item.
+            try:
+                sd.stop(ignore_errors=True)
+                self._log("play_one: sd.stop after natural completion")
+            except Exception as stop_err:  # pragma: no cover - defensive
+                self._log(f"play_one: sd.stop after completion raised: {stop_err!r}")
         except (sd.PortAudioError, OSError, ValueError) as e:
             outs = _say_enumerate_output_devices(sd)
             raise MoonshineAudioOutputError(
@@ -603,6 +1258,9 @@ class TextToSpeech:
         self._play_thread = None
 
     def close(self) -> None:
+        if getattr(self, "_closed", False):
+            return
+        self._closed = True
         if getattr(self, "_say_queue", None) is not None:
             self._say_stop_event.set()
 
@@ -708,6 +1366,19 @@ if __name__ == "__main__":
         help="Voice id with kokoro_ or piper_ prefix (e.g. kokoro_af_heart)",
     )
     parser.add_argument(
+        "--clone",
+        default=None,
+        type=Path,
+        metavar="WAV_PATH",
+        help="Clone the voice from a reference .wav clip using ZipVoice",
+    )
+    parser.add_argument(
+        "--clone-transcript",
+        default=None,
+        metavar="TEXT",
+        help="Transcript of the --clone reference clip (optional; auto-transcribed with Moonshine ASR when omitted)",
+    )
+    parser.add_argument(
         "--text",
         default="Hello world!",
         help="Text to speak (default: %(default)r)",
@@ -754,11 +1425,17 @@ if __name__ == "__main__":
             print(e, file=sys.stderr)
             sys.exit(2)
 
+    if args.clone_transcript is not None and args.clone is None:
+        print("--clone-transcript requires --clone", file=sys.stderr)
+        sys.exit(2)
+
     try:
         with TextToSpeech(
             args.language,
             voice=args.voice,
             options=extra,
+            clone=args.clone,
+            clone_transcript=args.clone_transcript,
         ) as tts:
             if args.out is not None:
                 samples, sr = tts.synthesize(args.text, options=extra)
@@ -779,6 +1456,9 @@ if __name__ == "__main__":
                     )
                     samples, sr = tts.synthesize(args.text, options=extra)
                     _write_wav_mono_pcm16(fallback_path, samples, sr)
+    except KeyboardInterrupt:
+        print("\nInterrupted.", file=sys.stderr)
+        sys.exit(130)
     except MoonshineError as e:
         print(e, file=sys.stderr)
         sys.exit(1)

@@ -1,17 +1,19 @@
 #include "cmudict-tsv.h"
 
-#include "text-normalize.h"
-
 #include <fstream>
 #include <istream>
 #include <set>
 #include <sstream>
 
+#include "text-normalize.h"
+
 namespace moonshine_tts {
 
 namespace {
 
-void parse_cmudict_tsv_lines(std::istream& in, std::unordered_map<std::string, std::vector<std::string>>& ipa_by_word) {
+void parse_cmudict_tsv_lines(
+    std::istream& in,
+    std::unordered_map<std::string, std::vector<std::string>>& ipa_by_word) {
   std::unordered_map<std::string, std::set<std::string>> raw;
   std::string line;
   while (std::getline(in, line)) {
@@ -27,7 +29,8 @@ void parse_cmudict_tsv_lines(std::istream& in, std::unordered_map<std::string, s
     }
     std::string word_token = line.substr(0, tab);
     std::string ipa = line.substr(tab + 1);
-    while (!word_token.empty() && (word_token.back() == ' ' || word_token.back() == '\t')) {
+    while (!word_token.empty() &&
+           (word_token.back() == ' ' || word_token.back() == '\t')) {
       word_token.pop_back();
     }
     while (!ipa.empty() && (ipa.back() == ' ' || ipa.back() == '\t')) {

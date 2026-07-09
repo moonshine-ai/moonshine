@@ -95,6 +95,46 @@ struct WordTiming {
       : word(word), start(start), end(end), confidence(confidence) {}
 };
 
+/// One contiguous span of speech within a line attributed to a single
+/// speaker. Only populated when the identify_speakers transcriber option is
+/// enabled. Spans can be revised on any transcription update, even for lines
+/// that are already complete; see TranscriptLine::haveSpeakersChanged.
+/// Character ranges use UTF-8 byte offsets into the line text; word timestamps
+/// are enabled automatically when identify_speakers is on.
+struct SpeakerSpan {
+  /// Time offset from the start of the audio or stream in seconds
+  float startTime;
+  /// Length of the span in seconds
+  float duration;
+  /// Stable identifier for the speaker within this stream
+  uint64_t speakerId;
+  /// The order the speaker first appeared in the transcript, starting at 0
+  uint32_t speakerIndex;
+  /// UTF-8 byte offset into the line text where this span begins (inclusive).
+  /// Zero when unknown. Populated when identify_speakers is enabled.
+  uint64_t startChar;
+  /// UTF-8 byte offset into the line text where this span ends (exclusive).
+  /// Zero when unknown.
+  uint64_t endChar;
+
+  SpeakerSpan()
+      : startTime(0.0f),
+        duration(0.0f),
+        speakerId(0),
+        speakerIndex(0),
+        startChar(0),
+        endChar(0) {}
+  SpeakerSpan(float startTime, float duration, uint64_t speakerId,
+              uint32_t speakerIndex, uint64_t startChar = 0,
+              uint64_t endChar = 0)
+      : startTime(startTime),
+        duration(duration),
+        speakerId(speakerId),
+        speakerIndex(speakerIndex),
+        startChar(startChar),
+        endChar(endChar) {}
+};
+
 /// A single line of transcription
 struct TranscriptLine {
   /// UTF-8 encoded transcription text
@@ -122,16 +162,19 @@ struct TranscriptLine {
   /// (streaming only)
   bool hasTextChanged;
 
-  /// Whether a speaker ID has been calculated for the line.
-  bool hasSpeakerId;
-
-  /// The speaker ID for the line.
-  uint64_t speakerId;
-
-  /// The order the speaker appeared in the current transcript.
-  uint32_t speakerIndex;
+  /// Whether the speaker spans of the line have changed since the previous
+  /// call. Unlike the other change flags, this can fire for lines that are
+  /// already complete, since diarization refines speaker assignments
+  /// retroactively as more audio arrives.
+  bool haveSpeakersChanged;
 
   int32_t lastTranscriptionLatencyMs;
+
+  /// Speaker spans covering this line, ordered by start time and clipped to
+  /// the line's time range (empty unless the identify_speakers option is
+  /// enabled). These are mutable: they can be revised on any transcription
+  /// update, even after the line is complete.
+  std::vector<SpeakerSpan> speakerSpans;
 
   /// Audio data for this line, if available (16KHz float PCM, -1.0 to 1.0)
   std::vector<float> audioData;
@@ -148,9 +191,7 @@ struct TranscriptLine {
         isUpdated(false),
         isNew(false),
         hasTextChanged(false),
-        hasSpeakerId(false),
-        speakerId(0),
-        speakerIndex(0),
+        haveSpeakersChanged(false),
         lastTranscriptionLatencyMs(0) {}
 
   /// Construct from C API structure
@@ -162,12 +203,18 @@ struct TranscriptLine {
         isUpdated(line_c.is_updated != 0),
         isNew(line_c.is_new != 0),
         hasTextChanged(line_c.has_text_changed != 0),
-        hasSpeakerId(line_c.has_speaker_id != 0),
-        speakerId(line_c.speaker_id),
-        speakerIndex(line_c.speaker_index),
+        haveSpeakersChanged(line_c.have_speakers_changed != 0),
         lastTranscriptionLatencyMs(line_c.last_transcription_latency_ms) {
     if (line_c.text) {
       text = std::string(line_c.text);
+    }
+    if (line_c.speaker_spans && line_c.speaker_span_count > 0) {
+      speakerSpans.reserve(line_c.speaker_span_count);
+      for (uint64_t i = 0; i < line_c.speaker_span_count; i++) {
+        const auto &s = line_c.speaker_spans[i];
+        speakerSpans.emplace_back(s.start_time, s.duration, s.speaker_id,
+                                  s.speaker_index, s.start_char, s.end_char);
+      }
     }
     if (line_c.audio_data && line_c.audio_data_count > 0) {
       audioData.assign(line_c.audio_data,
@@ -177,22 +224,37 @@ struct TranscriptLine {
       words.reserve(line_c.word_count);
       for (uint64_t i = 0; i < line_c.word_count; i++) {
         const auto &w = line_c.words[i];
-        words.emplace_back(
-            w.text ? std::string(w.text) : std::string(),
-            w.start, w.end, w.confidence);
+        words.emplace_back(w.text ? std::string(w.text) : std::string(),
+                           w.start, w.end, w.confidence);
       }
     }
   }
 
   std::string toString() const {
+    std::string spansString;
+    if (!speakerSpans.empty()) {
+      spansString = ", speaker spans=[";
+      for (size_t i = 0; i < speakerSpans.size(); i++) {
+        const SpeakerSpan &span = speakerSpans[i];
+        if (i > 0) {
+          spansString += ", ";
+        }
+        spansString += std::to_string(span.startTime) + "s+" +
+                       std::to_string(span.duration) + "s speaker " +
+                       std::to_string(span.speakerIndex) + " (" +
+                       std::to_string(span.speakerId) + ") chars " +
+                       std::to_string(span.startChar) + "-" +
+                       std::to_string(span.endChar);
+      }
+      spansString += "]";
+    }
     return "[" + std::to_string(startTime) + "s] '" + text + "' (" +
            std::to_string(duration) + "s) [" + std::to_string(lineId) + "] " +
            (isComplete ? " complete, " : " incomplete, ") +
            (isUpdated ? " updated, " : " not updated, ") +
            (isNew ? " new" : " not new, ") +
            (hasTextChanged ? " text changed" : " text not changed") +
-           (hasSpeakerId ? " speaker id=" + std::to_string(speakerId) +
-           ", speaker index=" + std::to_string(speakerIndex) : "") +
+           (haveSpeakersChanged ? ", speakers changed" : "") + spansString +
            ", last transcription latency ms=" +
            std::to_string(lastTranscriptionLatencyMs);
   }
@@ -238,6 +300,7 @@ class TranscriptEvent {
     LINE_STARTED,
     LINE_UPDATED,
     LINE_TEXT_CHANGED,
+    LINE_SPEAKERS_CHANGED,
     LINE_COMPLETED,
     ERROR
   };
@@ -277,6 +340,16 @@ class LineTextChanged : public TranscriptEvent {
  public:
   LineTextChanged(const TranscriptLine &line, int32_t streamHandle)
       : TranscriptEvent(line, streamHandle, LINE_TEXT_CHANGED) {}
+};
+
+/// Event emitted when the speaker spans of a transcription line change.
+/// Only fired when the identify_speakers option is enabled. Note that this
+/// can fire for lines that are already complete, since diarization refines
+/// speaker assignments retroactively as more audio arrives.
+class LineSpeakersChanged : public TranscriptEvent {
+ public:
+  LineSpeakersChanged(const TranscriptLine &line, int32_t streamHandle)
+      : TranscriptEvent(line, streamHandle, LINE_SPEAKERS_CHANGED) {}
 };
 
 /// Event emitted when a transcription line is completed
@@ -321,6 +394,10 @@ class TranscriptEventListener {
 
   /// Called when the text of a transcription line changes
   virtual void onLineTextChanged(const LineTextChanged &) {}
+
+  /// Called when the speaker spans of a transcription line change. Can be
+  /// called for lines that are already complete.
+  virtual void onLineSpeakersChanged(const LineSpeakersChanged &) {}
 
   /// Called when a transcription line is completed
   virtual void onLineCompleted(const LineCompleted &) {}
@@ -459,8 +536,8 @@ class Transcriber {
   /// entries to the C API.
   /// @throws MoonshineException if the transcriber cannot be loaded
   Transcriber(
-      const std::string &modelPath, ModelArch modelArch,
-      double updateInterval, const std::string &spellingModelPath,
+      const std::string &modelPath, ModelArch modelArch, double updateInterval,
+      const std::string &spellingModelPath,
       const std::vector<std::pair<std::string, std::string>> &options = {});
 
   /// Initialize a transcriber from in-memory model buffers. Buffers
@@ -583,7 +660,8 @@ class Transcriber {
   friend class Stream;
 };
 
-/* --------------------------- TTS DATA STRUCTURES --------------------------- */
+/* --------------------------- TTS DATA STRUCTURES ---------------------------
+ */
 
 /// Result of a text-to-speech synthesis operation
 struct TtsSynthesisResult {
@@ -597,7 +675,8 @@ struct TtsSynthesisResult {
       : samples(std::move(samples)), sampleRateHz(sampleRateHz) {}
 };
 
-/* ----------------------------- TEXT TO SPEECH ------------------------------- */
+/* ----------------------------- TEXT TO SPEECH -------------------------------
+ */
 
 /// Text-to-speech synthesizer
 ///
@@ -685,7 +764,8 @@ class TextToSpeech {
   void checkError(int32_t error) const;
 };
 
-/* ------------------------- GRAPHEME TO PHONEMIZER -------------------------- */
+/* ------------------------- GRAPHEME TO PHONEMIZER --------------------------
+ */
 
 /// Grapheme-to-phoneme converter
 ///
@@ -779,7 +859,7 @@ class IntentRecognizer {
   /// Load an embedding model from disk.
   /// @throws MoonshineException if the model cannot be loaded
   IntentRecognizer(const std::string &model_path, EmbeddingModelArch arch,
-                     const std::string &model_variant = "q4");
+                   const std::string &model_variant = "q4");
 
   ~IntentRecognizer();
 
@@ -791,19 +871,20 @@ class IntentRecognizer {
 
   /// Register a canonical phrase to match against.
   /// @param canonical_phrase The phrase to register.
-  /// @param embedding Optional pre-computed embedding (nullptr to auto-compute).
+  /// @param embedding Optional pre-computed embedding (nullptr to
+  /// auto-compute).
   /// @param embedding_size Number of floats in the embedding array.
   /// @param priority Higher priority intents rank above lower ones.
   /// @throws MoonshineException on failure
   void registerIntent(const std::string &canonical_phrase,
-                      float *embedding = nullptr,
-                      uint64_t embedding_size = 0,
+                      float *embedding = nullptr, uint64_t embedding_size = 0,
                       int32_t priority = 0);
 
   /// Remove a phrase. Returns false if it was not registered.
   bool unregisterIntent(const std::string &canonical_phrase);
 
-  /// Rank registered intents by similarity (see ``moonshine_get_closest_intents``).
+  /// Rank registered intents by similarity (see
+  /// ``moonshine_get_closest_intents``).
   std::vector<IntentMatch> getClosestIntents(const std::string &utterance,
                                              float tolerance_threshold);
 
@@ -980,6 +1061,9 @@ inline void Stream::notifyFromTranscript(const Transcript &transcript) {
     if (line.hasTextChanged) {
       emit(LineTextChanged(line, handle_));
     }
+    if (line.haveSpeakersChanged) {
+      emit(LineSpeakersChanged(line, handle_));
+    }
     if (line.isComplete && line.isUpdated) {
       emit(LineCompleted(line, handle_));
     }
@@ -1000,6 +1084,10 @@ inline void Stream::emit(const TranscriptEvent &event) {
         case TranscriptEvent::LINE_TEXT_CHANGED:
           listener->onLineTextChanged(
               static_cast<const LineTextChanged &>(event));
+          break;
+        case TranscriptEvent::LINE_SPEAKERS_CHANGED:
+          listener->onLineSpeakersChanged(
+              static_cast<const LineSpeakersChanged &>(event));
           break;
         case TranscriptEvent::LINE_COMPLETED:
           listener->onLineCompleted(static_cast<const LineCompleted &>(event));
@@ -1132,8 +1220,7 @@ inline Transcriber::Transcriber(
       modelPath_(modelPath),
       modelArch_(modelArch),
       updateInterval_(updateInterval) {
-  detail::OptionsBuffer buf =
-      detail::buildOptions(spellingModelPath, options);
+  detail::OptionsBuffer buf = detail::buildOptions(spellingModelPath, options);
   handle_ = moonshine_load_transcriber_from_files(
       modelPath.c_str(), static_cast<uint32_t>(modelArch),
       buf.options.empty() ? nullptr : buf.options.data(),
@@ -1144,15 +1231,15 @@ inline Transcriber::Transcriber(
 inline Transcriber Transcriber::loadFromMemory(
     const uint8_t *encoderData, size_t encoderDataSize,
     const uint8_t *decoderData, size_t decoderDataSize,
-    const uint8_t *tokenizerData, size_t tokenizerDataSize,
-    ModelArch modelArch, double updateInterval,
-    const uint8_t *spellingModelData, size_t spellingModelDataSize,
+    const uint8_t *tokenizerData, size_t tokenizerDataSize, ModelArch modelArch,
+    double updateInterval, const uint8_t *spellingModelData,
+    size_t spellingModelDataSize,
     const std::vector<std::pair<std::string, std::string>> &options) {
   detail::OptionsBuffer buf = detail::buildOptions("", options);
   int32_t handle = moonshine_load_transcriber_from_memory(
-      encoderData, encoderDataSize, decoderData, decoderDataSize,
-      tokenizerData, tokenizerDataSize, spellingModelData,
-      spellingModelDataSize, static_cast<uint32_t>(modelArch),
+      encoderData, encoderDataSize, decoderData, decoderDataSize, tokenizerData,
+      tokenizerDataSize, spellingModelData, spellingModelDataSize,
+      static_cast<uint32_t>(modelArch),
       buf.options.empty() ? nullptr : buf.options.data(),
       static_cast<uint64_t>(buf.options.size()), MOONSHINE_HEADER_VERSION);
   if (handle < 0) {
@@ -1300,8 +1387,7 @@ inline void Stream::checkError(int32_t error) const {
 
 // TextToSpeech implementation
 inline TextToSpeech::TextToSpeech(
-    const std::string &language,
-    const std::vector<moonshine_option_t> &options)
+    const std::string &language, const std::vector<moonshine_option_t> &options)
     : handle_(-1), language_(language) {
   handle_ = moonshine_create_tts_synthesizer_from_files(
       language.c_str(), nullptr, 0, options.empty() ? nullptr : options.data(),
@@ -1327,8 +1413,7 @@ inline TextToSpeech &TextToSpeech::operator=(TextToSpeech &&other) {
 }
 
 inline TtsSynthesisResult TextToSpeech::synthesize(
-    const std::string &text,
-    const std::vector<moonshine_option_t> &options) {
+    const std::string &text, const std::vector<moonshine_option_t> &options) {
   if (handle_ < 0) {
     throw MoonshineException("TextToSpeech is not initialized");
   }
@@ -1404,8 +1489,7 @@ inline void TextToSpeech::checkError(int32_t error) const {
 
 // GraphemeToPhonemizer implementation
 inline GraphemeToPhonemizer::GraphemeToPhonemizer(
-    const std::string &language,
-    const std::vector<moonshine_option_t> &options)
+    const std::string &language, const std::vector<moonshine_option_t> &options)
     : handle_(-1), language_(language) {
   handle_ = moonshine_create_grapheme_to_phonemizer_from_files(
       language.c_str(), nullptr, 0, options.empty() ? nullptr : options.data(),
@@ -1415,8 +1499,7 @@ inline GraphemeToPhonemizer::GraphemeToPhonemizer(
 
 inline GraphemeToPhonemizer::~GraphemeToPhonemizer() { close(); }
 
-inline GraphemeToPhonemizer::GraphemeToPhonemizer(
-    GraphemeToPhonemizer &&other)
+inline GraphemeToPhonemizer::GraphemeToPhonemizer(GraphemeToPhonemizer &&other)
     : handle_(other.handle_), language_(std::move(other.language_)) {
   other.handle_ = -1;
 }
@@ -1433,8 +1516,7 @@ inline GraphemeToPhonemizer &GraphemeToPhonemizer::operator=(
 }
 
 inline std::string GraphemeToPhonemizer::toIpa(
-    const std::string &text,
-    const std::vector<moonshine_option_t> &options) {
+    const std::string &text, const std::vector<moonshine_option_t> &options) {
   if (handle_ < 0) {
     throw MoonshineException("GraphemeToPhonemizer is not initialized");
   }
@@ -1485,8 +1567,8 @@ inline void GraphemeToPhonemizer::checkError(int32_t error) const {
 }
 
 inline IntentRecognizer::IntentRecognizer(const std::string &model_path,
-                                           EmbeddingModelArch arch,
-                                           const std::string &model_variant)
+                                          EmbeddingModelArch arch,
+                                          const std::string &model_variant)
     : handle_(-1) {
   handle_ = moonshine_create_intent_recognizer(
       model_path.c_str(), static_cast<uint32_t>(arch), model_variant.c_str());
@@ -1519,8 +1601,7 @@ inline void IntentRecognizer::registerIntent(
 
 inline bool IntentRecognizer::unregisterIntent(
     const std::string &canonical_phrase) {
-  int32_t err =
-      moonshine_unregister_intent(handle_, canonical_phrase.c_str());
+  int32_t err = moonshine_unregister_intent(handle_, canonical_phrase.c_str());
   if (err == MOONSHINE_ERROR_NONE) {
     return true;
   }

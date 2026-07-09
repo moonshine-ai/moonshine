@@ -1,21 +1,22 @@
 #include "english.h"
 
-#include "cmudict-tsv.h"
-#include "g2p-word-log.h"
-#include "english-hand-oov.h"
-#include "english-numbers.h"
-#include "onnx-g2p-models.h"
-#include "text-normalize.h"
-#include "utf8-utils.h"
+#include <nlohmann/json.h>
 
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
-#include <nlohmann/json.h>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
+
+#include "cmudict-tsv.h"
+#include "english-hand-oov.h"
+#include "english-numbers.h"
+#include "g2p-word-log.h"
+#include "onnx-g2p-models.h"
+#include "text-normalize.h"
+#include "utf8-utils.h"
 
 namespace moonshine_tts {
 
@@ -33,9 +34,11 @@ void append_log(std::vector<G2pWordLog>* out, G2pWordLog entry) {
   }
 }
 
-/// CMU-style heteronyms such as ``tomato`` include both US (stressed ``eɪ``) and UK (stressed ``ɑ``)
-/// readings. Lexicographic IPA sort is not locale-aware; pick explicitly by dialect.
-std::string pick_english_heteronym_ipa(std::vector<std::string> alts, bool prefer_british) {
+/// CMU-style heteronyms such as ``tomato`` include both US (stressed ``eɪ``)
+/// and UK (stressed ``ɑ``) readings. Lexicographic IPA sort is not
+/// locale-aware; pick explicitly by dialect.
+std::string pick_english_heteronym_ipa(std::vector<std::string> alts,
+                                       bool prefer_british) {
   if (alts.empty()) {
     return {};
   }
@@ -47,7 +50,8 @@ std::string pick_english_heteronym_ipa(std::vector<std::string> alts, bool prefe
     return s.find("ˈeɪ") != std::string::npos;
   };
   const auto has_stressed_open_back = [](const std::string& s) {
-    return s.find("ˈɑ") != std::string::npos && s.find("ˈeɪ") == std::string::npos;
+    return s.find("ˈɑ") != std::string::npos &&
+           s.find("ˈeɪ") == std::string::npos;
   };
   bool any_us = false;
   bool any_uk = false;
@@ -75,42 +79,57 @@ std::string pick_english_heteronym_ipa(std::vector<std::string> alts, bool prefe
 
 }  // namespace
 
-EnglishRuleG2p::EnglishRuleG2p(std::filesystem::path dict_tsv,
-                               std::optional<std::filesystem::path> oov_onnx, bool use_cuda,
-                               std::optional<EnglishOnnxAuxMemory> oov_from_memory,
-                               bool prefer_british_heteronyms)
-    : impl_(std::make_unique<Impl>()), prefer_british_heteronyms_(prefer_british_heteronyms) {
+EnglishRuleG2p::EnglishRuleG2p(
+    std::filesystem::path dict_tsv,
+    std::optional<std::filesystem::path> oov_onnx, bool use_cuda,
+    std::optional<EnglishOnnxAuxMemory> oov_from_memory,
+    bool prefer_british_heteronyms,
+    const std::vector<std::string>& ort_providers,
+    const std::string& coreml_cache_dir)
+    : impl_(std::make_unique<Impl>()),
+      prefer_british_heteronyms_(prefer_british_heteronyms) {
+  (void)use_cuda;
   if (!std::filesystem::is_regular_file(dict_tsv)) {
-    throw std::runtime_error("English G2P: dictionary not found at " + dict_tsv.generic_string());
+    throw std::runtime_error("English G2P: dictionary not found at " +
+                             dict_tsv.generic_string());
   }
   impl_->dict = std::make_unique<CmudictTsv>(dict_tsv);
   if (oov_from_memory && !oov_from_memory->model_onnx.empty() &&
       !oov_from_memory->onnx_config_json_utf8.empty()) {
-    impl_->oov = std::make_unique<OnnxOovG2p>(impl_->env, oov_from_memory->model_onnx.data(),
-                                              oov_from_memory->model_onnx.size(),
-                                              nlohmann::json::parse(oov_from_memory->onnx_config_json_utf8),
-                                              use_cuda);
+    impl_->oov = std::make_unique<OnnxOovG2p>(
+        impl_->env, oov_from_memory->model_onnx.data(),
+        oov_from_memory->model_onnx.size(),
+        nlohmann::json::parse(oov_from_memory->onnx_config_json_utf8),
+        ort_providers, coreml_cache_dir);
   } else if (oov_onnx && std::filesystem::is_regular_file(*oov_onnx)) {
-    impl_->oov = std::make_unique<OnnxOovG2p>(impl_->env, *oov_onnx, use_cuda);
+    impl_->oov = std::make_unique<OnnxOovG2p>(impl_->env, *oov_onnx,
+                                              ort_providers, coreml_cache_dir);
   }
 }
 
-EnglishRuleG2p::EnglishRuleG2p(std::string dict_tsv_utf8, std::optional<std::filesystem::path> oov_onnx,
-                               bool use_cuda, std::optional<EnglishOnnxAuxMemory> oov_from_memory,
-                               bool prefer_british_heteronyms)
-    : impl_(std::make_unique<Impl>()), prefer_british_heteronyms_(prefer_british_heteronyms) {
+EnglishRuleG2p::EnglishRuleG2p(
+    std::string dict_tsv_utf8, std::optional<std::filesystem::path> oov_onnx,
+    bool use_cuda, std::optional<EnglishOnnxAuxMemory> oov_from_memory,
+    bool prefer_british_heteronyms,
+    const std::vector<std::string>& ort_providers,
+    const std::string& coreml_cache_dir)
+    : impl_(std::make_unique<Impl>()),
+      prefer_british_heteronyms_(prefer_british_heteronyms) {
+  (void)use_cuda;
   if (dict_tsv_utf8.empty()) {
     throw std::runtime_error("English G2P: empty dictionary buffer");
   }
   impl_->dict = std::make_unique<CmudictTsv>(std::string_view(dict_tsv_utf8));
   if (oov_from_memory && !oov_from_memory->model_onnx.empty() &&
       !oov_from_memory->onnx_config_json_utf8.empty()) {
-    impl_->oov = std::make_unique<OnnxOovG2p>(impl_->env, oov_from_memory->model_onnx.data(),
-                                              oov_from_memory->model_onnx.size(),
-                                              nlohmann::json::parse(oov_from_memory->onnx_config_json_utf8),
-                                              use_cuda);
+    impl_->oov = std::make_unique<OnnxOovG2p>(
+        impl_->env, oov_from_memory->model_onnx.data(),
+        oov_from_memory->model_onnx.size(),
+        nlohmann::json::parse(oov_from_memory->onnx_config_json_utf8),
+        ort_providers, coreml_cache_dir);
   } else if (oov_onnx && std::filesystem::is_regular_file(*oov_onnx)) {
-    impl_->oov = std::make_unique<OnnxOovG2p>(impl_->env, *oov_onnx, use_cuda);
+    impl_->oov = std::make_unique<OnnxOovG2p>(impl_->env, *oov_onnx,
+                                              ort_providers, coreml_cache_dir);
   }
 }
 
@@ -119,21 +138,25 @@ EnglishRuleG2p::EnglishRuleG2p(EnglishRuleG2p&&) noexcept = default;
 EnglishRuleG2p& EnglishRuleG2p::operator=(EnglishRuleG2p&&) noexcept = default;
 
 std::vector<std::string> EnglishRuleG2p::dialect_ids() {
-  return dedupe_dialect_ids_preserve_first(
-      {"en_us", "en-US", "en-us", "english", "en", "en_gb", "en-GB", "en-gb", "british"});
+  return dedupe_dialect_ids_preserve_first({"en_us", "en-US", "en-us",
+                                            "english", "en", "en_gb", "en-GB",
+                                            "en-gb", "british"});
 }
 
-std::string EnglishRuleG2p::text_to_ipa(std::string text, std::vector<G2pWordLog>* per_word_log) {
+std::string EnglishRuleG2p::text_to_ipa(std::string text,
+                                        std::vector<G2pWordLog>* per_word_log) {
   std::vector<std::string> parts;
   int pos = 0;
   for (const auto& token : split_text_to_words(text)) {
-    std::optional<std::pair<int, int>> se = utf8_find_token_codepoints(text, token, pos);
+    std::optional<std::pair<int, int>> se =
+        utf8_find_token_codepoints(text, token, pos);
     if (!se) {
       se = utf8_find_token_codepoints(text, token, 0);
     }
     if (!se) {
-      append_log(per_word_log,
-                 G2pWordLog{token, "", G2pWordPath::kTokenNotLocatedInText, ""});
+      append_log(
+          per_word_log,
+          G2pWordLog{token, "", G2pWordPath::kTokenNotLocatedInText, ""});
       continue;
     }
     const int start = se->first;
@@ -151,8 +174,9 @@ std::string EnglishRuleG2p::text_to_ipa(std::string text, std::vector<G2pWordLog
     const std::string gkey = normalize_grapheme_key(key_lookup);
 
     if (auto num_ipa = english_number_token_ipa(key_lookup)) {
-      append_log(per_word_log,
-                 G2pWordLog{token, gkey, G2pWordPath::kEnglishNumber, *num_ipa});
+      append_log(
+          per_word_log,
+          G2pWordLog{token, gkey, G2pWordPath::kEnglishNumber, *num_ipa});
       parts.push_back(std::move(*num_ipa));
       continue;
     }
@@ -160,7 +184,8 @@ std::string EnglishRuleG2p::text_to_ipa(std::string text, std::vector<G2pWordLog
     const std::vector<std::string>* alts_ptr = impl_->dict->lookup(gkey);
     if (!alts_ptr || alts_ptr->empty()) {
       if (impl_->oov) {
-        const std::vector<std::string> phones = impl_->oov->predict_phonemes(gkey);
+        const std::vector<std::string> phones =
+            impl_->oov->predict_phonemes(gkey);
         if (!phones.empty()) {
           std::string chunk;
           for (const auto& p : phones) {
@@ -186,13 +211,17 @@ std::string EnglishRuleG2p::text_to_ipa(std::string text, std::vector<G2pWordLog
 
     std::vector<std::string> alts = *alts_ptr;
     if (alts.size() == 1) {
-      append_log(per_word_log,
-                 G2pWordLog{token, gkey, G2pWordPath::kDictUnambiguous, alts[0]});
+      append_log(
+          per_word_log,
+          G2pWordLog{token, gkey, G2pWordPath::kDictUnambiguous, alts[0]});
       parts.push_back(alts[0]);
     } else {
-      const std::string chosen = pick_english_heteronym_ipa(std::move(alts), prefer_british_heteronyms_);
+      const std::string chosen = pick_english_heteronym_ipa(
+          std::move(alts), prefer_british_heteronyms_);
       append_log(per_word_log,
-                 G2pWordLog{token, gkey, G2pWordPath::kDictFirstAlternativeNoHeteronymModel, chosen});
+                 G2pWordLog{token, gkey,
+                            G2pWordPath::kDictFirstAlternativeNoHeteronymModel,
+                            chosen});
       parts.push_back(chosen);
     }
   }

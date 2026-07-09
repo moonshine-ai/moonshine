@@ -1,8 +1,4 @@
 // Unified G2P CLI: rule-based dialects (English, Spanish, German, …).
-#include "g2p-word-log.h"
-#include "spanish.h"
-#include "moonshine-g2p.h"
-
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -11,68 +7,95 @@
 #include <string>
 #include <vector>
 
-using moonshine_tts::MoonshineG2P;
-using moonshine_tts::MoonshineG2POptions;
-using moonshine_tts::RuleBasedG2pKind;
+#include "g2p-word-log.h"
+#include "moonshine-g2p.h"
+#include "spanish.h"
+
 using moonshine_tts::dialect_uses_rule_based_g2p;
 using moonshine_tts::format_g2p_word_log_line;
+using moonshine_tts::MoonshineG2P;
+using moonshine_tts::MoonshineG2POptions;
 using moonshine_tts::rule_based_g2p_dialect_catalog;
+using moonshine_tts::RuleBasedG2pKind;
 using moonshine_tts::spanish_dialect_cli_ids;
 
 namespace {
 
 void usage(const char *argv0) {
   std::cerr
-      << "Usage: " << argv0
-      << " [--language|--lang ID] [--model-root DIR]\n"
-      << "       (omit DIR to use the process cwd as the asset root; same layout as MoonshineTTS/PiperTTS)\n"
+      << "Usage: " << argv0 << " [--language|--lang ID] [--model-root DIR]\n"
+      << "       (omit DIR to use the process cwd as the asset root; same "
+         "layout as MoonshineTTS/PiperTTS)\n"
       << "       [--dict PATH] [--oov-onnx PATH]\n"
       << "       [--cuda] [--log-words|-v]\n"
       << "       [--no-stress] [--broad-phonemes] [--stdin]\n"
       << "       [--german-dict PATH] [--german-syllable-initial-stress]\n"
       << "       [--russian-dict PATH] [--russian-syllable-initial-stress]\n"
-      << "       [--chinese-dict PATH] [--chinese-onnx-dir PATH] [--korean-dict PATH] "
+      << "       [--chinese-dict PATH] [--chinese-onnx-dir PATH] "
+         "[--korean-dict PATH] "
          "[--no-korean-expand-digits]\n"
       << "       [--japanese-dict PATH] [--japanese-onnx-dir DIR]\n"
       << "       [--arabic-dict PATH] [--arabic-onnx-dir DIR]\n"
-      << "       [--dutch-dict PATH] [--dutch-syllable-initial-stress] [--no-dutch-expand-digits]\n"
-      << "       [--portuguese-dict PATH] [--portuguese-syllable-initial-stress] [--no-portuguese-expand-digits]\n"
+      << "       [--dutch-dict PATH] [--dutch-syllable-initial-stress] "
+         "[--no-dutch-expand-digits]\n"
+      << "       [--portuguese-dict PATH] "
+         "[--portuguese-syllable-initial-stress] "
+         "[--no-portuguese-expand-digits]\n"
       << "       [--no-turkish-expand-digits] [--no-ukrainian-expand-digits]\n"
       << "       [--hindi-dict PATH] [--no-hindi-expand-digits]\n"
       << "       [--french-dict PATH] [--french-csv-dir DIR]\n"
-      << "       [--no-french-liaison] [--no-french-oov] [--no-french-expand-digits]\n"
+      << "       [--no-french-liaison] [--no-french-oov] "
+         "[--no-french-expand-digits]\n"
       << "       [--no-french-optional-liaison]\n"
       << "       [--print-spanish-dialects] [TEXT...]\n"
-      << "  Default dialect: en_us (CMUdict + OOV ONNX under <model-root>/en_us/oov/). "
+      << "  Default dialect: en_us (CMUdict + OOV ONNX under "
+         "<model-root>/en_us/oov/). "
          "Default phrase when no TEXT: \"Hello world!\".\n"
-      << "  Spanish dialects use rule-based G2P (no ONNX). With a Spanish dialect and no TEXT, "
+      << "  Spanish dialects use rule-based G2P (no ONNX). With a Spanish "
+         "dialect and no TEXT, "
          "stdin is read unless you pass --stdin explicitly for empty input.\n"
-      << "  German (de, de-DE, german): rule-based G2P with <model-root>/de/dict.tsv by default; "
+      << "  German (de, de-DE, german): rule-based G2P with "
+         "<model-root>/de/dict.tsv by default; "
          "override with --german-dict.\n"
-      << "  French (fr, fr-FR, french): rule-based G2P; default lexicon <model-root>/fr/dict.tsv; "
+      << "  French (fr, fr-FR, french): rule-based G2P; default lexicon "
+         "<model-root>/fr/dict.tsv; "
          "POS CSVs under <model-root>/fr/.\n"
-      << "  Dutch (nl, nl-NL, dutch): rule-based G2P; default <model-root>/nl/dict.tsv; "
+      << "  Dutch (nl, nl-NL, dutch): rule-based G2P; default "
+         "<model-root>/nl/dict.tsv; "
          "override with --dutch-dict.\n"
-      << "  Russian (ru, ru-RU, russian): rule-based G2P; default <model-root>/ru/dict.tsv; "
+      << "  Russian (ru, ru-RU, russian): rule-based G2P; default "
+         "<model-root>/ru/dict.tsv; "
          "override with --russian-dict.\n"
-      << "  Chinese (zh, zh-Hans, cmn, …): RoBERTa UPOS ONNX + lexicon; default "
-         "<model-root>/zh_hans/dict.tsv and <model-root>/zh_hans/roberta_chinese_base_upos_onnx/; "
+      << "  Chinese (zh, zh-Hans, cmn, …): RoBERTa UPOS ONNX + lexicon; "
+         "default "
+         "<model-root>/zh_hans/dict.tsv and "
+         "<model-root>/zh_hans/roberta_chinese_base_upos_onnx/; "
          "override with --chinese-dict / --chinese-onnx-dir.\n"
-      << "  Korean (ko, ko-KR, korean): rule-based G2P; default <model-root>/ko/dict.tsv; "
+      << "  Korean (ko, ko-KR, korean): rule-based G2P; default "
+         "<model-root>/ko/dict.tsv; "
          "override with --korean-dict.\n"
-      << "  Japanese (ja, ja-JP, japanese): ONNX LUW + lexicon; default <model-root>/ja/dict.tsv "
-         "and <model-root>/ja/roberta_japanese_char_luw_upos_onnx/; override with "
+      << "  Japanese (ja, ja-JP, japanese): ONNX LUW + lexicon; default "
+         "<model-root>/ja/dict.tsv "
+         "and <model-root>/ja/roberta_japanese_char_luw_upos_onnx/; override "
+         "with "
          "--japanese-dict / --japanese-onnx-dir.\n"
       << "  Arabic (ar, ar-MSA, msa, arabic): ONNX tashkīl + rules; default "
-         "<model-root>/ar_msa/arabertv02_tashkeel_fadel_onnx + dict.tsv; override with "
+         "<model-root>/ar_msa/arabertv02_tashkeel_fadel_onnx + dict.tsv; "
+         "override with "
          "--arabic-onnx-dir / --arabic-dict.\n"
-      << "  Portuguese (pt_br, pt-br, pt_pt, portugal, …): rule-based G2P; default "
-         "<model-root>/pt_br/dict.tsv or <model-root>/pt_pt/dict.tsv; override with --portuguese-dict.\n"
-      << "  Turkish (tr, tr-TR, turkish): rule-based G2P (no lexicon); optional cardinal digit expansion.\n"
-      << "  Ukrainian (uk, uk-UA, ukrainian): rule-based G2P (no lexicon); optional cardinal digit expansion.\n"
-      << "  Hindi (hi, hi-IN, hindi): lexicon lookup + Devanagari rules; default "
+      << "  Portuguese (pt_br, pt-br, pt_pt, portugal, …): rule-based G2P; "
+         "default "
+         "<model-root>/pt_br/dict.tsv or <model-root>/pt_pt/dict.tsv; override "
+         "with --portuguese-dict.\n"
+      << "  Turkish (tr, tr-TR, turkish): rule-based G2P (no lexicon); "
+         "optional cardinal digit expansion.\n"
+      << "  Ukrainian (uk, uk-UA, ukrainian): rule-based G2P (no lexicon); "
+         "optional cardinal digit expansion.\n"
+      << "  Hindi (hi, hi-IN, hindi): lexicon lookup + Devanagari rules; "
+         "default "
          "<model-root>/hi/dict.tsv; override with --hindi-dict.\n"
-      << "  -d PATH / --dict PATH: English CMU TSV (en_us only; overrides default under "
+      << "  -d PATH / --dict PATH: English CMU TSV (en_us only; overrides "
+         "default under "
          "<model-root>/en_us/).\n";
 }
 
@@ -84,45 +107,46 @@ std::string read_all_stdin() {
 
 const char *rule_based_kind_label(RuleBasedG2pKind k) {
   switch (k) {
-  case RuleBasedG2pKind::English:
-    return "English";
-  case RuleBasedG2pKind::Spanish:
-    return "Spanish";
-  case RuleBasedG2pKind::German:
-    return "German";
-  case RuleBasedG2pKind::French:
-    return "French";
-  case RuleBasedG2pKind::Dutch:
-    return "Dutch";
-  case RuleBasedG2pKind::Italian:
-    return "Italian";
-  case RuleBasedG2pKind::Russian:
-    return "Russian";
-  case RuleBasedG2pKind::Chinese:
-    return "Chinese";
-  case RuleBasedG2pKind::Korean:
-    return "Korean";
-  case RuleBasedG2pKind::Vietnamese:
-    return "Vietnamese";
-  case RuleBasedG2pKind::Japanese:
-    return "Japanese";
-  case RuleBasedG2pKind::Arabic:
-    return "Arabic";
-  case RuleBasedG2pKind::Portuguese:
-    return "Portuguese";
-  case RuleBasedG2pKind::Turkish:
-    return "Turkish";
-  case RuleBasedG2pKind::Ukrainian:
-    return "Ukrainian";
-  case RuleBasedG2pKind::Hindi:
-    return "Hindi";
-  default:
-    return "Unknown";
+    case RuleBasedG2pKind::English:
+      return "English";
+    case RuleBasedG2pKind::Spanish:
+      return "Spanish";
+    case RuleBasedG2pKind::German:
+      return "German";
+    case RuleBasedG2pKind::French:
+      return "French";
+    case RuleBasedG2pKind::Dutch:
+      return "Dutch";
+    case RuleBasedG2pKind::Italian:
+      return "Italian";
+    case RuleBasedG2pKind::Russian:
+      return "Russian";
+    case RuleBasedG2pKind::Chinese:
+      return "Chinese";
+    case RuleBasedG2pKind::Korean:
+      return "Korean";
+    case RuleBasedG2pKind::Vietnamese:
+      return "Vietnamese";
+    case RuleBasedG2pKind::Japanese:
+      return "Japanese";
+    case RuleBasedG2pKind::Arabic:
+      return "Arabic";
+    case RuleBasedG2pKind::Portuguese:
+      return "Portuguese";
+    case RuleBasedG2pKind::Turkish:
+      return "Turkish";
+    case RuleBasedG2pKind::Ukrainian:
+      return "Ukrainian";
+    case RuleBasedG2pKind::Hindi:
+      return "Hindi";
+    default:
+      return "Unknown";
   }
 }
 
 void print_rule_based_dialect_catalog(std::ostream &os) {
-  os << "\nSupported languages and dialect ids (pass with --language or --lang):\n\n";
+  os << "\nSupported languages and dialect ids (pass with --language or "
+        "--lang):\n\n";
   for (const auto &entry : rule_based_g2p_dialect_catalog()) {
     os << "  " << rule_based_kind_label(entry.first) << '\n';
     for (const std::string &id : entry.second) {
@@ -280,7 +304,8 @@ int main(int argc, char **argv) {
   try {
     MoonshineG2P g2p(dialect_str, opt);
     std::vector<moonshine_tts::G2pWordLog> word_log;
-    std::cout << g2p.text_to_ipa(phrase, log_words ? &word_log : nullptr) << '\n';
+    std::cout << g2p.text_to_ipa(phrase, log_words ? &word_log : nullptr)
+              << '\n';
     if (log_words) {
       for (const auto &e : word_log) {
         std::cerr << format_g2p_word_log_line(e) << '\n';

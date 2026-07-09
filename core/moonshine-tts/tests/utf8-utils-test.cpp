@@ -1,7 +1,7 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
-#include <doctest/doctest.h>
-
 #include "utf8-utils.h"
+
+#include <doctest/doctest.h>
 
 using namespace moonshine_tts;
 
@@ -29,8 +29,11 @@ TEST_CASE("utf8_find_token_codepoints") {
 }
 
 TEST_CASE("digit_ascii_span_expandable_python_w") {
-  // Space-delimited digit expands; digit glued to katakana (U+30EA リ) does not.
-  const std::string glued = "\xe3\x83\xaa" "3";  // リ + ASCII 3
+  // Space-delimited digit expands; digit glued to katakana (U+30EA リ) does
+  // not.
+  const std::string glued =
+      "\xe3\x83\xaa"
+      "3";  // リ + ASCII 3
   REQUIRE(glued.size() == 4);
   CHECK_FALSE(digit_ascii_span_expandable_python_w(glued, 3, 4));
 

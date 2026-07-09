@@ -1,20 +1,21 @@
 #ifndef MOONSHINE_TTS_LANG_SPECIFIC_FRENCH_H
 #define MOONSHINE_TTS_LANG_SPECIFIC_FRENCH_H
 
-#include "rule-based-g2p.h"
-
 #include <filesystem>
 #include <string>
-#include <utility>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
+
+#include "rule-based-g2p.h"
 
 namespace moonshine_tts {
 
 struct G2pWordLog;
 
-/// Lexicon + liaison + OOV rules + cardinal digit expansion (mirrors ``french_g2p.py``).
+/// Lexicon + liaison + OOV rules + cardinal digit expansion (mirrors
+/// ``french_g2p.py``).
 class FrenchRuleG2p : public RuleBasedG2p {
  public:
   struct Options {
@@ -25,17 +26,25 @@ class FrenchRuleG2p : public RuleBasedG2p {
     bool expand_cardinal_digits = true;
   };
 
-  /// Load ``word<TAB>IPA`` TSV and POS CSV inventory from *csv_dir* (if directory exists).
-  explicit FrenchRuleG2p(std::filesystem::path dict_tsv, std::filesystem::path csv_dir);
-  explicit FrenchRuleG2p(std::filesystem::path dict_tsv, std::filesystem::path csv_dir, Options options);
-  explicit FrenchRuleG2p(std::string dict_tsv_utf8, std::filesystem::path csv_dir, Options options);
-  explicit FrenchRuleG2p(std::string dict_tsv_utf8, std::filesystem::path csv_dir)
-      : FrenchRuleG2p(std::move(dict_tsv_utf8), std::move(csv_dir), Options{}) {}
-
-  /// POS lexicon CSVs as UTF-8 (keys: uppercase stems e.g. ``NOUN``, ``ADJ`` — same as on-disk ``.csv`` names).
+  /// Load ``word<TAB>IPA`` TSV and POS CSV inventory from *csv_dir* (if
+  /// directory exists).
+  explicit FrenchRuleG2p(std::filesystem::path dict_tsv,
+                         std::filesystem::path csv_dir);
+  explicit FrenchRuleG2p(std::filesystem::path dict_tsv,
+                         std::filesystem::path csv_dir, Options options);
   explicit FrenchRuleG2p(std::string dict_tsv_utf8,
-                         std::unordered_map<std::string, std::string> pos_csv_utf8_by_cat_upper,
-                         Options options);
+                         std::filesystem::path csv_dir, Options options);
+  explicit FrenchRuleG2p(std::string dict_tsv_utf8,
+                         std::filesystem::path csv_dir)
+      : FrenchRuleG2p(std::move(dict_tsv_utf8), std::move(csv_dir), Options{}) {
+  }
+
+  /// POS lexicon CSVs as UTF-8 (keys: uppercase stems e.g. ``NOUN``, ``ADJ`` —
+  /// same as on-disk ``.csv`` names).
+  explicit FrenchRuleG2p(
+      std::string dict_tsv_utf8,
+      std::unordered_map<std::string, std::string> pos_csv_utf8_by_cat_upper,
+      Options options);
 
   static std::vector<std::string> dialect_ids();
 
@@ -43,8 +52,9 @@ class FrenchRuleG2p : public RuleBasedG2p {
 
   std::string word_to_ipa(const std::string& word) const;
 
-  std::string text_to_ipa(std::string text,
-                          std::vector<G2pWordLog>* per_word_log = nullptr) override;
+  std::string text_to_ipa(
+      std::string text,
+      std::vector<G2pWordLog>* per_word_log = nullptr) override;
 
   /// Exported for tests (same as Python :func:`ensure_french_nuclear_stress`).
   static std::string ensure_french_nuclear_stress(std::string ipa);
@@ -59,7 +69,8 @@ class FrenchRuleG2p : public RuleBasedG2p {
   std::string text_to_ipa_impl(const std::string& text, bool expand_digits,
                                std::vector<G2pWordLog>* per_word_log) const;
 
-  std::string word_to_ipa_impl(const std::string& raw_word, bool expand_digits) const;
+  std::string word_to_ipa_impl(const std::string& raw_word,
+                               bool expand_digits) const;
   std::string finalize_word_ipa(std::string ipa, bool from_compound) const;
 };
 

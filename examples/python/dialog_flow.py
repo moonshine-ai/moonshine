@@ -100,10 +100,18 @@ def _apply_wifi_config(ssid: str, password: str) -> None:
 
 
 class TranscriptPrinter(TranscriptEventListener):
-    """Echoes in-progress transcripts and logs every completed line."""
+    """Echoes in-progress transcripts and logs every completed line.
 
-    def __init__(self):
+    When ``--log-io`` is on, ``DialogFlow`` itself emits a
+    ``user: …`` line for every completed utterance (including
+    self-capture annotations); set ``log_user_completed=False``
+    so we only print the partial / overwrite stream and skip the
+    final completed-line print to avoid duplicates.
+    """
+
+    def __init__(self, *, log_user_completed: bool = True):
         self.last_len = 0
+        self._log_user_completed = log_user_completed
 
     def _overwrite(self, text: str) -> None:
         print(f"\r{text}", end="", flush=True)
@@ -122,7 +130,8 @@ class TranscriptPrinter(TranscriptEventListener):
             # Wipe the in-progress line so the finalized log starts clean.
             print(f"\r{' ' * self.last_len}\r", end="", flush=True)
             self.last_len = 0
-        print(f"user: {event.line.text}", flush=True)
+        if self._log_user_completed:
+            print(f"user: {event.line.text}", flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +186,18 @@ def run_live(args: argparse.Namespace) -> None:
         tts_kwargs = {}
         if getattr(args, "tts_options", None):
             tts_kwargs["options"] = dict(args.tts_options)
-        tts = TextToSpeech(language=args.language, **tts_kwargs)
+        # Forward ``--debug`` into TextToSpeech so its synth/play traces
+        # interleave with the DialogFlow ones — handy when the success
+        # / error beeps don't seem to be making it to the speaker.
+        # ``--output-device`` pins playback to a specific PortAudio
+        # device for cases where the host default isn't connected to
+        # speakers.
+        tts = TextToSpeech(
+            language=args.language,
+            debug=getattr(args, "debug", False),
+            output_device=getattr(args, "output_device", None),
+            **tts_kwargs,
+        )
 
     def mute(should_mute: bool) -> None:
         # Stop the mic from recording our own speech while we're talking.
@@ -187,9 +207,17 @@ def run_live(args: argparse.Namespace) -> None:
         """Toggle the C++ spelling-CNN fusion path on the live mic stream."""
         mic.set_transcribe_flags(MOONSHINE_FLAG_SPELLING_MODE if active else 0)
 
+    log_io = getattr(args, "log_io", False)
+
     def speak(text: str) -> None:
-        """Log every spoken prompt and (optionally) pass it through TTS."""
-        print(f"assistant: {text}", flush=True)
+        """Log every spoken prompt and (optionally) pass it through TTS.
+
+        When ``--log-io`` is on the runner emits its own
+        ``assistant: …`` line for every prompt; suppress the local
+        print to avoid duplicates.
+        """
+        if not log_io:
+            print(f"assistant: {text}", flush=True)
         if tts is not None:
             tts.say(text)
             try:
@@ -198,6 +226,11 @@ def run_live(args: argparse.Namespace) -> None:
                 pass
 
     runner = DialogFlow(
+        # Pass ``tts`` alongside ``speak_fn`` so DialogFlow can auto-wire
+        # the success / error beeps to ``tts.play_success`` /
+        # ``tts.play_error`` (no-op when --no-tts strips the synth, since
+        # ``tts`` will be ``None`` and the beep callbacks stay unset).
+        tts=tts,
         speak_fn=speak,
         intent_recognizer=intent_recognizer,
         mute_fn=mute,
@@ -205,6 +238,7 @@ def run_live(args: argparse.Namespace) -> None:
             set_spelling_mode if spelling_model_path is not None else None
         ),
         spell_feedback=True,
+        log_io=log_io,
         debug=getattr(args, "debug", False),
     )
     runner.register_flow("set up wifi", setup_wifi)
@@ -215,7 +249,7 @@ def run_live(args: argparse.Namespace) -> None:
     runner.register_global("cancel", lambda d: d.cancel())
     runner.register_global("start over", lambda d: d.restart())
 
-    mic.add_listener(TranscriptPrinter())
+    mic.add_listener(TranscriptPrinter(log_user_completed=not log_io))
     mic.add_listener(runner)
 
     print(
@@ -396,6 +430,25 @@ def main() -> None:
             "--tts-option voice=kokoro_af_heart)."
         ),
     )
+    parser.add_argument(
+        "--list-output-devices",
+        action="store_true",
+        help=(
+            "List PortAudio output devices and exit.  Useful when the "
+            "assistant is silent under --mic — the host default may "
+            "not be the device with speakers."
+        ),
+    )
+    parser.add_argument(
+        "--output-device",
+        default=None,
+        metavar="INDEX_OR_NAME",
+        help=(
+            "Pin --mic TTS playback to a specific PortAudio output "
+            "device (integer index or case-insensitive name "
+            "substring).  Defaults to the host default."
+        ),
+    )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "--mic",
@@ -421,10 +474,37 @@ def main() -> None:
         action="store_true",
         help=(
             "Print DialogFlow stage-transition traces to stderr with "
-            "per-step and cumulative timings."
+            "per-step and cumulative timings, plus per-stage timing in "
+            "the TextToSpeech synth and play workers (handy for "
+            "diagnosing missing-beep / missing-audio issues)."
+        ),
+    )
+    parser.add_argument(
+        "--log-io",
+        action="store_true",
+        help=(
+            "Print every utterance the runner receives from the STT "
+            "and every prompt the assistant speaks as plain "
+            "``user: ...`` / ``assistant: ...`` lines on stderr.  "
+            "Distinct from --debug: this is the user-facing dialogue "
+            "transcript without the verbose internal stage-transition "
+            "trace."
         ),
     )
     args = parser.parse_args()
+
+    if args.list_output_devices:
+        from moonshine_voice.tts import list_output_devices
+
+        print("PortAudio output devices (asterisk = current host default):")
+        for line in list_output_devices():
+            print(f"  {line}")
+        sys.exit(0)
+
+    # Coerce numeric strings to ints so the resolver picks them up as
+    # indices instead of name substrings.
+    if isinstance(args.output_device, str) and args.output_device.strip().isdigit():
+        args.output_device = int(args.output_device.strip())
 
     if args.tts_option:
         from moonshine_voice.tts import _parse_options_cli

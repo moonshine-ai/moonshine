@@ -1,18 +1,20 @@
 // Hindi rule + lexicon G2P (no ONNX). Mirrors ``hindi_rule_g2p.py`` CLI subset.
-#include "hindi.h"
-
 #include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "hindi.h"
+
 namespace {
 
 void usage(const char* argv0) {
   std::cerr << "Usage: " << argv0
-            << " [--dict PATH] [--no-expand-digits] [--no-stress] [--stdin] [TEXT...]\n"
-            << "  Default dict: <cwd>/hi/dict.tsv (run with cwd = your asset root, or pass --dict).\n";
+            << " [--dict PATH] [--no-expand-digits] [--no-stress] [--stdin] "
+               "[TEXT...]\n"
+            << "  Default dict: <cwd>/hi/dict.tsv (run with cwd = your asset "
+               "root, or pass --dict).\n";
 }
 
 std::string read_all_stdin() {

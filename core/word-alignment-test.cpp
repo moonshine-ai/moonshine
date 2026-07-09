@@ -1,11 +1,10 @@
-#include "moonshine-c-api.h"
-
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <string>
 
 #include "debug-utils.h"
+#include "moonshine-c-api.h"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest.h>
@@ -32,7 +31,8 @@ TEST_CASE("word-timestamps") {
     float *wav_data = nullptr;
     size_t wav_data_size = 0;
     int32_t sample_rate = 0;
-    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size, &sample_rate));
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
+                          &sample_rate));
     REQUIRE(wav_data != nullptr);
     REQUIRE(wav_data_size > 0);
 

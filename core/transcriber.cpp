@@ -1,5 +1,6 @@
 #include "transcriber.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -56,11 +57,15 @@ size_t vad_sample_count_from_duration(float duration) {
 Transcriber::Transcriber(const TranscriberOptions &options)
     : stt_model(nullptr),
       streaming_model(nullptr),
-      speaker_embedding_model(nullptr),
-      online_clusterer(nullptr),
-      next_speaker_index(0),
+      speaker_diarizer(nullptr),
       next_stream_id(1) {
   this->options = options;
+  // Speaker-to-text mapping needs per-word timings, so turn on word timestamps
+  // whenever diarization is requested (even if the caller did not set the
+  // word_timestamps option explicitly).
+  if (this->options.identify_speakers) {
+    this->options.word_timestamps = true;
+  }
   // Start with a random 64-bit value as a unique identifier. We increment
   // this value to generate each new line ID. These should be safe to use as a
   // persistent identifier for every line, since duplicates are so unlikely as
@@ -83,41 +88,39 @@ Transcriber::Transcriber(const TranscriberOptions &options)
                              std::to_string((int)(model_source)));
   }
   if (options.identify_speakers) {
-    this->speaker_embedding_model = new SpeakerEmbeddingModel();
-    int load_error = this->speaker_embedding_model->load_from_memory(
-        speaker_embedding_model_ort_bytes,
-        speaker_embedding_model_ort_byte_count);
-    if (load_error != 0) {
-      throw std::runtime_error(
-          "Failed to load speaker embedding model from memory. Error code: " +
-          std::to_string(load_error));
-    }
-    this->online_clusterer = new OnlineClusterer(OnlineClustererOptions(
-        {.embedding_size = SpeakerEmbeddingModel::embedding_size,
-         .threshold = this->options.speaker_id_cluster_threshold}));
+    SpeakerDiarizerOptions diarizer_options;
+    diarizer_options.cluster_cadence =
+        this->options.diarization_cluster_cadence;
+    diarizer_options.analyze_cadence =
+        this->options.diarization_analyze_cadence;
+    diarizer_options.cluster_window_sec =
+        this->options.diarization_cluster_window_sec;
+    this->speaker_diarizer = new SpeakerDiarizer(diarizer_options);
   }
   // Lazily attach the spelling model when the caller provided one.
   // We deliberately don't fall back to a built-in: the model weights
   // are language-specific, so the C API leaves the choice to the
   // caller (Python downloads it, native callers can ship an .ort).
   const bool has_spelling_buffer = options.spelling_model_data != nullptr &&
-                                    options.spelling_model_data_size > 0;
+                                   options.spelling_model_data_size > 0;
   const bool has_spelling_path = !options.spelling_model_path.empty();
   if (has_spelling_buffer || has_spelling_path) {
-    this->spelling_model = new SpellingModel(this->options.log_ort_run);
+    this->spelling_model = new SpellingModel(this->options.log_ort_run,
+                                             this->options.ort_provider_names,
+                                             this->options.coreml_cache_dir);
     int load_error = 0;
     if (has_spelling_buffer) {
       load_error = this->spelling_model->load_from_memory(
           options.spelling_model_data, options.spelling_model_data_size);
     } else {
-      load_error = this->spelling_model->load(options.spelling_model_path.c_str());
+      load_error =
+          this->spelling_model->load(options.spelling_model_path.c_str());
     }
     if (load_error != 0) {
       delete this->spelling_model;
       this->spelling_model = nullptr;
-      throw std::runtime_error(
-          "Failed to load spelling model. Error code: " +
-          std::to_string(load_error));
+      throw std::runtime_error("Failed to load spelling model. Error code: " +
+                               std::to_string(load_error));
     }
   }
 }
@@ -143,8 +146,9 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
   if (is_streaming_model_arch(model_arch)) {
     // Streaming model: expects frontend.onnx, encoder.onnx, adapter.onnx,
     // decoder.onnx, and streaming_config.json
-    this->streaming_model =
-        new MoonshineStreamingModel(this->options.log_ort_run);
+    this->streaming_model = new MoonshineStreamingModel(
+        this->options.log_ort_run, this->options.ort_provider_names,
+        this->options.coreml_cache_dir);
 
     int32_t load_error = this->streaming_model->load(
         model_path, tokenizer_path.c_str(), model_arch);
@@ -185,8 +189,9 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
   } else {
     // Non-streaming model: expects encoder_model.ort and
     // decoder_model_merged.ort
-    this->stt_model = new MoonshineModel(this->options.log_ort_run,
-                                         this->options.max_tokens_per_second);
+    this->stt_model = new MoonshineModel(
+        this->options.log_ort_run, this->options.max_tokens_per_second,
+        this->options.ort_provider_names, this->options.coreml_cache_dir);
 
     std::string encoder_model_path =
         append_path_component(model_path, "encoder_model.ort");
@@ -236,9 +241,8 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
         size_t dec_mmapped_size = 0;
         int32_t dec_err = ort_session_from_path(
             this->stt_model->ort_api, this->stt_model->ort_env,
-            this->stt_model->ort_session_options,
-            decoder_attn_path.c_str(), &this->stt_model->decoder_session,
-            &dec_mmapped, &dec_mmapped_size);
+            this->stt_model->ort_session_options, decoder_attn_path.c_str(),
+            &this->stt_model->decoder_session, &dec_mmapped, &dec_mmapped_size);
         if (dec_err != 0) {
           LOGF("Warning: Failed to load decoder_with_attention from %s\n",
                decoder_attn_path.c_str());
@@ -275,8 +279,9 @@ void Transcriber::load_from_memory(const uint8_t *encoder_model_data,
         "Use load_from_files instead.");
   }
 
-  this->stt_model = new MoonshineModel(this->options.log_ort_run,
-                                       this->options.max_tokens_per_second);
+  this->stt_model = new MoonshineModel(
+      this->options.log_ort_run, this->options.max_tokens_per_second,
+      this->options.ort_provider_names, this->options.coreml_cache_dir);
   int32_t load_error = this->stt_model->load_from_memory(
       encoder_model_data, encoder_model_data_size, decoder_model_data,
       decoder_model_data_size, tokenizer_data, tokenizer_data_size, model_arch);
@@ -290,8 +295,7 @@ void Transcriber::load_from_memory(const uint8_t *encoder_model_data,
 Transcriber::~Transcriber() {
   delete this->stt_model;
   delete this->streaming_model;
-  delete this->speaker_embedding_model;
-  delete this->online_clusterer;
+  delete this->speaker_diarizer;
   delete this->spelling_model;
   for (auto &stream : this->streams) {
     delete stream.second;
@@ -332,7 +336,15 @@ void Transcriber::transcribe_without_streaming(
     segments = *(stream->vad->get_segments());
   }
 
-  this->update_transcript_from_segments(segments, stream, flags, out_transcript);
+  this->update_transcript_from_segments(segments, stream, flags,
+                                        out_transcript);
+
+  if (this->speaker_diarizer != nullptr) {
+    const std::vector<SpeakerTurn> turns =
+        this->speaker_diarizer->diarize(audio_data, audio_length, sample_rate);
+    apply_speaker_turns_to_lines(turns, stream->transcript_output);
+    stream->transcript_output->update_transcript_from_lines();
+  }
 }
 
 int32_t Transcriber::create_stream() {
@@ -348,6 +360,9 @@ int32_t Transcriber::create_stream() {
                                 this->options.vad_look_behind_sample_count,
                                 vad_max_segment_sample_count),
       stream_id, this->options.save_input_wav_path);
+  if (this->speaker_diarizer != nullptr) {
+    stream->diarizer_stream_id = this->speaker_diarizer->create_stream();
+  }
 
   this->streams.insert({stream_id, stream});
   return stream_id;
@@ -357,6 +372,9 @@ void Transcriber::free_stream(int32_t stream_id) {
   std::lock_guard<std::mutex> lock(this->streams_mutex);
   TranscriberStream *stream = this->streams[stream_id];
   this->streams.erase(stream_id);
+  if (this->speaker_diarizer != nullptr && stream->diarizer_stream_id >= 0) {
+    this->speaker_diarizer->free_stream(stream->diarizer_stream_id);
+  }
   delete stream;
 }
 
@@ -374,6 +392,9 @@ void Transcriber::start_stream(int32_t stream_id) {
     stream->transcript_output->transcript.line_count = 0;
   }
   stream->start();
+  if (this->speaker_diarizer != nullptr && stream->diarizer_stream_id >= 0) {
+    this->speaker_diarizer->start_stream(stream->diarizer_stream_id);
+  }
 }
 
 void Transcriber::stop_stream(int32_t stream_id) {
@@ -381,6 +402,11 @@ void Transcriber::stop_stream(int32_t stream_id) {
   TranscriberStream *stream = this->streams[stream_id];
   stream->stop();
   stream->save_audio_data_to_wav(nullptr, 0, 0);
+  if (this->speaker_diarizer != nullptr && stream->diarizer_stream_id >= 0) {
+    // Run a final clustering pass so the next transcribe_stream call picks up
+    // the finalized speaker spans.
+    this->speaker_diarizer->finish_stream(stream->diarizer_stream_id);
+  }
 }
 
 void Transcriber::add_audio_to_stream(int32_t stream_id,
@@ -402,22 +428,27 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
                                     struct transcript_t **out_transcript) {
   TranscriberStream *stream = nullptr;
   {
+    // Resolve the stream pointer entirely under streams_mutex. Reading the map
+    // outside the lock (as an earlier version did on a second streams[] lookup)
+    // races with create_stream()/free_stream() mutating the map on another
+    // thread, which ThreadSanitizer flags and can corrupt the red-black tree.
     std::lock_guard<std::mutex> lock(this->streams_mutex);
-    if (this->streams.find(stream_id) == this->streams.end()) {
+    auto it = this->streams.find(stream_id);
+    if (it == this->streams.end()) {
       std::string error_message =
           "Stream with ID " + std::to_string(stream_id) + " not found in " +
           std::to_string(this->streams.size()) + " streams: ";
-      for (const auto &stream : this->streams) {
+      for (const auto &entry : this->streams) {
         char addr_str[32];
-        snprintf(addr_str, sizeof(addr_str), "%p", (void *)stream.second);
-        error_message += "ID: " + std::to_string(stream.first) +
+        snprintf(addr_str, sizeof(addr_str), "%p", (void *)entry.second);
+        error_message += "ID: " + std::to_string(entry.first) +
                          ", Address: " + std::string(addr_str) + "\n";
       }
       throw std::runtime_error(error_message);
     }
+    stream = it->second;
   }
 
-  stream = this->streams[stream_id];
   if (stream == nullptr) {
     std::string error_message =
         "Stream with ID " + std::to_string(stream_id) + " is null";
@@ -434,16 +465,42 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
   const bool should_update =
       (long_enough_to_analyze || force_update) && has_new_audio;
   const bool is_stopped = !stream->vad->is_active();
+  const bool diarization_enabled =
+      (this->speaker_diarizer != nullptr && stream->diarizer_stream_id >= 0);
   // Return the cached transcript if it's only been a short time since the
   // last transcription.
   if (!should_update) {
     stream->transcript_output->clear_update_flags();
+    // Speaker spans may still have been revised since the last call (for
+    // example by the final clustering pass in stop_stream), so pick up the
+    // latest turns even when the transcription itself is unchanged.
+    bool speakers_changed = false;
+    if (diarization_enabled) {
+      const std::vector<SpeakerTurn> turns =
+          this->speaker_diarizer->get_turns(stream->diarizer_stream_id);
+      speakers_changed =
+          apply_speaker_turns_to_lines(turns, stream->transcript_output);
+    }
     // Ensure that all lines are marked as complete if the stream is stopped.
     if (is_stopped) {
       stream->transcript_output->mark_all_lines_as_complete();
     }
-    *out_transcript = &(stream->transcript_output->transcript);
+    if (speakers_changed) {
+      stream->transcript_output->update_transcript_from_lines();
+    }
+    if (out_transcript != nullptr) {
+      *out_transcript = &(stream->transcript_output->transcript);
+    }
     return;
+  }
+
+  // Feed the new audio to the diarizer before it's consumed. This runs the
+  // segmentation/embedding models on new analysis chunks and re-clusters on
+  // the configured cadence, which is the main cost of identify_speakers.
+  if (diarization_enabled) {
+    this->speaker_diarizer->add_audio_to_stream(stream->diarizer_stream_id,
+                                                audio_data, audio_length,
+                                                INTERNAL_SAMPLE_RATE);
   }
 
   // Use VAD to segment audio
@@ -468,10 +525,19 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
     }
   }
   stream->clear_new_audio_buffer();
-  this->update_transcript_from_segments(segments, stream, flags, out_transcript);
+  this->update_transcript_from_segments(segments, stream, flags,
+                                        out_transcript);
   if (!this->options.return_audio_data) {
     std::lock_guard<std::mutex> lock(stream->vad_mutex);
     stream->vad->clear_completed_segment_audio_data();
+  }
+
+  if (diarization_enabled) {
+    const std::vector<SpeakerTurn> turns =
+        this->speaker_diarizer->get_turns(stream->diarizer_stream_id);
+    if (apply_speaker_turns_to_lines(turns, stream->transcript_output)) {
+      stream->transcript_output->update_transcript_from_lines();
+    }
   }
 }
 
@@ -533,15 +599,14 @@ bool Transcriber::apply_spelling_fusion(TranscriberLine &line) {
   bool have_prediction = false;
   if (this->spelling_model != nullptr && !line.audio_data.empty()) {
     std::lock_guard<std::mutex> lock(this->spelling_model_mutex);
-    int err = this->spelling_model->predict(
-        line.audio_data.data(), line.audio_data.size(), INTERNAL_SAMPLE_RATE,
-        &prediction);
+    int err = this->spelling_model->predict(line.audio_data.data(),
+                                            line.audio_data.size(),
+                                            INTERNAL_SAMPLE_RATE, &prediction);
     have_prediction = (err == 0);
   }
 
   FusedResult result =
-      fuse_default(raw_text, match,
-                   have_prediction ? &prediction : nullptr,
+      fuse_default(raw_text, match, have_prediction ? &prediction : nullptr,
                    this->spelling_matcher);
   if (!result.is_character()) return false;
 
@@ -683,33 +748,6 @@ void Transcriber::update_transcript_from_segments(
       // we hand the transcript back so this doesn't leak per-segment.
       line.audio_data = segment.audio_data;
     }
-    if (this->options.identify_speakers && !line.has_speaker_id) {
-      const bool long_enough_to_analyze =
-          segment.audio_data.size() >= SpeakerEmbeddingModel::ideal_input_size;
-      if (long_enough_to_analyze || line.is_complete) {
-        std::vector<float> embedding;
-        int calculate_error =
-            this->speaker_embedding_model->calculate_embedding(
-                segment.audio_data.data(), segment.audio_data.size(),
-                &embedding);
-        if (calculate_error != 0) {
-          LOGF("Failed to calculate embedding: %d", calculate_error);
-          throw std::runtime_error("Failed to calculate embedding: " +
-                                   std::to_string(calculate_error));
-        }
-        const float audio_duration =
-            segment.audio_data.size() / (float)INTERNAL_SAMPLE_RATE;
-        line.speaker_id = this->online_clusterer->embed_and_cluster(
-            embedding, audio_duration);
-        line.has_speaker_id = true;
-        if (!this->speaker_index_map.contains(line.speaker_id)) {
-          line.speaker_index = this->next_speaker_index++;
-          this->speaker_index_map.insert({line.speaker_id, line.speaker_index});
-        } else {
-          line.speaker_index = this->speaker_index_map.at(line.speaker_id);
-        }
-      }
-    }
     if (spelling_mode_enabled && line.is_complete) {
       apply_spelling_fusion(line);
     }
@@ -720,7 +758,132 @@ void Transcriber::update_transcript_from_segments(
     stream->transcript_output->mark_all_lines_as_complete();
   }
   stream->transcript_output->update_transcript_from_lines();
-  *out_transcript = &(stream->transcript_output->transcript);
+  if (out_transcript != nullptr) {
+    *out_transcript = &(stream->transcript_output->transcript);
+  }
+}
+
+namespace {
+
+// Map each aligned word to a UTF-8 byte range in the line text by walking the
+// words in order through the transcription string.
+std::vector<std::pair<uint64_t, uint64_t>> map_words_to_char_ranges(
+    const std::string &line_text, const std::vector<TranscriberWord> &words) {
+  std::vector<std::pair<uint64_t, uint64_t>> ranges;
+  ranges.reserve(words.size());
+  size_t search_from = 0;
+  for (const TranscriberWord &word : words) {
+    if (word.text.empty()) {
+      ranges.push_back({0, 0});
+      continue;
+    }
+    size_t pos = line_text.find(word.text, search_from);
+    if (pos == std::string::npos) {
+      ranges.push_back({0, 0});
+      continue;
+    }
+    ranges.push_back({static_cast<uint64_t>(pos),
+                      static_cast<uint64_t>(pos + word.text.size())});
+    search_from = pos + word.text.size();
+  }
+  return ranges;
+}
+
+// Fill UTF-8 byte offsets [start_char, end_char) for a speaker span by
+// selecting words whose timings overlap the span's absolute time range.
+void fill_speaker_span_char_indices(const std::string *line_text,
+                                    const std::vector<TranscriberWord> &words,
+                                    float span_start_time, float span_duration,
+                                    uint64_t *out_start_char,
+                                    uint64_t *out_end_char) {
+  *out_start_char = 0;
+  *out_end_char = 0;
+  if (line_text == nullptr || line_text->empty() || words.empty()) {
+    return;
+  }
+
+  const float span_end_time = span_start_time + span_duration;
+  const auto char_ranges = map_words_to_char_ranges(*line_text, words);
+
+  bool found = false;
+  uint64_t start_char = 0;
+  uint64_t end_char = 0;
+  for (size_t i = 0; i < words.size(); i++) {
+    const TranscriberWord &word = words[i];
+    const auto &range = char_ranges[i];
+    if (range.second <= range.first) {
+      continue;
+    }
+    if (word.start < span_end_time && word.end > span_start_time) {
+      if (!found) {
+        start_char = range.first;
+        end_char = range.second;
+        found = true;
+      } else {
+        start_char = std::min(start_char, range.first);
+        end_char = std::max(end_char, range.second);
+      }
+    }
+  }
+
+  if (found) {
+    *out_start_char = start_char;
+    *out_end_char = end_char;
+  }
+}
+
+}  // namespace
+
+bool Transcriber::apply_speaker_turns_to_lines(
+    const std::vector<SpeakerTurn> &turns, TranscriptStreamOutput *output) {
+  // Boundary jitter below this size doesn't count as a change, so that small
+  // frame-level wobbles between clustering passes don't spam clients with
+  // have_speakers_changed notifications.
+  constexpr float kTimeTolerance = 0.1f;
+
+  std::lock_guard<std::mutex> lock(output->mutex);
+  bool any_changed = false;
+  for (const uint64_t &line_id : output->ordered_internal_line_ids) {
+    TranscriberLine &line = output->internal_lines_map.at(line_id);
+    const float line_start = line.start_time;
+    const float line_end = line.start_time + line.duration;
+
+    // Clip each diarization turn to the line's time range. Turns are already
+    // sorted by start time.
+    std::vector<SpeakerTurn> spans;
+    for (const SpeakerTurn &turn : turns) {
+      const float span_start = std::max(turn.start_time, line_start);
+      const float span_end =
+          std::min(turn.start_time + turn.duration, line_end);
+      if ((span_end - span_start) <= 0.0f) {
+        continue;
+      }
+      SpeakerTurn span = turn;
+      span.start_time = span_start;
+      span.duration = span_end - span_start;
+      spans.push_back(span);
+    }
+
+    bool changed = (spans.size() != line.speaker_spans.size());
+    if (!changed) {
+      for (size_t i = 0; i < spans.size(); i++) {
+        const SpeakerTurn &a = spans[i];
+        const SpeakerTurn &b = line.speaker_spans[i];
+        if (a.speaker_id != b.speaker_id ||
+            std::abs(a.start_time - b.start_time) > kTimeTolerance ||
+            std::abs(a.duration - b.duration) > kTimeTolerance) {
+          changed = true;
+          break;
+        }
+      }
+    }
+    if (changed) {
+      line.speaker_spans = std::move(spans);
+      line.have_speakers_changed = true;
+      any_changed = true;
+    }
+  }
+  return any_changed;
 }
 
 std::string *Transcriber::transcribe_segment_with_streaming_model(
@@ -911,10 +1074,9 @@ TranscriberLine::TranscriberLine() {
   this->just_updated = false;
   this->is_new = false;
   this->has_text_changed = false;
-  this->has_speaker_id = false;
+  this->have_speakers_changed = false;
   this->id = 0;
   this->last_transcription_latency_ms = 0;
-  this->speaker_id = 0;
 }
 
 TranscriberLine::TranscriberLine(const TranscriberLine &other) {
@@ -926,11 +1088,10 @@ TranscriberLine::TranscriberLine(const TranscriberLine &other) {
   this->just_updated = other.just_updated;
   this->is_new = other.is_new;
   this->has_text_changed = other.has_text_changed;
-  this->has_speaker_id = other.has_speaker_id;
+  this->have_speakers_changed = other.have_speakers_changed;
   this->id = other.id;
   this->last_transcription_latency_ms = other.last_transcription_latency_ms;
-  this->speaker_id = other.speaker_id;
-  this->speaker_index = other.speaker_index;
+  this->speaker_spans = other.speaker_spans;
   this->words = other.words;
 }
 
@@ -949,11 +1110,10 @@ TranscriberLine &TranscriberLine::operator=(const TranscriberLine &other) {
   this->just_updated = other.just_updated;
   this->is_new = other.is_new;
   this->has_text_changed = other.has_text_changed;
-  this->has_speaker_id = other.has_speaker_id;
+  this->have_speakers_changed = other.have_speakers_changed;
   this->id = other.id;
   this->last_transcription_latency_ms = other.last_transcription_latency_ms;
-  this->speaker_id = other.speaker_id;
-  this->speaker_index = other.speaker_index;
+  this->speaker_spans = other.speaker_spans;
   this->words = other.words;
   return *this;
 }
@@ -961,6 +1121,19 @@ TranscriberLine &TranscriberLine::operator=(const TranscriberLine &other) {
 TranscriberLine::~TranscriberLine() { delete this->text; }
 
 std::string TranscriberLine::to_string() const {
+  std::string spans_string = "[";
+  for (size_t i = 0; i < speaker_spans.size(); i++) {
+    const SpeakerTurn &span = speaker_spans[i];
+    if (i > 0) {
+      spans_string += ", ";
+    }
+    spans_string += "(start_time=" + std::to_string(span.start_time) +
+                    ", duration=" + std::to_string(span.duration) +
+                    ", speaker_id=" + std::to_string(span.speaker_id) +
+                    ", speaker_index=" + std::to_string(span.speaker_index) +
+                    ")";
+  }
+  spans_string += "]";
   return "TranscriberLine(start_time=" + std::to_string(start_time) +
          ", text='" + (text == nullptr ? "<null>" : *text) + "'" +
          ", duration=" + std::to_string(duration) +
@@ -968,11 +1141,10 @@ std::string TranscriberLine::to_string() const {
          ", just_updated=" + std::to_string(just_updated) +
          ", is_new=" + std::to_string(is_new) +
          ", has_text_changed=" + std::to_string(has_text_changed) +
-         ", has_speaker_id=" + std::to_string(has_speaker_id) +
+         ", have_speakers_changed=" + std::to_string(have_speakers_changed) +
          ", id=" + std::to_string(id) + ", last_transcription_latency_ms=" +
          std::to_string(last_transcription_latency_ms) +
-         ", speaker_id=" + std::to_string(speaker_id) +
-         ", speaker_index=" + std::to_string(speaker_index) + ")";
+         ", speaker_spans=" + spans_string + ")";
 }
 
 void TranscriptStreamOutput::add_or_update_line(TranscriberLine &line) {
@@ -984,6 +1156,11 @@ void TranscriptStreamOutput::add_or_update_line(TranscriberLine &line) {
         (existing_line->text != nullptr && line.text == nullptr) ||
         (existing_line->text != nullptr && line.text != nullptr &&
          *existing_line->text != *line.text);
+    // Speaker spans are maintained separately by
+    // apply_speaker_turns_to_lines(), so carry them over from the existing
+    // line rather than dropping them on every transcription update.
+    line.speaker_spans = existing_line->speaker_spans;
+    line.have_speakers_changed = existing_line->have_speakers_changed;
   } else {
     line.is_new = true;
     line.has_text_changed = line.text != nullptr;
@@ -996,10 +1173,12 @@ void TranscriptStreamOutput::update_transcript_from_lines() {
   this->output_lines.clear();
   this->output_words.clear();
   this->output_word_texts.clear();
+  this->output_speaker_spans.clear();
 
   size_t num_lines = this->ordered_internal_line_ids.size();
   this->output_words.resize(num_lines);
   this->output_word_texts.resize(num_lines);
+  this->output_speaker_spans.resize(num_lines);
 
   size_t line_index = 0;
   for (const uint64_t &line_id : this->ordered_internal_line_ids) {
@@ -1026,6 +1205,24 @@ void TranscriptStreamOutput::update_transcript_from_lines() {
       });
     }
 
+    // Build speaker span C structs for this line
+    auto &span_structs = this->output_speaker_spans[line_index];
+    span_structs.clear();
+    for (const SpeakerTurn &span : line.speaker_spans) {
+      uint64_t start_char = 0;
+      uint64_t end_char = 0;
+      fill_speaker_span_char_indices(line.text, line.words, span.start_time,
+                                     span.duration, &start_char, &end_char);
+      span_structs.push_back({
+          .start_time = span.start_time,
+          .duration = span.duration,
+          .speaker_id = span.speaker_id,
+          .speaker_index = span.speaker_index,
+          .start_char = start_char,
+          .end_char = end_char,
+      });
+    }
+
     this->output_lines.push_back({
         .text = line.text == nullptr ? nullptr : line.text->c_str(),
         .audio_data = audio_data,
@@ -1037,9 +1234,9 @@ void TranscriptStreamOutput::update_transcript_from_lines() {
         .is_updated = line.just_updated,
         .is_new = line.is_new,
         .has_text_changed = line.has_text_changed,
-        .has_speaker_id = line.has_speaker_id,
-        .speaker_id = line.speaker_id,
-        .speaker_index = line.speaker_index,
+        .have_speakers_changed = line.have_speakers_changed,
+        .speaker_spans = span_structs.empty() ? nullptr : span_structs.data(),
+        .speaker_span_count = (uint64_t)span_structs.size(),
         .last_transcription_latency_ms = line.last_transcription_latency_ms,
         .words = word_structs.empty() ? nullptr : word_structs.data(),
         .word_count = (uint64_t)word_structs.size(),
@@ -1058,11 +1255,13 @@ void TranscriptStreamOutput::clear_update_flags() {
     line.just_updated = false;
     line.is_new = false;
     line.has_text_changed = false;
+    line.have_speakers_changed = false;
   }
   for (transcript_line_t &line : this->output_lines) {
     line.is_updated = 0;
     line.has_text_changed = 0;
     line.is_new = 0;
+    line.have_speakers_changed = 0;
   }
 }
 

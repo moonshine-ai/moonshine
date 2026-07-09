@@ -1,12 +1,13 @@
-// Spanish cardinal expansion (spanish_numbers.py). #include from spanish.cpp (same TU).
-
-#include "utf8-utils.h"
+// Spanish cardinal expansion (spanish_numbers.py). #include from spanish.cpp
+// (same TU).
 
 #include <regex>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "utf8-utils.h"
 
 namespace {
 
@@ -22,8 +23,8 @@ bool es_ascii_all_digits(std::string_view s) {
   return true;
 }
 
-static const char* kEsDigit[] = {"cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho",
-                                 "nueve"};
+static const char* kEsDigit[] = {"cero",  "uno",  "dos",   "tres", "cuatro",
+                                 "cinco", "seis", "siete", "ocho", "nueve"};
 
 static const char* kEsUnder30[] = {
     nullptr,
@@ -58,11 +59,20 @@ static const char* kEsUnder30[] = {
     "veintinueve",
 };
 
-static const char* kEsTens[] = {"", "", "veinte", "treinta", "cuarenta", "cincuenta", "sesenta", "setenta",
-                                "ochenta", "noventa"};
+static const char* kEsTens[] = {"",         "",          "veinte",  "treinta",
+                                "cuarenta", "cincuenta", "sesenta", "setenta",
+                                "ochenta",  "noventa"};
 
-static const char* kEsHundreds[] = {"", "", "doscientos", "trescientos", "cuatrocientos", "quinientos",
-                                    "seiscientos", "setecientos", "ochocientos", "novecientos"};
+static const char* kEsHundreds[] = {"",
+                                    "",
+                                    "doscientos",
+                                    "trescientos",
+                                    "cuatrocientos",
+                                    "quinientos",
+                                    "seiscientos",
+                                    "setecientos",
+                                    "ochocientos",
+                                    "novecientos"};
 
 void es_append_under_100(int n, std::vector<std::string>& out) {
   if (n < 0 || n >= 100) {
@@ -168,7 +178,8 @@ std::string expand_cardinal_digits_to_spanish_words(std::string_view s) {
 }
 
 std::string expand_spanish_digit_tokens_in_text(std::string text) {
-  static const std::regex range_re(R"(\b(\d+)-(\d+)\b)", std::regex::ECMAScript);
+  static const std::regex range_re(R"(\b(\d+)-(\d+)\b)",
+                                   std::regex::ECMAScript);
   static const std::regex dig_re(R"(\b\d+\b)", std::regex::ECMAScript);
   std::string out;
   std::sregex_iterator it(text.begin(), text.end(), range_re);
@@ -176,7 +187,8 @@ std::string expand_spanish_digit_tokens_in_text(std::string text) {
   size_t pos = 0;
   for (; it != end; ++it) {
     const std::smatch& m = *it;
-    out.append(text, pos, static_cast<size_t>(m.position() - static_cast<long>(pos)));
+    out.append(text, pos,
+               static_cast<size_t>(m.position() - static_cast<long>(pos)));
     const size_t g1s = static_cast<size_t>(m.position(1));
     const size_t g1e = g1s + m.str(1).size();
     const size_t g2s = static_cast<size_t>(m.position(2));
@@ -198,7 +210,8 @@ std::string expand_spanish_digit_tokens_in_text(std::string text) {
   std::sregex_iterator it2(text.begin(), text.end(), dig_re);
   for (; it2 != end; ++it2) {
     const std::smatch& m = *it2;
-    out.append(text, pos, static_cast<size_t>(m.position() - static_cast<long>(pos)));
+    out.append(text, pos,
+               static_cast<size_t>(m.position() - static_cast<long>(pos)));
     const size_t gs = static_cast<size_t>(m.position());
     const size_t ge = gs + m.str().size();
     if (moonshine_tts::digit_ascii_span_expandable_python_w(text, gs, ge)) {

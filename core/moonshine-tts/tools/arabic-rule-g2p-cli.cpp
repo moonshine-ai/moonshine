@@ -1,18 +1,19 @@
 // MSA Arabic ONNX + rule G2P (mirrors ``arabic_rule_g2p.py`` CLI subset).
-#include "arabic.h"
-
 #include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "arabic.h"
+
 namespace {
 
 void usage(const char* argv0) {
   std::cerr << "Usage: " << argv0
             << " [--onnx-dir DIR] [--dict PATH] [--cuda] [--stdin] [TEXT...]\n"
-            << "  Defaults: data/ar_msa/arabertv02_tashkeel_fadel_onnx, data/ar_msa/dict.tsv\n";
+            << "  Defaults: data/ar_msa/arabertv02_tashkeel_fadel_onnx, "
+               "data/ar_msa/dict.tsv\n";
 }
 
 std::string read_all_stdin() {
@@ -24,8 +25,10 @@ std::string read_all_stdin() {
 }  // namespace
 
 int main(int argc, char** argv) {
-  std::filesystem::path onnx_dir = std::filesystem::path("data") / "ar_msa" / "arabertv02_tashkeel_fadel_onnx";
-  std::filesystem::path dict_path = std::filesystem::path("data") / "ar_msa" / "dict.tsv";
+  std::filesystem::path onnx_dir = std::filesystem::path("data") / "ar_msa" /
+                                   "arabertv02_tashkeel_fadel_onnx";
+  std::filesystem::path dict_path =
+      std::filesystem::path("data") / "ar_msa" / "dict.tsv";
   bool use_cuda = false;
   bool force_stdin = false;
   std::vector<std::string> parts;

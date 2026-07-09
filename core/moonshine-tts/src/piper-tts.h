@@ -1,9 +1,6 @@
 #ifndef MOONSHINE_TTS_PIPER_TTS_H
 #define MOONSHINE_TTS_PIPER_TTS_H
 
-#include "file-information.h"
-#include "moonshine-g2p-options.h"
-
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -12,41 +9,56 @@
 #include <string_view>
 #include <vector>
 
+#include "file-information.h"
+#include "moonshine-g2p-options.h"
+
 namespace moonshine_tts {
 
-/// Piper ONNX TTS + ``MoonshineG2P`` IPA (filtered to each model's ``phoneme_id_map``; no eSpeak at runtime).
+/// Piper ONNX TTS + ``MoonshineG2P`` IPA (filtered to each model's
+/// ``phoneme_id_map``; no eSpeak at runtime).
 struct PiperTTSOptions {
-  /// When non-empty, load this ``*.onnx`` directly; ``voices_dir`` / discovery is skipped.
-  /// Config JSON defaults to ``explicit_onnx_path`` with ``.onnx.json`` (same folder) unless
+  /// When non-empty, load this ``*.onnx`` directly; ``voices_dir`` / discovery
+  /// is skipped. Config JSON defaults to ``explicit_onnx_path`` with
+  /// ``.onnx.json`` (same folder) unless
   /// ``explicit_onnx_json_path`` is set.
   std::filesystem::path explicit_onnx_path{};
-  /// Piper model config (``*.onnx.json``). Empty → beside ``explicit_onnx_path`` or, when using
-  /// ``voices_dir`` discovery, ``voices_json_dir / (<onnx_filename> + ".json")`` if ``voices_json_dir``
-  /// is non-empty, else beside the chosen ``*.onnx``.
+  /// Piper model config (``*.onnx.json``). Empty → beside
+  /// ``explicit_onnx_path`` or, when using
+  /// ``voices_dir`` discovery, ``voices_json_dir / (<onnx_filename> +
+  /// ".json")`` if ``voices_json_dir`` is non-empty, else beside the chosen
+  /// ``*.onnx``.
   std::filesystem::path explicit_onnx_json_path{};
   /// Directory containing ``*.onnx`` for the resolved language. Empty →
-  /// ``g2p_options.g2p_root / <lang-subdir> / piper-voices`` unless ``explicit_onnx_path`` is set
+  /// ``g2p_options.g2p_root / <lang-subdir> / piper-voices`` unless
+  /// ``explicit_onnx_path`` is set
   /// (``g2p_root`` defaults to the process cwd when empty).
   std::filesystem::path voices_dir{};
-  /// Optional directory containing ``*.onnx.json`` files whose basenames match ``*.onnx`` in
-  /// ``voices_dir`` (``<name>.onnx`` → ``<name>.onnx.json`` in this folder). Empty → JSON beside ONNX.
+  /// Optional directory containing ``*.onnx.json`` files whose basenames match
+  /// ``*.onnx`` in
+  /// ``voices_dir`` (``<name>.onnx`` → ``<name>.onnx.json`` in this folder).
+  /// Empty → JSON beside ONNX.
   std::filesystem::path voices_json_dir{};
   /// Locale tag (e.g. ``en_us``, ``de``, ``es``, ``es-ES``, ``ar_msa``).
   std::string lang = "en_us";
-  /// ONNX basename (e.g. ``en_US-lessac-medium.onnx``) or stem; empty → default for ``lang``.
+  /// ONNX basename (e.g. ``en_US-lessac-medium.onnx``) or stem; empty → default
+  /// for ``lang``.
   std::string onnx_model{};
   double speed = 1.0;
   MoonshineG2POptions g2p_options{};
   std::vector<std::string> ort_provider_names{};
-  /// Match ``piper-tts`` ``SynthesisConfig.normalize_audio`` (scale chunk to full range before clip).
-  bool piper_normalize_audio = true;
+  std::string coreml_cache_dir{};
+  /// Match ``piper-tts`` ``SynthesisConfig.normalize_audio`` (scale chunk to
+  /// full range before clip).
+  bool normalize_audio = true;
   /// Match ``SynthesisConfig.volume`` (applied after normalize).
-  float piper_output_volume = 1.F;
-  /// When set, replaces JSON ``inference.noise_scale`` for ORT (``0`` matches deterministic ``speak.py`` parity tests).
+  float output_volume = 1.F;
+  /// When set, replaces JSON ``inference.noise_scale`` for ORT (``0`` matches
+  /// deterministic ``speak.py`` parity tests).
   std::optional<float> piper_noise_scale_override{};
   /// When set, replaces JSON ``inference.noise_w`` for ORT.
   std::optional<float> piper_noise_w_override{};
-  /// Optional in-memory TTS assets (keys ``piper/onnx``, ``piper/onnx.json``) from ``MoonshineTTSOptions::files``.
+  /// Optional in-memory TTS assets (keys ``piper/onnx``, ``piper/onnx.json``)
+  /// from ``MoonshineTTSOptions::files``.
   FileInformationMap tts_asset_files{};
 };
 
@@ -64,33 +76,48 @@ class PiperTTS {
   double speed() const;
   /// Basename or stem of an ``.onnx`` under ``voices_dir``.
   void set_onnx_model(std::string_view basename_or_stem);
+  /// Post-synthesis effects (``apply_synthesis_output_effects``).
+  /// Getters/setters allow per-call overrides without rebuilding the engine.
+  bool normalize_audio() const;
+  void set_normalize_audio(bool on);
+  float output_volume() const;
+  void set_output_volume(float volume);
 
   static constexpr int kSampleRateHz = 24000;
 
-  /// Text → IPA (MoonshineG2P) → Piper phoneme ids → ONNX → mono float waveform at ``kSampleRateHz``.
+  /// Text → IPA (MoonshineG2P) → Piper phoneme ids → ONNX → mono float waveform
+  /// at ``kSampleRateHz``.
   std::vector<float> synthesize(std::string_view text);
 
-  /// Run ONNX on an existing Piper phoneme-id sequence (same layout as ``piper.phoneme_ids.phonemes_to_ids``),
-  /// then apply ``piper_normalize_audio`` / ``piper_output_volume`` and resample to ``kSampleRateHz``.
-  /// For parity with ``speak.py`` ``--piper-inference-backend onnxruntime`` when *ids* match Piper’s eSpeak ids.
-  std::vector<float> synthesize_phoneme_ids(const std::vector<int64_t>& phoneme_ids);
+  /// Run ONNX on an existing Piper phoneme-id sequence (same layout as
+  /// ``piper.phoneme_ids.phonemes_to_ids``), then apply ``normalize_audio`` /
+  /// ``output_volume`` (via ``apply_synthesis_output_effects``) and resample to
+  /// ``kSampleRateHz``. For parity with ``speak.py``
+  /// ``--piper-inference-backend onnxruntime`` when *ids* match Piper’s eSpeak
+  /// ids.
+  std::vector<float> synthesize_phoneme_ids(
+      const std::vector<int64_t>& phoneme_ids);
 
  private:
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };
 
-/// Default Piper ONNX + ``*.onnx.json`` paths relative to ``g2p_root`` (under ``<data_subdir>/piper-voices/``).
-/// If ``onnx_model_stem`` is non-empty (basename or stem), it selects that ``*.onnx`` instead of the table default
+/// Default Piper ONNX + ``*.onnx.json`` paths relative to ``g2p_root`` (under
+/// ``<data_subdir>/piper-voices/``). If ``onnx_model_stem`` is non-empty
+/// (basename or stem), it selects that ``*.onnx`` instead of the table default
 /// (same rules as ``PiperTTSOptions::onnx_model``).
-bool piper_default_model_bundle_relative_paths(std::string_view lang_cli, const MoonshineG2POptions& opt,
-                                               std::string* onnx_relpath_out, std::string* onnx_json_relpath_out,
-                                               std::string_view onnx_model_stem = {});
+bool piper_default_model_bundle_relative_paths(
+    std::string_view lang_cli, const MoonshineG2POptions& opt,
+    std::string* onnx_relpath_out, std::string* onnx_json_relpath_out,
+    std::string_view onnx_model_stem = {});
 
-/// Piper voice stems (no ``.onnx``) with availability (on-disk ``*.onnx`` or in-memory ``piper/onnx``), same
-/// resolution as ``PiperTTS``. Known voices are the language default plus any ``*.onnx`` under the resolved
-/// voices directory (union, sorted).
-std::vector<std::pair<std::string, bool>> piper_list_voices_with_availability(const PiperTTSOptions& opt);
+/// Piper voice stems (no ``.onnx``) with availability (on-disk ``*.onnx`` or
+/// in-memory ``piper/onnx``), same resolution as ``PiperTTS``. Known voices are
+/// the language default plus any ``*.onnx`` under the resolved voices directory
+/// (union, sorted).
+std::vector<std::pair<std::string, bool>> piper_list_voices_with_availability(
+    const PiperTTSOptions& opt);
 
 }  // namespace moonshine_tts
 

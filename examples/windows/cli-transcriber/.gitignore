@@ -1,2 +1,9 @@
 Release
 Debug
+.vs/
+*.obj
+moonshine-voice-windows-x86_64/
+models/
+beckett.wav
+test-output.txt
+x64/

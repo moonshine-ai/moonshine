@@ -15,6 +15,10 @@ public protocol TranscriptEventListener: AnyObject {
     /// Called when the text of a transcription line changes.
     func onLineTextChanged(_ event: LineTextChanged)
     
+    /// Called when the speaker spans of a transcription line change. Can be
+    /// called for lines that are already complete.
+    func onLineSpeakersChanged(_ event: LineSpeakersChanged)
+    
     /// Called when a transcription line is completed.
     func onLineCompleted(_ event: LineCompleted)
     
@@ -27,6 +31,7 @@ public extension TranscriptEventListener {
     func onLineStarted(_ event: LineStarted) {}
     func onLineUpdated(_ event: LineUpdated) {}
     func onLineTextChanged(_ event: LineTextChanged) {}
+    func onLineSpeakersChanged(_ event: LineSpeakersChanged) {}
     func onLineCompleted(_ event: LineCompleted) {}
     func onError(_ event: TranscriptError) {}
 }

@@ -136,8 +136,8 @@ int32_t int32_from_string(const std::string &input) {
   try {
     result = std::stoi(input, nullptr, 10);
   } catch (const std::exception &e) {
-    throw std::runtime_error("Invalid int32_t string: '" + input + "': " +
-                             e.what());
+    throw std::runtime_error("Invalid int32_t string: '" + input +
+                             "': " + e.what());
   }
   return result;
 }
@@ -154,8 +154,8 @@ size_t size_t_from_string(const std::string &input) {
   try {
     result = std::stoul(input, nullptr, 10);
   } catch (const std::exception &e) {
-    throw std::runtime_error("Invalid size_t string: '" + input + "': " +
-                             e.what());
+    throw std::runtime_error("Invalid size_t string: '" + input +
+                             "': " + e.what());
   }
   return result;
 }

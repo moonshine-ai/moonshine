@@ -531,6 +531,28 @@ class DialogFlow(TranscriptEventListener):
             reliable echo cancellation *and* want barge-in: callers
             still get the utterance via the regular
             ``TranscriptEventListener`` path.
+        success_beep_fn: Optional callable ``() -> None`` invoked the
+            moment a completed transcript line is recognized — i.e.
+            it matched a trigger phrase or was successfully
+            interpreted as the answer to an active prompt — and
+            *before* any TTS response begins.  Gives the user a
+            short audible cue that "I heard you and understood"
+            before the assistant starts replying.  When omitted,
+            falls back to ``tts.play_success()`` if the configured
+            ``tts`` exposes one (e.g. the bundled
+            :class:`TextToSpeech`); pass any callable to override
+            (e.g. play a custom WAV) or ``lambda: None`` to
+            silence.
+        error_beep_fn: Optional callable ``() -> None`` invoked when
+            a completed transcript line *isn't* recognized — no
+            trigger matched, no active flow could interpret it as
+            an answer, and no global handler took it.  Pairs with
+            ``success_beep_fn`` so misrecognitions don't end in
+            silence: the user hears a distinct "didn't get that"
+            cue immediately, and the runner then reprompts /
+            abandons / forwards to the intent recognizer as before.
+            Same fallback as ``success_beep_fn`` — auto-wired to
+            ``tts.play_error()`` when available.
     """
 
     def __init__(
@@ -542,6 +564,8 @@ class DialogFlow(TranscriptEventListener):
         speak_fn: Optional[Callable[[str], None]] = None,
         mute_fn: Optional[Callable[[bool], None]] = None,
         spelling_mode_fn: Optional[Callable[[bool], None]] = None,
+        success_beep_fn: Optional[Callable[[], None]] = None,
+        error_beep_fn: Optional[Callable[[], None]] = None,
         phrase_matcher_factory: Optional[PhraseMatcherFactory] = None,
         cached_embeddings: Optional[CachedEmbeddings] = None,
         trigger_threshold: float = 0.7,
@@ -556,6 +580,22 @@ class DialogFlow(TranscriptEventListener):
         self._speak_fn = speak_fn
         self._mute_fn = mute_fn
         self._spelling_mode_fn = spelling_mode_fn
+        # Auto-wire success/error beeps from ``tts`` when the caller
+        # didn't pass an explicit callback.  We duck-type both
+        # methods so backends without beep support (e.g. test stubs
+        # that only implement ``say``) silently skip the cue rather
+        # than raising.  Callers who want to disable the beeps even
+        # when ``tts`` supports them can pass ``lambda: None``.
+        if success_beep_fn is None and tts is not None:
+            method = getattr(tts, "play_success", None)
+            if callable(method):
+                success_beep_fn = method
+        if error_beep_fn is None and tts is not None:
+            method = getattr(tts, "play_error", None)
+            if callable(method):
+                error_beep_fn = method
+        self._success_beep_fn = success_beep_fn
+        self._error_beep_fn = error_beep_fn
         self._spelling_mode_active = False
         self._trigger_threshold = float(trigger_threshold)
         self._spell_feedback = bool(spell_feedback)
@@ -781,6 +821,10 @@ class DialogFlow(TranscriptEventListener):
             active, utterance
         ):
             self._log("process_utterance: alpha short-circuit → deliver")
+            # The success/error cue is played by ``_deliver_to_active``
+            # once interpretation has decided whether the line was
+            # recognized — partial spelled input keeps quiet here so
+            # the spell-back acts as feedback instead.
             self._deliver_to_active(active, utterance)
             return True
 
@@ -791,6 +835,10 @@ class DialogFlow(TranscriptEventListener):
             f"phrase={trigger_phrase!r}"
         )
         if trigger_kind == "global":
+            # A global handler matched — the line was recognized.  Cue
+            # the user before the handler's potential ``Say`` reply
+            # begins so the beep doesn't pile up on top of the TTS.
+            self._play_success_beep()
             self._invoke_global(trigger_phrase)
             return True
 
@@ -799,9 +847,16 @@ class DialogFlow(TranscriptEventListener):
             return True
 
         if trigger_kind == "flow":
+            self._play_success_beep()
             self._start_flow(trigger_phrase)
             return True
 
+        # Nothing in DialogFlow's domain matched.  Forward to the
+        # intent recognizer (if any) for app-level handling, and then
+        # play the "didn't get that" cue regardless: from the
+        # runner's point of view the line wasn't recognized as a
+        # flow trigger, global, or active-prompt answer, and
+        # silence here is a bad experience.
         if self._intent_recognizer is not None:
             self._log("process_utterance: forwarding to intent recognizer")
             try:
@@ -809,6 +864,7 @@ class DialogFlow(TranscriptEventListener):
             except Exception as e:
                 print(f"DialogFlow: intent recognizer error: {e}", file=sys.stderr)
         self._log("process_utterance: no handler matched")
+        self._play_error_beep()
         return False
 
     def _should_short_circuit_to_alpha(
@@ -899,21 +955,37 @@ class DialogFlow(TranscriptEventListener):
             value = self._interpret_answer(prompt, utterance, active)
         except _PartialInput:
             self._log("deliver_to_active: partial input; awaiting more")
-            # Still gathering input (e.g. spelled letter-by-letter).  Don't
-            # advance the generator yet; wait for the next utterance.
+            # Still gathering input (e.g. spelled letter-by-letter).
+            # Don't beep or advance the generator yet — the per-character
+            # spell-back from ``_speak_character_feedback`` is itself
+            # the "I heard that letter" cue, and stacking a success
+            # beep on top would be noisy at every keystroke.
             return
         except _Reprompt as r:
+            # Recognized a line but couldn't interpret it for the
+            # current prompt.  Beep first so the user notices their
+            # last answer was rejected, then speak the reprompt.
             self._log(f"deliver_to_active: reprompt → {_summarise(r.text)!r}")
+            self._play_error_beep()
             self._speak(r.text)
             return
         except _AbandonPrompt as a:
+            # Out of retries — the prompt is being torn down.  Same
+            # rationale as the reprompt path: cue the user that the
+            # last utterance was the one that failed before the
+            # generator's exception handler runs.
             self._log(f"deliver_to_active: abandon → {a.exc!r}")
+            self._play_error_beep()
             self._throw(active, a.exc)
             return
         self._log(
             f"deliver_to_active: interpreted {prompt_kind} → "
             f"{_summarise(repr(value))}; advancing flow"
         )
+        # Successful interpretation — play the recognition cue before
+        # advancing the generator so the beep lands ahead of any
+        # ``Say`` the next yield produces.
+        self._play_success_beep()
         self._advance(active, value=value)
 
     def _advance(self, active: _ActiveFlow, value: Any) -> None:
@@ -1427,6 +1499,73 @@ class DialogFlow(TranscriptEventListener):
         except Exception as e:
             self._log(f"spell_feedback: speak failed: {e!r}")
 
+    # -- Success / error beeps ---------------------------------------------
+
+    def _play_beep(self, kind: str) -> None:
+        """Play the recognition cue identified by ``kind``.
+
+        ``kind`` is ``"success"`` or ``"error"``.  This routes through
+        the configured ``success_beep_fn`` / ``error_beep_fn`` (or
+        their ``tts.play_*`` auto-wiring) and provides three levels
+        of visibility for "no beep heard" debugging:
+
+        * No-op when the callback is not configured, but the
+          first such miss for each kind is reported once on
+          stderr so the auto-wiring failing silently doesn't
+          look like a configured-but-broken beep.  Subsequent
+          misses are quiet to keep the log readable.
+        * Callback exceptions are *always* reported on stderr
+          (regardless of ``debug``) — a broken beep callback is
+          rare, surprising, and worth surfacing on the first
+          occurrence; we don't want it swallowed.
+        * Successful invocations emit a debug trace via
+          :meth:`_log` so you can confirm the runner reached the
+          beep and on which path (turn it on with ``debug=True``).
+        """
+        fn = self._success_beep_fn if kind == "success" else self._error_beep_fn
+        if fn is None:
+            attr = "_warned_missing_" + kind
+            if not getattr(self, attr, False):
+                setattr(self, attr, True)
+                print(
+                    f"DialogFlow: no {kind}_beep_fn configured "
+                    f"(and tts.play_{kind} not available); "
+                    f"{kind} beeps will be silent.",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            return
+        self._log(f"{kind}_beep: invoking {fn!r}")
+        try:
+            fn()
+        except Exception as e:
+            print(
+                f"DialogFlow: {kind}_beep_fn raised {e!r}; "
+                "the beep will be silent.",
+                file=sys.stderr,
+                flush=True,
+            )
+            return
+        self._log(f"{kind}_beep: callback returned")
+
+    def _play_success_beep(self) -> None:
+        """Play the "recognized" cue, if a beep callback is wired.
+
+        Fired before the TTS reply on every recognized utterance:
+        trigger matches, completed alphanumeric input, and matched
+        confirm / choose / free-form answers.
+        """
+        self._play_beep("success")
+
+    def _play_error_beep(self) -> None:
+        """Play the "not recognized" cue, if a beep callback is wired.
+
+        Fired when an utterance can't be routed: no trigger matched,
+        an active flow couldn't interpret it (reprompt / abandon),
+        or the runner is unmounted entirely.
+        """
+        self._play_beep("error")
+
     def _speak_undo_feedback(self, character: str) -> None:
         """Speak ``"deleting <spoken_form(character)>"`` after an UNDO.
 
@@ -1562,6 +1701,137 @@ def _summarise(text: str, max_len: int = 60) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _run_beep_diagnostic(
+    *,
+    language: str,
+    output_device: Optional[Any],
+    tts_options: Optional[Dict[str, Any]],
+    debug: bool,
+) -> None:
+    """Play the success / error beeps and a reference tone, then return.
+
+    Used by ``--play-test-beeps`` to isolate "speech audible, beeps
+    not" issues without going through mic + flow.  Plays in order:
+
+    1. Success beep (ascending two-tone, ~0.41 s incl. pad).
+    2. One second of silence.
+    3. Error beep (descending two-tone, ~0.48 s incl. pad).
+    4. One second of silence.
+    5. A 500 ms 440 Hz reference tone at ~0.5 amplitude — twice as
+       loud as the beeps' 0.25 amplitude — so a "reference audible
+       but beeps not" outcome points at the beep waveform (raise
+       amplitude or extend the lead-silence pad) rather than at
+       the audio stack.
+
+    Routes through the same :class:`TextToSpeech` instance that the
+    main flow would use, so the diagnostic exercises the exact same
+    stream-open / play / wait code path (and thus the same
+    PortAudio / PipeWire / ALSA shim) that the real beeps go
+    through.
+    """
+    print(
+        "Playing test cue sequence: success beep, silence, error beep, "
+        "silence, 440 Hz reference tone.",
+        file=sys.stderr,
+    )
+    tts_kwargs: Dict[str, Any] = {}
+    if tts_options:
+        tts_kwargs["options"] = dict(tts_options)
+    tts = TextToSpeech(
+        language=language,
+        debug=debug,
+        output_device=output_device,
+        **tts_kwargs,
+    )
+    try:
+        print("--- success beep ---", file=sys.stderr)
+        tts.play_success()
+        tts.wait()
+        time.sleep(1.0)
+
+        print("--- error beep ---", file=sys.stderr)
+        tts.play_error()
+        tts.wait()
+        time.sleep(1.0)
+
+        # Tear down the TTS playback stream *before* the reference
+        # tone tries to open its own.  Some USB DACs (e.g. the user's
+        # Pi setup) reserve the device exclusively and PortAudio
+        # can't re-open it while the previous stream is still
+        # being closed by ALSA.  ``tts.close()`` joins both worker
+        # threads and tells PortAudio to release the device, plus
+        # a short grace nap covers any kernel-side teardown delay.
+        try:
+            tts.close()
+        except Exception:
+            pass
+        time.sleep(0.3)
+
+        print("--- 440 Hz reference tone (0.5 amplitude, 500 ms) ---", file=sys.stderr)
+        try:
+            import numpy as np
+            import sounddevice as sd
+
+            # Pick a sample rate the device will accept.  Some USB
+            # DACs only expose a single rate (e.g. 48 kHz) and
+            # PortAudio refuses to open the stream at any other
+            # rate; fall back through 48 kHz / 44.1 kHz /
+            # device-default until one sticks.
+            candidate_rates: List[int] = [48000, 44100]
+            try:
+                info = sd.query_devices(output_device) if output_device is not None \
+                    else sd.query_devices(kind="output")
+                default_sr = int(info.get("default_samplerate", 0) or 0)
+                if default_sr and default_sr not in candidate_rates:
+                    candidate_rates.insert(0, default_sr)
+            except Exception:
+                pass
+            sr_chosen: Optional[int] = None
+            for sr in candidate_rates:
+                try:
+                    sd.check_output_settings(
+                        samplerate=sr, channels=1, dtype="float32",
+                        device=output_device,
+                    )
+                    sr_chosen = sr
+                    break
+                except Exception:
+                    continue
+            if sr_chosen is None:
+                raise RuntimeError(
+                    f"None of {candidate_rates} Hz worked for the "
+                    f"reference tone on this device (it may be "
+                    f"reserved exclusively by the previous TTS "
+                    f"stream — that's harmless; rely on the beep "
+                    f"audibility for the diagnosis)."
+                )
+            t = np.arange(int(sr_chosen * 0.5), dtype=np.float32) / float(sr_chosen)
+            tone = (0.5 * np.sin(2.0 * np.pi * 440.0 * t)).astype(np.float32)
+            ramp_n = int(sr_chosen * 0.010)
+            if ramp_n > 0:
+                ramp = np.linspace(0.0, 1.0, ramp_n, dtype=np.float32)
+                tone[:ramp_n] *= ramp
+                tone[-ramp_n:] *= ramp[::-1]
+            sd.play(tone, sr_chosen, device=output_device)
+            sd.wait()
+        except Exception as e:
+            print(
+                f"Reference tone playback skipped: {e!r}",
+                file=sys.stderr,
+            )
+
+        print(
+            "Done.  Tell the assistant which of the three cues you heard "
+            "(success / error / reference).",
+            file=sys.stderr,
+        )
+    finally:
+        try:
+            tts.close()
+        except Exception:
+            pass
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         prog="python -m moonshine_voice.dialog_flow",
@@ -1599,14 +1869,82 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
+        "--list-output-devices",
+        action="store_true",
+        help=(
+            "List the PortAudio output devices the runner can pick "
+            "from and exit.  Useful when the assistant is silent: the "
+            "host default may not be the device with speakers (HDMI vs "
+            "3.5 mm jack vs USB DAC)."
+        ),
+    )
+    parser.add_argument(
+        "--output-device",
+        default=None,
+        metavar="INDEX_OR_NAME",
+        help=(
+            "Pin TTS playback to a specific PortAudio output device.  "
+            "Accepts an integer index, a decimal-string index, or a "
+            "case-insensitive substring of the device name as shown "
+            "by --list-output-devices.  Defaults to the host default."
+        ),
+    )
+    parser.add_argument(
+        "--play-test-beeps",
+        action="store_true",
+        help=(
+            "Play the success and error beep cues followed by a "
+            "louder reference 440 Hz tone, then exit.  Useful for "
+            "diagnosing 'speech audible, beeps not' issues without "
+            "going through the full mic + flow loop: if you hear "
+            "the reference tone but not the beeps, raise the beep "
+            "amplitude or report it; if you hear nothing, it's a "
+            "system audio routing / volume / mute problem rather "
+            "than a runner bug."
+        ),
+    )
+    parser.add_argument(
         "--debug",
         action="store_true",
         help=(
             "Print DialogFlow stage-transition traces to stderr with "
-            "per-step and cumulative timings."
+            "per-step and cumulative timings, plus per-stage timing in "
+            "the TextToSpeech synth and play workers (handy for "
+            "diagnosing missing-beep issues)."
+        ),
+    )
+    parser.add_argument(
+        "--log-io",
+        action="store_true",
+        help=(
+            "Print every utterance the runner receives from the STT "
+            "and every prompt the assistant speaks as plain "
+            "``user: ...`` / ``assistant: ...`` lines on stderr.  "
+            "Distinct from --debug: this is the user-facing dialogue "
+            "transcript without the verbose internal stage-transition "
+            "trace."
         ),
     )
     args = parser.parse_args()
+
+    # Handle the device-listing diagnostic first so the user can run it
+    # without needing the embedding / spelling models downloaded.
+    if args.list_output_devices:
+        from moonshine_voice.tts import list_output_devices
+
+        print(
+            "PortAudio output devices (asterisk = current host default):",
+            file=sys.stderr,
+        )
+        for line in list_output_devices():
+            print(f"  {line}", file=sys.stderr)
+        sys.exit(0)
+
+    # Coerce purely numeric --output-device strings into ints so the TTS
+    # device-resolver treats them as indices rather than name substrings.
+    output_device: Optional[Any] = args.output_device
+    if isinstance(output_device, str) and output_device.strip().isdigit():
+        output_device = int(output_device.strip())
 
     tts_options: Dict[str, Any] = {}
     if args.tts_option:
@@ -1614,6 +1952,22 @@ if __name__ == "__main__":
             tts_options = dict(_parse_options_cli(args.tts_option))
         except ValueError as e:
             parser.error(str(e))
+
+    # The beep diagnostic skips the embedding / spelling / mic
+    # plumbing entirely — it's the fastest way to confirm whether the
+    # success / error beeps are even audible on the chosen output
+    # device.  Plays each beep with a one-second pause, then a louder
+    # reference tone (~0.5 amplitude vs. the beeps' 0.25 amplitude)
+    # so a missing beep against an audible reference points at the
+    # beep waveform rather than the audio stack.
+    if args.play_test_beeps:
+        _run_beep_diagnostic(
+            language=args.language,
+            output_device=output_device,
+            tts_options=tts_options,
+            debug=args.debug,
+        )
+        sys.exit(0)
 
     # ---- Wifi-setup flow (inlined for the demo) --------------------------
     #
@@ -1699,7 +2053,18 @@ if __name__ == "__main__":
         tts_kwargs: Dict[str, Any] = {}
         if tts_options:
             tts_kwargs["options"] = dict(tts_options)
-        tts = TextToSpeech(language=args.language, **tts_kwargs)
+        # Forward ``--debug`` into the TTS so synth/play traces (which
+        # are useful for diagnosing missing-beep issues) line up with
+        # the DialogFlow trace stream.  ``--output-device`` pins
+        # playback to a specific PortAudio device — needed on Pis
+        # where the host default is HDMI even though speakers are on
+        # the 3.5 mm jack or a USB DAC.
+        tts = TextToSpeech(
+            language=args.language,
+            debug=args.debug,
+            output_device=output_device,
+            **tts_kwargs,
+        )
 
     def mute(should_mute: bool) -> None:
         # Stop the mic from recording our own speech while we're talking.
@@ -1714,8 +2079,14 @@ if __name__ == "__main__":
         mic.set_transcribe_flags(MOONSHINE_FLAG_SPELLING_MODE if active else 0)
 
     def speak(text: str) -> None:
-        """Log every spoken prompt and (optionally) pass it through TTS."""
-        print(f"assistant: {text}", flush=True)
+        """Log every spoken prompt and (optionally) pass it through TTS.
+
+        When the runner is configured with ``log_io=True`` it emits
+        its own ``assistant: …`` transcript line for every prompt, so
+        we skip the local print to avoid duplicates.
+        """
+        if not args.log_io:
+            print(f"assistant: {text}", flush=True)
         if tts is not None:
             tts.say(text)
             try:
@@ -1724,14 +2095,26 @@ if __name__ == "__main__":
                 pass
 
     class _CompletedLinePrinter(TranscriptEventListener):
-        """Logs every completed mic line as ``user: <text>``."""
+        """Logs every completed mic line as ``user: <text>``.
+
+        Suppressed when ``--log-io`` is on so the runner's own
+        ``user: …`` transcript line (which also annotates self-capture
+        drops) is the single source of truth.
+        """
 
         def on_line_completed(self, event):
+            if args.log_io:
+                return
             print(f"user: {event.line.text}", flush=True)
 
     # ---- Wire up DialogFlow ----------------------------------------------
 
     runner = DialogFlow(
+        # Pass ``tts`` alongside ``speak_fn`` so the runner can auto-wire
+        # ``tts.play_success`` / ``tts.play_error`` for the recognition
+        # cue beeps; with ``--no-tts`` ``tts`` stays ``None`` and the
+        # beeps quietly become no-ops.
+        tts=tts,
         speak_fn=speak,
         intent_recognizer=intent_recognizer,
         mute_fn=mute,
@@ -1739,6 +2122,7 @@ if __name__ == "__main__":
             set_spelling_mode if spelling_model_path is not None else None
         ),
         spell_feedback=True,
+        log_io=args.log_io,
         debug=args.debug,
     )
     runner.register_flow("set up wifi", wifi_setup)

@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 
-set VERSION=0.0.60
+set VERSION=0.0.65
 set REPO=moonshine-ai/moonshine
 
 REM Get the directory where this script is located
@@ -55,13 +55,15 @@ copy /Y !TAR_NAME! !REPO_ROOT_DIR!\
 
 cd /d !REPO_ROOT_DIR!
 
-REM Check if the GitHub release exists; create it if missing
-gh release view v!VERSION! >nul 2>&1
-if errorlevel 1 (
-    gh release create v!VERSION! --title "v!VERSION!" --notes "Release v!VERSION!"
-)
+if /I "%~1"=="upload" (
+    REM Check if the GitHub release exists; create it if missing
+    gh release view v!VERSION! >nul 2>&1
+    if errorlevel 1 (
+        gh release create v!VERSION! --title "v!VERSION!" --notes "Release v!VERSION!"
+    )
 
-gh release upload v!VERSION! !TAR_NAME! --clobber
+    gh release upload v!VERSION! !TAR_NAME! --clobber
+)
 
 REM Cleanup temporary directory
 rmdir /s /q !TMP_DIR!

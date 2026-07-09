@@ -182,7 +182,8 @@ TEST_CASE("moonshine-cpp-test") {
       REQUIRE(line.isUpdated);
       REQUIRE(line.isNew);
       REQUIRE(line.hasTextChanged);
-      REQUIRE(line.hasSpeakerId);
+      // Speaker identification is opt-in, so no spans by default.
+      REQUIRE(line.speakerSpans.empty());
     }
   }
   SUBCASE("transcribe-with-streaming") {
@@ -281,12 +282,20 @@ TEST_CASE("moonshine-cpp-test") {
     REQUIRE(listener.updated_count >= listener.started_count);
   }
   SUBCASE("g2p") {
-    std::string text = "Hello! This is a test of the Moonshine text to speech.";
     std::string root_model_path = "../core/moonshine-tts/data/";
-    moonshine::GraphemeToPhonemizer g2p("en_us",
-                                       {
-                                         {"g2p_root", root_model_path.c_str()},
-                                       });
+    // The English G2P lexicon lives under the large (git-LFS) TTS data tree,
+    // which isn't always present -- e.g. the reliability box intentionally
+    // skips syncing moonshine-tts/data. Match the sibling data-dependent
+    // subcases and skip rather than throw when the lexicon is absent.
+    if (!file_exists(root_model_path + "en_us/dict_filtered_heteronyms.tsv")) {
+      MESSAGE("skip: en_us G2P lexicon not in moonshine-tts/data");
+      return;
+    }
+    std::string text = "Hello! This is a test of the Moonshine text to speech.";
+    moonshine::GraphemeToPhonemizer g2p(
+        "en_us", {
+                     {"g2p_root", root_model_path.c_str()},
+                 });
     std::string ipa = g2p.toIpa(text);
     REQUIRE(ipa.size() > 10);
   }
@@ -323,8 +332,7 @@ TEST_CASE("moonshine-cpp-test") {
                           &wav_sample_rate));
     moonshine::Transcriber transcriber(root_model_path,
                                        moonshine::ModelArch::TINY,
-                                       /*updateInterval=*/0.5,
-                                       spelling_path);
+                                       /*updateInterval=*/0.5, spelling_path);
     moonshine::Transcript transcript = transcriber.transcribeWithoutStreaming(
         std::vector<float>(wav_data, wav_data + wav_data_size), wav_sample_rate,
         moonshine::Transcriber::FLAG_SPELLING_MODE);
@@ -349,9 +357,8 @@ TEST_CASE("moonshine-cpp-test") {
     }
     auto slurp = [](const std::string &path) {
       std::ifstream f(path, std::ios::binary);
-      return std::vector<uint8_t>(
-          (std::istreambuf_iterator<char>(f)),
-          std::istreambuf_iterator<char>());
+      return std::vector<uint8_t>((std::istreambuf_iterator<char>(f)),
+                                  std::istreambuf_iterator<char>());
     };
     std::vector<uint8_t> encoder =
         slurp(root_model_path + "/encoder_model.ort");
@@ -391,8 +398,7 @@ TEST_CASE("moonshine-cpp-test") {
     REQUIRE(recognizer.intentCount() == 0);
     recognizer.registerIntent("turn on the lights");
     REQUIRE(recognizer.intentCount() == 1);
-    auto ranked =
-        recognizer.getClosestIntents("turn on the lights", 0.0f);
+    auto ranked = recognizer.getClosestIntents("turn on the lights", 0.0f);
     REQUIRE(ranked.size() >= 1);
     REQUIRE(ranked[0].canonicalPhrase == "turn on the lights");
     REQUIRE_FALSE(recognizer.unregisterIntent("unknown phrase"));

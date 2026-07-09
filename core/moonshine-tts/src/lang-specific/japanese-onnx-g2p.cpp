@@ -1,7 +1,4 @@
 #include "japanese-onnx-g2p.h"
-#include "japanese-kana-to-ipa.h"
-#include "moonshine-g2p-options.h"
-#include "utf8-utils.h"
 
 #include <algorithm>
 #include <fstream>
@@ -10,6 +7,10 @@
 #include <stdexcept>
 #include <utility>
 #include <vector>
+
+#include "japanese-kana-to-ipa.h"
+#include "moonshine-g2p-options.h"
+#include "utf8-utils.h"
 
 extern "C" {
 #include <utf8proc.h>
@@ -120,7 +121,8 @@ std::vector<std::pair<std::string, std::string>> merge_katakana_plus_han(
   while (i < pairs.size()) {
     const auto& surf = pairs[i].first;
     const auto& tag = pairs[i].second;
-    if (only_katakana(surf) && (tag == "NOUN" || tag == "PROPN") && i + 1 < pairs.size()) {
+    if (only_katakana(surf) && (tag == "NOUN" || tag == "PROPN") &&
+        i + 1 < pairs.size()) {
       const std::string& s2 = pairs[i + 1].first;
       const std::string& t2 = pairs[i + 1].second;
       if (is_single_han(s2) && (t2 == "NOUN" || t2 == "PROPN")) {
@@ -142,7 +144,8 @@ std::vector<std::pair<std::string, std::string>> merge_verb_adj_okurigana(
   while (i < pairs.size()) {
     const auto& surf = pairs[i].first;
     const auto& tag = pairs[i].second;
-    if (only_han(surf) && (tag == "VERB" || tag == "ADJ") && i + 1 < pairs.size()) {
+    if (only_han(surf) && (tag == "VERB" || tag == "ADJ") &&
+        i + 1 < pairs.size()) {
       std::size_t j = i + 1;
       std::string acc = surf;
       while (j < pairs.size()) {
@@ -173,19 +176,21 @@ std::vector<std::pair<std::string, std::string>> merge_for_lexicon_lookup(
 const std::vector<std::string>& trailing_particles_sorted() {
   static const std::vector<std::string> k = [] {
     std::vector<std::string> v = {
-        "について", "によって", "に対して", "では", "には", "から", "まで", "へは",
-        "は",       "を",       "に",       "で",   "と",   "が",   "も",   "か",
-        "や",       "へ",
+        "について", "によって", "に対して", "では", "には", "から",
+        "まで",     "へは",     "は",       "を",   "に",   "で",
+        "と",       "が",       "も",       "か",   "や",   "へ",
     };
-    std::sort(v.begin(), v.end(), [](const std::string& a, const std::string& b) {
-      return a.size() > b.size();
-    });
+    std::sort(v.begin(), v.end(),
+              [](const std::string& a, const std::string& b) {
+                return a.size() > b.size();
+              });
     return v;
   }();
   return k;
 }
 
-std::unordered_map<std::string, std::string> load_ja_lexicon_first_ipa_stream(std::istream& in) {
+std::unordered_map<std::string, std::string> load_ja_lexicon_first_ipa_stream(
+    std::istream& in) {
   std::unordered_map<std::string, std::string> lex;
   std::string line;
   while (std::getline(in, line)) {
@@ -211,7 +216,8 @@ std::unordered_map<std::string, std::string> load_ja_lexicon_first_ipa_stream(st
   return lex;
 }
 
-std::unordered_map<std::string, std::string> load_ja_lexicon_first_ipa(const std::filesystem::path& p) {
+std::unordered_map<std::string, std::string> load_ja_lexicon_first_ipa(
+    const std::filesystem::path& p) {
   std::ifstream in(p);
   if (!in) {
     throw std::runtime_error("JapaneseOnnxG2p: cannot open dict " + p.string());
@@ -219,8 +225,9 @@ std::unordered_map<std::string, std::string> load_ja_lexicon_first_ipa(const std
   return load_ja_lexicon_first_ipa_stream(in);
 }
 
-void build_by_first(const std::unordered_map<std::string, std::string>& lex,
-                    std::unordered_map<std::string, std::vector<std::string>>& by_first) {
+void build_by_first(
+    const std::unordered_map<std::string, std::string>& lex,
+    std::unordered_map<std::string, std::vector<std::string>>& by_first) {
   by_first.clear();
   for (const auto& pr : lex) {
     const std::string& w = pr.first;
@@ -236,42 +243,45 @@ void build_by_first(const std::unordered_map<std::string, std::string>& lex,
   }
   for (auto& pr : by_first) {
     auto& vec = pr.second;
-    std::sort(vec.begin(), vec.end(), [](const std::string& a, const std::string& b) {
-      return a.size() > b.size();
-    });
+    std::sort(vec.begin(), vec.end(),
+              [](const std::string& a, const std::string& b) {
+                return a.size() > b.size();
+              });
   }
 }
 
 }  // namespace
 
-std::filesystem::path default_japanese_dict_path(const std::filesystem::path& g2p_data_root) {
+std::filesystem::path default_japanese_dict_path(
+    const std::filesystem::path& g2p_data_root) {
   return g2p_data_root / "ja" / "dict.tsv";
 }
 
 JapaneseOnnxG2p::JapaneseOnnxG2p(std::filesystem::path model_dir,
-                                   std::filesystem::path dict_tsv,
-                                   bool use_cuda)
+                                 std::filesystem::path dict_tsv, bool use_cuda)
     : tok_(std::move(model_dir), use_cuda) {
   lex_ = load_ja_lexicon_first_ipa(dict_tsv);
   build_by_first(lex_, by_first_);
 }
 
-JapaneseOnnxG2p::JapaneseOnnxG2p(std::filesystem::path model_dir, std::string dict_tsv_utf8,
-                                   bool use_cuda)
+JapaneseOnnxG2p::JapaneseOnnxG2p(std::filesystem::path model_dir,
+                                 std::string dict_tsv_utf8, bool use_cuda)
     : tok_(std::move(model_dir), use_cuda) {
   std::istringstream in(std::move(dict_tsv_utf8));
   lex_ = load_ja_lexicon_first_ipa_stream(in);
   build_by_first(lex_, by_first_);
 }
 
-JapaneseOnnxG2p::JapaneseOnnxG2p(const MoonshineG2POptions& opt, std::filesystem::path model_dir,
+JapaneseOnnxG2p::JapaneseOnnxG2p(const MoonshineG2POptions& opt,
+                                 std::filesystem::path model_dir,
                                  std::filesystem::path dict_tsv, bool use_cuda)
     : tok_(&opt, kG2pJapaneseOnnxDirKey, std::move(model_dir), use_cuda) {
   lex_ = load_ja_lexicon_first_ipa(dict_tsv);
   build_by_first(lex_, by_first_);
 }
 
-JapaneseOnnxG2p::JapaneseOnnxG2p(const MoonshineG2POptions& opt, std::filesystem::path model_dir,
+JapaneseOnnxG2p::JapaneseOnnxG2p(const MoonshineG2POptions& opt,
+                                 std::filesystem::path model_dir,
                                  std::string dict_tsv_utf8, bool use_cuda)
     : tok_(&opt, kG2pJapaneseOnnxDirKey, std::move(model_dir), use_cuda) {
   std::istringstream in(std::move(dict_tsv_utf8));
@@ -290,7 +300,8 @@ std::string JapaneseOnnxG2p::g2p_word(std::string word_utf8) {
   }
   const auto& parts = trailing_particles_sorted();
   for (const std::string& suf : parts) {
-    if (w.size() > suf.size() && w.size() >= suf.size() && w.compare(w.size() - suf.size(), suf.size(), suf) == 0) {
+    if (w.size() > suf.size() && w.size() >= suf.size() &&
+        w.compare(w.size() - suf.size(), suf.size(), suf) == 0) {
       const std::string base = w.substr(0, w.size() - suf.size());
       const std::string ipa_b = g2p_word(base);
       const std::string ipa_s = g2p_word(suf);
@@ -349,7 +360,8 @@ std::string JapaneseOnnxG2p::text_to_ipa(std::string text_utf8) {
     return "";
   }
   auto pairs = tok_.annotate(raw);
-  std::vector<std::pair<std::string, std::string>> pv(pairs.begin(), pairs.end());
+  std::vector<std::pair<std::string, std::string>> pv(pairs.begin(),
+                                                      pairs.end());
   pv = merge_for_lexicon_lookup(std::move(pv));
   std::vector<std::string> ipa_words;
   for (const auto& pr : pv) {

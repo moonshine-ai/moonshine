@@ -11,8 +11,7 @@
 #include "onnxruntime_c_api.h"
 #include "spelling-fusion.h"
 
-/* Wraps the SpellingCNN ``.ort`` model. Mirrors the construction /
-   loading shape of ``SpeakerEmbeddingModel``: an instance is created
+/* Wraps the SpellingCNN ``.ort`` model. An instance is created
    without a session, then ``load`` or ``load_from_memory`` is called.
 
    All metadata defaults (sample rate, clip seconds, class list,
@@ -26,7 +25,10 @@ class SpellingModel {
  public:
   static constexpr size_t default_target_samples = 16000;
 
-  explicit SpellingModel(bool log_ort_run = false);
+  explicit SpellingModel(
+      bool log_ort_run = false,
+      const std::vector<std::string> &ort_provider_names = {},
+      const std::string &coreml_cache_dir = {});
   ~SpellingModel();
 
   SpellingModel(const SpellingModel &) = delete;
@@ -68,6 +70,8 @@ class SpellingModel {
   // Named without trailing underscore so ORT_RUN's ``this->log_ort_run``
   // expansion compiles.
   bool log_ort_run = false;
+  std::vector<std::string> ort_provider_names_{};
+  std::string coreml_cache_dir_{};
   std::mutex processing_mutex_;
 
   const char *mmapped_data_ = nullptr;

@@ -1,7 +1,5 @@
-// Dev / CI: Piper ONNX from a JSON list of int64 phoneme ids (parity with ``speak.py`` ORT path).
-#include "moonshine-tts.h"
-#include "piper-tts.h"
-
+// Dev / CI: Piper ONNX from a JSON list of int64 phoneme ids (parity with
+// ``speak.py`` ORT path).
 #include <nlohmann/json.h>
 
 #include <cstdlib>
@@ -12,16 +10,23 @@
 #include <string>
 #include <vector>
 
+#include "moonshine-tts.h"
+#include "piper-tts.h"
+
 namespace {
 
 void usage(const char* argv0) {
   std::cerr << "Usage: " << argv0
-            << " --onnx PATH.onnx --ids-json PATH.json [--onnx-json PATH.onnx.json] [--lang en_us] [--speed N] "
+            << " --onnx PATH.onnx --ids-json PATH.json [--onnx-json "
+               "PATH.onnx.json] [--lang en_us] [--speed N] "
                "[--noise-scale F] [--noise-w F] [-o out.wav]\n"
-            << "  JSON file: array of int64 phoneme ids (Piper ``phonemes_to_ids`` layout).\n"
-            << "  Optional --noise-scale / --noise-w override model JSON (use 0 0 for deterministic parity vs "
+            << "  JSON file: array of int64 phoneme ids (Piper "
+               "``phonemes_to_ids`` layout).\n"
+            << "  Optional --noise-scale / --noise-w override model JSON (use "
+               "0 0 for deterministic parity vs "
                "``speak.py`` tests).\n"
-            << "  Writes 24 kHz mono WAV (same as ``moonshine_tts`` / ``speak.py`` Piper output).\n";
+            << "  Writes 24 kHz mono WAV (same as ``moonshine_tts`` / "
+               "``speak.py`` Piper output).\n";
 }
 
 }  // namespace
@@ -57,7 +62,8 @@ int main(int argc, char** argv) {
     } else if (a == "--speed" && i + 1 < argc) {
       speed = std::strtod(argv[++i], nullptr);
     } else if (a == "--noise-scale" && i + 1 < argc) {
-      noise_scale_override = static_cast<float>(std::strtod(argv[++i], nullptr));
+      noise_scale_override =
+          static_cast<float>(std::strtod(argv[++i], nullptr));
     } else if (a == "--noise-w" && i + 1 < argc) {
       noise_w_override = static_cast<float>(std::strtod(argv[++i], nullptr));
     } else if ((a == "-o" || a == "--output") && i + 1 < argc) {
@@ -104,12 +110,14 @@ int main(int argc, char** argv) {
   opt.speed = speed;
   {
     std::error_code ec;
-    const std::filesystem::path canon = std::filesystem::weakly_canonical(onnx_path, ec);
-    const std::filesystem::path base = ec ? std::filesystem::absolute(onnx_path) : canon;
+    const std::filesystem::path canon =
+        std::filesystem::weakly_canonical(onnx_path, ec);
+    const std::filesystem::path base =
+        ec ? std::filesystem::absolute(onnx_path) : canon;
     opt.g2p_options.g2p_root = base.parent_path().parent_path().parent_path();
   }
-  opt.piper_normalize_audio = true;
-  opt.piper_output_volume = 1.F;
+  opt.normalize_audio = true;
+  opt.output_volume = 1.F;
   opt.piper_noise_scale_override = noise_scale_override;
   opt.piper_noise_w_override = noise_w_override;
 
@@ -121,7 +129,8 @@ int main(int argc, char** argv) {
       return 1;
     }
     write_wav_mono_pcm16(out_path, wav);
-    std::cout << "Wrote " << out_path << " (" << wav.size() << " samples, " << PiperTTS::kSampleRateHz << " Hz)\n";
+    std::cout << "Wrote " << out_path << " (" << wav.size() << " samples, "
+              << PiperTTS::kSampleRateHz << " Hz)\n";
   } catch (const std::exception& e) {
     std::cerr << "Error: " << e.what() << '\n';
     return 1;

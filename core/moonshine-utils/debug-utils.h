@@ -125,10 +125,9 @@ static inline const char *_moonshine_filename_without_path(const char *path) {
 #ifdef DEBUG_ALLOC_ENABLED
 
 // Needed in every file that uses DEBUG_CALLOC and DEBUG_FREE, declared static
-// to avoid name conflicts.
-namespace {
+// to avoid name conflicts (static already gives internal linkage, so no
+// anonymous namespace is needed -- and one in a header trips cert-dcl59-cpp).
 static size_t g_debug_alloc_size = 0;
-}
 
 #define DEBUG_ALLOC_MAGIC (0x71A3BEEF)
 
@@ -139,7 +138,6 @@ static size_t g_debug_alloc_size = 0;
 #define DEBUG_CALLOC(size, count) \
   debug_calloc(size, count, FILENAME_ONLY, __LINE__, __FUNCTION__)
 
-namespace {
 static inline void *debug_calloc(size_t size, size_t count, const char *, int,
                                  const char *) {
   size_t byteCount = DEBUG_ALLOC_ALIGNMENT + (size * count);
@@ -152,7 +150,6 @@ static inline void *debug_calloc(size_t size, size_t count, const char *, int,
   *sizePtr = byteCount;
   return memPtr;
 }
-}  // namespace
 
 #define DEBUG_FREE(ptr) debug_free(ptr, FILENAME_ONLY, __LINE__, __FUNCTION__)
 

@@ -1,0 +1,11 @@
+# Sanitizer ignore-list for MOONSHINE_RELIABILITY builds (clang
+# -fsanitize-ignorelist). We keep AddressSanitizer active everywhere (memory
+# corruption matters even in vendored code), but suppress UndefinedBehavior
+# Sanitizer inside third-party and vendored numeric code, where benign,
+# upstream-owned patterns (signed shifts, aliasing, alignment) would otherwise
+# produce noise we are not allowed to fix. First-party code is fully checked.
+[undefined]
+src:*/third-party/*
+src:*/cpp-annote/*
+src:*/kaldi-native-fbank/*
+src:*/kissfft/*

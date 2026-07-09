@@ -263,6 +263,22 @@ internal final class MoonshineAPI: @unchecked Sendable {
                 }
             }
 
+            // Extract speaker spans if available
+            var speakerSpans: [SpeakerSpan] = []
+            if let spansPtr = lineC.speaker_spans, lineC.speaker_span_count > 0 {
+                for j in 0..<Int(lineC.speaker_span_count) {
+                    let spanC = spansPtr[j]
+                    speakerSpans.append(SpeakerSpan(
+                        startTime: spanC.start_time,
+                        duration: spanC.duration,
+                        speakerId: spanC.speaker_id,
+                        speakerIndex: spanC.speaker_index,
+                        startChar: spanC.start_char,
+                        endChar: spanC.end_char
+                    ))
+                }
+            }
+
             let line = TranscriptLine(
                 text: text,
                 startTime: lineC.start_time,
@@ -272,9 +288,8 @@ internal final class MoonshineAPI: @unchecked Sendable {
                 isUpdated: lineC.is_updated != 0,
                 isNew: lineC.is_new != 0,
                 hasTextChanged: lineC.has_text_changed != 0,
-                hasSpeakerId: lineC.has_speaker_id != 0,
-                speakerId: lineC.speaker_id,
-                speakerIndex: lineC.speaker_index,
+                haveSpeakersChanged: lineC.have_speakers_changed != 0,
+                speakerSpans: speakerSpans,
                 audioData: audioData,
                 words: words
             )
@@ -336,6 +351,69 @@ internal final class MoonshineAPI: @unchecked Sendable {
                 message: "Failed to create TTS synthesizer: \(errorString)", code: handle)
         }
 
+        return handle
+    }
+
+    /// Create a TTS synthesizer from in-memory asset buffers keyed by canonical filename.
+    ///
+    /// The buffers pointed to by ``memoryPtrs`` are **not** copied by the native layer; the caller
+    /// must keep them valid until the synthesizer is freed.
+    func createTtsSynthesizerFromMemory(
+        language: String,
+        filenames: [String],
+        memoryPtrs: [UnsafePointer<UInt8>?],
+        memorySizes: [UInt64],
+        options: [TranscriberOption]? = nil,
+        moonshineVersion: Int32 = 20000
+    ) throws -> Int32 {
+        precondition(filenames.count == memoryPtrs.count && filenames.count == memorySizes.count)
+        let langCString = language.cString(using: .utf8)!
+        let fileCStrings = filenames.map { $0.cString(using: .utf8)! }
+        let opts = options ?? []
+        let nameCStrings = opts.map { $0.name.cString(using: .utf8)! }
+        let valueCStrings = opts.map { $0.value.cString(using: .utf8)! }
+        let optionStructs = (0..<opts.count).map { i -> moonshine_option_t in
+            moonshine_option_t(
+                name: nameCStrings[i].withUnsafeBufferPointer { $0.baseAddress },
+                value: valueCStrings[i].withUnsafeBufferPointer { $0.baseAddress }
+            )
+        }
+
+        // The C signature is ``const char **`` / ``const uint8_t **`` / ``const uint64_t *`` — the
+        // outer pointers are mutable, so use mutable buffers (contents are still treated as const).
+        var filePtrs: [UnsafePointer<CChar>?] = fileCStrings.map {
+            $0.withUnsafeBufferPointer { $0.baseAddress }
+        }
+        var mem = memoryPtrs
+        var sizes = memorySizes
+        let handle: Int32 = withExtendedLifetime(
+            (fileCStrings, nameCStrings, valueCStrings, optionStructs)
+        ) {
+            filePtrs.withUnsafeMutableBufferPointer { fileBuf in
+                mem.withUnsafeMutableBufferPointer { memBuf in
+                    sizes.withUnsafeMutableBufferPointer { sizeBuf in
+                        optionStructs.withUnsafeBufferPointer { optBuf in
+                            moonshine_create_tts_synthesizer_from_memory(
+                                langCString,
+                                fileBuf.baseAddress,
+                                UInt64(filenames.count),
+                                memBuf.baseAddress,
+                                sizeBuf.baseAddress,
+                                opts.isEmpty ? nil : optBuf.baseAddress,
+                                UInt64(opts.count),
+                                moonshineVersion
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        if handle < 0 {
+            let errorString = errorToString(handle)
+            throw MoonshineError.custom(
+                message: "Failed to create TTS synthesizer from memory: \(errorString)", code: handle)
+        }
         return handle
     }
 
