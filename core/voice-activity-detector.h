@@ -56,6 +56,7 @@ class VoiceActivityDetector {
   const std::vector<VoiceActivitySegment> *get_segments() const {
     return &segments;
   }
+  void clear_completed_segment_audio_data();
   std::string to_string() const;
 
  private:

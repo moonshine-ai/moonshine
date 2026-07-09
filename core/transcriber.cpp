@@ -509,11 +509,28 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
     std::lock_guard<std::mutex> lock(stream->vad_mutex);
     stream->vad->process_audio(audio_data, (int32_t)audio_length,
                                INTERNAL_SAMPLE_RATE);
-    segments = *(stream->vad->get_segments());
+    const std::vector<VoiceActivitySegment> *vad_segments =
+        stream->vad->get_segments();
+    segments.reserve(vad_segments->size());
+    for (const VoiceActivitySegment &segment : *vad_segments) {
+      VoiceActivitySegment segment_copy;
+      segment_copy.start_time = segment.start_time;
+      segment_copy.end_time = segment.end_time;
+      segment_copy.is_complete = segment.is_complete;
+      segment_copy.just_updated = segment.just_updated;
+      if (segment.just_updated) {
+        segment_copy.audio_data = segment.audio_data;
+      }
+      segments.push_back(std::move(segment_copy));
+    }
   }
   stream->clear_new_audio_buffer();
   this->update_transcript_from_segments(segments, stream, flags,
                                         out_transcript);
+  if (!this->options.return_audio_data) {
+    std::lock_guard<std::mutex> lock(stream->vad_mutex);
+    stream->vad->clear_completed_segment_audio_data();
+  }
 
   if (diarization_enabled) {
     const std::vector<SpeakerTurn> turns =

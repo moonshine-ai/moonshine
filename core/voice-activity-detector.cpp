@@ -96,6 +96,14 @@ void VoiceActivityDetector::process_audio(const float *audio_data,
   processing_remainder_audio_buffer = processing_buffer;
 }
 
+void VoiceActivityDetector::clear_completed_segment_audio_data() {
+  for (VoiceActivitySegment &segment : segments) {
+    if (segment.is_complete && !segment.audio_data.empty()) {
+      std::vector<float>().swap(segment.audio_data);
+    }
+  }
+}
+
 void VoiceActivityDetector::process_audio_chunk(const float *audio_data,
                                                 size_t audio_data_size) {
   assert(audio_data_size == (size_t)(hop_size));
