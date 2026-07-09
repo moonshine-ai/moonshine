@@ -44,7 +44,9 @@ size_t read_rss_kb() {
   size_t rss_kb = 0;
   while (std::fgets(line, sizeof(line), f) != nullptr) {
     if (std::strncmp(line, "VmRSS:", 6) == 0) {
-      std::sscanf(line, "VmRSS: %zu kB", &rss_kb);
+      if (std::sscanf(line, "VmRSS: %zu kB", &rss_kb) != 1) {
+        rss_kb = 0;
+      }
       break;
     }
   }
