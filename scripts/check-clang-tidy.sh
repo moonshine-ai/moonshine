@@ -24,6 +24,12 @@
 #              2 = usage / environment error.
 set -uo pipefail
 
+# Force byte-order collation everywhere. Our keys are ASCII, and this keeps
+# Python's sorted() output, `sort`, and `comm` in agreement -- under a UTF-8
+# locale `sort`/`comm` use a different collation and `comm` then aborts with
+# "input is not in sorted order", yielding bogus "new finding" reports.
+export LC_ALL=C
+
 LOG=""
 BASELINE=""
 REPO_ROOT=""
@@ -82,7 +88,7 @@ PY
 
 CURRENT="$(mktemp)"
 trap 'rm -f "${CURRENT}"' EXIT
-extract_keys "${LOG}" >"${CURRENT}"
+extract_keys "${LOG}" | sort -u >"${CURRENT}"
 current_count="$(wc -l <"${CURRENT}" | tr -d ' ')"
 
 if [[ "${UPDATE}" == "1" ]]; then
@@ -108,7 +114,8 @@ if [[ ! -f "${BASELINE}" ]]; then
 fi
 
 # Strip comments/blank lines from the baseline, then report any current pair that
-# is absent from it. comm needs both inputs sorted (extract_keys already sorts).
+# is absent from it. Both inputs to comm must be sorted with the same collation;
+# LC_ALL=C (set above) plus the identical `sort -u` used for CURRENT guarantees it.
 BASE_KEYS="$(mktemp)"
 trap 'rm -f "${CURRENT}" "${BASE_KEYS}"' EXIT
 grep -v -e '^#' -e '^[[:space:]]*$' "${BASELINE}" | sort -u >"${BASE_KEYS}"
