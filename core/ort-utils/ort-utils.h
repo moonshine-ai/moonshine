@@ -99,7 +99,8 @@ OrtStatus *ort_run(const OrtApi *ort_api, OrtSession *session,
 // This is intended solely for running the library under ThreadSanitizer, whose
 // interceptors deadlock inside onnxruntime's uninstrumented thread-pool
 // synchronization. Production builds never set the variable, so this is a no-op
-// there with zero performance impact. Call immediately after CreateSessionOptions.
+// there with zero performance impact. Call immediately after
+// CreateSessionOptions.
 void ort_maybe_force_single_thread(const OrtApi *ort_api,
                                    OrtSessionOptions *session_options);
 

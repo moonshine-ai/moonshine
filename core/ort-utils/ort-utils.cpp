@@ -99,8 +99,8 @@ void ort_maybe_force_single_thread(const OrtApi *ort_api,
   }
   LOG_ORT_ERROR(ort_api, ort_api->SetIntraOpNumThreads(session_options, 1));
   LOG_ORT_ERROR(ort_api, ort_api->SetInterOpNumThreads(session_options, 1));
-  LOG_ORT_ERROR(
-      ort_api, ort_api->SetSessionExecutionMode(session_options, ORT_SEQUENTIAL));
+  LOG_ORT_ERROR(ort_api, ort_api->SetSessionExecutionMode(session_options,
+                                                          ORT_SEQUENTIAL));
 }
 
 #if defined(ANDROID)
