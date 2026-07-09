@@ -53,10 +53,10 @@ OrtStatus *make_invalid_argument_status(const OrtApi *ort_api,
   return ort_api->CreateStatus(ORT_INVALID_ARGUMENT, message.c_str());
 }
 
-OrtStatus *append_one_provider(const OrtApi *ort_api,
-                               OrtSessionOptions *session_options,
-                               const std::string &normalized,
-                               const OrtExecutionProviderOptions *config) {
+OrtStatus *append_one_provider(
+    const OrtApi *ort_api, OrtSessionOptions *session_options,
+    const std::string &normalized,
+    [[maybe_unused]] const OrtExecutionProviderOptions *config) {
   if (normalized == "cpu") {
     return OrtSessionOptionsAppendExecutionProvider_CPU(session_options, 0);
   }

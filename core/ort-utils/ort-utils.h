@@ -91,6 +91,18 @@ OrtStatus *ort_run(const OrtApi *ort_api, OrtSession *session,
                    OrtValue **outputs, const char *session_name,
                    bool log_ort_run);
 
+// Reliability-only escape hatch: when the MOONSHINE_ORT_SINGLE_THREAD
+// environment variable is set to a non-empty value other than "0", force this
+// session to run entirely on the calling thread (intra-op = inter-op = 1,
+// sequential execution) so onnxruntime spawns no internal thread pool.
+//
+// This is intended solely for running the library under ThreadSanitizer, whose
+// interceptors deadlock inside onnxruntime's uninstrumented thread-pool
+// synchronization. Production builds never set the variable, so this is a no-op
+// there with zero performance impact. Call immediately after CreateSessionOptions.
+void ort_maybe_force_single_thread(const OrtApi *ort_api,
+                                   OrtSessionOptions *session_options);
+
 std::vector<std::string> ort_parse_provider_names(const std::string &csv);
 
 OrtStatus *ort_append_execution_providers(

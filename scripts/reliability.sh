@@ -7,7 +7,8 @@
 #      uncommitted changes are exercised), preserving the box's large model /
 #      test assets.
 #   3. Runs scripts/reliability-remote.sh there (ASan/UBSan build + test suite,
-#      clang-tidy, and time-boxed per-module fuzzing).
+#      clang-tidy, a ThreadSanitizer rebuild + threaded tests, and time-boxed
+#      per-module fuzzing).
 #   4. Copies logs and any crash reproducers back to core/reliability/artifacts.
 #
 # The whole run is designed to finish within a few hours (tune FUZZ_SECONDS).
@@ -20,6 +21,8 @@
 #   REMOTE_DIR         repo path on that box, relative to $HOME (default: moonshine)
 #   FUZZ_SECONDS       seconds per fuzz target (default 900 => ~1h of fuzzing)
 #   TIDY_STRICT        1 => clang-tidy findings fail the run (default 0)
+#   TSAN               1 => run the ThreadSanitizer stage (default 1); 0 to skip
+#   TSAN_STRICT        1 => TSan findings fail the run (default 0, advisory)
 #   FORMAT_STRICT      1 => formatting drift fails the run (default 0, advisory).
 #                      Run scripts/format-core.sh to fix drift wholesale.
 set -euo pipefail
@@ -32,6 +35,8 @@ RELIABILITY_HOST="${RELIABILITY_HOST:-petes-alienware-pc}"
 REMOTE_DIR="${REMOTE_DIR:-moonshine}"
 FUZZ_SECONDS="${FUZZ_SECONDS:-900}"
 TIDY_STRICT="${TIDY_STRICT:-0}"
+TSAN="${TSAN:-1}"
+TSAN_STRICT="${TSAN_STRICT:-0}"
 FORMAT_STRICT="${FORMAT_STRICT:-0}"
 
 echo "=== Local static checks ==="
@@ -50,20 +55,31 @@ fi
 
 echo ""
 echo "=== Syncing working tree to ${RELIABILITY_HOST}:${REMOTE_DIR} ==="
-# Overlay our source onto the box's existing checkout without --delete so its
-# LFS-managed models / test assets (excluded below) are preserved.
+# Derive the exclude list from git's own ignore rules (root + nested .gitignore,
+# .git/info/exclude, global excludes) so we never copy build output, virtualenvs,
+# caches, or other temporary files. --directory collapses fully-ignored dirs to a
+# single entry; a leading '/' anchors each pattern to the transfer root.
+IGNORE_LIST="$(mktemp)"
+trap 'rm -f "${IGNORE_LIST}"' EXIT
+( cd "${REPO_ROOT_DIR}" \
+  && git ls-files --others --ignored --exclude-standard --directory ) \
+  | sed 's#^#/#' >"${IGNORE_LIST}"
+
+# Overlay our source onto the box without --delete. The box is a plain rsync
+# target (not a git checkout), so we must ship everything the build, tests, and
+# fuzzers need: that includes test-assets/ (~190MB of models/fixtures the tests
+# and fuzz seeds load) and the Linux onnxruntime libs. We still skip .git, the
+# large TTS data (no TTS test runs here), and the non-Linux onnxruntime prebuilt
+# libraries (~950MB) that this Linux-x86 run never links against.
 ssh "${RELIABILITY_HOST}" "mkdir -p '${REMOTE_DIR}'"
-rsync -az --info=stats1 \
-  --exclude '.git/' \
-  --exclude '.env' \
-  --exclude '**/build/' \
-  --exclude 'core/reliability/artifacts/' \
-  --exclude 'core/reliability/corpus/' \
-  --exclude 'test-assets/' \
-  --exclude 'core/moonshine-tts/data/' \
-  --exclude '**/__pycache__/' \
-  --exclude '*.dylib' \
-  --exclude '*.so' \
+rsync -az --stats \
+  --exclude-from="${IGNORE_LIST}" \
+  --exclude '/.git/' \
+  --exclude '/core/moonshine-tts/data/' \
+  --exclude '/core/third-party/onnxruntime/lib/android/' \
+  --exclude '/core/third-party/onnxruntime/lib/ios/' \
+  --exclude '/core/third-party/onnxruntime/lib/macos/' \
+  --exclude '/core/third-party/onnxruntime/lib/windows/' \
   "${REPO_ROOT_DIR}/" \
   "${RELIABILITY_HOST}:${REMOTE_DIR}/"
 
@@ -71,7 +87,7 @@ echo ""
 echo "=== Running remote reliability checks ==="
 remote_status=0
 ssh "${RELIABILITY_HOST}" \
-  "cd '${REMOTE_DIR}' && FUZZ_SECONDS='${FUZZ_SECONDS}' TIDY_STRICT='${TIDY_STRICT}' bash scripts/reliability-remote.sh" \
+  "cd '${REMOTE_DIR}' && FUZZ_SECONDS='${FUZZ_SECONDS}' TIDY_STRICT='${TIDY_STRICT}' TSAN='${TSAN}' TSAN_STRICT='${TSAN_STRICT}' bash scripts/reliability-remote.sh" \
   || remote_status=$?
 
 echo ""

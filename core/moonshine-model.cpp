@@ -103,6 +103,7 @@ MoonshineModel::MoonshineModel(
   ort_string_allocator = new MoonshineOrtAllocator(ort_memory_info);
 
   LOG_ORT_ERROR(ort_api, ort_api->CreateSessionOptions(&ort_session_options));
+  ort_maybe_force_single_thread(ort_api, ort_session_options);
   LOG_ORT_ERROR(ort_api, ort_api->SetSessionGraphOptimizationLevel(
                              ort_session_options, ORT_ENABLE_EXTENDED));
   LOG_ORT_ERROR(ort_api,

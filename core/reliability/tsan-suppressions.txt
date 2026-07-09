@@ -1,0 +1,23 @@
+# ThreadSanitizer runtime suppressions for the MOONSHINE_RELIABILITY=thread
+# build (used via TSAN_OPTIONS=suppressions=... in scripts/reliability-remote.sh).
+#
+# TSan can only reason about instrumented code. The prebuilt onnxruntime library
+# and the vendored trees are NOT instrumented, so races reported *inside* them
+# (or in their internal thread pools) are noise we can neither act on nor fix
+# without touching third-party code. First-party races are still reported.
+#
+# Format: https://clang.llvm.org/docs/ThreadSanitizerFlags.html
+called_from_lib:libonnxruntime.so
+race:libonnxruntime.so
+deadlock:libonnxruntime.so
+# onnxruntime's own thread pool manages its condition variables/mutexes in ways
+# TSan misreads as "unlock of an unlocked mutex (or by a wrong thread)". The
+# reliability run forces onnxruntime single-threaded (MOONSHINE_ORT_SINGLE_THREAD),
+# so this should not fire, but suppress the mutex class from the library defensively.
+mutex:libonnxruntime.so
+
+# Vendored first-party-adjacent code we do not modify.
+race:*/third-party/*
+race:*/cpp-annote/*
+race:*/kaldi-native-fbank/*
+race:*/kissfft/*

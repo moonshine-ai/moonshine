@@ -138,8 +138,30 @@ bool load_wav_data(const char *path, float **out_float_data,
     return false;
   }
 
+  // The data chunk size comes straight from the (untrusted) file header, so a
+  // corrupt or malicious WAV can claim a chunk far larger than the file. Clamp
+  // it to the bytes actually present before allocating, otherwise the malloc
+  // below can request gigabytes and OOM the process.
+  const long data_start = std::ftell(file);
+  if (data_start < 0 || std::fseek(file, 0, SEEK_END) != 0) {
+    std::fclose(file);
+    std::fprintf(stderr, "Failed to determine WAV data size\n");
+    return false;
+  }
+  const long file_end = std::ftell(file);
+  if (file_end < data_start || std::fseek(file, data_start, SEEK_SET) != 0) {
+    std::fclose(file);
+    std::fprintf(stderr, "Failed to seek to WAV data\n");
+    return false;
+  }
+  const size_t available_bytes = static_cast<size_t>(file_end - data_start);
+  const size_t bytes_per_sample = bits_per_sample / 8;
+  if (chunk_size > available_bytes) {
+    chunk_size = static_cast<uint32_t>(available_bytes);
+  }
+
   // Read PCM data
-  size_t num_samples = chunk_size / (bits_per_sample / 8);
+  size_t num_samples = chunk_size / bytes_per_sample;
   if (num_samples == 0) {
     std::fclose(file);
     std::fprintf(stderr, "No samples found\n");
