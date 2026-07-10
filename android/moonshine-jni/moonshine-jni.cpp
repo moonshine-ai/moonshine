@@ -140,7 +140,8 @@ static jobject c_transcript_to_jobject(JNIEnv *env, struct transcript_t *transcr
     // that text is null when there is no transcription, and the Java bindings
     // must mirror that. Leaving the field unset keeps its null default.
     if (line->text != nullptr) {
-      std::string sanitized_text = utf8::replace_invalid(line->text);
+      std::string raw_text(line->text);
+      std::string sanitized_text = utf8::replace_invalid(raw_text);
       env->SetObjectField(jline, textField,
                           env->NewStringUTF(sanitized_text.c_str()));
     }

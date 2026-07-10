@@ -125,16 +125,19 @@ main() {
             "${LINUX_CLOUD_HOST}"
     fi
 
-    # The Linux cloud host is x86_64, so it runs the x86_64 Android
-    # instrumentation tests (Apple Silicon can't). This assumes a one-time setup
-    # on that host: Android SDK + platform-tools + emulator, an x86_64 system
-    # image, KVM, and an AVD named moonshine_api26_x86_64 (override with
-    # ANDROID_X86_64_AVD).
-    ssh ${LINUX_CLOUD_HOST} 'cd moonshine \
+    # The Linux host (LINUX_CLOUD_HOST in .env) is x86_64, so it runs the x86_64
+    # Android instrumentation tests (Apple Silicon can't run an x86_64 emulator).
+    # One-time host setup via scripts/setup-android-ci.sh: Android SDK +
+    # platform-tools + emulator, an x86_64 system image, KVM, an AVD named
+    # moonshine_api26_x86_64 (override with ANDROID_X86_64_AVD), and JAVA_HOME/
+    # ANDROID_HOME exported in ~/.bashrc (sourced by non-interactive ssh). The
+    # checkout path comes from LINUX_CLOUD_REPO_PATH. LINUX_CLOUD_REPO_PATH and the
+    # AVD default are expanded here on the local side before the command is sent.
+    ssh ${LINUX_CLOUD_HOST} "cd '${LINUX_CLOUD_REPO_PATH}' \
       && git pull origin main \
       && scripts/test-core.sh \
-      && scripts/test-android.sh --avd "${ANDROID_X86_64_AVD:-moonshine_api26_x86_64}" \
-      && scripts/publish-binary.sh upload' || exit 1
+      && scripts/test-android.sh --avd '${ANDROID_X86_64_AVD:-moonshine_api26_x86_64}' \
+      && scripts/publish-binary.sh upload" || exit 1
 
     ssh -p ${RPI_CLOUD_PORT} ${RPI_CLOUD_HOST} 'cd moonshine \
       && git pull origin main \
