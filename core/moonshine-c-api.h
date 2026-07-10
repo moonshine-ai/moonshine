@@ -406,9 +406,11 @@ MOONSHINE_EXPORT void moonshine_free_transcriber(int32_t transcriber_handle);
    `audio_length` should be the number of samples in the audio data array.
 
    `sample_rate` should be the sample rate of the audio data, in Hz.
-   `flags` should be a bitwise OR of any of the following flags:
-   - MOONSHINE_FLAG_DISABLE_VAD: Disable voice activity detection, so all audio
-     is processed as if it were speech.
+   `flags` should be a bitwise OR of flags. Currently the only supported flag
+   is MOONSHINE_FLAG_SPELLING_MODE, which applies alphanumeric-spelling fusion
+   to completed lines (requires the transcriber to have been loaded with a
+   spelling model; otherwise the flag is a no-op). Pass zero for the default
+   behavior.
 
    `out_transcript` should be a pointer to a pointer to a transcript_t struct.
    The transcript_t struct will be populated with the transcript data, which
