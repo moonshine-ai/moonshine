@@ -21,9 +21,11 @@
 # Environment:
 #   ANDROID_HOME or ANDROID_SDK_ROOT — required.
 #
-# ABI note: the library is built for arm64-v8a only (see build.gradle.kts
-# abiFilters), so the device/emulator must be arm64-v8a. On Apple Silicon use an
-# "arm64-v8a" system image; an x86_64 emulator will not have the native libs.
+# ABI note: the library ships native libs for arm64-v8a, armeabi-v7a and x86_64
+# (see build.gradle.kts abiFilters), so the device/emulator's ABI must be one of
+# those. On Apple Silicon use an "arm64-v8a" system image; x86_64 emulators only
+# run on an x86_64 host. Apple Silicon cannot run armeabi-v7a (32-bit ARM)
+# emulators; test that ABI on a real 32-bit-capable device via --serial.
 
 set -euo pipefail
 
@@ -49,7 +51,7 @@ while [[ $# -gt 0 ]]; do
 		shift 2
 		;;
 	-h | --help)
-		sed -n '2,26p' "$0"
+		sed -n '2,28p' "$0"
 		exit 0
 		;;
 	*)
@@ -62,8 +64,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-if [[ -z "${SDK}" && -d "${HOME}/Library/Android/sdk" ]]; then
-	SDK="${HOME}/Library/Android/sdk"
+if [[ -z "${SDK}" ]]; then
+	# Common default install locations: macOS then Linux.
+	for cand in "${HOME}/Library/Android/sdk" "${HOME}/Android/Sdk"; do
+		if [[ -d "${cand}" ]]; then
+			SDK="${cand}"
+			break
+		fi
+	done
 fi
 [[ -n "${SDK}" ]] || die "ANDROID_HOME (or ANDROID_SDK_ROOT) is not set."
 export ANDROID_HOME="${SDK}"

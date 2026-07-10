@@ -70,14 +70,14 @@ trap 'rm -f "${IGNORE_LIST}"' EXIT
 # Overlay our source onto the box without --delete. The box is a plain rsync
 # target (not a git checkout), so we must ship everything the build, tests, and
 # fuzzers need: that includes test-assets/ (~190MB of models/fixtures the tests
-# and fuzz seeds load) and the Linux onnxruntime libs. We still skip .git, the
-# large TTS data (no TTS test runs here), and the non-Linux onnxruntime prebuilt
-# libraries (~950MB) that this Linux-x86 run never links against.
+# and fuzz seeds load), the ~2.4GB TTS data (core/moonshine-tts/data, required
+# by the repeated-use TTS memory test), and the Linux onnxruntime libs. We still
+# skip .git and the non-Linux onnxruntime prebuilt libraries (~950MB) that this
+# Linux-x86 run never links against.
 ssh "${RELIABILITY_HOST}" "mkdir -p '${REMOTE_DIR}'"
 rsync -az --stats \
   --exclude-from="${IGNORE_LIST}" \
   --exclude '/.git/' \
-  --exclude '/core/moonshine-tts/data/' \
   --exclude '/core/third-party/onnxruntime/lib/android/' \
   --exclude '/core/third-party/onnxruntime/lib/ios/' \
   --exclude '/core/third-party/onnxruntime/lib/macos/' \

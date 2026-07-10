@@ -16,8 +16,12 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
         ndk {
-            // Only build for ARM64 to match the app module
-            abiFilters += listOf("arm64-v8a")
+            // ABIs we ship native libraries for. arm64-v8a is the primary target;
+            // x86_64 covers emulators (testable on an x86_64 host); armeabi-v7a
+            // covers legacy 32-bit ARM devices. Each ABI needs a matching
+            // libonnxruntime.so under
+            // core/third-party/onnxruntime/lib/android/<abi>/ (see issue #174).
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
         externalNativeBuild {
             cmake {
