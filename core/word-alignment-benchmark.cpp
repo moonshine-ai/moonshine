@@ -4,6 +4,7 @@
 #include <cstring>
 #include <vector>
 
+#include "file-utils.h"
 #include "moonshine-c-api.h"
 
 static float* load_wav(const char* path, long* num_samples_out) {
@@ -17,7 +18,7 @@ static float* load_wav(const char* path, long* num_samples_out) {
   fseek(f, 44, SEEK_SET);
   long data_size = file_size - 44;
   int16_t* raw = (int16_t*)malloc(data_size);
-  fread(raw, 1, data_size, f);
+  fread_exact(raw, 1, data_size, f, "WAV PCM data");
   fclose(f);
   long n = data_size / sizeof(int16_t);
   float* audio = (float*)malloc(n * sizeof(float));

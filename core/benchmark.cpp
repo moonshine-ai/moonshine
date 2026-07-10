@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "file-utils.h"
 #include "moonshine-cpp.h"
 
 namespace {
@@ -158,12 +159,12 @@ void AudioProducer::loadWavData(std::string wav_path) {
     std::fclose(file);
     throw std::runtime_error("fmt chunk too small");
   }
-  std::fread(&audio_format, sizeof(uint16_t), 1, file);
-  std::fread(&num_channels, sizeof(uint16_t), 1, file);
-  std::fread(&sample_rate, sizeof(uint32_t), 1, file);
-  std::fread(&byte_rate, sizeof(uint32_t), 1, file);
-  std::fread(&block_align, sizeof(uint16_t), 1, file);
-  std::fread(&bits_per_sample, sizeof(uint16_t), 1, file);
+  fread_exact(&audio_format, sizeof(uint16_t), 1, file, "WAV fmt chunk");
+  fread_exact(&num_channels, sizeof(uint16_t), 1, file, "WAV fmt chunk");
+  fread_exact(&sample_rate, sizeof(uint32_t), 1, file, "WAV fmt chunk");
+  fread_exact(&byte_rate, sizeof(uint32_t), 1, file, "WAV fmt chunk");
+  fread_exact(&block_align, sizeof(uint16_t), 1, file, "WAV fmt chunk");
+  fread_exact(&bits_per_sample, sizeof(uint16_t), 1, file, "WAV fmt chunk");
   // Skip any extra fmt bytes
   if (chunk_size > 16) std::fseek(file, chunk_size - 16, SEEK_CUR);
 
