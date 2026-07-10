@@ -20,20 +20,6 @@
 # script will start the corresponding GCP VM before connecting and stop it
 # again on exit (including on error) to minimize compute costs.
 
-if [[ "$OSTYPE" != "darwin"* ]]; then
-    echo "This script is expected to be run on macOS."
-    exit 1
-fi
-
-SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT_DIR=$(dirname $SCRIPTS_DIR)
-
-if [ -f "${REPO_ROOT_DIR}/.env" ]; then
-    set -o allexport
-    source "${REPO_ROOT_DIR}/.env"
-    set +o allexport
-fi
-
 # Resume a GCP compute instance and wait for SSH to become available.
 gcp_resume_instance() {
     local instance="$1"
@@ -93,51 +79,73 @@ cleanup() {
     fi
     exit ${exit_code}
 }
-trap cleanup EXIT
+# All imperative work lives inside main() so that bash parses the entire
+# script before it starts executing the long-running build steps. Without
+# this, editing/saving the file mid-run shifts bash's byte offsets and can
+# corrupt an in-flight run (e.g. turning "exit 1" into "xit 1").
+main() {
+    if [[ "$OSTYPE" != "darwin"* ]]; then
+        echo "This script is expected to be run on macOS."
+        exit 1
+    fi
 
-cd ${REPO_ROOT_DIR}
-scripts/test-core.sh
-scripts/test-python.sh
-scripts/test-docs.sh --skip-build
-scripts/build-swift.sh
-scripts/publish-swift.sh
-scripts/publish-android.sh
-scripts/build-pip.sh upload
-scripts/build-pip-docker.sh
-scripts/publish-binary.sh upload
-scripts/publish-examples.sh
+    SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+    REPO_ROOT_DIR=$(dirname $SCRIPTS_DIR)
 
-if [ -n "${LINUX_CLOUD_INSTANCE:-}" ]; then
-    gcp_resume_instance \
-        "${LINUX_CLOUD_INSTANCE}" \
-        "${LINUX_CLOUD_ZONE}" \
-        "${LINUX_CLOUD_PROJECT}" \
-        "${LINUX_CLOUD_HOST}"
-fi
+    if [ -f "${REPO_ROOT_DIR}/.env" ]; then
+        set -o allexport
+        source "${REPO_ROOT_DIR}/.env"
+        set +o allexport
+    fi
 
-ssh ${LINUX_CLOUD_HOST} 'cd moonshine \
-  && git pull origin main \
-  && scripts/test-core.sh \
-  && scripts/publish-binary.sh upload' || exit 1
+    trap cleanup EXIT
 
-ssh -p ${RPI_CLOUD_PORT} ${RPI_CLOUD_HOST} 'cd moonshine \
-  && git pull origin main \
-  && scripts/test-core.sh \
-  && scripts/build-pip.sh upload \
-  && scripts/publish-binary.sh upload' || exit 1
+    cd ${REPO_ROOT_DIR}
+    scripts/test-core.sh
+    scripts/test-python.sh
+    scripts/test-docs.sh --skip-build
+    scripts/build-swift.sh
+    scripts/publish-swift.sh
+    scripts/build-android.sh publish
+    scripts/build-pip.sh upload
+    scripts/build-pip-docker.sh
+    scripts/publish-binary.sh upload
+    scripts/publish-examples.sh
 
-if [ -n "${WINDOWS_CLOUD_INSTANCE:-}" ]; then
-    gcp_resume_instance \
-        "${WINDOWS_CLOUD_INSTANCE}" \
-        "${WINDOWS_CLOUD_ZONE}" \
-        "${WINDOWS_CLOUD_PROJECT}" \
-        "${WINDOWS_CLOUD_USER}@${WINDOWS_CLOUD_HOST}"
-fi
+    if [ -n "${LINUX_CLOUD_INSTANCE:-}" ]; then
+        gcp_resume_instance \
+            "${LINUX_CLOUD_INSTANCE}" \
+            "${LINUX_CLOUD_ZONE}" \
+            "${LINUX_CLOUD_PROJECT}" \
+            "${LINUX_CLOUD_HOST}"
+    fi
 
-ssh ${WINDOWS_CLOUD_USER}@${WINDOWS_CLOUD_HOST} 'cd moonshine `
-  ; git pull origin main `
-  ; scripts/test-core.bat `
-  ; scripts/publish-binary.bat upload `
-  ; scripts/publish-examples.bat upload `
-  ; scripts/build-pip.bat upload' \
-  || exit 1
+    ssh ${LINUX_CLOUD_HOST} 'cd moonshine \
+      && git pull origin main \
+      && scripts/test-core.sh \
+      && scripts/publish-binary.sh upload' || exit 1
+
+    ssh -p ${RPI_CLOUD_PORT} ${RPI_CLOUD_HOST} 'cd moonshine \
+      && git pull origin main \
+      && scripts/test-core.sh \
+      && scripts/build-pip.sh upload \
+      && scripts/publish-binary.sh upload' || exit 1
+
+    if [ -n "${WINDOWS_CLOUD_INSTANCE:-}" ]; then
+        gcp_resume_instance \
+            "${WINDOWS_CLOUD_INSTANCE}" \
+            "${WINDOWS_CLOUD_ZONE}" \
+            "${WINDOWS_CLOUD_PROJECT}" \
+            "${WINDOWS_CLOUD_USER}@${WINDOWS_CLOUD_HOST}"
+    fi
+
+    ssh ${WINDOWS_CLOUD_USER}@${WINDOWS_CLOUD_HOST} 'cd moonshine `
+      ; git pull origin main `
+      ; scripts/test-core.bat `
+      ; scripts/publish-binary.bat upload `
+      ; scripts/publish-examples.bat upload `
+      ; scripts/build-pip.bat upload' \
+      || exit 1
+}
+
+main "$@"

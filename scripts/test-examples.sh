@@ -6,10 +6,21 @@
 # Usage:
 #   ./scripts/test-examples.sh [--repo OWNER/REPO] [--tag vX.Y.Z] [--workdir DIR] [--keep-workdir]
 #   ./scripts/test-examples.sh --local-examples [--workdir DIR] [--keep-workdir]
+#   ./scripts/test-examples.sh --local-library [--workdir DIR]
 #
 # With --local-examples, skips GitHub downloads and copies this repository's
 # examples/android and examples/ios into a temp tree (same layout as extracted
 # release archives), then runs the same Gradle / xcodebuild checks.
+#
+# With --local-library (implies --local-examples), first builds the Android AAR
+# from this checkout and installs it into the local Maven cache (via
+# scripts/build-android.sh local), then makes the temp Android example copies
+# resolve that locally-built AAR instead of the published Maven Central one. This
+# is how you verify the examples still build against a library change (e.g. a
+# lowered minSdk) before publishing. mavenLocal() is injected as the first
+# repository (via a Gradle init script) so it takes precedence, and the examples'
+# requested moonshine-voice version is synced to this checkout's coordinates().
+# The example apps' minSdk (like the library's) comes from their Gradle files.
 #
 # Environment:
 #   ANDROID_HOME or ANDROID_SDK_ROOT — required for Android (unless SKIP_ANDROID=1)
@@ -33,6 +44,10 @@ KEEP_WORKDIR=0
 SKIP_ANDROID="${SKIP_ANDROID:-0}"
 SKIP_IOS="${SKIP_IOS:-0}"
 USE_LOCAL_EXAMPLES=0
+USE_LOCAL_LIBRARY=0
+# Path to a Gradle init script (created at runtime when --local-library is used)
+# that injects mavenLocal() as the first dependency-resolution repository.
+LOCAL_LIBRARY_INIT_SCRIPT=""
 
 usage() {
 	cat <<'EOF'
@@ -50,10 +65,16 @@ tree per platform, and runs standalone builds:
 work directory (temporary copy; does not modify the originals), then run the
 same build steps. Implies repository root is the parent of scripts/.
 
+--local-library: implies --local-examples. Build + install this checkout's
+Android AAR into the local Maven cache, then build the Android examples against
+that local AAR instead of the published Maven Central artifact. Use this to
+verify library changes (e.g. a lowered minSdk) before publishing.
+
 Options:
   --repo OWNER/REPO   GitHub repository (default: moonshine-ai/moonshine); only for downloads
   --tag vX.Y.Z        Use .../releases/download/TAG/... (default: latest/download); only for downloads
   --local-examples    Use examples/android and examples/ios from this checkout instead of archives
+  --local-library     Build + consume this checkout's Android AAR from the local Maven cache
   --workdir DIR       Extract / copy and build here instead of a fresh mktemp directory
   --keep-workdir      Do not delete the work directory on exit (implies useful with --workdir)
 
@@ -93,6 +114,11 @@ while [[ $# -gt 0 ]]; do
 		shift
 		;;
 	--local-examples)
+		USE_LOCAL_EXAMPLES=1
+		shift
+		;;
+	--local-library)
+		USE_LOCAL_LIBRARY=1
 		USE_LOCAL_EXAMPLES=1
 		shift
 		;;
@@ -211,6 +237,75 @@ copy_local_example_trees() {
 	cp -a "${ios_src}/." "${ios_dest}/"
 }
 
+# Portable in-place edit (BSD/macOS sed and GNU sed differ on -i), applied to
+# each given file with the supplied sed expression.
+portable_sed_inplace() {
+	local expr="$1"
+	shift
+	local f tmp
+	for f in "$@"; do
+		tmp="$(mktemp)"
+		sed "${expr}" "${f}" >"${tmp}"
+		mv "${tmp}" "${f}"
+	done
+}
+
+# Read the moonshine-voice version this checkout would publish, parsed from the
+# root build.gradle.kts coordinates("ai.moonshine", "moonshine-voice", "X.Y.Z").
+read_library_version() {
+	local version
+	version="$(sed -n 's/.*coordinates("ai.moonshine", *"moonshine-voice", *"\([^"]*\)").*/\1/p' "${REPO_ROOT}/build.gradle.kts" | head -n1)"
+	[[ -n "${version}" ]] || die "could not parse moonshine-voice version from ${REPO_ROOT}/build.gradle.kts"
+	echo "${version}"
+}
+
+# Build the AAR from this checkout and install it into the local Maven cache so
+# the example builds can resolve it. Delegates to build-android.sh so there is a
+# single source of truth for the Gradle invocation.
+publish_local_library() {
+	log "building + installing local AAR into ~/.m2 (scripts/build-android.sh local)"
+	"${SCRIPT_DIR}/build-android.sh" local
+}
+
+# Write a Gradle init script that adds mavenLocal() as the first dependency
+# resolution repository for every build. Using beforeSettings ensures it is
+# consulted before the examples' google()/mavenCentral() entries, so the freshly
+# installed local AAR wins over any same-versioned artifact on Maven Central.
+write_local_library_init_script() {
+	local path="${WORKDIR}/local-library.init.gradle"
+	cat >"${path}" <<'EOF'
+// Injected by test-examples.sh --local-library. Adds mavenLocal() as the first
+// dependency-resolution repository so examples resolve the AAR that
+// build-android.sh installed into ~/.m2 rather than the published artifact.
+beforeSettings { settings ->
+    settings.dependencyResolutionManagement {
+        repositories {
+            mavenLocal()
+        }
+    }
+}
+EOF
+	LOCAL_LIBRARY_INIT_SCRIPT="${path}"
+	log "wrote local-library init script: ${path}"
+}
+
+# Point the copied Android examples at the locally-built library: sync each
+# example's requested moonshine-voice version to this checkout's version.
+apply_local_library_overrides() {
+	local android_root="$1"
+	local version
+	version="$(read_library_version)"
+	log "syncing example moonshine-voice version to ${version}"
+
+	local toml
+	while IFS= read -r toml; do
+		[[ -z "${toml}" ]] && continue
+		portable_sed_inplace \
+			"s/^\(moonshineVoice[[:space:]]*=[[:space:]]*\)\"[^\"]*\"/\1\"${version}\"/" \
+			"${toml}"
+	done < <(find "${android_root}" -type f -name libs.versions.toml 2>/dev/null)
+}
+
 pick_xcode_scheme() {
 	local project="$1"
 	python3 - "$project" <<'PY'
@@ -269,7 +364,11 @@ run_android_builds() {
 		(
 			cd "${dir}"
 			chmod +x ./gradlew
-			./gradlew assembleDebug --no-daemon --warning-mode all
+			local gradle_args=(assembleDebug --no-daemon --warning-mode all)
+			if [[ -n "${LOCAL_LIBRARY_INIT_SCRIPT}" ]]; then
+				gradle_args+=(--init-script "${LOCAL_LIBRARY_INIT_SCRIPT}")
+			fi
+			./gradlew "${gradle_args[@]}"
 		)
 	done < <(find "${root}" -type f -name gradlew 2>/dev/null)
 
@@ -319,16 +418,25 @@ run_ios_builds() {
 }
 
 main() {
-	log "repo=${REPO} tag=${TAG:-<latest>} workdir=${WORKDIR} local_examples=${USE_LOCAL_EXAMPLES}"
+	log "repo=${REPO} tag=${TAG:-<latest>} workdir=${WORKDIR} local_examples=${USE_LOCAL_EXAMPLES} local_library=${USE_LOCAL_LIBRARY}"
 
 	local ios_root="${WORKDIR}/ios-examples-tree"
 	local android_root="${WORKDIR}/android-examples-tree"
+
+	if [[ "${USE_LOCAL_LIBRARY}" -eq 1 && "${SKIP_ANDROID}" != "1" ]]; then
+		publish_local_library
+		write_local_library_init_script
+	fi
 
 	if [[ "${USE_LOCAL_EXAMPLES}" -eq 1 ]]; then
 		copy_local_example_trees "${android_root}" "${ios_root}"
 	else
 		download_platform_example_archives "android" "${android_root}"
 		download_platform_example_archives "ios" "${ios_root}"
+	fi
+
+	if [[ "${USE_LOCAL_LIBRARY}" -eq 1 && "${SKIP_ANDROID}" != "1" ]]; then
+		apply_local_library_overrides "${android_root}"
 	fi
 
 	run_android_builds "${android_root}"
