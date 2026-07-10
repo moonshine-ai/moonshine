@@ -26,6 +26,7 @@ reinterpret_cast:core/moonshine-tts/src/piper-tts.cpp
 reinterpret_cast:core/moonshine-tts/src/zipvoice-tts.cpp
 reinterpret_cast:core/spelling-model-test.cpp
 reinterpret_cast:core/transcriber-streaming-memory-test.cpp
+reinterpret_cast:core/tts-repeated-memory-test.cpp
 c_alloc:core/intent-recognizer-test.cpp
 c_alloc:core/moonshine-c-api-memory-test.cpp
 c_alloc:core/moonshine-c-api-test.cpp
@@ -61,6 +62,7 @@ c_alloc:core/spelling-model-test.cpp
 c_alloc:core/transcriber-streaming-memory-test.cpp
 c_alloc:core/transcriber-test.cpp
 c_alloc:core/transcriber.h
+c_alloc:core/tts-repeated-memory-test.cpp
 c_alloc:core/word-alignment-benchmark.cpp
 raw_new_delete:core/gemma-embedding-model.cpp
 raw_new_delete:core/gemma-embedding-model.h

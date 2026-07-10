@@ -106,6 +106,11 @@ main() {
     scripts/test-docs.sh --skip-build
     scripts/build-swift.sh
     scripts/publish-swift.sh
+    # Run the Android instrumentation tests on a local arm64 emulator before
+    # publishing the AAR. x86_64 coverage runs on the Linux cloud host below
+    # (Apple Silicon can't run an x86_64 emulator). Override the AVD name with
+    # ANDROID_ARM64_AVD if yours differs.
+    scripts/test-android.sh --avd "${ANDROID_ARM64_AVD:-moonshine_api26_arm64}"
     scripts/build-android.sh publish
     scripts/build-pip.sh upload
     scripts/build-pip-docker.sh
@@ -120,9 +125,15 @@ main() {
             "${LINUX_CLOUD_HOST}"
     fi
 
+    # The Linux cloud host is x86_64, so it runs the x86_64 Android
+    # instrumentation tests (Apple Silicon can't). This assumes a one-time setup
+    # on that host: Android SDK + platform-tools + emulator, an x86_64 system
+    # image, KVM, and an AVD named moonshine_api26_x86_64 (override with
+    # ANDROID_X86_64_AVD).
     ssh ${LINUX_CLOUD_HOST} 'cd moonshine \
       && git pull origin main \
       && scripts/test-core.sh \
+      && scripts/test-android.sh --avd "${ANDROID_X86_64_AVD:-moonshine_api26_x86_64}" \
       && scripts/publish-binary.sh upload' || exit 1
 
     ssh -p ${RPI_CLOUD_PORT} ${RPI_CLOUD_HOST} 'cd moonshine \

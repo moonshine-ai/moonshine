@@ -159,6 +159,17 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         COMPILE_OPTIONS "-Wno-error=class-memaccess"
     )
 endif()
+# Same story on 32-bit ARM (armeabi-v7a): Eigen's NEON GeneralBlockPanelKernel.h
+# has an unused 'tmp' parameter that Clang flags with -Wunused-parameter, which
+# -Werror turns into a build failure when speaker-diarizer.cpp pulls it in. This
+# path is only compiled for armeabi-v7a (arm64-v8a's NEON kernels don't trip it),
+# so downgrade just that diagnostic for that ABI. We must not edit third-party
+# code, and all other warnings still fail the build.
+if (ANDROID AND CMAKE_ANDROID_ARCH_ABI STREQUAL "armeabi-v7a")
+    set_source_files_properties(speaker-diarizer.cpp PROPERTIES
+        COMPILE_OPTIONS "-Wno-error=unused-parameter"
+    )
+endif()
 
 # Build as STATIC framework for iOS/Swift (shared frameworks cannot be embedded)
 # Build as SHARED library for other platforms
@@ -360,6 +371,32 @@ if (IOS OR MOONSHINE_BUILD_SWIFT)
     )
 endif()
 target_link_libraries(moonshine-c-api-memory-test PRIVATE
+    moonshine
+)
+
+# Repeated-use TTS memory-growth regression test (Kokoro / Piper / ZipVoice).
+# Uses only the public C API, so it links just libmoonshine like the other
+# memory tests. Driven from scripts/reliability-remote.sh and scripts/test-core.sh.
+add_executable(tts-repeated-memory-test tts-repeated-memory-test.cpp)
+set_target_properties(tts-repeated-memory-test PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED YES
+    CXX_EXTENSIONS NO
+)
+target_include_directories(tts-repeated-memory-test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}
+    ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+    ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+)
+if (IOS OR MOONSHINE_BUILD_SWIFT)
+    set_target_properties(tts-repeated-memory-test PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.tts-repeated-memory-test"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+    )
+endif()
+target_link_libraries(tts-repeated-memory-test PRIVATE
     moonshine
 )
 

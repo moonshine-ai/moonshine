@@ -29,6 +29,13 @@
 #   MOONSHINE_STREAM_MEMORY_AUDIO_SECONDS  audio seconds fed by that test
 #                      (default 120); forwarded to the test binary
 #   MOONSHINE_STREAM_MEMORY_TEST_DISABLE  1 => skip the streaming memory test
+#   TTS_MEMORY_TEST_TIMEOUT  wall-clock limit for tts-repeated-memory-test
+#                      (default 1800); the TTS engines (esp. ZipVoice) are slow
+#   MOONSHINE_TTS_MEMORY_SYNTH_ITERATIONS / _RELOAD_ITERATIONS  per-engine loop
+#                      counts (defaults 64 / 24); forwarded to the test binary
+#   MOONSHINE_TTS_MEMORY_RELOAD_STRICT  1 => make the (advisory by default)
+#                      reload-loop RSS growth a hard failure
+#   MOONSHINE_TTS_MEMORY_TEST_DISABLE  1 => skip the TTS repeated-use memory test
 #   CC / CXX       compilers (default clang / clang++, required for libFuzzer)
 #   JOBS           parallel build jobs (default: nproc)
 set -uo pipefail
@@ -52,6 +59,7 @@ TSAN="${TSAN:-1}"
 TSAN_STRICT="${TSAN_STRICT:-0}"
 TSAN_TEST_TIMEOUT="${TSAN_TEST_TIMEOUT:-600}"
 STREAM_MEMORY_TEST_TIMEOUT="${STREAM_MEMORY_TEST_TIMEOUT:-900}"
+TTS_MEMORY_TEST_TIMEOUT="${TTS_MEMORY_TEST_TIMEOUT:-1800}"
 CC="${CC:-clang}"
 CXX="${CXX:-clang++}"
 JOBS="${JOBS:-$(nproc 2>/dev/null || echo 4)}"
@@ -220,6 +228,39 @@ if [[ "${MOONSHINE_STREAM_MEMORY_TEST_DISABLE:-0}" != "1" ]]; then
   fi
 else
   echo "  skip transcriber-streaming-memory (MOONSHINE_STREAM_MEMORY_TEST_DISABLE=1)"
+fi
+
+# Repeated-use TTS memory-growth regression (Kokoro / Piper / ZipVoice). Needs
+# the bundled TTS data, which reliability.sh syncs to the box. Skips cleanly if
+# the data or the binary is absent (e.g. running this script directly without a
+# full sync). Individual engines self-skip when their assets are missing.
+TTS_DATA_DIR="${REPO_ROOT_DIR}/core/moonshine-tts/data"
+if [[ "${MOONSHINE_TTS_MEMORY_TEST_DISABLE:-0}" == "1" ]]; then
+  echo "  skip tts-repeated-memory (MOONSHINE_TTS_MEMORY_TEST_DISABLE=1)"
+elif [[ ! -x "${BUILD_DIR}/tts-repeated-memory-test" ]]; then
+  echo "  skip tts-repeated-memory (missing binary)"
+elif [[ ! -d "${TTS_DATA_DIR}/en_us" ]]; then
+  echo "  skip tts-repeated-memory (TTS data missing at ${TTS_DATA_DIR#"${REPO_ROOT_DIR}"/}; check reliability.sh sync)"
+else
+  echo "  run  tts-repeated-memory (timeout ${TTS_MEMORY_TEST_TIMEOUT}s)"
+  tts_memory_rc=0
+  if command -v timeout >/dev/null 2>&1; then
+    ( cd "${TEST_WORKDIR}" && \
+      timeout -k 30 "${TTS_MEMORY_TEST_TIMEOUT}" \
+        "${BUILD_DIR}/tts-repeated-memory-test" "${TTS_DATA_DIR}" ) \
+      >"${ARTIFACTS_DIR}/test-tts-repeated-memory.log" 2>&1 \
+      || tts_memory_rc=$?
+  else
+    ( cd "${TEST_WORKDIR}" && \
+      "${BUILD_DIR}/tts-repeated-memory-test" "${TTS_DATA_DIR}" ) \
+      >"${ARTIFACTS_DIR}/test-tts-repeated-memory.log" 2>&1 \
+      || tts_memory_rc=$?
+  fi
+  if [[ "${tts_memory_rc}" == "124" || "${tts_memory_rc}" == "137" ]]; then
+    record_failure "test:tts-repeated-memory timed out after ${TTS_MEMORY_TEST_TIMEOUT}s (see artifacts/test-tts-repeated-memory.log)"
+  elif [[ "${tts_memory_rc}" != "0" ]]; then
+    record_failure "test:tts-repeated-memory (see artifacts/test-tts-repeated-memory.log)"
+  fi
 fi
 run_test moonshine-c-api "${BUILD_DIR}/moonshine-c-api-test"
 run_test moonshine-cpp   "${BUILD_DIR}/moonshine-cpp-test"
