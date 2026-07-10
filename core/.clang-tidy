@@ -47,7 +47,9 @@ Checks: >
 #     constant-array-index): buffer/pointer math is intrinsic to this style.
 #   * cppcoreguidelines-pro-type-{reinterpret,cstyle}-cast + narrowing-conversions:
 #     C-style casts and int/size_t narrowing are pervasive and deliberate here.
-#   * cert-err33-c: mostly ignored printf/fwrite/ORT-release return values.
+#   * cert-err33-c: mostly ignored printf/fwrite/ORT-release return values. We
+#     still catch the one case that bit us -- ignored fread returns -- via the
+#     scoped bugprone-unused-return-value.CheckedFunctions option below.
 #   * bugprone-macro-parentheses: hygiene nits in fixed macros.
 #   * bugprone-reserved-identifier / cert-dcl37-c / cert-dcl51-cpp: the code uses
 #     leading-underscore member names (_tensor, _shape) by convention.
@@ -73,3 +75,14 @@ CheckOptions:
   # the macro-driven cases (there is no hand-written __func__ to fix there) while
   # still catching a literal __func__ typed directly inside a lambda body.
   bugprone-lambda-function-name.IgnoreMacros: 'true'
+  # Catch ignored std::fread/fread return values (the classic short-read bug
+  # that silently proceeds on garbage/truncated data). We keep the broad
+  # cert-err33-c OFF because it also flags the many deliberately-ignored
+  # printf/fwrite/ORT-release returns, but scoping bugprone-unused-return-value
+  # to just fread gives us that one high-value check with no noise.
+  # CheckedFunctions is a regex (clang-tidy >= 17) matched against the fully-
+  # qualified callee, so this matches both ::fread and ::std::fread and nothing
+  # else. Prefer fread_exact() (core/moonshine-utils/file-utils.h); for a genuine
+  # intentional discard, write (void)fread(...), which AllowCastToVoid permits.
+  bugprone-unused-return-value.CheckedFunctions: '^::(std::)?fread$'
+  bugprone-unused-return-value.AllowCastToVoid: 'true'
