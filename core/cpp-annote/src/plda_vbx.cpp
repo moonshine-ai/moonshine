@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cmath>
+#include <numbers>
 #include <stdexcept>
 
 namespace cppannote::plda_vbx {
@@ -339,7 +340,8 @@ void cluster_vbx(const std::vector<int>& ahc_init, const Eigen::MatrixXd& fea,
     for (int j = 0; j < D; ++j) {
       sq += fea(t, j) * fea(t, j);
     }
-    G(t) = -0.5 * (sq + static_cast<double>(D) * std::log(2.0 * M_PI));
+    G(t) = -0.5 * (sq + static_cast<double>(D) *
+                            std::log(2.0 * std::numbers::pi));
   }
   Eigen::VectorXd V = Phi.array().sqrt();
   Eigen::MatrixXd rho(T, D);
