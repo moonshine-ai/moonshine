@@ -2,14 +2,25 @@
 import Foundation
 
 /// MicTranscriber is a class that transcribes audio from a microphone.
-public class MicTranscriber {
-    private let transcriber: Transcriber
-    private let micStream: Stream
+///
+/// Marked `@unchecked Sendable` because it manages its own cross-thread
+/// safety: captured audio crosses from the capture thread to a serial
+/// ``audioQueue`` guarded by ``pendingLock``, and lifecycle calls
+/// (``start``/``stop``) are expected from a single controlling thread.
+public final class MicTranscriber: @unchecked Sendable {
+    private let transcriber: Transcriber?
+    private let micStream: TranscriptionStream
     private var audioEngine: AVAudioEngine?
     private var isListening: Bool = false
     private let sampleRate: Double
     private let channels: Int
     private let bufferSize: AVAudioFrameCount
+
+    // Captured audio is handed to this serial queue, which runs the blocking
+    // transcription off the time-critical capture thread (see issue #196).
+    private let audioQueue = DispatchQueue(label: "ai.moonshine.MicTranscriber.audio")
+    private let pendingLock = NSLock()
+    private var pendingChunks: [(audio: [Float], sampleRate: Int32)] = []
 
     /// Initialize a MicTranscriber.
     /// - Parameters:
@@ -40,17 +51,39 @@ public class MicTranscriber {
         spellingModelPath: String? = nil,
         transcribeFlags: UInt32 = 0
     ) throws {
-        self.transcriber = try Transcriber(
+        let transcriber = try Transcriber(
             modelPath: modelPath,
             modelArch: modelArch,
             options: options,
             spellingModelPath: spellingModelPath)
+        self.transcriber = transcriber
         self.micStream = try transcriber.createStream(
             updateInterval: updateInterval,
             transcribeFlags: transcribeFlags)
         self.sampleRate = sampleRate
         self.channels = channels
         self.bufferSize = bufferSize
+    }
+
+    /// Test-only initializer that injects a stream stand-in and puts the
+    /// transcriber into the "listening" state without opening an
+    /// ``AVAudioEngine``. This lets tests drive ``feedCapturedAudio`` directly
+    /// (simulating the capture tap) without real microphone hardware or model
+    /// assets. The injected stream is started immediately so it behaves like a
+    /// running mic stream.
+    internal init(
+        testStream: TranscriptionStream,
+        sampleRate: Double = 16000,
+        channels: Int = 1,
+        bufferSize: AVAudioFrameCount = 1024
+    ) throws {
+        self.transcriber = nil
+        self.micStream = testStream
+        self.sampleRate = sampleRate
+        self.channels = channels
+        self.bufferSize = bufferSize
+        try micStream.start()
+        self.isListening = true
     }
 
     deinit {
@@ -209,18 +242,65 @@ public class MicTranscriber {
                 finalSampleRate = inputFormat.sampleRate
             }
 
-            // Feed audio to stream
-            do {
-                try self.micStream.addAudio(audioData, sampleRate: Int32(finalSampleRate))
-            } catch {
-                print("MicTranscriber: Error adding audio to stream: \(error.localizedDescription)")
-            }
+            // Hand the captured audio to the (time-critical-safe) sink.
+            self.feedCapturedAudio(audioData, sampleRate: Int32(finalSampleRate))
         }
 
         // Start the audio engine
         try engine.start()
         self.audioEngine = engine
         self.isListening = true
+    }
+
+    /// Sink for a single captured audio buffer.
+    ///
+    /// Called from the ``AVAudioEngine`` capture tap (a high-priority audio
+    /// thread), so it must return promptly and must never run transcription
+    /// inline, or the capture buffer overflows and audio is dropped (see
+    /// issue #196). The buffer is queued for a worker to transcribe and this
+    /// returns immediately.
+    internal func feedCapturedAudio(_ audioData: [Float], sampleRate: Int32) {
+        pendingLock.lock()
+        pendingChunks.append((audioData, sampleRate))
+        pendingLock.unlock()
+        audioQueue.async { [weak self] in
+            self?.drainPendingAudio()
+        }
+    }
+
+    /// Drain everything queued so far into the stream, running on ``audioQueue``.
+    ///
+    /// Consecutive chunks sharing a sample rate are concatenated so a backlog
+    /// (which builds while a slow transcription is running) is transcribed in a
+    /// single pass instead of once per chunk.
+    private func drainPendingAudio() {
+        pendingLock.lock()
+        let batch = pendingChunks
+        pendingChunks.removeAll(keepingCapacity: true)
+        pendingLock.unlock()
+        guard !batch.isEmpty else { return }
+
+        var runAudio: [Float] = []
+        var runRate: Int32? = nil
+        for chunk in batch {
+            if let rate = runRate, rate != chunk.sampleRate {
+                addRun(runAudio, sampleRate: rate)
+                runAudio.removeAll(keepingCapacity: true)
+            }
+            runAudio.append(contentsOf: chunk.audio)
+            runRate = chunk.sampleRate
+        }
+        if let rate = runRate {
+            addRun(runAudio, sampleRate: rate)
+        }
+    }
+
+    private func addRun(_ audioData: [Float], sampleRate: Int32) {
+        do {
+            try micStream.addAudio(audioData, sampleRate: sampleRate)
+        } catch {
+            print("MicTranscriber: Error adding audio to stream: \(error.localizedDescription)")
+        }
     }
 
     /// Stop listening to the microphone and stop transcription.
@@ -237,8 +317,21 @@ public class MicTranscriber {
             audioEngine = nil
         }
 
-        // Stop the stream
-        try micStream.stop()
+        // Drain any queued audio and run the final flush on the audio queue,
+        // so every stream call is serialized on one thread and no transcription
+        // is still running on a worker when we stop.
+        var flushError: Error?
+        audioQueue.sync {
+            self.drainPendingAudio()
+            do {
+                try self.micStream.stop()
+            } catch {
+                flushError = error
+            }
+        }
+        if let flushError {
+            throw flushError
+        }
 
         // Deactivate audio session (iOS/tvOS/watchOS only)
         #if os(iOS) || os(tvOS) || os(watchOS)
@@ -254,7 +347,7 @@ public class MicTranscriber {
             // Ignore errors during cleanup
         }
         micStream.close()
-        transcriber.close()
+        transcriber?.close()
     }
 
     /// Add an event listener to the stream.
