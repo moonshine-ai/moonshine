@@ -147,6 +147,19 @@ else()
 endif()
 list(APPEND MOONSHINE_SRC_FILES ${CPP_ANNOTE_SRC_FILES})
 
+# speaker-diarizer.cpp is first-party and must keep the project's warning
+# settings, but it includes the vendored Eigen headers. On ARM/NEON, GCC's
+# -Wclass-memaccess fires inside Eigen's PacketMath.h (memcpy of the non-trivial
+# Packet4c wrapper), which -Werror then turns into a build failure. Since we
+# must not edit third-party code, downgrade only that one diagnostic from an
+# error for this file, and only for GCC (Clang/MSVC don't define the flag). All
+# other warnings, including first-party class-memaccess misuse, still fail.
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set_source_files_properties(speaker-diarizer.cpp PROPERTIES
+        COMPILE_OPTIONS "-Wno-error=class-memaccess"
+    )
+endif()
+
 # Build as STATIC framework for iOS/Swift (shared frameworks cannot be embedded)
 # Build as SHARED library for other platforms
 if (NOT MOONSHINE_BUILD_SHARED AND (IOS OR MOONSHINE_BUILD_SWIFT OR WIN32))
