@@ -67,6 +67,8 @@ done < <(grep -rlI \
   --exclude=zipvoice-voices-data.cpp \
   --exclude=plda_vbx.cpp \
   --exclude=community1_cpp_annote_embedded.cpp \
+  --exclude=hindi-numbers.cpp \
+  --exclude=hindi.cpp \
   "$OLD_VERSION" .)
 for FILE in "${ACTUAL_FILES[@]}"; do
 	echo "Checking file '$FILE'"
