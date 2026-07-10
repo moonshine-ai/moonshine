@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -490,7 +491,10 @@ Ort::Session make_segmentation_session(Ort::Env &env,
                                        Ort::SessionOptions &opts,
                                        const std::string &path) {
   if (!path.empty()) {
-    return Ort::Session(env, path.c_str(), opts);
+    // path::c_str() yields ORTCHAR_T (wchar_t on Windows, char elsewhere), as
+    // required by the Ort::Session constructor.
+    const std::filesystem::path model_path = path;
+    return Ort::Session(env, model_path.c_str(), opts);
   }
   return Ort::Session(
       env, cppannote::embedded_community1::segmentation_ort_data,
@@ -500,7 +504,8 @@ Ort::Session make_segmentation_session(Ort::Env &env,
 std::unique_ptr<Ort::Session> make_embedding_session(
     Ort::Env &env, Ort::SessionOptions &opts, const std::string &path) {
   if (!path.empty()) {
-    return std::make_unique<Ort::Session>(env, path.c_str(), opts);
+    const std::filesystem::path model_path = path;
+    return std::make_unique<Ort::Session>(env, model_path.c_str(), opts);
   }
   return std::make_unique<Ort::Session>(
       env, cppannote::embedded_community1::embedding_ort_data,
