@@ -743,6 +743,9 @@ uv run -m moonshine_voice.transcriber --options='log_api_calls=true'
 
 If you want to debug into the library internals, or add instrumentation to help understand its operation, or add improvements or customizations, all of the source is available for you to build it for yourself.
 
+> [!TIP]
+> Because the project includes large files like models, this repository uses git lfs. If you clone the repo and don't have lfs already set up, you'll see compile errors like `moonshine/core/speaker-embedding-model-data.cpp:1:1: error: 'version' does not name a type`. This is because LFS files are replaced by small text files that point to the actual location of the stored data, and if your git isn't aware of LFS it will happily leave them that way. The basic fix is to make sure you have git-lfs installed through your favorite OS package manager, and then run `git lfs install` before trying a new clone.
+
 #### Cmake
 
 The core engine of the library is contained in the `core` folder of this repo. It's written in C++ with a C interface for easy integration with other languages. We use cmake to build on all our platforms, and so the easiest way to get started is something like this:
