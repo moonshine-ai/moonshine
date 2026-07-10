@@ -81,7 +81,10 @@ TEST_CASE("ort_append_execution_providers") {
 }
 
 TEST_CASE("ort session with execution providers") {
-  const char *model_path = "../test-assets/tiny-en/encoder_model.ort";
+  // path::c_str() yields ORTCHAR_T (wchar_t on Windows, char elsewhere), as
+  // required by OrtApi::CreateSession.
+  const std::filesystem::path model_path =
+      "../test-assets/tiny-en/encoder_model.ort";
   if (!std::filesystem::exists(model_path)) {
     return;
   }
@@ -99,7 +102,8 @@ TEST_CASE("ort session with execution providers") {
     REQUIRE(ort_append_execution_providers(api, opts, {"cpu"}, nullptr) ==
             nullptr);
     OrtSession *session = nullptr;
-    OrtStatus *status = api->CreateSession(env, model_path, opts, &session);
+    OrtStatus *status =
+        api->CreateSession(env, model_path.c_str(), opts, &session);
     CHECK(status == nullptr);
     if (session != nullptr) {
       api->ReleaseSession(session);
@@ -117,7 +121,8 @@ TEST_CASE("ort session with execution providers") {
     REQUIRE(ort_append_execution_providers(api, opts, {"coreml", "cpu"},
                                            nullptr) == nullptr);
     OrtSession *session = nullptr;
-    OrtStatus *status = api->CreateSession(env, model_path, opts, &session);
+    OrtStatus *status =
+        api->CreateSession(env, model_path.c_str(), opts, &session);
     CHECK(status == nullptr);
     if (session != nullptr) {
       api->ReleaseSession(session);
@@ -136,7 +141,8 @@ TEST_CASE("ort session with execution providers") {
     REQUIRE(ort_append_execution_providers(api, opts, {"nnapi", "cpu"},
                                            nullptr) == nullptr);
     OrtSession *session = nullptr;
-    OrtStatus *status = api->CreateSession(env, model_path, opts, &session);
+    OrtStatus *status =
+        api->CreateSession(env, model_path.c_str(), opts, &session);
     CHECK(status == nullptr);
     if (session != nullptr) {
       api->ReleaseSession(session);
