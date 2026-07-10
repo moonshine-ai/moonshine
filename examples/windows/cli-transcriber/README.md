@@ -8,7 +8,7 @@ The [GitHub release archive](https://github.com/moonshine-ai/moonshine/releases/
 
 Download and extract [windows-cli-transcriber.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/windows-cli-transcriber.tar.gz).
 
-If you're working from a git checkout instead, run `download-lib.bat` to fetch the library bundle separately, then download models with `pip install moonshine-voice` and `python -m moonshine_voice.download --language en`.
+If you're working from a git checkout instead, run `download-lib.bat` to fetch the library bundle separately, then download models with `pip install moonshine-voice` and `moonshine-voice download --stt --language en`.
 
 ## Building
 

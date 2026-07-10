@@ -37,21 +37,21 @@ Example apps for iOS, Android, macOS, Windows, and Raspberry Pi are published on
 <!-- doc-test: parse-only -->
 ```bash
 pip install moonshine-voice
-python -m moonshine_voice.mic_transcriber --language en
+moonshine-voice mic --language en
 ```
 
 Listens to the microphone and prints updates to the transcript as they come in.
 
 <!-- doc-test: parse-only -->
 ```bash
-python -m moonshine_voice.intent_recognizer
+moonshine-voice intent
 ```
 
 Listens for user-defined action phrases, like "Turn on the lights", using semantic matching so natural language variations are recognized. For more, check out [our "Getting Started" Colab notebook](https://bit.ly/moonshine-colab) and [video](https://www.youtube.com/watch?v=WH-AGvHmtoM).
 
 <!-- doc-test: parse-only -->
 ```bash
-python -m moonshine_voice.tts --language en_us --text "Hello world"
+moonshine-voice tts --language en_us --text "Hello world"
 ```
 
 Synthesizes and speaks the text.
@@ -97,7 +97,7 @@ You'll need a USB microphone plugged in to get audio input, but the Python pip p
 <!-- doc-test: skip -->
 ```bash
  sudo pip install --break-system-packages moonshine-voice
- python -m moonshine_voice.mic_transcriber --language en
+ moonshine-voice mic --language en
 ```
 
 I've recorded [a screencast on YouTube](https://www.youtube.com/watch?v=NNcqx1wFxl0) to help you get started, and you can also download [github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz) for some fun, Pi-specific examples. [The README](examples/raspberry-pi/my-dalek/README.md) has information about using a virtual environment for the Python install if you don't want to use `--break-system-packages`.
@@ -696,6 +696,26 @@ We distribute the library through the most widely-used package managers for each
 
 The Python package is [hosted on PyPi](https://pypi.org/project/moonshine-voice/), so all you should need to do to install it is `pip install moonshine-voice`, and then `import moonshine_voice` in your project.
 
+##### Command-line tools
+
+Installing the pip package adds a `moonshine-voice` command (with a shorter `moonshine` alias) that groups the built-in tools as subcommands:
+
+<!-- doc-test: parse-only -->
+```bash
+moonshine-voice --help
+```
+
+| Command | Description |
+| --- | --- |
+| `moonshine-voice mic` | Transcribe live microphone input to the terminal. |
+| `moonshine-voice transcribe` | Transcribe a WAV file (optionally with speaker IDs / word timestamps). |
+| `moonshine-voice tts` | Synthesize speech from text to a WAV file or audio device. |
+| `moonshine-voice intent` | Recognize spoken intents from the microphone or a WAV file. |
+| `moonshine-voice download` | Download STT, TTS, G2P, or intent model assets. |
+| `moonshine-voice g2p` | Convert text to phonemes (IPA). |
+
+Run `moonshine-voice <command> --help` for the options each one accepts. Every subcommand is equivalent to running the underlying module directly, so `moonshine-voice mic --language en` and `python -m moonshine_voice.mic_transcriber --language en` do exactly the same thing.
+
 #### iOS or MacOS
 
 For iOS we use the Swift Package Manager, with [an auto-updated GitHub repository](https://github.com/moonshine-ai/moonshine-swift/) holding each version. To use this right-click on the file view sidebar in Xcode and choose "Add Package Dependencies..." from the menu. A dialog should open up, paste `https://github.com/moonshine-ai/moonshine-swift/` into the top search box and you should see `moonshine-swift`. Select it and choose "Add Package", and it should be added to your project. You should now be able to `import MoonshineVoice` and use the library. You will need to add any model files you use to your app bundle and ensure they're copied during the deployment phase, so they can be accessed on-device.
@@ -725,7 +745,7 @@ The library is designed to help you understand what's going wrong when you hit a
 If no errors are being reported but the quality of the transcription isn't what you expect, it's worth ruling out an issue with the audio data that the transcriber is receiving. To make this easier, you can pass in the `save_input_wav_path` option when you create a transcriber. That will save any audio received into .wav files in the folder you specify. Here's a Python example:
 
 ```bash
-python -m moonshine_voice.transcriber --options='save_input_wav_path=.'
+moonshine-voice transcribe --options='save_input_wav_path=.'
 ```
 
 This will run test audio through a transcriber, and write out the audio it has received into an `input_1.wav` file in the current directory. If you're running multiple streams, you'll see `input_2.wav`, etc for each additional one. These wavs only contain the audio data from the latest session, and are overwritten after each one is started. Listening to these files should help you confirm that the input you're providing is as you expect it, and not distorted or corrupted.
@@ -780,14 +800,14 @@ If you want to call this library from a language we don't support, then you shou
 The easiest way to get the model files required for transcription is by using the Python download module. After [installing it](#python) run the downloader like this:
 
 ```bash
-python -m moonshine_voice.download --stt --language en
+moonshine-voice download --stt --language en
 ```
 
 You can use either the two-letter code or the English name for the `language` argument. If you want to see which languages are supported by your current version they're [listed below](#available-models), or you can supply a bogus language as the argument to this command:
 
 <!-- doc-test: expect-error -->
 ```bash
-python -m moonshine_voice.download --stt --language foo
+moonshine-voice download --stt --language foo
 ```
 
 You can also optionally request a specific model architecture using the `model-arch` flag, chosen from the numbers in [moonshine-c-api.h](/core/moonshine-c-api.h). If no architecture is set, the script will load the highest-quality model available.
@@ -811,7 +831,7 @@ The last two lines tell you which model architecture is being used, and where th
 The download module also helps you obtain the assets you need to recognize intent, primarily a sentence embedding model. 
 
 ```bash
-python -m moonshine_voice.download --intent
+moonshine-voice download --intent
 ```
 
 ```text
@@ -826,7 +846,7 @@ Embedding model path: /Users/petewarden/Library/Caches/moonshine_voice/download.
 A large variety of models, dictionaries and other files are needed for TTS, and these vary widely by language. You can use the download module to pull down exactly what you need for a particular language, and optionally a voice:
 
 ```bash
-python -m moonshine_voice.download --tts --root /tmp/tts-files/
+moonshine-voice download --tts --root /tmp/tts-files/
 ```
 
 ```text

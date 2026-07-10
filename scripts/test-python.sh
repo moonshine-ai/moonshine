@@ -1,8 +1,9 @@
 #!/bin/bash -ex
 
 # Runs the Python module tests (python/tests/test_modules.py), which drive
-# the __main__ sections of the most significant moonshine_voice modules
-# against a freshly built wheel.
+# the __main__ sections of the most significant moonshine_voice modules, and
+# the CLI tests (python/tests/test_cli.py), which exercise the installed
+# moonshine-voice console script, both against a freshly built wheel.
 #
 # Usage:
 #   ./scripts/test-python.sh                Build the wheel first, then test.
@@ -37,4 +38,4 @@ pip install --upgrade pip
 pip install "${WHEEL}"
 pip install -r "${PYTHON_DIR}/tests/requirements.txt"
 
-pytest -v "${PYTHON_DIR}/tests/test_modules.py"
+pytest -v "${PYTHON_DIR}/tests/test_modules.py" "${PYTHON_DIR}/tests/test_cli.py"

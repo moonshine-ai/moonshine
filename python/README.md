@@ -14,8 +14,15 @@ pip install moonshine-voice
 ```bash
 # Listens to the microphone, logging to the console when there are 
 # speech updates.
-python -m moonshine_voice.mic_transcriber
+moonshine-voice mic
 ```
+
+Installing the package adds a `moonshine-voice` command (with a shorter
+`moonshine` alias) that groups the built-in tools as subcommands: `mic`,
+`transcribe`, `tts`, `intent`, `download`, and `g2p`. Run
+`moonshine-voice --help`, or `moonshine-voice <command> --help` for a specific
+tool. Each subcommand is equivalent to `python -m moonshine_voice.<module>`, so
+either invocation style works.
 
 ## Example
 

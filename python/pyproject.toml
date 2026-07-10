@@ -32,6 +32,10 @@ classifiers = [
     "Topic :: Multimedia :: Sound/Audio :: Speech",
 ]
 
+[project.scripts]
+moonshine-voice = "moonshine_voice.cli:main"
+moonshine = "moonshine_voice.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/moonshine-ai/moonshine"
 Documentation = "https://github.com/moonshine-ai/moonshine"
