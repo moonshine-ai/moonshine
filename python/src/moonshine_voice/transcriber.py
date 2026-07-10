@@ -847,8 +847,8 @@ if __name__ == "__main__":
                 )
 
         def on_line_completed(self, event: LineCompleted):
-            if args.quiet:
-                return
+            # Completed lines are always printed; --quiet only silences the
+            # noisy per-chunk progress messages above, not the final output.
             if args.speaker_ids and event.line.speaker_spans:
                 for row in format_line_by_speaker_spans(event.line):
                     print(row, file=sys.stderr)
