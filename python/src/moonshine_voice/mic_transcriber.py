@@ -8,8 +8,10 @@ from moonshine_voice.transcriber import (
 from moonshine_voice.utils import get_model_path
 
 import numpy as np
+import queue
 import sounddevice as sd
 import sys
+import threading
 import time
 from typing import Callable, Optional
 
@@ -45,6 +47,15 @@ class MicTranscriber:
         self._samplerate = samplerate
         self._channels = channels
         self._blocksize = blocksize
+        # Audio captured on the PortAudio callback is handed to a worker
+        # thread through this queue. Transcription (which can block for
+        # hundreds of milliseconds per update, e.g. on a Raspberry Pi) must
+        # never run on the time-critical capture callback, or PortAudio
+        # reports input overflows (see issue #196).
+        self._audio_queue: "queue.Queue" = queue.Queue()
+        self._worker_thread: Optional[threading.Thread] = None
+        # Sentinel pushed onto the queue to tell the worker to drain and exit.
+        self._worker_stop = object()
 
     def _query_device_default_samplerate(self) -> Optional[int]:
         """Return the input device's native default sample rate, or None on failure.
@@ -89,9 +100,12 @@ class MicTranscriber:
             if in_data is not None:
                 # Flatten and convert to float32 if needed
                 audio_data = in_data.astype(np.float32).flatten()
-                # The Moonshine C API resamples to its internal 16 kHz, so we
-                # pass whatever rate the device is actually capturing at.
-                self.mic_stream.add_audio(audio_data, self._samplerate)
+                # Hand the audio to the worker thread and return immediately.
+                # The C API resamples to its internal 16 kHz, so we pass
+                # whatever rate the device is actually capturing at. Queueing
+                # is non-blocking, keeping this callback safe to run on the
+                # time-critical PortAudio thread.
+                self._audio_queue.put((audio_data, self._samplerate))
 
         try:
             self._sd_stream = self._open_input_stream(self._samplerate, audio_callback)
@@ -111,17 +125,97 @@ class MicTranscriber:
             self._sd_stream = self._open_input_stream(self._samplerate, audio_callback)
         self._sd_stream.start()
 
+    def _process_audio_queue(self):
+        """Drain queued audio into the stream from a dedicated worker thread.
+
+        The blocking ``update_transcription`` that ``Stream.add_audio``
+        triggers every ``update_interval`` runs here instead of on the
+        PortAudio capture callback, so audio capture is never stalled by
+        inference (see issue #196).
+
+        Whenever the worker wakes it consumes everything currently waiting on
+        the queue and hands it to ``add_audio`` in as few calls as possible
+        (one per run of chunks sharing a sample rate). Coalescing a backlog
+        this way means a single transcription pass instead of one per chunk,
+        which lowers latency and avoids redundant work when the worker falls
+        behind.
+        """
+        while True:
+            item = self._audio_queue.get()
+            if item is self._worker_stop:
+                break
+            batch = [item]
+            stop_requested = False
+            # Grab anything else already waiting without blocking.
+            while True:
+                try:
+                    queued = self._audio_queue.get_nowait()
+                except queue.Empty:
+                    break
+                if queued is self._worker_stop:
+                    stop_requested = True
+                    break
+                batch.append(queued)
+            self._add_batch(batch)
+            if stop_requested:
+                break
+
+    def _add_batch(self, batch):
+        """Concatenate consecutive same-sample-rate chunks and add each run once."""
+        run_chunks = []
+        run_rate = None
+        for audio_data, sample_rate in batch:
+            if run_chunks and sample_rate != run_rate:
+                self._add_run(run_chunks, run_rate)
+                run_chunks = []
+            run_chunks.append(audio_data)
+            run_rate = sample_rate
+        if run_chunks:
+            self._add_run(run_chunks, run_rate)
+
+    def _add_run(self, chunks, sample_rate):
+        audio_data = chunks[0] if len(chunks) == 1 else np.concatenate(chunks)
+        try:
+            self.mic_stream.add_audio(audio_data, sample_rate)
+        except Exception as e:
+            print(
+                f"MicTranscriber: error transcribing audio: {e}",
+                file=sys.stderr,
+            )
+
+    def _start_worker(self):
+        if self._worker_thread is None:
+            self._worker_thread = threading.Thread(
+                target=self._process_audio_queue,
+                name="MicTranscriberWorker",
+                daemon=True,
+            )
+            self._worker_thread.start()
+
+    def _stop_worker(self):
+        """Signal the worker to drain the queue and exit, then join it."""
+        if self._worker_thread is not None:
+            self._audio_queue.put(self._worker_stop)
+            self._worker_thread.join()
+            self._worker_thread = None
+
     def start(self):
         self.mic_stream.start()
+        self._start_worker()
         if self._sd_stream is None:
             self._start_listening()
         self._should_listen = True
 
     def stop(self):
         self._should_listen = False
+        # Let the worker finish transcribing any queued audio, then join it
+        # before flushing the stream so the final transcript is complete.
+        self._stop_worker()
         self.mic_stream.stop()
 
     def close(self):
+        self._should_listen = False
+        self._stop_worker()
         self.mic_stream.close()
         self.transcriber.close()
 
