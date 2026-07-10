@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 
-set VERSION=0.0.65
+set VERSION=0.0.66
 set REPO=moonshine-ai/moonshine
 
 set "SCRIPTS_DIR=%~dp0"

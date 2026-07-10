@@ -42,6 +42,7 @@ done < <(grep -rlI \
   --exclude-dir=.build \
   --exclude-dir=.cxx \
   --exclude-dir=third-party \
+  --exclude-dir=artifacts \
   --exclude=Package.resolved \
   --exclude=uv.lock \
   --exclude=PKG-INFO \
@@ -64,6 +65,8 @@ done < <(grep -rlI \
   --exclude=vad_mel_tables.cc \
   --exclude=mel_tables.cc \
   --exclude=zipvoice-voices-data.cpp \
+  --exclude=plda_vbx.cpp \
+  --exclude=community1_cpp_annote_embedded.cpp \
   "$OLD_VERSION" .)
 for FILE in "${ACTUAL_FILES[@]}"; do
 	echo "Checking file '$FILE'"

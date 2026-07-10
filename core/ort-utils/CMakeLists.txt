@@ -47,6 +47,15 @@ target_link_libraries(ort-utils PUBLIC
     moonshine-utils
     ${ONNXRUNTIME_LIB_PATH}
 )
+# The static ONNX Runtime library on Apple platforms pulls in the CoreML
+# execution provider, which depends on these system frameworks. Propagate the
+# requirement publicly so every consumer of ort-utils links them too.
+if(APPLE AND ONNXRUNTIME_LIB_PATH MATCHES "\\.a$")
+  target_link_libraries(ort-utils PUBLIC
+    "-framework CoreFoundation"
+    "-framework Foundation"
+  )
+endif()
 # add_custom_command(TARGET ort-utils POST_BUILD
 # COMMAND ${CMAKE_COMMAND} -E echo "Merging static libraries into framework..."
 # COMMAND libtool -static -o "$<TARGET_FILE:ort-utils>.merged"
@@ -62,6 +71,13 @@ target_link_libraries(ort-utils PUBLIC
     moonshine-utils
     ${ONNXRUNTIME_LIB_PATH}
 )
+# See note above: static ONNX Runtime on Apple needs these frameworks.
+if(APPLE AND ONNXRUNTIME_LIB_PATH MATCHES "\\.a$")
+  target_link_libraries(ort-utils PUBLIC
+    "-framework CoreFoundation"
+    "-framework Foundation"
+  )
+endif()
 endif()
 
 add_executable(ort-utils-test ort-utils-test.cpp)
@@ -89,10 +105,3 @@ target_include_directories(ort-utils-ep-test PRIVATE
 target_link_libraries(ort-utils-ep-test PRIVATE
     ort-utils
 )
-
-if(APPLE AND ONNXRUNTIME_LIB_PATH MATCHES "\\.a$")
-  target_link_libraries(ort-utils-ep-test PRIVATE
-    "-framework CoreFoundation"
-    "-framework Foundation"
-  )
-endif()
