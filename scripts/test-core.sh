@@ -19,6 +19,7 @@ export LD_LIBRARY_PATH=${REPO_ROOT_DIR}/core/third-party/onnxruntime/lib/linux/x
 ${REPO_ROOT_DIR}/core/bin-tokenizer/build/bin-tokenizer-test
 ${REPO_ROOT_DIR}/core/third-party/onnxruntime/build/onnxruntime-test
 ${REPO_ROOT_DIR}/core/moonshine-utils/build/debug-utils-test
+${REPO_ROOT_DIR}/core/moonshine-utils/build/file-utils-test
 ${REPO_ROOT_DIR}/core/moonshine-utils/build/string-utils-test
 ${REPO_ROOT_DIR}/core/ort-utils/build/ort-utils-ep-test
 ${REPO_ROOT_DIR}/core/build/resampler-test

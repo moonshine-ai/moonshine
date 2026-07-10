@@ -371,9 +371,11 @@ target_link_libraries(moonshine-cpp-test PRIVATE
 add_executable(benchmark benchmark.cpp)
 target_include_directories(benchmark PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
+    ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
 )
 target_link_libraries(benchmark PRIVATE
     moonshine
+    moonshine-utils
 )
 
 # Windows DLLs don't export all symbols by default and so tests that rely on them
@@ -616,7 +618,7 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
         ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
         ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
     )
-    target_link_libraries(word-alignment-benchmark PRIVATE moonshine)
+    target_link_libraries(word-alignment-benchmark PRIVATE moonshine moonshine-utils)
 
     add_executable(intent-recognizer-test intent-recognizer-test.cpp intent-recognizer.cpp gemma-embedding-model.cpp)
     set_target_properties(intent-recognizer-test PROPERTIES

@@ -6,6 +6,7 @@
 #include <stdexcept>
 
 #include "debug-utils.h"
+#include "file-utils.h"
 #include "string-utils.h"
 
 BinTokenizer::BinTokenizer(const char *tokenizer_path,
@@ -32,11 +33,11 @@ BinTokenizer::BinTokenizer(const char *tokenizer_path,
       byte_count = first_byte;
     } else {
       uint8_t second_byte;
-      std::fread(&second_byte, 1, 1, file);
+      fread_exact(&second_byte, 1, 1, file, "tokenizer length byte");
       byte_count = (second_byte * 128) + first_byte - 128;
     }
     std::vector<uint8_t> bytes(byte_count);
-    std::fread(bytes.data(), 1, byte_count, file);
+    fread_exact(bytes.data(), 1, byte_count, file, "tokenizer token bytes");
     tokens_to_bytes.push_back(bytes);
   }
   std::fclose(file);
