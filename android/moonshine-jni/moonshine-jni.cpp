@@ -80,7 +80,10 @@ static std::unique_ptr<transcript_t> c_transcript_from_jobject(
   for (int i = 0; i < lineCount; i++) {
     jobject line = env->CallObjectMethod(linesList, getMethod, i);
     jstring text = (jstring)env->GetObjectField(line, textField);
-    transcript->lines[i].text = env->GetStringUTFChars(text, nullptr);
+    // Mirror the C→Java direction: a null Java String stays null on the C side
+    // rather than being fed to GetStringUTFChars (which is undefined for null).
+    transcript->lines[i].text =
+        (text != nullptr) ? env->GetStringUTFChars(text, nullptr) : nullptr;
     jfloatArray audioData =
         (jfloatArray)env->GetObjectField(line, audioDataField);
     transcript->lines[i].audio_data =
@@ -131,10 +134,16 @@ static jobject c_transcript_to_jobject(JNIEnv *env, struct transcript_t *transcr
   for (size_t i = 0; i < transcript->line_count; i++) {
     transcript_line_t *line = &transcript->lines[i];
     jobject jline = env->NewObject(lineClass, lineConstructor);
-    std::string raw_text(line->text ? line->text : "");
-    std::string sanitized_text = utf8::replace_invalid(raw_text);
-    env->SetObjectField(jline, textField,
-                        env->NewStringUTF(sanitized_text.c_str()));
+    // Preserve the native null/non-null text distinction: a null line->text
+    // (e.g. skip_transcription, or a line with no text yet) must map to a null
+    // Java String, not "". The C API contract (see moonshine-c-api-test.cpp) is
+    // that text is null when there is no transcription, and the Java bindings
+    // must mirror that. Leaving the field unset keeps its null default.
+    if (line->text != nullptr) {
+      std::string sanitized_text = utf8::replace_invalid(line->text);
+      env->SetObjectField(jline, textField,
+                          env->NewStringUTF(sanitized_text.c_str()));
+    }
     jfloatArray audioDataArray = env->NewFloatArray(line->audio_data_count);
     env->SetFloatArrayRegion(audioDataArray, 0, line->audio_data_count,
                              line->audio_data);
