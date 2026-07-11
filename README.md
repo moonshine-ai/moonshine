@@ -942,6 +942,7 @@ Moonshine Voice is based on a family of speech to text models created by the tea
 
  - [Papers](#papers)
  - [Available Models](#available-models)
+ - [Accuracy (Word Error Rate)](#accuracy-word-error-rate)
  - [Domain Customization](#domain-customization)
  - [Quantization](#quantization)
  - [HuggingFace](#huggingface)
@@ -977,6 +978,86 @@ Here are the models currently available. See [Downloading Models](#downloading-m
 The English evaluations were done using the [HuggingFace OpenASR Leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard) datasets and methodology. The other languages were evaluated using the FLEURS dataset and the [`scripts/eval-model-accuracy`](scripts/eval-model-accuracy.py) script, with the character or word error rate chosen per language.
 
 One common issue to watch out for if you're using models that don't use the Latin alphabet (so any languages except English and Spanish) is that you'll need to set the [`max_tokens_per_second` option](#transcriber-options) to 13.0 when you create the transcriber. This is because the most common pattern for hallucinations is endlessly repeating the last few words, and our heuristic to detect this is to check if there's an unusually high number of tokens for the duration of a segment. Unfortunately the base number of tokens per second for non-Latin languages is much higher than for English, thanks to how we're tokenizing, so you have to manually set the threshold higher to avoid cutting off valid outputs.
+
+### Accuracy (Word Error Rate)
+
+Beyond knowing which models are available, you'll often want to understand how
+accurate they are and how to reproduce the numbers yourself. The
+[`scripts/eval-librispeech.py`](scripts/eval-librispeech.py) script measures Word
+Error Rate (WER) on the LibriSpeech `test-clean` set using the same dataset and
+[Open ASR Leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard)
+methodology (corpus-level WER with the Whisper English text normalizer) reported
+in our [Moonshine v2 paper](https://arxiv.org/abs/2602.12241).
+
+There's an important subtlety here that can be confusing: **the WER numbers
+in the paper were measured with the floating-point models running in the Hugging
+Face Transformers library, not the quantized models this framework ships.** As the
+paper notes in section 4.1.2, we use the Transformers implementation to measure
+accuracy and our own C++/ONNX library to measure latency. The models you download
+here are 8-bit quantized `.ort` files chosen for on-device speed and size, so they
+trade a little accuracy for a lot of portability.
+
+The table below shows LibriSpeech `test-clean` WER for all three streaming models,
+comparing the paper's floating-point reference against the quantized models this
+library ships. All numbers use whole-utterance (non-streaming) transcription with
+the VAD disabled, so they're a like-for-like comparison of raw model accuracy.
+
+| Model            | Paper (float) | Reproduced float (HF Transformers) | Shipped quantized model (this library) |
+| ---------------- | ------------- | ---------------------------------- | -------------------------------------- |
+| Tiny Streaming   | 4.49%         | 4.52%                              | 7.57%                                  |
+| Small Streaming  | 2.49%         | 2.55%                              | 3.03%                                  |
+| Medium Streaming | 2.08%         | 2.16%                              | 2.37%                                  |
+
+#### Reproducing these numbers
+
+The evaluation script downloads the dataset and models for you. Install the
+dependencies and run it:
+
+<!-- doc-test: skip -->
+```bash
+# Core dependencies for evaluating the shipped (quantized) models.
+pip install moonshine-voice datasets soundfile scipy jiwer openai-whisper
+
+# Evaluate a shipped quantized model on LibriSpeech test-clean (VAD disabled).
+python scripts/eval-librispeech.py --backend moonshine_c --model-arch tiny_streaming
+python scripts/eval-librispeech.py --backend moonshine_c --model-arch small_streaming
+python scripts/eval-librispeech.py --backend moonshine_c --model-arch medium_streaming
+```
+
+To reproduce the paper's floating-point reference numbers you also need a recent
+version of Transformers (the streaming models were added in Transformers 5.x) and
+PyTorch, then pass `--backend hf`:
+
+<!-- doc-test: skip -->
+```bash
+pip install "transformers>=5.13" torch
+python scripts/eval-librispeech.py --backend hf --model-arch tiny_streaming
+```
+
+The script disables the VAD by default (`vad_threshold=0` plus a very large
+`vad_max_segment_duration`) because the LibriSpeech clips are already single
+utterances, so any VAD segmentation only adds errors. Pass `--enable-vad` to see
+the effect of the segmenter, or `--backend moonshine_c_streaming` to measure the
+chunked, real-time streaming path instead of whole-utterance transcription. Use
+`--limit N` for a quick smoke test on the first `N` clips.
+
+#### Takeaways
+
+- **Quantization is the main reason the shipped models don't hit the paper's
+  numbers, and its impact shrinks quickly with model size.** The 8-bit penalty is
+  about +3.0% WER on Tiny (which has the least redundancy to spare), but only
+  +0.5% on Small and +0.2% on Medium. If you need Tiny to be as accurate as
+  possible, run the floating-point checkpoint from Hugging Face in Transformers; Small and Medium
+  are within a few tenths of a percent as shipped.
+- **Disable the VAD when evaluating pre-segmented data.** On already-segmented
+  clips like LibriSpeech, leaving the default VAD enabled adds roughly +1.5–2%
+  WER on Tiny (mostly extra insertions at segment boundaries). The VAD is there to
+  chop up continuous live audio, not clean single utterances.
+- **Watch which number you're comparing against.** The per-model WER in the
+  [Available Models](#available-models) table is the Open ASR Leaderboard *average*
+  across eight datasets (e.g. 12.0% for Tiny Streaming), which is much higher than
+  the LibriSpeech-clean-only number (4.49%). Make sure you're comparing the same
+  benchmark.
 
 ### Domain Customization
 
