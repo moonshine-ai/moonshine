@@ -977,6 +977,8 @@ Here are the models currently available. See [Downloading Models](#downloading-m
 
 The English evaluations were done using the [HuggingFace OpenASR Leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard) datasets and methodology. The other languages were evaluated using the FLEURS dataset and the [`scripts/eval-model-accuracy`](scripts/eval-model-accuracy.py) script, with the character or word error rate chosen per language.
 
+Note that the English WER figures above are the Open ASR Leaderboard *average* across eight datasets, measured on the floating-point reference models. The quantized models this library actually ships score a little higher, especially at the Tiny size. See [Accuracy (Word Error Rate)](#accuracy-word-error-rate) below for a float-vs-quantized comparison and instructions on reproducing the numbers.
+
 One common issue to watch out for if you're using models that don't use the Latin alphabet (so any languages except English and Spanish) is that you'll need to set the [`max_tokens_per_second` option](#transcriber-options) to 13.0 when you create the transcriber. This is because the most common pattern for hallucinations is endlessly repeating the last few words, and our heuristic to detect this is to check if there's an unusually high number of tokens for the duration of a segment. Unfortunately the base number of tokens per second for non-Latin languages is much higher than for English, thanks to how we're tokenizing, so you have to manually set the threshold higher to avoid cutting off valid outputs.
 
 ### Accuracy (Word Error Rate)
@@ -1055,9 +1057,9 @@ chunked, real-time streaming path instead of whole-utterance transcription. Use
   chop up continuous live audio, not clean single utterances.
 - **Watch which number you're comparing against.** The per-model WER in the
   [Available Models](#available-models) table is the Open ASR Leaderboard *average*
-  across eight datasets (e.g. 12.0% for Tiny Streaming), which is much higher than
-  the LibriSpeech-clean-only number (4.49%). Make sure you're comparing the same
-  benchmark.
+  across eight datasets (12.00% for Tiny Streaming, 7.84% for Small Streaming, and
+  6.65% for Medium Streaming), which is much higher than the LibriSpeech-clean-only
+  numbers above. Make sure you're comparing the same benchmark.
 
 ### Domain Customization
 
