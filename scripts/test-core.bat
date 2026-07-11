@@ -36,7 +36,10 @@ mkdir "!BUILD_DIR!"
 cd /d "!BUILD_DIR!"
 
 set "BUILD_TYPE=Debug"
-cmake ..
+REM Pin to the VS2022 (v143) toolset so the tests exercise the same toolchain we
+REM ship to users, even when a newer Visual Studio (e.g. VS2026/v145) is also
+REM installed on the box. See github.com/moonshine-ai/moonshine/issues/125.
+cmake .. -G "Visual Studio 17 2022" -A x64 -T v143
 cmake --build . --config !BUILD_TYPE!
 
 cd /d "!REPO_ROOT_DIR!\test-assets"

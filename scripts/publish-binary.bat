@@ -21,7 +21,13 @@ REM Clean and create build directory
 if exist !BUILD_DIR! rmdir /s /q !BUILD_DIR!
 if not exist !BUILD_DIR! mkdir !BUILD_DIR!
 cd /d !BUILD_DIR!
-cmake ..
+REM Pin the redistributed libraries to the VS2022 (v143) toolset. The release
+REM box may also have a newer Visual Studio (e.g. VS2026/v145) installed, whose
+REM STL emits calls to helpers (__std_find_first_not_of_trivial_pos_1, etc.)
+REM that older VS2022 installs don't provide, producing LNK2001 unresolved
+REM externals for consumers. Building with v143 keeps the shipped .libs
+REM linkable by VS2022 users. See github.com/moonshine-ai/moonshine/issues/125.
+cmake .. -G "Visual Studio 17 2022" -A x64 -T v143
 cmake --build . --config Release --target clean
 cmake --build . --config Release
 
