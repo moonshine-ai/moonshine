@@ -36,9 +36,24 @@ if errorlevel 1 exit /b 1
 :build_example
 echo [test-examples] Building cli-transcriber (Release^|x64)...
 cd /d "!EXAMPLE_DIR!"
-msbuild cli-transcriber.sln /t:Clean /p:Configuration=Release /p:Platform=x64 /nologo
+
+REM Resolve MSBuild from the VS2022 (v143) install via vswhere so this works in a
+REM plain shell (e.g. over SSH), not just a Developer Command Prompt, and so the
+REM example links against the same toolset we ship the libraries with. The
+REM version range pins VS2022 (17.x); v145/VS2026 STL requires helper symbols that
+REM older VS2022 consumers lack. See github.com/moonshine-ai/moonshine/issues/125.
+set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+set "MSBUILD="
+set "MSBUILD_LIST=%TEMP%\moonshine-msbuild-%RANDOM%.txt"
+if exist "!VSWHERE!" "!VSWHERE!" -products * -version "[17.0,18.0)" -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe > "!MSBUILD_LIST!" 2>nul
+if exist "!MSBUILD_LIST!" set /p MSBUILD=<"!MSBUILD_LIST!"
+if exist "!MSBUILD_LIST!" del "!MSBUILD_LIST!" 2>nul
+if not defined MSBUILD set "MSBUILD=msbuild"
+echo [test-examples] Using MSBuild: !MSBUILD!
+
+"!MSBUILD!" cli-transcriber.sln /t:Clean /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143 /nologo
 if errorlevel 1 goto fail
-msbuild cli-transcriber.sln /p:Configuration=Release /p:Platform=x64 /nologo
+"!MSBUILD!" cli-transcriber.sln /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143 /nologo
 if errorlevel 1 goto fail
 
 if not exist "models\medium-streaming-en\streaming_config.json" (
