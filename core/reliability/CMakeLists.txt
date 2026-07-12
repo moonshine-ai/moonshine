@@ -32,6 +32,7 @@ moonshine_add_fuzzer(fuzz_bin_tokenizer
     ${CORE_DIR}/bin-tokenizer/bin-tokenizer.cpp
     ${CORE_DIR}/moonshine-utils/string-utils.cpp
     ${CORE_DIR}/moonshine-utils/debug-utils.cpp
+    ${CORE_DIR}/moonshine-utils/file-utils.cpp
 )
 target_include_directories(fuzz_bin_tokenizer PRIVATE
     ${CORE_DIR}/bin-tokenizer
