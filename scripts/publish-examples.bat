@@ -73,7 +73,11 @@ if /I "%~1"=="upload" (
   if errorlevel 1 (
     gh release create v!VERSION! --title "v!VERSION!" --notes "Release v!VERSION!"
   )
-  gh release upload v!VERSION! !TAR_NAME! --clobber
+  REM gh release upload has no client-side timeout, so a stalled connection
+  REM to GitHub can hang the release forever. Wrap it with a per-attempt
+  REM timeout + retry helper. See scripts/gh-upload-retry.ps1.
+  powershell -NoProfile -ExecutionPolicy Bypass -File "!SCRIPTS_DIR!\gh-upload-retry.ps1" -Version !VERSION! -Asset "!TAR_NAME!"
+  if errorlevel 1 exit /b 1
 )
 
 echo [publish-examples] Windows example archive ready: !TAR_NAME!
