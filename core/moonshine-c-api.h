@@ -859,6 +859,63 @@ MOONSHINE_EXPORT int32_t moonshine_get_tts_voices(
     const char *languages, const struct moonshine_option_t *options,
     uint64_t options_count, char **out_voices_json);
 
+/* ------------------------------ MODEL DOWNLOAD MANIFESTS ----------------- */
+
+/* Returns the download manifest for a speech-to-text transcription model as a
+   JSON object. This lets language bindings and applications fetch exactly the
+   files a model needs from the CDN (https://download.moonshine.ai) without
+   hardcoding the file layout, then load the model from the resulting
+   directory with moonshine_load_transcriber_from_files.
+
+   ``language`` is a language code (for example ``"en"``) or English name (for
+   example ``"English"``); it must not be empty.
+
+   ``options`` / ``options_count`` recognize:
+     - ``model_arch``: one of the MOONSHINE_MODEL_ARCH_* constants as a decimal
+       string. When omitted, the default (first) model for the language is
+       used.
+     - ``include_spelling`` (bool): when true and a spelling model is published
+       for the language, its files are appended as an extra group. Defaults to
+       false.
+   Other options are ignored.
+
+   On success, writes a NUL-terminated JSON object to
+   ``*out_dependencies_json`` and returns ``MOONSHINE_ERROR_NONE``. The shape
+   is:
+     ``{"groups":[{"base_url":"https://download.moonshine.ai/model/tiny-en/quantized/tiny-en","files":["encoder_model.ort","decoder_model_merged.ort","tokenizer.bin","decoder_with_attention.ort"]}]}``
+   Download each file from ``base_url + "/" + file``. A model is a single
+   group, plus an optional second group for the spelling model (which uses a
+   different ``base_url``). The buffer is allocated with ``malloc``; release it
+   with ``free``. On failure (empty/unknown language, or an unknown
+   language+arch pair) returns a non-zero error code and sets
+   ``*out_dependencies_json`` to NULL. */
+MOONSHINE_EXPORT int32_t moonshine_get_stt_dependencies(
+    const char *language, const struct moonshine_option_t *options,
+    uint64_t options_count, char **out_dependencies_json);
+
+/* Returns the download manifest for an intent-recognition embedding model as a
+   JSON object with the same shape as moonshine_get_stt_dependencies. Load the
+   downloaded directory with moonshine_create_intent_recognizer.
+
+   ``model_name`` is an embedding model id (for example
+   ``"embeddinggemma-300m"``); pass NULL or an empty string to use the default
+   model.
+
+   ``options`` / ``options_count`` recognize ``variant`` (aliases:
+   ``model_variant``): one of ``"q4"``, ``"q8"``, ``"fp16"``, ``"fp32"``, or
+   ``"q4f16"``. When omitted, the model's default variant is used. Other
+   options are ignored. The manifest includes the model's external-data sidecar
+   (``model*.onnx_data``) alongside the ``.onnx`` file and ``tokenizer.bin``.
+
+   On success, writes a NUL-terminated JSON object to
+   ``*out_dependencies_json`` (single group) and returns
+   ``MOONSHINE_ERROR_NONE``; free with ``free``. On failure (unknown model or
+   variant) returns a non-zero error code and sets ``*out_dependencies_json``
+   to NULL. */
+MOONSHINE_EXPORT int32_t moonshine_get_intent_dependencies(
+    const char *model_name, const struct moonshine_option_t *options,
+    uint64_t options_count, char **out_dependencies_json);
+
 /* Synthesizes text to speech.
    ``options`` / ``options_count``: optional per-call overrides using the same
    ``name`` / ``value`` convention as the synthesizer constructor. Currently
