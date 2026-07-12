@@ -82,6 +82,7 @@ endif()
 
 set(MOONSHINE_SRC_FILES
     moonshine-c-api.cpp
+    moonshine-model-catalog.cpp
     cosine-distance.cpp
     moonshine-model.cpp
     moonshine-streaming-model.cpp
@@ -372,6 +373,34 @@ if (IOS OR MOONSHINE_BUILD_SWIFT)
 endif()
 target_link_libraries(moonshine-c-api-memory-test PRIVATE
     moonshine
+)
+
+# Download smoke tool: resolves model download manifests via the C API and
+# loads+runs each engine from a directory of freshly downloaded files. Driven by
+# scripts/test-model-downloads.sh (network-dependent, so it is NOT part of the
+# hermetic scripts/test-core.sh run). Links moonshine-utils for load_wav_data.
+add_executable(moonshine-download-smoke moonshine-download-smoke.cpp)
+set_target_properties(moonshine-download-smoke PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED YES
+    CXX_EXTENSIONS NO
+)
+target_include_directories(moonshine-download-smoke PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}
+    ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+    ${CMAKE_CURRENT_LIST_DIR}/third-party
+)
+if (IOS OR MOONSHINE_BUILD_SWIFT)
+    set_target_properties(moonshine-download-smoke PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.moonshine-download-smoke"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+    )
+endif()
+target_link_libraries(moonshine-download-smoke PRIVATE
+    moonshine
+    moonshine-utils
 )
 
 # Repeated-use TTS memory-growth regression test (Kokoro / Piper / ZipVoice).

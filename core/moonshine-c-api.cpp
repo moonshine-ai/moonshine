@@ -56,6 +56,7 @@ SOFTWARE.
 #include "intent-recognizer.h"
 #include "moonshine-asset-catalog.h"
 #include "moonshine-g2p.h"
+#include "moonshine-model-catalog.h"
 #include "moonshine-model.h"
 #include "moonshine-ort-allocator.h"
 #include "moonshine-tensor-view.h"
@@ -1170,6 +1171,27 @@ std::string json_flat_string_array(const std::vector<std::string> &items) {
   return o;
 }
 
+// Serializes a model download manifest as a JSON object with a "groups" array.
+// Each group is { "base_url": "...", "files": ["a", "b", ...] }. Consumers
+// download `base_url + "/" + file` for every file. STT models emit a single
+// group (plus an optional spelling group); embedding models emit one group.
+std::string json_model_dependencies(const moonshine::ModelDependencies &deps) {
+  std::string o = "{\"groups\":[";
+  for (size_t i = 0; i < deps.groups.size(); ++i) {
+    if (i > 0) {
+      o.push_back(',');
+    }
+    const moonshine::ModelDependencyGroup &group = deps.groups[i];
+    o += "{\"base_url\":";
+    o += json_utf8_string_literal(group.base_url);
+    o += ",\"files\":";
+    o += json_flat_string_array(group.files);
+    o += "}";
+  }
+  o += "]}";
+  return o;
+}
+
 std::string json_tts_voice_entry(
     const moonshine_tts::MoonshineTtsVoiceAvailability &v) {
   std::string o = "{\"id\":";
@@ -1552,6 +1574,150 @@ int32_t moonshine_get_tts_voices(const char *languages,
     return MOONSHINE_ERROR_NONE;
   } catch (const std::exception &e) {
     LOGF("moonshine_get_tts_voices failed: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+/* ------------------------------ MODEL CATALOG --------------------------- */
+
+namespace {
+
+std::string normalize_option_key(const char *name) {
+  if (name == nullptr) {
+    return std::string();
+  }
+  return replace_all(to_lowercase(std::string(name)), "-", "_");
+}
+
+// Parses an integer option value; returns std::nullopt on empty/invalid input.
+std::optional<int32_t> parse_int_option(const std::string &value) {
+  const std::string t = trim(value);
+  if (t.empty()) {
+    return std::nullopt;
+  }
+  try {
+    size_t consumed = 0;
+    const long parsed = std::stol(t, &consumed, 10);
+    if (consumed != t.size()) {
+      return std::nullopt;
+    }
+    return static_cast<int32_t>(parsed);
+  } catch (const std::exception &) {
+    return std::nullopt;
+  }
+}
+
+}  // namespace
+
+int32_t moonshine_get_stt_dependencies(const char *language,
+                                       const moonshine_option_t *options,
+                                       uint64_t options_count,
+                                       char **out_dependencies_json) {
+  if (out_dependencies_json == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  if (options_count > 0 && options == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  *out_dependencies_json = nullptr;
+  const std::string language_str =
+      language != nullptr ? std::string(language) : std::string();
+  if (trim(language_str).empty()) {
+    LOGF("moonshine_get_stt_dependencies: language must not be empty%s\n", "");
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  try {
+    std::optional<int32_t> model_arch;
+    bool include_spelling = false;
+    for (uint64_t i = 0; i < options_count; ++i) {
+      const std::string key = normalize_option_key(options[i].name);
+      const std::string value =
+          options[i].value != nullptr ? std::string(options[i].value)
+                                      : std::string();
+      if (key == "model_arch") {
+        const std::optional<int32_t> parsed = parse_int_option(value);
+        if (!parsed.has_value()) {
+          LOGF(
+              "moonshine_get_stt_dependencies: invalid model_arch \"%s\"\n",
+              value.c_str());
+          return MOONSHINE_ERROR_INVALID_ARGUMENT;
+        }
+        model_arch = parsed;
+      } else if (key == "include_spelling" || key == "spelling") {
+        include_spelling = bool_from_string(value.c_str());
+      }
+    }
+
+    const std::optional<moonshine::ModelDependencies> deps =
+        moonshine::stt_model_dependencies(trim(language_str), model_arch,
+                                          include_spelling);
+    if (!deps.has_value()) {
+      LOGF(
+          "moonshine_get_stt_dependencies: unknown language \"%s\" or "
+          "model_arch\n",
+          language_str.c_str());
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
+    }
+    const std::string dumped = json_model_dependencies(*deps);
+    char *buf = malloc_string_copy(dumped);
+    if (buf == nullptr) {
+      return MOONSHINE_ERROR_UNKNOWN;
+    }
+    *out_dependencies_json = buf;
+    return MOONSHINE_ERROR_NONE;
+  } catch (const std::exception &e) {
+    LOGF("moonshine_get_stt_dependencies failed: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+int32_t moonshine_get_intent_dependencies(const char *model_name,
+                                          const moonshine_option_t *options,
+                                          uint64_t options_count,
+                                          char **out_dependencies_json) {
+  if (out_dependencies_json == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  if (options_count > 0 && options == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  *out_dependencies_json = nullptr;
+  // Default to the only published embedding model when none is requested.
+  std::string resolved_model_name =
+      model_name != nullptr ? trim(std::string(model_name)) : std::string();
+  if (resolved_model_name.empty()) {
+    resolved_model_name = "embeddinggemma-300m";
+  }
+  try {
+    std::string variant;
+    for (uint64_t i = 0; i < options_count; ++i) {
+      const std::string key = normalize_option_key(options[i].name);
+      const std::string value =
+          options[i].value != nullptr ? std::string(options[i].value)
+                                      : std::string();
+      if (key == "variant" || key == "model_variant") {
+        variant = trim(value);
+      }
+    }
+
+    const std::optional<moonshine::ModelDependencies> deps =
+        moonshine::intent_model_dependencies(resolved_model_name, variant);
+    if (!deps.has_value()) {
+      LOGF(
+          "moonshine_get_intent_dependencies: unknown model \"%s\" or "
+          "variant \"%s\"\n",
+          resolved_model_name.c_str(), variant.c_str());
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
+    }
+    const std::string dumped = json_model_dependencies(*deps);
+    char *buf = malloc_string_copy(dumped);
+    if (buf == nullptr) {
+      return MOONSHINE_ERROR_UNKNOWN;
+    }
+    *out_dependencies_json = buf;
+    return MOONSHINE_ERROR_NONE;
+  } catch (const std::exception &e) {
+    LOGF("moonshine_get_intent_dependencies failed: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
 }

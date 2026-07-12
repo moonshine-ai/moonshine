@@ -1123,6 +1123,227 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
   }
 }
 
+TEST_CASE("moonshine-stt-intent-dependency-api") {
+  SUBCASE("null-output-pointer") {
+    CHECK(moonshine_get_stt_dependencies("en", nullptr, 0, nullptr) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(moonshine_get_intent_dependencies("embeddinggemma-300m", nullptr, 0,
+                                            nullptr) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+  }
+
+  SUBCASE("options-count-without-options-pointer") {
+    char* out = nullptr;
+    CHECK(moonshine_get_stt_dependencies("en", nullptr, 1, &out) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(moonshine_get_intent_dependencies("embeddinggemma-300m", nullptr, 1,
+                                            &out) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+  }
+
+  SUBCASE("stt-empty-language-is-invalid") {
+    char* out = nullptr;
+    CHECK(moonshine_get_stt_dependencies("", nullptr, 0, &out) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(out == nullptr);
+  }
+
+  SUBCASE("stt-english-default-is-medium-streaming") {
+    // The first English model in the catalog is medium-streaming-en.
+    char* out = nullptr;
+    REQUIRE(moonshine_get_stt_dependencies("en", nullptr, 0, &out) ==
+            MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string json(out);
+    CHECK(json.find("\"groups\"") != std::string::npos);
+    CHECK(json.find(
+              "\"https://download.moonshine.ai/model/medium-streaming-en/"
+              "quantized\"") != std::string::npos);
+    CHECK(json.find("\"adapter.ort\"") != std::string::npos);
+    CHECK(json.find("\"streaming_config.json\"") != std::string::npos);
+    // English streaming carries the attention decoder extra.
+    CHECK(json.find("\"decoder_kv_with_attention.ort\"") != std::string::npos);
+    std::free(out);
+  }
+
+  SUBCASE("stt-english-tiny-non-streaming") {
+    const moonshine_option_t opts[] = {
+        {"model_arch", "0"},  // MOONSHINE_MODEL_ARCH_TINY
+    };
+    char* out = nullptr;
+    REQUIRE(moonshine_get_stt_dependencies("en", opts, 1, &out) ==
+            MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string json(out);
+    CHECK(json.find(
+              "\"https://download.moonshine.ai/model/tiny-en/quantized/"
+              "tiny-en\"") != std::string::npos);
+    CHECK(json.find("\"encoder_model.ort\"") != std::string::npos);
+    CHECK(json.find("\"decoder_model_merged.ort\"") != std::string::npos);
+    CHECK(json.find("\"tokenizer.bin\"") != std::string::npos);
+    CHECK(json.find("\"decoder_with_attention.ort\"") != std::string::npos);
+    // Non-streaming must not list streaming files.
+    CHECK(json.find("\"adapter.ort\"") == std::string::npos);
+    std::free(out);
+  }
+
+  SUBCASE("stt-non-english-omits-attention-extra") {
+    const moonshine_option_t opts[] = {
+        {"model_arch", "0"},  // MOONSHINE_MODEL_ARCH_TINY
+    };
+    char* out = nullptr;
+    REQUIRE(moonshine_get_stt_dependencies("ja", opts, 1, &out) ==
+            MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string json(out);
+    CHECK(json.find(
+              "\"https://download.moonshine.ai/model/tiny-ja/quantized/"
+              "tiny-ja\"") != std::string::npos);
+    CHECK(json.find("\"encoder_model.ort\"") != std::string::npos);
+    CHECK(json.find("\"decoder_with_attention.ort\"") == std::string::npos);
+    std::free(out);
+  }
+
+  SUBCASE("stt-english-name-lookup") {
+    char* out = nullptr;
+    REQUIRE(moonshine_get_stt_dependencies("English", nullptr, 0, &out) ==
+            MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    std::free(out);
+  }
+
+  SUBCASE("stt-include-spelling-adds-group-for-english") {
+    const moonshine_option_t opts[] = {
+        {"model_arch", "0"},
+        {"include_spelling", "true"},
+    };
+    char* out = nullptr;
+    REQUIRE(moonshine_get_stt_dependencies("en", opts, 2, &out) ==
+            MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string json(out);
+    CHECK(json.find("\"https://download.moonshine.ai/model/spelling-en\"") !=
+          std::string::npos);
+    CHECK(json.find("\"spelling_cnn.ort\"") != std::string::npos);
+    CHECK(json.find("\"spelling_cnn_meta.json\"") != std::string::npos);
+    std::free(out);
+  }
+
+  SUBCASE("stt-include-spelling-noop-for-non-english") {
+    const moonshine_option_t opts[] = {
+        {"model_arch", "1"},  // MOONSHINE_MODEL_ARCH_BASE
+        {"include_spelling", "true"},
+    };
+    char* out = nullptr;
+    REQUIRE(moonshine_get_stt_dependencies("es", opts, 2, &out) ==
+            MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string json(out);
+    CHECK(json.find("spelling") == std::string::npos);
+    std::free(out);
+  }
+
+  SUBCASE("stt-unknown-language") {
+    char* out = nullptr;
+    CHECK(moonshine_get_stt_dependencies("zzz_not_a_language", nullptr, 0,
+                                         &out) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(out == nullptr);
+  }
+
+  SUBCASE("stt-unknown-arch-for-language") {
+    const moonshine_option_t opts[] = {
+        {"model_arch", "2"},  // streaming arch not published for Spanish
+    };
+    char* out = nullptr;
+    CHECK(moonshine_get_stt_dependencies("es", opts, 1, &out) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(out == nullptr);
+  }
+
+  SUBCASE("stt-invalid-arch-value") {
+    const moonshine_option_t opts[] = {
+        {"model_arch", "not-a-number"},
+    };
+    char* out = nullptr;
+    CHECK(moonshine_get_stt_dependencies("en", opts, 1, &out) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(out == nullptr);
+  }
+
+  SUBCASE("intent-default-variant-is-q4") {
+    char* out = nullptr;
+    REQUIRE(moonshine_get_intent_dependencies("embeddinggemma-300m", nullptr, 0,
+                                              &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string json(out);
+    CHECK(json.find("\"https://download.moonshine.ai/model/"
+                    "embeddinggemma-300m\"") != std::string::npos);
+    CHECK(json.find("\"model_q4.onnx\"") != std::string::npos);
+    CHECK(json.find("\"model_q4.onnx_data\"") != std::string::npos);
+    CHECK(json.find("\"tokenizer.bin\"") != std::string::npos);
+    std::free(out);
+  }
+
+  SUBCASE("intent-null-model-name-uses-default") {
+    char* out = nullptr;
+    REQUIRE(moonshine_get_intent_dependencies(nullptr, nullptr, 0, &out) ==
+            MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    CHECK(std::string(out).find("\"model_q4.onnx\"") != std::string::npos);
+    std::free(out);
+  }
+
+  SUBCASE("intent-q8-maps-to-model-quantized") {
+    // The C++ embedding loader resolves the q8 variant to model_quantized.onnx
+    // (model_q8.onnx is not published), so the manifest must match.
+    const moonshine_option_t opts[] = {
+        {"variant", "q8"},
+    };
+    char* out = nullptr;
+    REQUIRE(moonshine_get_intent_dependencies("embeddinggemma-300m", opts, 1,
+                                              &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string json(out);
+    CHECK(json.find("\"model_quantized.onnx\"") != std::string::npos);
+    CHECK(json.find("\"model_quantized.onnx_data\"") != std::string::npos);
+    CHECK(json.find("\"model_q8.onnx\"") == std::string::npos);
+    std::free(out);
+  }
+
+  SUBCASE("intent-fp32-uses-bare-model-onnx") {
+    const moonshine_option_t opts[] = {
+        {"variant", "fp32"},
+    };
+    char* out = nullptr;
+    REQUIRE(moonshine_get_intent_dependencies("embeddinggemma-300m", opts, 1,
+                                              &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string json(out);
+    CHECK(json.find("\"model.onnx\"") != std::string::npos);
+    CHECK(json.find("\"model.onnx_data\"") != std::string::npos);
+    std::free(out);
+  }
+
+  SUBCASE("intent-unknown-model") {
+    char* out = nullptr;
+    CHECK(moonshine_get_intent_dependencies("not-a-model", nullptr, 0, &out) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(out == nullptr);
+  }
+
+  SUBCASE("intent-unknown-variant") {
+    const moonshine_option_t opts[] = {
+        {"variant", "q3"},
+    };
+    char* out = nullptr;
+    CHECK(moonshine_get_intent_dependencies("embeddinggemma-300m", opts, 1,
+                                            &out) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(out == nullptr);
+  }
+}
+
 // Full ZipVoice synthesis needs the model bundle under ``<data>/zipvoice`` (not
 // committed in bulk). These cases exercise the built-in-voice and user-PCM
 // paths when the assets are present, and skip cleanly otherwise.
