@@ -24,7 +24,7 @@ function Stop-ProcessTree {
 }
 
 for ($attempt = 1; $attempt -le $Retries; $attempt++) {
-    Write-Host "[gh-upload-retry] Attempt $attempt/$Retries: uploading '$Asset' to release $tag (timeout ${TimeoutSec}s)..."
+    Write-Host "[gh-upload-retry] Attempt $attempt/${Retries}: uploading '$Asset' to release $tag (timeout ${TimeoutSec}s)..."
 
     $proc = Start-Process -FilePath 'gh' `
         -ArgumentList @('release', 'upload', $tag, $Asset, '--clobber') `
