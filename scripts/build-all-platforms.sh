@@ -153,13 +153,63 @@ main() {
             "${WINDOWS_CLOUD_USER}@${WINDOWS_CLOUD_HOST}"
     fi
 
-    ssh ${WINDOWS_CLOUD_USER}@${WINDOWS_CLOUD_HOST} 'cd moonshine `
+    # Keepalives so a brief network stall doesn't tear down the session. A
+    # dropped connection kills the remote build outright, because Windows
+    # OpenSSH terminates the session's process tree on disconnect. With these,
+    # the client tolerates ~2 minutes (15s * 8) of silence before giving up.
+    windows_ssh_opts=(
+        -o ServerAliveInterval=15
+        -o ServerAliveCountMax=8
+        -o TCPKeepAlive=yes
+    )
+
+    # The Windows login shell is PowerShell. Pull first (that refreshes
+    # run-windows-ci.ps1 itself), then hand off to the orchestrator, which runs
+    # each step with heavy, disconnect-surviving logging (see the script header
+    # and build-logs/ on the box). Using a single orchestrator also makes the
+    # run abort on the first failing step rather than masking it behind the
+    # exit code of the last chained command.
+    windows_remote_cmd='cd moonshine `
       ; git pull origin main `
-      ; scripts/test-core.bat `
-      ; scripts/publish-binary.bat upload `
-      ; scripts/publish-examples.bat upload `
-      ; scripts/build-pip.bat upload' \
-      || exit 1
+      ; if ($LASTEXITCODE -ne 0) { Write-Host "git pull failed"; exit 1 } `
+      ; pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\run-windows-ci.ps1 -Upload'
+
+    # Transient SSH/network disconnects (not build defects) have killed runs
+    # mid-compile. The remote build is a clean rebuild and therefore idempotent,
+    # so retry the whole invocation on a connection failure before giving up.
+    # ssh exits 255 for transport-level errors (dropped connection, broken
+    # pipe); any other non-zero code is the remote command's own exit status,
+    # i.e. a genuine build/test failure that retrying won't fix -- fail fast on
+    # those. Each attempt leaves a disconnect-surviving log on the box under
+    # build-logs/.
+    windows_attempts=3
+    windows_attempt=1
+    while true; do
+        echo "Windows build attempt ${windows_attempt}/${windows_attempts}..."
+        set +e
+        ssh "${windows_ssh_opts[@]}" \
+            "${WINDOWS_CLOUD_USER}@${WINDOWS_CLOUD_HOST}" \
+            "${windows_remote_cmd}"
+        windows_ssh_rc=$?
+        set -e
+
+        if [ ${windows_ssh_rc} -eq 0 ]; then
+            break
+        fi
+        if [ ${windows_ssh_rc} -ne 255 ]; then
+            echo "Windows build failed (remote exit ${windows_ssh_rc}); not a" \
+                 "connection error, not retrying." >&2
+            exit 1
+        fi
+        if [ ${windows_attempt} -ge ${windows_attempts} ]; then
+            echo "Windows build aborted after ${windows_attempts} connection" \
+                 "failures (ssh exit 255)." >&2
+            exit 1
+        fi
+        windows_attempt=$((windows_attempt + 1))
+        echo "SSH connection dropped (exit 255); retrying in 15s..."
+        sleep 15
+    done
 }
 
 main "$@"
