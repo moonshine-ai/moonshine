@@ -21,6 +21,8 @@ flash). It shows how you can run a complete WiFi setup process on a resource-con
 
 ## Quick Start
 
+> Tip: You can find a step by step tutorial [on Hackster](https://www.hackster.io/petewarden/voice-recognition-and-speech-synthesis-on-an-rpi-pico-2-93b0ef), and a demo video [on YouTube](https://www.youtube.com/watch?v=kMliOFYBiz4).
+
 To make evaluating the example as easy as possible, you can connect your laptop's speaker and microphone to the board as virtual devices, instead of having to wire in physical components.
 
 The default firmware **is** the live service: the laptop acts as the board's mic
