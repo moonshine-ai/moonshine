@@ -16,9 +16,11 @@ pairs of files under moonshine-micro/generated/:
                             test loop can score accuracy directly.
 
 Defaults are picked to be reasonable for the Pico 2 / RP2350 (4 MB QSPI
-flash). With ``--clips-per-class 2`` we ship 72 clips x 32 KB = ~2.3 MB
-of test data alongside the 1.3 MB model and ~300 KB of TFLM code, which
-fits comfortably under the 4 MB ceiling.
+flash). Each embedded clip is 1 s @ 16 kHz int16 == 32 KiB. With the
+current 51-class model (~1.3 MB) and firmware overhead, ``--clips-per-class
+1`` (51 clips, ~1.6 MB) fits; ``2`` overflows ``moonshine_micro_echo_test``
+by ~500 KiB. Use ``--clips-per-class 2`` only with ``--max-classes`` caps
+for quick iteration builds.
 
 Usage::
 
@@ -678,12 +680,14 @@ def _pick_clips_hub(
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument(
-        "--clips-per-class", type=int, default=2,
-        help="How many clips to embed per class (deterministic sort).",
+        "--clips-per-class", type=int, default=1,
+        help="How many clips to embed per class (deterministic sort). "
+        "Default 1 fits the 51-class model on 4 MB flash; use 2 only with "
+        "--max-classes.",
     )
     ap.add_argument(
         "--max-classes", type=int, default=None,
-        help="Cap class count for quick-iteration builds (default: all 36).",
+        help="Cap class count for quick-iteration builds (default: all classes).",
     )
     ap.add_argument(
         "--tflite", default=None,

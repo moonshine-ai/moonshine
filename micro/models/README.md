@@ -47,7 +47,7 @@ flowchart LR
 51-way classifier for hyperarticulated **isolated spoken tokens** in a ~1 s
 window: the 26 letters `a`…`z`, the ten digit words `zero`…`nine`, and 15
 command/symbol words used by the voice WiFi-setup flow (`capital`, `uppercase`,
-`star`, `dollar`, `underscore`, `exclamation`, `percent`, `delete`, `done`,
+`star`, `dollar`, `underscore`, `exclamation`, `percent`, `delete`, `finish`,
 `cancel`, `wifi`, `ip`, `yes`, `no`, `hey rp`). Limited to isolated tokens — not
 NATO names, running speech, or multi-character strings.
 

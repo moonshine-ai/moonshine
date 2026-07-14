@@ -37,7 +37,10 @@ class AudioOutput {
   virtual ~AudioOutput() = default;
 
   // Announce an utterance of `num_samples` int16 mono samples at `sample_rate`.
-  virtual void Begin(int sample_rate, int num_samples) = 0;
+  // `kind` labels the stream for the host: "AUDIO" (TTS reply) or "CLIP"
+  // (captured mic clip played back for debugging). Hardware sinks ignore it.
+  virtual void Begin(int sample_rate, int num_samples,
+                     const char* kind = "AUDIO") = 0;
 
   // Emit `n` int16 samples.
   virtual void Write(const int16_t* samples, int n) = 0;

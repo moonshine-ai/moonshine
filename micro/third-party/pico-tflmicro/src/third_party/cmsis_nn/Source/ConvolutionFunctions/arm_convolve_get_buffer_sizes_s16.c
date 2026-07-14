@@ -30,6 +30,7 @@
 
 #include "third_party/cmsis_nn/Include/Internal/arm_nn_compiler.h"
 #include "third_party/cmsis_nn/Include/arm_nnfunctions.h"
+#include "third_party/cmsis_nn/Include/arm_nnsupportfunctions.h"
 
 /**
  *  @ingroup NNConv
@@ -56,7 +57,9 @@ int32_t arm_convolve_s16_get_buffer_size(const cmsis_nn_dims *input_dims, const 
 #if defined(ARM_MATH_MVEI)
     return arm_convolve_s16_get_buffer_size_mve(input_dims, filter_dims);
 #else
-    return (2 * input_dims->c * filter_dims->w * filter_dims->h) * (int32_t)sizeof(int16_t);
+    /* moonshine-micro: SPELLING_S16_COL_BLOCK im2col columns are buffered
+     * per GEMM call (upstream: 2) -- see arm_convolve_s16.c. */
+    return (SPELLING_S16_COL_BLOCK * input_dims->c * filter_dims->w * filter_dims->h) * (int32_t)sizeof(int16_t);
 #endif
 }
 

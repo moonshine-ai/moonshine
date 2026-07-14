@@ -79,6 +79,15 @@ inline int ReflectIndex(int i, int n) {
   if (m < 0) m += period;
   return (m < n) ? m : (period - m);
 }
+
+// Per-sample input conversion for ComputeImpl. Lets the STT clip be stored as
+// raw int16 mic samples (half the SRAM of fp32) and converted to the [-1, 1]
+// float the STFT expects at the single read site, with no precision loss (the
+// samples originate as int16 anyway). The fp32 overload is the identity.
+inline float ToFloatSample(float s) { return s; }
+inline float ToFloatSample(int16_t s) {
+  return static_cast<float>(s) * (1.0f / 32768.0f);
+}
 }  // namespace
 
 float HzToMelSlaney(float hz) {
@@ -300,8 +309,9 @@ LogMelSpectrogram::~LogMelSpectrogram() {
   fft_ = nullptr;
 }
 
-void LogMelSpectrogram::Compute(const float* waveform, std::size_t n_samples,
-                                float* out) const {
+template <typename SampleT>
+void LogMelSpectrogram::ComputeImpl(const SampleT* waveform,
+                                    std::size_t n_samples, float* out) const {
   const int n_fft = params_.n_fft;
   const int hop = params_.hop_length;
   const int n_mels = params_.n_mels;
@@ -359,10 +369,10 @@ void LogMelSpectrogram::Compute(const float* waveform, std::size_t n_samples,
       const int orig_idx = s + i - pad;
       float s_val;
       if (orig_idx >= 0 && orig_idx < n) {
-        s_val = waveform[orig_idx];
+        s_val = ToFloatSample(waveform[orig_idx]);
       } else if (params_.center) {
         // ReflectIndex maps any index to a valid [0, n) waveform index.
-        s_val = waveform[ReflectIndex(orig_idx, n)];
+        s_val = ToFloatSample(waveform[ReflectIndex(orig_idx, n)]);
       } else {
         s_val = 0.0f;
       }
@@ -422,6 +432,18 @@ void LogMelSpectrogram::Compute(const float* waveform, std::size_t n_samples,
   for (std::size_t i = 0; i < total; ++i) {
     out[i] = (out[i] - meanf) * inv;
   }
+}
+
+// Public entry points: fp32 (unchanged API) and int16 (the on-device STT clip
+// buffer). Both share the templated body above.
+void LogMelSpectrogram::Compute(const float* waveform, std::size_t n_samples,
+                                float* out) const {
+  ComputeImpl(waveform, n_samples, out);
+}
+
+void LogMelSpectrogram::Compute(const int16_t* waveform, std::size_t n_samples,
+                                float* out) const {
+  ComputeImpl(waveform, n_samples, out);
 }
 
 }  // namespace spelling

@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="920" viewBox="0 0 1200 920" font-family="Helvetica, Arial, sans-serif">
+  <rect x="0" y="0" width="1200" height="920" fill="#ffffff"/>
+  <text x="600" y="40" text-anchor="middle" font-size="26" font-weight="bold" fill="#111">RP2350 (Pico 2 / 2 W) -- I2S mic + I2S amp wiring</text>
+  <text x="600" y="66" text-anchor="middle" font-size="14" fill="#555">Pins &amp; colours match the README table. GPIO signals on the left header; power (pins 36/38/39) on the right header.</text>
+
+  <!-- ============ Pico board ============ -->
+  <rect x="640" y="150" width="240" height="490" rx="12" fill="#0f6d4f" stroke="#0a4d38" stroke-width="2"/>
+  <text x="760" y="182" text-anchor="middle" font-size="16" font-weight="bold" fill="#ffffff">Raspberry Pi</text>
+  <text x="760" y="202" text-anchor="middle" font-size="16" font-weight="bold" fill="#ffffff">Pico 2 / 2 W</text>
+  <rect x="720" y="214" width="80" height="24" rx="4" fill="#c9c9c9" stroke="#888"/>
+  <text x="760" y="231" text-anchor="middle" font-size="12" fill="#333">USB-C</text>
+
+  <!-- Left header pads (GPIO), correct top-to-bottom order -->
+  <rect x="632" y="265" width="10" height="10" fill="#d4b106" stroke="#7a6a00"/>
+  <text x="650" y="274" font-size="13" fill="#ffffff">GP0 &#183; pin 1</text>
+  <rect x="632" y="300" width="10" height="10" fill="#d4b106" stroke="#7a6a00"/>
+  <text x="650" y="309" font-size="13" fill="#ffffff">GP1 &#183; pin 2</text>
+  <rect x="632" y="335" width="10" height="10" fill="#d4b106" stroke="#7a6a00"/>
+  <text x="650" y="344" font-size="13" fill="#ffffff">GP2 &#183; pin 4</text>
+  <rect x="632" y="395" width="10" height="10" fill="#d4b106" stroke="#7a6a00"/>
+  <text x="650" y="404" font-size="13" fill="#ffffff">GP10 &#183; pin 14</text>
+  <rect x="632" y="430" width="10" height="10" fill="#d4b106" stroke="#7a6a00"/>
+  <text x="650" y="439" font-size="13" fill="#ffffff">GP11 &#183; pin 15</text>
+  <rect x="632" y="465" width="10" height="10" fill="#d4b106" stroke="#7a6a00"/>
+  <text x="650" y="474" font-size="13" fill="#ffffff">GP12 &#183; pin 16</text>
+
+  <!-- Right header pads (power), correct top-to-bottom order (pin 40 at top) -->
+  <rect x="878" y="265" width="10" height="10" fill="#e0e0e0" stroke="#888"/>
+  <text x="872" y="274" text-anchor="end" font-size="13" fill="#ffffff">VSYS &#183; pin 39</text>
+  <rect x="878" y="315" width="10" height="10" fill="#e0e0e0" stroke="#888"/>
+  <text x="872" y="324" text-anchor="end" font-size="13" fill="#ffffff">GND &#183; pin 38</text>
+  <rect x="878" y="365" width="10" height="10" fill="#e0e0e0" stroke="#888"/>
+  <text x="872" y="374" text-anchor="end" font-size="13" fill="#ffffff">3V3(OUT) &#183; pin 36</text>
+
+  <text x="760" y="600" text-anchor="middle" font-size="11" fill="#d7f5e8">Left header pins 1-20 (top-down);</text>
+  <text x="760" y="616" text-anchor="middle" font-size="11" fill="#d7f5e8">right header pins 21-40 (bottom-up, so 40 is top).</text>
+
+  <!-- ============ Mic ============ -->
+  <rect x="170" y="200" width="200" height="240" rx="8" fill="#2f6fb0" stroke="#1c4a78" stroke-width="2"/>
+  <text x="270" y="224" text-anchor="middle" font-size="14" font-weight="bold" fill="#ffffff">SPH0645 I2S mic</text>
+  <text x="270" y="242" text-anchor="middle" font-size="12" fill="#dceaf7">Adafruit #3421</text>
+
+  <rect x="370" y="246" width="10" height="8" fill="#d4b106" stroke="#7a6a00"/>
+  <text x="364" y="254" text-anchor="end" font-size="13" fill="#ffffff">3V</text>
+  <rect x="370" y="281" width="10" height="8" fill="#d4b106" stroke="#7a6a00"/>
+  <text x="364" y="289" text-anchor="end" font-size="13" fill="#ffffff">GND</text>
+  <rect x="370" y="316" width="10" height="8" fill="#d4b106" stroke="#7a6a00"/>
+  <text x="364" y="324" text-anchor="end" font-size="13" fill="#ffffff">BCLK</text>
+  <rect x="370" y="351" width="10" height="8" fill="#d4b106" stroke="#7a6a00"/>
+  <text x="364" y="359" text-anchor="end" font-size="13" fill="#ffffff">DOUT</text>
+  <rect x="370" y="386" width="10" height="8" fill="#d4b106" stroke="#7a6a00"/>
+  <text x="364" y="394" text-anchor="end" font-size="13" fill="#ffffff">LRCL</text>
+  <rect x="370" y="421" width="10" height="8" fill="#d4b106" stroke="#7a6a00"/>
+  <text x="364" y="429" text-anchor="end" font-size="13" fill="#ffffff">SEL</text>
+
+  <!-- ============ Amp ============ -->
+  <rect x="170" y="470" width="200" height="220" rx="8" fill="#4a4a8a" stroke="#2f2f5c" stroke-width="2"/>
+  <text x="270" y="494" text-anchor="middle" font-size="14" font-weight="bold" fill="#ffffff">MAX98357A I2S amp</text>
+  <text x="270" y="512" text-anchor="middle" font-size="12" fill="#dcdcf2">Adafruit #3006</text>
+
+  <rect x="370" y="536" width="10" height="8" fill="#d4b106" stroke="#7a6a00"/>
+  <text x="364" y="544" text-anchor="end" font-size="13" fill="#ffffff">LRC</text>
+  <rect x="370" y="561" width="10" height="8" fill="#d4b106" stroke="#7a6a00"/>
+  <text x="364" y="569" text-anchor="end" font-size="13" fill="#ffffff">BCLK</text>
+  <rect x="370" y="586" width="10" height="8" fill="#d4b106" stroke="#7a6a00"/>
+  <text x="364" y="594" text-anchor="end" font-size="13" fill="#ffffff">DIN</text>
+  <text x="364" y="619" text-anchor="end" font-size="12" fill="#c9c9ee">GAIN (open -&gt; 9 dB)</text>
+  <text x="364" y="639" text-anchor="end" font-size="12" fill="#c9c9ee">SD (open -&gt; on, L+R/2)</text>
+  <rect x="370" y="656" width="10" height="8" fill="#d4b106" stroke="#7a6a00"/>
+  <text x="364" y="664" text-anchor="end" font-size="13" fill="#ffffff">GND</text>
+  <rect x="370" y="676" width="10" height="8" fill="#d4b106" stroke="#7a6a00"/>
+  <text x="364" y="684" text-anchor="end" font-size="13" fill="#ffffff">Vin</text>
+
+  <!-- amp output terminals (left edge) -->
+  <rect x="160" y="596" width="10" height="8" fill="#bbbbbb" stroke="#777"/>
+  <text x="176" y="604" font-size="12" fill="#ffffff">+</text>
+  <rect x="160" y="621" width="10" height="8" fill="#bbbbbb" stroke="#777"/>
+  <text x="176" y="629" font-size="12" fill="#ffffff">-</text>
+
+  <!-- ============ Speaker ============ -->
+  <circle cx="80" cy="610" r="40" fill="#8a5a2b" stroke="#5c3c1c" stroke-width="2"/>
+  <circle cx="80" cy="610" r="15" fill="#5c3c1c"/>
+  <text x="80" y="668" text-anchor="middle" font-size="12" fill="#333">4-8 ohm speaker</text>
+  <text x="80" y="683" text-anchor="middle" font-size="11" fill="#777">(not included)</text>
+
+  <!-- ============ Signal wires (left band) ============ -->
+  <!-- mic DOUT (green) -> GP0 -->
+  <polyline points="380,351 520,351 520,270 632,270" fill="none" stroke="#2a9d3f" stroke-width="3" stroke-linejoin="round"/>
+  <!-- mic BCLK (blue) -> GP1 -->
+  <polyline points="380,316 490,316 490,305 632,305" fill="none" stroke="#1f6fd6" stroke-width="3" stroke-linejoin="round"/>
+  <!-- mic LRCL (orange) -> GP2 -->
+  <polyline points="380,386 560,386 560,340 632,340" fill="none" stroke="#e08a00" stroke-width="3" stroke-linejoin="round"/>
+  <!-- amp DIN (green) -> GP10 -->
+  <polyline points="380,586 600,586 600,400 632,400" fill="none" stroke="#2a9d3f" stroke-width="3" stroke-linejoin="round"/>
+  <!-- amp BCLK (blue) -> GP11 -->
+  <polyline points="380,561 580,561 580,435 632,435" fill="none" stroke="#1f6fd6" stroke-width="3" stroke-linejoin="round"/>
+  <!-- amp LRC (orange) -> GP12 -->
+  <polyline points="380,536 620,536 620,470 632,470" fill="none" stroke="#e08a00" stroke-width="3" stroke-linejoin="round"/>
+
+  <!-- ============ Power / ground wires (perimeter routing to right header) ============ -->
+  <!-- mic 3V (red) -> 3V3(OUT) pin 36 : over the top -->
+  <polyline points="380,250 460,250 460,110 930,110 930,370 888,370" fill="none" stroke="#d1332e" stroke-width="3" stroke-linejoin="round"/>
+  <!-- amp Vin (red) -> VSYS pin 39 : under the bottom -->
+  <polyline points="380,680 460,680 460,750 960,750 960,270 888,270" fill="none" stroke="#d1332e" stroke-width="3" stroke-linejoin="round"/>
+  <!-- mic GND (black) -> GND pin 38 : over the top -->
+  <polyline points="380,285 440,285 440,95 915,95 915,320 888,320" fill="none" stroke="#222222" stroke-width="3" stroke-linejoin="round"/>
+  <!-- amp GND (black) -> GND pin 38 : under the bottom -->
+  <polyline points="380,660 440,660 440,770 940,770 940,320 888,320" fill="none" stroke="#222222" stroke-width="3" stroke-linejoin="round"/>
+  <!-- SEL -> GND (tie low, local jumper) -->
+  <polyline points="380,425 402,425 402,285 380,285" fill="none" stroke="#222222" stroke-width="3" stroke-linejoin="round"/>
+  <circle cx="381" cy="285" r="4" fill="#222222"/>
+  <text x="410" y="429" font-size="11" fill="#555">SEL -&gt; GND (left ch)</text>
+  <!-- both grounds meet at GND pin 38 -->
+  <circle cx="888" cy="320" r="4" fill="#222222"/>
+
+  <!-- amp output -> speaker -->
+  <line x1="160" y1="600" x2="118" y2="600" stroke="#555" stroke-width="3"/>
+  <line x1="160" y1="625" x2="118" y2="625" stroke="#555" stroke-width="3"/>
+  <line x1="118" y1="600" x2="118" y2="625" stroke="#555" stroke-width="3"/>
+  <line x1="118" y1="612" x2="110" y2="612" stroke="#555" stroke-width="3"/>
+
+  <!-- ============ Legend ============ -->
+  <rect x="170" y="800" width="900" height="96" rx="8" fill="#f5f5f5" stroke="#ccc"/>
+  <text x="190" y="826" font-size="14" font-weight="bold" fill="#333">Net colour key</text>
+
+  <line x1="190" y1="850" x2="225" y2="850" stroke="#d1332e" stroke-width="4"/>
+  <text x="232" y="854" font-size="13" fill="#333">Power (mic 3V &lt;- 3V3 &#183; amp Vin &lt;- VSYS)</text>
+
+  <line x1="560" y1="850" x2="595" y2="850" stroke="#222222" stroke-width="4"/>
+  <text x="602" y="854" font-size="13" fill="#333">Ground (GND &#183; SEL -&gt; GND)</text>
+
+  <line x1="850" y1="850" x2="885" y2="850" stroke="#1f6fd6" stroke-width="4"/>
+  <text x="892" y="854" font-size="13" fill="#333">BCLK (bit clock)</text>
+
+  <line x1="190" y1="878" x2="225" y2="878" stroke="#2a9d3f" stroke-width="4"/>
+  <text x="232" y="882" font-size="13" fill="#333">Data (DOUT / DIN)</text>
+
+  <line x1="560" y1="878" x2="595" y2="878" stroke="#e08a00" stroke-width="4"/>
+  <text x="602" y="882" font-size="13" fill="#333">Word-select (LRCL / LRC)</text>
+
+  <text x="850" y="882" font-size="12" fill="#777">GP11=BCLK, GP12=LRC (adjacent sideset pair)</text>
+</svg>

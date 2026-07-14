@@ -30,6 +30,7 @@
 #define FEATURE_GENERATION_FEATURE_GENERATION_H_
 
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 // Forward-declare kissfft's opaque real-FFT config so this header doesn't pull
@@ -108,7 +109,13 @@ class LogMelSpectrogram {
   // least n_mels * target_frames floats. On return out[m * target_frames + t]
   // is the normalised log-mel value for mel bin m, frame t. Frames that would
   // require samples past the waveform are left at log(eps) (right-zero-pad).
+  //
+  // Two input formats: fp32 in [-1, 1], or raw int16 mic samples converted to
+  // [-1, 1] at the read site (lets the caller store the 1 s clip as int16 and
+  // halve its SRAM -- the samples are int16-precision to begin with). Both
+  // produce identical features for the same underlying signal.
   void Compute(const float* waveform, std::size_t n_samples, float* out) const;
+  void Compute(const int16_t* waveform, std::size_t n_samples, float* out) const;
 
   int n_mels() const { return params_.n_mels; }
   int target_frames() const { return params_.target_frames; }
@@ -116,6 +123,11 @@ class LogMelSpectrogram {
   const LogMelParams& params() const { return params_; }
 
  private:
+  // Shared body for both Compute() overloads; SampleT is float or int16_t.
+  template <typename SampleT>
+  void ComputeImpl(const SampleT* waveform, std::size_t n_samples,
+                   float* out) const;
+
   LogMelParams params_;
   int n_freq_;            // n_fft / 2 + 1
   int mel_nz_total_ = 0;  // == mel_nz_off_[n_mels]

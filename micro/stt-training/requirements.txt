@@ -1,0 +1,37 @@
+# Python dependencies for the moonshine-micro STT training recipe.
+# Tested on Linux with an NVIDIA GPU (CUDA) and Python 3.10-3.12.
+#
+#   python -m venv .venv
+#   . .venv/bin/activate
+#   pip install -r requirements.txt
+#
+# On PyPI/Linux the default torch/torchaudio wheels are CUDA builds, so a plain
+# `pip install` gives you GPU support (given a recent NVIDIA driver). See the
+# README "Running on an NVIDIA GPU box (Docker)" section if CUDA lives in a
+# container on your machine.
+#
+# IMPORTANT: torch and torchaudio are pinned to the same version on purpose.
+# `litert-torch` (via torchao) pins an exact torch, and pip will happily install
+# a newer torchaudio that expects a different torch, leaving a broken pair
+# ("undefined symbol" / "Could not load libtorchaudio" at import). Keeping them
+# equal makes a single `pip install -r requirements.txt` resolve consistently.
+# To upgrade, bump both to the torch version litert-torch currently supports.
+
+# --- core training stack ---------------------------------------------------
+torch==2.10.*
+torchaudio==2.10.*
+numpy
+soundfile
+tqdm
+
+# --- data gathering --------------------------------------------------------
+huggingface_hub                 # anonymous (no-token) access to the Hub Parquet export
+pyarrow                         # column-selective Parquet reads over HTTP range requests
+librosa                         # resample ZipVoice output to 16 kHz
+moonshine-voice                 # Moonshine Voice ZipVoice TTS (synthetic clips)
+
+# --- export to the RP2350 firmware format ----------------------------------
+litert-torch                    # PyTorch -> .tflite conversion
+ai-edge-litert                  # LiteRT interpreter (parity checks) + flatbuffer schema
+ai-edge-quantizer               # int8 post-training quantization
+flatbuffers                     # re-serialize .tflite for TFLM (inline weight buffers)

@@ -32,7 +32,28 @@ could not be lifted out into `examples/rp2350/` — it is physically interleaved
 with the CMSIS-NN kernels. A port to another platform would simply leave
 `SPELLING_TINY_MULTICORE` undefined.
 
-## 2. Subdirectory-friendly CMakeLists
+## 2. GELU micro kernel + int16 TRANSPOSE (for the neural-TTS decoder)
+
+Upstream TFLM has no GELU kernel (the schema, `TfLiteGeluParams`, and the
+`ParseOpData` switch case all exist upstream, but no micro implementation).
+The Phase-B TTS decoder graph (s16x8: int16 activations, int8 weights) needs
+GELU and int16 TRANSPOSE, so:
+
+- `src/tensorflow/lite/micro/kernels/gelu.cpp` — **added.** LUT-based int8
+  (256-entry) and int16 (513-entry interpolated) paths via the shared
+  `LUTPopulate`/`LUTLookup` helpers, plus a float path. Mirrors how full
+  TFLite lowers GELU.
+- `src/tensorflow/lite/micro/kernels/micro_ops.h` — `Register_GELU()` decl.
+- `src/tensorflow/lite/micro/micro_mutable_op_resolver.h` — `AddGelu()`.
+- `src/tensorflow/lite/core/api/flatbuffer_conversions.{h,cpp}` — standalone
+  `ParseGelu()` (reads the `approximate` flag) for the micro resolver.
+- `src/tensorflow/lite/micro/kernels/transpose.cpp` — added the
+  `kTfLiteInt16` case (pure data movement, same reference kernel).
+- `CMakeLists.txt` — added `gelu.cpp` to the kernel sources.
+
+If upstream ever adds a GELU micro kernel, prefer theirs on the next sync.
+
+## 3. Subdirectory-friendly CMakeLists
 
 The upstream top-level `project()` / `pico_sdk_init()` calls and the
 example/test subdirectory blocks were removed so this builds as an

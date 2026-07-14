@@ -5,6 +5,6 @@
 
 namespace spelling {
 
-const char* const kClassLabels[kNumClasses] = { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "capital", "uppercase", "star", "dollar", "underscore", "exclamation", "percent", "delete", "done", "cancel", "wifi", "ip", "yes", "no", "hey rp" };
+const char* const kClassLabels[kNumClasses] = { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "capital", "uppercase", "star", "dollar", "underscore", "exclamation", "percent", "dash", "delete", "finish", "cancel", "wifi", "ip", "yes", "no" };
 
 }  // namespace spelling

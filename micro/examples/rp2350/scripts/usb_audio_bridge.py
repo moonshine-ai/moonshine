@@ -149,6 +149,9 @@ def main() -> int:
                          "to trigger the VAD end, then the script waits for the reply.")
     ap.add_argument("--save-reply", default=None,
                     help="Write the device's spoken reply PCM to this wav path.")
+    ap.add_argument("--save-output", default=None, metavar="DIR",
+                    help="Save every CLIP and AUDIO stream from the device as "
+                         "numbered wav files in DIR (for debugging).")
     args = ap.parse_args()
 
     print("Bridge: starting...", flush=True)
@@ -174,7 +177,30 @@ def main() -> int:
     stop = threading.Event()
     reply_done = threading.Event()
     ready = threading.Event()    # set when the device prints its readiness banner
+    expect_audio_after_clip = threading.Event()  # echo: CLIP then TTS AUDIO
     mic_q: queue.Queue[bytes] = queue.Queue(maxsize=256)
+    save_seq = 0
+
+    def save_stream(tag: str, samples, rate: int) -> None:
+        nonlocal save_seq
+        if args.save_reply and tag == "AUDIO":
+            try:
+                import soundfile as sf
+                sf.write(args.save_reply, samples, rate, subtype="PCM_16")
+                print(f"  [reply saved -> {args.save_reply}]")
+            except Exception as exc:  # noqa: BLE001
+                print(f"  (save error: {exc})")
+        if not args.save_output:
+            return
+        save_seq += 1
+        os.makedirs(args.save_output, exist_ok=True)
+        path = os.path.join(args.save_output, f"{tag.lower()}_{save_seq:04d}.wav")
+        try:
+            import soundfile as sf
+            sf.write(path, samples, rate, subtype="PCM_16")
+            print(f"  [saved -> {path}]")
+        except Exception as exc:  # noqa: BLE001
+            print(f"  (save error: {exc})")
 
     # --- mic capture: enqueue framed hops ---
     def on_audio(indata, frames, time_info, status):  # noqa: ARG001
@@ -244,29 +270,51 @@ def main() -> int:
             line = reader.readline()
             if not line:
                 continue
-            if line.startswith("AUDIO "):
-                parts = line.split()
+            parts = line.split()
+            # A binary stream header is EXACTLY "<TAG> <rate> <nsamples>" (three
+            # tokens, integer rate + count) and is immediately followed by raw
+            # PCM. The firmware ALSO prints human-readable diagnostics that share
+            # the prefix -- e.g. "CLIP playback: 1234 samples @ 16000 Hz
+            # (gain 4.9x)" under SPELLING_AUDIO_DIAG -- which must NOT be parsed
+            # as headers (int("playback:") used to raise and kill the receiver
+            # thread, so the spoken reply never played and the loop timed out).
+            # Require the strict 3-integer-token shape to disambiguate; anything
+            # else falls through to the diagnostic print below.
+            if (
+                len(parts) == 3
+                and parts[0] in ("AUDIO", "CLIP")
+                and parts[1].lstrip("-").isdigit()
+                and parts[2].lstrip("-").isdigit()
+            ):
+                tag = parts[0]
                 rate, n = int(parts[1]), int(parts[2])
                 raw = reader.read_exact(n * 2)
                 samples = np.frombuffer(raw, dtype="<i2").astype("float32") / 32768.0
-                print(f"  [spoken reply: {n} samples @ {rate} Hz]")
-                if args.save_reply:
-                    try:
-                        import soundfile as sf
-                        sf.write(args.save_reply, samples, rate, subtype="PCM_16")
-                        print(f"  [reply saved -> {args.save_reply}]")
-                    except Exception as exc:  # noqa: BLE001
-                        print(f"  (save error: {exc})")
+                label = "captured clip" if tag == "CLIP" else "spoken reply"
+                print(f"  [{label}: {n} samples @ {rate} Hz]")
+                if tag == "CLIP" and not paused.is_set():
+                    paused.set()
+                    flush_mic()
+                save_stream(tag, samples, rate)
                 try:
                     import sounddevice as sd
                     sd.play(samples, samplerate=rate, device=_dev(args.output_device))
                     sd.wait()
                 except Exception as exc:  # noqa: BLE001
                     print(f"  (playback skipped/error: {exc})")
-                flush_mic()
-                paused.clear()  # turn over: resume listening
-                reply_done.set()
-                print("  [resumed listening]")
+                if tag == "CLIP":
+                    try:
+                        os.write(fd, b"CLIP_ACK\n")
+                    except OSError:
+                        pass
+                    if not expect_audio_after_clip.is_set():
+                        paused.clear()
+                if tag == "AUDIO":
+                    expect_audio_after_clip.clear()
+                    flush_mic()
+                    paused.clear()  # turn over: resume listening
+                    reply_done.set()
+                    print("  [resumed listening]")
             elif line.startswith("RESULT "):
                 parts = line.split()
                 print(f">>> recognized: {parts[1]}  (p={parts[2]})")
@@ -283,15 +331,20 @@ def main() -> int:
                 except (IndexError, ValueError):
                     pass
             elif line.startswith("VAD end"):
+                expect_audio_after_clip.set()
                 paused.set()      # device is about to do STT+TTS; stop sending
                 flush_mic()
                 print(f"[{line}] -> classifying...")
             elif line.startswith("VAD start"):
                 print("[speech detected]")
             elif line.strip():
-                # The device is ready as soon as it prints its banner / enters
-                # the listening loop -- unblock startup immediately (see below).
-                if "[audio] ready" in line or "[audio] listening" in line:
+                # ANY "[audio]" line proves the firmware is up and talking --
+                # not just the boot banner. When the bridge attaches to a board
+                # that has been running for a while, the banner was printed
+                # long ago and all we see is the periodic "idle, waiting for
+                # hops" heartbeat; matching only the banner made startup sit
+                # out the full 10 s fallback timeout in that (common) case.
+                if "[audio]" in line:
                     ready.set()
                 print(f"[dev] {line}")
 

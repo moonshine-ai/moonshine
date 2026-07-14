@@ -1,0 +1,12 @@
+{
+ "total_bytes": 1906352,
+ "model_bytes": 449032,
+ "codebook_bytes": 262144,
+ "codes_bytes": 652339,
+ "f0_bytes": 134266,
+ "diphone_index_bytes": 187616,
+ "word_index_bytes": 218484,
+ "n_diphone_types": 968,
+ "n_diphone_units": 3032,
+ "n_words": 7000
+}

@@ -136,6 +136,15 @@ void ExtractClipFrontAligned(const float* src, std::size_t src_len,
                              std::size_t start, std::size_t end, float* out,
                              std::size_t clip_len);
 
+// Power-weighted centroid sample index over buf[start, end):
+//   round( sum(i * buf[i]^2) / sum(buf[i]^2) ).
+// Returns the region midpoint if the region is empty or silent. Used to
+// re-centre the captured clip on the spoken word's energy instead of the
+// noisy VAD segment_start -- this closes most of the streaming-VAD accuracy
+// gap in host simulation (see scripts/test_streaming_vad.py --align-sweep).
+std::size_t EnergyCentroidIndex(const int16_t* buf, std::size_t start,
+                                std::size_t end);
+
 }  // namespace spelling
 
 #endif  // VAD_VAD_H_

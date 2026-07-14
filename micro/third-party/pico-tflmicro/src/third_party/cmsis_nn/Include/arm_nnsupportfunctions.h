@@ -332,6 +332,40 @@ int16_t *arm_nn_mat_mult_kernel_s16(const int8_t *input_a,
                                     int16_t *out_0);
 
 /**
+ * moonshine-micro extension (NOT upstream CMSIS-NN): column-blocked
+ * variant of arm_nn_mat_mult_kernel_s16. Multiplies n_cols buffered
+ * im2col columns (contiguous in input_b) against all output_ch weight
+ * rows, channel-pairs outer / column-pairs inner, so each weight row is
+ * streamed from (XIP) flash once per block instead of once per 2
+ * columns. Optionally splits the channel range across both RP2350 cores
+ * (SPELLING_TINY_MULTICORE). Output layout: out_0[col * output_ch + ch].
+ * Returns out_0 + n_cols * output_ch.
+ *
+ * How many columns fit is the caller's contract via the conv scratch
+ * buffer: see SPELLING_S16_COL_BLOCK in arm_convolve_s16.c and
+ * arm_convolve_s16_get_buffer_size().
+ */
+int16_t *arm_nn_mat_mult_kernel_s16_block(const int8_t *input_a,
+                                          const int16_t *input_b,
+                                          const int32_t output_ch,
+                                          const int32_t *out_shift,
+                                          const int32_t *out_mult,
+                                          const int32_t activation_min,
+                                          const int32_t activation_max,
+                                          const int32_t num_col_a,
+                                          const int32_t n_cols,
+                                          const cmsis_nn_bias_data *const bias_data,
+                                          int16_t *out_0);
+
+/* Column-block depth shared by arm_convolve_s16.c (im2col batching) and
+ * arm_convolve_s16_get_buffer_size() (scratch sizing). 64 columns x
+ * worst-case 576 cols x 2 B = ~72 KiB scratch for the TTS decoder
+ * (arena headroom allows it; measured: 64 is ~8% faster than 32). */
+#ifndef SPELLING_S16_COL_BLOCK
+#define SPELLING_S16_COL_BLOCK (64)
+#endif
+
+/**
  * @brief General Vector by Matrix multiplication with requantization and storage of result.
  * @param[in]       row_elements          number of row elements
  * @param[in]       skipped_row_elements  number of row elements skipped due to padding.

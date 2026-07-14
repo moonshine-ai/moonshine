@@ -70,6 +70,7 @@ TFLMRegistration Register_FLOOR_MOD();
 TFLMRegistration Register_FULLY_CONNECTED();
 TFLMRegistration Register_GATHER();
 TFLMRegistration Register_GATHER_ND();
+TFLMRegistration Register_GELU();
 TFLMRegistration Register_GREATER();
 TFLMRegistration Register_GREATER_EQUAL();
 TFLMRegistration Register_HARD_SWISH();

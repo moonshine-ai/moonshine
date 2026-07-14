@@ -34,9 +34,13 @@ constexpr std::size_t kTensorArenaSize =
     (kNMels <= 64) ? (SPELLING_TINY_ARENA_BYTES) : (256u * 1024u);
 
 // Shared large static buffers (defined, 16-byte aligned, in app_common.cc).
-// g_waveform (1 s @ fp32) doubles as the live capture window and the STT clip.
+// g_waveform (1 s of int16 mic samples) doubles as the live capture window and
+// the STT clip. int16 (not fp32) halves it to 32 KiB -- the samples are
+// int16-precision anyway, and the STT log-mel + VAD convert to float at the
+// read site -- which frees ~32 KiB of SRAM for the malloc heap (the WiFi scan
+// path needs it; see RunWifiAppWithIo).
 extern uint8_t g_tensor_arena[kTensorArenaSize];
-extern float g_waveform[kClipNumSamples];
+extern int16_t g_waveform[kClipNumSamples];
 
 // Bring up the board: overclock to 250 MHz (core voltage bumped first), LED
 // POST pulses, USB CDC stdio, and wait up to ~30 s for the host to open the

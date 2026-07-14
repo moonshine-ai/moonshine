@@ -93,4 +93,24 @@ TF_LITE_MICRO_TEST(ExtractClipFrontAlignedZeroPads) {
   TF_LITE_MICRO_EXPECT_NEAR(out[5], 0.0f, 1e-6f);
 }
 
+TF_LITE_MICRO_TEST(EnergyCentroidIndexWeightsByPower) {
+  // A single loud sample dominates the power-weighted centroid.
+  const int16_t a[8] = {0, 0, 0, 1000, 0, 0, 0, 0};
+  TF_LITE_MICRO_EXPECT_EQ(
+      static_cast<int>(spelling::EnergyCentroidIndex(a, 0, 8)), 3);
+  // Two equal-energy peaks -> centroid at their midpoint.
+  const int16_t b[8] = {0, 500, 0, 0, 0, 0, 500, 0};
+  TF_LITE_MICRO_EXPECT_EQ(
+      static_cast<int>(spelling::EnergyCentroidIndex(b, 0, 8)),
+      (1 + 6) / 2 + ((1 + 6) % 2));  // round(3.5) == 4
+  // A silent region returns the midpoint rather than dividing by zero.
+  const int16_t z[4] = {0, 0, 0, 0};
+  TF_LITE_MICRO_EXPECT_EQ(
+      static_cast<int>(spelling::EnergyCentroidIndex(z, 0, 4)), 2);
+  // Respects the [start, end) sub-range (offset centroid).
+  const int16_t c[10] = {2000, 0, 0, 0, 0, 900, 0, 0, 0, 0};
+  TF_LITE_MICRO_EXPECT_EQ(
+      static_cast<int>(spelling::EnergyCentroidIndex(c, 4, 10)), 5);
+}
+
 TF_LITE_MICRO_TESTS_END

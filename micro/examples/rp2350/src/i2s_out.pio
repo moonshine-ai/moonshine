@@ -1,0 +1,78 @@
+; I2S *output* (TX) PIO program for the MAX98357A I2S class-D amp (Adafruit 3006).
+;
+; Standard Philips I2S, 16 bits per channel, stereo frames. Adapted from the
+; Raspberry Pi pico-extras audio_i2s.pio (BSD-3-Clause, (c) 2020 Raspberry Pi
+; (Trading) Ltd.), the non-swapped variant (BCLK on the sideset base pin, LRCLK
+; on base + 1) to match our wiring:
+;
+;   DIN  (amp) <- data_pin           (GPIO10)
+;   BCLK (amp) <- clock_pin_base     (GPIO11)
+;   LRC  (amp) <- clock_pin_base + 1 (GPIO12)   ; LRCLK = BCLK + 1 (sideset needs
+;                                                 consecutive pins)
+;
+; The RP2350 is the I2S controller: it drives BCLK + LRCLK (word select) via the
+; 2-bit sideset and shifts DIN out MSB-first. FIFO word format (autopull @ 32,
+; shift left):
+;
+;   | 31 : 16      | 15 : 0       |
+;   | sample ws=0  | sample ws=1  |
+;
+; We write the same mono sample into both slots so the amp's default (L+R)/2
+; downmix reproduces it at full level. Two PIO cycles per data bit, 32 bits per
+; stereo frame -> state-machine clock = sample_rate * 64.
+
+.program i2s_out
+.side_set 2
+
+ ; /--- LRCLK  (sideset bit 1 -> clock_pin_base + 1)
+ ; |/-- BCLK   (sideset bit 0 -> clock_pin_base)
+bitloop1:                            ; ||
+    out pins, 1       side 0b10
+    jmp x-- bitloop1  side 0b11
+    out pins, 1       side 0b00
+    set x, 14         side 0b01
+bitloop0:
+    out pins, 1       side 0b00
+    jmp x-- bitloop0  side 0b01
+    out pins, 1       side 0b10
+public entry_point:
+    set x, 14         side 0b11
+
+% c-sdk {
+#include "hardware/clocks.h"
+
+// Clock divider for `sample_rate`: 32 bits/frame * 2 PIO cycles/bit = 64 PIO
+// cycles per stereo sample, so sm_clk = sample_rate * 64.
+static inline float i2s_out_clkdiv(uint sample_rate) {
+    return (float)clock_get_hz(clk_sys) / (float)(sample_rate * 64);
+}
+
+// Bring up the I2S TX state machine in master mode. DIN = data_pin;
+// BCLK = clock_pin_base; LRC = clock_pin_base + 1. Starts the SM running (it
+// will idle-clock silence until the FIFO is fed).
+static inline void i2s_out_program_init(PIO pio, uint sm, uint offset,
+                                        uint data_pin, uint clock_pin_base,
+                                        uint sample_rate) {
+    pio_gpio_init(pio, data_pin);
+    pio_gpio_init(pio, clock_pin_base);
+    pio_gpio_init(pio, clock_pin_base + 1);
+
+    pio_sm_config c = i2s_out_program_get_default_config(offset);
+    sm_config_set_out_pins(&c, data_pin, 1);
+    sm_config_set_sideset_pins(&c, clock_pin_base);
+    // MSB-first (shift left), autopull one 32-bit stereo frame at a time.
+    sm_config_set_out_shift(&c, false, true, 32);
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+    sm_config_set_clkdiv(&c, i2s_out_clkdiv(sample_rate));
+
+    pio_sm_init(pio, sm, offset, &c);
+
+    // DIN + both clock pins are outputs driven by the SM.
+    uint32_t pin_mask = (1u << data_pin) | (3u << clock_pin_base);
+    pio_sm_set_pindirs_with_mask(pio, sm, pin_mask, pin_mask);
+    pio_sm_set_pins(pio, sm, 0);  // start with the lines low
+
+    pio_sm_exec(pio, sm, pio_encode_jmp(offset + i2s_out_offset_entry_point));
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}

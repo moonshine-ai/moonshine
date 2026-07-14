@@ -1636,6 +1636,22 @@ TfLiteStatus ParseHardSwish(const Operator*, ErrorReporter*,
   return kTfLiteOk;
 }
 
+TfLiteStatus ParseGelu(const Operator* op, ErrorReporter* error_reporter,
+                       BuiltinDataAllocator* allocator, void** builtin_data) {
+  CheckParsePointerParams(op, error_reporter, allocator, builtin_data);
+
+  SafeBuiltinDataAllocator safe_allocator(allocator);
+  std::unique_ptr<TfLiteGeluParams,
+                  SafeBuiltinDataAllocator::BuiltinDataDeleter>
+      params = safe_allocator.Allocate<TfLiteGeluParams>();
+  TF_LITE_ENSURE(error_reporter, params != nullptr);
+  if (const auto* gelu_params = op->builtin_options_as_GeluOptions()) {
+    params->approximate = gelu_params->approximate();
+  }
+  *builtin_data = params.release();
+  return kTfLiteOk;
+}
+
 TfLiteStatus ParseIf(const Operator* op, ErrorReporter* error_reporter,
                      BuiltinDataAllocator* allocator, void** builtin_data) {
   CheckParsePointerParams(op, error_reporter, allocator, builtin_data);

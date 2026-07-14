@@ -1,0 +1,75 @@
+; Minimal I2S *input* (RX) PIO program for the SPH0645 MEMS mic test app.
+;
+; This is the master-mode receive program from the arduino-pico I2S library
+; (Earle F. Philhower, III, LGPL-2.1) -- the same protocol the wiring in
+; https://github.com/earlephilhower/arduino-pico/.../I2SInput.ino expects:
+;
+;   DOUT (mic) -> data_in_pin        (GPIO0)
+;   BCLK <-      clock_pin_base      (GPIO1)
+;   LRCL <-      clock_pin_base + 1  (GPIO2)   ; LRCLK = BCLK + 1 (sideset needs
+;                                                consecutive pins)
+;
+; The RP2350 is the I2S controller: it drives BCLK + LRCLK (word select) via the
+; 2-bit sideset and samples DIN on the rising BCLK edge. Two PIO cycles per bit,
+; so the state machine runs at sample_rate * bits * channels * 2.
+
+.program i2s_mic_in
+.side_set 2                 ; bit 0 = BCLK, bit 1 = WCLK (LRCL)
+
+; The init code loads (bits_per_sample - 2) into Y and primes the ISR so the
+; left/right word boundary lands on the autopush threshold.
+
+; +----- WCLK
+; |+---- BCLK
+    mov x, y        side 0b00
+left1:
+    in pins, 1      side 0b01
+    jmp x--, left1  side 0b00
+    in pins, 1      side 0b01   ; last left bit; LRCLK stays low until BCLK low
+
+    mov x, y        side 0b10
+right1:
+    in pins, 1      side 0b11
+    jmp x--, right1 side 0b10
+    in pins, 1      side 0b11   ; last right bit; LRCLK stays high until BCLK low
+    ; wrap back to the top
+
+% c-sdk {
+#include "hardware/clocks.h"
+
+// Bring up the I2S RX state machine in master mode. `bits` is the slot width
+// (use 32 for the SPH0645, which left-justifies its 18 real bits in a 32-bit
+// slot). Returns nothing; configures BCLK/LRCLK + data pins and starts the SM.
+static inline void i2s_mic_in_program_init(PIO pio, uint sm, uint offset,
+                                           uint data_in_pin, uint clock_pin_base,
+                                           uint bits, uint sample_rate) {
+    pio_gpio_init(pio, data_in_pin);
+    pio_gpio_init(pio, clock_pin_base);
+    pio_gpio_init(pio, clock_pin_base + 1);
+
+    pio_sm_config sm_config = i2s_mic_in_program_get_default_config(offset);
+    sm_config_set_in_pins(&sm_config, data_in_pin);
+    sm_config_set_sideset_pins(&sm_config, clock_pin_base);
+    // Shift left (MSB first), autopush every `bits` so each channel word is one
+    // FIFO entry. Join both FIFOs into RX for deeper buffering.
+    sm_config_set_in_shift(&sm_config, false, true, (bits <= 16) ? 2 * bits : bits);
+    sm_config_set_fifo_join(&sm_config, PIO_FIFO_JOIN_RX);
+
+    // Two PIO cycles per data bit, both channels -> sample_rate * bits * 2 * 2.
+    float div = (float)clock_get_hz(clk_sys) / (float)(sample_rate * bits * 2 * 2);
+    sm_config_set_clkdiv(&sm_config, div);
+
+    pio_sm_init(pio, sm, offset, &sm_config);
+
+    pio_sm_set_consecutive_pindirs(pio, sm, data_in_pin, 1, false);   // DIN = input
+    pio_sm_set_consecutive_pindirs(pio, sm, clock_pin_base, 2, true); // clocks = output
+
+    pio_sm_exec(pio, sm, pio_encode_set(pio_y, bits - 2));
+    // Prime the ISR so the first autopush aligns the left word (see arduino-pico
+    // note: shift in 1 L word then R-1 bits to dodge an off-by-one on RP2040).
+    pio_sm_exec(pio, sm, pio_encode_in(pio_pins, bits));
+    pio_sm_exec(pio, sm, pio_encode_in(pio_pins, bits - 1));
+
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}
