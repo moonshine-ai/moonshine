@@ -4,6 +4,10 @@
 
 [Moonshine Voice](https://github.com/moonshine-ai/moonshine) is an open source AI toolkit for developers building real-time voice agents and applications. Moonshine Micro is a version designed specifically for embedded system processors like microcontrollers and DSPs, and uses the Raspberry Pi RP2350, which retails for just 80 cents, as its reference platform. It includes [voice-activity detection](vad/README.md), [command recognition](stt/README.md), and [neural speech synthesis](neural-tts/README.md) and can run in as little as 470 KB of RAM.
 
+You can see a full walkthrough in the video below:
+
+[![Moonshine Micro demo video](video-thumbnail.gif)](https://www.youtube.com/watch?v=kMliOFYBiz4)
+
 The memory and compute requirements are designed to fit resource-constrained
 systems. Figures below are for [the RP2350 demo](examples/rp2350/README.md); the
 detailed [memory budget](examples/rp2350/README.md#memory-budget) breaks each one down:
