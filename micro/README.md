@@ -6,7 +6,11 @@
 
 You can see a full walkthrough in the video below:
 
-[![Moonshine Micro demo video](video-thumbnail.gif)](https://www.youtube.com/watch?v=kMliOFYBiz4)
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=kMliOFYBiz4">
+    <img src="video-thumbnail.gif" alt="Moonshine Micro demo video">
+  </a>
+</p>
 
 The memory and compute requirements are designed to fit resource-constrained
 systems. Figures below are for [the RP2350 demo](examples/rp2350/README.md); the
