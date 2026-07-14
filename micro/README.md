@@ -2,7 +2,7 @@
 
 # Moonshine Micro — Voice Interfaces for Microcontrollers
 
-[Moonshine Voice](https://github.com/moonshine-ai/moonshine) is an open source AI toolkit for developers building real-time voice agents and applications. Moonshine Micro is a version of that designed specifically for embedded system processors like microcontrollers and DSPs, and uses the Raspberry Pi RP2350, which retails for just 80 cents, as its reference platform. It includes [voice-activity detection](vad/README.md), [command recognition](stt/README.md), and [neural speech synthesis](neural-tts/README.md) and can run in as little as ~470 KiB RAM on the RP2350 demo.
+[Moonshine Voice](https://github.com/moonshine-ai/moonshine) is an open source AI toolkit for developers building real-time voice agents and applications. Moonshine Micro is a version designed specifically for embedded system processors like microcontrollers and DSPs, and uses the Raspberry Pi RP2350, which retails for just 80 cents, as its reference platform. It includes [voice-activity detection](vad/README.md), [command recognition](stt/README.md), and [neural speech synthesis](neural-tts/README.md) and can run in as little as 470 KB of RAM.
 
 The memory and compute requirements are designed to fit resource-constrained
 systems. Figures below are for [the RP2350 demo](examples/rp2350/README.md); the
@@ -20,7 +20,7 @@ detailed [memory budget](examples/rp2350/README.md#memory-budget) breaks each on
 - *\*VAD, STT, and neural TTS run sequentially and time-share one ~384 KiB TFLM arena, so SRAM is not additive — ~468 KiB is the total RAM provisioned on the 520 KiB RP2350 (`wifi_hardware` ~491 KiB).*
 - *A MAC is one multiply-accumulate; MMAC/s = millions per second during the active (non-idle) stage.*
 
-The code is released under [the permissive MIT License](#license), usable for commercial applications.
+The code is released under [the permissive MIT License](#license), suitable for commercial applications.
 
 There's a [complete end-to-end example](examples/rp2350/README.md) showing how to set up a wifi connection on a microcontroller using voice on an RP2350 MCU.
 
@@ -30,7 +30,7 @@ The VAD, STT, and TTS libraries can be used independently of each other, relying
 
  - [Voice Activity Detection](vad/README.md)
  - [Speech to Text](stt/README.md)
- - [Neural Text to Speech](neural-tts/README.md) (RVQ decoder + WORLD-lite vocoder; [Klatt duration rules](klatt-tts/README.md) used internally)
+ - [Neural Text to Speech](neural-tts/README.md)
  - [Wifi Setup Example](examples/rp2350/README.md)
 
 ## License

@@ -51,3 +51,4 @@ transcriber
 build-*/
 /eval-results.txt
 .vscode/
+pico_monitor.log
