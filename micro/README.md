@@ -38,6 +38,7 @@ The VAD, STT, and TTS libraries can be used independently of each other, relying
 
  - [Voice Activity Detection](vad/README.md)
  - [Speech to Text](stt/README.md)
+ - [Custom Word Recognition](stt-training/README.md)
  - [Neural Text to Speech](neural-tts/README.md)
  - [Wifi Setup Example](examples/rp2350/README.md)
 
