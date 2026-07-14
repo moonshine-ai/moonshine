@@ -865,6 +865,73 @@ The downloaded models are placed in child folders underneath the root folder, an
 
 If you have an application that may be stored in an arbitrary location after installation, you can also pass in a `tts_root` value as an option to set the path to the actual root folder of the TTS data at runtime.
 
+#### On-Device Auto-Download (iOS / macOS / Android)
+
+The Python `download` module is the right tool for build-time and desktop workflows, but mobile apps often want to fetch models on first run instead of shipping every model inside the app bundle. Both the Swift (iOS/macOS) and Android bindings include an **opt-in** downloader for this.
+
+This is strictly opt-in: apps that bundle their models and load them with the usual `from files` / `from assets` / `from memory` paths behave exactly as before and never touch the network. The downloader only resolves the file list from the native dependency catalog (the same catalog the Python module uses), so you never hardcode filenames, and it writes each file atomically (through a `.part` file), resumes interrupted transfers with HTTP `Range`, checks free space before large writes, and reports per-file progress.
+
+##### Swift (iOS 15+ / macOS 12+)
+
+`AssetDownloader.ensureModelPresent` downloads whatever is missing under a directory you choose and returns that directory, ready to hand to `Transcriber`, `IntentRecognizer`, or `TextToSpeech`. Call it off the main actor (it is `async`).
+
+```swift
+import MoonshineVoice
+
+let modelDir = URL.cachesDirectory.appending(path: "moonshine/tiny-en")
+
+// Speech-to-text: download the default English model (add includeSpelling: true for the
+// alphanumeric spelling model, or pass modelArch: to pick a specific architecture).
+let downloader = AssetDownloader(allowsCellularAccess: false)  // Wi-Fi only
+try await downloader.ensureModelPresent(root: modelDir, spec: .stt(language: "en")) { progress in
+    print("\(progress.relativePath): \(progress.bytesDownloaded)/\(progress.bytesTotal)")
+}
+let transcriber = try Transcriber(modelPath: modelDir.path, modelArch: .tiny)
+
+// Intent recognition (the embeddinggemma-300m model is large — a few hundred MB even at q4):
+try await downloader.ensureModelPresent(root: intentDir, spec: .intent(variant: "q4"))
+
+// Text to speech (files land under the directory you pass as g2p_root):
+try await downloader.ensureModelPresent(root: ttsRoot, spec: .tts(language: "en_us", voice: "kokoro_af_heart"))
+```
+
+`isModelPresent(root:spec:)` is a cheap synchronous check you can use to skip the download UI entirely when everything is already on disk. Download failures throw `AssetDownloadError` (HTTP status, insufficient space, cancellation, …) so you can distinguish "couldn't fetch" from a later load failure. No extra `Info.plist` entries or permissions are required for HTTPS downloads.
+
+##### Android
+
+The Android `AssetDownloader` mirrors the Swift API and performs blocking network I/O, so run it off the main thread. For reliable background downloads that survive process death, honor a network constraint, and retry with backoff, use `MoonshineDownloadWorker` (WorkManager).
+
+```java
+File modelDir = new File(context.getFilesDir(), "moonshine/tiny-en");
+
+// Direct (call from a background thread / coroutine):
+File root = new AssetDownloader().ensureModelPresent(
+        modelDir, ModelSpec.stt("en"),
+        (path, index, total, done, size) -> Log.i("dl", path + " " + done + "/" + size));
+Transcriber transcriber = new Transcriber();
+transcriber.loadFromFiles(root.getAbsolutePath(), JNI.MOONSHINE_MODEL_ARCH_TINY);
+
+// Or via WorkManager, downloading only over unmetered (e.g. Wi-Fi) connections:
+OneTimeWorkRequest request =
+        MoonshineDownloadWorker.buildRequest(modelDir, ModelSpec.stt("en"), /*requireUnmetered=*/ true);
+WorkManager.getInstance(context).enqueue(request);
+```
+
+`ModelSpec` also has `tts(language, voice)`, `intent(modelName, variant)`, and `g2p(language)` factories, matching the Swift specs. The library manifest declares the `INTERNET` and `ACCESS_NETWORK_STATE` permissions, which merge into your app automatically; observe `MoonshineDownloadWorker` progress via `WorkInfo.getProgress()` using the worker's `PROGRESS_*` data keys. Using the downloader pulls in OkHttp and WorkManager transitively; apps that bundle their models still ship these but never invoke the network path.
+
+##### Where files go
+
+You pick the destination directory, so choose one appropriate for your platform's cache/storage policy (for example `URL.cachesDirectory` on Apple platforms, or `context.getFilesDir()` / `context.getCacheDir()` on Android). Files are laid out under that directory exactly as the loaders expect: STT and intent files use their bare filenames, while TTS/G2P assets keep their canonical relative paths (e.g. `en_us/dict.tsv`) so the engine can find them from the root alone.
+
+##### Testing the download path
+
+Both frameworks ship download tests that hit the real CDN, download a model into an empty directory, and then load and run the matching engine. They pull tens to hundreds of MB, so they are **opt-in** and skip on a normal test run:
+
+- Swift (`AssetDownloaderNetworkTests`): `MOONSHINE_DOWNLOAD_TESTS=1 swift test --filter AssetDownloaderNetworkTests`.
+- Android (`AssetDownloaderTest`): `./gradlew connectedAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=ai.moonshine.voice.AssetDownloaderTest -Pandroid.testInstrumentationRunnerArguments.moonshineDownloadTests=1` (needs a connected device/emulator).
+
+`scripts/test-model-downloads.sh` runs the native catalog samples and then drives both of these automatically (skipping a platform when its toolchain or a device is unavailable). The mocked, offline `AssetDownloaderTests` still run as part of the default `swift test` and cover manifest parsing, resume, and error handling without a network.
+
 ### Benchmarks
 
 The core library includes a benchmarking tool that simulates processing live audio by loading a .wav audio file and feeding it in chunks to the model. To run it:

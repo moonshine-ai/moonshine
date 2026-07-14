@@ -582,6 +582,100 @@ internal final class MoonshineAPI: @unchecked Sendable {
         return result
     }
 
+    /// Get G2P-only asset dependency keys as a comma-separated string.
+    func getG2pDependencies(
+        languages: String,
+        options: [TranscriberOption]? = nil
+    ) throws -> String {
+        return try stringOutDependencyCall(
+            primaryArg: languages,
+            emptyResult: ""
+        ) { primaryC, optsPtr, optsCount, outPtr in
+            moonshine_get_g2p_dependencies(primaryC, optsPtr, optsCount, outPtr)
+        }(options)
+    }
+
+    /// Get the speech-to-text model download manifest as a JSON object string.
+    ///
+    /// - Parameters:
+    ///   - language: Language code (e.g. `"en"`) or English name; must not be empty.
+    ///   - options: Optional options; recognizes `model_arch` (decimal string) and
+    ///     `include_spelling` (bool).
+    func getSttDependencies(
+        language: String,
+        options: [TranscriberOption]? = nil
+    ) throws -> String {
+        return try stringOutDependencyCall(
+            primaryArg: language,
+            emptyResult: "{}"
+        ) { primaryC, optsPtr, optsCount, outPtr in
+            moonshine_get_stt_dependencies(primaryC, optsPtr, optsCount, outPtr)
+        }(options)
+    }
+
+    /// Get the intent-recognition embedding model download manifest as a JSON object string.
+    ///
+    /// - Parameters:
+    ///   - modelName: Embedding model id, or `nil` to use the default model.
+    ///   - options: Optional options; recognizes `variant`.
+    func getIntentDependencies(
+        modelName: String?,
+        options: [TranscriberOption]? = nil
+    ) throws -> String {
+        return try stringOutDependencyCall(
+            primaryArg: modelName,
+            emptyResult: "{}"
+        ) { primaryC, optsPtr, optsCount, outPtr in
+            moonshine_get_intent_dependencies(primaryC, optsPtr, optsCount, outPtr)
+        }(options)
+    }
+
+    /// Shared plumbing for the `moonshine_get_*_dependencies` family: marshals the primary string
+    /// argument and options, invokes `call`, converts errors, and returns the malloc'd string.
+    private func stringOutDependencyCall(
+        primaryArg: String?,
+        emptyResult: String,
+        _ call: @escaping (
+            UnsafePointer<CChar>?,
+            UnsafePointer<moonshine_option_t>?,
+            UInt64,
+            UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
+        ) -> Int32
+    ) -> ([TranscriberOption]?) throws -> String {
+        return { options in
+            let primaryC = primaryArg?.cString(using: .utf8)
+            var outJson: UnsafeMutablePointer<CChar>? = nil
+
+            let error: Int32
+            if let options = options, !options.isEmpty {
+                let nameCStrings = options.map { $0.name.cString(using: .utf8)! }
+                let valueCStrings = options.map { $0.value.cString(using: .utf8)! }
+                let optionStructs = (0..<options.count).map { i -> moonshine_option_t in
+                    moonshine_option_t(
+                        name: nameCStrings[i].withUnsafeBufferPointer { $0.baseAddress },
+                        value: valueCStrings[i].withUnsafeBufferPointer { $0.baseAddress }
+                    )
+                }
+                error = withExtendedLifetime((nameCStrings, valueCStrings, optionStructs)) {
+                    optionStructs.withUnsafeBufferPointer { buffer in
+                        call(primaryC, buffer.baseAddress, UInt64(options.count), &outJson)
+                    }
+                }
+            } else {
+                error = call(primaryC, nil, 0, &outJson)
+            }
+
+            try checkError(error)
+
+            guard let jsonPtr = outJson else {
+                return emptyResult
+            }
+            let result = String(cString: jsonPtr)
+            free(outJson)
+            return result
+        }
+    }
+
     // MARK: - Intent recognition
 
     func createIntentRecognizer(

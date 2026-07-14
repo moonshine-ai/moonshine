@@ -240,10 +240,10 @@ class TTSModel: ObservableObject {
     private func downloadAssets(
         g2pRoot: URL, language: String, voice: String?
     ) async throws {
-        let statusCallback: @Sendable (TtsAssetDownloader.Progress) -> Void = { [weak self] p in
+        let statusCallback: @Sendable (DownloadProgress) -> Void = { [weak self] p in
             let fraction: Double? = p.bytesTotal > 0
                 ? min(1.0, Double(p.bytesDownloaded) / Double(p.bytesTotal)) : nil
-            let fileName = (p.key as NSString).lastPathComponent
+            let fileName = (p.relativePath as NSString).lastPathComponent
             let snapshot = DownloadStatus(
                 fileName: fileName,
                 fileIndex: p.fileIndex,
@@ -257,10 +257,11 @@ class TTSModel: ObservableObject {
         defer {
             Task { @MainActor in self.downloadStatus = nil }
         }
-        try await TtsAssetDownloader.ensureAssetsPresent(
-            g2pRoot: g2pRoot,
-            language: language,
-            voice: voice,
+        // Uses the library's opt-in downloader; the file list is resolved from the native TTS
+        // dependency catalog rather than being hardcoded in the app.
+        try await AssetDownloader().ensureModelPresent(
+            root: g2pRoot,
+            spec: .tts(language: language, voice: voice),
             onProgress: statusCallback
         )
     }
