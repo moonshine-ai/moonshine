@@ -6,7 +6,7 @@
 #   feature-generation/  log-mel front-end (batch + streaming)   [kissfft + TFLM]
 #   vad/                 voice activity detection                [feature-gen + TFLM]
 #   stt/                 SpellingCNN classifier                  [feature-gen + TFLM]
-#   tts/                 portable formant TTS synth core         [self-contained]
+#   klatt-tts/           portable formant TTS synth core         [self-contained]
 #   examples/rp2350/      the RP2350 firmware that wires them up  [Pico SDK]
 #
 # TFLM is decoupled behind an INTERFACE target named `tflm`, so the modules don't
@@ -59,7 +59,9 @@ if(MOONSHINE_MICRO_HOST_TESTS)
   add_subdirectory(feature-generation)
   add_subdirectory(vad)
   add_subdirectory(stt)
-  add_subdirectory(tts)
+  add_subdirectory(g2p)
+  add_subdirectory(klatt-tts)
+  add_subdirectory(neural-tts)
   return()
 endif()
 
@@ -111,10 +113,13 @@ option(SPELLING_TINY_PRINT_MEMORY_PLAN
 # live + WiFi apps always link the VAD + STT + TTS pipeline. The options below
 # only tune optional demos inside the TEST target.
 
-# Streaming formant TTS engine USB speak command loop in the test sweep (the
-# live + WiFi apps always link the synth core directly, regardless of this).
+# Neural TTS USB speak command loop in the test sweep (the live + WiFi apps
+# always link the TTS pipeline directly, regardless of this). OFF by default:
+# the neural voice pack (~2.2 MB) does not fit in 4 MB flash next to the test
+# sweep's embedded clip set + STT model; turning this on requires shrinking
+# the embedded clips (generate_test_clips.py) to make room.
 option(SPELLING_TINY_TTS
-       "Add the TTS USB speak-loop demo to the test-sweep target." ON)
+       "Add the TTS USB speak-loop demo to the test-sweep target." OFF)
 
 # A streaming VAD demo over the embedded clips in the test sweep (the live + WiFi
 # apps always include the on-device VAD, regardless of this).
@@ -164,7 +169,9 @@ add_compile_options(
 add_subdirectory(feature-generation)
 add_subdirectory(stt)
 add_subdirectory(vad)
-add_subdirectory(tts)
+add_subdirectory(g2p)
+add_subdirectory(klatt-tts)
+add_subdirectory(neural-tts)
 
 # --- The example app -------------------------------------------------------
 add_subdirectory(examples/rp2350)

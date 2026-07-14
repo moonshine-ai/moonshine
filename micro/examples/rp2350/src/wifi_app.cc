@@ -10,7 +10,6 @@
 #include "classes.h"        // kClassLabels
 #include "kiss_fftr.h"
 #include "spelling_labels.h"  // SpokenForLabel
-#include "usb_audio_io.h"
 
 #include "pico/cyw43_arch.h"
 #include "pico/stdlib.h"
@@ -97,7 +96,7 @@ Tok Classify(const char* label, char* out_char) {
       std::strcmp(label, "uppercase") == 0)
     return Tok::kCapital;
   if (std::strcmp(label, "delete") == 0) return Tok::kDelete;
-  if (std::strcmp(label, "done") == 0) return Tok::kDone;
+  if (std::strcmp(label, "finish") == 0) return Tok::kDone;
   if (std::strcmp(label, "cancel") == 0) return Tok::kCancel;
   if (std::strcmp(label, "wifi") == 0) return Tok::kWifi;
   if (std::strcmp(label, "ip") == 0) return Tok::kIp;
@@ -142,7 +141,18 @@ void SpeakSpelled(const char* prefix, const char* text, AudioOutput& out,
   Speak(phrase, out, in, arena, arena_size);
 }
 
-// Speak the current STA IPv4 address digit-by-digit ("one nine two point ...").
+// Announce a network name: first say it as whole words (letting the TTS g2p
+// pronounce the raw text), then spell it out letter-by-letter so an ambiguous
+// pronunciation is still unambiguous.
+void SpeakName(const char* name, AudioOutput& out, AudioInput& in,
+               uint8_t* arena, std::size_t arena_size) {
+  static char phrase[128];
+  std::snprintf(phrase, sizeof(phrase), "the name is %s", name);
+  Speak(phrase, out, in, arena, arena_size);
+  SpeakSpelled("spelled", name, out, in, arena, arena_size);
+}
+
+// Speak the current STA IPv4 address digit-by-digit ("one nine two dot ...").
 void SpeakIp(AudioOutput& out, AudioInput& in, uint8_t* arena,
              std::size_t arena_size) {
   struct netif* nif = &cyw43_state.netif[CYW43_ITF_STA];
@@ -170,7 +180,7 @@ void SpeakIp(AudioOutput& out, AudioInput& in, uint8_t* arena,
       }
       std::strncat(phrase, DigitWord(*d), sizeof(phrase) - std::strlen(phrase) - 1);
     }
-    if (o < 3) std::strncat(phrase, " point", sizeof(phrase) - std::strlen(phrase) - 1);
+    if (o < 3) std::strncat(phrase, " dot", sizeof(phrase) - std::strlen(phrase) - 1);
   }
   Speak(phrase, out, in, arena, arena_size);
 }
@@ -228,12 +238,128 @@ std::size_t AppendChar(char* buf, std::size_t len, char c, bool* caps,
   return len;
 }
 
+// ---- Network scan + "spell the first few letters" prefix matching ----------
+//
+// Rather than make the user spell out a whole SSID, we scan for nearby networks
+// and match what they spell against that list as a prefix. As soon as the typed
+// letters single out exactly one network we announce it; on "finish" we resolve
+// an exact name, a unique prefix, or fall back to the typed text (so hidden
+// networks still work).
+
+// Plenty for a normal environment; extra APs past this are simply not offered
+// as matches (the user can still spell the full name and have it used as typed).
+constexpr int kMaxScanSsids = 24;
+char g_scan_ssids[kMaxScanSsids][33];  // 32-char SSID + NUL
+int g_scan_count = 0;
+
+int ScanResultCb(void* /*env*/, const cyw43_ev_scan_result_t* r) {
+  if (r == nullptr || r->ssid_len == 0) return 0;  // skip hidden / broadcast
+  int n = r->ssid_len;
+  if (n > 32) n = 32;
+  char name[33];
+  std::memcpy(name, r->ssid, static_cast<std::size_t>(n));
+  name[n] = '\0';
+  for (int i = 0; i < g_scan_count; ++i) {
+    if (std::strcmp(g_scan_ssids[i], name) == 0) return 0;  // dedup (multi-AP)
+  }
+  if (g_scan_count < kMaxScanSsids) {
+    std::strcpy(g_scan_ssids[g_scan_count], name);
+    ++g_scan_count;
+  }
+  return 0;
+}
+
+// Scan for nearby networks into g_scan_ssids. Blocking: pumps the poll-mode
+// CYW43 context (and drains the mic so its FIFO can't overflow) until the scan
+// finishes or times out. Safe to call before connecting (we're in STA mode).
+void ScanNetworks(AudioInput& in) {
+  g_scan_count = 0;
+  printf("[wifi] scanning for networks...\n");
+  fflush(stdout);
+  cyw43_wifi_scan_options_t opts;
+  std::memset(&opts, 0, sizeof(opts));
+  const int err = cyw43_wifi_scan(&cyw43_state, &opts, nullptr, ScanResultCb);
+  if (err != 0) {
+    printf("[wifi] scan start failed (err=%d)\n", err);
+    fflush(stdout);
+    return;
+  }
+  const absolute_time_t deadline = make_timeout_time_ms(8000);
+  while (cyw43_wifi_scan_active(&cyw43_state) && !time_reached(deadline)) {
+    cyw43_arch_poll();
+    in.Drain();
+    sleep_ms(20);
+  }
+  printf("[wifi] scan complete: %d network(s)\n", g_scan_count);
+  for (int i = 0; i < g_scan_count; ++i) {
+    printf("[wifi]   %2d: %s\n", i, g_scan_ssids[i]);
+  }
+  fflush(stdout);
+}
+
+char LowerAscii(char c) {
+  return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
+}
+
+// Case-insensitive: does `name` begin with the `plen`-char `prefix`?
+bool HasPrefixCi(const char* name, const char* prefix, std::size_t plen) {
+  for (std::size_t i = 0; i < plen; ++i) {
+    if (name[i] == '\0' || LowerAscii(name[i]) != LowerAscii(prefix[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool EqualsCi(const char* a, const char* b) {
+  for (;; ++a, ++b) {
+    if (LowerAscii(*a) != LowerAscii(*b)) return false;
+    if (*a == '\0') return true;
+  }
+}
+
+// Count scanned SSIDs starting (case-insensitively) with `prefix`; on a single
+// match, write its index to *only_idx.
+int CountPrefixMatches(const char* prefix, int* only_idx) {
+  const std::size_t plen = std::strlen(prefix);
+  int count = 0, idx = -1;
+  for (int i = 0; i < g_scan_count; ++i) {
+    if (HasPrefixCi(g_scan_ssids[i], prefix, plen)) {
+      ++count;
+      idx = i;
+    }
+  }
+  if (only_idx != nullptr) *only_idx = idx;
+  return count;
+}
+
+int FindExactMatch(const char* name) {
+  for (int i = 0; i < g_scan_count; ++i) {
+    if (EqualsCi(g_scan_ssids[i], name)) return i;
+  }
+  return -1;
+}
+
+// Adopt `name` as the chosen SSID (copied into `ssid`), say it back spelled out,
+// and ask for confirmation. The caller then moves to State::kSsidConfirm.
+void AnnounceMatch(const char* name, char* ssid, std::size_t* ssid_len,
+                   AudioOutput& out, AudioInput& in, uint8_t* arena,
+                   std::size_t arena_size) {
+  std::snprintf(ssid, kFieldMax, "%s", name);
+  *ssid_len = std::strlen(ssid);
+  printf("[wifi] matched network '%s'\n", ssid);
+  fflush(stdout);
+  Speak("found a network", out, in, arena, arena_size);
+  SpeakName(ssid, out, in, arena, arena_size);
+  Speak("say yes to confirm or no to try again", out, in, arena, arena_size);
+}
+
 }  // namespace
 
-void RunWifiApp() {
+void RunWifiAppWithIo(AudioInput& in, AudioOutput& out) {
   uint8_t* arena = g_tensor_arena;
   const std::size_t arena_size = kTensorArenaSize;
-  float* window = g_waveform;
+  int16_t* window = g_waveform;
   const int WS = kClipNumSamples;
 
   // One shared 512-pt real-FFT twiddle state for the VAD front-end and the STT
@@ -257,9 +383,6 @@ void RunWifiApp() {
   fflush(stdout);
 
   RecognizerInit(fft);
-
-  UsbAudioInput in;
-  UsbAudioOutput out;
 
   static char ssid[kFieldMax];
   static char pw[kFieldMax];
@@ -289,8 +412,9 @@ void RunWifiApp() {
           ssid_len = 0;
           ssid[0] = '\0';
           caps = false;
-          Speak("spell the network name then say done", out, in, arena,
-                arena_size);
+          ScanNetworks(in);
+          Speak("spell the first few letters of the network name then say finish",
+                out, in, arena, arena_size);
           st = State::kSsid;
         } else if (tok == Tok::kIp) {
           SpeakIp(out, in, arena, arena_size);
@@ -304,21 +428,35 @@ void RunWifiApp() {
         switch (tok) {
           case Tok::kChar:
             len = AppendChar(buf, len, ch, &caps, out, in, arena, arena_size);
+            // While spelling the SSID, announce as soon as the typed letters
+            // single out exactly one scanned network (no need to say "finish").
+            if (st == State::kSsid && len > 0) {
+              int only = -1;
+              if (CountPrefixMatches(ssid, &only) == 1) {
+                AnnounceMatch(g_scan_ssids[only], ssid, &ssid_len, out, in,
+                              arena, arena_size);
+                st = State::kSsidConfirm;
+              }
+            }
             break;
           case Tok::kCapital:
             caps = true;
             break;
           case Tok::kDelete:
             if (len > 0) {
+              const char removed = buf[len - 1];
               buf[--len] = '\0';
-              Speak("delete", out, in, arena, arena_size);
+              char phrase[48];
+              std::snprintf(phrase, sizeof(phrase), "deleting");
+              AppendSpokenForChar(phrase, sizeof(phrase), removed);
+              Speak(phrase, out, in, arena, arena_size);
             }
             break;
           case Tok::kCancel:
             caps = false;
             Speak("cancelled", out, in, arena, arena_size);
             st = State::kIdle;
-            Speak("say wifi to set up a network", out, in, arena, arena_size);
+            Speak("say wifi to set up a network, or ip", out, in, arena, arena_size);
             break;
           case Tok::kDone:
             if (st == State::kSsid) {
@@ -327,10 +465,29 @@ void RunWifiApp() {
                       arena_size);
                 break;
               }
-              SpeakSpelled("the name is", ssid, out, in, arena, arena_size);
-              Speak("say yes to confirm or no to try again", out, in, arena,
-                    arena_size);
-              st = State::kSsidConfirm;
+              // Resolve the typed letters against the scan: an exact name wins,
+              // then a unique prefix; several matches asks for more letters, and
+              // no match falls back to the typed text (hidden network).
+              int only = -1;
+              const int exact = FindExactMatch(ssid);
+              if (exact >= 0) {
+                AnnounceMatch(g_scan_ssids[exact], ssid, &ssid_len, out, in,
+                              arena, arena_size);
+                st = State::kSsidConfirm;
+              } else if (CountPrefixMatches(ssid, &only) == 1) {
+                AnnounceMatch(g_scan_ssids[only], ssid, &ssid_len, out, in,
+                              arena, arena_size);
+                st = State::kSsidConfirm;
+              } else if (only >= 0) {  // CountPrefixMatches returned > 1
+                Speak("several networks match, please spell more letters", out,
+                      in, arena, arena_size);
+                // stay in State::kSsid
+              } else {
+                SpeakName(ssid, out, in, arena, arena_size);
+                Speak("say yes to confirm or no to try again", out, in, arena,
+                      arena_size);
+                st = State::kSsidConfirm;
+              }
             } else {
               // Password complete -> attempt the join right away.
               DoConnect(ssid, pw, out, in, arena, arena_size);
@@ -350,15 +507,16 @@ void RunWifiApp() {
           pw_len = 0;
           pw[0] = '\0';
           caps = false;
-          Speak("spell the password then say done", out, in, arena,
+          Speak("spell the password then say finish", out, in, arena,
                 arena_size);
           st = State::kPassword;
         } else if (tok == Tok::kNo) {
           ssid_len = 0;
           ssid[0] = '\0';
           caps = false;
-          Speak("spell the network name then say done", out, in, arena,
-                arena_size);
+          ScanNetworks(in);
+          Speak("spell the first few letters of the network name then say finish",
+                out, in, arena, arena_size);
           st = State::kSsid;
         }
         break;

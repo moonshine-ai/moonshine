@@ -153,19 +153,24 @@ arm_cmsis_nn_status arm_convolve_s16(const cmsis_nn_context *ctx,
                     im2col = buffer_a;
                 }
 #else
-                /* Computation is filed for every 2 columns */
-                if (lhs_rows == 2)
+                /* moonshine-micro: batch SPELLING_S16_COL_BLOCK im2col
+                 * columns per GEMM call (upstream: 2) so each weight row
+                 * is streamed from flash once per block. The scratch
+                 * buffer is sized for this in
+                 * arm_convolve_s16_get_buffer_size(). */
+                if (lhs_rows == SPELLING_S16_COL_BLOCK)
                 {
-                    out = arm_nn_mat_mult_kernel_s16(filter_data,
-                                                     buffer_a,
-                                                     output_ch,
-                                                     output_shift,
-                                                     output_mult,
-                                                     out_activation_min,
-                                                     out_activation_max,
-                                                     rhs_cols,
-                                                     bias_data,
-                                                     out);
+                    out = arm_nn_mat_mult_kernel_s16_block(filter_data,
+                                                           buffer_a,
+                                                           output_ch,
+                                                           output_shift,
+                                                           output_mult,
+                                                           out_activation_min,
+                                                           out_activation_max,
+                                                           rhs_cols,
+                                                           lhs_rows,
+                                                           bias_data,
+                                                           out);
 
                     /* Counter reset */
                     im2col = buffer_a;
@@ -200,79 +205,19 @@ arm_cmsis_nn_status arm_convolve_s16(const cmsis_nn_context *ctx,
             im2col = buffer_a;
 #else // #if defined(ARM_MATH_MVEI)
 
-            const int64_t *bias_s64 = (const int64_t *)bias_data->data;
-            const int32_t *bias_s32 = (const int32_t *)bias_data->data;
-            const bool is_int32_bias = bias_data->is_int32_bias;
-            const int8_t *ker_a = filter_data;
-            int i;
-
-            for (i = 0; i < output_ch; i++)
-            {
-                /* Init the accumulator*/
-                int32_t sum = 0;
-
-                /* Point to the beginning of the im2col buffer where the input is available as a rearranged column */
-                const int16_t *ip_as_col = buffer_a;
-
-    #if defined(ARM_MATH_DSP)
-                /* 4 multiply and accumulates are done in one loop. */
-                int32_t col_count = rhs_cols >> 2;
-
-                while (col_count)
-                {
-                    int32_t ker_a1, ker_a2;
-                    int32_t ip_b1, ip_b2;
-
-                    ker_a = read_and_pad(ker_a, &ker_a1, &ker_a2);
-
-                    ip_b1 = arm_nn_read_q15x2_ia(&ip_as_col);
-                    sum = SMLAD(ker_a1, ip_b1, sum);
-                    ip_b2 = arm_nn_read_q15x2_ia(&ip_as_col);
-                    sum = SMLAD(ker_a2, ip_b2, sum);
-
-                    col_count--;
-                }
-                /* Handle left over mac */
-                col_count = rhs_cols & 0x3;
-    #else
-                uint16_t col_count = rhs_cols;
-
-    #endif
-
-                while (col_count)
-                {
-                    int8_t ker_a1 = *ker_a++;
-                    int16_t ip_b1 = *ip_as_col++;
-                    sum += ker_a1 * ip_b1;
-                    col_count--;
-                }
-
-                if (is_int32_bias)
-                {
-                    if (bias_s32)
-                    {
-                        sum += bias_s32[i];
-                    }
-
-                    sum = arm_nn_requantize(sum, output_mult[i], output_shift[i]);
-                }
-                else
-                {
-                    int64_t acc_64 = sum;
-
-                    if (bias_s64)
-                    {
-                        acc_64 += bias_s64[i];
-                    }
-
-                    int32_t reduced_multiplier = REDUCE_MULTIPLIER(output_mult[i]);
-                    sum = arm_nn_requantize_s64(acc_64, reduced_multiplier, output_shift[i]);
-                }
-
-                sum = MAX(sum, out_activation_min);
-                sum = MIN(sum, out_activation_max);
-                *out++ = (int16_t)sum;
-            }
+            /* moonshine-micro: leftover columns (< SPELLING_S16_COL_BLOCK)
+             * go through the same block kernel. */
+            out = arm_nn_mat_mult_kernel_s16_block(filter_data,
+                                                   buffer_a,
+                                                   output_ch,
+                                                   output_shift,
+                                                   output_mult,
+                                                   out_activation_min,
+                                                   out_activation_max,
+                                                   rhs_cols,
+                                                   lhs_rows,
+                                                   bias_data,
+                                                   out);
             lhs_rows = 0;
 
 #endif // #if defined(ARM_MATH_MVEI)

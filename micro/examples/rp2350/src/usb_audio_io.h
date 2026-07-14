@@ -5,9 +5,10 @@
 //   host
 //                       (scripts/usb_audio_bridge.py, in this example's scripts/,
 //                       captures the laptop mic).
-//   * UsbAudioOutput -- writes a framed PCM reply the host plays back:
-//                         AUDIO <sample_rate> <num_samples>\n
-//                         <num_samples * int16 little-endian>
+//   * UsbAudioOutput -- writes framed PCM the host plays back:
+//                         CLIP <rate> <n>   (captured mic clip, debug)
+//                         AUDIO <rate> <n>  (TTS reply)
+//                         <n * int16 little-endian>
 //                         \nEND\n
 //
 // Both are thin wrappers over the Pico SDK stdio CDC byte pipe. Swap them for
@@ -29,7 +30,8 @@ class UsbAudioInput : public AudioInput {
 
 class UsbAudioOutput : public AudioOutput {
  public:
-  void Begin(int sample_rate, int num_samples) override;
+  void Begin(int sample_rate, int num_samples,
+             const char* kind = "AUDIO") override;
   void Write(const int16_t* samples, int n) override;
   void End() override;
 };

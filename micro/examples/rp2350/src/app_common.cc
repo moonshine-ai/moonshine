@@ -28,7 +28,7 @@ static_assert(
 
 // 16-byte-aligned so TFLM's planner has room for SIMD-aligned working buffers.
 alignas(16) uint8_t g_tensor_arena[kTensorArenaSize];
-alignas(16) float g_waveform[kClipNumSamples];
+alignas(16) int16_t g_waveform[kClipNumSamples];
 
 void LedPulse(unsigned pin, int count, int on_ms, int off_ms) {
   for (int i = 0; i < count; ++i) {
@@ -61,11 +61,11 @@ unsigned BoardInit() {
   gpio_set_dir(led_pin, GPIO_OUT);
   LedPulse(led_pin, 5, 80, 80);  // POST
 
-  // Bring up USB stdio and wait up to ~30 s for the host to open the CDC port
-  // (so a serial monitor attached after enumeration still catches the banner).
-  // Slow blink during the wait distinguishes "waiting for monitor" from "hung".
+  // Bring up USB stdio and wait up to ~1 s for the host to open the CDC port
+  // (so a serial monitor attached just after enumeration still catches the
+  // banner). Slow blink during the wait distinguishes "waiting" from "hung".
   stdio_init_all();
-  for (int i = 0; i < 1500 && !stdio_usb_connected(); ++i) {
+  for (int i = 0; i < 50 && !stdio_usb_connected(); ++i) {
     gpio_put(led_pin, (i & 0x10) ? 1 : 0);  // ~250 ms half-period
     sleep_ms(20);
   }

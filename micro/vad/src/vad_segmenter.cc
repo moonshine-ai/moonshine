@@ -103,4 +103,22 @@ void ExtractClipFrontAligned(const float* src, std::size_t src_len,
   for (std::size_t i = n; i < clip_len; ++i) out[i] = 0.0f;
 }
 
+std::size_t EnergyCentroidIndex(const int16_t* buf, std::size_t start,
+                                std::size_t end) {
+  if (end <= start) return start;
+  // int64 accumulators: for a 1 s / 16 kHz int16 window the sums stay well
+  // within range (den <= ~1.6e13, num <= ~2.7e17 << 9.2e18), so we avoid any
+  // float in the hot-ish path and get a deterministic result.
+  int64_t num = 0;
+  int64_t den = 0;
+  for (std::size_t i = start; i < end; ++i) {
+    const int64_t e = static_cast<int64_t>(buf[i]) * static_cast<int64_t>(buf[i]);
+    num += static_cast<int64_t>(i) * e;
+    den += e;
+  }
+  if (den <= 0) return (start + end) / 2;  // silent region -> midpoint
+  // Round to nearest sample.
+  return static_cast<std::size_t>((num + den / 2) / den);
+}
+
 }  // namespace spelling

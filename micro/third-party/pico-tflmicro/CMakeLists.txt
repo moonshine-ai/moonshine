@@ -329,6 +329,7 @@ target_sources(pico-tflmicro
   ${CMAKE_CURRENT_LIST_DIR}/src/tensorflow/lite/micro/kernels/fully_connected_common.cpp
   ${CMAKE_CURRENT_LIST_DIR}/src/tensorflow/lite/micro/kernels/gather.cpp
   ${CMAKE_CURRENT_LIST_DIR}/src/tensorflow/lite/micro/kernels/gather_nd.cpp
+  ${CMAKE_CURRENT_LIST_DIR}/src/tensorflow/lite/micro/kernels/gelu.cpp
   ${CMAKE_CURRENT_LIST_DIR}/src/tensorflow/lite/micro/kernels/hard_swish.cpp
   ${CMAKE_CURRENT_LIST_DIR}/src/tensorflow/lite/micro/kernels/hard_swish.h
   ${CMAKE_CURRENT_LIST_DIR}/src/tensorflow/lite/micro/kernels/hard_swish_common.cpp
@@ -645,10 +646,14 @@ target_sources(pico-tflmicro
   ${CMAKE_CURRENT_LIST_DIR}/src/third_party/gemmlowp/fixedpoint/fixedpoint_neon.h
   ${CMAKE_CURRENT_LIST_DIR}/src/third_party/gemmlowp/fixedpoint/fixedpoint_sse.h
   ${CMAKE_CURRENT_LIST_DIR}/src/third_party/gemmlowp/internal/detect_platform.h
+  # NOTE: kiss_fft.c / tools/kiss_fftr.c are deliberately NOT compiled
+  # standalone here. TFLM only uses kissfft via the namespaced wrappers in
+  # signal/src/kiss_fft_wrappers (which #include the .c files inside a
+  # namespace). Compiling them standalone exported unmangled kiss_fftr_alloc
+  # etc. whose KISS_FFT_MALLOC is patched to return NULL, and those symbols
+  # shadowed the real third-party/kissfft library at app link time.
   ${CMAKE_CURRENT_LIST_DIR}/src/third_party/kissfft/_kiss_fft_guts.h
-  ${CMAKE_CURRENT_LIST_DIR}/src/third_party/kissfft/kiss_fft.c
   ${CMAKE_CURRENT_LIST_DIR}/src/third_party/kissfft/kiss_fft.h
-  ${CMAKE_CURRENT_LIST_DIR}/src/third_party/kissfft/tools/kiss_fftr.c
   ${CMAKE_CURRENT_LIST_DIR}/src/third_party/kissfft/tools/kiss_fftr.h
   ${CMAKE_CURRENT_LIST_DIR}/src/third_party/ruy/ruy/profiler/instrumentation.h
 

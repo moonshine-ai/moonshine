@@ -1,0 +1,6 @@
+# Generated audio, checkpoints, mining caches, and downloaded augmentation data.
+/data/
+/checkpoints/
+__pycache__/
+*.pyc
+.venv/

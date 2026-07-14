@@ -2,21 +2,22 @@
 
 # Moonshine Micro — Voice Interfaces for Microcontrollers
 
-[Moonshine Voice](https://github.com/moonshine-ai/moonshine) is an open source AI toolkit for developers building real-time voice agents and applications. Moonshine Micro is a version of that designed specifically for embedded system processors like microcontrollers and DSPs. It includes [voice-activity detection](vad/README.md), [command recognition](stt/README.md), and [speech synthesis](tts/README.md) and can run in as little as 500KB RAM.
+[Moonshine Voice](https://github.com/moonshine-ai/moonshine) is an open source AI toolkit for developers building real-time voice agents and applications. Moonshine Micro is a version of that designed specifically for embedded system processors like microcontrollers and DSPs, and uses the Raspberry Pi RP2350, which retails for just 80 cents, as its reference platform. It includes [voice-activity detection](vad/README.md), [command recognition](stt/README.md), and [neural speech synthesis](neural-tts/README.md) and can run in as little as ~470 KiB RAM on the RP2350 demo.
 
 The memory and compute requirements are designed to fit resource-constrained
-systems. Figures below are for [the RP2350 demo](examples/rp2350/README.md); the detailed [memory budget](#memory-budget) breaks each one down:
+systems. Figures below are for [the RP2350 demo](examples/rp2350/README.md); the
+detailed [memory budget](examples/rp2350/README.md#memory-budget) breaks each one down:
 
 | Component | Flash | SRAM (arena peak) | Compute |
 |-----------|-------|-------------------|---------|
-| VAD (Voice Activity Detection) | ~89 KiB | ~36 KiB | ~0.8 MMAC/frame (~25 MMAC/second) |
-| STT (SpellingCNN Speech-to-Text) | ~1.3 MiB | ~346 KiB | ~36 MMAC/second |
-| TTS (Klatt synth, waveform synthesis etc.) | ~150 KiB | few KiB | ~1 MMAC/second |
-| **TOTAL (Demo pipeline)** | **~1.8 MiB** | **~498 KiB provisioned\*** | — |
+| VAD (Voice Activity Detection) | ~89 KiB | ~36 KiB | ~0.8 MMAC/frame (~25 MMAC/s) |
+| STT (SpellingCNN Speech-to-Text) | ~1.3 MiB | ~346 KiB | ~36 MMAC/s |
+| TTS (neural diphone synth @ 16 kHz) | ~1.8 MiB voice pack | ~340 KiB | ~37 MMAC typical reply (~65 MMAC/s out) |
+| **TOTAL (Demo pipeline)** | **~3.6 MiB** | **~468 KiB provisioned\*** | classify + speak ~0.7–1.0 s |
 
 *Notes:*
-- *Flash is the `.text` measured with `arm-none-eabi-size` (model + code + rodata); SRAM is `.bss` + heap + stacks.*
-- *\*The three stages run sequentially and time-share one ~384 KiB TFLM arena, so SRAM is not additive — ~498 KiB is the total RAM provisioned on the 520 KiB RP2350.*
+- *Flash is `.text` + `.rodata` measured with `arm-none-eabi-size` on the default `moonshine_micro_echo` firmware (includes the embedded neural voice pack); SRAM is `.bss` + heap + stacks.*
+- *\*VAD, STT, and neural TTS run sequentially and time-share one ~384 KiB TFLM arena, so SRAM is not additive — ~468 KiB is the total RAM provisioned on the 520 KiB RP2350 (`wifi_hardware` ~491 KiB).*
 - *A MAC is one multiply-accumulate; MMAC/s = millions per second during the active (non-idle) stage.*
 
 The code is released under [the permissive MIT License](#license), usable for commercial applications.
@@ -29,7 +30,7 @@ The VAD, STT, and TTS libraries can be used independently of each other, relying
 
  - [Voice Activity Detection](vad/README.md)
  - [Speech to Text](stt/README.md)
- - [Text to Speech](tts/README.md)
+ - [Neural Text to Speech](neural-tts/README.md) (RVQ decoder + WORLD-lite vocoder; [Klatt duration rules](klatt-tts/README.md) used internally)
  - [Wifi Setup Example](examples/rp2350/README.md)
 
 ## License

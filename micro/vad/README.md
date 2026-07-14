@@ -43,6 +43,22 @@ if (seg.ProcessFrame(p) == spelling::VadEvent::kSpeechEnd) {
 }
 ```
 
+`segment_start_sample()` is a noisy anchor (moving-average lag + look-behind,
+plus occasional merged segments), so front-aligning the captured clip can clip
+leading consonants or strand the word at the window edge. Prefer centring the
+1 s clip on the spoken word's energy via `EnergyCentroidIndex` -- it recovers
+essentially the entire streaming-VAD accuracy gap in host simulation (see
+`scripts/test_streaming_vad.py --align-sweep`). `audio_service.cc` does this on
+the int16 capture buffer:
+
+```cpp
+// buf holds the last WS samples; the segment occupies the tail.
+std::size_t region = (seg_len >= WS) ? 0 : (WS - seg_len);
+std::size_t c = spelling::EnergyCentroidIndex(buf, region, WS);
+long shift = (long)c - WS / 2;      // slide so the word sits at WS/2,
+// memmove buf by `shift`, zero-pad the vacated side.
+```
+
 The `Vad` output logit is accepted as int8 (pure-int8 model) or int16 (the
 mixed-precision int8-body/int16-head export); `Predict()` dequantizes both and
 applies the sigmoid.

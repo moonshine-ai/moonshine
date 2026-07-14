@@ -10,9 +10,10 @@
 // VAD (~36 KiB arena), the SpellingCNN classifier (~366 KiB arena) and the TTS
 // synth (arena working memory) never run at the same time, so they reuse the
 // SINGLE tensor arena sequentially (Vad -> Classifier -> StreamSynth -> Vad).
-// `window` is the reused 1 s fp32 waveform buffer (g_waveform) that doubles as
+// `window` is the reused 1 s int16 waveform buffer (g_waveform) that doubles as
 // the sliding capture window and the front-aligned STT clip; no extra big SRAM
-// buffer is allocated.
+// buffer is allocated. int16 (vs fp32) halves it to 32 KiB; the VAD + STT
+// front-ends convert to float at the read site.
 
 #ifndef SPELLING_AUDIO_SERVICE_H_
 #define SPELLING_AUDIO_SERVICE_H_
@@ -43,11 +44,27 @@ void RecognizerInit(kiss_fftr_state* fft);
 // Reuses the shared tensor `arena` for the VAD then the classifier. Emits the
 // same "listening" / "VAD start" / "VAD end" / "RESULT" logs the host expects.
 int RecognizeOne(AudioInput& input, uint8_t* arena, std::size_t arena_size,
-                 float* window, int window_samples, float* out_prob);
+                 int16_t* window, int window_samples, float* out_prob);
+
+// Playback volume for the spoken reply, as a linear multiplier on the TTS PCM.
+//
+// Unlike the microphone input (whose absolute level we can't choose, and which
+// RecognizeOne RMS-normalizes before the STT front-end so the quiet I2S mic
+// clears the log-mel eps floor), the TTS reply is OUR signal: the streaming synth
+// already self-normalizes each utterance to ~-1 dBFS (VoiceParams::output_gain +
+// a soft limiter), so its peak is predictable. That makes "volume" a clean
+// scalar we get to pick: 1.0 plays at full scale (loudest, and cleanest on a
+// small speaker, which needs the whole range to stay above the noise floor);
+// values < 1.0 attenuate. Values > 1.0 are allowed but will clip the
+// already-near-full-scale reply, so prefer <= 1.0. Applied in Speak() on every
+// path (echo / echo_hardware / wifi), so it's the single TTS-loudness knob.
+void SetTtsVolume(float volume);
+float TtsVolume();
 
 // Synthesize `text` with the formant TTS and stream it to `output`, draining
 // `input` while we speak so our own audio (and room echo) can't re-trigger the
 // VAD, then hold a short mute tail. Reuses the tensor `arena` as synth scratch.
+// The PCM is scaled by TtsVolume() (see SetTtsVolume) before output.
 void Speak(const char* text, AudioOutput& output, AudioInput& input,
            uint8_t* arena, std::size_t arena_size);
 
@@ -59,7 +76,7 @@ void Speak(const char* text, AudioOutput& output, AudioInput& input,
 // (kClipNumSamples) reused as the sliding capture window and the STT clip.
 void RunAudioService(AudioInput& input, AudioOutput& output, uint8_t* arena,
                      std::size_t arena_size, kiss_fftr_state* fft,
-                     float* window, int window_samples);
+                     int16_t* window, int window_samples);
 
 }  // namespace spelling
 

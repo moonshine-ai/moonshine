@@ -96,19 +96,22 @@ void RunVadDemo(uint8_t* arena, std::size_t arena_size, kiss_fftr_state* fft) {
     const unsigned n = (clip.num_samples < (unsigned)kClipNumSamples)
                            ? clip.num_samples
                            : (unsigned)kClipNumSamples;
-    for (unsigned i = 0; i < n; ++i)
-      g_waveform[i] = static_cast<float>(clip.samples[i]) * kInt16ToFp32;
-    for (unsigned i = n; i < (unsigned)kClipNumSamples; ++i)
-      g_waveform[i] = 0.0f;
+    // g_waveform is int16 now; store the clip's int16 samples directly and
+    // convert each block to fp32 just-in-time for PushHop below.
+    for (unsigned i = 0; i < n; ++i) g_waveform[i] = clip.samples[i];
+    for (unsigned i = n; i < (unsigned)kClipNumSamples; ++i) g_waveform[i] = 0;
 
     streamer.Reset();
     seg.Start();
     int n_segs = 0;
     std::size_t last_start = 0, last_end = 0;
     float max_prob = 0.0f;
+    static float hop_f[kVadHop];  // fp32 hop scratch (BSS, not the core stack)
     const absolute_time_t t0 = get_absolute_time();
     for (int k = 0; k < n_blocks; ++k) {
-      streamer.PushHop(&g_waveform[k * hop]);
+      for (int j = 0; j < hop; ++j)
+        hop_f[j] = static_cast<float>(g_waveform[k * hop + j]) * kInt16ToFp32;
+      streamer.PushHop(hop_f);
       float* feats = vad.feature_scratch();
       streamer.BuildModelInput(feats);
       const float p = vad.Predict(feats);
@@ -221,13 +224,12 @@ void RunTestApp(unsigned led_pin) {
   for (int ci = 0; ci < kNumEmbeddedClips; ++ci) {
     const EmbeddedClip& clip = kEmbeddedClips[ci];
 
-    // int16 PCM -> static fp32 waveform. 1/32768 (not 32767) matches the
-    // inverse of the generator's _fp32_to_int16_pcm, keeping the round-trip
-    // exact at integer values.
+    // The embedded clips are already int16 PCM and g_waveform is int16, so this
+    // is a straight copy; Compute()'s int16 overload converts to fp32 at the
+    // read site (1/32768, matching the generator's _fp32_to_int16_pcm inverse).
     const absolute_time_t t_fm0 = get_absolute_time();
-    constexpr float kInt16ToFp32 = 1.0f / 32768.0f;
     for (unsigned int i = 0; i < clip.num_samples; ++i) {
-      g_waveform[i] = static_cast<float>(clip.samples[i]) * kInt16ToFp32;
+      g_waveform[i] = clip.samples[i];
     }
     float* features = classifier.feature_scratch();
     log_mel.Compute(g_waveform, clip.num_samples, features);

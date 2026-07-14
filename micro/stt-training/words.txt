@@ -1,0 +1,41 @@
+# Robot command vocabulary -- the ONLY file you normally need to edit.
+#
+# One command per line. Blank lines and lines starting with '#' are ignored.
+# The contents of this file drive everything downstream: the number of model
+# outputs, the folder names the data scripts create, and the class labels
+# embedded in the firmware. Change this list and re-run the pipeline to build
+# a classifier for a different vocabulary.
+#
+# A reserved "_unknown_" reject class is added automatically by the training
+# and export code (built from generic People's Speech that contains none of
+# these commands), so the robot can ignore out-of-vocabulary speech. You do
+# NOT list it here.
+#
+# Tips for choosing words:
+#   - Avoid rhymes and minimal pairs (e.g. "go"/"no", "left"/"lift",
+#     "right"/"light"): words that differ by only a brief onset are the
+#     hardest for a small classifier to tell apart.
+#   - Prefer words that also occur in everyday speech; they are easier to
+#     mine from People's Speech for real-speaker variety. ZipVoice covers
+#     every word regardless.
+
+go
+stop
+left
+right
+forward
+reverse
+turn
+spin
+faster
+slower
+wait
+follow
+come
+home
+dance
+circle
+dock
+climb
+patrol
+explore

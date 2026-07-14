@@ -336,6 +336,11 @@ class MicroMutableOpResolver : public MicroOpResolver {
                       ParseGatherNd);
   }
 
+  TfLiteStatus AddGelu() {
+    return AddBuiltin(BuiltinOperator_GELU, tflite::Register_GELU(),
+                      ParseGelu);
+  }
+
   TfLiteStatus AddGreater() {
     return AddBuiltin(BuiltinOperator_GREATER, Register_GREATER(),
                       ParseGreater);

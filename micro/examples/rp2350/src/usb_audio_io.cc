@@ -64,8 +64,8 @@ void UsbAudioInput::Drain() {
   }
 }
 
-void UsbAudioOutput::Begin(int sample_rate, int num_samples) {
-  printf("AUDIO %d %d\n", sample_rate, num_samples);
+void UsbAudioOutput::Begin(int sample_rate, int num_samples, const char* kind) {
+  printf("%s %d %d\n", kind, sample_rate, num_samples);
   fflush(stdout);
 }
 

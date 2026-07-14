@@ -103,10 +103,16 @@ TfLiteStatus TransposeEval(TfLiteContext* context, TfLiteNode* node) {
                                tflite::micro::GetTensorShape(output),
                                tflite::micro::GetTensorData<int8_t>(output));
       break;
+    case kTfLiteInt16:
+      reference_ops::Transpose(params, tflite::micro::GetTensorShape(input),
+                               tflite::micro::GetTensorData<int16_t>(input),
+                               tflite::micro::GetTensorShape(output),
+                               tflite::micro::GetTensorData<int16_t>(output));
+      break;
     default:
       MicroPrintf(
           "Type %s is currently not supported by Transpose. "
-          "Only float32 and int8 is supported",
+          "Only float32, int8 and int16 are supported",
           TfLiteTypeGetName(input->type));
       return kTfLiteError;
   }

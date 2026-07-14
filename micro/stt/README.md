@@ -21,7 +21,7 @@ letters, digits, and command words. Class labels (from
 
 - **Letters (26):** `a`, `b`, `c`, …, `z`
 - **Digits (10):** `zero`, `one`, `two`, `three`, `four`, `five`, `six`, `seven`, `eight`, `nine`
-- **Command / symbol words (15):** `capital`, `uppercase`, `star`, `dollar`, `underscore`, `exclamation`, `percent`, `delete`, `done`, `cancel`, `wifi`, `ip`, `yes`, `no`, `hey rp`
+- **Command / symbol words (15):** `capital`, `uppercase`, `star`, `dollar`, `underscore`, `exclamation`, `percent`, `delete`, `finish`, `cancel`, `wifi`, `ip`, `yes`, `no`, `hey rp`
 
 Each class is a single hyperarticulated token in a ~1 s window at 16 kHz. The
 model supports isolated tokens only — not NATO/ICAO phonetic names,
