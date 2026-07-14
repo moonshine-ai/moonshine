@@ -790,6 +790,86 @@ Java_ai_moonshine_voice_JNI_moonshineGetTtsDependencies(JNIEnv *env,
 }
 
 extern "C" JNIEXPORT jstring JNICALL
+Java_ai_moonshine_voice_JNI_moonshineGetSttDependencies(JNIEnv *env,
+                                                        jobject /* this */,
+                                                        jstring language,
+                                                        jobjectArray joptions) {
+  try {
+    std::vector<moonshine_option_t> copts;
+    std::vector<std::pair<jstring, jstring>> jhold;
+    if (!fill_moonshine_options(env, joptions, &copts, &jhold)) {
+      return nullptr;
+    }
+    const char *lang_ptr = nullptr;
+    if (language != nullptr) {
+      lang_ptr = env->GetStringUTFChars(language, nullptr);
+    }
+    char *out = nullptr;
+    const int32_t err = moonshine_get_stt_dependencies(
+        lang_ptr, copts.data(), copts.size(), &out);
+    release_moonshine_options(env, copts, jhold);
+    if (language != nullptr && lang_ptr != nullptr) {
+      env->ReleaseStringUTFChars(language, lang_ptr);
+    }
+    if (err != MOONSHINE_ERROR_NONE) {
+      if (out != nullptr) {
+        std::free(out);
+      }
+      return nullptr;
+    }
+    if (out == nullptr) {
+      return env->NewStringUTF("");
+    }
+    std::string sanitized = utf8::replace_invalid(std::string(out));
+    std::free(out);
+    return env->NewStringUTF(sanitized.c_str());
+  } catch (const std::exception &e) {
+    ALOGE("moonshineGetSttDependencies: %s\n", e.what());
+    return nullptr;
+  }
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_ai_moonshine_voice_JNI_moonshineGetIntentDependencies(JNIEnv *env,
+                                                           jobject /* this */,
+                                                           jstring model_name,
+                                                           jobjectArray joptions) {
+  try {
+    std::vector<moonshine_option_t> copts;
+    std::vector<std::pair<jstring, jstring>> jhold;
+    if (!fill_moonshine_options(env, joptions, &copts, &jhold)) {
+      return nullptr;
+    }
+    const char *model_ptr = nullptr;
+    if (model_name != nullptr) {
+      model_ptr = env->GetStringUTFChars(model_name, nullptr);
+    }
+    char *out = nullptr;
+    const int32_t err = moonshine_get_intent_dependencies(
+        model_ptr, copts.data(), copts.size(), &out);
+    release_moonshine_options(env, copts, jhold);
+    if (model_name != nullptr && model_ptr != nullptr) {
+      env->ReleaseStringUTFChars(model_name, model_ptr);
+    }
+    if (err != MOONSHINE_ERROR_NONE) {
+      if (out != nullptr) {
+        std::free(out);
+      }
+      return nullptr;
+    }
+    if (out == nullptr) {
+      return env->NewStringUTF("");
+    }
+    std::string sanitized = utf8::replace_invalid(std::string(out));
+    std::free(out);
+    return env->NewStringUTF(sanitized.c_str());
+  } catch (const std::exception &e) {
+    ALOGE("moonshineGetIntentDependencies: %s\n", e.what());
+    return nullptr;
+  }
+}
+
+extern "C" JNIEXPORT jstring JNICALL
 Java_ai_moonshine_voice_JNI_moonshineGetTtsVoices(JNIEnv *env, jobject /* this */,
                                                   jstring languages,
                                                   jobjectArray joptions) {

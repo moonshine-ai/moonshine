@@ -67,8 +67,30 @@ moonshine_tensor_t *moonshine_tensor_from_shape_and_dtype(
     DEBUG_FREE(moonshine_tensor);
     return nullptr;
   }
+  // Reject implausibly large allocations from a crafted or corrupt shape. The
+  // checked multiplies above only catch size_t *overflow*; a shape can still
+  // demand a non-overflowing but absurd byte count (e.g. a dimension of ~7e17
+  // elements asks for exabytes), which would either abort under ASan
+  // ("allocation-size-too-big") or trigger an OOM/bad_alloc in production. Real
+  // tensors in this library are at most a few hundred MB, so anything past this
+  // generous bound is corrupt input, not a workload we should try to serve.
+  constexpr size_t kMaxTensorBytes = size_t{8} << 30;  // 8 GiB.
+  if (data_size_in_bytes > kMaxTensorBytes) {
+    fprintf(stderr, "Tensor byte size %zu exceeds maximum %zu\n",
+            data_size_in_bytes, kMaxTensorBytes);
+    DEBUG_FREE(moonshine_tensor->shape);
+    DEBUG_FREE(moonshine_tensor);
+    return nullptr;
+  }
   moonshine_tensor->data =
       static_cast<uint8_t *>(DEBUG_CALLOC(data_size_in_bytes, 1));
+  if (moonshine_tensor->data == nullptr && data_size_in_bytes != 0) {
+    fprintf(stderr, "Failed to allocate %zu bytes for tensor data\n",
+            data_size_in_bytes);
+    DEBUG_FREE(moonshine_tensor->shape);
+    DEBUG_FREE(moonshine_tensor);
+    return nullptr;
+  }
   if (data_to_copy != nullptr) {
     std::memcpy(moonshine_tensor->data, data_to_copy, data_size_in_bytes);
   }

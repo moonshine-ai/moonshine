@@ -12,15 +12,19 @@
 # examples/android and examples/ios into a temp tree (same layout as extracted
 # release archives), then runs the same Gradle / xcodebuild checks.
 #
-# With --local-library (implies --local-examples), first builds the Android AAR
-# from this checkout and installs it into the local Maven cache (via
-# scripts/build-android.sh local), then makes the temp Android example copies
-# resolve that locally-built AAR instead of the published Maven Central one. This
-# is how you verify the examples still build against a library change (e.g. a
-# lowered minSdk) before publishing. mavenLocal() is injected as the first
-# repository (via a Gradle init script) so it takes precedence, and the examples'
-# requested moonshine-voice version is synced to this checkout's coordinates().
-# The example apps' minSdk (like the library's) comes from their Gradle files.
+# With --local-library (implies --local-examples), the examples are built against
+# THIS checkout's library instead of the published artifacts, so you can verify a
+# library change (e.g. a new API or a lowered minSdk) before publishing:
+#   - Android: builds + installs the AAR into the local Maven cache (via
+#     scripts/build-android.sh local), injects mavenLocal() as the first
+#     repository (via a Gradle init script) so it takes precedence, and syncs each
+#     example's requested moonshine-voice version to this checkout's coordinates().
+#     The example apps' minSdk (like the library's) comes from their Gradle files.
+#   - iOS/macOS: copies this checkout's swift/ package into the temp iOS tree and
+#     rewrites each example's project.pbxproj to reference that local package
+#     (XCLocalSwiftPackageReference) instead of the remote moonshine-swift Git
+#     package. Requires swift/Moonshine.xcframework to exist; when it is missing,
+#     scripts/build-swift.sh is run to build it first.
 #
 # Environment:
 #   ANDROID_HOME or ANDROID_SDK_ROOT — required for Android (unless SKIP_ANDROID=1)
@@ -65,10 +69,11 @@ tree per platform, and runs standalone builds:
 work directory (temporary copy; does not modify the originals), then run the
 same build steps. Implies repository root is the parent of scripts/.
 
---local-library: implies --local-examples. Build + install this checkout's
-Android AAR into the local Maven cache, then build the Android examples against
-that local AAR instead of the published Maven Central artifact. Use this to
-verify library changes (e.g. a lowered minSdk) before publishing.
+--local-library: implies --local-examples. Build the Android examples against
+this checkout's AAR (installed into the local Maven cache) and the iOS examples
+against this checkout's swift/ package (referenced locally in place of the remote
+moonshine-swift package), instead of the published artifacts. Use this to verify
+library changes (e.g. a new API or a lowered minSdk) before publishing.
 
 Options:
   --repo OWNER/REPO   GitHub repository (default: moonshine-ai/moonshine); only for downloads
@@ -306,6 +311,122 @@ apply_local_library_overrides() {
 	done < <(find "${android_root}" -type f -name libs.versions.toml 2>/dev/null)
 }
 
+# Directory name the local swift/ package is copied to inside the iOS tree.
+LOCAL_SWIFT_PACKAGE_DIR="local-moonshine-swift"
+
+# Ensure a locally-built XCFramework exists for the swift package to wrap. The
+# example apps consume the MoonshineVoice product, whose binaryTarget points at
+# swift/Moonshine.xcframework; build it (via build-swift.sh) if it is missing.
+ensure_local_swift_package() {
+	local framework="${REPO_ROOT}/swift/Moonshine.xcframework"
+	if [[ -d "${framework}" ]]; then
+		log "using existing ${framework} (run scripts/build-swift.sh to refresh if core changed)"
+		return 0
+	fi
+	log "swift/Moonshine.xcframework missing — building it via scripts/build-swift.sh"
+	"${SCRIPT_DIR}/build-swift.sh"
+}
+
+# Copy this checkout's swift/ package into the iOS tree so the examples can
+# reference it locally. Excludes the SwiftPM .build cache to keep the copy small;
+# the XCFramework and sources are preserved.
+copy_local_swift_package() {
+	local ios_root="$1"
+	local dest="${ios_root}/${LOCAL_SWIFT_PACKAGE_DIR}"
+	rm -rf "${dest}"
+	mkdir -p "${dest}"
+	log "copying ${REPO_ROOT}/swift/ → ${dest}/"
+	# rsync is available on macOS (the only platform that runs the iOS builds).
+	rsync -a --exclude '.build' "${REPO_ROOT}/swift/." "${dest}/"
+}
+
+# Rewrite one project.pbxproj so its remote moonshine-swift package reference
+# becomes a local reference at ${relpath}. The XCSwiftPackageProductDependency
+# links by productName, so only the package reference object needs to change.
+rewrite_pbxproj_to_local_package() {
+	local pbxproj="$1"
+	local relpath="$2"
+	python3 - "$pbxproj" "$relpath" <<'PY'
+import sys
+
+pbxproj, relpath = sys.argv[1], sys.argv[2]
+with open(pbxproj, "r") as f:
+    text = f.read()
+
+marker = ' /* XCRemoteSwiftPackageReference "moonshine-swift" */ = {'
+out = []
+idx = 0
+changed = 0
+while True:
+    pos = text.find(marker, idx)
+    if pos == -1:
+        out.append(text[idx:])
+        break
+    # The 24-char object id immediately precedes the marker on the same line.
+    line_start = text.rfind("\n", 0, pos) + 1
+    obj_id = text[line_start:pos].strip()
+    out.append(text[idx:line_start])
+    # Brace-match from the opening '{' at the end of the marker.
+    i = pos + len(marker)  # position just after '{'
+    depth = 1
+    while i < len(text) and depth > 0:
+        c = text[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+        i += 1
+    if i < len(text) and text[i] == ";":
+        i += 1
+    out.append(
+        '\t\t{id} /* XCLocalSwiftPackageReference "{name}" */ = {{\n'
+        "\t\t\tisa = XCLocalSwiftPackageReference;\n"
+        '\t\t\trelativePath = "{rel}";\n'
+        "\t\t}};".format(id=obj_id, name=relpath, rel=relpath)
+    )
+    idx = i
+    changed += 1
+
+if changed == 0:
+    sys.exit(0)
+
+text = "".join(out)
+# Fix up the (cosmetic) packageReferences entry and section header comments.
+text = text.replace(
+    '/* XCRemoteSwiftPackageReference "moonshine-swift" */',
+    '/* XCLocalSwiftPackageReference "{}" */'.format(relpath),
+)
+text = text.replace(
+    "/* Begin XCRemoteSwiftPackageReference section */",
+    "/* Begin XCLocalSwiftPackageReference section */",
+)
+text = text.replace(
+    "/* End XCRemoteSwiftPackageReference section */",
+    "/* End XCLocalSwiftPackageReference section */",
+)
+with open(pbxproj, "w") as f:
+    f.write(text)
+print("rewrote {} package reference(s) in {}".format(changed, pbxproj))
+PY
+}
+
+# Point every copied iOS example at the local swift package.
+apply_local_library_overrides_ios() {
+	local ios_root="$1"
+	local pkg_abs="${ios_root}/${LOCAL_SWIFT_PACKAGE_DIR}"
+	local proj
+	while IFS= read -r proj; do
+		[[ -z "${proj}" ]] && continue
+		# relativePath is resolved against the directory containing the .xcodeproj.
+		local proj_dir
+		proj_dir="$(cd "$(dirname "${proj}")" && pwd)"
+		local relpath
+		relpath="$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "${pkg_abs}" "${proj_dir}")"
+		log "iOS local package: ${proj} -> relativePath ${relpath}"
+		rewrite_pbxproj_to_local_package "${proj}/project.pbxproj" "${relpath}"
+	done < <(find "${ios_root}" -type d -name '*.xcodeproj' 2>/dev/null)
+}
+
 pick_xcode_scheme() {
 	local project="$1"
 	python3 - "$project" <<'PY'
@@ -437,6 +558,12 @@ main() {
 
 	if [[ "${USE_LOCAL_LIBRARY}" -eq 1 && "${SKIP_ANDROID}" != "1" ]]; then
 		apply_local_library_overrides "${android_root}"
+	fi
+
+	if [[ "${USE_LOCAL_LIBRARY}" -eq 1 && "${SKIP_IOS}" != "1" && "$(uname -s)" == "Darwin" ]]; then
+		ensure_local_swift_package
+		copy_local_swift_package "${ios_root}"
+		apply_local_library_overrides_ios "${ios_root}"
 	fi
 
 	run_android_builds "${android_root}"

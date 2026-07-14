@@ -1,6 +1,7 @@
 #!/bin/bash -e
 
-# Download-and-run sampling tests for the native model catalog.
+# Download-and-run sampling tests for the native model catalog, plus the Swift
+# and Android framework download tests.
 #
 # For a strategically sampled set of configurations (one per code path, biased
 # toward the smallest model that exercises it), this script:
@@ -12,18 +13,31 @@
 # If a required file is missing from a manifest, step 3 fails - which is the
 # whole point: this verifies the catalog lists everything each model needs.
 #
+# After the native samples, it also drives the framework-level download tests
+# that exercise the real AssetDownloader on each platform (they are opt-in and
+# skip on a plain `swift test` / `connectedAndroidTest`):
+#   - Swift: MOONSHINE_DOWNLOAD_TESTS=1 swift test --filter AssetDownloaderNetworkTests
+#     (macOS, when `swift` and swift/Moonshine.xcframework are present).
+#   - Android: connectedAndroidTest for AssetDownloaderTest with
+#     moonshineDownloadTests=1 (only when a device/emulator is already
+#     connected; this script never boots one - use scripts/test-android.sh for
+#     emulator lifecycle).
+#
 # This test hits the network, so it is intentionally NOT part of the hermetic
 # scripts/test-core.sh. Run it directly (it assumes a fast connection) or from
 # scripts/build-all-platforms.sh / CI. Pass --all to cover more configurations
-# (extra languages and embedding variants) for nightly runs.
+# (extra languages and embedding variants) for nightly runs. Pass
+# --skip-frameworks to run only the native samples.
 #
 # Usage:
-#   scripts/test-model-downloads.sh [--all]
+#   scripts/test-model-downloads.sh [--all] [--skip-frameworks]
 
 RUN_ALL=0
+SKIP_FRAMEWORKS=0
 for arg in "$@"; do
     case "${arg}" in
         --all) RUN_ALL=1 ;;
+        --skip-frameworks) SKIP_FRAMEWORKS=1 ;;
         -h|--help)
             grep '^#' "$0" | sed 's/^# \{0,1\}//'
             exit 0
@@ -172,6 +186,76 @@ if [[ "${RUN_ALL}" -eq 1 ]]; then
     download_and_run "STT base-zh" stt zh 1
     download_and_run "Intent embeddinggemma-300m q8" intent embeddinggemma-300m q8
     download_and_run "Intent embeddinggemma-300m fp16" intent embeddinggemma-300m fp16
+fi
+
+# --- Framework download tests (real AssetDownloader on each platform). --------
+
+# Swift: run the opt-in network tests when a Swift toolchain and the local
+# XCFramework the package links against are both available.
+run_swift_framework_tests() {
+    echo ""
+    echo "=== Swift framework download tests (AssetDownloaderNetworkTests) ==="
+    if [[ "${UNAME_S}" != "Darwin" ]]; then
+        echo "SKIP: Swift download tests only run on macOS"
+        return 0
+    fi
+    if ! command -v swift >/dev/null 2>&1; then
+        echo "SKIP: swift not found in PATH"
+        return 0
+    fi
+    if [[ ! -d "${REPO_ROOT_DIR}/swift/Moonshine.xcframework" ]]; then
+        echo "SKIP: swift/Moonshine.xcframework missing (build it with scripts/build-swift.sh)"
+        return 0
+    fi
+    if MOONSHINE_DOWNLOAD_TESTS=1 swift test \
+        --package-path "${REPO_ROOT_DIR}/swift" \
+        --filter 'AssetDownloaderNetworkTests'; then
+        echo "PASS: Swift framework download tests"
+        PASS_COUNT=$((PASS_COUNT + 1))
+    else
+        echo "FAIL: Swift framework download tests" >&2
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+    fi
+}
+
+# Android: run the opt-in instrumentation test, but only if a device/emulator is
+# already connected (this script does not manage emulator lifecycle).
+run_android_framework_tests() {
+    echo ""
+    echo "=== Android framework download tests (AssetDownloaderTest) ==="
+    local sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+    if [[ -z "${sdk}" ]]; then
+        for cand in "${HOME}/Library/Android/sdk" "${HOME}/Android/Sdk"; do
+            [[ -d "${cand}" ]] && sdk="${cand}" && break
+        done
+    fi
+    local adb="${sdk}/platform-tools/adb"
+    if [[ -z "${sdk}" || ! -x "${adb}" ]]; then
+        echo "SKIP: Android SDK / adb not found (set ANDROID_HOME)"
+        return 0
+    fi
+    local device_count
+    device_count="$("${adb}" devices | awk 'NR>1 && $2=="device"{c++} END{print c+0}')"
+    if [[ "${device_count}" -eq 0 ]]; then
+        echo "SKIP: no connected device/emulator (use scripts/test-android.sh to boot one)"
+        return 0
+    fi
+    if (cd "${REPO_ROOT_DIR}" && ANDROID_HOME="${sdk}" ./gradlew \
+        -Pandroid.useAndroidX=true \
+        -Pandroid.testInstrumentationRunnerArguments.class=ai.moonshine.voice.AssetDownloaderTest \
+        -Pandroid.testInstrumentationRunnerArguments.moonshineDownloadTests=1 \
+        connectedAndroidTest --no-daemon); then
+        echo "PASS: Android framework download tests"
+        PASS_COUNT=$((PASS_COUNT + 1))
+    else
+        echo "FAIL: Android framework download tests" >&2
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+    fi
+}
+
+if [[ "${SKIP_FRAMEWORKS}" -eq 0 ]]; then
+    run_swift_framework_tests
+    run_android_framework_tests
 fi
 
 echo ""

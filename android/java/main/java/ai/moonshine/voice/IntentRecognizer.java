@@ -29,6 +29,31 @@ public class IntentRecognizer {
     this(modelRootDir, embeddingModelArch, "q4");
   }
 
+  /**
+   * Returns the intent-recognition embedding model download manifest as a JSON
+   * object string (see {@code moonshine_get_intent_dependencies}). Shape:
+   * {@code {"groups":[{"base_url":"...","files":["a","b",...]}]}}. Use with
+   * {@link AssetDownloader} to fetch the files, then construct an
+   * {@link IntentRecognizer} pointing at the download directory.
+   *
+   * @param modelName Embedding model id (e.g. {@code "embeddinggemma-300m"}), or
+   *                  {@code null} for the default model.
+   * @param options   Optional options; recognizes {@code variant}.
+   */
+  public static String getIntentDependencies(String modelName,
+                                             List<TranscriberOption> options) {
+    JNI.ensureLibraryLoaded();
+    TranscriberOption[] optionsArray =
+        (options == null || options.isEmpty())
+            ? null
+            : options.toArray(new TranscriberOption[0]);
+    String json = JNI.moonshineGetIntentDependencies(modelName, optionsArray);
+    if (json == null) {
+      throw new RuntimeException("moonshineGetIntentDependencies failed");
+    }
+    return json;
+  }
+
   @Override
   protected void finalize() throws Throwable {
     try {

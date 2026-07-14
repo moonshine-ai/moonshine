@@ -1,7 +1,7 @@
 import Foundation
 
 /// Model architecture types supported by Moonshine Voice.
-public enum ModelArch: UInt32 {
+public enum ModelArch: UInt32, Sendable {
     case tiny = 0
     case base = 1
     case tinyStreaming = 2

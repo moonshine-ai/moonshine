@@ -109,6 +109,33 @@ public class JNI {
     public static native String moonshineGetTtsDependencies(String languages,
             TranscriberOption[] options);
 
+    /**
+     * Returns the speech-to-text model download manifest as a JSON object string,
+     * or {@code null} on failure. Shape:
+     * {@code {"groups":[{"base_url":"...","files":["a","b",...]}]}}. Download each
+     * file from {@code base_url + "/" + file}.
+     *
+     * @param language Language code (e.g. {@code "en"}) or English name; must not
+     *                 be empty.
+     * @param options  Optional options; recognizes {@code model_arch} (decimal
+     *                 string of a {@code MOONSHINE_MODEL_ARCH_*} value) and
+     *                 {@code include_spelling} (bool).
+     */
+    public static native String moonshineGetSttDependencies(String language,
+            TranscriberOption[] options);
+
+    /**
+     * Returns the intent-recognition embedding model download manifest as a JSON
+     * object string (same shape as {@link #moonshineGetSttDependencies}), or
+     * {@code null} on failure.
+     *
+     * @param modelName Embedding model id (e.g. {@code "embeddinggemma-300m"}), or
+     *                  {@code null} for the default model.
+     * @param options   Optional options; recognizes {@code variant}.
+     */
+    public static native String moonshineGetIntentDependencies(String modelName,
+            TranscriberOption[] options);
+
     public static native String moonshineGetTtsVoices(String languages,
             TranscriberOption[] options);
 

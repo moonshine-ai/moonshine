@@ -13,6 +13,8 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import androidx.appcompat.app.AppCompatActivity
 import ai.moonshine.examples.texttospeech.databinding.ActivityMainBinding
+import ai.moonshine.voice.AssetDownloader
+import ai.moonshine.voice.ModelSpec
 import ai.moonshine.voice.TextToSpeech
 import ai.moonshine.voice.TranscriberOption
 import java.io.File
@@ -190,10 +192,9 @@ class MainActivity : AppCompatActivity() {
                 )
                 g2pRoot = destRoot.absolutePath
 
-                TtsAssetDownloader.ensureAssetsPresent(
+                AssetDownloader().ensureModelPresent(
                     destRoot,
-                    initialLang.id,
-                    initialVoice,
+                    ModelSpec.tts(initialLang.id, initialVoice),
                     ::postDownloadProgress,
                 )
 
@@ -286,10 +287,9 @@ class MainActivity : AppCompatActivity() {
         thread {
             var errorMessage: String? = null
             try {
-                TtsAssetDownloader.ensureAssetsPresent(
+                AssetDownloader().ensureModelPresent(
                     root,
-                    language.id,
-                    voice.id,
+                    ModelSpec.tts(language.id, voice.id),
                     ::postDownloadProgress,
                 )
             } catch (e: Exception) {

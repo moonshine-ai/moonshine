@@ -62,6 +62,31 @@ public class Transcriber {
 
   public int getTranscribeFlags() { return this.transcribeFlags; }
 
+  /**
+   * Returns the speech-to-text model download manifest as a JSON object string
+   * (see {@code moonshine_get_stt_dependencies}). Shape:
+   * {@code {"groups":[{"base_url":"...","files":["a","b",...]}]}}. Use with
+   * {@link AssetDownloader} to fetch the files, then {@link #loadFromFiles}.
+   *
+   * @param language Language code (e.g. {@code "en"}) or English name.
+   * @param options  Optional options; recognizes {@code model_arch} (decimal
+   *                 string of a {@code MOONSHINE_MODEL_ARCH_*} value) and
+   *                 {@code include_spelling} (bool).
+   */
+  public static String getSttDependencies(String language,
+                                          List<TranscriberOption> options) {
+    JNI.ensureLibraryLoaded();
+    TranscriberOption[] optionsArray =
+        (options == null || options.isEmpty())
+            ? null
+            : options.toArray(new TranscriberOption[0]);
+    String json = JNI.moonshineGetSttDependencies(language, optionsArray);
+    if (json == null) {
+      throw new RuntimeException("moonshineGetSttDependencies failed");
+    }
+    return json;
+  }
+
   public void loadFromFiles(String modelRootDir, int modelArch) {
     JNI.ensureLibraryLoaded();
     this.transcriberHandle = JNI.moonshineLoadTranscriberFromFiles(

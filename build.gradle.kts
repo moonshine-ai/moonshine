@@ -94,6 +94,10 @@ mavenPublishing {
 dependencies {
     implementation(libs.appcompat)
     implementation(libs.material)
+    // Opt-in model auto-download (AssetDownloader / MoonshineDownloadWorker). OkHttp streams the
+    // downloads; WorkManager runs them reliably in the background with network constraints.
+    implementation(libs.okhttp)
+    implementation(libs.work.runtime)
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
