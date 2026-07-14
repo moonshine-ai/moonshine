@@ -34,9 +34,18 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import os
 import re
 import sys
+import time
 from pathlib import Path
+
+# Read Parquet through the plain `resolve` CDN, not Xet. Anonymous Xet access
+# caches a storage token that expires after ~1 h and is shared process-wide, so
+# long scans die with a 401 that reopening the file can't clear. The non-Xet
+# path re-signs a fresh CDN URL on every range request. Must be set before
+# huggingface_hub is imported.
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 
 import numpy as np
 import soundfile as sf
@@ -57,9 +66,66 @@ TARGET_SR = 16000
 # --------------------------------------------------------------------------
 # Anonymous Parquet loader (column-selective HTTP range reads, no token).
 # --------------------------------------------------------------------------
-def _shard_paths(fs, config, split):
+def _new_fs():
+    from huggingface_hub import HfFileSystem
+
+    return HfFileSystem()
+
+
+def _shard_paths(config, split):
     base = f"datasets/{_DATASET}@{_PARQUET_REF}/{config}/{split}"
-    return sorted(p for p in fs.ls(base, detail=False) if p.endswith(".parquet"))
+    return sorted(p for p in _new_fs().ls(base, detail=False) if p.endswith(".parquet"))
+
+
+class _ShardReader:
+    """Row-group reader for one Parquet shard, resilient to expiring creds.
+
+    Anonymous access to the Hub's Xet/presigned storage uses short-lived
+    (~1 h) credentials, so a single long-lived handle 401s partway through a
+    big scan. On any read error we sleep and reopen the shard with a *fresh*
+    ``HfFileSystem`` (new credentials), which also rides out transient network
+    blips. Reopening is cheap: only Parquet metadata is re-fetched.
+    """
+
+    def __init__(self, shard, max_attempts=6):
+        import pyarrow.parquet as pq
+
+        self._pq = pq
+        self.shard = shard
+        self.max_attempts = max_attempts
+        self._open()
+
+    def _open(self):
+        self._fh = _new_fs().open(self.shard)
+        self.pf = self._pq.ParquetFile(self._fh)
+
+    @property
+    def num_row_groups(self):
+        return self.pf.num_row_groups
+
+    def row_group_num_rows(self, rg):
+        return self.pf.metadata.row_group(rg).num_rows
+
+    def read_columns(self, rg, columns):
+        delay, last = 2.0, None
+        for attempt in range(self.max_attempts):
+            try:
+                return self.pf.read_row_group(rg, columns=columns)
+            except Exception as exc:  # noqa: BLE001
+                last = exc
+                print(
+                    f"  [retry] read {Path(self.shard).name} rg{rg} "
+                    f"attempt {attempt + 1}/{self.max_attempts}: "
+                    f"{type(exc).__name__}",
+                    flush=True,
+                )
+                time.sleep(delay)
+                delay = min(delay * 2, 60.0)
+                try:
+                    self._open()
+                except Exception:  # noqa: BLE001
+                    pass
+        raise last
 
 
 def iter_peoples_speech(config, split, offset, limit):
@@ -69,55 +135,50 @@ def iter_peoples_speech(config, split, offset, limit):
     decodes the audio for its row (downloading that row group's ``audio``
     column only on first use), so scanning stays cheap for non-matching rows.
     """
-    import pyarrow.parquet as pq
-    from huggingface_hub import HfFileSystem
-
-    fs = HfFileSystem()
-    shards = _shard_paths(fs, config, split)
+    shards = _shard_paths(config, split)
     seen = 0          # rows yielded (counts toward ``limit``)
     skip = max(0, int(offset))
     for shard in shards:
         if limit is not None and seen >= limit:
             return
-        with fs.open(shard) as fh:
-            pf = pq.ParquetFile(fh)
-            for rg in range(pf.num_row_groups):
+        reader = _ShardReader(shard)
+        for rg in range(reader.num_row_groups):
+            if limit is not None and seen >= limit:
+                return
+            n_rows = reader.row_group_num_rows(rg)
+            if skip >= n_rows:
+                skip -= n_rows
+                continue
+            tbl = reader.read_columns(rg, ["id", "text"])
+            ids = tbl.column("id").to_pylist()
+            texts = tbl.column("text").to_pylist()
+            audio_cache: dict[int, list] = {}
+
+            def _fetch(_rg=rg, _i=None):
+                if _rg not in audio_cache:
+                    at = reader.read_columns(_rg, ["audio"])
+                    audio_cache[_rg] = at.column("audio").to_pylist()
+                entry = audio_cache[_rg][_i]
+                data = entry.get("bytes") if isinstance(entry, dict) else None
+                if not data:
+                    return None
+                try:
+                    arr, sr = sf.read(io.BytesIO(data), always_2d=False)
+                    return arr, int(sr)
+                except Exception:  # noqa: BLE001
+                    return None
+
+            start = skip
+            skip = 0
+            for i in range(start, len(ids)):
                 if limit is not None and seen >= limit:
                     return
-                n_rows = pf.metadata.row_group(rg).num_rows
-                if skip >= n_rows:
-                    skip -= n_rows
-                    continue
-                tbl = pf.read_row_group(rg, columns=["id", "text"])
-                ids = tbl.column("id").to_pylist()
-                texts = tbl.column("text").to_pylist()
-                audio_cache: dict[int, list] = {}
-
-                def _fetch(_rg=rg, _i=None):
-                    if _rg not in audio_cache:
-                        at = pf.read_row_group(_rg, columns=["audio"])
-                        audio_cache[_rg] = at.column("audio").to_pylist()
-                    entry = audio_cache[_rg][_i]
-                    data = entry.get("bytes") if isinstance(entry, dict) else None
-                    if not data:
-                        return None
-                    try:
-                        arr, sr = sf.read(io.BytesIO(data), always_2d=False)
-                        return arr, int(sr)
-                    except Exception:  # noqa: BLE001
-                        return None
-
-                start = skip
-                skip = 0
-                for i in range(start, len(ids)):
-                    if limit is not None and seen >= limit:
-                        return
-                    clip_id = str(ids[i] or f"peoples_speech_{seen}")
-                    speaker = _SPEAKER_RE.split(clip_id)[0][:64] or "unknown"
-                    yield clip_id, str(texts[i] or ""), speaker, (
-                        lambda _i=i: _fetch(_i=_i)
-                    )
-                    seen += 1
+                clip_id = str(ids[i] or f"peoples_speech_{seen}")
+                speaker = _SPEAKER_RE.split(clip_id)[0][:64] or "unknown"
+                yield clip_id, str(texts[i] or ""), speaker, (
+                    lambda _i=i: _fetch(_i=_i)
+                )
+                seen += 1
 
 
 # --------------------------------------------------------------------------

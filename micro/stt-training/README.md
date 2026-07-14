@@ -27,9 +27,12 @@ firmware.
 ## What you need
 
 - Linux with an NVIDIA GPU (training runs on CPU/Mac too, just slower).
-- Python 3.10–3.12.
-- ~5 GB of free disk for generated audio and checkpoints.
-- Internet access (ZipVoice model download + People's Speech streaming).
+- Python 3.10–3.12, or Docker if CUDA on your box lives in a container (see
+  [Running on an NVIDIA GPU box where CUDA lives in Docker](#running-on-an-nvidia-gpu-box-where-cuda-lives-in-docker)).
+- ~15 GB of free disk for generated/mined audio and checkpoints (more if you
+  download the optional MUSAN/RIR augmentation assets).
+- Internet access (ZipVoice model download + anonymous People's Speech streaming;
+  no Hugging Face account or token needed).
 
 ## Step 0 — Setup
 
@@ -42,6 +45,52 @@ pip install -r requirements.txt
 
 The first synthesis run downloads the ZipVoice models from the Moonshine CDN and
 caches them; subsequent runs are offline for TTS.
+
+On PyPI/Linux the default `torch`/`torchaudio` wheels are CUDA builds, so this
+plain install gives you GPU support as long as you have a recent NVIDIA driver.
+`torch` and `torchaudio` are pinned to the **same** version in
+`requirements.txt` on purpose — `litert-torch` (used only for export) pins an
+exact `torch`, and an unpinned `torchaudio` will silently install a build for a
+different `torch` and fail to load (`undefined symbol` / `Could not load
+libtorchaudio`). If you bump one, bump both together.
+
+### Running on an NVIDIA GPU box where CUDA lives in Docker
+
+Some GPU machines only expose CUDA through NVIDIA's container runtime (the host
+Python may be too new for CUDA wheels). In that case, use the NGC PyTorch image
+as a CUDA-capable Python 3.12 environment and build a normal venv **inside** it:
+
+```bash
+# On the host: start a container with the GPU and this repo mounted.
+docker run -d --name stt --gpus all --ipc=host \
+    -v "$PWD":/workspace/repo -w /workspace/repo/moonshine-micro/stt-training \
+    nvcr.io/nvidia/pytorch:25.06-py3 sleep infinity
+
+docker exec -it stt bash
+```
+
+```bash
+# Inside the container:
+unset PIP_CONSTRAINT          # NGC pins torch to its custom build; this frees pip
+python -m venv /workspace/venv
+. /workspace/venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+Two things matter here:
+
+- **`unset PIP_CONSTRAINT`** — NGC images set `PIP_CONSTRAINT=/etc/pip/constraint.txt`,
+  which pins `torch` to NVIDIA's prebuilt version and makes `pip install -r
+  requirements.txt` fail to resolve. Clearing it lets pip install the standard
+  CUDA wheels (which bundle their own CUDA runtime and support recent GPUs).
+- We deliberately install stock wheels into a fresh venv rather than reuse the
+  image's built-in torch: NGC's custom torch has an ABI that the PyPI
+  `torchaudio` wheel can't link against.
+
+Then run everything (`./run_all.sh`, the per-step commands, etc.) inside that
+activated venv. Use `docker exec -d stt bash -lc '. /workspace/venv/bin/activate
+&& ./run_all.sh > run.log 2>&1'` for a long unattended run.
 
 ## The one-command path
 
