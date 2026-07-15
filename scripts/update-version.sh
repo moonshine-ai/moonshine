@@ -72,6 +72,7 @@ done < <(grep -rlI \
   --exclude=prepare-release.sh \
   --exclude=patch-release.sh \
   --exclude=build-all-platforms.sh \
+  --exclude=neural_tts_demo_data.cc \
   "$OLD_VERSION" .)
 for FILE in "${ACTUAL_FILES[@]}"; do
 	echo "Checking file '$FILE'"
