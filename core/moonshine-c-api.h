@@ -932,6 +932,30 @@ MOONSHINE_EXPORT int32_t moonshine_text_to_speech(
     float **out_audio_data, uint64_t *out_audio_data_size,
     int32_t *out_sample_rate);
 
+/* Synthesizes speech directly from International Phonetic Alphabet (IPA)
+   phonemes, skipping the grapheme-to-phoneme conversion that
+   ``moonshine_text_to_speech`` performs internally. ``phonemes`` should be an
+   IPA string in the same format produced by ``moonshine_text_to_phonemes`` (a
+   grapheme-to-phonemizer created for the matching language). This lets callers
+   inspect or edit the phonemes between the text-to-phonemes and
+   phonemes-to-speech steps (e.g. to fix pronunciation of a name). The
+   phonemes are normalized to the active vocoder's phoneme inventory before
+   synthesis, so passing the raw ``moonshine_text_to_phonemes`` output for the
+   same language yields audio equivalent to ``moonshine_text_to_speech`` on the
+   original text.
+
+   ``options`` / ``options_count`` behave exactly like
+   ``moonshine_text_to_speech``: only ``speed`` is honored for the duration of
+   the call; pass NULL / 0 to use the synthesizer defaults.
+
+   Returns zero on success, or a non-zero error code on failure.
+*/
+MOONSHINE_EXPORT int32_t moonshine_phonemes_to_speech(
+    int32_t tts_synthesizer_handle, const char *phonemes,
+    const struct moonshine_option_t *options, uint64_t options_count,
+    float **out_audio_data, uint64_t *out_audio_data_size,
+    int32_t *out_sample_rate);
+
 /* Creates a grapheme to phonemizer from files on disk.
    Returns a non-negative handle on success, or a negative error code on
    failure. The error code can be converted to a human-readable string using

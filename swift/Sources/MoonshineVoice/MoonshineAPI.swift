@@ -477,6 +477,70 @@ internal final class MoonshineAPI: @unchecked Sendable {
         return TtsSynthesisResult(samples: samples, sampleRateHz: outSampleRate)
     }
 
+    /// Synthesize speech from IPA phonemes, returning PCM float samples and sample rate.
+    ///
+    /// `phonemes` is an IPA string in the same format produced by the
+    /// `moonshine_text_to_phonemes` C API, letting callers inspect or edit phonemes between G2P
+    /// and vocoding. Skips grapheme-to-phoneme conversion.
+    func phonemesToSpeech(
+        ttsHandle: Int32,
+        phonemes: String,
+        options: [TranscriberOption]? = nil
+    ) throws -> TtsSynthesisResult {
+        let phonemesCString = phonemes.cString(using: .utf8)!
+        var outAudioData: UnsafeMutablePointer<Float>? = nil
+        var outAudioDataSize: UInt64 = 0
+        var outSampleRate: Int32 = 0
+
+        let error: Int32
+
+        if let options = options, !options.isEmpty {
+            let nameCStrings = options.map { $0.name.cString(using: .utf8)! }
+            let valueCStrings = options.map { $0.value.cString(using: .utf8)! }
+
+            let optionStructs = (0..<options.count).map { i -> moonshine_option_t in
+                return moonshine_option_t(
+                    name: nameCStrings[i].withUnsafeBufferPointer { $0.baseAddress },
+                    value: valueCStrings[i].withUnsafeBufferPointer { $0.baseAddress }
+                )
+            }
+
+            error = withExtendedLifetime((nameCStrings, valueCStrings, optionStructs)) {
+                optionStructs.withUnsafeBufferPointer { buffer in
+                    moonshine_phonemes_to_speech(
+                        ttsHandle,
+                        phonemesCString,
+                        buffer.baseAddress,
+                        UInt64(options.count),
+                        &outAudioData,
+                        &outAudioDataSize,
+                        &outSampleRate
+                    )
+                }
+            }
+        } else {
+            error = moonshine_phonemes_to_speech(
+                ttsHandle,
+                phonemesCString,
+                nil,
+                0,
+                &outAudioData,
+                &outAudioDataSize,
+                &outSampleRate
+            )
+        }
+
+        try checkError(error)
+
+        var samples: [Float] = []
+        if let audioPtr = outAudioData, outAudioDataSize > 0 {
+            samples = Array(UnsafeBufferPointer(start: audioPtr, count: Int(outAudioDataSize)))
+            free(outAudioData)
+        }
+
+        return TtsSynthesisResult(samples: samples, sampleRateHz: outSampleRate)
+    }
+
     /// Free a TTS synthesizer handle.
     func freeTtsSynthesizer(_ handle: Int32) {
         moonshine_free_tts_synthesizer(handle)

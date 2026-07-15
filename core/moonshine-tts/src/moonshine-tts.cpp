@@ -1197,18 +1197,26 @@ struct KokoroTtsEngine {
   }
 
   std::vector<float> synthesize(std::string_view text) {
-    TIMER_START_IF(log_profiling_, kokoro_synthesize);
-
     TIMER_START_IF(log_profiling_, kokoro_g2p);
     const std::string ipa = g2p_->text_to_ipa(text, nullptr);
     TIMER_END_IF(log_profiling_, kokoro_g2p);
+    return synthesize_from_ipa(ipa);
+  }
+
+  /// Synthesize from an existing IPA phoneme string (skips G2P). The input is
+  /// normalized to Kokoro's phoneme inventory just like the text path, so the
+  /// IPA produced by ``MoonshineG2P::text_to_ipa`` / ``moonshine_text_to_phonemes``
+  /// is accepted directly.
+  std::vector<float> synthesize_from_ipa(std::string_view ipa) {
+    TIMER_START_IF(log_profiling_, kokoro_synthesize);
+
     if (trim_ascii_ws_copy(ipa).empty()) {
       return {};
     }
 
     TIMER_START_IF(log_profiling_, kokoro_normalize_ipa);
     std::string phonemes =
-        normalize_ipa_to_kokoro(ipa, kokoro_lang_, vocab_keys_);
+        normalize_ipa_to_kokoro(std::string(ipa), kokoro_lang_, vocab_keys_);
     TIMER_END_IF(log_profiling_, kokoro_normalize_ipa);
     if (phonemes.empty()) {
       return {};
@@ -1401,13 +1409,45 @@ struct MoonshineTTS::Impl {
     return result;
   }
 
+  std::vector<float> synthesize_from_phonemes_unlocked(
+      std::string_view phonemes) {
+    if (zipvoice_) {
+      return zipvoice_->synthesize_from_ipa(phonemes);
+    }
+    if (kokoro_) {
+      return kokoro_->synthesize_from_ipa(phonemes);
+    }
+    return piper_->synthesize_from_ipa(phonemes);
+  }
+
   std::vector<float> synthesize(std::string_view text) {
     std::lock_guard<std::mutex> lock(synth_mu_);
     return synthesize_unlocked(text);
   }
 
+  std::vector<float> synthesize_from_phonemes(std::string_view phonemes) {
+    std::lock_guard<std::mutex> lock(synth_mu_);
+    return synthesize_from_phonemes_unlocked(phonemes);
+  }
+
+  std::vector<float> synthesize_from_phonemes_with_overrides(
+      std::string_view phonemes, const SynthesisOverrides& ov) {
+    return run_with_overrides(
+        ov, [&] { return synthesize_from_phonemes_unlocked(phonemes); });
+  }
+
   std::vector<float> synthesize_with_overrides(std::string_view text,
                                                const SynthesisOverrides& ov) {
+    return run_with_overrides(ov,
+                              [&] { return synthesize_unlocked(text); });
+  }
+
+  /// Applies ``ov`` to the active engine, invokes ``produce`` while holding the
+  /// synthesis lock, then restores the previous effect settings (even if
+  /// ``produce`` throws).
+  template <typename Produce>
+  std::vector<float> run_with_overrides(const SynthesisOverrides& ov,
+                                        Produce&& produce) {
     std::lock_guard<std::mutex> lock(synth_mu_);
     if (zipvoice_) {
       const double prev_speed = zipvoice_->speed();
@@ -1422,7 +1462,7 @@ struct MoonshineTTS::Impl {
                ov.normalize_audio.value_or(prev_normalize),
                ov.output_volume.value_or(prev_volume));
       try {
-        std::vector<float> wave = synthesize_unlocked(text);
+        std::vector<float> wave = produce();
         apply_zv(prev_speed, prev_normalize, prev_volume);
         return wave;
       } catch (...) {
@@ -1450,7 +1490,7 @@ struct MoonshineTTS::Impl {
           ov.normalize_audio.value_or(prev_normalize),
           ov.output_volume.value_or(prev_volume));
     try {
-      std::vector<float> wave = synthesize_unlocked(text);
+      std::vector<float> wave = produce();
       apply(prev_speed, prev_normalize, prev_volume);
       return wave;
     } catch (...) {
@@ -1485,6 +1525,25 @@ std::vector<float> MoonshineTTS::synthesize(
     return synthesize(text);
   }
   return impl_->synthesize_with_overrides(text, ov);
+}
+
+std::vector<float> MoonshineTTS::synthesize_from_phonemes(
+    std::string_view phonemes) {
+  return impl_->synthesize_from_phonemes(phonemes);
+}
+
+std::vector<float> MoonshineTTS::synthesize_from_phonemes(
+    std::string_view phonemes,
+    const std::vector<std::pair<std::string, std::string>>& option_overrides) {
+  if (option_overrides.empty()) {
+    return synthesize_from_phonemes(phonemes);
+  }
+  const SynthesisOverrides ov =
+      parse_synthesis_overrides_from_pairs(option_overrides);
+  if (ov.empty()) {
+    return synthesize_from_phonemes(phonemes);
+  }
+  return impl_->synthesize_from_phonemes_with_overrides(phonemes, ov);
 }
 
 void write_wav_mono_pcm16(const std::filesystem::path& path,

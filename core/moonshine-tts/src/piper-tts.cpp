@@ -643,10 +643,14 @@ struct PiperTTS::Impl {
 
   std::vector<float> synthesize(std::string_view text) {
     const std::string ipa = g2p_->text_to_ipa(text, nullptr);
-    if (trim_ascii_ws_copy(ipa).empty()) {
+    return synthesize_from_ipa(ipa);
+  }
+
+  std::vector<float> synthesize_from_ipa(std::string_view ipa_in) {
+    if (trim_ascii_ws_copy(ipa_in).empty()) {
       return {};
     }
-    const std::string trimmed_ipa = trim_ascii_ws_copy(ipa);
+    const std::string trimmed_ipa = trim_ascii_ws_copy(ipa_in);
     const std::string ipa_for_piper =
         coerce_unknown_ipa_chars_to_piper_inventory(
             normalize_g2p_ipa_for_piper(trimmed_ipa, piper_ipa_lang_key_),
@@ -700,6 +704,10 @@ void PiperTTS::set_output_volume(float volume) {
 
 std::vector<float> PiperTTS::synthesize(std::string_view text) {
   return impl_->synthesize(text);
+}
+
+std::vector<float> PiperTTS::synthesize_from_ipa(std::string_view ipa) {
+  return impl_->synthesize_from_ipa(ipa);
 }
 
 std::vector<float> PiperTTS::synthesize_phoneme_ids(

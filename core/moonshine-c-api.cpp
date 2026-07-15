@@ -1009,6 +1009,32 @@ void moonshine_free_tts_synthesizer(int32_t tts_synthesizer_handle) {
   }
 }
 
+namespace {
+
+/* Converts a C ``moonshine_option_t`` array into the name/value pair vector the
+   ``moonshine_tts::MoonshineTTS`` synthesize overloads expect. Null option
+   names/values become empty strings. Shared by moonshine_text_to_speech and
+   moonshine_phonemes_to_speech. */
+std::vector<std::pair<std::string, std::string>> tts_option_pairs_from_c(
+    const struct moonshine_option_t *options, uint64_t options_count) {
+  std::vector<std::pair<std::string, std::string>> tts_pairs;
+  if (options == nullptr || options_count == 0) {
+    return tts_pairs;
+  }
+  tts_pairs.reserve(static_cast<size_t>(options_count));
+  for (uint64_t i = 0; i < options_count; i++) {
+    const moonshine_option_t &option = options[i];
+    const std::string name =
+        option.name != nullptr ? std::string(option.name) : std::string();
+    const std::string value =
+        option.value != nullptr ? std::string(option.value) : std::string();
+    tts_pairs.emplace_back(name, value);
+  }
+  return tts_pairs;
+}
+
+}  // namespace
+
 /* Synthesizes text to speech.
  Returns zero on success, or a non-zero error code on failure.
 */
@@ -1037,18 +1063,8 @@ int32_t moonshine_text_to_speech(int32_t tts_synthesizer_handle,
   try {
     moonshine_tts::MoonshineTTS *synth =
         text_to_speech_synthesizer_map[tts_synthesizer_handle];
-    std::vector<std::pair<std::string, std::string>> tts_pairs;
-    if (options != nullptr && options_count > 0) {
-      tts_pairs.reserve(static_cast<size_t>(options_count));
-      for (uint64_t i = 0; i < options_count; i++) {
-        const moonshine_option_t &option = options[i];
-        const std::string name =
-            option.name != nullptr ? std::string(option.name) : std::string();
-        const std::string value =
-            option.value != nullptr ? std::string(option.value) : std::string();
-        tts_pairs.emplace_back(name, value);
-      }
-    }
+    const std::vector<std::pair<std::string, std::string>> tts_pairs =
+        tts_option_pairs_from_c(options, options_count);
     const std::vector<float> wave = tts_pairs.empty()
                                         ? synth->synthesize(text)
                                         : synth->synthesize(text, tts_pairs);
@@ -1065,6 +1081,59 @@ int32_t moonshine_text_to_speech(int32_t tts_synthesizer_handle,
     }
   } catch (const std::exception &e) {
     LOGF("Failed to synthesize text to speech: %s", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+  return MOONSHINE_ERROR_NONE;
+}
+
+int32_t moonshine_phonemes_to_speech(int32_t tts_synthesizer_handle,
+                                     const char *phonemes,
+                                     const struct moonshine_option_t *options,
+                                     uint64_t options_count,
+                                     float **out_audio_data,
+                                     uint64_t *out_audio_data_size,
+                                     int32_t *out_sample_rate) {
+  if (log_api_calls) {
+    LOGF(
+        "moonshine_phonemes_to_speech(handle=%d, phonemes=%s, options=%p, "
+        "options_count=%" PRIu64
+        ", out_audio_data=%p, out_audio_data_size=%p, "
+        "out_sample_rate=%p)",
+        tts_synthesizer_handle, phonemes, static_cast<const void *>(options),
+        options_count, static_cast<void *>(out_audio_data),
+        static_cast<void *>(out_audio_data_size),
+        static_cast<void *>(out_sample_rate));
+    for (uint64_t i = 0; i < options_count; i++) {
+      const moonshine_option_t &option = options[i];
+      LOGF("  option[%" PRIu64 "] = %s=%s", i, option.name, option.value);
+    }
+  }
+  if (phonemes == nullptr || out_audio_data == nullptr ||
+      out_audio_data_size == nullptr || out_sample_rate == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  CHECK_TTS_SYNTHESIZER_HANDLE(tts_synthesizer_handle);
+  try {
+    moonshine_tts::MoonshineTTS *synth =
+        text_to_speech_synthesizer_map[tts_synthesizer_handle];
+    const std::vector<std::pair<std::string, std::string>> tts_pairs =
+        tts_option_pairs_from_c(options, options_count);
+    const std::vector<float> wave =
+        tts_pairs.empty() ? synth->synthesize_from_phonemes(phonemes)
+                          : synth->synthesize_from_phonemes(phonemes, tts_pairs);
+    *out_sample_rate = moonshine_tts::MoonshineTTS::kSampleRateHz;
+    *out_audio_data_size = wave.size();
+    *out_audio_data = nullptr;
+    if (!wave.empty()) {
+      *out_audio_data =
+          static_cast<float *>(std::malloc(wave.size() * sizeof(float)));
+      if (*out_audio_data == nullptr) {
+        return MOONSHINE_ERROR_UNKNOWN;
+      }
+      std::memcpy(*out_audio_data, wave.data(), wave.size() * sizeof(float));
+    }
+  } catch (const std::exception &e) {
+    LOGF("Failed to synthesize phonemes to speech: %s", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
   return MOONSHINE_ERROR_NONE;

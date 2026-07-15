@@ -283,6 +283,10 @@ struct ZipVoiceTTS::Impl {
 
   std::vector<int64_t> ipa_text_to_token_ids(const std::string& text) {
     const std::string ipa = g2p_->text_to_ipa(text, nullptr);
+    return ipa_to_token_ids(ipa);
+  }
+
+  std::vector<int64_t> ipa_to_token_ids(const std::string& ipa) {
     const std::string trimmed = trim_ascii_ws_copy(ipa);
     if (trimmed.empty()) {
       return {};
@@ -685,7 +689,14 @@ struct ZipVoiceTTS::Impl {
   }
 
   std::vector<float> synthesize(std::string_view text) {
-    std::vector<int64_t> ids = ipa_text_to_token_ids(std::string(text));
+    return synthesize_from_token_ids(ipa_text_to_token_ids(std::string(text)));
+  }
+
+  std::vector<float> synthesize_from_ipa(std::string_view ipa) {
+    return synthesize_from_token_ids(ipa_to_token_ids(std::string(ipa)));
+  }
+
+  std::vector<float> synthesize_from_token_ids(std::vector<int64_t> ids) {
     if (ids.empty()) {
       return {};
     }
@@ -734,6 +745,10 @@ void ZipVoiceTTS::set_output_volume(float volume) {
 
 std::vector<float> ZipVoiceTTS::synthesize(std::string_view text) {
   return impl_->synthesize(text);
+}
+
+std::vector<float> ZipVoiceTTS::synthesize_from_ipa(std::string_view ipa) {
+  return impl_->synthesize_from_ipa(ipa);
 }
 
 std::vector<float> zipvoice_compress_long_pauses(const std::vector<float>& wav,

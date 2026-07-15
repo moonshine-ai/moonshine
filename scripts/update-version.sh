@@ -69,6 +69,9 @@ done < <(grep -rlI \
   --exclude=community1_cpp_annote_embedded.cpp \
   --exclude=hindi-numbers.cpp \
   --exclude=hindi.cpp \
+  --exclude=prepare-release.sh \
+  --exclude=patch-release.sh \
+  --exclude=build-all-platforms.sh \
   "$OLD_VERSION" .)
 for FILE in "${ACTUAL_FILES[@]}"; do
 	echo "Checking file '$FILE'"

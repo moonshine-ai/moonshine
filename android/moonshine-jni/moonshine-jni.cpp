@@ -958,6 +958,56 @@ Java_ai_moonshine_voice_JNI_moonshineTextToSpeech(JNIEnv *env, jobject /* this *
   }
 }
 
+extern "C" JNIEXPORT jobject JNICALL
+Java_ai_moonshine_voice_JNI_moonshinePhonemesToSpeech(
+    JNIEnv *env, jobject /* this */, jint tts_handle, jstring phonemes,
+    jobjectArray joptions) {
+  try {
+    std::vector<moonshine_option_t> copts;
+    std::vector<std::pair<jstring, jstring>> jhold;
+    if (!fill_moonshine_options(env, joptions, &copts, &jhold)) {
+      return nullptr;
+    }
+    if (phonemes == nullptr) {
+      release_moonshine_options(env, copts, jhold);
+      return nullptr;
+    }
+    const char *phonemes_ptr = env->GetStringUTFChars(phonemes, nullptr);
+    float *out_audio = nullptr;
+    uint64_t out_size = 0;
+    int32_t out_sr = 0;
+    const int32_t err = moonshine_phonemes_to_speech(
+        tts_handle, phonemes_ptr, copts.data(), copts.size(), &out_audio,
+        &out_size, &out_sr);
+    env->ReleaseStringUTFChars(phonemes, phonemes_ptr);
+    release_moonshine_options(env, copts, jhold);
+    if (err != MOONSHINE_ERROR_NONE) {
+      if (out_audio != nullptr) {
+        std::free(out_audio);
+      }
+      return nullptr;
+    }
+    jclass resClass = get_class(env, "ai/moonshine/voice/TtsSynthesisResult");
+    jmethodID ctor = get_method(env, resClass, "<init>", "()V");
+    jobject res = env->NewObject(resClass, ctor);
+    jfieldID samplesField = get_field(env, resClass, "samples", "[F");
+    jfieldID srField = get_field(env, resClass, "sampleRateHz", "I");
+    jfloatArray jsamples = env->NewFloatArray(static_cast<jsize>(out_size));
+    if (out_audio != nullptr && out_size > 0) {
+      env->SetFloatArrayRegion(jsamples, 0, static_cast<jsize>(out_size),
+                               out_audio);
+      std::free(out_audio);
+    }
+    env->SetObjectField(res, samplesField, jsamples);
+    env->SetIntField(res, srField, out_sr);
+    env->DeleteLocalRef(resClass);
+    return res;
+  } catch (const std::exception &e) {
+    ALOGE("moonshinePhonemesToSpeech: %s\n", e.what());
+    return nullptr;
+  }
+}
+
 extern "C" JNIEXPORT jint JNICALL
 Java_ai_moonshine_voice_JNI_moonshineCreateGraphemeToPhonemizerFromFiles(
     JNIEnv *env, jobject /* this */, jstring language, jobjectArray jfilenames,

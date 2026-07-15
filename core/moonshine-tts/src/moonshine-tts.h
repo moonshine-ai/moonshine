@@ -41,6 +41,21 @@ class MoonshineTTS {
       std::string_view text,
       const std::vector<std::pair<std::string, std::string>>& option_overrides);
 
+  /// Synthesize from an existing IPA phoneme string, skipping grapheme-to-
+  /// phoneme conversion. ``phonemes`` is the same International Phonetic
+  /// Alphabet representation produced by ``MoonshineG2P::text_to_ipa`` (i.e.
+  /// the ``moonshine_text_to_phonemes`` C API), so callers can inspect or edit
+  /// the phonemes between G2P and vocoding. The string is normalized to the
+  /// active engine's phoneme inventory before synthesis.
+  std::vector<float> synthesize_from_phonemes(std::string_view phonemes);
+
+  /// ``synthesize_from_phonemes`` with per-call option overrides (same keys as
+  /// the ``synthesize`` overload: ``speed``, ``normalize_audio``,
+  /// ``output_volume``).
+  std::vector<float> synthesize_from_phonemes(
+      std::string_view phonemes,
+      const std::vector<std::pair<std::string, std::string>>& option_overrides);
+
  private:
   struct Impl;
   std::unique_ptr<Impl> impl_;

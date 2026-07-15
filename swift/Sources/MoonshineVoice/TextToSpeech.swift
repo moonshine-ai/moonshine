@@ -178,6 +178,27 @@ public class TextToSpeech: @unchecked Sendable {
         )
     }
 
+    /// Synthesize speech directly from IPA phonemes, skipping grapheme-to-phoneme conversion.
+    ///
+    /// - Parameters:
+    ///   - phonemes: An IPA phoneme string, as produced by the `moonshine_text_to_phonemes`
+    ///     C API. Passing the phonemes for the same language yields audio equivalent to
+    ///     ``synthesize(text:options:)`` on the original text, but lets you inspect or edit the
+    ///     phonemes in between (e.g. to fix a name's pronunciation).
+    ///   - options: Optional per-call options (e.g. `speed`).
+    /// - Returns: A ``TtsSynthesisResult`` with PCM samples and sample rate.
+    /// - Throws: `MoonshineError` if synthesis fails.
+    public func synthesizeFromPhonemes(
+        phonemes: String,
+        options: [TranscriberOption]? = nil
+    ) throws -> TtsSynthesisResult {
+        return try api.phonemesToSpeech(
+            ttsHandle: handle,
+            phonemes: phonemes,
+            options: options
+        )
+    }
+
     // MARK: - Queued say / stop / wait / isTalking
 
     /// Queue ``text`` for synthesis and playback, returning immediately.

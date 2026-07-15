@@ -730,6 +730,17 @@ class TextToSpeech {
       const std::string &text,
       const std::vector<moonshine_option_t> &options = {});
 
+  /// Synthesize speech from IPA phonemes, skipping grapheme-to-phoneme
+  /// conversion.
+  /// @param phonemes IPA phoneme string (as produced by
+  ///        GraphemeToPhonemizer::textToPhonemes / moonshine_text_to_phonemes)
+  /// @param options Per-call options (e.g., speed), or empty to use defaults
+  /// @return TtsSynthesisResult containing PCM samples and sample rate
+  /// @throws MoonshineException if synthesis fails
+  TtsSynthesisResult synthesizeFromPhonemes(
+      const std::string &phonemes,
+      const std::vector<moonshine_option_t> &options = {});
+
   /// Free the synthesizer resources
   void close();
 
@@ -1422,6 +1433,27 @@ inline TtsSynthesisResult TextToSpeech::synthesize(
   int32_t out_sample_rate = 0;
   checkError(moonshine_text_to_speech(
       handle_, text.c_str(), options.empty() ? nullptr : options.data(),
+      options.size(), &out_audio, &out_size, &out_sample_rate));
+  TtsSynthesisResult result;
+  if (out_audio && out_size > 0) {
+    result.samples.assign(out_audio, out_audio + out_size);
+    std::free(out_audio);
+  }
+  result.sampleRateHz = out_sample_rate;
+  return result;
+}
+
+inline TtsSynthesisResult TextToSpeech::synthesizeFromPhonemes(
+    const std::string &phonemes,
+    const std::vector<moonshine_option_t> &options) {
+  if (handle_ < 0) {
+    throw MoonshineException("TextToSpeech is not initialized");
+  }
+  float *out_audio = nullptr;
+  uint64_t out_size = 0;
+  int32_t out_sample_rate = 0;
+  checkError(moonshine_phonemes_to_speech(
+      handle_, phonemes.c_str(), options.empty() ? nullptr : options.data(),
       options.size(), &out_audio, &out_size, &out_sample_rate));
   TtsSynthesisResult result;
   if (out_audio && out_size > 0) {

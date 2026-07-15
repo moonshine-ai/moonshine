@@ -654,6 +654,133 @@ TEST_CASE("moonshine-test-v2") {
   }
 }
 
+TEST_CASE("moonshine-phonemes-to-speech-c-api") {
+  SUBCASE("invalid-handle") {
+    float* audio = nullptr;
+    uint64_t n = 0;
+    int32_t sr = 0;
+    CHECK(moonshine_phonemes_to_speech(-1, "h\u0259\u02c8lo\u028a", nullptr, 0,
+                                       &audio, &n,
+                                       &sr) == MOONSHINE_ERROR_INVALID_HANDLE);
+  }
+
+  SUBCASE("invalid-arguments") {
+    const auto data_root = find_moonshine_tts_data_dir();
+    if (!data_root) {
+      MESSAGE("skip: moonshine-tts data directory not found");
+      return;
+    }
+    const std::string model_root_str = data_root->string();
+    const moonshine_option_t create_opts[] = {
+        {"model_root", model_root_str.c_str()},
+        {"lang", "en_us"},
+        {"voice", "kokoro_af_heart"},
+    };
+    const int32_t h = moonshine_create_tts_synthesizer_from_files(
+        "en_us", nullptr, 0, create_opts,
+        static_cast<uint64_t>(sizeof(create_opts) / sizeof(create_opts[0])),
+        MOONSHINE_HEADER_VERSION);
+    REQUIRE(h >= 0);
+    float* audio = nullptr;
+    uint64_t n = 0;
+    int32_t sr = 0;
+    // NULL phonemes / output pointers are rejected before synthesis.
+    CHECK(moonshine_phonemes_to_speech(h, nullptr, nullptr, 0, &audio, &n,
+                                       &sr) == MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(moonshine_phonemes_to_speech(h, "h\u0259\u02c8lo\u028a", nullptr, 0,
+                                       nullptr, &n,
+                                       &sr) == MOONSHINE_ERROR_INVALID_ARGUMENT);
+    moonshine_free_tts_synthesizer(h);
+  }
+
+  SUBCASE("kokoro-matches-text-to-speech") {
+    const auto data_root = find_moonshine_tts_data_dir();
+    if (!data_root) {
+      MESSAGE("skip: moonshine-tts data directory not found");
+      return;
+    }
+    const std::string root_str = data_root->string();
+    const moonshine_option_t create_opts[] = {
+        {"model_root", root_str.c_str()},
+        {"lang", "en_us"},
+        {"voice", "kokoro_af_heart"},
+        {"speed", "1.0"},
+    };
+    const int32_t tts = moonshine_create_tts_synthesizer_from_files(
+        "en_us", nullptr, 0, create_opts,
+        static_cast<uint64_t>(sizeof(create_opts) / sizeof(create_opts[0])),
+        MOONSHINE_HEADER_VERSION);
+    REQUIRE(tts >= 0);
+
+    const moonshine_option_t g2p_opts[] = {{"g2p_root", root_str.c_str()}};
+    const int32_t g2p = moonshine_create_grapheme_to_phonemizer_from_files(
+        "en_us", nullptr, 0, g2p_opts,
+        static_cast<uint64_t>(sizeof(g2p_opts) / sizeof(g2p_opts[0])),
+        MOONSHINE_HEADER_VERSION);
+    REQUIRE(g2p >= 0);
+
+    const char* text = "Hello world, this is a phoneme test.";
+
+    // text -> IPA phonemes.
+    const char* ipa = nullptr;
+    uint64_t ipa_count = 0;
+    REQUIRE(moonshine_text_to_phonemes(g2p, text, nullptr, 0, &ipa,
+                                       &ipa_count) == MOONSHINE_ERROR_NONE);
+    REQUIRE(ipa != nullptr);
+    REQUIRE(ipa_count > 1);
+
+    // phonemes -> speech.
+    float* audio_ph = nullptr;
+    uint64_t n_ph = 0;
+    int32_t sr_ph = 0;
+    REQUIRE(moonshine_phonemes_to_speech(tts, ipa, nullptr, 0, &audio_ph, &n_ph,
+                                         &sr_ph) == MOONSHINE_ERROR_NONE);
+    CHECK(sr_ph == 24000);
+    CHECK(n_ph > 2000);
+    REQUIRE(audio_ph != nullptr);
+
+    // text -> speech via the full pipeline should be equivalent, since the
+    // synthesizer runs the same en_us G2P internally.
+    float* audio_txt = nullptr;
+    uint64_t n_txt = 0;
+    int32_t sr_txt = 0;
+    REQUIRE(moonshine_text_to_speech(tts, text, nullptr, 0, &audio_txt, &n_txt,
+                                     &sr_txt) == MOONSHINE_ERROR_NONE);
+    REQUIRE(audio_txt != nullptr);
+    CHECK(sr_txt == sr_ph);
+    CHECK(n_txt == n_ph);
+    if (n_txt == n_ph) {
+      double max_abs_diff = 0.0;
+      for (uint64_t i = 0; i < n_ph; ++i) {
+        max_abs_diff = std::max(
+            max_abs_diff,
+            static_cast<double>(std::fabs(audio_ph[i] - audio_txt[i])));
+      }
+      CHECK(max_abs_diff < 1e-3);
+    }
+
+    // A faster per-call speed should shorten the phoneme-driven output too.
+    const moonshine_option_t fast_opts[] = {{"speed", "2.0"}};
+    float* audio_fast = nullptr;
+    uint64_t n_fast = 0;
+    int32_t sr_fast = 0;
+    REQUIRE(moonshine_phonemes_to_speech(
+                tts, ipa, fast_opts,
+                static_cast<uint64_t>(sizeof(fast_opts) / sizeof(fast_opts[0])),
+                &audio_fast, &n_fast, &sr_fast) == MOONSHINE_ERROR_NONE);
+    CHECK(n_fast < n_ph);
+
+    std::free(audio_ph);
+    std::free(audio_txt);
+    if (audio_fast != nullptr) {
+      std::free(audio_fast);
+    }
+    free_phonemes_output(ipa);
+    moonshine_free_grapheme_to_phonemizer(g2p);
+    moonshine_free_tts_synthesizer(tts);
+  }
+}
+
 TEST_CASE("grapheme-to-phonemizer-c-api") {
   SUBCASE("create-invalid-filenames-pointer") {
     const moonshine_option_t opts[] = {

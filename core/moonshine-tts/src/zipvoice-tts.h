@@ -85,6 +85,10 @@ class ZipVoiceTTS {
   /// ``kSampleRateHz``, cloned in the reference voice.
   std::vector<float> synthesize(std::string_view text);
 
+  /// Like ``synthesize`` but starts from an existing IPA phoneme string
+  /// (the same format ``MoonshineG2P::text_to_ipa`` produces), skipping G2P.
+  std::vector<float> synthesize_from_ipa(std::string_view ipa);
+
  private:
   struct Impl;
   std::unique_ptr<Impl> impl_;

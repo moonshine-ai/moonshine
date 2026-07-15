@@ -142,6 +142,9 @@ public class JNI {
     public static native TtsSynthesisResult moonshineTextToSpeech(int tts_synthesizer_handle,
             String text, TranscriberOption[] options);
 
+    public static native TtsSynthesisResult moonshinePhonemesToSpeech(int tts_synthesizer_handle,
+            String phonemes, TranscriberOption[] options);
+
     public static native int moonshineCreateGraphemeToPhonemizerFromFiles(String language,
             String[] filenames, TranscriberOption[] options);
 
