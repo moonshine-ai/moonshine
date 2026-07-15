@@ -11,11 +11,11 @@ flash-resident voice pack (`g_neural_tts_pack`).
 
 | Phrase | |
 | ------ | - |
-| say wifi to set up a network | [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine-spelling@main/moonshine-micro/neural-tts/examples/say_wifi.wav) |
-| bee | [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine-spelling@main/moonshine-micro/neural-tts/examples/bee.wav) |
-| zero | [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine-spelling@main/moonshine-micro/neural-tts/examples/zero.wav) |
-| double u | [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine-spelling@main/moonshine-micro/neural-tts/examples/double_u.wav) |
-| You are connected | [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine-spelling@main/moonshine-micro/neural-tts/examples/connected.wav) |
+| say wifi to set up a network | [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/micro/neural-tts/examples/say_wifi.wav) |
+| bee | [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/micro/neural-tts/examples/bee.wav) |
+| zero | [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/micro/neural-tts/examples/zero.wav) |
+| double u | [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/micro/neural-tts/examples/double_u.wav) |
+| You are connected | [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/micro/neural-tts/examples/connected.wav) |
 
 <!--TOC-->
 
@@ -98,8 +98,8 @@ tts.SynthesizeIpa("ɹˈɛdɪŋ", EmitPcm, &sink);
 
 | Path | IPA | Listen |
 | ---- | --- | ------ |
-| `Synthesize("Reading")` (rules) | `ɹˈiːdɪŋ` | [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine-spelling@main/moonshine-micro/neural-tts/examples/ipa/reading_g2p.wav) |
-| `SynthesizeIpa("ɹˈɛdɪŋ")` | `ɹˈɛdɪŋ` | [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine-spelling@main/moonshine-micro/neural-tts/examples/ipa/reading_ipa.wav) |
+| `Synthesize("Reading")` (rules) | `ɹˈiːdɪŋ` | [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/micro/neural-tts/examples/ipa/reading_g2p.wav) |
+| `SynthesizeIpa("ɹˈɛdɪŋ")` | `ɹˈɛdɪŋ` | [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/micro/neural-tts/examples/ipa/reading_ipa.wav) |
 
 Clips live under [`examples/ipa/`](examples/ipa/) (not the main demo table above).
 Regenerate with:
