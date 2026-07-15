@@ -142,6 +142,16 @@ main() {
     rm -rf "${RELEASE_DIR}"
     git -C "${REPO_ROOT_DIR}" worktree add --detach "${RELEASE_DIR}" "${RELEASE_REF}"
 
+    # A fresh worktree only contains tracked files, but the build relies on a
+    # few gitignored, repo-root credential/config files that live in the main
+    # checkout (e.g. .pypirc, which build-pip-docker.sh COPYs into its image).
+    # Copy them across so the worktree build behaves like an in-place one.
+    for cfg in .env .pypirc local.properties; do
+        if [ -f "${REPO_ROOT_DIR}/${cfg}" ]; then
+            cp "${REPO_ROOT_DIR}/${cfg}" "${RELEASE_DIR}/${cfg}"
+        fi
+    done
+
     cd "${RELEASE_DIR}"
     scripts/test-core.sh
     scripts/test-python.sh
