@@ -24,6 +24,7 @@ from moonshine_voice.moonshine_api import (
     MOONSHINE_HEADER_VERSION,
     _MoonshineLib,
     moonshine_options_array,
+    moonshine_phonemes_to_speech_samples,
     moonshine_text_to_speech_samples,
 )
 
@@ -851,6 +852,33 @@ class TextToSpeech:
             options["output_volume"] = str(volume)
 
         return moonshine_text_to_speech_samples(self._handle, text, options)
+
+    def synthesize_from_phonemes(
+        self,
+        phonemes: str,
+        *,
+        speed: Optional[float] = None,
+        volume: Optional[float] = None,
+        options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
+    ) -> Tuple[List[float], int]:
+        """Synthesize speech directly from IPA ``phonemes``, skipping grapheme-to-phoneme conversion.
+
+        ``phonemes`` is an International Phonetic Alphabet string in the same format produced by
+        :meth:`~moonshine_voice.g2p.GraphemeToPhonemizer.to_ipa`. Passing the raw
+        phonemes for the same language yields audio equivalent to :meth:`synthesize` on the original
+        text, but lets you inspect or edit the phonemes in between (e.g. to fix a name's
+        pronunciation). Returns PCM float samples ``(-1..1)`` and the sample rate in Hz.
+        """
+        if options is None:
+            options = {}
+
+        if speed is not None:
+            options["speed"] = str(speed)
+
+        if volume is not None:
+            options["output_volume"] = str(volume)
+
+        return moonshine_phonemes_to_speech_samples(self._handle, phonemes, options)
 
     def say(
         self,

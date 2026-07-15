@@ -502,6 +502,47 @@ def moonshine_text_to_speech_samples(
         moonshine_free(ctypes.cast(out_audio, ctypes.c_void_p).value)
 
 
+def moonshine_phonemes_to_speech_samples(
+    tts_synthesizer_handle: int,
+    phonemes: str,
+    options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
+) -> Tuple[List[float], int]:
+    """Call ``moonshine_phonemes_to_speech``; returns ``(samples, sample_rate_hz)``.
+
+    ``phonemes`` is an IPA string as produced by
+    ``moonshine_text_to_phonemes_string``. Frees the native audio buffer.
+    """
+    lib = _MoonshineLib().lib
+    opt_arr, opt_n, opt_keep = moonshine_options_array(options)
+    phonemes_b = phonemes.encode("utf-8")
+    out_audio = ctypes.POINTER(ctypes.c_float)()
+    out_size = ctypes.c_uint64()
+    out_sr = ctypes.c_int32()
+    err = lib.moonshine_phonemes_to_speech(
+        ctypes.c_int32(tts_synthesizer_handle),
+        phonemes_b,
+        opt_arr,
+        opt_n,
+        ctypes.byref(out_audio),
+        ctypes.byref(out_size),
+        ctypes.byref(out_sr),
+    )
+    if err != MOONSHINE_ERROR_NONE:
+        raise MoonshineError(
+            lib.moonshine_error_to_string(err).decode("utf-8")
+            if lib.moonshine_error_to_string(err)
+            else f"moonshine_phonemes_to_speech failed ({err})"
+        )
+    n = int(out_size.value)
+    if n <= 0 or not out_audio:
+        return [], int(out_sr.value)
+    try:
+        chunk = ctypes.cast(out_audio, ctypes.POINTER(ctypes.c_float * n)).contents
+        return list(chunk), int(out_sr.value)
+    finally:
+        moonshine_free(ctypes.cast(out_audio, ctypes.c_void_p).value)
+
+
 def moonshine_text_to_phonemes_string(
     grapheme_to_phonemizer_handle: int,
     text: str,
@@ -788,6 +829,17 @@ class _MoonshineLib:
 
         lib.moonshine_text_to_speech.restype = ctypes.c_int32
         lib.moonshine_text_to_speech.argtypes = [
+            ctypes.c_int32,
+            ctypes.c_char_p,
+            ctypes.POINTER(TranscriberOptionC),
+            ctypes.c_uint64,
+            ctypes.POINTER(ctypes.POINTER(ctypes.c_float)),
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.POINTER(ctypes.c_int32),
+        ]
+
+        lib.moonshine_phonemes_to_speech.restype = ctypes.c_int32
+        lib.moonshine_phonemes_to_speech.argtypes = [
             ctypes.c_int32,
             ctypes.c_char_p,
             ctypes.POINTER(TranscriberOptionC),

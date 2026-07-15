@@ -89,6 +89,12 @@ class PiperTTS {
   /// at ``kSampleRateHz``.
   std::vector<float> synthesize(std::string_view text);
 
+  /// Like ``synthesize`` but starts from an existing IPA phoneme string
+  /// (the same format ``MoonshineG2P::text_to_ipa`` produces), skipping G2P.
+  /// The IPA is normalized/coerced to this model's phoneme inventory before
+  /// running the ONNX vocoder.
+  std::vector<float> synthesize_from_ipa(std::string_view ipa);
+
   /// Run ONNX on an existing Piper phoneme-id sequence (same layout as
   /// ``piper.phoneme_ids.phonemes_to_ids``), then apply ``normalize_audio`` /
   /// ``output_volume`` (via ``apply_synthesis_output_effects``) and resample to

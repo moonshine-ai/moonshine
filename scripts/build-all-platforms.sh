@@ -3,9 +3,21 @@
 # Expected to be run on macOS.
 #
 # Usage:
-#   ./scripts/build-all-platforms.sh
+#   ./scripts/build-all-platforms.sh [RELEASE_REF]
+#
+# This builds and publishes a *frozen* release ref (a tag or branch), NOT your
+# live working tree or origin/main. That way you can keep editing `main` while
+# this long-running build is in flight without corrupting it. Normally you cut
+# the ref first with scripts/prepare-release.sh (or scripts/patch-release.sh),
+# then run this with no arguments and it builds the most recent v* tag.
+#
+# The local platforms build from an isolated git worktree checked out at the
+# release ref, and each remote host checks out the same ref (instead of pulling
+# main), so nothing you push to main afterwards leaks into the release.
 #
 # Environment:
+#   RELEASE_REF            - git ref (tag/branch/sha) to build. Defaults to the
+#                            first argument, or the most recent v* tag.
 #   LINUX_CLOUD_HOST       - SSH host for Linux cloud
 #   LINUX_CLOUD_INSTANCE   - GCP instance name for the Linux VM (optional)
 #   LINUX_CLOUD_ZONE       - GCP zone for the Linux VM (e.g. us-central1-b)
@@ -65,6 +77,11 @@ gcp_suspend_instance() {
 cleanup() {
     local exit_code=$?
     set +e
+    if [ -n "${RELEASE_DIR:-}" ] && [ -d "${RELEASE_DIR}" ]; then
+        echo "Removing release worktree ${RELEASE_DIR}..."
+        git -C "${REPO_ROOT_DIR}" worktree remove --force "${RELEASE_DIR}" \
+            2>/dev/null || rm -rf "${RELEASE_DIR}"
+    fi
     if [ -n "${LINUX_CLOUD_INSTANCE:-}" ]; then
         gcp_suspend_instance \
             "${LINUX_CLOUD_INSTANCE}" \
@@ -100,7 +117,32 @@ main() {
 
     trap cleanup EXIT
 
-    cd ${REPO_ROOT_DIR}
+    # Freeze the release to an immutable ref so we can keep working on `main`
+    # while this long build runs. RELEASE_REF defaults to the most recent v*
+    # tag (what prepare-release.sh / patch-release.sh just pushed); override it
+    # via the RELEASE_REF env var or the first argument.
+    RELEASE_REF="${RELEASE_REF:-${1:-}}"
+    git -C "${REPO_ROOT_DIR}" fetch origin --tags --prune
+    if [ -z "${RELEASE_REF}" ]; then
+        RELEASE_REF="$(git -C "${REPO_ROOT_DIR}" describe --tags --abbrev=0 --match 'v*')"
+    fi
+    if ! git -C "${REPO_ROOT_DIR}" rev-parse -q --verify "${RELEASE_REF}^{commit}" >/dev/null; then
+        echo "Release ref '${RELEASE_REF}' does not resolve to a commit." >&2
+        exit 1
+    fi
+    echo "Building release ref: ${RELEASE_REF}"
+
+    # Build the local platforms from an isolated worktree checked out at the
+    # release ref, so editing files in the main checkout can't corrupt the
+    # in-flight build. Sub-scripts derive their repo root from their own
+    # location, so running the worktree's copies roots everything in the
+    # worktree; .env vars were already exported above and are inherited here.
+    RELEASE_DIR="$(cd "${REPO_ROOT_DIR}/.." && pwd)/moonshine-release-${RELEASE_REF//\//-}"
+    git -C "${REPO_ROOT_DIR}" worktree remove --force "${RELEASE_DIR}" 2>/dev/null || true
+    rm -rf "${RELEASE_DIR}"
+    git -C "${REPO_ROOT_DIR}" worktree add --detach "${RELEASE_DIR}" "${RELEASE_REF}"
+
+    cd "${RELEASE_DIR}"
     scripts/test-core.sh
     scripts/test-python.sh
     scripts/test-docs.sh --skip-build
@@ -134,16 +176,18 @@ main() {
     # checkout path comes from LINUX_CLOUD_REPO_PATH. LINUX_CLOUD_REPO_PATH and the
     # AVD default are expanded here on the local side before the command is sent.
     ssh ${LINUX_CLOUD_HOST} "cd '${LINUX_CLOUD_REPO_PATH}' \
-      && git pull origin main \
+      && git fetch origin --tags --prune \
+      && git checkout -f '${RELEASE_REF}' \
       && scripts/test-core.sh \
       && scripts/test-android.sh --avd '${ANDROID_X86_64_AVD:-moonshine_api26_x86_64}' \
       && scripts/publish-binary.sh upload" || exit 1
 
-    ssh -p ${RPI_CLOUD_PORT} ${RPI_CLOUD_HOST} 'cd moonshine \
-      && git pull origin main \
+    ssh -p ${RPI_CLOUD_PORT} ${RPI_CLOUD_HOST} "cd moonshine \
+      && git fetch origin --tags --prune \
+      && git checkout -f '${RELEASE_REF}' \
       && scripts/test-core.sh \
       && scripts/build-pip.sh upload \
-      && scripts/publish-binary.sh upload' || exit 1
+      && scripts/publish-binary.sh upload" || exit 1
 
     if [ -n "${WINDOWS_CLOUD_INSTANCE:-}" ]; then
         gcp_resume_instance \
@@ -163,15 +207,18 @@ main() {
         -o TCPKeepAlive=yes
     )
 
-    # The Windows login shell is PowerShell. Pull first (that refreshes
-    # run-windows-ci.ps1 itself), then hand off to the orchestrator, which runs
-    # each step with heavy, disconnect-surviving logging (see the script header
-    # and build-logs/ on the box). Using a single orchestrator also makes the
-    # run abort on the first failing step rather than masking it behind the
-    # exit code of the last chained command.
+    # The Windows login shell is PowerShell. Check out the release ref first
+    # (that also refreshes run-windows-ci.ps1 itself at that ref), then hand off
+    # to the orchestrator, which runs each step with heavy, disconnect-surviving
+    # logging (see the script header and build-logs/ on the box). Using a single
+    # orchestrator also makes the run abort on the first failing step rather
+    # than masking it behind the exit code of the last chained command. The
+    # RELEASE_REF is expanded locally (via the single-quote break) so PowerShell
+    # variables like $LASTEXITCODE stay intact for the remote shell.
     windows_remote_cmd='cd moonshine `
-      ; git pull origin main `
-      ; if ($LASTEXITCODE -ne 0) { Write-Host "git pull failed"; exit 1 } `
+      ; git fetch origin --tags --prune `
+      ; git checkout -f '"${RELEASE_REF}"' `
+      ; if ($LASTEXITCODE -ne 0) { Write-Host "git checkout failed"; exit 1 } `
       ; pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\run-windows-ci.ps1 -Upload'
 
     # Transient SSH/network disconnects (not build defects) have killed runs

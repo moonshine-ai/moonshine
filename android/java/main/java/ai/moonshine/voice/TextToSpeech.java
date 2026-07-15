@@ -237,6 +237,28 @@ public class TextToSpeech {
         return synthesize(text, null);
     }
 
+    /**
+     * Synthesize speech directly from IPA phonemes, skipping grapheme-to-phoneme conversion.
+     *
+     * <p>{@code phonemes} is an International Phonetic Alphabet string, as produced by
+     * {@link GraphemeToPhonemizer#toIpa} / the native {@code moonshine_text_to_phonemes}. Passing
+     * the phonemes for the same language yields audio equivalent to {@link #synthesize(String)} on
+     * the original text, but lets you inspect or edit the phonemes in between (e.g. to fix a name's
+     * pronunciation). Optional per-call options (e.g. {@code speed}) are forwarded to the native
+     * layer.
+     */
+    public TtsSynthesisResult synthesizeFromPhonemes(String phonemes, List<TranscriberOption> options) {
+        TtsSynthesisResult r = JNI.moonshinePhonemesToSpeech(handle, phonemes, toArray(options));
+        if (r == null) {
+            throw new RuntimeException("moonshinePhonemesToSpeech failed");
+        }
+        return r;
+    }
+
+    public TtsSynthesisResult synthesizeFromPhonemes(String phonemes) {
+        return synthesizeFromPhonemes(phonemes, null);
+    }
+
     // -- Queued say / stop / wait / isTalking --------------------------------
 
     /**
