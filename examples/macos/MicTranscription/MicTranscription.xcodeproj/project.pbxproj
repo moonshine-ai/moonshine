@@ -50,7 +50,7 @@
 			path = Sources/MicTranscription;
 			sourceTree = "<group>";
 		};
-		B8B49A6A12013730.0.6854E = {
+		B8B49A6A12013730.0.6954E = {
 			isa = PBXGroup;
 			children = (
 				7EEA7A59511F12BB6EA396A3 /* MicTranscription */,
@@ -98,7 +98,7 @@
 				Base,
 				en,
 			);
-			mainGroup = B8B49A6A12013730.0.6854E;
+			mainGroup = B8B49A6A12013730.0.6954E;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				E68EFCE52E5CBD663A132D80 /* XCRemoteSwiftPackageReference "moonshine-swift" */,
@@ -301,7 +301,7 @@
 			repositoryURL = "https://github.com/moonshine-ai/moonshine-swift.git";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 0.0.68;
+				minimumVersion = 0.0.69;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

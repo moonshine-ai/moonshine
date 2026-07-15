@@ -342,7 +342,7 @@
 			repositoryURL = "https://github.com/moonshine-ai/moonshine-swift.git";
 			requirement = {
 				kind = exactVersion;
-				version = 0.0.68;
+				version = 0.0.69;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
