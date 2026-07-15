@@ -53,3 +53,4 @@ build-*/
 .vscode/
 pico_monitor.log
 .claude/
+.release-state/
