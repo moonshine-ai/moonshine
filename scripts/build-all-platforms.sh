@@ -15,9 +15,16 @@
 # release ref, and each remote host checks out the same ref (instead of pulling
 # main), so nothing you push to main afterwards leaks into the release.
 #
+# Resumable: each stage drops a breadcrumb under .release-state/<ref>/ when it
+# completes, so re-running the script (e.g. after a failure) skips the stages
+# that already finished and picks up where it left off. Set RELEASE_FRESH=1 to
+# discard the breadcrumbs and rebuild every stage from scratch.
+#
 # Environment:
 #   RELEASE_REF            - git ref (tag/branch/sha) to build. Defaults to the
 #                            first argument, or the most recent v* tag.
+#   RELEASE_FRESH          - if non-empty, ignore/clear resume breadcrumbs and
+#                            rebuild every stage.
 #   LINUX_CLOUD_HOST       - SSH host for Linux cloud
 #   LINUX_CLOUD_INSTANCE   - GCP instance name for the Linux VM (optional)
 #   LINUX_CLOUD_ZONE       - GCP zone for the Linux VM (e.g. us-central1-b)
@@ -96,6 +103,136 @@ cleanup() {
     fi
     exit ${exit_code}
 }
+
+# Per-release resume support: each stage drops a breadcrumb file in STATE_DIR
+# when it finishes, so re-running the script skips any stage that already
+# completed for the same release ref. Because the release is pinned to an
+# immutable ref, a resumed run rebuilds identical code. Set RELEASE_FRESH=1 to
+# clear the breadcrumbs and rebuild every stage from scratch.
+run_stage() {
+    local name="$1"
+    shift
+    local marker="${STATE_DIR}/${name}.done"
+    if [ -f "${marker}" ]; then
+        echo "[resume] Skipping stage '${name}' (already completed for ${RELEASE_REF})."
+        return 0
+    fi
+    echo "[stage] ===== ${name}: starting ====="
+    "$@"
+    touch "${marker}"
+    echo "[stage] ===== ${name}: done ====="
+}
+
+# The x86_64 Linux cloud host runs the x86_64 Android instrumentation tests
+# (Apple Silicon can't run an x86_64 emulator). One-time host setup via
+# scripts/setup-android-ci.sh: Android SDK + platform-tools + emulator, an
+# x86_64 system image, KVM, an AVD named moonshine_api26_x86_64 (override with
+# ANDROID_X86_64_AVD), and JAVA_HOME/ANDROID_HOME exported in ~/.bashrc (sourced
+# by non-interactive ssh). The checkout path comes from LINUX_CLOUD_REPO_PATH.
+# LINUX_CLOUD_REPO_PATH and the AVD default are expanded here on the local side
+# before the command is sent.
+stage_linux() {
+    if [ -n "${LINUX_CLOUD_INSTANCE:-}" ]; then
+        gcp_resume_instance \
+            "${LINUX_CLOUD_INSTANCE}" \
+            "${LINUX_CLOUD_ZONE}" \
+            "${LINUX_CLOUD_PROJECT}" \
+            "${LINUX_CLOUD_HOST}"
+    fi
+
+    ssh ${LINUX_CLOUD_HOST} "cd '${LINUX_CLOUD_REPO_PATH}' \
+      && git fetch origin --tags --prune \
+      && git checkout -f '${RELEASE_REF}' \
+      && scripts/test-core.sh \
+      && scripts/test-android.sh --avd '${ANDROID_X86_64_AVD:-moonshine_api26_x86_64}' \
+      && scripts/publish-binary.sh upload" || exit 1
+}
+
+# The Raspberry Pi cloud host checks out the release ref and publishes the arm64
+# wheel + binary.
+stage_pi() {
+    ssh -p ${RPI_CLOUD_PORT} ${RPI_CLOUD_HOST} "cd moonshine \
+      && git fetch origin --tags --prune \
+      && git checkout -f '${RELEASE_REF}' \
+      && scripts/test-core.sh \
+      && scripts/build-pip.sh upload \
+      && scripts/publish-binary.sh upload" || exit 1
+}
+
+# The Windows cloud host runs the CI orchestrator over SSH with
+# disconnect-surviving retries.
+stage_windows() {
+    if [ -n "${WINDOWS_CLOUD_INSTANCE:-}" ]; then
+        gcp_resume_instance \
+            "${WINDOWS_CLOUD_INSTANCE}" \
+            "${WINDOWS_CLOUD_ZONE}" \
+            "${WINDOWS_CLOUD_PROJECT}" \
+            "${WINDOWS_CLOUD_USER}@${WINDOWS_CLOUD_HOST}"
+    fi
+
+    # Keepalives so a brief network stall doesn't tear down the session. A
+    # dropped connection kills the remote build outright, because Windows
+    # OpenSSH terminates the session's process tree on disconnect. With these,
+    # the client tolerates ~2 minutes (15s * 8) of silence before giving up.
+    local windows_ssh_opts=(
+        -o ServerAliveInterval=15
+        -o ServerAliveCountMax=8
+        -o TCPKeepAlive=yes
+    )
+
+    # The Windows login shell is PowerShell. Check out the release ref first
+    # (that also refreshes run-windows-ci.ps1 itself at that ref), then hand off
+    # to the orchestrator, which runs each step with heavy, disconnect-surviving
+    # logging (see the script header and build-logs/ on the box). Using a single
+    # orchestrator also makes the run abort on the first failing step rather
+    # than masking it behind the exit code of the last chained command. The
+    # RELEASE_REF is expanded locally (via the single-quote break) so PowerShell
+    # variables like $LASTEXITCODE stay intact for the remote shell.
+    local windows_remote_cmd='cd moonshine `
+      ; git fetch origin --tags --prune `
+      ; git checkout -f '"${RELEASE_REF}"' `
+      ; if ($LASTEXITCODE -ne 0) { Write-Host "git checkout failed"; exit 1 } `
+      ; pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\run-windows-ci.ps1 -Upload'
+
+    # Transient SSH/network disconnects (not build defects) have killed runs
+    # mid-compile. The remote build is a clean rebuild and therefore idempotent,
+    # so retry the whole invocation on a connection failure before giving up.
+    # ssh exits 255 for transport-level errors (dropped connection, broken
+    # pipe); any other non-zero code is the remote command's own exit status,
+    # i.e. a genuine build/test failure that retrying won't fix -- fail fast on
+    # those. Each attempt leaves a disconnect-surviving log on the box under
+    # build-logs/.
+    local windows_attempts=3
+    local windows_attempt=1
+    local windows_ssh_rc
+    while true; do
+        echo "Windows build attempt ${windows_attempt}/${windows_attempts}..."
+        set +e
+        ssh "${windows_ssh_opts[@]}" \
+            "${WINDOWS_CLOUD_USER}@${WINDOWS_CLOUD_HOST}" \
+            "${windows_remote_cmd}"
+        windows_ssh_rc=$?
+        set -e
+
+        if [ ${windows_ssh_rc} -eq 0 ]; then
+            break
+        fi
+        if [ ${windows_ssh_rc} -ne 255 ]; then
+            echo "Windows build failed (remote exit ${windows_ssh_rc}); not a" \
+                 "connection error, not retrying." >&2
+            exit 1
+        fi
+        if [ ${windows_attempt} -ge ${windows_attempts} ]; then
+            echo "Windows build aborted after ${windows_attempts} connection" \
+                 "failures (ssh exit 255)." >&2
+            exit 1
+        fi
+        windows_attempt=$((windows_attempt + 1))
+        echo "SSH connection dropped (exit 255); retrying in 15s..."
+        sleep 15
+    done
+}
+
 # All imperative work lives inside main() so that bash parses the entire
 # script before it starts executing the long-running build steps. Without
 # this, editing/saving the file mid-run shifts bash's byte offsets and can
@@ -132,6 +269,24 @@ main() {
     fi
     echo "Building release ref: ${RELEASE_REF}"
 
+    # Resume breadcrumbs live in the main checkout (NOT the worktree, which is
+    # recreated every run), keyed by release ref so different releases don't
+    # collide. Completed stages are skipped on a re-run; RELEASE_FRESH=1 forces
+    # a full rebuild.
+    STATE_DIR="${REPO_ROOT_DIR}/.release-state/${RELEASE_REF//\//-}"
+    if [ -n "${RELEASE_FRESH:-}" ]; then
+        echo "RELEASE_FRESH set; clearing resume breadcrumbs in ${STATE_DIR}."
+        rm -rf "${STATE_DIR}"
+    fi
+    mkdir -p "${STATE_DIR}"
+    echo "Resume breadcrumbs: ${STATE_DIR}"
+    if compgen -G "${STATE_DIR}/*.done" >/dev/null; then
+        echo "Already-completed stages that will be skipped:"
+        for done_marker in "${STATE_DIR}"/*.done; do
+            echo "  - $(basename "${done_marker}" .done)"
+        done
+    fi
+
     # Build the local platforms from an isolated worktree checked out at the
     # release ref, so editing files in the main checkout can't corrupt the
     # in-flight build. Sub-scripts derive their repo root from their own
@@ -153,120 +308,23 @@ main() {
     done
 
     cd "${RELEASE_DIR}"
-    scripts/test-core.sh
-    scripts/test-python.sh
-    scripts/test-docs.sh --skip-build
-    scripts/build-swift.sh
-    scripts/publish-swift.sh
-    # Run the Android instrumentation tests on a local arm64 emulator before
-    # publishing the AAR. x86_64 coverage runs on the Linux cloud host below
-    # (Apple Silicon can't run an x86_64 emulator). Override the AVD name with
-    # ANDROID_ARM64_AVD if yours differs.
-    scripts/test-android.sh --avd "${ANDROID_ARM64_AVD:-moonshine_api26_arm64}"
-    scripts/build-android.sh publish
-    scripts/build-pip.sh upload
-    scripts/build-pip-docker.sh
-    scripts/publish-binary.sh upload
-    scripts/publish-examples.sh
+    run_stage test-core          scripts/test-core.sh
+    run_stage test-python        scripts/test-python.sh
+    run_stage test-docs          scripts/test-docs.sh --skip-build
+    run_stage build-swift        scripts/build-swift.sh
+    run_stage publish-swift      scripts/publish-swift.sh
+    run_stage test-android-arm64 scripts/test-android.sh --avd "${ANDROID_ARM64_AVD:-moonshine_api26_arm64}"
+    run_stage build-android      scripts/build-android.sh publish
+    run_stage build-pip          scripts/build-pip.sh upload
+    run_stage build-pip-docker   scripts/build-pip-docker.sh
+    run_stage publish-binary     scripts/publish-binary.sh upload
+    run_stage publish-examples   scripts/publish-examples.sh
 
-    if [ -n "${LINUX_CLOUD_INSTANCE:-}" ]; then
-        gcp_resume_instance \
-            "${LINUX_CLOUD_INSTANCE}" \
-            "${LINUX_CLOUD_ZONE}" \
-            "${LINUX_CLOUD_PROJECT}" \
-            "${LINUX_CLOUD_HOST}"
-    fi
+    run_stage linux   stage_linux
+    run_stage pi      stage_pi
+    run_stage windows stage_windows
 
-    # The Linux host (LINUX_CLOUD_HOST in .env) is x86_64, so it runs the x86_64
-    # Android instrumentation tests (Apple Silicon can't run an x86_64 emulator).
-    # One-time host setup via scripts/setup-android-ci.sh: Android SDK +
-    # platform-tools + emulator, an x86_64 system image, KVM, an AVD named
-    # moonshine_api26_x86_64 (override with ANDROID_X86_64_AVD), and JAVA_HOME/
-    # ANDROID_HOME exported in ~/.bashrc (sourced by non-interactive ssh). The
-    # checkout path comes from LINUX_CLOUD_REPO_PATH. LINUX_CLOUD_REPO_PATH and the
-    # AVD default are expanded here on the local side before the command is sent.
-    ssh ${LINUX_CLOUD_HOST} "cd '${LINUX_CLOUD_REPO_PATH}' \
-      && git fetch origin --tags --prune \
-      && git checkout -f '${RELEASE_REF}' \
-      && scripts/test-core.sh \
-      && scripts/test-android.sh --avd '${ANDROID_X86_64_AVD:-moonshine_api26_x86_64}' \
-      && scripts/publish-binary.sh upload" || exit 1
-
-    ssh -p ${RPI_CLOUD_PORT} ${RPI_CLOUD_HOST} "cd moonshine \
-      && git fetch origin --tags --prune \
-      && git checkout -f '${RELEASE_REF}' \
-      && scripts/test-core.sh \
-      && scripts/build-pip.sh upload \
-      && scripts/publish-binary.sh upload" || exit 1
-
-    if [ -n "${WINDOWS_CLOUD_INSTANCE:-}" ]; then
-        gcp_resume_instance \
-            "${WINDOWS_CLOUD_INSTANCE}" \
-            "${WINDOWS_CLOUD_ZONE}" \
-            "${WINDOWS_CLOUD_PROJECT}" \
-            "${WINDOWS_CLOUD_USER}@${WINDOWS_CLOUD_HOST}"
-    fi
-
-    # Keepalives so a brief network stall doesn't tear down the session. A
-    # dropped connection kills the remote build outright, because Windows
-    # OpenSSH terminates the session's process tree on disconnect. With these,
-    # the client tolerates ~2 minutes (15s * 8) of silence before giving up.
-    windows_ssh_opts=(
-        -o ServerAliveInterval=15
-        -o ServerAliveCountMax=8
-        -o TCPKeepAlive=yes
-    )
-
-    # The Windows login shell is PowerShell. Check out the release ref first
-    # (that also refreshes run-windows-ci.ps1 itself at that ref), then hand off
-    # to the orchestrator, which runs each step with heavy, disconnect-surviving
-    # logging (see the script header and build-logs/ on the box). Using a single
-    # orchestrator also makes the run abort on the first failing step rather
-    # than masking it behind the exit code of the last chained command. The
-    # RELEASE_REF is expanded locally (via the single-quote break) so PowerShell
-    # variables like $LASTEXITCODE stay intact for the remote shell.
-    windows_remote_cmd='cd moonshine `
-      ; git fetch origin --tags --prune `
-      ; git checkout -f '"${RELEASE_REF}"' `
-      ; if ($LASTEXITCODE -ne 0) { Write-Host "git checkout failed"; exit 1 } `
-      ; pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\run-windows-ci.ps1 -Upload'
-
-    # Transient SSH/network disconnects (not build defects) have killed runs
-    # mid-compile. The remote build is a clean rebuild and therefore idempotent,
-    # so retry the whole invocation on a connection failure before giving up.
-    # ssh exits 255 for transport-level errors (dropped connection, broken
-    # pipe); any other non-zero code is the remote command's own exit status,
-    # i.e. a genuine build/test failure that retrying won't fix -- fail fast on
-    # those. Each attempt leaves a disconnect-surviving log on the box under
-    # build-logs/.
-    windows_attempts=3
-    windows_attempt=1
-    while true; do
-        echo "Windows build attempt ${windows_attempt}/${windows_attempts}..."
-        set +e
-        ssh "${windows_ssh_opts[@]}" \
-            "${WINDOWS_CLOUD_USER}@${WINDOWS_CLOUD_HOST}" \
-            "${windows_remote_cmd}"
-        windows_ssh_rc=$?
-        set -e
-
-        if [ ${windows_ssh_rc} -eq 0 ]; then
-            break
-        fi
-        if [ ${windows_ssh_rc} -ne 255 ]; then
-            echo "Windows build failed (remote exit ${windows_ssh_rc}); not a" \
-                 "connection error, not retrying." >&2
-            exit 1
-        fi
-        if [ ${windows_attempt} -ge ${windows_attempts} ]; then
-            echo "Windows build aborted after ${windows_attempts} connection" \
-                 "failures (ssh exit 255)." >&2
-            exit 1
-        fi
-        windows_attempt=$((windows_attempt + 1))
-        echo "SSH connection dropped (exit 255); retrying in 15s..."
-        sleep 15
-    done
+    echo "All stages complete for release ${RELEASE_REF}."
 }
 
 main "$@"
