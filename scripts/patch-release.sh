@@ -1,46 +1,41 @@
 #! /bin/bash
 
-# Fold one or more fixes into an already-prepared release by cherry-picking them
-# onto a fresh release branch and cutting a new patch version.
+# Fold one or more fixes into the current in-progress release by cherry-picking
+# them onto its release-v<version> branch. No version bump and no tag: the
+# release branch is the mutable source of truth, and build-all-platforms.sh
+# refreshes the v<version> tag from the branch HEAD on its next run.
 #
 # Usage:
-#   scripts/patch-release.sh <new_version> <commit-ish> [<commit-ish> ...]
+#   scripts/patch-release.sh <commit-ish> [<commit-ish> ...]
 #
 # Example (fix already committed on main as abc1234):
-#   scripts/patch-release.sh 0.0.70 abc1234
-#
-# Why a new version number: package registries (PyPI, Maven, GitHub release
-# assets, etc.) reject re-uploading an existing version, so a re-publish always
-# needs a fresh version.
+#   scripts/patch-release.sh abc1234
 #
 # What it does:
-#   1. Uses the most recent v* tag as the base (the last release you cut).
-#   2. Creates branch `release-v<new_version>` from that tag.
+#   1. Finds the newest release-v* branch (the release you're building).
+#   2. Checks it out at origin's HEAD.
 #   3. Cherry-picks the commits you name onto it.
-#   4. Runs update-version.sh to bump the version strings.
-#   5. Commits, tags `v<new_version>`, and pushes the branch + tag.
-#   6. Switches you back to `main`.
+#   4. Pushes the branch and returns you to main.
 #
 # Afterwards re-run:
 #   scripts/build-all-platforms.sh
-# which will build/publish the new frozen tag.
+# It resumes (skipping completed stages) and the remaining stages pick up the
+# new branch HEAD.
+#
+# IMPORTANT: this is for a release that is still in progress. To ship a fix for
+# a version that is ALREADY fully published, cut a NEW version with
+# scripts/prepare-release.sh instead -- package registries reject re-uploading
+# an existing version.
 
 set -euo pipefail
 
 main() {
-    if [ $# -lt 2 ]; then
-        echo "Usage: $0 <new_version> <commit-ish> [<commit-ish> ...]" >&2
+    if [ $# -lt 1 ]; then
+        echo "Usage: $0 <commit-ish> [<commit-ish> ...]" >&2
         exit 1
     fi
 
-    NEW_VERSION="$1"
-    shift
     COMMITS=("$@")
-
-    if ! [[ "${NEW_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        echo "New version '${NEW_VERSION}' is not in X.Y.Z form (no leading 'v')." >&2
-        exit 1
-    fi
 
     SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
     REPO_ROOT_DIR="$(dirname "${SCRIPTS_DIR}")"
@@ -48,14 +43,14 @@ main() {
 
     if ! git diff --quiet || ! git diff --cached --quiet; then
         echo "Your working tree has uncommitted changes to tracked files." >&2
-        echo "Commit or stash them before cutting a patch release." >&2
+        echo "Commit or stash them before folding in a fix." >&2
         exit 1
     fi
 
     echo "Fetching latest refs from origin..."
-    git fetch origin --tags --prune
+    git fetch origin --tags --prune --force
 
-    # Resolve every commit-ish up front so a typo fails before we branch.
+    # Resolve every commit-ish up front so a typo fails before we switch branch.
     local resolved=()
     local c sha
     for c in "${COMMITS[@]}"; do
@@ -66,40 +61,36 @@ main() {
         resolved+=("${sha}")
     done
 
-    local base_tag
-    # Highest-version v* tag, NOT `git describe` (which only sees tags reachable
-    # from HEAD); release tags live on release-v* branches off main.
-    base_tag="$(git tag -l 'v*' --sort=-v:refname | head -n1)"
-    if [ -z "${base_tag}" ]; then
-        echo "Could not find a previous v* tag to base the patch on." >&2
-        echo "Use scripts/prepare-release.sh to cut the first release." >&2
+    # Newest release-v* branch (highest version), from origin if present.
+    local version
+    version="$( { git for-each-ref --format='%(refname:short)' \
+            'refs/heads/release-v*' 'refs/remotes/origin/release-v*'; } 2>/dev/null \
+        | sed -E 's#^origin/##; s#^release-v##' \
+        | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+        | sort -V | tail -n1 )"
+    if [ -z "${version}" ]; then
+        echo "No release-v* branch found to patch." >&2
+        echo "Use scripts/prepare-release.sh to cut a release first." >&2
         exit 1
     fi
-    local old_version="${base_tag#v}"
+    local branch="release-v${version}"
 
-    if [ "${old_version}" = "${NEW_VERSION}" ]; then
-        echo "New version '${NEW_VERSION}' matches the base tag '${base_tag}'." >&2
-        echo "Pick a higher version number." >&2
-        exit 1
-    fi
-
-    local tag="v${NEW_VERSION}"
-    local branch="release-v${NEW_VERSION}"
-
-    if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null \
-        || git ls-remote --exit-code --tags origin "${tag}" >/dev/null 2>&1; then
-        echo "Tag '${tag}' already exists (locally or on origin)." >&2
-        exit 1
-    fi
-    if git rev-parse -q --verify "refs/heads/${branch}" >/dev/null \
-        || git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
-        echo "Branch '${branch}' already exists (locally or on origin)." >&2
+    if ! git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1 \
+        && ! git rev-parse -q --verify "refs/heads/${branch}" >/dev/null; then
+        echo "Release branch '${branch}' not found on origin or locally." >&2
         exit 1
     fi
 
-    echo "Cutting patch release ${tag} from base ${base_tag}."
+    echo "Folding ${#resolved[@]} commit(s) into ${branch}."
     echo "Cherry-picking: ${resolved[*]}"
-    git checkout -b "${branch}" "${base_tag}"
+
+    # Check the branch out at origin's HEAD (create/reset the local branch to
+    # match what everything else builds).
+    if git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
+        git checkout -B "${branch}" "origin/${branch}"
+    else
+        git checkout "${branch}"
+    fi
 
     if ! git cherry-pick "${resolved[@]}"; then
         cat <<EOF >&2
@@ -109,48 +100,38 @@ Cherry-pick hit a conflict on branch '${branch}'. Nothing has been pushed.
 To finish by hand:
   1. Resolve the conflicts, then: git cherry-pick --continue
      (repeat until all picks are applied)
-  2. scripts/update-version.sh ${old_version} ${NEW_VERSION}
-  3. git commit -a -m "Update to version ${NEW_VERSION}"
-  4. git tag -a ${tag} -m "Release ${tag}"
-  5. git push origin ${branch} && git push origin ${tag}
-  6. git checkout main
+  2. git push origin ${branch}
+  3. git checkout main
 
 Or to bail out entirely:
-  git cherry-pick --abort && git checkout main && git branch -D ${branch}
+  git cherry-pick --abort && git checkout main
 EOF
         exit 1
     fi
 
-    # From here on, undo the branch on failure and return to main.
+    # On any later failure, just return to main (the branch keeps the picks;
+    # nothing destructive has happened).
     restore_main() {
         git checkout -f main >/dev/null 2>&1 || true
-        git branch -D "${branch}" >/dev/null 2>&1 || true
     }
     trap restore_main ERR
 
-    echo "Rewriting version strings..."
-    "${SCRIPTS_DIR}/update-version.sh" "${old_version}" "${NEW_VERSION}"
-
-    git commit -a -m "Update to version ${NEW_VERSION}"
-    git tag -a "${tag}" -m "Release ${tag}"
-
-    echo "Pushing branch and tag to origin..."
+    echo "Pushing ${branch} to origin..."
     git push origin "${branch}"
-    git push origin "${tag}"
 
     trap - ERR
     git checkout main
 
     cat <<EOF
 
-Patch release ${tag} is prepared and pushed.
-  base:   ${base_tag}
-  branch: ${branch}
-  tag:    ${tag}
+Fix folded into ${branch} and pushed.
 
-You are back on 'main'. To build and publish it, run:
+Re-run the build to continue where it left off:
 
   scripts/build-all-platforms.sh
+
+It will resume (skipping completed stages) and the remaining stages will build
+the updated branch HEAD.
 EOF
 }
 
