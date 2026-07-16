@@ -118,7 +118,10 @@ main() {
 
     if [ -z "${OLD_VERSION}" ]; then
         local latest_tag
-        latest_tag="$(git describe --tags --abbrev=0 --match 'v*' origin/main 2>/dev/null || true)"
+        # Highest-version v* tag, NOT `git describe` (which only sees tags
+        # reachable from a commit). Release tags live on release-v* branches
+        # that aren't ancestors of main, so describe would miss the latest one.
+        latest_tag="$(git tag -l 'v*' --sort=-v:refname | head -n1)"
         if [ -z "${latest_tag}" ]; then
             echo "Could not find a previous v* tag to derive the old version." >&2
             echo "Pass it explicitly: $0 ${NEW_VERSION} <old_version>" >&2
