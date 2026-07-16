@@ -261,7 +261,14 @@ main() {
     RELEASE_REF="${RELEASE_REF:-${1:-}}"
     git -C "${REPO_ROOT_DIR}" fetch origin --tags --prune
     if [ -z "${RELEASE_REF}" ]; then
-        RELEASE_REF="$(git -C "${REPO_ROOT_DIR}" describe --tags --abbrev=0 --match 'v*')"
+        # Highest-version v* tag, NOT `git describe` (which only sees tags
+        # reachable from HEAD). prepare-release.sh tags on a release-v* branch
+        # that isn't an ancestor of main, so describe would miss it.
+        RELEASE_REF="$(git -C "${REPO_ROOT_DIR}" tag -l 'v*' --sort=-v:refname | head -n1)"
+        if [ -z "${RELEASE_REF}" ]; then
+            echo "No v* tags found to build. Run scripts/prepare-release.sh first." >&2
+            exit 1
+        fi
     fi
     if ! git -C "${REPO_ROOT_DIR}" rev-parse -q --verify "${RELEASE_REF}^{commit}" >/dev/null; then
         echo "Release ref '${RELEASE_REF}' does not resolve to a commit." >&2

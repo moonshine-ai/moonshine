@@ -67,7 +67,9 @@ main() {
     done
 
     local base_tag
-    base_tag="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)"
+    # Highest-version v* tag, NOT `git describe` (which only sees tags reachable
+    # from HEAD); release tags live on release-v* branches off main.
+    base_tag="$(git tag -l 'v*' --sort=-v:refname | head -n1)"
     if [ -z "${base_tag}" ]; then
         echo "Could not find a previous v* tag to base the patch on." >&2
         echo "Use scripts/prepare-release.sh to cut the first release." >&2
