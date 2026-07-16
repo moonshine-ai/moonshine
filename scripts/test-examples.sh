@@ -433,13 +433,24 @@ pick_xcode_scheme() {
 import json, os, subprocess, sys
 
 proj = sys.argv[1]
-out = subprocess.run(
+proc = subprocess.run(
     ["xcodebuild", "-list", "-json", "-project", proj],
     capture_output=True,
     text=True,
-    check=True,
-).stdout
-data = json.loads(out)
+)
+if proc.returncode != 0:
+    # Surface xcodebuild's own diagnostics instead of hiding them behind a bare
+    # exit code. Exit 74 here is usually a Swift Package resolution problem
+    # (e.g. a moved tag tripping SPM's trust-on-first-use fingerprint, or a
+    # release-asset checksum that no longer matches Package.swift).
+    sys.stderr.write(proc.stdout)
+    sys.stderr.write(proc.stderr)
+    sys.stderr.write(
+        "\n[pick_xcode_scheme] 'xcodebuild -list' failed for {} "
+        "(exit {}).\n".format(proj, proc.returncode)
+    )
+    sys.exit(proc.returncode)
+data = json.loads(proc.stdout)
 schemes = []
 if "project" in data and isinstance(data["project"], dict):
     schemes = data["project"].get("schemes") or []
