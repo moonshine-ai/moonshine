@@ -99,9 +99,11 @@ cp ${TAR_NAME} ${REPO_ROOT_DIR}
 if [[ -n "${DO_UPLOAD}" ]]; then
     TAR_PATH=${TMP_DIR}/${TAR_NAME}
 
-    # Check if the GitHub release exists; create it if missing.
-    if ! gh release view "v${VERSION}" >/dev/null 2>&1; then
-        gh release create "v${VERSION}" --title "v${VERSION}" --notes "Release v${VERSION}"
+    # Check if the GitHub release exists; create it if missing. Pass -R
+    # explicitly because at this point we are inside TMP_DIR (not a git
+    # checkout), so gh can't infer the repo from the working directory.
+    if ! gh release view "v${VERSION}" -R "${REPO}" >/dev/null 2>&1; then
+        gh release create "v${VERSION}" -R "${REPO}" --title "v${VERSION}" --notes "Release v${VERSION}"
     fi
 
     # `gh release upload` has no client-side timeout, so a stalled TLS
@@ -126,9 +128,9 @@ if [[ -n "${DO_UPLOAD}" ]]; then
         # get a chance to retry, so guard the call and inspect its status.
         rc=0
         if [[ -n "${TIMEOUT_CMD}" ]]; then
-            "${TIMEOUT_CMD}" "${UPLOAD_TIMEOUT_SEC}" gh release upload "v${VERSION}" "${TAR_PATH}" --clobber || rc=$?
+            "${TIMEOUT_CMD}" "${UPLOAD_TIMEOUT_SEC}" gh release upload "v${VERSION}" "${TAR_PATH}" -R "${REPO}" --clobber || rc=$?
         else
-            gh release upload "v${VERSION}" "${TAR_PATH}" --clobber || rc=$?
+            gh release upload "v${VERSION}" "${TAR_PATH}" -R "${REPO}" --clobber || rc=$?
         fi
         if [[ ${rc} -eq 0 ]]; then
             upload_ok=1
