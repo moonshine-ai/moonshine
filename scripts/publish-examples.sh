@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
-VERSION="0.0.68"
+VERSION="0.0.70"
 
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR="$(dirname "${SCRIPTS_DIR}")"

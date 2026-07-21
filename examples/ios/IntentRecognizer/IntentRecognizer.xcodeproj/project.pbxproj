@@ -34,7 +34,7 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		IRE10.0.68F0762A100CE654A = {
+		IRE10.0.70F0762A100CE654A = {
 			isa = PBXGroup;
 			children = (
 				IRE10F0042F0762A100CE654A /* IntentRecognizer */,
@@ -99,7 +99,7 @@
 				en,
 				Base,
 			);
-			mainGroup = IRE10.0.68F0762A100CE654A;
+			mainGroup = IRE10.0.70F0762A100CE654A;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				IRE10F0202F0762A200CE654D /* XCRemoteSwiftPackageReference "moonshine-swift" */,
@@ -361,7 +361,7 @@
 			repositoryURL = "https://github.com/moonshine-ai/moonshine-swift.git";
 			requirement = {
 				kind = exactVersion;
-				version = "0.0.68";
+				version = "0.0.70";
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

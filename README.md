@@ -66,7 +66,18 @@ Download [github.com/moonshine-ai/moonshine/releases/latest/download/android-Tra
 
 ### Linux
 
-[Download](https://github.com/moonshine-ai/moonshine/archive/refs/heads/main.zip) or `git clone` this repository and then run:
+This repository uses [Git LFS](https://git-lfs.com/) to store the test models and audio in `test-assets`, so install it (for example `sudo apt install git-lfs && git lfs install`) *before* you clone. If you already cloned without it, run `git lfs install` followed by `git lfs pull` to fetch the assets.
+
+[Download](https://github.com/moonshine-ai/moonshine/archive/refs/heads/main.zip) or `git clone` this repository and then build and run the tests with:
+
+<!-- doc-test: skip -->
+```bash
+./scripts/test-core.sh
+```
+
+This script builds the C++ core with CMake and then runs the unit tests. The tests use relative paths to load their models and audio (for example `two_cities.wav` and `tiny-en`), so they must be launched from the `test-assets` directory, and on Linux the ONNX Runtime shared library directory must be on `LD_LIBRARY_PATH`. The script handles both of these for you, so prefer it over running the test binaries directly.
+
+If you would rather build by hand, run the following from the repository root, making sure you run the test binary from `test-assets` with `LD_LIBRARY_PATH` pointing at the bundled ONNX Runtime:
 
 <!-- doc-test: skip -->
 ```bash
@@ -75,7 +86,10 @@ mkdir -p build
 cd build
 cmake ..
 cmake --build .
-./moonshine-cpp-test
+cd ../../test-assets
+# Use lib/linux/aarch64 instead of x86_64 on 64-bit ARM machines.
+LD_LIBRARY_PATH=../core/third-party/onnxruntime/lib/linux/x86_64 \
+  ../core/build/moonshine-cpp-test
 ```
 
 ### MacOS
@@ -680,7 +694,7 @@ The [`examples`](examples/) folder has code samples organized by platform. We us
   - [my-dalek](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz)
   - [Pi Help Bot](https://github.com/moonshine-ai/pi-help-bot/archive/refs/heads/main.zip)
 
-The examples usually include one minimal project that just creates a transcriber and then feeds it data from a WAV file, and another that's pulling audio from a microphone using the platform's default framework for accessing audio devices. For Android, [`examples/android/IntentRecognizer`](examples/android/IntentRecognizer/) is a self-contained Gradle project you can copy out of the tree: it depends on **`ai.moonshine:moonshine-voice:0.0.68`** from Maven Central (includes `IntentRecognizer`) and bundles **small English streaming** ASR plus **embeddinggemma-300m** under `app/src/main/assets/` (Git LFS). 
+The examples usually include one minimal project that just creates a transcriber and then feeds it data from a WAV file, and another that's pulling audio from a microphone using the platform's default framework for accessing audio devices. For Android, [`examples/android/IntentRecognizer`](examples/android/IntentRecognizer/) is a self-contained Gradle project you can copy out of the tree: it depends on **`ai.moonshine:moonshine-voice:0.0.70`** from Maven Central (includes `IntentRecognizer`) and bundles **small English streaming** ASR plus **embeddinggemma-300m** under `app/src/main/assets/` (Git LFS). 
 
 Streaming weights are mirrored from assets to internal storage at runtime, then loaded with `MicTranscriber.loadFromFiles` and `MOONSHINE_MODEL_ARCH_SMALL_STREAMING`. [`examples/android/TextToSpeech`](examples/android/TextToSpeech/) is the same style of Gradle sample for on-device TTS: it uses the `TextToSpeech` class from **`moonshine-voice`** and bundles everything the default English voice needs to run fully offline — the **Kokoro** model, the `af_alloy` voice, and the `en_us` G2P + OOV files (`dict_filtered_heteronyms.tsv`, `g2p-config.json`, `oov/model.onnx`, `oov/onnx-config.json`) — under `app/src/main/assets/tts-data/` (Git LFS). 
 
@@ -724,9 +738,9 @@ For reference purposes you can find Xcode projects with these changes applied in
 
 #### Android
 
-On Android we publish [the package to Maven](https://mvnrepository.com/artifact/ai.moonshine/moonshine-voice). To include it in your project using Android Studio and Gradle, first add the version number you want to the `gradle/libs.versions.toml` file by inserting a line in the `[versions]` section, for example `moonshineVoice = "0.0.68"`. Then in the `[libraries]` part, add a reference to the package: `moonshine-voice = { group = "ai.moonshine", name = "moonshine-voice", version.ref = "moonshineVoice" }`.
+On Android we publish [the package to Maven](https://mvnrepository.com/artifact/ai.moonshine/moonshine-voice). To include it in your project using Android Studio and Gradle, first add the version number you want to the `gradle/libs.versions.toml` file by inserting a line in the `[versions]` section, for example `moonshineVoice = "0.0.70"`. Then in the `[libraries]` part, add a reference to the package: `moonshine-voice = { group = "ai.moonshine", name = "moonshine-voice", version.ref = "moonshineVoice" }`.
 
-Finally, in your `app/build.gradle.kts` add the library to the `dependencies` list: `implementation(libs.moonshine.voice)`. The [`examples/android/IntentRecognizer`](examples/android/IntentRecognizer/) and [`examples/android/TextToSpeech`](examples/android/TextToSpeech/) samples use the same coordinates (`moonshineVoice = "0.0.68"` in their catalogs).
+Finally, in your `app/build.gradle.kts` add the library to the `dependencies` list: `implementation(libs.moonshine.voice)`. The [`examples/android/IntentRecognizer`](examples/android/IntentRecognizer/) and [`examples/android/TextToSpeech`](examples/android/TextToSpeech/) samples use the same coordinates (`moonshineVoice = "0.0.70"` in their catalogs).
 
 #### Windows/C++
 
@@ -851,7 +865,7 @@ moonshine-voice download --tts --root /tmp/tts-files/
 
 ```text
 dict_filtered_heteronyms.tsv: 100%|██████████████████████████████| 2.77M/2.77M [00:00<00:00, 15.5MB/s]
-g2p-config.json: 100%|██████████████████████████████████████████████| 60.0.68.0 [00:00<00:00, 160kB/s]
+g2p-config.json: 100%|██████████████████████████████████████████████| 60.0.70.0 [00:00<00:00, 160kB/s]
 model.onnx: 100%|████████████████████████████████████████████████| 20.9M/20.9M [00:00<00:00, 37.7MB/s]
 onnx-config.json: 100%|██████████████████████████████████████████| 4.53k/4.53k [00:00<00:00, 11.7MB/s]
 model.onnx: 100%|████████████████████████████████████████████████| 88.1M/88.1M [00:01<00:00, 85.6MB/s]
