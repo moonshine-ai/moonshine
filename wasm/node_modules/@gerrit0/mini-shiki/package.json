@@ -1,0 +1,45 @@
+{
+  "type": "module",
+  "license": "MIT",
+  "name": "@gerrit0/mini-shiki",
+  "version": "1.27.2",
+  "exports": {
+    ".": {
+      "types": "./dist/shiki.d.ts",
+      "default": "./dist/shiki.js"
+    },
+    "./onig.wasm": {
+      "import": "./dist/onig.wasm"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gerrit0/mini-shiki.git"
+  },
+  "scripts": {
+    "build": "./scripts/build.sh",
+    "test": "node --experimental-require-module --test"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "15.3.0",
+    "@rollup/plugin-typescript": "12.1.1",
+    "@types/node": "^22.9.3",
+    "dts-bundle-generator": "^9.5.1",
+    "rollup": "4.27.4",
+    "rollup-plugin-dts": "^6.1.1",
+    "semver": "7.6.3",
+    "shiki": "^1.27.2"
+  },
+  "files": [
+    "static",
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@shikijs/engine-oniguruma": "^1.27.2",
+    "@shikijs/types": "^1.27.2",
+    "@shikijs/vscode-textmate": "^10.0.1"
+  }
+}

@@ -22,6 +22,7 @@
 #include "moonshine-tts-options.h"
 #include "ort-onnx-external-data.h"
 #include "ort-session-options.h"
+#include "ort-utils-cxx.h"
 #include "utf8-utils.h"
 #include "zipvoice-custom-ops.h"
 #include "zipvoice-mel.h"
@@ -195,7 +196,7 @@ struct ZipVoiceTTS::Impl {
   FileInformationMap tts_files_{};
   std::vector<std::string> ort_provider_names_{};
   std::string coreml_cache_dir_{};
-  Ort::Env env_{ORT_LOGGING_LEVEL_WARNING, "moonshine_zipvoice"};
+  Ort::Env env_ = make_ort_env(ORT_LOGGING_LEVEL_WARNING, "moonshine_zipvoice");
   Ort::MemoryInfo mem_{
       Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)};
   Ort::Session text_encoder_{nullptr};

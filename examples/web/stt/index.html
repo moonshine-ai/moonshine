@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Moonshine — Speech to Text</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        max-width: 720px; margin: 3rem auto; padding: 0 1rem; line-height: 1.5;
+      }
+      h1 { font-size: 1.6rem; }
+      button {
+        font-size: 1rem; padding: 0.6rem 1.1rem; border-radius: 0.5rem;
+        border: 1px solid currentColor; background: transparent; cursor: pointer;
+      }
+      button[disabled] { opacity: 0.5; cursor: default; }
+      #status { margin: 1rem 0; opacity: 0.75; min-height: 1.4em; }
+      #transcript {
+        margin-top: 1.5rem; padding: 1rem; border-radius: 0.5rem;
+        border: 1px solid rgba(128,128,128,0.4); min-height: 6rem; white-space: pre-wrap;
+      }
+      .live { opacity: 0.6; }
+    </style>
+  </head>
+  <body>
+    <h1>Moonshine — Speech to Text</h1>
+    <p>Live microphone transcription running entirely on-device via WebAssembly.</p>
+    <button id="toggle">Start listening</button>
+    <p id="status">Idle.</p>
+    <div id="transcript" aria-live="polite"></div>
+
+    <script type="module">
+      import {
+        MicrophoneTranscriber,
+        ModelArch,
+      } from '/wasm/dist/index.js';
+
+      const toggle = document.getElementById('toggle');
+      const statusEl = document.getElementById('status');
+      const transcriptEl = document.getElementById('transcript');
+
+      let mic = null;
+      let running = false;
+      // Completed lines keyed by id, plus a live in-progress line.
+      const lines = new Map();
+
+      function render(liveLine) {
+        const parts = [...lines.values()];
+        transcriptEl.textContent = parts.join('\n');
+        if (liveLine) {
+          const span = document.createElement('span');
+          span.className = 'live';
+          span.textContent = (parts.length ? '\n' : '') + liveLine;
+          transcriptEl.appendChild(span);
+        }
+      }
+
+      const listener = {
+        onLineTextChanged: (e) => render(e.line.text),
+        onLineCompleted: (e) => { lines.set(e.line.id, e.line.text); render(); },
+        onError: (e) => { statusEl.textContent = 'Error: ' + e.error.message; },
+      };
+
+      async function start() {
+        statusEl.textContent = 'Loading model (first run downloads it)…';
+        toggle.disabled = true;
+        try {
+          mic = await MicrophoneTranscriber.load({
+            language: 'en',
+            modelArch: ModelArch.BaseStreaming,
+            listeners: [listener],
+            onProgress: (loaded, total, file) => {
+              const pct = total ? ` ${Math.round((100 * loaded) / total)}%` : '';
+              statusEl.textContent = `Downloading ${file}${pct}…`;
+            },
+          });
+          await mic.start();
+          running = true;
+          statusEl.textContent = 'Listening… speak now.';
+          toggle.textContent = 'Stop';
+        } catch (err) {
+          statusEl.textContent = 'Failed to start: ' + err.message;
+        } finally {
+          toggle.disabled = false;
+        }
+      }
+
+      async function stop() {
+        toggle.disabled = true;
+        await mic?.stop();
+        mic?.close();
+        mic = null;
+        running = false;
+        statusEl.textContent = 'Stopped.';
+        toggle.textContent = 'Start listening';
+        toggle.disabled = false;
+      }
+
+      toggle.addEventListener('click', () => (running ? stop() : start()));
+    </script>
+  </body>
+</html>

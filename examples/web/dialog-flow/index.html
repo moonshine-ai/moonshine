@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Moonshine — Dialog Flow</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        max-width: 720px; margin: 3rem auto; padding: 0 1rem; line-height: 1.5;
+      }
+      h1 { font-size: 1.6rem; }
+      button {
+        font-size: 1rem; padding: 0.6rem 1.1rem; border-radius: 0.5rem;
+        border: 1px solid currentColor; background: transparent; cursor: pointer;
+      }
+      button[disabled] { opacity: 0.5; cursor: default; }
+      #status { margin: 1rem 0; opacity: 0.75; min-height: 1.4em; }
+      #log {
+        margin-top: 1.5rem; padding: 1rem; border-radius: 0.5rem;
+        border: 1px solid rgba(128,128,128,0.4); min-height: 8rem;
+      }
+      .user { color: #2a7; }
+      .assistant { color: #4af; }
+    </style>
+  </head>
+  <body>
+    <h1>Moonshine — Dialog Flow</h1>
+    <p>
+      A voice-driven conversation running fully on-device. Say
+      <strong>“set up wifi”</strong> to start the flow, or “cancel” / “start over”
+      at any time.
+    </p>
+    <button id="toggle">Start</button>
+    <p id="status">Idle.</p>
+    <div id="log" aria-live="polite"></div>
+
+    <script type="module">
+      import {
+        MicrophoneTranscriber,
+        IntentRecognizer,
+        TextToSpeech,
+        DialogFlow,
+        ModelArch,
+      } from '/wasm/dist/index.js';
+
+      const toggle = document.getElementById('toggle');
+      const statusEl = document.getElementById('status');
+      const logEl = document.getElementById('log');
+
+      let mic = null;
+      let running = false;
+
+      function log(role, text) {
+        const div = document.createElement('div');
+        div.className = role;
+        div.textContent = `${role}: ${text}`;
+        logEl.appendChild(div);
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      // The flow: a generator that yields prompts and resumes with answers.
+      function* wifiSetup(d) {
+        const ssid = yield d.ask("What's the name of your wifi network?");
+        if (!(yield d.confirm(`I heard ${ssid}. Is that right?`))) {
+          yield d.say("No problem, let's start over.");
+          return;
+        }
+        if (yield d.confirm('Apply these changes?')) {
+          yield d.say(`Done. Connecting to ${ssid}.`);
+        } else {
+          yield d.say('Okay, nothing changed.');
+        }
+      }
+
+      async function start() {
+        toggle.disabled = true;
+        statusEl.textContent = 'Loading models (first run downloads them)…';
+        try {
+          const audioContext = new AudioContext();
+          const onProgress = (loaded, total, file) => {
+            const pct = total ? ` ${Math.round((100 * loaded) / total)}%` : '';
+            statusEl.textContent = `Downloading ${file}${pct}…`;
+          };
+
+          const [tts, intent] = await Promise.all([
+            TextToSpeech.load({ language: 'en', onProgress }),
+            IntentRecognizer.load({ onProgress }),
+          ]);
+
+          const runner = new DialogFlow({
+            tts,
+            intentRecognizer: intent,
+            audioContext,
+            speakFn: async (text) => {
+              log('assistant', text);
+              await tts.speak(text, audioContext);
+            },
+          });
+          runner.registerFlow('set up wifi', wifiSetup);
+          runner.registerGlobal('cancel', (d) => d.cancel());
+          runner.registerGlobal('start over', (d) => d.restart());
+
+          mic = await MicrophoneTranscriber.load({
+            language: 'en',
+            modelArch: ModelArch.BaseStreaming,
+            listeners: [
+              { onLineCompleted: (e) => log('user', e.line.text) },
+              runner,
+            ],
+            onProgress,
+          });
+          await mic.start();
+          running = true;
+          statusEl.textContent = 'Listening… say “set up wifi”.';
+          toggle.textContent = 'Stop';
+        } catch (err) {
+          statusEl.textContent = 'Failed to start: ' + err.message;
+        } finally {
+          toggle.disabled = false;
+        }
+      }
+
+      async function stop() {
+        toggle.disabled = true;
+        await mic?.stop();
+        mic?.close();
+        mic = null;
+        running = false;
+        statusEl.textContent = 'Stopped.';
+        toggle.textContent = 'Start';
+        toggle.disabled = false;
+      }
+
+      toggle.addEventListener('click', () => (running ? stop() : start()));
+    </script>
+  </body>
+</html>

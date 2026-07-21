@@ -10,6 +10,7 @@
 #include "moonshine-tts-options.h"
 #include "ort-onnx-external-data.h"
 #include "ort-session-options.h"
+#include "ort-utils-cxx.h"
 #include "piper-voice-catalog.h"
 #include "utf8-utils.h"
 
@@ -406,7 +407,7 @@ struct PiperTTS::Impl {
   std::filesystem::path voices_json_dir_;
   std::filesystem::path onnx_path_;
   std::filesystem::path explicit_onnx_json_path_;
-  Ort::Env env_{ORT_LOGGING_LEVEL_WARNING, "piper_tts"};
+  Ort::Env env_ = make_ort_env(ORT_LOGGING_LEVEL_WARNING, "piper_tts");
   Ort::Session session_{nullptr};
   Ort::MemoryInfo mem_{
       Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)};

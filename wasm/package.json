@@ -1,0 +1,61 @@
+{
+  "name": "@moonshine-ai/moonshine-wasm",
+  "version": "0.0.68",
+  "description": "Fast, accurate, on-device speech-to-text, text-to-speech, and voice intent recognition in the browser via WebAssembly.",
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "module": "./dist/index.js",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./full": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./moonshine.wasm": "./dist/moonshine.wasm",
+    "./moonshine.mjs": "./dist/moonshine.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build:core": "../scripts/build-wasm.sh",
+    "build:ts": "tsc -p tsconfig.json",
+    "build": "npm run build:ts",
+    "docs": "typedoc",
+    "test": "node --test tests/*.test.mjs",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "speech-to-text",
+    "text-to-speech",
+    "stt",
+    "tts",
+    "asr",
+    "voice",
+    "wasm",
+    "webassembly",
+    "moonshine",
+    "on-device",
+    "offline"
+  ],
+  "license": "MIT",
+  "homepage": "https://moonshine.ai",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/moonshine-ai/moonshine.git",
+    "directory": "wasm"
+  },
+  "devDependencies": {
+    "typedoc": "^0.27.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

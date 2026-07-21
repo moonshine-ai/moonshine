@@ -14,8 +14,24 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Disable compiler-specific extensions (optional, but recommended)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-if (NOT WIN32)
+if (NOT WIN32 AND NOT EMSCRIPTEN)
   add_compile_options(-Wall -Wextra -pedantic -Werror)
+elseif (EMSCRIPTEN)
+  # Keep first-party warnings visible but don't fail the wasm build on them
+  # (the Emscripten clang can differ from the native toolchains).
+  add_compile_options(-Wall -Wextra)
+endif()
+
+# WebAssembly: build every core target with SIMD + pthreads + C++ exceptions so
+# the whole graph (core, ort-utils, bin-tokenizer, TTS, embind module) matches
+# the vendored ORT-wasm archive's ABI. The SIMD-only fallback drops -pthread.
+if (EMSCRIPTEN)
+  add_compile_options(-msimd128 -fexceptions)
+  add_link_options(-fexceptions)
+  if (NOT MOONSHINE_WASM_SINGLE_THREAD)
+    add_compile_options(-pthread)
+    add_link_options(-pthread)
+  endif()
 endif()
 
 # Opt-in reliability build (Linux/Clang): a sanitizer build plus a compile-
@@ -173,8 +189,9 @@ if (ANDROID AND CMAKE_ANDROID_ARCH_ABI STREQUAL "armeabi-v7a")
 endif()
 
 # Build as STATIC framework for iOS/Swift (shared frameworks cannot be embedded)
-# Build as SHARED library for other platforms
-if (NOT MOONSHINE_BUILD_SHARED AND (IOS OR MOONSHINE_BUILD_SWIFT OR WIN32))
+# Build as STATIC library for WebAssembly (Emscripten links it into the embind
+# module in wasm/). Build as SHARED library for other platforms.
+if (NOT MOONSHINE_BUILD_SHARED AND (IOS OR MOONSHINE_BUILD_SWIFT OR WIN32 OR EMSCRIPTEN))
     add_library(moonshine STATIC
         ${MOONSHINE_SRC_FILES}
     )
@@ -326,6 +343,19 @@ if(APPLE AND NOT IOS AND NOT MOONSHINE_BUILD_SWIFT)
         COMMENT "Ad-hoc codesign libmoonshine.dylib for stable dlopen on macOS"
     )
 endif()
+
+# WebAssembly module target (embind). The native test/benchmark executables
+# below are not built for Emscripten.
+if (EMSCRIPTEN)
+    # Binary dir is relative to this build's binary dir (a unique subfolder) so
+    # it never collides with the top-level wasm build directory.
+    add_subdirectory(
+        ${CMAKE_CURRENT_LIST_DIR}/../wasm
+        ${CMAKE_CURRENT_BINARY_DIR}/wasm-embind
+    )
+endif()
+
+if (NOT EMSCRIPTEN)
 
 add_executable(moonshine-c-api-test moonshine-c-api-test.cpp)
 set_target_properties(moonshine-c-api-test PROPERTIES
@@ -834,3 +864,5 @@ if (MOONSHINE_RELIABILITY AND MOONSHINE_SANITIZER MATCHES "address")
         ${CMAKE_CURRENT_LIST_DIR}/reliability/build
     )
 endif()
+
+endif()  # NOT EMSCRIPTEN

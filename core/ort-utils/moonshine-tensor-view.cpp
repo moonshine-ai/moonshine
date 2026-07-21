@@ -74,10 +74,14 @@ moonshine_tensor_t *moonshine_tensor_from_shape_and_dtype(
   // ("allocation-size-too-big") or trigger an OOM/bad_alloc in production. Real
   // tensors in this library are at most a few hundred MB, so anything past this
   // generous bound is corrupt input, not a workload we should try to serve.
-  constexpr size_t kMaxTensorBytes = size_t{8} << 30;  // 8 GiB.
-  if (data_size_in_bytes > kMaxTensorBytes) {
-    fprintf(stderr, "Tensor byte size %zu exceeds maximum %zu\n",
-            data_size_in_bytes, kMaxTensorBytes);
+  // NOTE: the constant and comparison are 64-bit on purpose. On a 32-bit target
+  // (e.g. wasm32, where size_t is 32 bits) `size_t{8} << 30` overflows to 0,
+  // which would reject *every* non-empty tensor ("exceeds maximum 0").
+  constexpr uint64_t kMaxTensorBytes = uint64_t{8} << 30;  // 8 GiB.
+  if (static_cast<uint64_t>(data_size_in_bytes) > kMaxTensorBytes) {
+    fprintf(stderr, "Tensor byte size %zu exceeds maximum %llu\n",
+            data_size_in_bytes,
+            static_cast<unsigned long long>(kMaxTensorBytes));
     DEBUG_FREE(moonshine_tensor->shape);
     DEBUG_FREE(moonshine_tensor);
     return nullptr;

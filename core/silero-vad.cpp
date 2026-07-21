@@ -5,8 +5,8 @@
 
 void SileroVad::init_onnx_env() {
   ort_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
-  LOG_ORT_ERROR(ort_api, ort_api->CreateEnv(ORT_LOGGING_LEVEL_WARNING,
-                                            "SileroVAD", &env));
+  LOG_ORT_ERROR(ort_api, ort_create_env(ort_api, ORT_LOGGING_LEVEL_WARNING,
+                                         "SileroVAD", &env));
   LOG_ORT_ERROR(ort_api, ort_api->CreateSessionOptions(&session_options));
   LOG_ORT_ERROR(ort_api, ort_api->SetIntraOpNumThreads(session_options, 1));
   LOG_ORT_ERROR(ort_api, ort_api->SetInterOpNumThreads(session_options, 1));

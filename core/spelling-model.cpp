@@ -99,8 +99,8 @@ SpellingModel::SpellingModel(bool log_ort_run,
       ort_provider_names_(ort_provider_names),
       coreml_cache_dir_(coreml_cache_dir) {
   ort_api_ = OrtGetApiBase()->GetApi(ORT_API_VERSION);
-  LOG_ORT_ERROR(ort_api_, ort_api_->CreateEnv(ORT_LOGGING_LEVEL_WARNING,
-                                              "SpellingModel", &ort_env_));
+  LOG_ORT_ERROR(ort_api_, ort_create_env(ort_api_, ORT_LOGGING_LEVEL_WARNING,
+                                          "SpellingModel", &ort_env_));
   LOG_ORT_ERROR(ort_api_,
                 ort_api_->CreateCpuMemoryInfo(
                     OrtDeviceAllocator, OrtMemTypeDefault, &ort_memory_info_));

@@ -15,13 +15,14 @@
 #include "english-numbers.h"
 #include "g2p-word-log.h"
 #include "onnx-g2p-models.h"
+#include "ort-utils-cxx.h"
 #include "text-normalize.h"
 #include "utf8-utils.h"
 
 namespace moonshine_tts {
 
 struct EnglishRuleG2p::Impl {
-  Ort::Env env{ORT_LOGGING_LEVEL_WARNING, "moonshine_tts_en"};
+  Ort::Env env = make_ort_env(ORT_LOGGING_LEVEL_WARNING, "moonshine_tts_en");
   std::unique_ptr<CmudictTsv> dict;
   std::unique_ptr<OnnxOovG2p> oov;
 };

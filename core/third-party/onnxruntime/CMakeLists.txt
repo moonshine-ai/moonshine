@@ -4,13 +4,20 @@ project("onnxruntime")
 
 include(${CMAKE_CURRENT_LIST_DIR}/find-ort-library-path.cmake)
 
-if (IOS OR MOONSHINE_BUILD_SWIFT)
+if (IOS OR MOONSHINE_BUILD_SWIFT OR EMSCRIPTEN)
     add_library(onnxruntime STATIC IMPORTED)
 else()
     add_library(onnxruntime SHARED IMPORTED)
 endif()
 
-if (ANDROID)
+if (EMSCRIPTEN)
+    # WebAssembly: link the vendored static ORT archive
+    # (scripts/build-ort-wasm.sh) selected by find-ort-library-path.cmake.
+    set_target_properties(onnxruntime PROPERTIES
+        IMPORTED_LOCATION "${ONNXRUNTIME_LIB_PATH}"
+        INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/include/"
+    )
+elseif (ANDROID)
     set_target_properties(onnxruntime PROPERTIES
         IMPORTED_LOCATION "${ONNXRUNTIME_LIB_PATH}"
         INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/include/"
@@ -45,6 +52,9 @@ endif()
 
 set(ONNXRUNTIME_INCLUDE_DIR "${CMAKE_CURRENT_LIST_DIR}/include" CACHE INTERNAL "")
 
+# The native ORT smoke-test executable isn't built for the WebAssembly target.
+if (NOT EMSCRIPTEN)
+
 add_executable(onnxruntime-test onnxruntime-test.cpp)
 
 target_include_directories(onnxruntime-test PRIVATE
@@ -74,3 +84,5 @@ else()
         onnxruntime
     )
 endif()
+
+endif()  # NOT EMSCRIPTEN

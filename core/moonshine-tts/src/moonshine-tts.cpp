@@ -9,6 +9,7 @@
 #include "moonshine-g2p.h"
 #include "ort-onnx-external-data.h"
 #include "ort-session-options.h"
+#include "ort-utils-cxx.h"
 #include "piper-tts.h"
 #include "string-utils.h"
 #include "utf8-utils.h"
@@ -962,7 +963,7 @@ struct KokoroTtsEngine {
   std::filesystem::path config_path_;
   std::filesystem::path voices_dir_;
   FileInformationMap tts_files_;
-  Ort::Env env_{ORT_LOGGING_LEVEL_WARNING, "moonshine_tts"};
+  Ort::Env env_ = make_ort_env(ORT_LOGGING_LEVEL_WARNING, "moonshine_tts");
   Ort::Session session_{nullptr};
   Ort::MemoryInfo mem_{
       Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)};
