@@ -19,7 +19,7 @@ If you would rather download by hand, look for `moonshine-voice-<platform>.tar.g
 
 ```bash
 cd examples/c++
-curl -O -L https://github.com/moonshine-ai/moonshine/releases/download/v0.0.70/moonshine-voice-macos-arm64.tar.gz
+curl -O -L https://github.com/moonshine-ai/moonshine/releases/download/v0.0.71/moonshine-voice-macos-arm64.tar.gz
 mkdir -p moonshine-voice
 tar xzf moonshine-voice-macos-arm64.tar.gz -C moonshine-voice --strip-components=1
 ```
