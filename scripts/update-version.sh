@@ -45,6 +45,7 @@ done < <(grep -rlI \
   --exclude-dir=.cxx \
   --exclude-dir=third-party \
   --exclude-dir=artifacts \
+  --exclude-dir=lang-specific \
   --exclude=Package.resolved \
   --exclude=uv.lock \
   --exclude=PKG-INFO \
