@@ -14,6 +14,10 @@
 //   node examples/web/serve.mjs [port]
 //
 // then open http://localhost:8080/stt/ (or /tts/, /dialog-flow/).
+//
+// By default the examples import the published binding from the jsDelivr CDN.
+// To test the locally-built binding served from /wasm/dist/index.js instead,
+// append ?local=1 to the URL, e.g. http://localhost:8080/stt/?local=1.
 
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -70,4 +74,5 @@ server.listen(PORT, () => {
   console.log('  http://localhost:%d/tts/', PORT);
   console.log('  http://localhost:%d/dialog-flow/', PORT);
   console.log('(cross-origin isolation headers enabled for threads/SIMD)');
+  console.log('(append ?local=1 to load the locally-built /wasm/dist binding)');
 });

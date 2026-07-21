@@ -104,13 +104,15 @@ set these headers, build the SIMD-only fallback (see below) and load it with
 ## Examples
 
 See [`examples/web/`](../examples/web): `stt/`, `tts/`, and `dialog-flow/`.
-After building the binding, run the dev server (which sets the isolation
-headers) and open a demo:
+The demos import the published binding from the jsDelivr CDN by default. To
+test a locally-built binding instead, append `?local=1` to the URL (this loads
+`/wasm/dist/index.js`). After building the binding, run the dev server (which
+sets the isolation headers) and open a demo:
 
 ```bash
 scripts/build-wasm.sh
 node examples/web/serve.mjs
-# → http://localhost:8080/stt/
+# → http://localhost:8080/stt/?local=1
 ```
 
 ## Building from source

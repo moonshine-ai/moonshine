@@ -32,10 +32,18 @@
     <div id="transcript" aria-live="polite"></div>
 
     <script type="module">
-      import {
+      // Load the locally-built binding when the page is opened with ?local=1
+      // (e.g. via examples/web/serve.mjs); otherwise use the published copy
+      // from the jsDelivr CDN.
+      const useLocal =
+        new URLSearchParams(location.search).get('local') === '1';
+      const moduleUrl = useLocal
+        ? '/wasm/dist/index.js'
+        : 'https://cdn.jsdelivr.net/npm/@moonshine-ai/moonshine-wasm/dist/index.js';
+      const {
         MicrophoneTranscriber,
         ModelArch,
-      } from '/wasm/dist/index.js';
+      } = await import(moduleUrl);
 
       const toggle = document.getElementById('toggle');
       const statusEl = document.getElementById('status');
