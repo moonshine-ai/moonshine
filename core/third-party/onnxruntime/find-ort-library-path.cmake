@@ -1,4 +1,21 @@
-if (ANDROID)
+if (EMSCRIPTEN)
+    # WebAssembly build: link the static ORT archive produced by
+    # scripts/build-ort-wasm.sh (Microsoft does not publish a prebuilt one).
+    # The default archive is built with SIMD + multithreading. Set
+    # -DMOONSHINE_WASM_SINGLE_THREAD=ON to link the SIMD-only fallback
+    # (for pages that can't be cross-origin isolated / lack SharedArrayBuffer).
+    if (MOONSHINE_WASM_SINGLE_THREAD)
+        set(ONNXRUNTIME_LIB_PATH "${CMAKE_CURRENT_LIST_DIR}/lib/wasm/libonnxruntime_webassembly_singlethread.a" CACHE INTERNAL "")
+    else()
+        set(ONNXRUNTIME_LIB_PATH "${CMAKE_CURRENT_LIST_DIR}/lib/wasm/libonnxruntime_webassembly.a" CACHE INTERNAL "")
+    endif()
+    if (NOT EXISTS "${ONNXRUNTIME_LIB_PATH}")
+        message(FATAL_ERROR
+            "ORT-wasm static library not found at ${ONNXRUNTIME_LIB_PATH}.\n"
+            "Build and vendor it first: scripts/build-ort-wasm.sh"
+            "$<$<BOOL:${MOONSHINE_WASM_SINGLE_THREAD}>: single-thread>")
+    endif()
+elseif (ANDROID)
     # Detect Android ABI and map to library directory name
     if(ANDROID_ABI STREQUAL "armeabi-v7a")
         set(ONNXRUNTIME_ABI_DIR "armeabi-v7a")

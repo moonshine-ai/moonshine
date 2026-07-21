@@ -1,0 +1,24 @@
+#!/usr/bin/env node
+//@ts-check
+
+const { fork } = require("child_process");
+
+function main() {
+    fork(__dirname + "/../dist/lib/cli.js", process.argv.slice(2), {
+        stdio: "inherit",
+    }).on("exit", (code) => {
+        // Watch restart required? Fork a new child
+        if (code === 7) {
+            // Set an environment variable to ensure we continue watching
+            // Otherwise, the watch might stop unexpectedly if the watch
+            // option was set in a config file originally, and change to false
+            // later, causing a restart
+            process.env["TYPEDOC_FORCE_WATCH"] = "1";
+            main();
+        } else {
+            process.exit(code || 0);
+        }
+    });
+}
+
+main();

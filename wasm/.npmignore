@@ -1,0 +1,10 @@
+# Publish only the built dist/ + README (see package.json "files").
+src
+tests
+docs
+moonshine-embind.cpp
+CMakeLists.txt
+tsconfig.json
+typedoc.json
+build
+*.tsbuildinfo

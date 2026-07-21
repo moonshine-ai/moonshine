@@ -1,0 +1,108 @@
+<svg width="805.17" height="104.45" viewBox="0.00 0.00 805.17 104.45" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" preserveAspectRatio="xMidYMid meet" id="graph-diagram"><defs><defs><style type="text/css">@import url('https://fonts.googleapis.com/css?family=Roboto+Condensed:400,700');</style></defs></defs>
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 100.45)">
+
+<text text-anchor="middle" x="398.58" y="-78.05" font-family="Roboto Condensed, sans-serif" font-size="16.00">@gerrit0/mini-shiki</text>
+<!-- @gerrit0/mini&#45;shiki@1.23.1 -->
+<g id="node1" class="node" data-module="@gerrit0/mini-shiki@1.23.1">
+<title>@gerrit0/mini-shiki@1.23.1</title>
+<g id="a_node1"><a xlink:href="https://npmgraph.js.org/?q=%40gerrit0%2Fmini-shiki%401.23.1" xlink:title="@gerrit0/mini-shiki@1.23.1">
+<path fill="none" stroke="black" d="M124.8,-32.25C124.8,-32.25 6.32,-32.25 6.32,-32.25 3.16,-32.25 0,-29.09 0,-25.93 0,-25.93 0,-19.61 0,-19.61 0,-16.45 3.16,-13.29 6.32,-13.29 6.32,-13.29 124.8,-13.29 124.8,-13.29 127.96,-13.29 131.12,-16.45 131.12,-19.61 131.12,-19.61 131.12,-25.93 131.12,-25.93 131.12,-29.09 127.96,-32.25 124.8,-32.25"></path>
+<text text-anchor="middle" x="65.56" y="-19.47" font-family="Roboto Condensed, sans-serif" font-size="11.00">@gerrit0/mini-shiki@1.23.1</text>
+</a>
+</g>
+</g>
+<!-- @shikijs/engine&#45;oniguruma@1.23.1 -->
+<g id="node2" class="node" data-module="@shikijs/engine-oniguruma@1.23.1">
+<title>@shikijs/engine-oniguruma@1.23.1</title>
+<g id="a_node2"><a xlink:href="https://npmgraph.js.org/?q=%40shikijs%2Fengine-oniguruma%401.23.1" xlink:title="@shikijs/engine-oniguruma@1.23.1">
+<path fill="none" stroke="black" d="M326.75,-32.25C326.75,-32.25 173.44,-32.25 173.44,-32.25 170.28,-32.25 167.12,-29.09 167.12,-25.93 167.12,-25.93 167.12,-19.61 167.12,-19.61 167.12,-16.45 170.28,-13.29 173.44,-13.29 173.44,-13.29 326.75,-13.29 326.75,-13.29 329.91,-13.29 333.07,-16.45 333.07,-19.61 333.07,-19.61 333.07,-25.93 333.07,-25.93 333.07,-29.09 329.91,-32.25 326.75,-32.25"></path>
+<text text-anchor="middle" x="250.1" y="-19.47" font-family="Roboto Condensed, sans-serif" font-size="11.00">@shikijs/engine-oniguruma@1.23.1</text>
+</a>
+</g>
+</g>
+<!-- @gerrit0/mini&#45;shiki@1.23.1&#45;&gt;@shikijs/engine&#45;oniguruma@1.23.1 -->
+<g id="edge2" class="edge">
+<title>@gerrit0/mini-shiki@1.23.1-&gt;@shikijs/engine-oniguruma@1.23.1</title>
+<path fill="none" stroke="black" d="M131.43,-22.77C139.23,-22.77 147.31,-22.77 155.42,-22.77"></path>
+<polygon fill="black" stroke="black" points="155.36,-26.27 165.36,-22.77 155.36,-19.27 155.36,-26.27"></polygon>
+</g>
+<!-- @shikijs/types@1.23.1 -->
+<g id="node3" class="node" data-module="@shikijs/types@1.23.1">
+<title>@shikijs/types@1.23.1</title>
+<g id="a_node3"><a xlink:href="https://npmgraph.js.org/?q=%40shikijs%2Ftypes%401.23.1" xlink:title="@shikijs/types@1.23.1">
+<path fill="none" stroke="black" d="M471.27,-69.25C471.27,-69.25 375.39,-69.25 375.39,-69.25 372.23,-69.25 369.07,-66.09 369.07,-62.93 369.07,-62.93 369.07,-56.61 369.07,-56.61 369.07,-53.45 372.23,-50.29 375.39,-50.29 375.39,-50.29 471.27,-50.29 471.27,-50.29 474.43,-50.29 477.59,-53.45 477.59,-56.61 477.59,-56.61 477.59,-62.93 477.59,-62.93 477.59,-66.09 474.43,-69.25 471.27,-69.25"></path>
+<text text-anchor="middle" x="423.33" y="-56.47" font-family="Roboto Condensed, sans-serif" font-size="11.00">@shikijs/types@1.23.1</text>
+</a>
+</g>
+</g>
+<!-- @gerrit0/mini&#45;shiki@1.23.1&#45;&gt;@shikijs/types@1.23.1 -->
+<g id="edge3" class="edge">
+<title>@gerrit0/mini-shiki@1.23.1-&gt;@shikijs/types@1.23.1</title>
+<path fill="none" stroke="black" d="M116.28,-32.72C132.44,-35.67 150.49,-38.67 167.12,-40.77 231.66,-48.93 305.87,-53.97 357.56,-56.79"></path>
+<polygon fill="black" stroke="black" points="357.21,-60.28 367.38,-57.32 357.58,-53.29 357.21,-60.28"></polygon>
+</g>
+<!-- @shikijs/vscode&#45;textmate@9.3.0 -->
+<g id="node4" class="node" data-module="@shikijs/vscode-textmate@9.3.0">
+<title>@shikijs/vscode-textmate@9.3.0</title>
+<g id="a_node4"><a xlink:href="https://npmgraph.js.org/?q=%40shikijs%2Fvscode-textmate%409.3.0" xlink:title="@shikijs/vscode-textmate@9.3.0">
+<path fill="none" stroke="black" d="M659.16,-32.25C659.16,-32.25 519.91,-32.25 519.91,-32.25 516.75,-32.25 513.59,-29.09 513.59,-25.93 513.59,-25.93 513.59,-19.61 513.59,-19.61 513.59,-16.45 516.75,-13.29 519.91,-13.29 519.91,-13.29 659.16,-13.29 659.16,-13.29 662.32,-13.29 665.48,-16.45 665.48,-19.61 665.48,-19.61 665.48,-25.93 665.48,-25.93 665.48,-29.09 662.32,-32.25 659.16,-32.25"></path>
+<text text-anchor="middle" x="589.54" y="-19.47" font-family="Roboto Condensed, sans-serif" font-size="11.00">@shikijs/vscode-textmate@9.3.0</text>
+</a>
+</g>
+</g>
+<!-- @gerrit0/mini&#45;shiki@1.23.1&#45;&gt;@shikijs/vscode&#45;textmate@9.3.0 -->
+<g id="edge1" class="edge">
+<title>@gerrit0/mini-shiki@1.23.1-&gt;@shikijs/vscode-textmate@9.3.0</title>
+<path fill="none" stroke="black" d="M112.39,-12.81C129.48,-9.56 149.1,-6.37 167.12,-4.77 282.71,5.49 416.67,-3.85 501.97,-12.46"></path>
+<polygon fill="black" stroke="black" points="501.61,-15.94 511.91,-13.48 502.32,-8.97 501.61,-15.94"></polygon>
+</g>
+<!-- @shikijs/engine&#45;oniguruma@1.23.1&#45;&gt;@shikijs/types@1.23.1 -->
+<g id="edge5" class="edge">
+<title>@shikijs/engine-oniguruma@1.23.1-&gt;@shikijs/types@1.23.1</title>
+<path fill="none" stroke="black" d="M296.98,-32.69C318,-37.23 343.12,-42.66 365.34,-47.46"></path>
+<polygon fill="black" stroke="black" points="364.32,-50.82 374.84,-49.51 365.8,-43.98 364.32,-50.82"></polygon>
+</g>
+<!-- @shikijs/engine&#45;oniguruma@1.23.1&#45;&gt;@shikijs/vscode&#45;textmate@9.3.0 -->
+<g id="edge4" class="edge">
+<title>@shikijs/engine-oniguruma@1.23.1-&gt;@shikijs/vscode-textmate@9.3.0</title>
+<path fill="none" stroke="black" d="M333.21,-22.77C384.37,-22.77 450.11,-22.77 502.07,-22.77"></path>
+<polygon fill="black" stroke="black" points="501.76,-26.27 511.76,-22.77 501.76,-19.27 501.76,-26.27"></polygon>
+</g>
+<!-- @shikijs/types@1.23.1&#45;&gt;@shikijs/vscode&#45;textmate@9.3.0 -->
+<g id="edge6" class="edge">
+<title>@shikijs/types@1.23.1-&gt;@shikijs/vscode-textmate@9.3.0</title>
+<path fill="none" stroke="black" d="M468.34,-49.86C488.31,-45.36 512.14,-39.99 533.3,-35.22"></path>
+<polygon fill="black" stroke="black" points="533.95,-38.66 542.93,-33.05 532.41,-31.83 533.95,-38.66"></polygon>
+</g>
+<!-- @types/hast@3.0.4 -->
+<g id="node5" class="node" data-module="@types/hast@3.0.4">
+<title>@types/hast@3.0.4</title>
+<g id="a_node5"><a xlink:href="https://npmgraph.js.org/?q=%40types%2Fhast%403.0.4" xlink:title="@types/hast@3.0.4">
+<path fill="none" stroke="black" d="M629.22,-69.25C629.22,-69.25 549.85,-69.25 549.85,-69.25 546.69,-69.25 543.53,-66.09 543.53,-62.93 543.53,-62.93 543.53,-56.61 543.53,-56.61 543.53,-53.45 546.69,-50.29 549.85,-50.29 549.85,-50.29 629.22,-50.29 629.22,-50.29 632.38,-50.29 635.54,-53.45 635.54,-56.61 635.54,-56.61 635.54,-62.93 635.54,-62.93 635.54,-66.09 632.38,-69.25 629.22,-69.25"></path>
+<text text-anchor="middle" x="589.54" y="-56.47" font-family="Roboto Condensed, sans-serif" font-size="11.00">@types/hast@3.0.4</text>
+</a>
+</g>
+</g>
+<!-- @shikijs/types@1.23.1&#45;&gt;@types/hast@3.0.4 -->
+<g id="edge7" class="edge">
+<title>@shikijs/types@1.23.1-&gt;@types/hast@3.0.4</title>
+<path fill="none" stroke="black" d="M477.64,-59.77C495.01,-59.77 514.33,-59.77 531.93,-59.77"></path>
+<polygon fill="black" stroke="black" points="531.69,-63.27 541.69,-59.77 531.69,-56.27 531.69,-63.27"></polygon>
+</g>
+<!-- @types/unist@3.0.3 -->
+<g id="node6" class="node" data-module="@types/unist@3.0.3">
+<title>@types/unist@3.0.3</title>
+<g id="a_node6"><a xlink:href="https://npmgraph.js.org/?q=%40types%2Funist%403.0.3" xlink:title="@types/unist@3.0.3">
+<path fill="none" stroke="black" d="M790.85,-69.25C790.85,-69.25 707.8,-69.25 707.8,-69.25 704.64,-69.25 701.48,-66.09 701.48,-62.93 701.48,-62.93 701.48,-56.61 701.48,-56.61 701.48,-53.45 704.64,-50.29 707.8,-50.29 707.8,-50.29 790.85,-50.29 790.85,-50.29 794.01,-50.29 797.17,-53.45 797.17,-56.61 797.17,-56.61 797.17,-62.93 797.17,-62.93 797.17,-66.09 794.01,-69.25 790.85,-69.25"></path>
+<text text-anchor="middle" x="749.32" y="-56.47" font-family="Roboto Condensed, sans-serif" font-size="11.00">@types/unist@3.0.3</text>
+</a>
+</g>
+</g>
+<!-- @types/hast@3.0.4&#45;&gt;@types/unist@3.0.3 -->
+<g id="edge8" class="edge">
+<title>@types/hast@3.0.4-&gt;@types/unist@3.0.3</title>
+<path fill="none" stroke="black" d="M635.75,-59.77C652.56,-59.77 671.88,-59.77 689.71,-59.77"></path>
+<polygon fill="black" stroke="black" points="689.67,-63.27 699.67,-59.77 689.67,-56.27 689.67,-63.27"></polygon>
+</g>
+</g>
+<style>:root{accent-color:var(--accent);--lightningcss-light:initial;--lightningcss-dark: ;--lightningcss-light:initial;--lightningcss-dark: ;color-scheme:light dark;--grey0:#000;--grey10:#1a1a1a;--grey20:#333;--grey30:#4d4d4d;--grey40:#666;--grey50:gray;--grey60:#999;--grey70:#b3b3b3;--grey80:#ccc;--grey90:#e6e6e6;--grey100:#fff;--root-color:white;--rad_sm:5px;--rad_lg:10px;--inspector-size:32em;--tabs-height:24pt;--bg-gradient:linear-gradient(to bottom,rgba(255,255,255,.2),transparent 100%);--text:#020303;--text-dim:#999;--bg-root:#fff;--bg0:#f1f4f4;--bg1:#bbb;--bg2:#ddd;--tabs-bg:#7e7e7d;--tabs-text:#fff;--tabs-border:rgba(203,203,203,.796);--accent:#da6200;--text-on-accent:#fff;--bg0-shadow-color:color-mix(in hsl,var(--bg0)90%,black);--stroke-L:40%;--stroke-S:100%;--stroke-blue:hsl(180,var(--stroke-S),var(--stroke-L));--stroke-orange:hsl(30,var(--stroke-S),var(--stroke-L));--stroke-green:hsl(120,var(--stroke-S),var(--stroke-L));--stroke-indigo:hsl(240,var(--stroke-S),var(--stroke-L));--stroke-red:hsl(0,var(--stroke-S),var(--stroke-L));--stroke-violet:hsl(300,var(--stroke-S),var(--stroke-L));--stroke-yellow:hsl(60,var(--stroke-S),var(--stroke-L));--bg-L:70%;--bg-S:100%;--bg-dark-L:50%;--bg-dark-S:60%;--bg-blue:hsl(180,var(--bg-S),var(--bg-L));--bg-green:hsl(120,var(--bg-S),var(--bg-L));--bg-indigo:hsl(240,var(--bg-S),var(--bg-L));--bg-orange:hsl(30,var(--bg-S),var(--bg-L));--bg-red:hsl(0,var(--bg-S),var(--bg-L));--bg-violet:hsl(300,var(--bg-S),var(--bg-L));--bg-yellow:hsl(60,var(--bg-S),var(--bg-L));--bg-darkblue:hsl(180,var(--bg-dark-S),var(--bg-dark-L));--bg-darkgreen:hsl(120,var(--bg-dark-S),var(--bg-dark-L));--bg-darkindigo:hsl(240,var(--bg-dark-S),var(--bg-dark-L));--bg-darkorange:hsl(30,var(--bg-dark-S),var(--bg-dark-L));--bg-darkred:hsl(0,var(--bg-dark-S),var(--bg-dark-L));--bg-darkviolet:hsl(300,var(--bg-dark-S),var(--bg-dark-L));--bg-darkyellow:hsl(60,var(--bg-dark-S),var(--bg-dark-L));--transition-duration:.5s}@media (prefers-color-scheme:dark){:root{--lightningcss-light: ;--lightningcss-dark:initial;--grey100:#000;--grey90:#1a1a1a;--grey80:#333;--grey70:#4d4d4d;--grey60:#666;--grey50:gray;--grey40:#999;--grey30:#b3b3b3;--grey20:#ccc;--grey10:#e6e6e6;--grey0:#fff;--root-color:black;--text:#f3f3f3;--text-dim:#766;--bg-root:#111;--bg0:#262222;--bg1:#696666;--bg2:#333;--stroke-L:60%;--bg-L:30%;--bg-dark-L:40%}}html{background:var(--bg-root);font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Noto Sans,Ubuntu,Cantarell,Helvetica Neue,Helvetica,Arial,sans-serif,Apple Color Emoji,Segoe UI Emoji;font-size:10pt}body{margin:0}#app{width:100vw;height:100svh;display:-ms-flexbox;display:flex}@media (max-aspect-ratio:2/3),(max-width:700px){html,body,#app{height:auto;min-height:100svh}#app{--inspector-size:auto;-ms-flex-direction:column;flex-direction:column}}p{line-height:1.5em}h2{border-radius:var(--rad_sm);font-size:14pt}hr{border:none;border-top:solid 1px var(--bg1);margin-top:1.2em;margin-bottom:1.2em}kbd{color:color-mix(in srgb,currentcolor 30%,transparent);white-space:nowrap;border:1px solid;border-radius:.3em;padding:.2em .3em;line-height:1}footer{color:var(--text-dim);text-align:center}.link{color:var(--accent);text-decoration:underline}</style><style>#graph{-webkit-user-select:none;-ms-user-select:none;user-select:none;--warning0:#f6f6e0;--warning1:#d9d9d9;--stub:red;-ms-flex-positive:1;flex-grow:1;position:relative;overflow:auto}#graph.centered{-ms-flex-pack:center;justify-content:center;-ms-flex-align:center;align-items:center;display:-ms-flexbox;display:flex}#graph.graphviz-loading,#graph.graphviz-failed{text-align:center;margin-top:20vh}#graph.graphviz-failed{color:var(--stroke-red)}@media (max-aspect-ratio:2/3),(max-width:700px){#graph{min-height:80vh}}@media (prefers-color-scheme:dark){#graph{--warning0:#101010;--warning1:#660}}#graph-controls{--padding:6px;gap:1em;display:-ms-flexbox;display:flex;position:fixed;top:auto;bottom:1em;left:1em;right:auto}@media (max-aspect-ratio:2/3),(max-width:700px){#graph-controls{top:1em;bottom:auto;left:auto;right:1em}}#graph-controls button{border:solid 1px var(--bg1);background:var(--bg0);padding:var(--padding);color:var(--text);display:inline-block}#graph-controls button svg{display:block}#graph-controls button.selected{background-color:var(--accent);color:var(--text-on-accent)}#zoom-buttons{display:-ms-flexbox;display:flex}#zoom-fit-width,#download-svg{border-top-left-radius:var(--rad_sm);border-bottom-left-radius:var(--rad_sm);padding-left:calc(var(--padding) + 1px)}#zoom-fit-height,#download-svg{border-top-right-radius:var(--rad_sm);border-bottom-right-radius:var(--rad_sm);padding-right:calc(var(--padding) + 1px)}#zoom-buttons,#download-svg{box-shadow:2px 2px 6px var(--bg0-shadow-color)}svg#graph-diagram{fill:var(--text)}pattern#warning .line0{stroke:var(--warning0)}pattern#warning .line1{stroke:var(--warning1)}g .stub{opacity:.6}g .stub>path{stroke-dasharray:4 4;stroke:var(--stub)}g.node text{fill:var(--text)}g.node path{stroke:var(--text);fill:var(--bg0)}g.node.collapsed{opacity:.5}g.node.selected path{stroke-width:3px;stroke:var(--accent)!important}g.node.downstream path{stroke:var(--accent)}g.node.unselected{opacity:.35}g.node.warning>path{fill:url(#warning)}g.node *{cursor:pointer}g.edge{--selected-edge-width:1}g.edge>path{stroke:var(--text)}g.edge>polygon{stroke:var(--text);fill:var(--text)}g.edge.downstream>path{stroke:var(--accent);stroke-width:var(--selected-edge-width)}g.edge.downstream>polygon{stroke:var(--accent);fill:var(--accent)}g.edge.unselected{opacity:.35}@media print{#graph-controls{display:none}}</style></svg>

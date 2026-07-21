@@ -37,6 +37,17 @@ struct OrtExecutionProviderOptions {
     }                                                          \
   } while (0);
 
+// Creates an OrtEnv. On the multithreaded WebAssembly build ORT defaults
+// SessionOptions::use_per_session_threads to false (see ORT's
+// core/framework/session_options.h), so every session then requires the env to
+// own the process-wide (global) thread pools -- otherwise session creation
+// fails with "the env must be created with the CreateEnvWithGlobalThreadPools
+// API". Everywhere else the per-session default holds and plain CreateEnv is
+// correct. Always create envs through this helper so the wasm-threaded build
+// runs inference instead of aborting at session construction.
+OrtStatus *ort_create_env(const OrtApi *ort_api, OrtLoggingLevel logging_level,
+                          const char *logid, OrtEnv **out);
+
 int ort_session_from_path(const OrtApi *ort_api, OrtEnv *env,
                           OrtSessionOptions *session_options, const char *path,
                           OrtSession **session, const char **mmapped_data,

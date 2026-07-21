@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Moonshine — Text to Speech</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        max-width: 720px; margin: 3rem auto; padding: 0 1rem; line-height: 1.5;
+      }
+      h1 { font-size: 1.6rem; }
+      textarea {
+        width: 100%; min-height: 6rem; font: inherit; padding: 0.6rem;
+        border-radius: 0.5rem; border: 1px solid rgba(128,128,128,0.4); box-sizing: border-box;
+      }
+      button {
+        margin-top: 0.8rem; font-size: 1rem; padding: 0.6rem 1.1rem; border-radius: 0.5rem;
+        border: 1px solid currentColor; background: transparent; cursor: pointer;
+      }
+      button[disabled] { opacity: 0.5; cursor: default; }
+      #status { margin-top: 1rem; opacity: 0.75; min-height: 1.4em; }
+    </style>
+  </head>
+  <body>
+    <h1>Moonshine — Text to Speech</h1>
+    <p>On-device speech synthesis via WebAssembly.</p>
+    <textarea id="text">Hello from Moonshine, running right in your browser.</textarea>
+    <br />
+    <button id="speak">Speak</button>
+    <p id="status">Idle.</p>
+
+    <script type="module">
+      import { TextToSpeech } from '/wasm/dist/index.js';
+
+      const speakBtn = document.getElementById('speak');
+      const textEl = document.getElementById('text');
+      const statusEl = document.getElementById('status');
+
+      let tts = null;
+      // A single AudioContext, created on the first user gesture.
+      let audioContext = null;
+
+      async function ensureTts() {
+        if (tts) return tts;
+        statusEl.textContent = 'Loading TTS model (first run downloads it)…';
+        tts = await TextToSpeech.load({
+          language: 'en',
+          onProgress: (loaded, total, file) => {
+            const pct = total ? ` ${Math.round((100 * loaded) / total)}%` : '';
+            statusEl.textContent = `Downloading ${file}${pct}…`;
+          },
+        });
+        return tts;
+      }
+
+      speakBtn.addEventListener('click', async () => {
+        speakBtn.disabled = true;
+        try {
+          audioContext ??= new AudioContext();
+          if (audioContext.state === 'suspended') await audioContext.resume();
+          const synth = await ensureTts();
+          statusEl.textContent = 'Synthesizing…';
+          await synth.speak(textEl.value, audioContext);
+          statusEl.textContent = 'Done.';
+        } catch (err) {
+          statusEl.textContent = 'Error: ' + err.message;
+        } finally {
+          speakBtn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

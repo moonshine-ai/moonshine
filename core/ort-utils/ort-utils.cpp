@@ -79,6 +79,25 @@ int ort_session_from_path(const OrtApi *ort_api, OrtEnv *env,
 }
 #endif
 
+OrtStatus *ort_create_env(const OrtApi *ort_api, OrtLoggingLevel logging_level,
+                          const char *logid, OrtEnv **out) {
+#if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
+  // Multithreaded wasm: sessions default to global thread pools, so the env
+  // must own them (see ort_create_env's declaration for details).
+  OrtThreadingOptions *threading_options = nullptr;
+  OrtStatus *status = ort_api->CreateThreadingOptions(&threading_options);
+  if (status != nullptr) {
+    return status;
+  }
+  status = ort_api->CreateEnvWithGlobalThreadPools(logging_level, logid,
+                                                   threading_options, out);
+  ort_api->ReleaseThreadingOptions(threading_options);
+  return status;
+#else
+  return ort_api->CreateEnv(logging_level, logid, out);
+#endif
+}
+
 int ort_session_from_memory(const OrtApi *ort_api, OrtEnv *env,
                             OrtSessionOptions *session_options,
                             const uint8_t *data, size_t data_size,

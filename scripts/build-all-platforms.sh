@@ -375,6 +375,7 @@ main() {
     run_stage build-pip          scripts/build-pip.sh upload
     run_stage build-pip-docker   scripts/build-pip-docker.sh
     run_stage publish-binary     scripts/publish-binary.sh upload
+    run_stage build-wasm         scripts/build-wasm.sh upload
     run_stage publish-examples   scripts/publish-examples.sh
 
     run_stage linux   stage_linux

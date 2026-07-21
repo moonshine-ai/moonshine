@@ -1,0 +1,9 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/index.ts"],
+  "out": "docs",
+  "readme": "README.md",
+  "name": "Moonshine Voice (WASM)",
+  "excludeInternal": true,
+  "categorizeByGroup": true
+}
