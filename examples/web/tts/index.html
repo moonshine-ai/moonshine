@@ -32,7 +32,15 @@
     <p id="status">Idle.</p>
 
     <script type="module">
-      import { TextToSpeech } from '/wasm/dist/index.js';
+      // Load the locally-built binding when the page is opened with ?local=1
+      // (e.g. via examples/web/serve.mjs); otherwise use the published copy
+      // from the jsDelivr CDN.
+      const useLocal =
+        new URLSearchParams(location.search).get('local') === '1';
+      const moduleUrl = useLocal
+        ? '/wasm/dist/index.js'
+        : 'https://cdn.jsdelivr.net/npm/@moonshine-ai/moonshine-wasm/dist/index.js';
+      const { TextToSpeech } = await import(moduleUrl);
 
       const speakBtn = document.getElementById('speak');
       const textEl = document.getElementById('text');
