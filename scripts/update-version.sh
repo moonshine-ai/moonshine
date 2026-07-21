@@ -21,6 +21,7 @@ KNOWN_FILES=(
 	./examples/android/Transcriber/gradle/libs.versions.toml
 	./examples/android/IntentRecognizer/gradle/libs.versions.toml
 	./examples/android/TextToSpeech/gradle/libs.versions.toml
+	./scripts/build-wasm.sh
 	./scripts/publish-swift.sh
 	./scripts/publish-binary.sh
 	./scripts/publish-binary.bat
@@ -73,6 +74,7 @@ done < <(grep -rlI \
   --exclude=patch-release.sh \
   --exclude=build-all-platforms.sh \
   --exclude=neural_tts_demo_data.cc \
+  --exclude=*package*.json \
   "$OLD_VERSION" .)
 for FILE in "${ACTUAL_FILES[@]}"; do
 	echo "Checking file '$FILE'"
