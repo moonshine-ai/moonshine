@@ -25,6 +25,7 @@ KNOWN_FILES=(
 	./scripts/publish-swift.sh
 	./scripts/publish-binary.sh
 	./scripts/publish-binary.bat
+	./scripts/build-pip-docker.sh
 	./scripts/publish-examples.sh
 	./scripts/publish-examples.bat
 	./scripts/test-examples.sh

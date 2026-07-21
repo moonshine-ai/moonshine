@@ -49,9 +49,9 @@ class PrintLinesListener : public moonshine::TranscriptEventListener {
 }  // namespace
 
 int main(int argc, char *argv[]) {
-  std::string model_path = "../../test-assets/tiny-en";
-  moonshine::ModelArch model_arch = moonshine::ModelArch::TINY;
-  std::string wav_path = "../../test-assets/two_cities.wav";
+  std::string model_path = "medium-streaming-en";
+  moonshine::ModelArch model_arch = moonshine::ModelArch::MEDIUM_STREAMING;
+  std::string wav_path = "two_cities.wav";
   float transcription_interval_seconds = 0.481f;
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];

@@ -31,9 +31,10 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 	else
 		PLATFORM=macos-x86_64
 	fi
-elif grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null || grep -q "BCM2" /proc/cpuinfo 2>/dev/null; then
-	PLATFORM=rpi-arm64
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    # A Raspberry Pi is just an aarch64 Linux box as far as this library is
+    # concerned (same vendored ONNX Runtime, same build), so package it as the
+    # generic linux-arm64 artifact rather than a Pi-specific one.
     ARCH=$(uname -m)
     if [[ "$ARCH" == "x86_64" ]]; then
         PLATFORM=linux-x86_64
@@ -87,8 +88,19 @@ LIB_DIR=${BINARY_DIR}/lib
 mkdir -p ${LIB_DIR}
 if [[ "$PLATFORM" == macos-* ]]; then
     cp ${BUILD_DIR}/moonshine.framework/Versions/A/moonshine ${LIB_DIR}/libmoonshine.a
-elif [[ "$PLATFORM" == "linux-x86_64" || "$PLATFORM" == "linux-arm64" || "$PLATFORM" == "rpi-arm64" ]]; then
+elif [[ "$PLATFORM" == "linux-x86_64" || "$PLATFORM" == "linux-arm64" ]]; then
     cp ${BUILD_DIR}/libmoonshine.so ${LIB_DIR}/libmoonshine.so
+    # Ship the ONNX Runtime shared library that libmoonshine.so depends on
+    # (its DT_NEEDED is libonnxruntime.so.1) right next to it. Combined with the
+    # $ORIGIN rpath baked into libmoonshine.so, this makes the extracted lib/
+    # folder self-contained: no LD_LIBRARY_PATH needed to run against it.
+    if [[ "$PLATFORM" == "linux-arm64" ]]; then
+        ORT_ARCH_DIR=aarch64
+    else
+        ORT_ARCH_DIR=x86_64
+    fi
+    cp ${CORE_DIR}/third-party/onnxruntime/lib/linux/${ORT_ARCH_DIR}/libonnxruntime.so.1 \
+        ${LIB_DIR}/libonnxruntime.so.1
 fi
 
 cd ${TMP_DIR}
@@ -99,52 +111,8 @@ cp ${TAR_NAME} ${REPO_ROOT_DIR}
 if [[ -n "${DO_UPLOAD}" ]]; then
     TAR_PATH=${TMP_DIR}/${TAR_NAME}
 
-    # Check if the GitHub release exists; create it if missing. Pass -R
-    # explicitly because at this point we are inside TMP_DIR (not a git
-    # checkout), so gh can't infer the repo from the working directory.
-    if ! gh release view "v${VERSION}" -R "${REPO}" >/dev/null 2>&1; then
-        gh release create "v${VERSION}" -R "${REPO}" --title "v${VERSION}" --notes "Release v${VERSION}"
-    fi
-
-    # `gh release upload` has no client-side timeout, so a stalled TLS
-    # connection to GitHub can leave it hanging indefinitely (this mirrors the
-    # Windows path, which wraps the upload in gh-upload-retry.ps1). Bound each
-    # attempt with `timeout` (prefer GNU `timeout`, fall back to `gtimeout` from
-    # coreutils on macOS) and retry a few times before giving up.
-    if command -v timeout >/dev/null 2>&1; then
-        TIMEOUT_CMD=timeout
-    elif command -v gtimeout >/dev/null 2>&1; then
-        TIMEOUT_CMD=gtimeout
-    else
-        TIMEOUT_CMD=""
-    fi
-
-    UPLOAD_TIMEOUT_SEC=180
-    UPLOAD_RETRIES=5
-    upload_ok=0
-    for attempt in $(seq 1 ${UPLOAD_RETRIES}); do
-        echo "[publish-binary] Attempt ${attempt}/${UPLOAD_RETRIES}: uploading ${TAR_NAME} to release v${VERSION}..."
-        # `set -e` would otherwise abort the script on a failed attempt before we
-        # get a chance to retry, so guard the call and inspect its status.
-        rc=0
-        if [[ -n "${TIMEOUT_CMD}" ]]; then
-            "${TIMEOUT_CMD}" "${UPLOAD_TIMEOUT_SEC}" gh release upload "v${VERSION}" "${TAR_PATH}" -R "${REPO}" --clobber || rc=$?
-        else
-            gh release upload "v${VERSION}" "${TAR_PATH}" -R "${REPO}" --clobber || rc=$?
-        fi
-        if [[ ${rc} -eq 0 ]]; then
-            upload_ok=1
-            break
-        fi
-        echo "[publish-binary] Attempt ${attempt} failed or timed out (exit ${rc})."
-        if [[ ${attempt} -lt ${UPLOAD_RETRIES} ]]; then
-            sleep 5
-        fi
-    done
-
-    if [[ ${upload_ok} -ne 1 ]]; then
-        echo "[publish-binary] ERROR: upload of ${TAR_NAME} to v${VERSION} failed after ${UPLOAD_RETRIES} attempts." >&2
-        exit 1
-    fi
-    echo "[publish-binary] Uploaded ${TAR_NAME} to release v${VERSION}."
+    # Create the release if needed and upload with a bounded per-attempt timeout
+    # and retries. The retry logic is shared with the Docker-based arm64 build
+    # (scripts/build-pip-docker.sh) via this helper.
+    REPO="${REPO}" "${SCRIPTS_DIR}/gh-upload-retry.sh" "${VERSION}" "${TAR_PATH}"
 fi
