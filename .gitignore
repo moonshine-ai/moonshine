@@ -33,7 +33,10 @@ xcuserdata/
 /swift/test-assets/
 /.config/
 *.tar.gz
+/examples/c++/moonshine-voice/
 /examples/c++/moonshine-voice-*/
+/examples/c++/medium-streaming-en/
+/examples/c++/two_cities.wav
 /examples/c++/transcriber
 Package.resolved
 /examples/windows/cli-transcriber/moonshine-voice-windows-x86_64/

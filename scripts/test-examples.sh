@@ -1,7 +1,13 @@
 #!/usr/bin/env bash -ex
-# Verify iOS and Android examples build standalone: either from GitHub Release
-# archives (default) or from a temporary copy of examples/android and examples/ios
-# (--local-examples).
+# Verify the iOS, Android, and portable C++ examples build standalone: either
+# from GitHub Release archives (default) or from a temporary copy of
+# examples/android, examples/ios, and examples/c++ (--local-examples).
+#
+# The C++ example is exercised exactly like the Linux quickstart in README.md:
+# fetch the library + a small model + sample audio with download-library.sh,
+# compile transcriber.cpp with a single compiler command, and run it. It is
+# platform-aware (macOS and Linux; skipped elsewhere) so it validates whatever
+# host it runs on. Windows has its own scripts/test-examples.bat.
 #
 # Usage:
 #   ./scripts/test-examples.sh [--repo OWNER/REPO] [--tag vX.Y.Z] [--workdir DIR] [--keep-workdir]
@@ -29,7 +35,8 @@
 # Environment:
 #   ANDROID_HOME or ANDROID_SDK_ROOT — required for Android (unless SKIP_ANDROID=1)
 #   GITHUB_TOKEN — optional; avoids anonymous rate limits on api.github.com if needed
-#   SKIP_ANDROID=1 / SKIP_IOS=1 — skip that platform
+#   SKIP_ANDROID=1 / SKIP_IOS=1 / SKIP_CPP=1 — skip that platform
+#   CXX — C++ compiler for the C++ example (default: g++)
 #   TEST_EXAMPLES_TAG — same as --tag when --tag is omitted (e.g. v0.0.70)
 #   TEST_EXAMPLES_USE_LOCAL=1 — same as --local-examples
 #
@@ -47,6 +54,7 @@ WORKDIR=""
 KEEP_WORKDIR=0
 SKIP_ANDROID="${SKIP_ANDROID:-0}"
 SKIP_IOS="${SKIP_IOS:-0}"
+SKIP_CPP="${SKIP_CPP:-0}"
 USE_LOCAL_EXAMPLES=0
 USE_LOCAL_LIBRARY=0
 # Path to a Gradle init script (created at runtime when --local-library is used)
@@ -87,6 +95,8 @@ Environment:
   ANDROID_HOME        SDK path for Android Gradle
   SKIP_ANDROID=1      Skip Android builds
   SKIP_IOS=1          Skip iOS builds (also implied on non-Darwin)
+  SKIP_CPP=1          Skip the portable C++ example build/run
+  CXX                 C++ compiler for the C++ example (default: g++)
   TEST_EXAMPLES_USE_LOCAL=1   Same as --local-examples
 EOF
 }
@@ -549,6 +559,90 @@ run_ios_builds() {
 	fi
 }
 
+# Obtain the portable C++ example (examples/c++) into ${dest}: copy it from this
+# checkout with --local-examples, otherwise download and unpack the published
+# cpp-examples.tar.gz release asset. Either way ${dest} ends up containing
+# transcriber.cpp, download-library.sh, etc. directly.
+obtain_cpp_example() {
+	local dest="$1"
+	rm -rf "${dest}"
+	mkdir -p "${dest}"
+	if [[ "${USE_LOCAL_EXAMPLES}" -eq 1 ]]; then
+		local src="${REPO_ROOT}/examples/c++"
+		[[ -d "${src}" ]] || die "missing directory: ${src}"
+		log "copying ${src}/ → ${dest}/"
+		cp -a "${src}/." "${dest}/"
+	else
+		download_one "cpp-examples.tar.gz"
+		log "extracting cpp-examples.tar.gz → ${dest}"
+		# The archive has a top-level c++/ directory; strip it so the sources
+		# land directly in ${dest}.
+		tar -xzf "${WORKDIR}/cpp-examples.tar.gz" -C "${dest}" --strip-components=1
+		rm -f "${WORKDIR}/cpp-examples.tar.gz"
+	fi
+}
+
+# Build and run the portable C++ transcriber example, mirroring the README
+# quickstart: download-library.sh fetches the prebuilt library plus a small
+# model and sample audio, then transcriber.cpp is compiled with a single
+# compiler command and run. macOS links the static libmoonshine.a (plus the
+# CoreFoundation/Foundation frameworks); Linux links the shared libmoonshine.so
+# and bakes in an $ORIGIN rpath so the co-located libonnxruntime.so.1 is found
+# without LD_LIBRARY_PATH. Other operating systems (e.g. Windows, which has its
+# own test-examples.bat) are skipped.
+run_cpp_build() {
+	local root="$1"
+	if [[ "${SKIP_CPP}" == "1" ]]; then
+		log "SKIP_CPP=1 — skipping C++ example build"
+		return 0
+	fi
+	local os
+	os="$(uname -s)"
+	if [[ "${os}" != "Darwin" && "${os}" != "Linux" ]]; then
+		log "C++ example test only runs on macOS and Linux — skipping on ${os}"
+		return 0
+	fi
+
+	local cxx="${CXX:-g++}"
+	command -v "${cxx}" >/dev/null 2>&1 || die "C++ compiler '${cxx}' not found (set CXX or SKIP_CPP=1)"
+
+	# download-library.sh always extracts into a folder named "moonshine-voice"
+	# regardless of OS/architecture, so the -I/-L paths are the same everywhere.
+	local platform_dir="moonshine-voice"
+
+	(
+		cd "${root}"
+		log "C++: fetching library, model, and sample audio via download-library.sh"
+		chmod +x ./download-library.sh
+		./download-library.sh
+
+		log "C++: compiling transcriber.cpp against ${platform_dir}"
+		if [[ "${os}" == "Darwin" ]]; then
+			"${cxx}" transcriber.cpp \
+				-I"${platform_dir}/include" \
+				-L"${platform_dir}/lib" \
+				-lmoonshine \
+				-o transcriber \
+				-framework CoreFoundation \
+				-framework Foundation
+		else
+			"${cxx}" transcriber.cpp \
+				-I"${platform_dir}/include" \
+				-L"${platform_dir}/lib" \
+				-lmoonshine \
+				-Wl,-rpath,'$ORIGIN/'"${platform_dir}/lib" \
+				-o transcriber
+		fi
+
+		log "C++: running transcriber"
+		./transcriber | tee transcriber-output.txt
+		if ! grep -q "Line completed:" transcriber-output.txt; then
+			die "C++ transcriber produced no completed lines — see output above"
+		fi
+		log "C++ example build and run succeeded"
+	)
+}
+
 main() {
 	log "repo=${REPO} tag=${TAG:-<latest>} workdir=${WORKDIR} local_examples=${USE_LOCAL_EXAMPLES} local_library=${USE_LOCAL_LIBRARY}"
 
@@ -579,6 +673,14 @@ main() {
 
 	run_android_builds "${android_root}"
 	run_ios_builds "${ios_root}"
+
+	if [[ "${SKIP_CPP}" != "1" ]]; then
+		local cpp_root="${WORKDIR}/cpp-example-tree"
+		obtain_cpp_example "${cpp_root}"
+		run_cpp_build "${cpp_root}"
+	else
+		log "SKIP_CPP=1 — skipping C++ example test"
+	fi
 
 	log "all requested example builds succeeded"
 }

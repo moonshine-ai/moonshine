@@ -217,6 +217,20 @@ if(APPLE AND NOT IOS AND NOT MOONSHINE_BUILD_SWIFT)
     )
 endif()
 
+# On Linux (and other non-Apple Unix), set rpath to $ORIGIN, the Linux analogue
+# of @loader_path, so libmoonshine.so resolves its shared dependencies (namely
+# libonnxruntime.so.1) from its own directory instead of the absolute build path
+# baked in at link time. This lets release consumers drop the packaged .so files
+# in one folder and run without setting LD_LIBRARY_PATH. It is additive to
+# LD_LIBRARY_PATH (a DT_RUNPATH, searched after it), so the test harness that
+# still points LD_LIBRARY_PATH at the vendored ONNX Runtime keeps working.
+if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
+    set_target_properties(moonshine PROPERTIES
+        INSTALL_RPATH "$ORIGIN"
+        BUILD_WITH_INSTALL_RPATH TRUE
+    )
+endif()
+
 target_include_directories(moonshine PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
     ${CMAKE_CURRENT_LIST_DIR}/ort-utils

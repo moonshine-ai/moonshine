@@ -150,13 +150,14 @@ stage_linux() {
 }
 
 # The Raspberry Pi cloud host checks out the release ref and publishes the arm64
-# wheel + binary.
+# wheel. The arm64 C++ library archive (moonshine-voice-linux-arm64.tar.gz) is
+# NOT built here anymore -- it moved to the native-arm64 Docker instance in the
+# build-pip-docker stage, which is much faster than the Pi.
 stage_pi() {
     ssh -p ${RPI_CLOUD_PORT} ${RPI_CLOUD_HOST} "cd moonshine \
       && ${REMOTE_GIT_SYNC} \
       && scripts/test-core.sh \
-      && scripts/build-pip.sh upload \
-      && scripts/publish-binary.sh upload" || exit 1
+      && scripts/build-pip.sh upload" || exit 1
 }
 
 # The Windows cloud host runs the CI orchestrator over SSH with

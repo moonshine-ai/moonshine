@@ -8,7 +8,8 @@ RUN apt-get update && \
     apt-get install -y \
     cmake \
     build-essential \
-    patchelf
+    patchelf \
+    curl
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 

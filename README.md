@@ -66,32 +66,18 @@ Download [github.com/moonshine-ai/moonshine/releases/latest/download/android-Tra
 
 ### Linux
 
-This repository uses [Git LFS](https://git-lfs.com/) to store the test models and audio in `test-assets`, so install it (for example `sudo apt install git-lfs && git lfs install`) *before* you clone. If you already cloned without it, run `git lfs install` followed by `git lfs pull` to fetch the assets.
-
-[Download](https://github.com/moonshine-ai/moonshine/archive/refs/heads/main.zip) or `git clone` this repository and then build and run the tests with:
+Moonshine Voice ships prebuilt shared libraries for both x86_64 and arm64 Linux. The quickest way to try it is with the [portable C++ example](/examples/c++/README.md), which downloads the library, an English speech to text model, and a sample recording, then builds and runs a transcriber:
 
 <!-- doc-test: skip -->
 ```bash
-./scripts/test-core.sh
+curl -O -L https://github.com/moonshine-ai/moonshine/releases/download/v0.0.70/cpp-examples.tar.gz
+tar xzf cpp-examples.tar.gz
+cd c++
+./download-library.sh
+g++ transcriber.cpp -Imoonshine-voice/include -Lmoonshine-voice/lib -lmoonshine -Wl,-rpath,'$ORIGIN/moonshine-voice/lib' -o transcriber
+./transcriber
 ```
-
-This script builds the C++ core with CMake and then runs the unit tests. The tests use relative paths to load their models and audio (for example `two_cities.wav` and `tiny-en`), so they must be launched from the `test-assets` directory, and on Linux the ONNX Runtime shared library directory must be on `LD_LIBRARY_PATH`. The script handles both of these for you, so prefer it over running the test binaries directly.
-
-If you would rather build by hand, run the following from the repository root, making sure you run the test binary from `test-assets` with `LD_LIBRARY_PATH` pointing at the bundled ONNX Runtime:
-
-<!-- doc-test: skip -->
-```bash
-cd core
-mkdir -p build
-cd build
-cmake ..
-cmake --build .
-cd ../../test-assets
-# Use lib/linux/aarch64 instead of x86_64 on 64-bit ARM machines.
-LD_LIBRARY_PATH=../core/third-party/onnxruntime/lib/linux/x86_64 \
-  ../core/build/moonshine-cpp-test
-```
-
+ 
 ### MacOS
 
 Moonshine Voice supports both Apple Silicon (arm64) and Intel (x86_64) Macs.
@@ -673,6 +659,7 @@ The [`examples`](examples/) folder has code samples organized by platform. We us
   - [TextToSpeech](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-TextToSpeech.tar.gz)
   - [Transcriber](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-Transcriber.tar.gz)
 - **[Portable C++](examples/c++/README.md)**
+  - [cpp-examples.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/cpp-examples.tar.gz) (sources plus the `download-library.sh` helper)
   - [transcriber.cpp](examples/c++/transcriber.cpp)
   - [text-to-speech.cpp](examples/c++/text-to-speech.cpp)
 - **[iOS](examples/ios/)**
