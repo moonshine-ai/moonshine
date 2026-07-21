@@ -12,8 +12,8 @@
 # release is just "add a commit to the branch and re-run the build".
 #
 #   1. Cut the release:
-#        scripts/prepare-release.sh 0.0.69
-#      Creates branch release-v0.0.69 off origin/main, rewrites every version
+#        scripts/prepare-release.sh 0.0.70
+#      Creates branch release-v0.0.70 off origin/main, rewrites every version
 #      string via update-version.sh, commits, and pushes the branch. No tag is
 #      created here; you are dropped back on main so you can keep working.
 #
@@ -50,7 +50,7 @@
 #   scripts/prepare-release.sh <new_version> [<old_version>]
 #
 # Example:
-#   scripts/prepare-release.sh 0.0.69
+#   scripts/prepare-release.sh 0.0.70
 #
 # What it does:
 #   1. Verifies you are on a clean `main` that is in sync with origin/main.
@@ -73,7 +73,7 @@ main() {
     NEW_VERSION="$1"
     OLD_VERSION="${2:-}"
 
-    # Versions are bare (no leading v), e.g. 0.0.69.
+    # Versions are bare (no leading v), e.g. 0.0.70.
     if ! [[ "${NEW_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         echo "New version '${NEW_VERSION}' is not in X.Y.Z form (no leading 'v')." >&2
         exit 1
