@@ -46,6 +46,7 @@ done < <(grep -rlI \
   --exclude-dir=third-party \
   --exclude-dir=artifacts \
   --exclude-dir=lang-specific \
+  --exclude-dir=node_modules \
   --exclude=Package.resolved \
   --exclude=uv.lock \
   --exclude=PKG-INFO \
