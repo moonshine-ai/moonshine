@@ -34,10 +34,12 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 	codesign --force --sign - ${PYTHON_DIR}/src/moonshine_voice/libmoonshine.dylib
 elif grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null || grep -q "BCM2" /proc/cpuinfo 2>/dev/null; then
     LINUX_VERSION=2_39
-	cp ${CORE_DIR}/third-party/onnxruntime/lib/linux/aarch64/libonnxruntime*.so* ${PYTHON_DIR}/src/moonshine_voice/
+	ORT_LINUX_LIB_DIR=${CORE_DIR}/third-party/onnxruntime/lib/linux/aarch64
+	cp ${ORT_LINUX_LIB_DIR}/libonnxruntime*.so* ${PYTHON_DIR}/src/moonshine_voice/
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
     LINUX_VERSION=2_34
-	cp ${CORE_DIR}/third-party/onnxruntime/lib/linux/x86_64/libonnxruntime*.so* ${PYTHON_DIR}/src/moonshine_voice/
+	ORT_LINUX_LIB_DIR=${CORE_DIR}/third-party/onnxruntime/lib/linux/x86_64
+	cp ${ORT_LINUX_LIB_DIR}/libonnxruntime*.so* ${PYTHON_DIR}/src/moonshine_voice/
 elif [[ "$OSTYPE" == "msys"* ]]; then
 	cp ${CORE_DIR}/third-party/onnxruntime/lib/windows/x86_64/libonnxruntime*.dll ${PYTHON_DIR}/src/moonshine_voice/
 else
@@ -85,8 +87,13 @@ fi
 rm -rf dist/* wheelhouse/*
 uv build --wheel --out-dir dist
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-	# Target manylinux_2_34 for wider compatibility (default would be 2_39 on newer images)
-	auditwheel repair dist/moonshine_voice-*.whl -w dist/ --plat "manylinux_${LINUX_VERSION}_${ARCH}"
+	# Target manylinux_2_34 for wider compatibility (default would be 2_39 on newer images).
+	# libmoonshine.so now carries only a `$ORIGIN` RUNPATH (so the released C++ .so is
+	# relocatable), which no longer points auditwheel at the vendored ONNX Runtime.
+	# Add that directory to LD_LIBRARY_PATH so auditwheel can locate libonnxruntime.so.1
+	# and graft it into the repaired wheel.
+	LD_LIBRARY_PATH="${ORT_LINUX_LIB_DIR}:${LD_LIBRARY_PATH:-}" \
+		auditwheel repair dist/moonshine_voice-*.whl -w dist/ --plat "manylinux_${LINUX_VERSION}_${ARCH}"
 	rm -rf dist/moonshine_voice-*-linux_*.whl
 fi
 
