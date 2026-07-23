@@ -38,7 +38,16 @@ elif grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null || grep -q "BCM2" /proc/cp
 	cp ${ORT_LINUX_LIB_DIR}/libonnxruntime*.so* ${PYTHON_DIR}/src/moonshine_voice/
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
     LINUX_VERSION=2_34
-	ORT_LINUX_LIB_DIR=${CORE_DIR}/third-party/onnxruntime/lib/linux/x86_64
+	# Pick the ONNX Runtime build matching the machine we're running on. The Pi
+	# branch above handles Raspberry Pi hardware specifically; this branch covers
+	# generic Linux, including native arm64 (e.g. an aarch64 Docker container on
+	# an Apple Silicon host), so select aarch64 vs x86_64 by uname rather than
+	# assuming x86_64.
+	if [[ "$(uname -m)" == "aarch64" || "$(uname -m)" == "arm64" ]]; then
+		ORT_LINUX_LIB_DIR=${CORE_DIR}/third-party/onnxruntime/lib/linux/aarch64
+	else
+		ORT_LINUX_LIB_DIR=${CORE_DIR}/third-party/onnxruntime/lib/linux/x86_64
+	fi
 	cp ${ORT_LINUX_LIB_DIR}/libonnxruntime*.so* ${PYTHON_DIR}/src/moonshine_voice/
 elif [[ "$OSTYPE" == "msys"* ]]; then
 	cp ${CORE_DIR}/third-party/onnxruntime/lib/windows/x86_64/libonnxruntime*.dll ${PYTHON_DIR}/src/moonshine_voice/
