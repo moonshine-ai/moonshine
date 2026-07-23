@@ -1,6 +1,6 @@
 #!/bin/bash -ex
 
-VERSION=0.0.70
+VERSION=0.0.71
 
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR=$(dirname $SCRIPTS_DIR)
