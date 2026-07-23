@@ -14,7 +14,24 @@ cmake --build .
 
 cd ${REPO_ROOT_DIR}/test-assets
 
-export LD_LIBRARY_PATH=${REPO_ROOT_DIR}/core/third-party/onnxruntime/lib/linux/x86_64
+# Point the dynamic loader at the vendored ONNX Runtime that matches this host.
+# libmoonshine now carries only a `$ORIGIN` rpath (so the released .so is
+# relocatable), which no longer points at the build-tree ONNX Runtime, so the
+# test binaries rely on this. Select the directory by OS + arch rather than
+# assuming linux/x86_64 (that broke the aarch64 Raspberry Pi / arm64 builds).
+ORT_LIB_ROOT=${REPO_ROOT_DIR}/core/third-party/onnxruntime/lib
+UNAME_S="$(uname -s)"
+UNAME_M="$(uname -m)"
+if [[ "${UNAME_S}" == "Darwin" ]]; then
+	export DYLD_LIBRARY_PATH=${BUILD_DIR}:${ORT_LIB_ROOT}/macos/${UNAME_M}:${DYLD_LIBRARY_PATH:-}
+else
+	if [[ "${UNAME_M}" == "aarch64" || "${UNAME_M}" == "arm64" ]]; then
+		ORT_ARCH_DIR=${ORT_LIB_ROOT}/linux/aarch64
+	else
+		ORT_ARCH_DIR=${ORT_LIB_ROOT}/linux/x86_64
+	fi
+	export LD_LIBRARY_PATH=${BUILD_DIR}:${ORT_ARCH_DIR}:${LD_LIBRARY_PATH:-}
+fi
 
 ${REPO_ROOT_DIR}/core/bin-tokenizer/build/bin-tokenizer-test
 ${REPO_ROOT_DIR}/core/third-party/onnxruntime/build/onnxruntime-test
