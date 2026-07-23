@@ -64,6 +64,8 @@ function(spelling_add_app target main_src)
     $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
     $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
     $<$<COMPILE_LANGUAGE:CXX>:-fno-threadsafe-statics>
+    # No __cxa_atexit/__dso_handle for static dtors (see micro/CMakeLists.txt).
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-use-cxa-atexit>
   )
 
   # CRITICAL: make stdio_usb consider the device "connected" as soon as USB
@@ -476,6 +478,8 @@ target_compile_options(moonshine_micro_tts PRIVATE
   $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
   $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
   $<$<COMPILE_LANGUAGE:CXX>:-fno-threadsafe-statics>
+  # No __cxa_atexit/__dso_handle for static dtors (see micro/CMakeLists.txt).
+  $<$<COMPILE_LANGUAGE:CXX>:-fno-use-cxa-atexit>
 )
 target_compile_definitions(moonshine_micro_tts PRIVATE
   PICO_STDIO_USB_CONNECTION_WITHOUT_DTR=1
@@ -598,6 +602,8 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/generated/neural_tts_demo_data.cc")
     $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
     $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
     $<$<COMPILE_LANGUAGE:CXX>:-fno-threadsafe-statics>
+    # No __cxa_atexit/__dso_handle for static dtors (see micro/CMakeLists.txt).
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-use-cxa-atexit>
   )
   target_compile_definitions(moonshine_micro_step6_decoder PRIVATE
     PICO_STDIO_USB_CONNECTION_WITHOUT_DTR=1
@@ -625,6 +631,8 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/generated/neural_tts_demo_data.cc")
     $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
     $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
     $<$<COMPILE_LANGUAGE:CXX>:-fno-threadsafe-statics>
+    # No __cxa_atexit/__dso_handle for static dtors (see micro/CMakeLists.txt).
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-use-cxa-atexit>
   )
   target_compile_definitions(moonshine_micro_step7_synthesize PRIVATE
     PICO_STDIO_USB_CONNECTION_WITHOUT_DTR=1
@@ -652,6 +660,8 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/generated/neural_tts_demo_data.cc")
     $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
     $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
     $<$<COMPILE_LANGUAGE:CXX>:-fno-threadsafe-statics>
+    # No __cxa_atexit/__dso_handle for static dtors (see micro/CMakeLists.txt).
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-use-cxa-atexit>
   )
   target_compile_definitions(moonshine_micro_step7b_framesweep PRIVATE
     PICO_STDIO_USB_CONNECTION_WITHOUT_DTR=1
@@ -677,6 +687,8 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/generated/neural_tts_demo_data.cc")
     $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
     $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
     $<$<COMPILE_LANGUAGE:CXX>:-fno-threadsafe-statics>
+    # No __cxa_atexit/__dso_handle for static dtors (see micro/CMakeLists.txt).
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-use-cxa-atexit>
   )
   target_compile_definitions(moonshine_micro_step7c_synthonly PRIVATE
     PICO_STDIO_USB_CONNECTION_WITHOUT_DTR=1
@@ -714,6 +726,8 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/generated/neural_tts_demo_data.cc")
     $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
     $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
     $<$<COMPILE_LANGUAGE:CXX>:-fno-threadsafe-statics>
+    # No __cxa_atexit/__dso_handle for static dtors (see micro/CMakeLists.txt).
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-use-cxa-atexit>
   )
   target_compile_definitions(moonshine_micro_tts_ladder_test PRIVATE
     PICO_STDIO_USB_CONNECTION_WITHOUT_DTR=1
@@ -752,6 +766,8 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/generated/neural_tts_demo_data.cc")
     $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
     $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
     $<$<COMPILE_LANGUAGE:CXX>:-fno-threadsafe-statics>
+    # No __cxa_atexit/__dso_handle for static dtors (see micro/CMakeLists.txt).
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-use-cxa-atexit>
   )
   target_compile_definitions(moonshine_micro_tflm_invoke_test PRIVATE
     PICO_STDIO_USB_CONNECTION_WITHOUT_DTR=1
