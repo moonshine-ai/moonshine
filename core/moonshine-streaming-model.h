@@ -117,6 +117,11 @@ struct MoonshineStreamingModel {
   int load(const char *model_dir, const char *tokenizer_path,
            int32_t model_type);
 
+  // Parses a streaming_config.json payload (from disk or an in-memory buffer)
+  // into ``this->config``. Exposed so the transcriber's in-memory load path can
+  // populate the config before calling ``load_from_memory``.
+  int load_config_from_string(const std::string &json);
+
   int load_from_memory(
       const uint8_t *frontend_model_data, size_t frontend_model_data_size,
       const uint8_t *encoder_model_data, size_t encoder_model_data_size,
@@ -171,7 +176,6 @@ struct MoonshineStreamingModel {
 
  private:
   int load_config(const char *config_path);
-  int load_config_from_string(const std::string &json);
 
   /* Internal helper that uses precomputed cross K/V */
   int run_decoder_with_cross_kv(MoonshineStreamingState *state,

@@ -588,6 +588,15 @@ int MoonshineModel::load_alignment_model(const char *alignment_model_path) {
   return 0;
 }
 
+int MoonshineModel::load_alignment_model_from_memory(
+    const uint8_t *alignment_model_data, size_t alignment_model_data_size) {
+  RETURN_ON_ERROR(ort_session_from_memory(
+      ort_api, ort_env, ort_session_options, alignment_model_data,
+      alignment_model_data_size, &alignment_session));
+  RETURN_ON_NULL(alignment_session);
+  return 0;
+}
+
 int MoonshineModel::compute_word_timestamps(
     float audio_duration, std::vector<TranscriberWord> &words_out) {
   words_out.clear();

@@ -375,7 +375,10 @@ MOONSHINE_EXPORT int32_t moonshine_load_transcriber_from_files(
     const struct moonshine_option_t *options, uint64_t options_count,
     int32_t moonshine_version);
 
-/* Loads models from memory. The `encoder_model_data`, `decoder_model_data` and
+/* **DEPRECATED** Use moonshine_load_transcriber_from_memory_files instead.
+   This function is deprecated and will be removed in a future version.
+
+   Loads models from memory. The `encoder_model_data`, `decoder_model_data` and
    `tokenizer_data` parameters are the data arrays for the models in binary
    format, and are expected to be in the same format as the files disk.
 
@@ -397,6 +400,45 @@ MOONSHINE_EXPORT int32_t moonshine_load_transcriber_from_memory(
     const uint8_t *spelling_model_data, size_t spelling_model_data_size,
     uint32_t model_arch, const struct moonshine_option_t *options,
     uint64_t options_count, int32_t moonshine_version);
+
+/* Loads a transcriber from a set of in-memory model assets keyed by their
+   canonical filename. This is the in-memory counterpart that reaches full
+   parity with moonshine_load_transcriber_from_files: unlike
+   moonshine_load_transcriber_from_memory (which only accepts a fixed
+   encoder/decoder/tokenizer/spelling set and rejects streaming models), this
+   entry point accepts whatever files the chosen architecture needs, resolved
+   by name.
+
+   ``filenames[i]`` is the canonical filename as it would appear on disk under
+   a model directory. Recognized keys depend on ``model_arch``:
+     - Non-streaming (TINY, BASE): ``encoder_model.ort``,
+       ``decoder_model_merged.ort``, ``tokenizer.bin`` (all required), plus the
+       optional word-timestamp decoder ``decoder_with_attention.ort`` (or the
+       two-pass ``alignment_model.ort``) when the ``word_timestamps`` option is
+       set.
+     - Streaming (``*_STREAMING``): ``frontend.ort``, ``encoder.ort``,
+       ``adapter.ort``, ``cross_kv.ort``, ``decoder_kv.ort``,
+       ``streaming_config.json``, ``tokenizer.bin`` (all required), plus the
+       optional ``decoder_kv_with_attention.ort`` when ``word_timestamps`` is
+       set.
+   Unrecognized keys are ignored, and missing required keys cause the load to
+   fail.
+
+   When ``memory[i]`` is non-NULL and ``memory_sizes[i]`` > 0, that buffer is
+   used as the asset bytes. The library does not copy the model buffers (the
+   ONNX Runtime sessions read them directly), so the buffers must outlive the
+   transcriber, exactly as for moonshine_load_transcriber_from_memory. When
+   ``memory[i]`` is NULL or ``memory_sizes[i]`` is zero, ``filenames[i]`` is
+   also used as a filesystem path (relative to the current working directory
+   unless absolute), so callers can mix in-memory and on-disk assets.
+
+   All other parameters behave as in the other transcriber loaders. Returns a
+   non-negative handle on success, or a negative error code on failure. */
+MOONSHINE_EXPORT int32_t moonshine_load_transcriber_from_memory_files(
+    const char **filenames, const uint8_t **memory,
+    const uint64_t *memory_sizes, uint64_t file_count, uint32_t model_arch,
+    const struct moonshine_option_t *options, uint64_t options_count,
+    int32_t moonshine_version);
 
 /* Releases all resources used by the transcriber. Subsequent transcriber
    creation calls may reuse this transcriber's ID, so ensure you remove

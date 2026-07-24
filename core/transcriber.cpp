@@ -81,6 +81,8 @@ Transcriber::Transcriber(const TranscriberOptions &options)
                      options.decoder_model_data,
                      options.decoder_model_data_size, options.tokenizer_data,
                      options.tokenizer_data_size, options.model_arch);
+  } else if (model_source == TranscriberOptions::ModelSource::MEMORY_FILES) {
+    load_from_memory_files(options.model_arch);
   } else if (model_source == TranscriberOptions::ModelSource::NONE) {
     // Both models stay nullptr
   } else {
@@ -289,6 +291,159 @@ void Transcriber::load_from_memory(const uint8_t *encoder_model_data,
     throw std::runtime_error(
         "Failed to load Moonshine models from memory. Error code: " +
         std::to_string(load_error));
+  }
+}
+
+void Transcriber::load_from_memory_files(uint32_t model_arch) {
+  validate_model_arch(model_arch);
+
+  // Resolve a required asset to bytes from the transcriber-owned file map. The
+  // returned pointer stays valid for the transcriber's lifetime (the map owns
+  // any bytes it read from disk, and client buffers are the caller's to keep
+  // alive), which is required because ORT sessions are created with
+  // session.use_ort_model_bytes_directly and do not copy their input.
+  auto require_bytes = [this](const char *key, const uint8_t **out_data,
+                              size_t *out_size) {
+    if (!this->options.model_files.contains(key)) {
+      throw std::runtime_error(
+          std::string("Required model asset '") + key +
+          "' was not supplied to the in-memory transcriber loader");
+    }
+    this->options.model_files.load(key, out_data, out_size);
+  };
+
+  // Replaces an ORT session with one built from an in-memory buffer, mirroring
+  // the file-based word-timestamp swap. Releases the old session first.
+  auto replace_session_from_memory =
+      [](const OrtApi *ort_api, OrtEnv *ort_env,
+         OrtSessionOptions *ort_session_options, OrtSession **session,
+         const uint8_t *data, size_t size, const char *label) {
+        if (*session != nullptr) {
+          ort_api->ReleaseSession(*session);
+          *session = nullptr;
+        }
+        int32_t err = ort_session_from_memory(ort_api, ort_env,
+                                              ort_session_options, data, size,
+                                              session);
+        if (err != 0 || *session == nullptr) {
+          LOGF("Warning: Failed to load %s from memory\n", label);
+        }
+      };
+
+  const uint8_t *tokenizer_data = nullptr;
+  size_t tokenizer_data_size = 0;
+  require_bytes("tokenizer.bin", &tokenizer_data, &tokenizer_data_size);
+
+  if (is_streaming_model_arch(model_arch)) {
+    const uint8_t *frontend_data = nullptr;
+    size_t frontend_size = 0;
+    const uint8_t *encoder_data = nullptr;
+    size_t encoder_size = 0;
+    const uint8_t *adapter_data = nullptr;
+    size_t adapter_size = 0;
+    const uint8_t *cross_kv_data = nullptr;
+    size_t cross_kv_size = 0;
+    const uint8_t *decoder_kv_data = nullptr;
+    size_t decoder_kv_size = 0;
+    const uint8_t *config_data = nullptr;
+    size_t config_size = 0;
+    require_bytes("frontend.ort", &frontend_data, &frontend_size);
+    require_bytes("encoder.ort", &encoder_data, &encoder_size);
+    require_bytes("adapter.ort", &adapter_data, &adapter_size);
+    require_bytes("cross_kv.ort", &cross_kv_data, &cross_kv_size);
+    require_bytes("decoder_kv.ort", &decoder_kv_data, &decoder_kv_size);
+    require_bytes("streaming_config.json", &config_data, &config_size);
+
+    this->streaming_model = new MoonshineStreamingModel(
+        this->options.log_ort_run, this->options.ort_provider_names,
+        this->options.coreml_cache_dir);
+
+    const std::string config_json(
+        static_cast<const char *>(static_cast<const void *>(config_data)),
+        config_size);
+    int32_t config_error =
+        this->streaming_model->load_config_from_string(config_json);
+    if (config_error != 0) {
+      throw std::runtime_error(
+          "Failed to parse streaming_config.json from memory. Error code: " +
+          std::to_string(config_error));
+    }
+
+    int32_t load_error = this->streaming_model->load_from_memory(
+        frontend_data, frontend_size, encoder_data, encoder_size, adapter_data,
+        adapter_size, cross_kv_data, cross_kv_size, decoder_kv_data,
+        decoder_kv_size, tokenizer_data, tokenizer_data_size,
+        this->streaming_model->config, model_arch);
+    if (load_error != 0) {
+      throw std::runtime_error(
+          "Failed to load Moonshine streaming models from memory. Error code: " +
+          std::to_string(load_error));
+    }
+    this->streaming_state.reset(this->streaming_model->config);
+
+    // Swap in the attention-enabled streaming decoder for word timestamps.
+    if (this->options.word_timestamps &&
+        this->options.model_files.contains("decoder_kv_with_attention.ort")) {
+      const uint8_t *attn_data = nullptr;
+      size_t attn_size = 0;
+      this->options.model_files.load("decoder_kv_with_attention.ort",
+                                     &attn_data, &attn_size);
+      replace_session_from_memory(
+          this->streaming_model->ort_api, this->streaming_model->ort_env,
+          this->streaming_model->ort_session_options,
+          &this->streaming_model->decoder_kv_session, attn_data, attn_size,
+          "decoder_kv_with_attention.ort");
+    }
+    return;
+  }
+
+  // Non-streaming: encoder_model.ort + decoder_model_merged.ort + tokenizer.
+  const uint8_t *encoder_data = nullptr;
+  size_t encoder_size = 0;
+  const uint8_t *decoder_data = nullptr;
+  size_t decoder_size = 0;
+  require_bytes("encoder_model.ort", &encoder_data, &encoder_size);
+  require_bytes("decoder_model_merged.ort", &decoder_data, &decoder_size);
+
+  this->stt_model = new MoonshineModel(
+      this->options.log_ort_run, this->options.max_tokens_per_second,
+      this->options.ort_provider_names, this->options.coreml_cache_dir);
+  int32_t load_error = this->stt_model->load_from_memory(
+      encoder_data, encoder_size, decoder_data, decoder_size, tokenizer_data,
+      tokenizer_data_size, model_arch);
+  if (load_error != 0) {
+    throw std::runtime_error(
+        "Failed to load Moonshine models from memory. Error code: " +
+        std::to_string(load_error));
+  }
+
+  // Word timestamps: prefer the single-pass decoder_with_attention.ort (which
+  // replaces the decoder), then fall back to the two-pass alignment_model.ort.
+  if (this->options.word_timestamps) {
+    if (this->options.model_files.contains("decoder_with_attention.ort")) {
+      const uint8_t *attn_data = nullptr;
+      size_t attn_size = 0;
+      this->options.model_files.load("decoder_with_attention.ort", &attn_data,
+                                     &attn_size);
+      replace_session_from_memory(
+          this->stt_model->ort_api, this->stt_model->ort_env,
+          this->stt_model->ort_session_options,
+          &this->stt_model->decoder_session, attn_data, attn_size,
+          "decoder_with_attention.ort");
+    } else if (this->options.model_files.contains("alignment_model.ort")) {
+      const uint8_t *align_data = nullptr;
+      size_t align_size = 0;
+      this->options.model_files.load("alignment_model.ort", &align_data,
+                                     &align_size);
+      int32_t align_err = this->stt_model->load_alignment_model_from_memory(
+          align_data, align_size);
+      if (align_err != 0) {
+        LOG("Warning: Failed to load alignment model from memory\n");
+      }
+    } else {
+      LOG("Warning: No word timestamp model supplied in memory, word "
+          "timestamps disabled\n");
+    }
   }
 }
 

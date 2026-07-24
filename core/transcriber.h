@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "file-information.h"
 #include "moonshine-model.h"
 #include "moonshine-streaming-model.h"
 #include "speaker-diarizer.h"
@@ -112,11 +113,26 @@ struct TranscriberOptions {
   enum ModelSource {
     FILES,
     MEMORY,
+    // Like MEMORY, but the model assets are supplied as a keyed
+    // ``model_files`` map (canonical filename -> bytes and/or path). This is
+    // the in-memory path that reaches full parity with FILES: it supports
+    // streaming architectures, the optional word-timestamp decoder, and the
+    // spelling model, resolving each asset by name via FileInformationMap.
+    MEMORY_FILES,
     NONE,
   };
   ModelSource model_source = ModelSource::FILES;
   const char *model_path = nullptr;
   uint32_t model_arch = -1;
+  // Keyed model assets for the MEMORY_FILES source. Canonical filenames match
+  // the FILES layout (e.g. "encoder_model.ort", "decoder_model_merged.ort",
+  // "tokenizer.bin", "decoder_with_attention.ort" for non-streaming; or
+  // "frontend.ort", "encoder.ort", "adapter.ort", "cross_kv.ort",
+  // "decoder_kv.ort", "streaming_config.json", "decoder_kv_with_attention.ort"
+  // for streaming). Entries may carry a client buffer, a path, or both; the
+  // transcriber owns this copy so any disk-loaded bytes outlive the ORT
+  // sessions that reference them directly.
+  FileInformationMap model_files;
   const uint8_t *encoder_model_data = nullptr;
   size_t encoder_model_data_size = 0;
   const uint8_t *decoder_model_data = nullptr;
@@ -251,6 +267,10 @@ class Transcriber {
                         size_t decoder_model_data_size,
                         const uint8_t *tokenizer_data,
                         size_t tokenizer_data_size, uint32_t model_arch);
+  // In-memory load from the keyed ``options.model_files`` map. Dispatches to
+  // the streaming or non-streaming path based on ``model_arch`` and honors the
+  // ``word_timestamps`` option when the map carries an attention decoder.
+  void load_from_memory_files(uint32_t model_arch);
 
   std::string *transcribe_segment_with_streaming_model(const float *audio_data,
                                                        size_t audio_length,

@@ -4,7 +4,6 @@
 # migrated to safer patterns (see core/STYLE_GUIDE.md).
 reinterpret_cast:core/moonshine-c-api-test.cpp
 reinterpret_cast:core/moonshine-c-api.cpp
-reinterpret_cast:core/moonshine-tts/src/file-information.cpp
 reinterpret_cast:core/moonshine-tts/src/ipa-postprocess.cpp
 reinterpret_cast:core/moonshine-tts/src/lang-specific/arabic-diac-onnx.cpp
 reinterpret_cast:core/moonshine-tts/src/lang-specific/arabic-ipa.cpp
@@ -24,6 +23,7 @@ reinterpret_cast:core/moonshine-tts/src/moonshine-tts.cpp
 reinterpret_cast:core/moonshine-tts/src/ort-onnx-external-data.cpp
 reinterpret_cast:core/moonshine-tts/src/piper-tts.cpp
 reinterpret_cast:core/moonshine-tts/src/zipvoice-tts.cpp
+reinterpret_cast:core/moonshine-utils/file-information.cpp
 reinterpret_cast:core/spelling-model-test.cpp
 reinterpret_cast:core/transcriber-streaming-memory-test.cpp
 reinterpret_cast:core/tts-repeated-memory-test.cpp
@@ -35,8 +35,6 @@ c_alloc:core/moonshine-cpp-test.cpp
 c_alloc:core/moonshine-cpp.h
 c_alloc:core/moonshine-streaming-model.cpp
 c_alloc:core/moonshine-streaming-model.h
-c_alloc:core/moonshine-tts/src/file-information.cpp
-c_alloc:core/moonshine-tts/src/file-information.h
 c_alloc:core/moonshine-tts/src/ipa-postprocess.cpp
 c_alloc:core/moonshine-tts/src/lang-specific/arabic-diac-onnx.cpp
 c_alloc:core/moonshine-tts/src/lang-specific/arabic-ipa.cpp
@@ -58,7 +56,11 @@ c_alloc:core/moonshine-tts/src/zipvoice-tts.cpp
 c_alloc:core/moonshine-utils/debug-utils-test.cpp
 c_alloc:core/moonshine-utils/debug-utils.cpp
 c_alloc:core/moonshine-utils/debug-utils.h
+c_alloc:core/moonshine-utils/file-information-test.cpp
+c_alloc:core/moonshine-utils/file-information.cpp
+c_alloc:core/moonshine-utils/file-information.h
 c_alloc:core/spelling-model-test.cpp
+c_alloc:core/transcriber-memory-files-test.cpp
 c_alloc:core/transcriber-streaming-memory-test.cpp
 c_alloc:core/transcriber-test.cpp
 c_alloc:core/transcriber.h

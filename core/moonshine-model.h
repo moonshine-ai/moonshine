@@ -74,6 +74,11 @@ struct MoonshineModel {
 
   int load_alignment_model(const char *alignment_model_path);
 
+  // In-memory counterpart of load_alignment_model. The buffer must outlive the
+  // session (ORT reads the bytes directly without copying).
+  int load_alignment_model_from_memory(const uint8_t *alignment_model_data,
+                                        size_t alignment_model_data_size);
+
   int load_from_memory(const uint8_t *encoder_model_data,
                        size_t encoder_model_data_size,
                        const uint8_t *decoder_model_data,
