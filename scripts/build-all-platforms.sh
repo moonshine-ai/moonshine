@@ -325,9 +325,17 @@ main() {
     # How each remote host syncs to the build point: for a release branch, reset
     # to the pushed branch HEAD; for a tag/sha, check it out detached. Built here
     # (bash + PowerShell variants) and injected into the ssh commands below.
+    #
+    # The branch checkout uses -f (matching the tag/sha path below) so a remote
+    # CI host force-syncs to the pushed HEAD, discarding any drift in its
+    # working tree: stale local modifications or in-the-way untracked files
+    # (e.g. left behind by manual debugging) would otherwise make a plain
+    # `git checkout` abort with "local changes would be overwritten" and fail the
+    # whole release. -f overwrites only the conflicting paths, so unrelated
+    # untracked build caches are left intact.
     if [ -n "${RELEASE_BRANCH}" ]; then
-        REMOTE_GIT_SYNC="git fetch origin --tags --prune --force && git checkout -B '${RELEASE_BRANCH}' 'origin/${RELEASE_BRANCH}'"
-        WIN_GIT_SYNC="git fetch origin --tags --prune --force ; git checkout -B ${RELEASE_BRANCH} origin/${RELEASE_BRANCH}"
+        REMOTE_GIT_SYNC="git fetch origin --tags --prune --force && git checkout -f -B '${RELEASE_BRANCH}' 'origin/${RELEASE_BRANCH}'"
+        WIN_GIT_SYNC="git fetch origin --tags --prune --force ; git checkout -f -B ${RELEASE_BRANCH} origin/${RELEASE_BRANCH}"
     else
         REMOTE_GIT_SYNC="git fetch origin --tags --prune --force && git checkout -f '${RELEASE_REF}'"
         WIN_GIT_SYNC="git fetch origin --tags --prune --force ; git checkout -f ${RELEASE_REF}"
