@@ -708,6 +708,19 @@ def _normalize_tts_voice_stem(stem: str) -> str:
     return t
 
 
+def _is_bare_tts_engine_selector(voice: str) -> bool:
+    """True for a bare engine keyword like ``zipvoice`` (no built-in voice id).
+
+    The native option parser (``MoonshineTTSOptions::apply_voice_engine_prefix``)
+    treats a bare ``zipvoice`` as an *engine* selector for zero-shot cloning
+    rather than a voice id. Its dependency keys are shared model files
+    (``zipvoice/tokens.txt``, encoders, vocoder, …) that always exist on the
+    CDN, so it must not be dropped by the catalog membership check used for
+    real per-voice files (which guards against 404s for unknown voice ids).
+    """
+    return _normalize_tts_voice_stem(voice).strip().lower() == "zipvoice"
+
+
 def _tts_voice_want_aliases(voice: str) -> Set[str]:
     """Normalized ids the user may mean (prefixed catalog id vs bare stem)."""
     want = _normalize_tts_voice_stem(voice)
@@ -921,7 +934,7 @@ def download_tts_assets(
     # Only include the voice in dependency resolution when the catalog recognises it,
     # so we never attempt to download a non-existent voice file (HTTP 404).
     download_voice = voice
-    if voice is not None:
+    if voice is not None and not _is_bare_tts_engine_selector(voice):
         try:
             by_avail = list_tts_voices(lang_tag, voice=voice, options=options, root_path=root)
             want = _tts_voice_want_aliases(voice)

@@ -154,6 +154,21 @@ def test_download_g2p_assets():
     assert Path(root).exists(), describe(result)
 
 
+def test_download_tts_assets_zipvoice_fetches_model_files():
+    """The bare ``zipvoice`` engine selector (used for voice cloning) must
+    download the shared ZipVoice model files, not be dropped as an unknown
+    voice id. Regression test for a missing ``zipvoice/tokens.txt`` when
+    cloning a voice.
+    """
+    result = run_module(
+        "download", "--tts", "--language", "en_us", "--voice", "zipvoice"
+    )
+    assert result.returncode == 0, describe(result)
+    root = Path(result.stdout.strip().splitlines()[-1])
+    assert root.exists(), describe(result)
+    assert (root / "zipvoice" / "tokens.txt").exists(), describe(result)
+
+
 def test_dialog_flow_lists_output_devices():
     result = run_module("dialog_flow", "--list-output-devices")
     assert result.returncode == 0, describe(result)
