@@ -42,8 +42,10 @@ class GemmaEmbeddingModel : public EmbeddingModel {
 
   /**
    * Load the model from a directory containing model files.
-   * @param model_dir Directory containing model.onnx (or quantized variants)
-   *                  and tokenizer.bin.
+   * @param model_dir Directory containing the all-in-one model
+   *                  (``model_<variant>.ort``, preferred) or the legacy
+   *                  ``model_<variant>.onnx`` + ``.onnx_data`` pair, plus
+   *                  ``tokenizer.bin``.
    * @param model_variant Optional variant name: "fp32", "fp16", "q8", "q4",
    *                      "q4f16". Default is "q4" for efficiency.
    * @return 0 on success, non-zero on failure.

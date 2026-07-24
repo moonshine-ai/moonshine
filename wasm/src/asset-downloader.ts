@@ -78,6 +78,23 @@ export class AssetDownloader {
     return out;
   }
 
+  /**
+   * Downloads a map of canonical filename -> URL, returning bytes keyed by the
+   * supplied filename (not the URL basename). Use this when the caller controls
+   * the canonical keys, e.g. feeding a transcriber's in-memory loader.
+   */
+  async downloadNamedFiles(
+    files: Record<string, string> | Map<string, string>,
+  ): Promise<Map<string, Uint8Array>> {
+    const entries =
+      files instanceof Map ? [...files.entries()] : Object.entries(files);
+    const out = new Map<string, Uint8Array>();
+    for (const [name, url] of entries) {
+      out.set(name, await this.fetchFile(url));
+    }
+    return out;
+  }
+
   /** Fetches a single URL, using the Cache API when available. */
   async fetchFile(url: string): Promise<Uint8Array> {
     const cache = await this.openCache();

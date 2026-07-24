@@ -110,6 +110,36 @@ public class JNITest {
     }
 
     @Test
+    public void testMoonshineLoadTranscriberFromMemoryFiles() {
+        Context testContext = InstrumentationRegistry.getInstrumentation().getContext();
+
+        byte[] encoderModelData = Utils.loadAsset(testContext, "tiny-en/encoder_model.ort");
+        byte[] decoderModelData = Utils.loadAsset(testContext, "tiny-en/decoder_model_merged.ort");
+        byte[] tokenizerData = Utils.loadAsset(testContext, "tiny-en/tokenizer.bin");
+        assertTrue(encoderModelData != null);
+        assertTrue(decoderModelData != null);
+        assertTrue(tokenizerData != null);
+
+        // The keyed loader takes buffers keyed by their canonical manifest
+        // filename, so it works for every architecture (streaming included).
+        String[] filenames = {
+                "encoder_model.ort", "decoder_model_merged.ort", "tokenizer.bin"};
+        byte[][] memory = {encoderModelData, decoderModelData, tokenizerData};
+        final int handle = JNI.moonshineLoadTranscriberFromMemoryFiles(
+                filenames, memory, JNI.MOONSHINE_MODEL_ARCH_TINY, null);
+        assertTrue(handle >= 0);
+        JNI.moonshineFreeTranscriber(handle);
+
+        // A missing required asset must fail rather than crash.
+        String[] incompleteFilenames = {"tokenizer.bin"};
+        byte[][] incompleteMemory = {tokenizerData};
+        final int badHandle = JNI.moonshineLoadTranscriberFromMemoryFiles(
+                incompleteFilenames, incompleteMemory, JNI.MOONSHINE_MODEL_ARCH_TINY,
+                null);
+        assertTrue(badHandle < 0);
+    }
+
+    @Test
     public void testMoonshineTranscribe() {
         Context testContext = InstrumentationRegistry.getInstrumentation().getContext();
         Utils.copyAssetToTempDir(testContext, tempDir, "tiny-en/encoder_model.ort");

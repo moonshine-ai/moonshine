@@ -1,18 +1,18 @@
 /**
- * Intent recognition (Phase 3), mirroring the Python/Swift `IntentRecognizer`.
- * Registers canonical phrases and finds the closest match to an utterance using
- * the embedding model.
+ * Intent recognition, mirroring the Python/Swift `IntentRecognizer`. Registers
+ * canonical phrases and finds the closest match to an utterance using the
+ * embedding model.
  *
- * The C ABI only exposes a from-files constructor, so in WASM we stage the
- * downloaded model into Emscripten's in-memory filesystem (MEMFS) and load from
- * that path.
+ * The embedding model ships as a single all-in-one `.ort` file (plus
+ * `tokenizer.bin`) and is loaded entirely from in-memory buffers via the
+ * `moonshine_create_intent_recognizer_from_memory` C ABI — the browser has no
+ * natural filesystem, so nothing is staged to disk.
  */
 import { AssetDownloader } from './asset-downloader.js';
 import { EmbeddingModelArch } from './enums.js';
 import { wrapErrors } from './errors.js';
 import { loadMoonshineModule, } from './module.js';
 import { normalizeIntentMatches } from './types.js';
-let stagedModelCounter = 0;
 export class IntentRecognizer {
     raw;
     constructor(raw) {
@@ -20,16 +20,29 @@ export class IntentRecognizer {
     }
     static async load(options = {}) {
         const module = options.module ?? (await loadMoonshineModule(options.moduleOptions));
-        if (!module.FS) {
-            throw new Error('Intent recognition needs the Emscripten filesystem; rebuild with -sFORCE_FILESYSTEM=1.');
-        }
+        const arch = options.modelArch ?? EmbeddingModelArch.Gemma300M;
+        const variant = options.variant ?? '';
+        const downloader = options.downloader ?? new AssetDownloader({ onProgress: options.onProgress });
+        const manifest = module.intentDependencies(options.modelName ?? '', variant);
+        const files = await downloader.downloadManifest(manifest);
+        return IntentRecognizer.construct(module, files, arch, variant);
+    }
+    /**
+     * Loads the embedding model from a caller-supplied map of canonical filename
+     * -> URL (e.g. `{ 'model_q4.ort': '...', 'tokenizer.bin': '...' }`), for
+     * self-hosting the model files instead of using the Moonshine CDN.
+     */
+    static async loadFromUrls(files, options = {}) {
+        const module = options.module ?? (await loadMoonshineModule(options.moduleOptions));
         const arch = options.modelArch ?? EmbeddingModelArch.Gemma300M;
         const downloader = options.downloader ?? new AssetDownloader({ onProgress: options.onProgress });
-        const manifest = module.intentDependencies(options.modelName ?? '', options.variant ?? '');
-        const files = await downloader.downloadManifest(manifest);
-        const dir = `/moonshine-intent-${stagedModelCounter++}`;
-        stageFiles(module, dir, files);
-        const raw = wrapErrors(() => new module.IntentRecognizer(dir, arch, options.variant ?? ''));
+        const bytes = await downloader.downloadNamedFiles(files);
+        return IntentRecognizer.construct(module, bytes, arch, options.variant ?? '');
+    }
+    static construct(module, files, arch, variant) {
+        const keys = [...files.keys()];
+        const buffers = keys.map((k) => files.get(k));
+        const raw = wrapErrors(() => new module.IntentRecognizer(keys, buffers, arch, variant));
         return new IntentRecognizer(raw);
     }
     /** Registers a phrase (optionally many). */
@@ -61,15 +74,6 @@ export class IntentRecognizer {
     }
     [Symbol.dispose]() {
         this.close();
-    }
-}
-/** Writes files into a fresh MEMFS directory (basename keys only). */
-function stageFiles(module, dir, files) {
-    const fs = module.FS;
-    if (!fs.analyzePath(dir).exists)
-        fs.mkdir(dir);
-    for (const [name, bytes] of files) {
-        fs.writeFile(`${dir}/${name}`, bytes);
     }
 }
 //# sourceMappingURL=intent-recognizer.js.map

@@ -692,6 +692,31 @@ struct moonshine_intent_match_t {
 MOONSHINE_EXPORT int32_t moonshine_create_intent_recognizer(
     const char *model_path, uint32_t model_arch, const char *model_variant);
 
+/* Creates an intent recognizer from in-memory model buffers.
+
+   This mirrors moonshine_load_transcriber_from_memory_files and
+   moonshine_create_tts_synthesizer_from_memory: `filenames[i]` is the canonical
+   asset filename (as listed by moonshine_get_intent_dependencies, e.g.
+   `model_q4.ort` and `tokenizer.bin`) and `memory[i]` / `memory_sizes[i]` are
+   the corresponding bytes. The embedding model must be a single self-contained
+   all-in-one `.ort` file (no external-data sidecar); the tokenizer is
+   `tokenizer.bin`. The library copies the bytes it needs, so the buffers only
+   need to remain valid for the duration of this call.
+
+   `model_arch` should be one of the MOONSHINE_EMBEDDING_MODEL_ARCH_* constants.
+   `model_variant` selects the variant ("fp32", "fp16", "q8", "q4", "q4f16"; NULL
+   defaults to "q4") and is only used to pick the model file when the filename
+   keys do not make it unambiguous.
+
+   Returns a non-negative handle on success, or a negative error code on
+   failure.
+*/
+MOONSHINE_EXPORT int32_t moonshine_create_intent_recognizer_from_memory(
+    uint32_t model_arch, const char *model_variant, const char **filenames,
+    uint64_t filenames_count, const uint8_t **memory,
+    const uint64_t *memory_sizes, const struct moonshine_option_t *options,
+    uint64_t options_count, int32_t moonshine_version);
+
 /* Frees an intent recognizer and all its resources. */
 MOONSHINE_EXPORT void moonshine_free_intent_recognizer(
     int32_t intent_recognizer_handle);

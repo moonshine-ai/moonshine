@@ -124,6 +124,35 @@ public class Transcriber {
     this.getDefaultStreamHandle();
   }
 
+  /**
+   * Loads a transcriber from in-memory model buffers keyed by their canonical
+   * filename (the same names returned by {@link #getSttDependencies}). Unlike
+   * the fixed encoder/decoder/tokenizer overloads this supports every
+   * architecture, including streaming models (e.g. {@code frontend.ort},
+   * {@code encoder.ort}, {@code adapter.ort}, {@code cross_kv.ort},
+   * {@code decoder_kv.ort}, {@code streaming_config.json}, {@code tokenizer.bin}),
+   * word-timestamp decoders, and the spelling model ({@code spelling_cnn.ort}).
+   *
+   * @param modelFiles Map of canonical filename to model bytes.
+   */
+  public void loadFromMemory(Map<String, byte[]> modelFiles, int modelArch) {
+    JNI.ensureLibraryLoaded();
+    String[] filenames = new String[modelFiles.size()];
+    byte[][] memory = new byte[modelFiles.size()][];
+    int i = 0;
+    for (Map.Entry<String, byte[]> entry : modelFiles.entrySet()) {
+      filenames[i] = entry.getKey();
+      memory[i] = entry.getValue();
+      i++;
+    }
+    this.transcriberHandle = JNI.moonshineLoadTranscriberFromMemoryFiles(
+        filenames, memory, modelArch, options.toArray(new TranscriberOption[0]));
+    if (this.transcriberHandle < 0) {
+      throw new RuntimeException("Failed to load transcriber from memory");
+    }
+    this.getDefaultStreamHandle();
+  }
+
   public void loadFromAssets(AppCompatActivity parentContext, String path,
                              int modelArch) {
     this.loadFromAssets(parentContext, path, /*spellingAssetPath=*/null,

@@ -13,11 +13,22 @@ std::unique_ptr<EmbeddingModel> create_embedding_model(
   switch (options.model_arch) {
     case EmbeddingModelArch::GEMMA_300M: {
       auto model = std::make_unique<GemmaEmbeddingModel>();
-      int result = model->load(options.model_path.c_str(),
-                               options.model_variant.c_str());
-      if (result != 0) {
-        throw std::runtime_error("Failed to load embedding model from: " +
-                                 options.model_path);
+      int result;
+      if (options.model_data != nullptr && options.model_data_size > 0) {
+        result = model->load_from_memory(
+            options.model_data, options.model_data_size, options.tokenizer_data,
+            options.tokenizer_data_size);
+        if (result != 0) {
+          throw std::runtime_error(
+              "Failed to load embedding model from memory");
+        }
+      } else {
+        result = model->load(options.model_path.c_str(),
+                             options.model_variant.c_str());
+        if (result != 0) {
+          throw std::runtime_error("Failed to load embedding model from: " +
+                                   options.model_path);
+        }
       }
       return model;
     }

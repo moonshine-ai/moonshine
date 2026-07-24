@@ -43,9 +43,11 @@
 #include <cinttypes>
 #include <cstring>
 #include <functional>
+#include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "moonshine-c-api.h"
@@ -554,6 +556,24 @@ class Transcriber {
       size_t spellingModelDataSize = 0,
       const std::vector<std::pair<std::string, std::string>> &options = {});
 
+  /// Initialize a transcriber from in-memory model buffers keyed by their
+  /// canonical filename (matching the download manifest, e.g.
+  /// ``encoder_model.ort`` / ``decoder_model_merged.ort`` / ``tokenizer.bin``
+  /// for non-streaming models, or ``frontend.ort`` / ``encoder.ort`` /
+  /// ``adapter.ort`` / ``cross_kv.ort`` / ``decoder_kv.ort`` /
+  /// ``streaming_config.json`` / ``tokenizer.bin`` for streaming models). This
+  /// is the general in-memory loader: unlike the fixed encoder/decoder overload
+  /// it supports every architecture, word-timestamp decoders, and the spelling
+  /// model (pass it under ``spelling_cnn.ort``). Each value is a
+  /// ``{data, size}`` pair; the buffers are not copied and must outlive the
+  /// transcriber.
+  /// @throws MoonshineException if the transcriber cannot be loaded
+  static Transcriber loadFromMemory(
+      const std::map<std::string, std::pair<const uint8_t *, size_t>>
+          &modelFiles,
+      ModelArch modelArch, double updateInterval = 0.5,
+      const std::vector<std::pair<std::string, std::string>> &options = {});
+
   /// Destructor - automatically closes the transcriber
   ~Transcriber();
 
@@ -872,6 +892,17 @@ class IntentRecognizer {
   IntentRecognizer(const std::string &model_path, EmbeddingModelArch arch,
                    const std::string &model_variant = "q4");
 
+  /// Load an embedding model from in-memory buffers keyed by canonical filename
+  /// (see ``moonshine_create_intent_recognizer_from_memory``). ``modelFiles``
+  /// holds the all-in-one model (``model_<variant>.ort``) and
+  /// ``tokenizer.bin``. The bytes are copied during construction, so the
+  /// buffers only need to outlive this call.
+  /// @throws MoonshineException if the model cannot be loaded
+  static IntentRecognizer loadFromMemory(
+      const std::map<std::string, std::pair<const uint8_t *, size_t>>
+          &modelFiles,
+      EmbeddingModelArch arch, const std::string &model_variant = "q4");
+
   ~IntentRecognizer();
 
   IntentRecognizer(IntentRecognizer &&other) noexcept;
@@ -920,6 +951,9 @@ class IntentRecognizer {
   int32_t getHandle() const { return handle_; }
 
  private:
+  /// Adopts an already-created C API handle (used by ``loadFromMemory``).
+  explicit IntentRecognizer(int32_t handle) : handle_(handle) {}
+
   int32_t handle_;
 
   void checkError(int32_t error) const;
@@ -1246,11 +1280,42 @@ inline Transcriber Transcriber::loadFromMemory(
     double updateInterval, const uint8_t *spellingModelData,
     size_t spellingModelDataSize,
     const std::vector<std::pair<std::string, std::string>> &options) {
+  // Map the classic (encoder, decoder, tokenizer[, spelling]) buffers onto
+  // their canonical filenames and defer to the general keyed loader so every
+  // in-memory path funnels through moonshine_load_transcriber_from_memory_files.
+  std::map<std::string, std::pair<const uint8_t *, size_t>> modelFiles = {
+      {"encoder_model.ort", {encoderData, encoderDataSize}},
+      {"decoder_model_merged.ort", {decoderData, decoderDataSize}},
+      {"tokenizer.bin", {tokenizerData, tokenizerDataSize}},
+  };
+  if (spellingModelData != nullptr && spellingModelDataSize > 0) {
+    modelFiles["spelling_cnn.ort"] = {spellingModelData, spellingModelDataSize};
+  }
+  return loadFromMemory(modelFiles, modelArch, updateInterval, options);
+}
+
+inline Transcriber Transcriber::loadFromMemory(
+    const std::map<std::string, std::pair<const uint8_t *, size_t>> &modelFiles,
+    ModelArch modelArch, double updateInterval,
+    const std::vector<std::pair<std::string, std::string>> &options) {
+  std::vector<const char *> names;
+  std::vector<const uint8_t *> datas;
+  std::vector<uint64_t> sizes;
+  names.reserve(modelFiles.size());
+  datas.reserve(modelFiles.size());
+  sizes.reserve(modelFiles.size());
+  for (const auto &kv : modelFiles) {
+    // kv.first is owned by the (const-ref) map and stays valid for this call.
+    names.push_back(kv.first.c_str());
+    datas.push_back(kv.second.first);
+    sizes.push_back(static_cast<uint64_t>(kv.second.second));
+  }
   detail::OptionsBuffer buf = detail::buildOptions("", options);
-  int32_t handle = moonshine_load_transcriber_from_memory(
-      encoderData, encoderDataSize, decoderData, decoderDataSize, tokenizerData,
-      tokenizerDataSize, spellingModelData, spellingModelDataSize,
-      static_cast<uint32_t>(modelArch),
+  int32_t handle = moonshine_load_transcriber_from_memory_files(
+      names.empty() ? nullptr : names.data(),
+      datas.empty() ? nullptr : datas.data(),
+      sizes.empty() ? nullptr : sizes.data(),
+      static_cast<uint64_t>(names.size()), static_cast<uint32_t>(modelArch),
       buf.options.empty() ? nullptr : buf.options.data(),
       static_cast<uint64_t>(buf.options.size()), MOONSHINE_HEADER_VERSION);
   if (handle < 0) {
@@ -1605,6 +1670,36 @@ inline IntentRecognizer::IntentRecognizer(const std::string &model_path,
   handle_ = moonshine_create_intent_recognizer(
       model_path.c_str(), static_cast<uint32_t>(arch), model_variant.c_str());
   checkError(handle_);
+}
+
+inline IntentRecognizer IntentRecognizer::loadFromMemory(
+    const std::map<std::string, std::pair<const uint8_t *, size_t>> &modelFiles,
+    EmbeddingModelArch arch, const std::string &model_variant) {
+  std::vector<const char *> names;
+  std::vector<const uint8_t *> datas;
+  std::vector<uint64_t> sizes;
+  names.reserve(modelFiles.size());
+  datas.reserve(modelFiles.size());
+  sizes.reserve(modelFiles.size());
+  for (const auto &kv : modelFiles) {
+    names.push_back(kv.first.c_str());
+    datas.push_back(kv.second.first);
+    sizes.push_back(static_cast<uint64_t>(kv.second.second));
+  }
+  int32_t handle = moonshine_create_intent_recognizer_from_memory(
+      static_cast<uint32_t>(arch),
+      model_variant.empty() ? nullptr : model_variant.c_str(),
+      names.empty() ? nullptr : names.data(),
+      static_cast<uint64_t>(names.size()),
+      datas.empty() ? nullptr : datas.data(),
+      sizes.empty() ? nullptr : sizes.data(), nullptr, 0,
+      MOONSHINE_HEADER_VERSION);
+  if (handle < 0) {
+    const char *errorStr = moonshine_error_to_string(handle);
+    throw MoonshineException(errorStr ? std::string(errorStr)
+                                      : "Unknown error");
+  }
+  return IntentRecognizer(handle);
 }
 
 inline IntentRecognizer::~IntentRecognizer() { close(); }

@@ -132,22 +132,37 @@ class Stream;
 
 class Transcriber {
  public:
-  // Loads a transcriber from in-memory model bytes. The buffers are kept alive
-  // for the transcriber's lifetime (the C ABI does not copy the spelling model
-  // and treats the others as borrowed for the load).
-  Transcriber(val encoder, val decoder, val tokenizer, val spelling,
-              uint32_t model_arch)
-      : encoder_(to_byte_vector(encoder)),
-        decoder_(to_byte_vector(decoder)),
-        tokenizer_(to_byte_vector(tokenizer)),
-        spelling_(spelling.isUndefined() || spelling.isNull()
-                      ? std::vector<uint8_t>{}
-                      : to_byte_vector(spelling)) {
-    handle_ = moonshine_load_transcriber_from_memory(
-        encoder_.data(), encoder_.size(), decoder_.data(), decoder_.size(),
-        tokenizer_.data(), tokenizer_.size(),
-        spelling_.empty() ? nullptr : spelling_.data(), spelling_.size(),
-        model_arch, nullptr, 0, MOONSHINE_HEADER_VERSION);
+  // Loads a transcriber from in-memory model bytes keyed by canonical filename
+  // (see moonshine_load_transcriber_from_memory_files). `keys` is an array of
+  // strings and `buffers` an array of Uint8Arrays of matching length; this maps
+  // 1:1 onto the download manifest so every architecture (streaming and
+  // non-streaming), the word-timestamp decoders, and the spelling model
+  // (`spelling_cnn.ort`) load through the same path. The browser has no natural
+  // filesystem, so this in-memory loader is the only STT entry point. The
+  // buffers are copied into `buffers_` and kept alive for the transcriber's
+  // lifetime (the C ABI references model bytes directly without copying).
+  Transcriber(val keys, val buffers, uint32_t model_arch) {
+    const size_t count = keys["length"].as<size_t>();
+    key_strings_.reserve(count);
+    buffers_.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+      key_strings_.push_back(keys[i].as<std::string>());
+      buffers_.push_back(to_byte_vector(buffers[i]));
+    }
+    std::vector<const char *> key_ptrs;
+    std::vector<const uint8_t *> buf_ptrs;
+    std::vector<uint64_t> buf_sizes;
+    key_ptrs.reserve(count);
+    buf_ptrs.reserve(count);
+    buf_sizes.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+      key_ptrs.push_back(key_strings_[i].c_str());
+      buf_ptrs.push_back(buffers_[i].data());
+      buf_sizes.push_back(buffers_[i].size());
+    }
+    handle_ = moonshine_load_transcriber_from_memory_files(
+        key_ptrs.data(), buf_ptrs.data(), buf_sizes.data(), count, model_arch,
+        nullptr, 0, MOONSHINE_HEADER_VERSION);
     if (handle_ < 0) {
       throw_moonshine_error(handle_);
     }
@@ -185,10 +200,8 @@ class Transcriber {
   }
 
  private:
-  std::vector<uint8_t> encoder_;
-  std::vector<uint8_t> decoder_;
-  std::vector<uint8_t> tokenizer_;
-  std::vector<uint8_t> spelling_;
+  std::vector<std::string> key_strings_;
+  std::vector<std::vector<uint8_t>> buffers_;
   int32_t handle_ = -1;
 };
 
@@ -243,11 +256,36 @@ struct JsIntentMatch {
 
 class IntentRecognizer {
  public:
-  IntentRecognizer(const std::string &model_path, uint32_t model_arch,
+  // Loads the embedding model from in-memory bytes keyed by canonical filename
+  // (see moonshine_create_intent_recognizer_from_memory). `keys` is an array of
+  // strings and `buffers` an array of Uint8Arrays of matching length, matching
+  // the download manifest (`model_<variant>.ort` + `tokenizer.bin`). The
+  // browser has no natural filesystem, so this in-memory loader is the only
+  // entry point. Buffers are copied into `buffers_` for the object's lifetime.
+  IntentRecognizer(val keys, val buffers, uint32_t model_arch,
                    const std::string &model_variant) {
-    handle_ = moonshine_create_intent_recognizer(
-        model_path.c_str(), model_arch,
-        model_variant.empty() ? nullptr : model_variant.c_str());
+    const size_t count = keys["length"].as<size_t>();
+    key_strings_.reserve(count);
+    buffers_.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+      key_strings_.push_back(keys[i].as<std::string>());
+      buffers_.push_back(to_byte_vector(buffers[i]));
+    }
+    std::vector<const char *> key_ptrs;
+    std::vector<const uint8_t *> buf_ptrs;
+    std::vector<uint64_t> buf_sizes;
+    key_ptrs.reserve(count);
+    buf_ptrs.reserve(count);
+    buf_sizes.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+      key_ptrs.push_back(key_strings_[i].c_str());
+      buf_ptrs.push_back(buffers_[i].data());
+      buf_sizes.push_back(buffers_[i].size());
+    }
+    handle_ = moonshine_create_intent_recognizer_from_memory(
+        model_arch, model_variant.empty() ? nullptr : model_variant.c_str(),
+        key_ptrs.data(), count, buf_ptrs.data(), buf_sizes.data(), nullptr, 0,
+        MOONSHINE_HEADER_VERSION);
     if (handle_ < 0) {
       throw_moonshine_error(handle_);
     }
@@ -293,6 +331,8 @@ class IntentRecognizer {
   }
 
  private:
+  std::vector<std::string> key_strings_;
+  std::vector<std::vector<uint8_t>> buffers_;
   int32_t handle_ = -1;
 };
 
@@ -430,10 +470,14 @@ class GraphemeToPhonemizer {
 int32_t version() { return moonshine_get_version(); }
 
 std::string stt_dependencies(const std::string &language,
-                             const std::string &model_arch) {
+                             const std::string &model_arch,
+                             bool include_spelling) {
   std::vector<moonshine_option_t> options;
   if (!model_arch.empty()) {
     options.push_back(moonshine_option_t{"model_arch", model_arch.c_str()});
+  }
+  if (include_spelling) {
+    options.push_back(moonshine_option_t{"include_spelling", "true"});
   }
   char *json = nullptr;
   check(moonshine_get_stt_dependencies(
@@ -538,7 +582,7 @@ EMSCRIPTEN_BINDINGS(moonshine) {
       .field("similarity", &JsIntentMatch::similarity);
 
   class_<Transcriber>("Transcriber")
-      .constructor<val, val, val, val, uint32_t>()
+      .constructor<val, val, uint32_t>()
       .function("transcribe", &Transcriber::transcribe)
       .function("close", &Transcriber::close);
 
@@ -551,7 +595,7 @@ EMSCRIPTEN_BINDINGS(moonshine) {
       .function("close", &Stream::close);
 
   class_<IntentRecognizer>("IntentRecognizer")
-      .constructor<std::string, uint32_t, std::string>()
+      .constructor<val, val, uint32_t, std::string>()
       .function("registerIntent", &IntentRecognizer::registerIntent)
       .function("unregisterIntent", &IntentRecognizer::unregisterIntent)
       .function("clearIntents", &IntentRecognizer::clearIntents)

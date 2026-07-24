@@ -85,6 +85,31 @@ URLs come from the C ABI manifest helpers, so the JS never hardcodes the layout.
 
 Pass `onProgress` to any `load(...)` call to drive a download UI.
 
+### Self-hosting the model files
+
+If you'd rather host the model files yourself, give `Transcriber.load` the raw
+bytes (`{ encoder, decoder, tokenizer }` for a non-streaming model, or a keyed
+`{ files }` map for any architecture — including streaming), or point it at your
+own URLs and let the binding download and cache them for you:
+
+```ts
+const transcriber = await Transcriber.loadFromUrls(
+  {
+    'encoder_model.ort': '/models/tiny-en/encoder_model.ort',
+    'decoder_model_merged.ort': '/models/tiny-en/decoder_model_merged.ort',
+    'tokenizer.bin': '/models/tiny-en/tokenizer.bin',
+  },
+  { modelArch: ModelArch.Base },
+);
+```
+
+The keys are the canonical manifest filenames (the same ones returned by the CDN
+manifest), so streaming models just list their own files (`frontend.ort`,
+`encoder.ort`, `adapter.ort`, `cross_kv.ort`, `decoder_kv.ort`,
+`streaming_config.json`, `tokenizer.bin`). Everything is loaded purely in memory
+— the browser has no natural filesystem — so the same code path serves every
+architecture.
+
 ## Cross-origin isolation (required for the default build)
 
 The default build enables **SIMD + multithreading** for best performance, which

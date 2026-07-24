@@ -186,11 +186,14 @@ const EmbeddingModelEntry* find_embedding_model(const std::string& model_name) {
 }
 
 // The C++ embedding loader (gemma-embedding-model.cpp) maps each variant to a
-// specific ONNX filename. Note that "q8" resolves to model_quantized.onnx, not
-// model_q8.onnx (the latter is not published) - this fixes a divergence in the
-// old Python table. Every published variant ships an external-data sidecar
-// (model*.onnx_data) that ONNX Runtime loads from beside the .onnx file, so it
-// must be part of the manifest even though the loader does not name it.
+// specific model filename. Note that "q8" resolves to model_quantized, not
+// model_q8 (the latter is not published) - this fixes a divergence in the old
+// Python table. Each variant now ships as a single all-in-one ``.ort`` file
+// (weights embedded inline, no external-data sidecar), so the manifest lists
+// only ``model_<variant>.ort`` and ``tokenizer.bin`` - matching how the
+// speech-to-text models ship and letting the in-memory loader take a single
+// buffer per file. See scripts/export-embedding-model-ort.py for how the
+// ``.ort`` files are produced from the published ``.onnx`` + ``.onnx_data``.
 std::vector<std::string> embedding_component_files(const std::string& variant) {
   std::string stem;
   if (variant == "fp32") {
@@ -206,7 +209,7 @@ std::vector<std::string> embedding_component_files(const std::string& variant) {
   } else {
     return {};
   }
-  return {stem + ".onnx", stem + ".onnx_data", "tokenizer.bin"};
+  return {stem + ".ort", "tokenizer.bin"};
 }
 
 }  // namespace

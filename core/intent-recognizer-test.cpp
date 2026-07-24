@@ -3,9 +3,11 @@
 #include <cmath>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <map>
 #include <set>
+#include <vector>
 
 #include "gemma-embedding-model.h"
 #include "moonshine-c-api.h"
@@ -26,6 +28,30 @@ IntentRecognizerOptions make_options() {
 
 bool embedding_model_available() {
   return std::filesystem::exists(EMBEDDING_MODEL_DIR);
+}
+
+// Reads an entire file into a byte vector. Returns an empty vector on failure.
+std::vector<uint8_t> read_file_bytes(const std::string &path) {
+  std::ifstream file(path, std::ios::binary | std::ios::ate);
+  if (!file) {
+    return {};
+  }
+  const std::streamsize size = file.tellg();
+  file.seekg(0, std::ios::beg);
+  std::vector<uint8_t> bytes(static_cast<size_t>(size));
+  if (size > 0 &&
+      !file.read(static_cast<char *>(static_cast<void *>(bytes.data())),
+                 size)) {
+    return {};
+  }
+  return bytes;
+}
+
+// True when the all-in-one .ort model + tokenizer are present for the memory
+// tests (older .onnx + .onnx_data directories can't be loaded from memory).
+bool memory_model_available() {
+  return std::filesystem::exists(EMBEDDING_MODEL_DIR + "/model_q4.ort") &&
+         std::filesystem::exists(EMBEDDING_MODEL_DIR + "/tokenizer.bin");
 }
 
 TEST_CASE("intent-recognizer unit tests") {
@@ -734,4 +760,82 @@ TEST_CASE("C API moonshine_get_closest_intents with priority") {
 
   moonshine_free_intent_matches(matches, count);
   moonshine_free_intent_recognizer(handle);
+}
+
+TEST_CASE("IntentRecognizer loads the embedding model from memory buffers") {
+  if (!memory_model_available()) {
+    MESSAGE("Skipping tests - all-in-one .ort model not found at: ",
+            EMBEDDING_MODEL_DIR);
+    return;
+  }
+
+  std::vector<uint8_t> model_bytes =
+      read_file_bytes(EMBEDDING_MODEL_DIR + "/model_q4.ort");
+  std::vector<uint8_t> tokenizer_bytes =
+      read_file_bytes(EMBEDDING_MODEL_DIR + "/tokenizer.bin");
+  REQUIRE(!model_bytes.empty());
+  REQUIRE(!tokenizer_bytes.empty());
+
+  SUBCASE("C++ IntentRecognizerOptions memory path matches disk loading") {
+    IntentRecognizerOptions options;
+    options.model_arch = EmbeddingModelArch::GEMMA_300M;
+    options.model_variant = "q4";
+    options.model_data = model_bytes.data();
+    options.model_data_size = model_bytes.size();
+    options.tokenizer_data = tokenizer_bytes.data();
+    options.tokenizer_data_size = tokenizer_bytes.size();
+
+    IntentRecognizer recognizer(options);
+    recognizer.register_intent("turn on the lights");
+    recognizer.register_intent("play some music");
+    CHECK(recognizer.get_intent_count() == 2);
+
+    auto matches = recognizer.rank_intents("turn on the lights", 0.0f, 6);
+    REQUIRE(!matches.empty());
+    CHECK(matches[0].first == "turn on the lights");
+  }
+
+  SUBCASE("C API moonshine_create_intent_recognizer_from_memory") {
+    const char *filenames[] = {"model_q4.ort", "tokenizer.bin"};
+    const uint8_t *memory[] = {model_bytes.data(), tokenizer_bytes.data()};
+    const uint64_t sizes[] = {model_bytes.size(), tokenizer_bytes.size()};
+
+    int32_t handle = moonshine_create_intent_recognizer_from_memory(
+        MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M, "q4", filenames, 2, memory,
+        sizes, nullptr, 0, MOONSHINE_HEADER_VERSION);
+    REQUIRE(handle >= 0);
+
+    CHECK(moonshine_register_intent(handle, "turn on the lights", nullptr, 0,
+                                    0) == MOONSHINE_ERROR_NONE);
+    CHECK(moonshine_register_intent(handle, "play some music", nullptr, 0, 0) ==
+          MOONSHINE_ERROR_NONE);
+
+    moonshine_intent_match_t *matches = nullptr;
+    uint64_t count = 0;
+    CHECK(moonshine_get_closest_intents(handle, "turn on the lights", 0.0f,
+                                        &matches, &count) ==
+          MOONSHINE_ERROR_NONE);
+    REQUIRE(count >= 1);
+    CHECK(std::string(matches[0].canonical_phrase) == "turn on the lights");
+    moonshine_free_intent_matches(matches, count);
+    moonshine_free_intent_recognizer(handle);
+  }
+
+  SUBCASE("tokenizer-only buffers (no model) fails") {
+    const char *filenames[] = {"tokenizer.bin"};
+    const uint8_t *memory[] = {tokenizer_bytes.data()};
+    const uint64_t sizes[] = {tokenizer_bytes.size()};
+
+    int32_t handle = moonshine_create_intent_recognizer_from_memory(
+        MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M, "q4", filenames, 1, memory,
+        sizes, nullptr, 0, MOONSHINE_HEADER_VERSION);
+    CHECK(handle < 0);
+  }
+
+  SUBCASE("empty file list fails") {
+    int32_t handle = moonshine_create_intent_recognizer_from_memory(
+        MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M, "q4", nullptr, 0, nullptr,
+        nullptr, nullptr, 0, MOONSHINE_HEADER_VERSION);
+    CHECK(handle < 0);
+  }
 }

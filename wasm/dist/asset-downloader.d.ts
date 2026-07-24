@@ -31,6 +31,12 @@ export declare class AssetDownloader {
     downloadManifest(manifestJson: string): Promise<Map<string, Uint8Array>>;
     /** Downloads a flat list of URLs, returning bytes keyed by basename. */
     downloadFiles(urls: string[]): Promise<Map<string, Uint8Array>>;
+    /**
+     * Downloads a map of canonical filename -> URL, returning bytes keyed by the
+     * supplied filename (not the URL basename). Use this when the caller controls
+     * the canonical keys, e.g. feeding a transcriber's in-memory loader.
+     */
+    downloadNamedFiles(files: Record<string, string> | Map<string, string>): Promise<Map<string, Uint8Array>>;
     /** Fetches a single URL, using the Cache API when available. */
     fetchFile(url: string): Promise<Uint8Array>;
     private readWithProgress;

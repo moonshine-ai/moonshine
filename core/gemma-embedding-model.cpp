@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <filesystem>
 
 #ifndef _WIN32
 #include <fcntl.h>
@@ -73,25 +74,33 @@ int GemmaEmbeddingModel::load(const char *model_dir,
 
   // Build model path based on variant
   std::string variant = model_variant ? model_variant : "q4";
-  std::string model_filename;
+  std::string stem;
 
   if (variant == "fp32") {
-    model_filename = "model.onnx";
+    stem = "model";
   } else if (variant == "fp16") {
-    model_filename = "model_fp16.onnx";
+    stem = "model_fp16";
   } else if (variant == "q8" || variant == "quantized") {
-    model_filename = "model_quantized.onnx";
+    stem = "model_quantized";
   } else if (variant == "q4") {
-    model_filename = "model_q4.onnx";
+    stem = "model_q4";
   } else if (variant == "q4f16") {
-    model_filename = "model_q4f16.onnx";
+    stem = "model_q4f16";
   } else {
     LOGF("Unknown model variant: %s\n", variant.c_str());
     return 1;
   }
 
+  // Prefer the all-in-one ``.ort`` file (weights embedded inline, matching the
+  // speech-to-text models and loadable from a single buffer). Fall back to the
+  // legacy ``.onnx`` + ``.onnx_data`` pair for model directories that were
+  // downloaded before the ``.ort`` migration.
+  std::string ort_path =
+      append_path_component(model_dir, (stem + ".ort").c_str());
+  std::string onnx_path =
+      append_path_component(model_dir, (stem + ".onnx").c_str());
   std::string model_path =
-      append_path_component(model_dir, model_filename.c_str());
+      std::filesystem::exists(ort_path) ? ort_path : onnx_path;
 
   std::string tokenizer_path =
       append_path_component(model_dir, "tokenizer.bin");

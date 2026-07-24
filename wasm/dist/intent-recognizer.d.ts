@@ -1,11 +1,12 @@
 /**
- * Intent recognition (Phase 3), mirroring the Python/Swift `IntentRecognizer`.
- * Registers canonical phrases and finds the closest match to an utterance using
- * the embedding model.
+ * Intent recognition, mirroring the Python/Swift `IntentRecognizer`. Registers
+ * canonical phrases and finds the closest match to an utterance using the
+ * embedding model.
  *
- * The C ABI only exposes a from-files constructor, so in WASM we stage the
- * downloaded model into Emscripten's in-memory filesystem (MEMFS) and load from
- * that path.
+ * The embedding model ships as a single all-in-one `.ort` file (plus
+ * `tokenizer.bin`) and is loaded entirely from in-memory buffers via the
+ * `moonshine_create_intent_recognizer_from_memory` C ABI — the browser has no
+ * natural filesystem, so nothing is staged to disk.
  */
 import { AssetDownloader } from './asset-downloader.js';
 import { EmbeddingModelArch } from './enums.js';
@@ -24,6 +25,16 @@ export type IntentRecognizerOptions = IntentFromCatalog & {
     moduleOptions?: LoadModuleOptions;
     module?: MoonshineModule;
 };
+/** Options for {@link IntentRecognizer.loadFromUrls} (self-hosted model files). */
+export interface IntentFromUrlsOptions {
+    modelArch?: EmbeddingModelArch;
+    /** One of "q4", "q8", "fp16", "fp32", "q4f16". Empty = "q4". */
+    variant?: string;
+    downloader?: AssetDownloader;
+    onProgress?: (loaded: number, total: number | undefined, file: string) => void;
+    moduleOptions?: LoadModuleOptions;
+    module?: MoonshineModule;
+}
 /** A phrase to register, with an optional priority for tie-breaking. */
 export interface IntentPhrase {
     phrase: string;
@@ -33,6 +44,13 @@ export declare class IntentRecognizer {
     private readonly raw;
     private constructor();
     static load(options?: IntentRecognizerOptions): Promise<IntentRecognizer>;
+    /**
+     * Loads the embedding model from a caller-supplied map of canonical filename
+     * -> URL (e.g. `{ 'model_q4.ort': '...', 'tokenizer.bin': '...' }`), for
+     * self-hosting the model files instead of using the Moonshine CDN.
+     */
+    static loadFromUrls(files: Record<string, string> | Map<string, string>, options?: IntentFromUrlsOptions): Promise<IntentRecognizer>;
+    private static construct;
     /** Registers a phrase (optionally many). */
     register(phrases: string | IntentPhrase | Array<string | IntentPhrase>): void;
     unregister(phrase: string): void;

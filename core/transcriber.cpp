@@ -103,8 +103,20 @@ Transcriber::Transcriber(const TranscriberOptions &options)
   // We deliberately don't fall back to a built-in: the model weights
   // are language-specific, so the C API leaves the choice to the
   // caller (Python downloads it, native callers can ship an .ort).
-  const bool has_spelling_buffer = options.spelling_model_data != nullptr &&
-                                   options.spelling_model_data_size > 0;
+  const uint8_t *spelling_buffer = options.spelling_model_data;
+  size_t spelling_buffer_size = options.spelling_model_data_size;
+  // The keyed in-memory loader (MEMORY_FILES) delivers the spelling model as a
+  // canonical asset (``spelling_cnn.ort``) rather than a dedicated argument, so
+  // pick it up from the transcriber-owned file map when present. The map (and
+  // any bytes it read from disk) lives for the transcriber's lifetime, so the
+  // pointer stays valid for the ORT session that references it directly.
+  if ((spelling_buffer == nullptr || spelling_buffer_size == 0) &&
+      this->options.model_files.contains("spelling_cnn.ort")) {
+    this->options.model_files.load("spelling_cnn.ort", &spelling_buffer,
+                                   &spelling_buffer_size);
+  }
+  const bool has_spelling_buffer =
+      spelling_buffer != nullptr && spelling_buffer_size > 0;
   const bool has_spelling_path = !options.spelling_model_path.empty();
   if (has_spelling_buffer || has_spelling_path) {
     this->spelling_model = new SpellingModel(this->options.log_ort_run,
@@ -112,8 +124,8 @@ Transcriber::Transcriber(const TranscriberOptions &options)
                                              this->options.coreml_cache_dir);
     int load_error = 0;
     if (has_spelling_buffer) {
-      load_error = this->spelling_model->load_from_memory(
-          options.spelling_model_data, options.spelling_model_data_size);
+      load_error = this->spelling_model->load_from_memory(spelling_buffer,
+                                                          spelling_buffer_size);
     } else {
       load_error =
           this->spelling_model->load(options.spelling_model_path.c_str());
