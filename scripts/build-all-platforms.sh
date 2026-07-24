@@ -133,6 +133,13 @@ run_stage() {
 # by non-interactive ssh). The checkout path comes from LINUX_CLOUD_REPO_PATH.
 # LINUX_CLOUD_REPO_PATH and the AVD default are expanded here on the local side
 # before the command is sent.
+#
+# NOTE: this host does NOT build the moonshine-voice-linux-x86_64.tar.gz C++
+# archive. That is built in the pinned Debian bookworm Docker container in the
+# build-pip-docker stage, alongside the arm64 archive, so both share the same
+# low, portable glibc floor. Building the x86_64 archive natively here (as we
+# used to) baked in a GLIBC_2.43 floor from this host's bleeding-edge glibc that
+# no released distro satisfies -- see issue #206.
 stage_linux() {
     if [ -n "${LINUX_CLOUD_INSTANCE:-}" ]; then
         gcp_resume_instance \
@@ -145,8 +152,7 @@ stage_linux() {
     ssh ${LINUX_CLOUD_HOST} "cd '${LINUX_CLOUD_REPO_PATH}' \
       && ${REMOTE_GIT_SYNC} \
       && scripts/test-core.sh \
-      && scripts/test-android.sh --avd '${ANDROID_X86_64_AVD:-moonshine_api26_x86_64}' \
-      && scripts/publish-binary.sh upload" || exit 1
+      && scripts/test-android.sh --avd '${ANDROID_X86_64_AVD:-moonshine_api26_x86_64}'" || exit 1
 }
 
 # The Raspberry Pi cloud host checks out the release ref and publishes the arm64
