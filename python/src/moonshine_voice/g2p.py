@@ -153,6 +153,15 @@ def main() -> None:
         print(str(e), file=sys.stderr)
         raise SystemExit(1) from e
 
+    # IPA output contains characters outside Latin-1 (e.g. the schwa 'ə',
+    # U+0259). Windows consoles default to the cp1252 code page, so a bare
+    # print(ipa) raises UnicodeEncodeError there; force UTF-8 so the CLI works
+    # cross-platform. Guarded because a redirected/wrapped stdout may not
+    # expose reconfigure().
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
     print(ipa)
 
 
