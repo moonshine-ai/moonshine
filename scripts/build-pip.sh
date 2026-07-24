@@ -8,14 +8,22 @@ CORE_DIR=${REPO_ROOT_DIR}/core
 CORE_BUILD_DIR=${CORE_DIR}/build
 rm -rf ${CORE_BUILD_DIR}
 mkdir -p ${CORE_BUILD_DIR}
-cd ${CORE_BUILD_DIR}
 # Align with bundled ONNX Runtime / dylibs so wheel metadata matches binary minimum macOS (silences
 # delocate/wheel warnings about MACOSX_DEPLOYMENT_TARGET vs interpreter).
 if [[ "$OSTYPE" == "darwin"* ]]; then
 	export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-15.0}"
 fi
-cmake ..
-cmake --build . --config Release
+# Configure/build out-of-source (cmake -S/-B) from a stable working directory
+# (${CORE_DIR}, never removed) instead of cd-ing into the just-recreated
+# ${CORE_BUILD_DIR}. On Docker Desktop for macOS the bind-mounted host dir is
+# served over VirtioFS/gRPC-FUSE, and a freshly `rm -rf`'d + re-`mkdir`'d
+# directory can briefly resolve to a stale inode, making getcwd() fail for a
+# process whose cwd is inside it (cmake then aborts with "Current working
+# directory cannot be established"). See scripts/publish-binary.sh for the same
+# guard.
+cd ${CORE_DIR}
+cmake -S ${CORE_DIR} -B ${CORE_BUILD_DIR}
+cmake --build ${CORE_BUILD_DIR} --config Release
 
 # Drop stale native libs from other platforms (e.g. macOS dylibs left in the
 # tree when this script runs inside Docker with the host repo bind-mounted).
