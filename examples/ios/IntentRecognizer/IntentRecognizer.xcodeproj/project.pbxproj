@@ -34,15 +34,15 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		IRE10.0.72F0762A100CE654A = {
+		IRE10.0.73F0762A100CE654A = {
 			isa = PBXGroup;
 			children = (
 				IRE10F0042F0762A100CE654A /* IntentRecognizer */,
-				IRE10F0072F0762A100CE654A /* Products */,
+				IRE10.0.73F0762A100CE654A /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		IRE10F0072F0762A100CE654A /* Products */ = {
+		IRE10.0.73F0762A100CE654A /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				IRE10F0032F0762A100CE654A /* IntentRecognizer.app */,
@@ -99,13 +99,13 @@
 				en,
 				Base,
 			);
-			mainGroup = IRE10.0.72F0762A100CE654A;
+			mainGroup = IRE10.0.73F0762A100CE654A;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				IRE10F0202F0762A200CE654D /* XCRemoteSwiftPackageReference "moonshine-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
-			productRefGroup = IRE10F0072F0762A100CE654A /* Products */;
+			productRefGroup = IRE10.0.73F0762A100CE654A /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -361,7 +361,7 @@
 			repositoryURL = "https://github.com/moonshine-ai/moonshine-swift.git";
 			requirement = {
 				kind = exactVersion;
-				version = "0.0.72";
+				version = "0.0.73";
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
