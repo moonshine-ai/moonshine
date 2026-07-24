@@ -37,7 +37,7 @@
 #   GITHUB_TOKEN — optional; avoids anonymous rate limits on api.github.com if needed
 #   SKIP_ANDROID=1 / SKIP_IOS=1 / SKIP_CPP=1 — skip that platform
 #   CXX — C++ compiler for the C++ example (default: g++)
-#   TEST_EXAMPLES_TAG — same as --tag when --tag is omitted (e.g. v0.0.71)
+#   TEST_EXAMPLES_TAG — same as --tag when --tag is omitted (e.g. v0.0.72)
 #   TEST_EXAMPLES_USE_LOCAL=1 — same as --local-examples
 #
 # Defaults:
