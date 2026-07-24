@@ -93,6 +93,10 @@ $steps = @(
     [pscustomobject]@{ Name = 'publish-binary'; Command = ('scripts\publish-binary.bat ' + $uploadArg).Trim() }
     [pscustomobject]@{ Name = 'publish-examples'; Command = ('scripts\publish-examples.bat ' + $uploadArg).Trim() }
     [pscustomobject]@{ Name = 'build-pip'; Command = ('scripts\build-pip.bat ' + $uploadArg).Trim() }
+    # Runs the Python module + CLI tests against the wheel that build-pip just
+    # produced (hence --skip-build), catching regressions like the Windows
+    # cross-CRT free crash that the C++ (test-core) suite can't see.
+    [pscustomobject]@{ Name = 'test-python'; Command = 'scripts\test-python.bat --skip-build' }
 )
 
 $overall = 0

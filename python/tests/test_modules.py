@@ -33,6 +33,13 @@ def run_module(module, *args, cwd=None, timeout=FULL_RUN_TIMEOUT_SECONDS):
         timeout=timeout,
         capture_output=True,
         text=True,
+        # Modules emit UTF-8 (e.g. g2p prints IPA like the schwa 'ə'). Decode
+        # their output as UTF-8 explicitly so capture doesn't blow up on
+        # Windows, where subprocess text mode otherwise defaults to the cp1252
+        # console code page and chokes on those bytes. errors="replace" keeps a
+        # genuinely mangled byte from masking the real assertion.
+        encoding="utf-8",
+        errors="replace",
     )
 
 
