@@ -295,6 +295,65 @@ int32_t moonshine_load_transcriber_from_memory(
   return transcriber_handle;
 }
 
+int32_t moonshine_load_transcriber_from_memory_files(
+    const char **filenames, const uint8_t **memory,
+    const uint64_t *memory_sizes, uint64_t file_count, uint32_t model_arch,
+    const moonshine_option_t *options, uint64_t options_count,
+    int32_t moonshine_version) {
+  OptionVector option_vector = parse_option_vector(options, options_count);
+  OptionVector uncommon_options = parse_common_options(option_vector);
+  if (file_count > 0 &&
+      (filenames == nullptr || memory == nullptr || memory_sizes == nullptr)) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  if (log_api_calls) {
+    LOGF(
+        "moonshine_load_transcriber_from_memory_files(filenames=%p, "
+        "memory=%p, memory_sizes=%p, file_count=%" PRIu64
+        ", model_arch=%d, options=%p, options_count=%" PRIu64
+        ", moonshine_version=%d)",
+        (const void *)(filenames), (const void *)(memory),
+        (const void *)(memory_sizes), file_count, model_arch, (void *)(options),
+        options_count, moonshine_version);
+    for (uint64_t i = 0; i < file_count; i++) {
+      LOGF("  file[%" PRIu64 "] = %s (%" PRIu64 " bytes)", i,
+           filenames[i] ? filenames[i] : "(null)",
+           memory_sizes[i]);
+    }
+  }
+
+  Transcriber *transcriber = nullptr;
+  try {
+    TranscriberOptions transcriber_options;
+    transcriber_options.model_source =
+        TranscriberOptions::ModelSource::MEMORY_FILES;
+    transcriber_options.model_arch = model_arch;
+    for (uint64_t i = 0; i < file_count; ++i) {
+      if (filenames[i] == nullptr) {
+        return MOONSHINE_ERROR_INVALID_ARGUMENT;
+      }
+      const std::string key(filenames[i]);
+      if (memory[i] != nullptr && memory_sizes[i] > 0) {
+        transcriber_options.model_files.set_memory(
+            key, memory[i], static_cast<size_t>(memory_sizes[i]));
+      } else {
+        // No buffer supplied: treat the canonical key as a path (relative to
+        // the current working directory unless absolute), so callers can mix
+        // in-memory and on-disk assets.
+        transcriber_options.model_files.set_path(key,
+                                                 std::filesystem::path(key));
+      }
+    }
+    parse_transcriber_options(uncommon_options, transcriber_options);
+    transcriber = new Transcriber(transcriber_options);
+  } catch (const std::exception &e) {
+    LOGF("Failed to load transcriber from memory files: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+  int32_t transcriber_handle = allocate_transcriber_handle(transcriber);
+  return transcriber_handle;
+}
+
 void moonshine_free_transcriber(int32_t transcriber_handle) {
   if (log_api_calls) {
     LOGF("moonshine_free_transcriber(transcriber_handle=%d)",
@@ -955,7 +1014,7 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
           (key.size() >= 7 && key.compare(0, 7, "kokoro/") == 0) ||
           (key.size() >= 6 && key.compare(0, 6, "piper/") == 0) ||
           (key.size() >= 9 && key.compare(0, 9, "zipvoice/") == 0);
-      moonshine_tts::FileInformationMap &dest =
+      FileInformationMap &dest =
           is_tts_only ? tts_options.files : tts_options.g2p_options.files;
       if (memory[i] != nullptr && memory_sizes[i] > 0) {
         dest.set_memory(key, memory[i], static_cast<size_t>(memory_sizes[i]));
@@ -966,7 +1025,7 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
     {
       // Legacy callers used in-memory key ``kokoro/model.ort``. Canonical key
       // is ``kokoro/model.onnx``.
-      moonshine_tts::FileInformationMap &tf = tts_options.files;
+      FileInformationMap &tf = tts_options.files;
       const std::string canon_k{moonshine_tts::kTtsKokoroModelOnnxKey};
       const auto canon_it = tf.entries.find(canon_k);
       const bool canon_ok = canon_it != tf.entries.end() &&
@@ -976,8 +1035,8 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
         const auto leg = tf.entries.find("kokoro/model.ort");
         if (leg != tf.entries.end() && leg->second.memory != nullptr &&
             leg->second.memory_size > 0) {
-          const moonshine_tts::FileInformation &src = leg->second;
-          tf.entries[canon_k] = moonshine_tts::FileInformation{
+          const FileInformation &src = leg->second;
+          tf.entries[canon_k] = FileInformation{
               std::filesystem::path(canon_k), src.memory, src.memory_size};
         }
       }

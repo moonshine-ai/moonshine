@@ -37,11 +37,13 @@ ${REPO_ROOT_DIR}/core/bin-tokenizer/build/bin-tokenizer-test
 ${REPO_ROOT_DIR}/core/third-party/onnxruntime/build/onnxruntime-test
 ${REPO_ROOT_DIR}/core/moonshine-utils/build/debug-utils-test
 ${REPO_ROOT_DIR}/core/moonshine-utils/build/file-utils-test
+${REPO_ROOT_DIR}/core/moonshine-utils/build/file-information-test
 ${REPO_ROOT_DIR}/core/moonshine-utils/build/string-utils-test
 ${REPO_ROOT_DIR}/core/ort-utils/build/ort-utils-ep-test
 ${REPO_ROOT_DIR}/core/build/resampler-test
 ${REPO_ROOT_DIR}/core/build/voice-activity-detector-test
 ${REPO_ROOT_DIR}/core/build/transcriber-test
+${REPO_ROOT_DIR}/core/build/transcriber-memory-files-test
 ${REPO_ROOT_DIR}/core/build/moonshine-c-api-test
 ${REPO_ROOT_DIR}/core/build/moonshine-cpp-test
 ${REPO_ROOT_DIR}/core/build/cosine-distance-test

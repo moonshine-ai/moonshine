@@ -1332,7 +1332,7 @@ struct MoonshineTTS::Impl {
     MoonshineTTSOptions opt = opt_in;
     log_profiling_ = opt.log_profiling;
     TIMER_START_IF(log_profiling_, tts_init);
-    for (const moonshine_tts::FileInformation& fi : opt.file_information) {
+    for (const FileInformation& fi : opt.file_information) {
       const std::string map_key = fi.path.generic_string();
       if (map_key.empty()) {
         continue;

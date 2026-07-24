@@ -8,10 +8,18 @@ add_library(moonshine-utils STATIC
     string-utils.cpp
     debug-utils.cpp
     file-utils.cpp
+    file-information.cpp
 )
 
 target_compile_options(moonshine-utils PRIVATE
     -fPIC
+)
+
+# Expose this directory to every consumer so its headers can be included by
+# their bare filename (e.g. `#include "file-information.h"`) without needing
+# relative `../../moonshine-utils/` prefixes.
+target_include_directories(moonshine-utils PUBLIC
+    ${CMAKE_CURRENT_LIST_DIR}
 )
 
 set_target_properties(moonshine-utils PROPERTIES
@@ -94,5 +102,29 @@ set_target_properties(file-utils-test PROPERTIES
     CXX_EXTENSIONS NO
 )
 target_link_libraries(file-utils-test
+    moonshine-utils
+)
+
+add_executable(file-information-test file-information-test.cpp)
+target_include_directories(file-information-test PRIVATE
+    ${MOONSHINE_UTILS_INCLUDE_DIR}
+    ${DOCTEST_INCLUDE_DIR}
+)
+
+if (IOS)
+    set_target_properties(file-information-test PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.file-information-test"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+    )
+endif()
+
+set_target_properties(file-information-test PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED YES
+    CXX_EXTENSIONS NO
+)
+target_link_libraries(file-information-test
     moonshine-utils
 )

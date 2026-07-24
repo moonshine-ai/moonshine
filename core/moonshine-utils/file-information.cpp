@@ -3,8 +3,6 @@
 #include <fstream>
 #include <stdexcept>
 
-namespace moonshine_tts {
-
 FileInformation::FileInformation(const FileInformation& o)
     : path(o.path), owned_storage_(o.owned_storage_) {
   if (!owned_storage_.empty()) {
@@ -96,6 +94,16 @@ void FileInformationMap::set_memory(std::string_view key, const uint8_t* mem,
   entries[std::string(key)] = FileInformation{std::move(p), mem, sz};
 }
 
+void FileInformationMap::load(std::string_view key, const uint8_t** out_memory,
+                              size_t* out_size) {
+  auto it = entries.find(std::string(key));
+  if (it == entries.end()) {
+    throw std::runtime_error("FileInformationMap::load: missing key '" +
+                             std::string(key) + "'");
+  }
+  it->second.load(out_memory, out_size);
+}
+
 void FileInformationMap::parse_file_list(
     const std::vector<std::pair<std::string, std::string>>* key_list,
     const std::vector<uint8_t*>* memory_pointers,
@@ -125,5 +133,3 @@ void FileInformationMap::parse_file_list(
     entries[map_key] = FileInformation{full_path, mem, mem_sz};
   }
 }
-
-}  // namespace moonshine_tts

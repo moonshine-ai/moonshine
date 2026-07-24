@@ -21,7 +21,6 @@ set_target_properties(moonshine_tts_utf8proc PROPERTIES POSITION_INDEPENDENT_COD
 enable_testing()
 
 add_library(moonshine_tts_core STATIC
-  src/file-information.cpp
   src/moonshine-asset-catalog.cpp
   src/moonshine-g2p-options.cpp
   src/moonshine-tts-options.cpp
@@ -119,7 +118,6 @@ function(moonshine_tts_add_test name)
 endfunction()
 
 moonshine_tts_add_test(utf8_utils_test moonshine_tts_core)
-moonshine_tts_add_test(file_information_test moonshine_tts_core)
 moonshine_tts_add_test(moonshine_g2p_options_test moonshine_tts_core)
 moonshine_tts_add_test(moonshine_tts_options_test moonshine_tts_core)
 moonshine_tts_add_test(german_rule_g2p_test moonshine_tts_core)

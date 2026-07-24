@@ -687,6 +687,39 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
         )
     endif()
 
+    # In-memory keyed-buffer transcriber loader test. Exercises the
+    # moonshine_load_transcriber_from_memory_files parity path across
+    # non-streaming, streaming, and word-timestamp buffer variants.
+    add_executable(transcriber-memory-files-test transcriber-memory-files-test.cpp)
+    set_target_properties(transcriber-memory-files-test PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(transcriber-memory-files-test PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+    )
+    copy_onnxruntime_dll(transcriber-memory-files-test)
+    if (IOS OR MOONSHINE_BUILD_SWIFT)
+        set_target_properties(transcriber-memory-files-test PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.transcriber-memory-files-test"
+            MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        )
+        target_link_libraries(transcriber-memory-files-test PRIVATE
+            moonshine
+            "-framework CoreFoundation"
+            "-framework Foundation"
+        )
+    else()
+        target_link_libraries(transcriber-memory-files-test PRIVATE
+            moonshine
+        )
+    endif()
+
     # Multi-threaded stress test for the transcriber's thread-safe API. Built
     # only for the opt-in reliability build (it exists to give ThreadSanitizer
     # real cross-thread contention to analyse), so normal builds are unchanged.

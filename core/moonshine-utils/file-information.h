@@ -1,5 +1,5 @@
-#ifndef MOONSHINE_TTS_FILE_INFORMATION_H
-#define MOONSHINE_TTS_FILE_INFORMATION_H
+#ifndef MOONSHINE_FILE_INFORMATION_H
+#define MOONSHINE_FILE_INFORMATION_H
 
 #include <cstddef>
 #include <cstdint>
@@ -10,11 +10,15 @@
 #include <utility>
 #include <vector>
 
-namespace moonshine_tts {
-
 /// Describes a bundled asset: optional on-disk ``path`` (relative to a caller
 /// root unless absolute), optional client-owned ``memory`` / ``memory_size``,
 /// or bytes read from disk by ``load()``.
+///
+/// This is the shared, engine-agnostic mechanism that lets every "from files"
+/// loader also accept the same assets "from memory". Speech-to-text, TTS, and
+/// G2P all build a ``FileInformationMap`` keyed by canonical filename and then
+/// resolve each entry to bytes via ``load()`` regardless of whether the caller
+/// handed us a buffer or a path.
 struct FileInformation {
   std::filesystem::path path{};
   const uint8_t* memory = nullptr;
@@ -32,6 +36,11 @@ struct FileInformation {
   /// If ``memory`` / ``memory_size`` are set (client buffer), returns them.
   /// Otherwise reads ``path`` into internal storage and returns that. Throws if
   /// neither is available or the file cannot be read.
+  ///
+  /// Note: when the bytes are read from disk they are owned by this object, so
+  /// the ``FileInformation`` (or the ``FileInformationMap`` holding it) must
+  /// outlive any consumer that keeps the returned pointer, e.g. an ONNX Runtime
+  /// session created with ``session.use_ort_model_bytes_directly``.
   void load(const uint8_t** out_memory, size_t* out_size);
 
   /// Drops bytes read by ``load()`` from disk. Does not free client-supplied
@@ -39,15 +48,19 @@ struct FileInformation {
   /// loaded data.
   void free();
 
+  /// True when this entry can produce bytes without touching the filesystem
+  /// (either a client buffer or already-loaded disk bytes).
+  bool has_memory() const { return memory != nullptr && memory_size > 0; }
+
  private:
   std::vector<uint8_t> owned_storage_{};
 };
 
 /// Maps canonical asset keys (typically default relative paths such as
-/// ``fr/dict.tsv``) to
-/// ``FileInformation``. Optional overrides use the same keys as
-/// ``MoonshineG2POptions::parse_options`` where no single bundle default exists
-/// (e.g. ``portuguese_dict_path``, ``oov_onnx_override``).
+/// ``encoder_model.ort`` for STT or ``fr/dict.tsv`` for G2P) to
+/// ``FileInformation``. Optional overrides use the same keys as the relevant
+/// options parser where no single bundle default exists (e.g.
+/// ``portuguese_dict_path``, ``oov_onnx_override``).
 struct FileInformationMap {
   std::map<std::string, FileInformation> entries;
 
@@ -66,7 +79,12 @@ struct FileInformationMap {
     return entries.find(std::string(key)) != entries.end();
   }
 
-  /// Fills ``entries`` from ``(*key_list)[i].first`` → path ``root_path /
+  /// Resolves ``key`` to bytes via ``FileInformation::load()``. Throws
+  /// ``std::runtime_error`` if the key is absent or cannot be loaded.
+  void load(std::string_view key, const uint8_t** out_memory,
+            size_t* out_size);
+
+  /// Fills ``entries`` from ``(*key_list)[i].first`` -> path ``root_path /
   /// (*key_list)[i].second``, with optional in-memory bytes per row.
   void parse_file_list(
       const std::vector<std::pair<std::string, std::string>>* key_list,
@@ -75,6 +93,4 @@ struct FileInformationMap {
       const std::filesystem::path& root_path);
 };
 
-}  // namespace moonshine_tts
-
-#endif  // MOONSHINE_TTS_FILE_INFORMATION_H
+#endif  // MOONSHINE_FILE_INFORMATION_H
