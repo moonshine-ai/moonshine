@@ -289,6 +289,22 @@ MOONSHINE_EXPORT int32_t moonshine_get_version(void);
    human-readable string. */
 MOONSHINE_EXPORT const char *moonshine_error_to_string(int32_t error);
 
+/* Frees a buffer that a moonshine_* function documented as "allocated with
+   malloc; release with free" returned to the caller. This covers, for
+   example, ``out_audio_data`` from moonshine_text_to_speech /
+   moonshine_phonemes_to_speech, the JSON / comma-separated strings from
+   moonshine_get_tts_dependencies / moonshine_get_g2p_dependencies /
+   moonshine_get_tts_voices, and ``out_phonemes`` from
+   moonshine_text_to_phonemes.
+
+   Always use this instead of the C runtime ``free`` directly. On Windows the
+   library and its host (e.g. a Python binding) can be linked against
+   different C runtimes with independent heaps, so freeing a library-allocated
+   pointer with the host's ``free`` corrupts the heap. Routing the free back
+   through the library guarantees the allocation and deallocation happen in
+   the same runtime. Safe to call on NULL. */
+MOONSHINE_EXPORT void moonshine_free_buffer(void *ptr);
+
 /* Converts a transcript_t struct into a human-readable string for debugging
  * purposes. The string is owned by the library, and is valid until the next
  * call to moonshine_transcript_to_string. */

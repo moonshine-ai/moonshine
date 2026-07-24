@@ -206,6 +206,13 @@ extern "C" const char *moonshine_error_to_string(int32_t error) {
   return "Unknown error";
 }
 
+/* Frees a caller-owned buffer that was allocated by this library with
+   std::malloc (see the "release with free" functions documented in the
+   header). Routing the free through the library ensures the allocation and
+   deallocation use the same C runtime heap, which matters on Windows where the
+   library and its host may link different runtimes. Safe on NULL. */
+extern "C" void moonshine_free_buffer(void *ptr) { std::free(ptr); }
+
 extern "C" int32_t moonshine_load_transcriber_from_files(
     const char *path, uint32_t model_arch, const moonshine_option_t *options,
     uint64_t options_count, int32_t moonshine_version) {

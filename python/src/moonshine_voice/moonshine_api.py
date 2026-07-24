@@ -1,7 +1,5 @@
 import ctypes
-import ctypes.util
 import platform
-import sys
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
@@ -39,33 +37,18 @@ def _decode_utf8_from_c(buf: bytes) -> str:
         return buf.decode("utf-8", errors="replace")
 
 
-def _load_libc():
-    if sys.platform == "win32":
-        return ctypes.CDLL("msvcrt")
-    name = ctypes.util.find_library("c")
-    if name:
-        return ctypes.CDLL(name)
-    if platform.system() == "Darwin":
-        return ctypes.CDLL("/usr/lib/libc.dylib")
-    return ctypes.CDLL("libc.so.6")
-
-
-_libc = None
-
-
-def _get_libc():
-    global _libc
-    if _libc is None:
-        _libc = _load_libc()
-        _libc.free.argtypes = [ctypes.c_void_p]
-        _libc.free.restype = None
-    return _libc
-
-
 def moonshine_free(address: Optional[int]) -> None:
-    """Release memory allocated by the Moonshine C API (``malloc``). Pass the raw pointer value (integer)."""
+    """Release memory allocated by the Moonshine C API (``malloc``). Pass the raw pointer value (integer).
+
+    Frees through the library's own ``moonshine_free_buffer`` export rather than
+    the C runtime's ``free`` directly. On Windows the library and this Python
+    process can be linked against different C runtimes with independent heaps, so
+    freeing a library-allocated pointer with the host CRT's ``free`` corrupts the
+    heap (a deferred, hard-to-diagnose crash). Routing the free back through the
+    library keeps the allocation and deallocation in the same runtime.
+    """
     if address:
-        _get_libc().free(ctypes.c_void_p(address))
+        _MoonshineLib().lib.moonshine_free_buffer(ctypes.c_void_p(address))
 
 
 # C structure definitions matching moonshine-c-api.h
@@ -648,6 +631,9 @@ class _MoonshineLib:
 
         lib.moonshine_error_to_string.restype = ctypes.c_char_p
         lib.moonshine_error_to_string.argtypes = [ctypes.c_int32]
+
+        lib.moonshine_free_buffer.restype = None
+        lib.moonshine_free_buffer.argtypes = [ctypes.c_void_p]
 
         lib.moonshine_transcript_to_string.restype = ctypes.c_char_p
         lib.moonshine_transcript_to_string.argtypes = [
