@@ -65,14 +65,22 @@ if [[ -n "${SKIP_BUILD}" ]]; then
 else
     rm -rf ${BUILD_DIR}
     mkdir -p ${BUILD_DIR}
-    cd ${BUILD_DIR}
+    # Configure and build out-of-source (cmake -S/-B) from a stable working
+    # directory (${CORE_DIR}, which is never removed) instead of cd-ing into the
+    # just-recreated ${BUILD_DIR}. On Docker Desktop for macOS the bind-mounted
+    # host directory is served over VirtioFS/gRPC-FUSE, and a directory that was
+    # just `rm -rf`'d and re-`mkdir`'d can briefly resolve to a stale inode, so a
+    # process whose cwd is inside it fails getcwd() -- cmake then aborts with
+    # "Current working directory cannot be established." Keeping cwd on
+    # ${CORE_DIR} sidesteps that race. A fresh build dir also makes the old
+    # `make clean` step redundant.
+    cd ${CORE_DIR}
     if [[ "$PLATFORM" == macos-* ]]; then
-      cmake .. -DMOONSHINE_BUILD_SWIFT=YES
+      cmake -S ${CORE_DIR} -B ${BUILD_DIR} -DMOONSHINE_BUILD_SWIFT=YES
     else
-      cmake ..
+      cmake -S ${CORE_DIR} -B ${BUILD_DIR}
     fi
-    make clean
-    cmake --build . -v
+    cmake --build ${BUILD_DIR} -v
 fi
 
 TMP_DIR=$(mktemp -d)
