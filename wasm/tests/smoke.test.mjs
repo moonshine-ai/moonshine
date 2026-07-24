@@ -36,7 +36,7 @@ test('core STT classes are registered', async () => {
 
 test('STT dependency manifest is valid JSON with groups', async () => {
   const mod = await loadModule();
-  const json = mod.sttDependencies('en', '1'); // arch 1 == Base
+  const json = mod.sttDependencies('en', '1', false); // arch 1 == Base
   const manifest = JSON.parse(json);
   assert.ok(Array.isArray(manifest.groups), 'manifest should have a groups array');
   assert.ok(manifest.groups.length > 0, 'manifest should list at least one group');

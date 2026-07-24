@@ -579,6 +579,75 @@ int32_t moonshine_create_intent_recognizer(const char *model_path,
   return allocate_intent_recognizer_handle(recognizer);
 }
 
+int32_t moonshine_create_intent_recognizer_from_memory(
+    uint32_t model_arch, const char *model_variant, const char **filenames,
+    uint64_t filenames_count, const uint8_t **memory,
+    const uint64_t *memory_sizes, const struct moonshine_option_t *options,
+    uint64_t options_count, int32_t moonshine_version) {
+  (void)moonshine_version;
+  (void)options;
+  (void)options_count;
+  if (filenames_count == 0 || filenames == nullptr || memory == nullptr ||
+      memory_sizes == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  if (log_api_calls) {
+    LOGF(
+        "moonshine_create_intent_recognizer_from_memory(model_arch=%d, "
+        "model_variant=%s, filenames_count=%" PRIu64 ")",
+        model_arch, model_variant ? model_variant : "q4", filenames_count);
+    for (uint64_t i = 0; i < filenames_count; i++) {
+      LOGF("  file[%" PRIu64 "] = %s (%" PRIu64 " bytes)", i,
+           filenames[i] ? filenames[i] : "(null)", memory_sizes[i]);
+    }
+  }
+
+  // Resolve the model and tokenizer buffers from the keyed files. The intent
+  // manifest contains exactly two assets: the all-in-one model (a `.ort`, or a
+  // legacy self-contained `.onnx`) and `tokenizer.bin`, so the model is simply
+  // the non-tokenizer entry.
+  const uint8_t *model_data = nullptr;
+  size_t model_data_size = 0;
+  const uint8_t *tokenizer_data = nullptr;
+  size_t tokenizer_data_size = 0;
+  for (uint64_t i = 0; i < filenames_count; ++i) {
+    if (filenames[i] == nullptr) {
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
+    }
+    const std::string key(filenames[i]);
+    if (key == "tokenizer.bin") {
+      tokenizer_data = memory[i];
+      tokenizer_data_size = static_cast<size_t>(memory_sizes[i]);
+    } else if (memory[i] != nullptr && memory_sizes[i] > 0) {
+      // First (or matching) non-tokenizer asset is the model.
+      model_data = memory[i];
+      model_data_size = static_cast<size_t>(memory_sizes[i]);
+    }
+  }
+  if (model_data == nullptr || model_data_size == 0) {
+    LOGF("%s", "No embedding model buffer supplied");
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+
+  IntentRecognizer *recognizer = nullptr;
+  try {
+    IntentRecognizerOptions recognizer_options;
+    recognizer_options.model_arch =
+        static_cast<EmbeddingModelArch>(model_arch);
+    recognizer_options.model_variant = model_variant ? model_variant : "q4";
+    recognizer_options.model_data = model_data;
+    recognizer_options.model_data_size = model_data_size;
+    recognizer_options.tokenizer_data = tokenizer_data;
+    recognizer_options.tokenizer_data_size = tokenizer_data_size;
+    recognizer = new IntentRecognizer(recognizer_options);
+  } catch (const std::exception &e) {
+    delete recognizer;
+    LOGF("Failed to create intent recognizer from memory: %s", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+  return allocate_intent_recognizer_handle(recognizer);
+}
+
 void moonshine_free_intent_recognizer(int32_t intent_recognizer_handle) {
   if (log_api_calls) {
     LOGF("moonshine_free_intent_recognizer(handle=%d)",

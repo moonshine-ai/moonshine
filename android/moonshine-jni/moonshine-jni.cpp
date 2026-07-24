@@ -317,6 +317,12 @@ static std::unordered_map<int32_t, std::vector<std::vector<uint8_t>>>
 static std::mutex g_g2p_memory_backing_mutex;
 static std::unordered_map<int32_t, std::vector<std::vector<uint8_t>>>
     g_g2p_memory_backing;
+// The in-memory transcriber loader references model bytes directly (ONNX
+// Runtime does not copy them), so we keep a per-handle copy of the buffers
+// alive until the transcriber is freed.
+static std::mutex g_transcriber_memory_backing_mutex;
+static std::unordered_map<int32_t, std::vector<std::vector<uint8_t>>>
+    g_transcriber_memory_backing;
 
 extern "C" JNIEXPORT jint JNICALL
 Java_ai_moonshine_voice_JNI_moonshineGetVersion(JNIEnv * /* env */,
@@ -381,50 +387,132 @@ Java_ai_moonshine_voice_JNI_moonshineLoadTranscriberFromFiles(
   }
 }
 
+// Copies a jbyteArray into `backing` and records its canonical `key`, pushing
+// the resulting {name, data, size} view into the parallel C-API arrays. A null
+// or empty array is skipped. Returns false only on an unexpected JNI failure.
+static void append_memory_file(JNIEnv *env, jbyteArray jbuf, const char *key,
+                               std::vector<std::string> *filename_storage,
+                               std::vector<const char *> *c_filenames,
+                               std::vector<std::vector<uint8_t>> *backing,
+                               std::vector<const uint8_t *> *c_mem,
+                               std::vector<uint64_t> *c_sizes) {
+  if (jbuf == nullptr) {
+    return;
+  }
+  const jsize len = env->GetArrayLength(jbuf);
+  if (len <= 0) {
+    return;
+  }
+  std::vector<uint8_t> copy(static_cast<size_t>(len));
+  env->GetByteArrayRegion(jbuf, 0, len, reinterpret_cast<jbyte *>(copy.data()));
+  filename_storage->emplace_back(key);
+  backing->push_back(std::move(copy));
+  c_filenames->push_back(filename_storage->back().c_str());
+  c_mem->push_back(backing->back().data());
+  c_sizes->push_back(static_cast<uint64_t>(backing->back().size()));
+}
+
+// Shared tail for both in-memory transcriber loaders: calls the keyed C API and,
+// on success, stashes `backing` so the referenced bytes outlive this call.
+static jint finish_transcriber_from_memory(
+    std::vector<const char *> &c_filenames, std::vector<const uint8_t *> &c_mem,
+    std::vector<uint64_t> &c_sizes, jint model_arch,
+    const std::vector<moonshine_option_t> &copts,
+    std::vector<std::vector<uint8_t>> backing) {
+  const int32_t handle = moonshine_load_transcriber_from_memory_files(
+      c_filenames.data(), c_mem.data(), c_sizes.data(),
+      static_cast<uint64_t>(c_filenames.size()), model_arch, copts.data(),
+      copts.size(), MOONSHINE_HEADER_VERSION);
+  if (handle >= 0 && !backing.empty()) {
+    std::lock_guard<std::mutex> lock(g_transcriber_memory_backing_mutex);
+    g_transcriber_memory_backing[handle] = std::move(backing);
+  }
+  return handle;
+}
+
 extern "C" JNIEXPORT int JNICALL
 Java_ai_moonshine_voice_JNI_moonshineLoadTranscriberFromMemory(
     JNIEnv *env, jobject /* this */, jbyteArray encoder_model_data,
     jbyteArray decoder_model_data, jbyteArray tokenizer_data,
     jbyteArray spelling_model_data, jint model_arch, jobjectArray joptions) {
   try {
-    jclass optionClass = get_class(env, "ai/moonshine/voice/TranscriberOption");
-    jfieldID nameField =
-        get_field(env, optionClass, "name", "Ljava/lang/String;");
-    jfieldID valueField =
-        get_field(env, optionClass, "value", "Ljava/lang/String;");
-    std::vector<moonshine_option_t> coptions;
-    if (joptions != nullptr) {
-      for (int i = 0; i < env->GetArrayLength(joptions); i++) {
-        jobject joption = env->GetObjectArrayElement(joptions, i);
-        jstring jname = (jstring)env->GetObjectField(joption, nameField);
-        jstring jvalue = (jstring)env->GetObjectField(joption, valueField);
-        coptions.push_back({env->GetStringUTFChars(jname, nullptr),
-                            env->GetStringUTFChars(jvalue, nullptr)});
-      }
+    std::vector<moonshine_option_t> copts;
+    std::vector<std::pair<jstring, jstring>> jhold;
+    if (!fill_moonshine_options(env, joptions, &copts, &jhold)) {
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
     }
-    const uint8_t *encoder_model_data_ptr =
-        (uint8_t *)(env->GetByteArrayElements(encoder_model_data, nullptr));
-    size_t encoder_model_data_size = env->GetArrayLength(encoder_model_data);
-    const uint8_t *decoder_model_data_ptr =
-        (uint8_t *)(env->GetByteArrayElements(decoder_model_data, nullptr));
-    size_t decoder_model_data_size = env->GetArrayLength(decoder_model_data);
-    const uint8_t *tokenizer_data_ptr =
-        (uint8_t *)(env->GetByteArrayElements(tokenizer_data, nullptr));
-    size_t tokenizer_data_size = env->GetArrayLength(tokenizer_data);
-    const uint8_t *spelling_model_data_ptr = nullptr;
-    size_t spelling_model_data_size = 0;
-    if (spelling_model_data != nullptr) {
-      spelling_model_data_ptr =
-          (uint8_t *)(env->GetByteArrayElements(spelling_model_data, nullptr));
-      spelling_model_data_size = env->GetArrayLength(spelling_model_data);
-    }
-    return moonshine_load_transcriber_from_memory(
-        encoder_model_data_ptr, encoder_model_data_size, decoder_model_data_ptr,
-        decoder_model_data_size, tokenizer_data_ptr, tokenizer_data_size,
-        spelling_model_data_ptr, spelling_model_data_size, model_arch,
-        coptions.data(), coptions.size(), MOONSHINE_HEADER_VERSION);
+    // Map the classic (encoder, decoder, tokenizer[, spelling]) buffers onto
+    // their canonical filenames and defer to the keyed memory-files loader, so
+    // this path shares the streaming-capable code in the C core.
+    std::vector<std::string> filename_storage;
+    std::vector<const char *> c_filenames;
+    std::vector<std::vector<uint8_t>> backing;
+    std::vector<const uint8_t *> c_mem;
+    std::vector<uint64_t> c_sizes;
+    append_memory_file(env, encoder_model_data, "encoder_model.ort",
+                       &filename_storage, &c_filenames, &backing, &c_mem,
+                       &c_sizes);
+    append_memory_file(env, decoder_model_data, "decoder_model_merged.ort",
+                       &filename_storage, &c_filenames, &backing, &c_mem,
+                       &c_sizes);
+    append_memory_file(env, tokenizer_data, "tokenizer.bin", &filename_storage,
+                       &c_filenames, &backing, &c_mem, &c_sizes);
+    append_memory_file(env, spelling_model_data, "spelling_cnn.ort",
+                       &filename_storage, &c_filenames, &backing, &c_mem,
+                       &c_sizes);
+    const jint handle = finish_transcriber_from_memory(
+        c_filenames, c_mem, c_sizes, model_arch, copts, std::move(backing));
+    release_moonshine_options(env, copts, jhold);
+    return handle;
   } catch (const std::exception &e) {
     ALOGE("moonshineLoadTranscriberFromMemory: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+extern "C" JNIEXPORT int JNICALL
+Java_ai_moonshine_voice_JNI_moonshineLoadTranscriberFromMemoryFiles(
+    JNIEnv *env, jobject /* this */, jobjectArray jfilenames,
+    jobjectArray jmemory, jint model_arch, jobjectArray joptions) {
+  try {
+    std::vector<moonshine_option_t> copts;
+    std::vector<std::pair<jstring, jstring>> jhold;
+    if (!fill_moonshine_options(env, joptions, &copts, &jhold)) {
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
+    }
+    const jsize n = jfilenames != nullptr ? env->GetArrayLength(jfilenames) : 0;
+    if (n > 0 && (jmemory == nullptr || env->GetArrayLength(jmemory) != n)) {
+      release_moonshine_options(env, copts, jhold);
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
+    }
+    std::vector<std::string> filename_storage;
+    std::vector<const char *> c_filenames;
+    std::vector<std::vector<uint8_t>> backing;
+    std::vector<const uint8_t *> c_mem;
+    std::vector<uint64_t> c_sizes;
+    filename_storage.reserve(static_cast<size_t>(n));
+    c_filenames.reserve(static_cast<size_t>(n));
+    c_mem.reserve(static_cast<size_t>(n));
+    c_sizes.reserve(static_cast<size_t>(n));
+    for (jsize i = 0; i < n; i++) {
+      jstring jf = (jstring)env->GetObjectArrayElement(jfilenames, i);
+      if (jf == nullptr) {
+        release_moonshine_options(env, copts, jhold);
+        return MOONSHINE_ERROR_INVALID_ARGUMENT;
+      }
+      const char *u = env->GetStringUTFChars(jf, nullptr);
+      const std::string key(u);
+      env->ReleaseStringUTFChars(jf, u);
+      jbyteArray jbuf = (jbyteArray)env->GetObjectArrayElement(jmemory, i);
+      append_memory_file(env, jbuf, key.c_str(), &filename_storage,
+                         &c_filenames, &backing, &c_mem, &c_sizes);
+    }
+    const jint handle = finish_transcriber_from_memory(
+        c_filenames, c_mem, c_sizes, model_arch, copts, std::move(backing));
+    release_moonshine_options(env, copts, jhold);
+    return handle;
+  } catch (const std::exception &e) {
+    ALOGE("moonshineLoadTranscriberFromMemoryFiles: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
 }
@@ -435,6 +523,8 @@ Java_ai_moonshine_voice_JNI_moonshineFreeTranscriber(JNIEnv * /* env */,
                                                      jint transcriber_handle) {
   try {
     moonshine_free_transcriber(transcriber_handle);
+    std::lock_guard<std::mutex> lock(g_transcriber_memory_backing_mutex);
+    g_transcriber_memory_backing.erase(transcriber_handle);
   } catch (const std::exception &e) {
     ALOGE("moonshineFreeTranscriber: %s\n", e.what());
   }

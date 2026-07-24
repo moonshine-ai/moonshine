@@ -311,11 +311,13 @@ def get_embedding_model(
             f"Available variants: {model_info['variants']}"
         )
 
-    # Determine components based on variant
+    # Determine components based on variant. Each variant ships as a single
+    # all-in-one ``.ort`` file (weights embedded inline, no ``.onnx_data``
+    # sidecar); see scripts/export-embedding-model-ort.py.
     if variant == "fp32":
-        components = ["model.onnx", "tokenizer.bin", "model.onnx_data"]
+        components = ["model.ort", "tokenizer.bin"]
     else:
-        components = [f"model_{variant}.onnx", "tokenizer.bin", f"model_{variant}.onnx_data"]
+        components = [f"model_{variant}.ort", "tokenizer.bin"]
 
     # Download the model
     cache_dir = Path(cache_root).resolve() if cache_root is not None else get_cache_dir()

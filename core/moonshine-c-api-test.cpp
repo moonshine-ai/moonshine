@@ -1406,8 +1406,9 @@ TEST_CASE("moonshine-stt-intent-dependency-api") {
     const std::string json(out);
     CHECK(json.find("\"https://download.moonshine.ai/model/"
                     "embeddinggemma-300m\"") != std::string::npos);
-    CHECK(json.find("\"model_q4.onnx\"") != std::string::npos);
-    CHECK(json.find("\"model_q4.onnx_data\"") != std::string::npos);
+    // The model now ships as a single all-in-one .ort (no .onnx_data sidecar).
+    CHECK(json.find("\"model_q4.ort\"") != std::string::npos);
+    CHECK(json.find(".onnx_data") == std::string::npos);
     CHECK(json.find("\"tokenizer.bin\"") != std::string::npos);
     std::free(out);
   }
@@ -1417,13 +1418,13 @@ TEST_CASE("moonshine-stt-intent-dependency-api") {
     REQUIRE(moonshine_get_intent_dependencies(nullptr, nullptr, 0, &out) ==
             MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
-    CHECK(std::string(out).find("\"model_q4.onnx\"") != std::string::npos);
+    CHECK(std::string(out).find("\"model_q4.ort\"") != std::string::npos);
     std::free(out);
   }
 
   SUBCASE("intent-q8-maps-to-model-quantized") {
-    // The C++ embedding loader resolves the q8 variant to model_quantized.onnx
-    // (model_q8.onnx is not published), so the manifest must match.
+    // The C++ embedding loader resolves the q8 variant to model_quantized
+    // (model_q8 is not published), so the manifest must match.
     const moonshine_option_t opts[] = {
         {"variant", "q8"},
     };
@@ -1432,13 +1433,12 @@ TEST_CASE("moonshine-stt-intent-dependency-api") {
                                               &out) == MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
-    CHECK(json.find("\"model_quantized.onnx\"") != std::string::npos);
-    CHECK(json.find("\"model_quantized.onnx_data\"") != std::string::npos);
-    CHECK(json.find("\"model_q8.onnx\"") == std::string::npos);
+    CHECK(json.find("\"model_quantized.ort\"") != std::string::npos);
+    CHECK(json.find("\"model_q8.ort\"") == std::string::npos);
     std::free(out);
   }
 
-  SUBCASE("intent-fp32-uses-bare-model-onnx") {
+  SUBCASE("intent-fp32-uses-bare-model-ort") {
     const moonshine_option_t opts[] = {
         {"variant", "fp32"},
     };
@@ -1447,8 +1447,7 @@ TEST_CASE("moonshine-stt-intent-dependency-api") {
                                               &out) == MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
-    CHECK(json.find("\"model.onnx\"") != std::string::npos);
-    CHECK(json.find("\"model.onnx_data\"") != std::string::npos);
+    CHECK(json.find("\"model.ort\"") != std::string::npos);
     std::free(out);
   }
 

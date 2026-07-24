@@ -10,16 +10,19 @@ import { importApi, loadRawModule } from './helpers.mjs';
 
 const mod = await loadRawModule();
 
-test('intent dependency manifest points at the embedding model', () => {
+test('intent dependency manifest points at the all-in-one embedding model', () => {
   const manifest = JSON.parse(mod.intentDependencies('', ''));
   assert.ok(Array.isArray(manifest.groups) && manifest.groups.length > 0);
   const group = manifest.groups[0];
   assert.match(group.base_url, /embeddinggemma/);
   assert.ok(Array.isArray(group.files) && group.files.includes('tokenizer.bin'));
+  // The model now ships as a single self-contained `.ort` (no `.onnx_data`).
+  assert.ok(group.files.some((f) => f.endsWith('.ort')));
+  assert.ok(!group.files.some((f) => f.endsWith('.onnx_data')));
 });
 
-test('constructing from a non-existent model path throws', () => {
-  assert.throws(() => new mod.IntentRecognizer('/no-such-intent-model', 0, ''));
+test('constructing with no model buffer throws', () => {
+  assert.throws(() => new mod.IntentRecognizer([], [], 0, 'q4'));
 });
 
 const downloadTests = process.env.MOONSHINE_DOWNLOAD_TESTS === '1';

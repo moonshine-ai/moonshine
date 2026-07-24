@@ -49,6 +49,18 @@ public class JNI {
     public static native int moonshineLoadTranscriberFromMemory(byte[] encoder_model_data, byte[] decoder_model_data,
             byte[] tokenizer_data, byte[] spelling_model_data, int model_arch, Object[] options);
 
+    /**
+     * Loads a transcriber from in-memory model buffers keyed by their canonical
+     * filename (matching {@link #moonshineGetSttDependencies}). This is the
+     * general in-memory loader: it supports every architecture (including
+     * streaming), the word-timestamp decoders, and the spelling model
+     * ({@code spelling_cnn.ort}). {@code filenames} and {@code memory} must be
+     * the same length; each buffer is copied and kept alive for the
+     * transcriber's lifetime.
+     */
+    public static native int moonshineLoadTranscriberFromMemoryFiles(String[] filenames, byte[][] memory,
+            int model_arch, Object[] options);
+
     public static native void moonshineFreeTranscriber(int transcriber_handle);
 
     public static native Transcript moonshineTranscribeWithoutStreaming(int transcriber_handle,

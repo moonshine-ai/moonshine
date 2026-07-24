@@ -5,15 +5,13 @@
  */
 /** Raw embind class/function surface exported by moonshine.mjs. */
 export interface MoonshineModule {
-    Transcriber: new (encoder: Uint8Array, decoder: Uint8Array, tokenizer: Uint8Array, spelling: Uint8Array | undefined, modelArch: number) => RawTranscriber;
+    Transcriber: new (keys: string[], buffers: Uint8Array[], modelArch: number) => RawTranscriber;
     Stream: new (transcriber: RawTranscriber, flags: number) => RawStream;
-    IntentRecognizer: new (modelPath: string, modelArch: number, modelVariant: string) => RawIntentRecognizer;
+    IntentRecognizer: new (keys: string[], buffers: Uint8Array[], modelArch: number, modelVariant: string) => RawIntentRecognizer;
     TextToSpeech?: new (language: string, keys: string[], buffers: Uint8Array[]) => RawTextToSpeech;
     GraphemeToPhonemizer?: new (language: string, keys: string[], buffers: Uint8Array[]) => RawGraphemeToPhonemizer;
-    /** Emscripten virtual filesystem (exported via -sEXPORTED_RUNTIME_METHODS). */
-    FS?: EmscriptenFS;
     version(): number;
-    sttDependencies(language: string, modelArch: string): string;
+    sttDependencies(language: string, modelArch: string, includeSpelling: boolean): string;
     intentDependencies(modelName: string, variant: string): string;
     ttsDependencies?(languages: string, voice: string): string;
     ttsVoices?(languages: string): string;
@@ -47,15 +45,6 @@ export interface RawTextToSpeech {
 export interface RawGraphemeToPhonemizer {
     textToPhonemes(text: string): string;
     close(): void;
-}
-/** Minimal subset of the Emscripten FS API we use to stage model files. */
-export interface EmscriptenFS {
-    mkdir(path: string): void;
-    writeFile(path: string, data: Uint8Array): void;
-    unlink(path: string): void;
-    analyzePath(path: string): {
-        exists: boolean;
-    };
 }
 /** Options for {@link loadMoonshineModule}. */
 export interface LoadModuleOptions {

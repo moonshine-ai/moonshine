@@ -21,7 +21,8 @@ enum class EmbeddingModelArch {
  * Options for configuring an IntentRecognizer.
  */
 struct IntentRecognizerOptions {
-  // Path to the embedding model directory
+  // Path to the embedding model directory (used when the in-memory buffers
+  // below are not supplied).
   std::string model_path;
 
   // Embedding model architecture
@@ -29,6 +30,17 @@ struct IntentRecognizerOptions {
 
   // Model variant: "fp32", "fp16", "q8", "q4", or "q4f16"
   std::string model_variant = "q4";
+
+  // Optional in-memory model source. When ``model_data`` is non-null the
+  // recognizer loads the embedding model from these buffers instead of
+  // ``model_path``. ``model_data`` must be a self-contained model (an
+  // all-in-one ``.ort``); ``tokenizer_data`` is the ``tokenizer.bin`` bytes.
+  // The buffers only need to remain valid for the duration of construction -
+  // both the ORT session and the tokenizer copy the bytes they need.
+  const uint8_t *model_data = nullptr;
+  size_t model_data_size = 0;
+  const uint8_t *tokenizer_data = nullptr;
+  size_t tokenizer_data_size = 0;
 };
 
 /**

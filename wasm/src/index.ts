@@ -61,7 +61,9 @@ export {
   Transcriber,
   type TranscriberLoadOptions,
   type TranscriberFromBytes,
+  type TranscriberFromFiles,
   type TranscriberFromCatalog,
+  type TranscriberFromUrlsOptions,
 } from './transcriber.js';
 export { Stream } from './stream.js';
 export {
@@ -85,6 +87,7 @@ export {
 export {
   IntentRecognizer,
   type IntentRecognizerOptions,
+  type IntentFromUrlsOptions,
   type IntentPhrase,
 } from './intent-recognizer.js';
 export {

@@ -12,11 +12,11 @@ export { ModelArch, EmbeddingModelArch, TranscribeFlags, modelArchToString, stri
 export type { WordTiming, SpeakerSpan, TranscriptLine, Transcript, IntentMatch, TtsSynthesisResult, } from './types.js';
 export type { TranscriptEvent, TranscriptEventListener, LineStarted, LineUpdated, LineTextChanged, LineSpeakersChanged, LineCompleted, TranscriptErrorEvent, } from './events.js';
 export { AssetDownloader, type AssetDownloaderOptions, type DownloadedAsset, } from './asset-downloader.js';
-export { Transcriber, type TranscriberLoadOptions, type TranscriberFromBytes, type TranscriberFromCatalog, } from './transcriber.js';
+export { Transcriber, type TranscriberLoadOptions, type TranscriberFromBytes, type TranscriberFromFiles, type TranscriberFromCatalog, type TranscriberFromUrlsOptions, } from './transcriber.js';
 export { Stream } from './stream.js';
 export { MicrophoneTranscriber, type MicrophoneTranscriberOptions, } from './microphone-transcriber.js';
 export { TextToSpeech, type TextToSpeechOptions, type TtsFromAssets, type TtsFromCatalog, } from './text-to-speech.js';
 export { GraphemeToPhonemizer, type GraphemeToPhonemizerOptions, } from './grapheme-to-phonemizer.js';
-export { IntentRecognizer, type IntentRecognizerOptions, type IntentPhrase, } from './intent-recognizer.js';
+export { IntentRecognizer, type IntentRecognizerOptions, type IntentFromUrlsOptions, type IntentPhrase, } from './intent-recognizer.js';
 export { DialogFlow, Dialog, DialogCancelled, DialogRestart, InputMode, spellOut, type Prompt, type Say, type Ask, type Confirm, type Choose, type FlowFn, type GlobalHandler, type DialogFlowOptions, } from './dialog-flow.js';
 //# sourceMappingURL=index.d.ts.map
