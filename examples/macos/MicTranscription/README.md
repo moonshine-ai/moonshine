@@ -80,7 +80,10 @@ The application will:
 
 ## Notes
 
-- The application expects model files to be in `test-assets/{model-name}/` directory
+- By default the **Medium Streaming English** model is downloaded on first run
+  into `~/Library/Caches/moonshine-models/medium-streaming-en/` and reused on
+  later runs. Pass `--model-path=/path/to/model --model-arch=<int>` to load your
+  own model files instead.
 - WAV files must be PCM format (16-bit, 24-bit, or 32-bit)
 - Multi-channel audio is automatically mixed down to mono
 

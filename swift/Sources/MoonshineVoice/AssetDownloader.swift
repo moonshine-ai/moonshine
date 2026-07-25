@@ -6,8 +6,12 @@ import Foundation
 public enum ModelSpec: Sendable {
     /// Speech-to-text transcription model. `modelArch` selects the architecture (nil = the default
     /// for the language); `includeSpelling` also fetches the alphanumeric spelling model when one
-    /// is published for the language.
-    case stt(language: String, modelArch: ModelArch? = nil, includeSpelling: Bool = false)
+    /// is published for the language. `includeWordTimestamps` also fetches the optional attention
+    /// decoder used by the `word_timestamps` transcriber option (roughly doubling the download);
+    /// leave it false unless you need word-level timestamps.
+    case stt(
+        language: String, modelArch: ModelArch? = nil, includeSpelling: Bool = false,
+        includeWordTimestamps: Bool = false)
     /// Text-to-speech voice. `voice` is a prefixed id (e.g. `kokoro_af_heart`,
     /// `piper_en_US-lessac-medium`); nil uses the language default.
     case tts(language: String, voice: String? = nil)
@@ -135,13 +139,16 @@ public final class AssetDownloader: @unchecked Sendable {
 
     private func resolveFiles(root: URL, spec: ModelSpec) throws -> [ResolvedFile] {
         switch spec {
-        case .stt(let language, let modelArch, let includeSpelling):
+        case .stt(let language, let modelArch, let includeSpelling, let includeWordTimestamps):
             var options: [TranscriberOption] = []
             if let modelArch = modelArch {
                 options.append(TranscriberOption(name: "model_arch", value: String(modelArch.rawValue)))
             }
             if includeSpelling {
                 options.append(TranscriberOption(name: "include_spelling", value: "true"))
+            }
+            if includeWordTimestamps {
+                options.append(TranscriberOption(name: "word_timestamps", value: "true"))
             }
             let json = try api.getSttDependencies(language: language, options: options)
             return try filesFromGroupManifest(json)

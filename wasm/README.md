@@ -22,7 +22,7 @@ import { MicrophoneTranscriber, ModelArch } from '@moonshine-ai/moonshine-wasm';
 
 const mic = await MicrophoneTranscriber.load({
   language: 'en',
-  modelArch: ModelArch.BaseStreaming,
+  modelArch: ModelArch.MediumStreaming,
   listeners: [
     {
       onLineTextChanged: (e) => console.log('…', e.line.text),

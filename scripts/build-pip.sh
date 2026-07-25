@@ -6,7 +6,12 @@ PYTHON_DIR=${REPO_ROOT_DIR}/python
 
 CORE_DIR=${REPO_ROOT_DIR}/core
 CORE_BUILD_DIR=${CORE_DIR}/build
-rm -rf ${CORE_BUILD_DIR}
+# Clean every fixed build dir under core/, not just core/build. moonshine-tts and
+# other add_subdirectory targets build into shared, fixed directories (e.g.
+# core/moonshine-tts/build; see core/CMakeLists.txt) that persist across builds.
+# If a previous wasm or iOS build left non-host objects there, this host build
+# would fail to link. Mirrors scripts/build-swift.sh.
+find ${CORE_DIR} -type d -name build -prune -exec rm -rf {} +
 mkdir -p ${CORE_BUILD_DIR}
 # Align with bundled ONNX Runtime / dylibs so wheel metadata matches binary minimum macOS (silences
 # delocate/wheel warnings about MACOSX_DEPLOYMENT_TARGET vs interpreter).

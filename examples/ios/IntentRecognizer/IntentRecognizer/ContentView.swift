@@ -44,7 +44,7 @@ struct ContentView: View {
             .navigationTitle("Intent Recognizer")
             .navigationBarTitleDisplayMode(.inline)
             .task {
-                session.bootstrapIfNeeded()
+                await session.bootstrapIfNeeded()
             }
             .onChange(of: scenePhase) { phase in
                 if phase == .background {

@@ -23,6 +23,10 @@
       }
       .user { color: #2a7; }
       .assistant { color: #4af; }
+      hr { border: none; border-top: 1px solid rgba(128,128,128,0.3); margin: 1.5rem 0; }
+      .row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+      #utterance { flex: 1; min-width: 12rem; font: inherit; padding: 0.5rem;
+        border-radius: 0.5rem; border: 1px solid rgba(128,128,128,0.4); }
     </style>
   </head>
   <body>
@@ -33,6 +37,14 @@
       at any time.
     </p>
     <button id="toggle">Start</button>
+
+    <hr />
+    <p>Or type what you'd say (drives the same flow without a microphone):</p>
+    <div class="row">
+      <input id="utterance" type="text" placeholder="e.g. set up wifi" />
+      <button id="send">Send</button>
+    </div>
+
     <p id="status">Idle.</p>
     <div id="log" aria-live="polite"></div>
 
@@ -40,8 +52,15 @@
       // Load the locally-built binding when the page is opened with ?local=1
       // (e.g. via examples/web/serve.mjs); otherwise use the published copy
       // from the jsDelivr CDN.
-      const useLocal =
-        new URLSearchParams(location.search).get('local') === '1';
+      const params = new URLSearchParams(location.search);
+      const useLocal = params.get('local') === '1';
+      // With &assets=local, models are fetched from the repo (served by
+      // serve.mjs) instead of the CDN, so the page runs fully offline. With
+      // &nomic=1 we build the dialog runner but skip the microphone, so the
+      // flow can be driven by the text box below. The browser integration test
+      // uses both.
+      const useLocalAssets = params.get('assets') === 'local';
+      const noMic = params.get('nomic') === '1';
       const moduleUrl = useLocal
         ? '/wasm/dist/index.js'
         : 'https://cdn.jsdelivr.net/npm/@moonshine-ai/moonshine-wasm/dist/index.js';
@@ -56,8 +75,12 @@
       const toggle = document.getElementById('toggle');
       const statusEl = document.getElementById('status');
       const logEl = document.getElementById('log');
+      const utteranceEl = document.getElementById('utterance');
+      const sendBtn = document.getElementById('send');
 
       let mic = null;
+      let runner = null;
+      let audioContext = null;
       let running = false;
 
       function log(role, text) {
@@ -82,47 +105,72 @@
         }
       }
 
-      async function start() {
+      function onProgress(loaded, total, file) {
+        const pct = total ? ` ${Math.round((100 * loaded) / total)}%` : '';
+        statusEl.textContent = `Downloading ${file}${pct}…`;
+      }
+
+      async function loadTts() {
+        return useLocalAssets
+          ? TextToSpeech.load({ language: 'en_us', assetBaseUrl: '/tts-data' })
+          : TextToSpeech.load({ language: 'en', onProgress });
+      }
+
+      async function loadIntent() {
+        if (useLocalAssets) {
+          const base = '/test-assets/embeddinggemma-300m-ONNX';
+          return IntentRecognizer.loadFromUrls(
+            {
+              'model_q4.ort': `${base}/model_q4.ort`,
+              'tokenizer.bin': `${base}/tokenizer.bin`,
+            },
+            { variant: 'q4' },
+          );
+        }
+        return IntentRecognizer.load({ onProgress });
+      }
+
+      /** Builds the dialog runner (and, unless disabled, the microphone). */
+      async function start({ useMic = true } = {}) {
         toggle.disabled = true;
         statusEl.textContent = 'Loading models (first run downloads them)…';
         try {
-          const audioContext = new AudioContext();
-          const onProgress = (loaded, total, file) => {
-            const pct = total ? ` ${Math.round((100 * loaded) / total)}%` : '';
-            statusEl.textContent = `Downloading ${file}${pct}…`;
-          };
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          const [tts, intent] = await Promise.all([loadTts(), loadIntent()]);
 
-          const [tts, intent] = await Promise.all([
-            TextToSpeech.load({ language: 'en', onProgress }),
-            IntentRecognizer.load({ onProgress }),
-          ]);
-
-          const runner = new DialogFlow({
+          runner = new DialogFlow({
             tts,
             intentRecognizer: intent,
             audioContext,
-            speakFn: async (text) => {
+            // Log the assistant's line and synthesize it. We don't await
+            // playback so the flow (and tests) never block on audio output.
+            speakFn: (text) => {
               log('assistant', text);
-              await tts.speak(text, audioContext);
+              try { tts.say(text); } catch { /* synth is best-effort here */ }
             },
           });
           runner.registerFlow('set up wifi', wifiSetup);
           runner.registerGlobal('cancel', (d) => d.cancel());
           runner.registerGlobal('start over', (d) => d.restart());
 
-          mic = await MicrophoneTranscriber.load({
-            language: 'en',
-            modelArch: ModelArch.BaseStreaming,
-            listeners: [
-              { onLineCompleted: (e) => log('user', e.line.text) },
-              runner,
-            ],
-            onProgress,
-          });
-          await mic.start();
+          if (useMic) {
+            mic = await MicrophoneTranscriber.load({
+              language: 'en',
+              modelArch: ModelArch.MediumStreaming,
+              listeners: [
+                { onLineCompleted: (e) => log('user', e.line.text) },
+                runner,
+              ],
+              onProgress,
+            });
+            await mic.start();
+            statusEl.textContent = 'Listening… say “set up wifi”.';
+            toggle.textContent = 'Stop';
+          } else {
+            statusEl.textContent = 'Ready — type “set up wifi” below.';
+          }
           running = true;
-          statusEl.textContent = 'Listening… say “set up wifi”.';
-          toggle.textContent = 'Stop';
+          window.__dialogReady = true;
         } catch (err) {
           statusEl.textContent = 'Failed to start: ' + err.message;
         } finally {
@@ -136,12 +184,30 @@
         mic?.close();
         mic = null;
         running = false;
+        window.__dialogReady = false;
         statusEl.textContent = 'Stopped.';
         toggle.textContent = 'Start';
         toggle.disabled = false;
       }
 
+      // Feed a typed utterance to the runner exactly like a completed STT line.
+      function sendUtterance() {
+        const text = utteranceEl.value.trim();
+        if (!text || !runner) return;
+        log('user', text);
+        runner.onLineCompleted({ line: { id: Date.now(), text } });
+        utteranceEl.value = '';
+      }
+
       toggle.addEventListener('click', () => (running ? stop() : start()));
+      sendBtn.addEventListener('click', sendUtterance);
+      utteranceEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') sendUtterance();
+      });
+
+      // In no-mic mode, build the runner immediately so the text box works
+      // without a user gesture (used by the browser integration test).
+      if (noMic) start({ useMic: false });
     </script>
   </body>
 </html>

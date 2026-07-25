@@ -57,7 +57,6 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = IRE10F0092F0762A200CE654A /* Build configuration list for PBXNativeTarget "IntentRecognizer" */;
 			buildPhases = (
-				IRE10F00A2F0762A100CE654A /* Copy Moonshine models */,
 				IRE10F00B2F0762A100CE654A /* Sources */,
 				IRE10F0052F0762A100CE654A /* Frameworks */,
 				IRE10F00C2F0762A100CE654A /* Resources */,
@@ -123,28 +122,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
-
-/* Begin PBXShellScriptBuildPhase section */
-		IRE10F00A2F0762A100CE654A /* Copy Moonshine models */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Copy Moonshine models";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/bash;
-			shellScript = "\"${SRCROOT}/scripts/copy-moonshine-models.sh\"\n";
-		};
-/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		IRE10F00B2F0762A100CE654A /* Sources */ = {

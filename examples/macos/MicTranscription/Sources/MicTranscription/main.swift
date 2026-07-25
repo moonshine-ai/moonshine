@@ -1,6 +1,32 @@
 import Foundation
 import MoonshineVoice
 
+/// Downloads the Medium Streaming English model on first run into the user
+/// caches directory and returns the directory to load it from. Subsequent runs
+/// reuse the cached files (``AssetDownloader`` skips ones already present).
+func downloadDefaultModel() async throws -> String {
+    let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+    let root = caches.appendingPathComponent(
+        "moonshine-models/medium-streaming-en", isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+
+    let downloader = AssetDownloader()
+    let spec = ModelSpec.stt(language: "en", modelArch: .mediumStreaming)
+    if !downloader.isModelPresent(root: root, spec: spec) {
+        fputs("Downloading Medium Streaming English model (first run only)…\n", stderr)
+    }
+    _ = try await downloader.ensureModelPresent(root: root, spec: spec) { progress in
+        let pct =
+            progress.bytesTotal > 0
+            ? Int(progress.bytesDownloaded * 100 / progress.bytesTotal) : 0
+        fputs(
+            "\r  \(progress.relativePath) [\(progress.fileIndex)/\(progress.totalFiles)] \(pct)%      ",
+            stderr)
+    }
+    fputs("\n", stderr)
+    return root.path
+}
+
 // MARK: - Main
 
 func main() async {
@@ -21,18 +47,16 @@ func main() async {
     }
 
     if modelPath == nil || modelArch == nil {
-        guard let bundle = Transcriber.frameworkBundle else {
-            fputs("Error: Could not find moonshine framework bundle\n", stderr)
+        // Default to the Medium Streaming English model, downloaded on first run
+        // into the user caches directory (and reused thereafter). Override with
+        // --model-path=/path/to/model --model-arch=<int>.
+        do {
+            modelPath = try await downloadDefaultModel()
+            modelArch = .mediumStreaming
+        } catch {
+            fputs("Error: failed to download the default model: \(error)\n", stderr)
             exit(1)
         }
-
-        guard let resourcePath = bundle.resourcePath else {
-            fputs("Error: Could not find resource path in bundle\n", stderr)
-            exit(1)
-        }
-        let testAssetsPath = resourcePath.appending("/test-assets")
-        modelPath = testAssetsPath.appending("/tiny-en")
-        modelArch = .tiny
     }
 
     let micTranscriber = try! MicTranscriber(modelPath: modelPath!, modelArch: modelArch!)

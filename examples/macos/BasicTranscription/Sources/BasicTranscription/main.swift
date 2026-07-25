@@ -142,26 +142,55 @@ func parseArguments() -> Arguments {
     return args
 }
 
+/// Downloads a Moonshine STT model on first run into the user caches directory
+/// and returns the directory to load it from. Subsequent runs reuse the cached
+/// files (``AssetDownloader`` skips ones already present).
+func downloadModel(language: String, modelArch: ModelArch) async throws -> String {
+    let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+    let root = caches.appendingPathComponent(
+        "moonshine-models/\(language)-\(modelArch.rawValue)", isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+
+    let downloader = AssetDownloader()
+    let spec = ModelSpec.stt(language: language, modelArch: modelArch)
+    if !downloader.isModelPresent(root: root, spec: spec) {
+        fputs("Downloading model (first run only)…\n", stderr)
+    }
+    _ = try await downloader.ensureModelPresent(root: root, spec: spec) { progress in
+        let pct =
+            progress.bytesTotal > 0
+            ? Int(progress.bytesDownloaded * 100 / progress.bytesTotal) : 0
+        fputs(
+            "\r  \(progress.relativePath) [\(progress.fileIndex)/\(progress.totalFiles)] \(pct)%      ",
+            stderr)
+    }
+    fputs("\n", stderr)
+    return root.path
+}
+
 // MARK: - Main
 
-func main() {
+func main() async {
     var args = parseArguments()
 
-    guard let bundle = Transcriber.frameworkBundle else {
-        fputs("Error: Could not find moonshine framework bundle\n", stderr)
+    // Default to the Medium Streaming English model (downloaded on first run);
+    // --model-arch overrides the architecture.
+    let modelArch: ModelArch = args.modelArch ?? .mediumStreaming
+    let modelPath: String
+    do {
+        modelPath = try await downloadModel(language: args.language, modelArch: modelArch)
+    } catch {
+        fputs("Error: failed to download the model: \(error)\n", stderr)
         exit(1)
     }
-
-    guard let resourcePath = bundle.resourcePath else {
-        fputs("Error: Could not find resource path in bundle\n", stderr)
-        exit(1)
-    }
-
-    let testAssetsPath = resourcePath.appending("/test-assets")
-    let modelPath = testAssetsPath.appending("/tiny-en")
-    let modelArch: ModelArch = .tiny
 
     if args.inputFiles.isEmpty {
+        guard let bundle = Transcriber.frameworkBundle,
+            let resourcePath = bundle.resourcePath
+        else {
+            fputs("Error: Could not find moonshine framework bundle\n", stderr)
+            exit(1)
+        }
         let testAssetsPath = resourcePath.appending("/test-assets")
         args.inputFiles = [testAssetsPath.appending("/two_cities.wav")]
     }
@@ -213,4 +242,4 @@ func main() {
     }
 }
 
-main()
+await main()
