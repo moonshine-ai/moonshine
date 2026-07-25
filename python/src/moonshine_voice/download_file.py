@@ -1,5 +1,7 @@
+import base64
 import hashlib
 import os
+import struct
 from pathlib import Path
 from typing import Optional
 
@@ -8,6 +10,14 @@ from tqdm import tqdm
 from filelock import FileLock
 from platformdirs import user_cache_dir
 import platform
+
+try:  # Fast C implementation (small wheel, standard for GCS checksums).
+    import google_crc32c  # type: ignore
+
+    _HAVE_CRC32C = True
+except Exception:  # pragma: no cover - optional acceleration only
+    google_crc32c = None  # type: ignore
+    _HAVE_CRC32C = False
 
 
 def get_cache_dir(app_name: str = "moonshine_voice") -> Path:
@@ -25,6 +35,43 @@ def hash_file(path: Path, algorithm: str = "sha256") -> str:
     return h.hexdigest()
 
 
+def crc32c_file(path: Path) -> Optional[str]:
+    """Return the base64 CRC32C of ``path`` (matching Google Cloud Storage's
+    ``x-goog-hash: crc32c=...``), or ``None`` when the ``google-crc32c``
+    acceleration package is unavailable (verification is then skipped)."""
+    if not _HAVE_CRC32C:
+        return None
+    checksum = google_crc32c.Checksum()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            checksum.update(chunk)
+    return base64.b64encode(struct.pack(">I", int.from_bytes(checksum.digest(), "big"))).decode(
+        "ascii"
+    )
+
+
+def _file_matches(
+    path: Path,
+    expected_sha256: Optional[str],
+    expected_size: Optional[int],
+    expected_crc32c: Optional[str],
+) -> bool:
+    """True when ``path`` already satisfies every supplied integrity check."""
+    if expected_size is not None and expected_size >= 0:
+        if path.stat().st_size != expected_size:
+            return False
+    if expected_sha256 is not None:
+        if hash_file(path) != expected_sha256:
+            return False
+    if expected_crc32c:
+        actual = crc32c_file(path)
+        # Only fails when we could compute a digest and it disagreed; if the
+        # accelerator is missing (actual is None) we don't force a re-download.
+        if actual is not None and actual != expected_crc32c:
+            return False
+    return True
+
+
 def download_file(
     url: str,
     dest: Path,
@@ -32,6 +79,8 @@ def download_file(
     resume: bool = True,
     show_progress: bool = True,
     timeout: int = 30,
+    expected_size: Optional[int] = None,
+    expected_crc32c: Optional[str] = None,
 ) -> Path:
     """
     Download a file with progress bar, resume support, and integrity checking.
@@ -43,13 +92,17 @@ def download_file(
         resume: Whether to attempt resuming partial downloads
         show_progress: Whether to show a progress bar
         timeout: Connection timeout in seconds
+        expected_size: Optional expected size in bytes (from the model catalog)
+        expected_crc32c: Optional expected base64 CRC32C digest (from the model
+            catalog, matching Google Cloud Storage). Verified only when the
+            ``google-crc32c`` package is installed.
 
     Returns:
         Path to the downloaded file
 
     Raises:
         requests.HTTPError: If download fails
-        ValueError: If SHA256 verification fails
+        ValueError: If any integrity check fails
     """
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -58,13 +111,14 @@ def download_file(
     lock_file = dest.with_suffix(dest.suffix + ".lock")
 
     with FileLock(lock_file):
-        # Check if already downloaded and valid
+        # Check if already downloaded and valid. For cached files we only verify
+        # the (cheap) size and any SHA256, deliberately skipping CRC32C so we
+        # don't rehash large multi-hundred-MB models on every load; CRC32C is
+        # fully verified on the fresh download below.
         if dest.exists():
-            if expected_sha256 is None:
+            if _file_matches(dest, expected_sha256, expected_size, None):
                 return dest
-            if hash_file(dest) == expected_sha256:
-                return dest
-            # Hash mismatch, re-download
+            # Integrity mismatch (or stale file), re-download.
             dest.unlink()
 
         # Check for partial download
@@ -136,6 +190,22 @@ def download_file(
                     f"SHA256 mismatch for {dest.name}: "
                     f"expected {expected_sha256}, got {actual_hash}"
                 )
+        if expected_size is not None and expected_size >= 0:
+            actual_size = temp_file.stat().st_size
+            if actual_size != expected_size:
+                temp_file.unlink()
+                raise ValueError(
+                    f"Size mismatch for {dest.name}: "
+                    f"expected {expected_size} bytes, got {actual_size}"
+                )
+        if expected_crc32c:
+            actual_crc = crc32c_file(temp_file)
+            if actual_crc is not None and actual_crc != expected_crc32c:
+                temp_file.unlink()
+                raise ValueError(
+                    f"CRC32C mismatch for {dest.name}: "
+                    f"expected {expected_crc32c}, got {actual_crc}"
+                )
 
         # Atomic rename
         temp_file.rename(dest)
@@ -151,6 +221,8 @@ def download_model(
     filename: str,
     expected_sha256: Optional[str] = None,
     app_name: str = "moonshine_voice",
+    expected_size: Optional[int] = None,
+    expected_crc32c: Optional[str] = None,
     **kwargs,
 ) -> Path:
     """
@@ -161,6 +233,8 @@ def download_model(
         filename: Name for the cached file
         expected_sha256: Optional SHA256 hash to verify
         app_name: Application name for cache directory
+        expected_size: Optional expected size in bytes (from the model catalog)
+        expected_crc32c: Optional expected base64 CRC32C digest (from the catalog)
         **kwargs: Additional arguments passed to download_file
 
     Returns:
@@ -168,7 +242,14 @@ def download_model(
     """
     cache_dir = get_cache_dir(app_name)
     dest = cache_dir / filename
-    return download_file(url, dest, expected_sha256=expected_sha256, **kwargs)
+    return download_file(
+        url,
+        dest,
+        expected_sha256=expected_sha256,
+        expected_size=expected_size,
+        expected_crc32c=expected_crc32c,
+        **kwargs,
+    )
 
 
 # Example usage

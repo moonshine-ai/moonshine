@@ -15,10 +15,18 @@ test('intent dependency manifest points at the all-in-one embedding model', () =
   assert.ok(Array.isArray(manifest.groups) && manifest.groups.length > 0);
   const group = manifest.groups[0];
   assert.match(group.base_url, /embeddinggemma/);
-  assert.ok(Array.isArray(group.files) && group.files.includes('tokenizer.bin'));
+  // Each `files` entry is an object {name, url, size, checksum, checksum_type}.
+  const names = group.files.map((f) => f.name);
+  assert.ok(names.includes('tokenizer.bin'));
   // The model now ships as a single self-contained `.ort` (no `.onnx_data`).
-  assert.ok(group.files.some((f) => f.endsWith('.ort')));
-  assert.ok(!group.files.some((f) => f.endsWith('.onnx_data')));
+  assert.ok(names.some((n) => n.endsWith('.ort')));
+  assert.ok(!names.some((n) => n.endsWith('.onnx_data')));
+  // Files carry a fully-qualified url and (when registered) a size/checksum.
+  for (const file of group.files) {
+    assert.equal(typeof file.name, 'string');
+    assert.equal(typeof file.url, 'string');
+    assert.ok(file.url.includes(file.name));
+  }
 });
 
 test('constructing with no model buffer throws', () => {

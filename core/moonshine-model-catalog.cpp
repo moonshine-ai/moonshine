@@ -4,10 +4,31 @@
 #include <cctype>
 
 #include "moonshine-c-api.h"
+#include "moonshine-model-file-metadata.h"
 
 namespace moonshine {
 
 namespace {
+
+// Builds a dependency group from a base URL and a list of canonical filenames,
+// joining in the size/checksum metadata for each file's full download URL.
+ModelDependencyGroup make_group(const std::string& base_url,
+                                const std::vector<std::string>& names) {
+  ModelDependencyGroup group;
+  group.base_url = base_url;
+  group.files.reserve(names.size());
+  for (const std::string& name : names) {
+    ModelFile file;
+    file.name = name;
+    file.url = base_url + "/" + name;
+    const ModelFileMetadata meta = find_model_file_metadata(file.url);
+    file.size = meta.size;
+    file.checksum = meta.checksum;
+    file.checksum_type = meta.checksum_type;
+    group.files.push_back(std::move(file));
+  }
+  return group;
+}
 
 // Base URL for the model CDN. STT and embedding models live under
 // "<kCdnModelBase>/<model>/...", matching the Python catalog's download_url
@@ -32,6 +53,7 @@ struct SpellingModelEntry {
 
 struct EmbeddingModelEntry {
   std::string name;
+  std::string english_name;
   std::string download_url;
   std::vector<std::string> variants;
   std::string default_variant;
@@ -123,6 +145,7 @@ spelling_catalog() {
 const std::vector<EmbeddingModelEntry>& embedding_catalog() {
   static const std::vector<EmbeddingModelEntry> catalog = {
       {"embeddinggemma-300m",
+       "Embedding Gemma 300M",
        std::string(kCdnModelBase) + "/embeddinggemma-300m",
        {"q4", "q8", "fp16", "fp32", "q4f16"},
        "q4"},
@@ -238,14 +261,14 @@ std::optional<ModelDependencies> stt_model_dependencies(
   }
 
   ModelDependencies deps;
-  deps.groups.push_back(
-      {model->download_url,
-       stt_component_files(lang->code, model->model_arch)});
+  deps.groups.push_back(make_group(
+      model->download_url, stt_component_files(lang->code, model->model_arch)));
 
   if (include_spelling) {
     const SpellingModelEntry* spelling = find_spelling_model(lang->code);
     if (spelling != nullptr) {
-      deps.groups.push_back({spelling->download_url, spelling->files});
+      deps.groups.push_back(
+          make_group(spelling->download_url, spelling->files));
     }
   }
   return deps;
@@ -269,7 +292,7 @@ std::optional<ModelDependencies> intent_model_dependencies(
     return std::nullopt;
   }
   ModelDependencies deps;
-  deps.groups.push_back({model->download_url, files});
+  deps.groups.push_back(make_group(model->download_url, files));
   return deps;
 }
 
@@ -296,6 +319,31 @@ std::vector<std::string> intent_supported_variants(
     return {};
   }
   return model->variants;
+}
+
+std::vector<SttCatalogLanguage> stt_catalog_listing() {
+  std::vector<SttCatalogLanguage> out;
+  for (const SttLanguageEntry& lang : stt_catalog()) {
+    SttCatalogLanguage entry;
+    entry.code = lang.code;
+    entry.english_name = lang.english_name;
+    for (size_t i = 0; i < lang.models.size(); ++i) {
+      entry.models.push_back({lang.models[i].model_arch,
+                              lang.models[i].download_url,
+                              /*is_default=*/i == 0});
+    }
+    out.push_back(std::move(entry));
+  }
+  return out;
+}
+
+std::vector<EmbeddingCatalogModel> embedding_catalog_listing() {
+  std::vector<EmbeddingCatalogModel> out;
+  for (const EmbeddingModelEntry& model : embedding_catalog()) {
+    out.push_back({model.name, model.english_name, model.download_url,
+                   model.variants, model.default_variant});
+  }
+  return out;
 }
 
 }  // namespace moonshine

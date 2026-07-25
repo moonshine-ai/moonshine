@@ -18,6 +18,7 @@ dependencies = [
     "tqdm",
     "filelock",
     "platformdirs",
+    "google-crc32c",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",

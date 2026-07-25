@@ -1375,10 +1375,36 @@ std::string json_flat_string_array(const std::vector<std::string> &items) {
   return o;
 }
 
+// Serializes one model file as a JSON object carrying everything a client needs
+// to fetch and verify it:
+//   { "name": "encoder.ort", "url": "https://.../encoder.ort",
+//     "size": 12345, "checksum": "abc==", "checksum_type": "crc32c" }
+// `size` is null and `checksum`/`checksum_type` are "" when the metadata
+// registry has no entry for the file (see moonshine-model-file-metadata.*).
+std::string json_model_file(const moonshine::ModelFile &file) {
+  std::string o = "{\"name\":";
+  o += json_utf8_string_literal(file.name);
+  o += ",\"url\":";
+  o += json_utf8_string_literal(file.url);
+  o += ",\"size\":";
+  if (file.size >= 0) {
+    o += std::to_string(file.size);
+  } else {
+    o += "null";
+  }
+  o += ",\"checksum\":";
+  o += json_utf8_string_literal(file.checksum);
+  o += ",\"checksum_type\":";
+  o += json_utf8_string_literal(file.checksum_type);
+  o += "}";
+  return o;
+}
+
 // Serializes a model download manifest as a JSON object with a "groups" array.
-// Each group is { "base_url": "...", "files": ["a", "b", ...] }. Consumers
-// download `base_url + "/" + file` for every file. STT models emit a single
-// group (plus an optional spelling group); embedding models emit one group.
+// Each group is { "base_url": "...", "files": [<file object>, ...] } where each
+// file object is produced by json_model_file (name/url/size/checksum/
+// checksum_type). STT models emit a single group (plus an optional spelling
+// group); embedding models emit one group.
 std::string json_model_dependencies(const moonshine::ModelDependencies &deps) {
   std::string o = "{\"groups\":[";
   for (size_t i = 0; i < deps.groups.size(); ++i) {
@@ -1388,9 +1414,14 @@ std::string json_model_dependencies(const moonshine::ModelDependencies &deps) {
     const moonshine::ModelDependencyGroup &group = deps.groups[i];
     o += "{\"base_url\":";
     o += json_utf8_string_literal(group.base_url);
-    o += ",\"files\":";
-    o += json_flat_string_array(group.files);
-    o += "}";
+    o += ",\"files\":[";
+    for (size_t j = 0; j < group.files.size(); ++j) {
+      if (j > 0) {
+        o.push_back(',');
+      }
+      o += json_model_file(group.files[j]);
+    }
+    o += "]}";
   }
   o += "]}";
   return o;
@@ -1922,6 +1953,92 @@ int32_t moonshine_get_intent_dependencies(const char *model_name,
     return MOONSHINE_ERROR_NONE;
   } catch (const std::exception &e) {
     LOGF("moonshine_get_intent_dependencies failed: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+int32_t moonshine_get_stt_catalog(char **out_catalog_json) {
+  if (out_catalog_json == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  *out_catalog_json = nullptr;
+  try {
+    std::string o = "{\"languages\":[";
+    const std::vector<moonshine::SttCatalogLanguage> languages =
+        moonshine::stt_catalog_listing();
+    for (size_t i = 0; i < languages.size(); ++i) {
+      if (i > 0) {
+        o.push_back(',');
+      }
+      const moonshine::SttCatalogLanguage &lang = languages[i];
+      o += "{\"code\":";
+      o += json_utf8_string_literal(lang.code);
+      o += ",\"english_name\":";
+      o += json_utf8_string_literal(lang.english_name);
+      o += ",\"models\":[";
+      for (size_t j = 0; j < lang.models.size(); ++j) {
+        if (j > 0) {
+          o.push_back(',');
+        }
+        const moonshine::SttCatalogModel &model = lang.models[j];
+        o += "{\"model_arch\":";
+        o += std::to_string(model.model_arch);
+        o += ",\"download_url\":";
+        o += json_utf8_string_literal(model.download_url);
+        o += ",\"is_default\":";
+        o += model.is_default ? "true" : "false";
+        o += "}";
+      }
+      o += "]}";
+    }
+    o += "]}";
+    char *buf = malloc_string_copy(o);
+    if (buf == nullptr) {
+      return MOONSHINE_ERROR_UNKNOWN;
+    }
+    *out_catalog_json = buf;
+    return MOONSHINE_ERROR_NONE;
+  } catch (const std::exception &e) {
+    LOGF("moonshine_get_stt_catalog failed: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+int32_t moonshine_get_embedding_catalog(char **out_catalog_json) {
+  if (out_catalog_json == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  *out_catalog_json = nullptr;
+  try {
+    std::string o = "{\"models\":[";
+    const std::vector<moonshine::EmbeddingCatalogModel> models =
+        moonshine::embedding_catalog_listing();
+    for (size_t i = 0; i < models.size(); ++i) {
+      if (i > 0) {
+        o.push_back(',');
+      }
+      const moonshine::EmbeddingCatalogModel &model = models[i];
+      o += "{\"name\":";
+      o += json_utf8_string_literal(model.name);
+      o += ",\"english_name\":";
+      o += json_utf8_string_literal(model.english_name);
+      o += ",\"download_url\":";
+      o += json_utf8_string_literal(model.download_url);
+      o += ",\"variants\":";
+      o += json_flat_string_array(model.variants);
+      o += ",\"default_variant\":";
+      o += json_utf8_string_literal(model.default_variant);
+      o += "}";
+    }
+    o += "]}";
+    char *buf = malloc_string_copy(o);
+    if (buf == nullptr) {
+      return MOONSHINE_ERROR_UNKNOWN;
+    }
+    *out_catalog_json = buf;
+    return MOONSHINE_ERROR_NONE;
+  } catch (const std::exception &e) {
+    LOGF("moonshine_get_embedding_catalog failed: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
 }

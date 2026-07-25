@@ -14,10 +14,27 @@ export interface DownloadedAsset {
   readonly bytes: Uint8Array;
 }
 
+/**
+ * One file in a manifest group. The C ABI emits each `files` entry as an object
+ * carrying everything needed to fetch and verify it (not a bare string).
+ */
+interface ManifestFile {
+  /** Canonical filename (basename), e.g. `encoder_model.ort`. */
+  name: string;
+  /** Fully-qualified download URL (`base_url + "/" + name`). */
+  url: string;
+  /** Expected size in bytes, or null/absent when unknown. */
+  size?: number | null;
+  /** Base64 checksum digest, or "" when unknown. */
+  checksum?: string;
+  /** Checksum algorithm, e.g. "crc32c", or "" when unknown. */
+  checksum_type?: string;
+}
+
 /** A group of files sharing a base URL, matching the C ABI manifest shape. */
 interface ManifestGroup {
   base_url: string;
-  files: string[];
+  files: ManifestFile[];
 }
 
 interface Manifest {
@@ -62,8 +79,19 @@ export class AssetDownloader {
     const out = new Map<string, Uint8Array>();
     for (const group of manifest.groups ?? []) {
       for (const file of group.files) {
-        const url = joinUrl(group.base_url, file);
-        out.set(file, await this.fetchFile(url));
+        const url = file.url ?? joinUrl(group.base_url, file.name);
+        const bytes = await this.fetchFile(url);
+        if (
+          typeof file.size === 'number' &&
+          file.size >= 0 &&
+          bytes.byteLength !== file.size
+        ) {
+          throw new MoonshineDownloadError(
+            `Size mismatch for ${file.name}: expected ${file.size} bytes, ` +
+              `got ${bytes.byteLength} (from ${url})`,
+          );
+        }
+        out.set(file.name, bytes);
       }
     }
     return out;

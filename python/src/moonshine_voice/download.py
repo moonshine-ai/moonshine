@@ -1,3 +1,4 @@
+import functools
 import json
 import os
 import re
@@ -18,7 +19,11 @@ from moonshine_voice.moonshine_api import (
     MOONSHINE_ERROR_INVALID_ARGUMENT,
     MOONSHINE_ERROR_NONE,
     ModelArch,
+    moonshine_get_embedding_catalog_string,
     moonshine_get_g2p_dependencies_string,
+    moonshine_get_intent_dependencies_string,
+    moonshine_get_stt_catalog_string,
+    moonshine_get_stt_dependencies_string,
     moonshine_get_tts_voices_string,
     moonshine_get_tts_dependencies_string,
     moonshine_try_get_tts_voices,
@@ -31,146 +36,105 @@ class EmbeddingModelArch(IntEnum):
     GEMMA_300M = 0  # embeddinggemma-300m (768-dim embeddings)
 
 
-MODEL_INFO = {
-    "ar": {
-        "english_name": "Arabic",
-        "models": [
-            {
-                "model_name": "base-ar",
-                "model_arch": ModelArch.BASE,
-                "download_url": "https://download.moonshine.ai/model/base-ar/quantized/base-ar",
-            }
-        ],
-    },
-    "es": {
-        "english_name": "Spanish",
-        "models": [
-            {
-                "model_name": "base-es",
-                "model_arch": ModelArch.BASE,
-                "download_url": "https://download.moonshine.ai/model/base-es/quantized/base-es",
-            }
-        ],
-    },
-    "en": {
-        "english_name": "English",
-        "models": [
-            {
-                "model_name": "medium-streaming-en",
-                "model_arch": ModelArch.MEDIUM_STREAMING,
-                "download_url": "https://download.moonshine.ai/model/medium-streaming-en/quantized",
-            },
-            {
-                "model_name": "small-streaming-en",
-                "model_arch": ModelArch.SMALL_STREAMING,
-                "download_url": "https://download.moonshine.ai/model/small-streaming-en/quantized",
-            },
-            {
-                "model_name": "base-en",
-                "model_arch": ModelArch.BASE,
-                "download_url": "https://download.moonshine.ai/model/base-en/quantized/base-en",
-            },
-            {
-                "model_name": "tiny-streaming-en",
-                "model_arch": ModelArch.TINY_STREAMING,
-                "download_url": "https://download.moonshine.ai/model/tiny-streaming-en/quantized",
-            },
-            {
-                "model_name": "tiny-en",
-                "model_arch": ModelArch.TINY,
-                "download_url": "https://download.moonshine.ai/model/tiny-en/quantized/tiny-en",
-            },
-        ],
-    },
-    "ja": {
-        "english_name": "Japanese",
-        "models": [
-            {
-                "model_name": "base-ja",
-                "model_arch": ModelArch.BASE,
-                "download_url": "https://download.moonshine.ai/model/base-ja/quantized/base-ja",
-            },
-            {
-                "model_name": "tiny-ja",
-                "model_arch": ModelArch.TINY,
-                "download_url": "https://download.moonshine.ai/model/tiny-ja/quantized/tiny-ja",
-            },
-        ],
-    },
-    "ko": {
-        "english_name": "Korean",
-        "models": [
-            {
-                "model_name": "base-ko",
-                "model_arch": ModelArch.TINY,
-                "download_url": "https://download.moonshine.ai/model/tiny-ko/quantized/tiny-ko",
-            }
-        ],
-    },
-    "vi": {
-        "english_name": "Vietnamese",
-        "models": [
-            {
-                "model_name": "base-vi",
-                "model_arch": ModelArch.BASE,
-                "download_url": "https://download.moonshine.ai/model/base-vi/quantized/base-vi",
-            }
-        ],
-    },
-    "uk": {
-        "english_name": "Ukrainian",
-        "models": [
-            {
-                "model_name": "base-uk",
-                "model_arch": ModelArch.BASE,
-                "download_url": "https://download.moonshine.ai/model/base-uk/quantized/base-uk",
-            }
-        ],
-    },
-    "zh": {
-        "english_name": "Chinese",
-        "models": [
-            {
-                "model_name": "base-zh",
-                "model_arch": ModelArch.BASE,
-                "download_url": "https://download.moonshine.ai/model/base-zh/quantized/base-zh",
-            }
-        ],
-    },
-}
+# The speech-to-text and embedding model tables used to be duplicated here. They
+# now come from the single source of truth in the C catalog, exposed via
+# moonshine_get_stt_catalog / moonshine_get_embedding_catalog, and the per-file
+# download list (URLs, sizes, CRC32C checksums) comes from
+# moonshine_get_stt_dependencies / moonshine_get_intent_dependencies. Nothing in
+# this file hardcodes filenames, URLs, or sizes anymore.
 
-# Optional alphanumeric spelling model. When present, the C++
-# transcriber can run the spelling-fusion path on completed lines if
-# ``MOONSHINE_FLAG_SPELLING_MODE`` is set. Right now we only ship an
-# English model; other languages get ``None`` from
-# ``get_spelling_model_path`` (and the listener falls back to its
-# Python implementation).
-SPELLING_MODEL_INFO = {
-    "en": {
-        "download_url": "https://download.moonshine.ai/model/spelling-en",
-        "components": ["spelling_cnn.ort", "spelling_cnn_meta.json"],
-    },
-}
 
-# Embedding models are stored separately since they use a different arch enum
-# and have a different component structure (variants like q4, fp32, etc.)
-EMBEDDING_MODEL_INFO = {
-    "embeddinggemma-300m": {
-        "english_name": "Embedding Gemma 300M",
-        "model_arch": EmbeddingModelArch.GEMMA_300M,
-        "download_url": "https://download.moonshine.ai/model/embeddinggemma-300m",
-        "variants": ["q4", "q8", "fp16", "fp32", "q4f16"],
-        "default_variant": "q4",
-    },
-}
+@functools.lru_cache(maxsize=1)
+def _stt_catalog() -> Dict[str, dict]:
+    """Language code -> {english_name, models:[{model_arch, download_url, is_default}]}.
+
+    Built from the native STT catalog so this module never keeps its own copy of
+    the language/model tables.
+    """
+    raw = json.loads(moonshine_get_stt_catalog_string())
+    catalog: Dict[str, dict] = {}
+    for language in raw.get("languages", []):
+        models = [
+            {
+                "model_arch": ModelArch(model["model_arch"]),
+                "download_url": model["download_url"],
+                "is_default": bool(model.get("is_default")),
+            }
+            for model in language.get("models", [])
+        ]
+        catalog[language["code"]] = {
+            "english_name": language["english_name"],
+            "models": models,
+        }
+    return catalog
+
+
+@functools.lru_cache(maxsize=1)
+def _embedding_catalog() -> Dict[str, dict]:
+    """Embedding model name -> {english_name, model_arch, download_url, variants,
+    default_variant}, built from the native embedding catalog."""
+    raw = json.loads(moonshine_get_embedding_catalog_string())
+    catalog: Dict[str, dict] = {}
+    for model in raw.get("models", []):
+        catalog[model["name"]] = {
+            "english_name": model["english_name"],
+            # Only one embedding architecture exists today.
+            "model_arch": EmbeddingModelArch.GEMMA_300M,
+            "download_url": model["download_url"],
+            "variants": list(model.get("variants", [])),
+            "default_variant": model.get("default_variant", ""),
+        }
+    return catalog
+
+
+def _cache_root_dir(cache_root: Optional[Path]) -> Path:
+    return Path(cache_root).resolve() if cache_root is not None else get_cache_dir()
+
+
+def _download_manifest_group(group: dict, cache_dir: Path) -> str:
+    """Downloads every file in one manifest group (each file object carries a
+    fully-qualified ``url`` plus optional ``size`` / ``checksum``), verifying
+    size and CRC32C, and returns the group's local root directory
+    (``cache_dir`` / ``base_url`` without its scheme)."""
+    base_url = group["base_url"]
+    root = os.path.join(cache_dir, base_url.replace("https://", ""))
+    for file_info in group.get("files", []):
+        name = file_info["name"]
+        url = file_info.get("url") or f"{base_url}/{name}"
+        size = file_info.get("size")
+        checksum = file_info.get("checksum") or None
+        checksum_type = file_info.get("checksum_type") or ""
+        dest = os.path.join(root, name)
+        download_model(
+            url,
+            dest,
+            expected_size=size if isinstance(size, int) and size >= 0 else None,
+            expected_crc32c=checksum if checksum_type == "crc32c" else None,
+        )
+    return str(root)
+
+
+def _stt_dependency_manifest(
+    language: str, model_arch: Optional[ModelArch], *, include_spelling: bool = False
+) -> dict:
+    """Fetches and parses the native STT download manifest for a language+arch."""
+    options: Dict[str, Union[str, int, float, bool]] = {}
+    if model_arch is not None:
+        options["model_arch"] = int(model_arch)
+    if include_spelling:
+        options["include_spelling"] = True
+    return json.loads(moonshine_get_stt_dependencies_string(language, options))
 
 
 def find_model_info(language: str = "en", model_arch: ModelArch = None) -> dict:
-    if language in MODEL_INFO.keys():
+    """Resolves a language (code or English name) and optional arch to a model
+    entry ``{model_arch, download_url, language}`` from the native catalog."""
+    catalog = _stt_catalog()
+    if language in catalog:
         language_key = language
     else:
         language_key = None
-        for key, info in MODEL_INFO.items():
+        for key, info in catalog.items():
             if language.lower() == info["english_name"].lower():
                 language_key = key
                 break
@@ -179,16 +143,16 @@ def find_model_info(language: str = "en", model_arch: ModelArch = None) -> dict:
                 f"Language not found: {language}. Supported languages: {supported_languages_friendly()}"
             )
 
-    model_info = MODEL_INFO[language_key]
-    available_models = model_info["models"]
+    available_models = catalog[language_key]["models"]
     if model_arch is None:
-        result = available_models[0]
+        result = dict(available_models[0])
         result["language"] = language_key
         return result
     for model in available_models:
         if model["model_arch"] == model_arch:
-            model["language"] = language_key
-            return model
+            result = dict(model)
+            result["language"] = language_key
+            return result
     raise ValueError(
         f"Model not found for language: {language} and model arch: {model_arch}. Available models: {available_models}"
     )
@@ -196,54 +160,44 @@ def find_model_info(language: str = "en", model_arch: ModelArch = None) -> dict:
 
 def supported_languages_friendly() -> str:
     return ", ".join(
-        [f"{key} ({info['english_name']})" for key, info in MODEL_INFO.items()]
+        [f"{key} ({info['english_name']})" for key, info in _stt_catalog().items()]
     )
 
 
 def supported_languages() -> list[str]:
-    return list(MODEL_INFO.keys())
+    return list(_stt_catalog().keys())
 
 
 def get_components_for_model_info(model_info: dict) -> list[str]:
-    model_arch = model_info["model_arch"]
-    if model_arch in [
-        ModelArch.TINY_STREAMING,
-        ModelArch.BASE_STREAMING,
-        ModelArch.SMALL_STREAMING,
-        ModelArch.MEDIUM_STREAMING,
-    ]:
-        result = [
-            "adapter.ort",
-            "cross_kv.ort",
-            "decoder_kv.ort",
-            "encoder.ort",
-            "frontend.ort",
-            "streaming_config.json",
-            "tokenizer.bin",
-        ]
-        if model_info["language"] == "en":
-            result.append("decoder_kv_with_attention.ort")
-    else:
-        result = ["encoder_model.ort", "decoder_model_merged.ort", "tokenizer.bin"]
-        if model_info["language"] == "en":
-            result.append("decoder_with_attention.ort")
-
+    """Returns the canonical filenames for a model, sourced from the native
+    dependency manifest (so streaming vs non-streaming layouts are never
+    hardcoded here)."""
+    manifest = _stt_dependency_manifest(
+        model_info["language"], model_info["model_arch"]
+    )
+    result: list[str] = []
+    for group in manifest.get("groups", []):
+        for file_info in group.get("files", []):
+            result.append(file_info["name"])
     return result
 
 
 def download_model_from_info(
     model_info: dict, *, cache_root: Optional[Path] = None
 ) -> tuple[str, ModelArch]:
-    cache_dir = Path(cache_root).resolve() if cache_root is not None else get_cache_dir()
-    model_download_url = model_info["download_url"]
-    model_folder_name = model_download_url.replace("https://", "")
-    root_model_path = os.path.join(cache_dir, model_folder_name)
-    components = get_components_for_model_info(model_info)
-    for component in components:
-        component_download_url = f"{model_download_url}/{component}"
-        component_path = os.path.join(root_model_path, component)
-        download_model(component_download_url, component_path)
-    return str(root_model_path), model_info["model_arch"]
+    cache_dir = _cache_root_dir(cache_root)
+    manifest = _stt_dependency_manifest(
+        model_info["language"], model_info["model_arch"]
+    )
+    # The primary model is the first group; its files carry fully-qualified URLs
+    # plus expected size / CRC32C, which _download_manifest_group verifies.
+    groups = manifest.get("groups", [])
+    if not groups:
+        raise MoonshineError(
+            f"Empty download manifest for {model_info['download_url']}"
+        )
+    root_model_path = _download_manifest_group(groups[0], cache_dir)
+    return root_model_path, model_info["model_arch"]
 
 
 # ============================================================================
@@ -253,24 +207,25 @@ def download_model_from_info(
 
 def supported_embedding_models() -> list[str]:
     """Return list of supported embedding model names."""
-    return list(EMBEDDING_MODEL_INFO.keys())
+    return list(_embedding_catalog().keys())
 
 
 def supported_embedding_models_friendly() -> str:
     """Return a friendly string listing supported embedding models."""
     return ", ".join(
-        [f"{key} ({info['english_name']})" for key, info in EMBEDDING_MODEL_INFO.items()]
+        [f"{key} ({info['english_name']})" for key, info in _embedding_catalog().items()]
     )
 
 
 def get_embedding_model_variants(model_name: str = "embeddinggemma-300m") -> list[str]:
     """Return list of available variants for an embedding model."""
-    if model_name not in EMBEDDING_MODEL_INFO:
+    catalog = _embedding_catalog()
+    if model_name not in catalog:
         raise ValueError(
             f"Embedding model not found: {model_name}. "
             f"Supported models: {supported_embedding_models_friendly()}"
         )
-    return EMBEDDING_MODEL_INFO[model_name]["variants"]
+    return list(catalog[model_name]["variants"])
 
 
 def get_embedding_model(
@@ -294,13 +249,14 @@ def get_embedding_model(
         >>> model_path, model_arch = get_embedding_model("embeddinggemma-300m", "q4")
         >>> recognizer = IntentRecognizer(model_path=model_path, model_arch=model_arch)
     """
-    if model_name not in EMBEDDING_MODEL_INFO:
+    catalog = _embedding_catalog()
+    if model_name not in catalog:
         raise ValueError(
             f"Embedding model not found: {model_name}. "
             f"Supported models: {supported_embedding_models_friendly()}"
         )
 
-    model_info = EMBEDDING_MODEL_INFO[model_name]
+    model_info = catalog[model_name]
 
     if variant is None:
         variant = model_info["default_variant"]
@@ -311,26 +267,19 @@ def get_embedding_model(
             f"Available variants: {model_info['variants']}"
         )
 
-    # Determine components based on variant. Each variant ships as a single
-    # all-in-one ``.ort`` file (weights embedded inline, no ``.onnx_data``
-    # sidecar); see scripts/export-embedding-model-ort.py.
-    if variant == "fp32":
-        components = ["model.ort", "tokenizer.bin"]
-    else:
-        components = [f"model_{variant}.ort", "tokenizer.bin"]
-
-    # Download the model
-    cache_dir = Path(cache_root).resolve() if cache_root is not None else get_cache_dir()
-    download_url = model_info["download_url"]
-    model_folder_name = download_url.replace("https://", "")
-    root_model_path = os.path.join(cache_dir, model_folder_name)
-
-    for component in components:
-        component_download_url = f"{download_url}/{component}"
-        component_path = os.path.join(root_model_path, component)
-        download_model(component_download_url, component_path)
-
-    return str(root_model_path), model_info["model_arch"]
+    # The file list (single all-in-one ``.ort`` plus ``tokenizer.bin``), their
+    # URLs, sizes, and CRC32C checksums all come from the native manifest.
+    manifest = json.loads(
+        moonshine_get_intent_dependencies_string(model_name, {"variant": variant})
+    )
+    groups = manifest.get("groups", [])
+    if not groups:
+        raise MoonshineError(
+            f"Empty download manifest for embedding model {model_name} ({variant})"
+        )
+    cache_dir = _cache_root_dir(cache_root)
+    root_model_path = _download_manifest_group(groups[0], cache_dir)
+    return root_model_path, model_info["model_arch"]
 
 
 # ============================================================================
@@ -338,30 +287,18 @@ def get_embedding_model(
 # ============================================================================
 
 
-def _spelling_language_key(language: str) -> Optional[str]:
-    """Map a user language tag to the key used in :data:`SPELLING_MODEL_INFO`, or ``None``."""
-    if not isinstance(language, str):
-        return None
-    key = language.strip().lower()
-    if not key:
-        return None
-    if key in SPELLING_MODEL_INFO:
-        return key
-    # Allow values like "english" or "en-us" / "en_US" to map to the "en" entry.
-    short = key.split("-", 1)[0].split("_", 1)[0]
-    if short in SPELLING_MODEL_INFO:
-        return short
-    for code, info in MODEL_INFO.items():
-        if info["english_name"].lower() == key and code in SPELLING_MODEL_INFO:
-            return code
+def _spelling_group_from_manifest(manifest: dict) -> Optional[dict]:
+    """Returns the spelling-model group from an ``include_spelling`` STT
+    manifest (the group whose base URL/files identify the alphanumeric spelling
+    model), or ``None`` when the manifest has no spelling group."""
+    for group in manifest.get("groups", []):
+        base_url = group.get("base_url", "")
+        if "/spelling" in base_url or any(
+            file_info.get("name", "").startswith("spelling")
+            for file_info in group.get("files", [])
+        ):
+            return group
     return None
-
-
-def _spelling_model_root_path(language_key: str, cache_root: Optional[Path] = None) -> Path:
-    cache_dir = Path(cache_root).resolve() if cache_root is not None else get_cache_dir()
-    info = SPELLING_MODEL_INFO[language_key]
-    folder = info["download_url"].replace("https://", "")
-    return Path(os.path.join(cache_dir, folder))
 
 
 def download_spelling_model_for_language(
@@ -375,23 +312,24 @@ def download_spelling_model_for_language(
 
     Returns ``None`` (without an error) when no spelling model is
     published for the requested language. Already-downloaded files are
-    left alone, matching :func:`download_model_from_info`.
+    left alone, matching :func:`download_model_from_info`. The file list and
+    URLs come from the native STT manifest (``include_spelling``), so nothing is
+    hardcoded here.
     """
-    language_key = _spelling_language_key(language)
-    if language_key is None:
+    try:
+        manifest = _stt_dependency_manifest(language, None, include_spelling=True)
+    except Exception:
+        # Unknown language, etc. — no spelling model to fetch.
         return None
-    info = SPELLING_MODEL_INFO[language_key]
-    root = _spelling_model_root_path(language_key, cache_root=cache_root)
-    primary_component: Optional[str] = None
-    for component in info["components"]:
-        component_url = f"{info['download_url']}/{component}"
-        component_path = os.path.join(str(root), component)
-        download_model(component_url, component_path)
-        if primary_component is None and component.endswith(".ort"):
-            primary_component = component
-    if primary_component is None:
+    group = _spelling_group_from_manifest(manifest)
+    if group is None:
         return None
-    return os.path.join(str(root), primary_component)
+    root = _download_manifest_group(group, _cache_root_dir(cache_root))
+    for file_info in group.get("files", []):
+        name = file_info["name"]
+        if name.endswith(".ort"):
+            return os.path.join(root, name)
+    return None
 
 
 def get_spelling_model_path(

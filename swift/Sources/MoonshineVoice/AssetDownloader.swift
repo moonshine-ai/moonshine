@@ -129,6 +129,8 @@ public final class AssetDownloader: @unchecked Sendable {
     private struct ResolvedFile {
         let url: URL
         let relativePath: String
+        /// Expected size in bytes, or -1 when the manifest did not report one.
+        var expectedSize: Int64 = -1
     }
 
     private func resolveFiles(root: URL, spec: ModelSpec) throws -> [ResolvedFile] {
@@ -171,9 +173,10 @@ public final class AssetDownloader: @unchecked Sendable {
         }
     }
 
-    /// Parses the `{"groups":[{"base_url":..,"files":[..]}]}` manifest emitted by the STT and intent
-    /// dependency APIs. Files are downloaded from `base_url + "/" + file` and stored under their bare
-    /// filename in the root.
+    /// Parses the `{"groups":[{"base_url":..,"files":[{...}]}]}` manifest emitted by the STT and
+    /// intent dependency APIs. Each `files` entry is an object carrying `name`, a fully-qualified
+    /// `url`, and optional `size` / `checksum` / `checksum_type`. Files are downloaded from their
+    /// `url` (falling back to `base_url + "/" + name`) and stored under their bare filename.
     private func filesFromGroupManifest(_ json: String) throws -> [ResolvedFile] {
         guard let data = json.data(using: .utf8),
             let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -184,15 +187,22 @@ public final class AssetDownloader: @unchecked Sendable {
         var result: [ResolvedFile] = []
         for group in groups {
             guard let baseURLString = group["base_url"] as? String,
-                let files = group["files"] as? [String]
+                let files = group["files"] as? [[String: Any]]
             else {
                 throw AssetDownloadError.invalidManifest(detail: "malformed group in \(json)")
             }
             for file in files {
-                guard let url = URL(string: baseURLString + "/" + file) else {
-                    throw AssetDownloadError.invalidManifest(detail: "bad URL for \(file)")
+                guard let name = file["name"] as? String else {
+                    throw AssetDownloadError.invalidManifest(detail: "file without a name in \(json)")
                 }
-                result.append(ResolvedFile(url: url, relativePath: file))
+                let urlString = (file["url"] as? String) ?? (baseURLString + "/" + name)
+                guard let url = URL(string: urlString) else {
+                    throw AssetDownloadError.invalidManifest(detail: "bad URL for \(name)")
+                }
+                // `size` is a JSON number (or null when unknown).
+                let expectedSize = (file["size"] as? NSNumber)?.int64Value ?? -1
+                result.append(
+                    ResolvedFile(url: url, relativePath: name, expectedSize: expectedSize))
             }
         }
         return result
@@ -285,7 +295,13 @@ public final class AssetDownloader: @unchecked Sendable {
         }
 
         let remainingBytes = http.expectedContentLength  // -1 if unknown
-        let totalBytes = remainingBytes >= 0 ? existingBytes + remainingBytes : -1
+        // Prefer the server's Content-Length; fall back to the catalog's expected
+        // size (from the manifest) so progress UI still has a total when the
+        // server doesn't report one.
+        let totalBytes =
+            remainingBytes >= 0
+            ? existingBytes + remainingBytes
+            : file.expectedSize
 
         try ensureSpaceAvailable(forVolumeAt: directory, needBytes: remainingBytes, url: file.url)
 

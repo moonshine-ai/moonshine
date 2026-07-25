@@ -99,6 +99,7 @@ endif()
 set(MOONSHINE_SRC_FILES
     moonshine-c-api.cpp
     moonshine-model-catalog.cpp
+    moonshine-model-file-metadata.generated.cpp
     cosine-distance.cpp
     moonshine-model.cpp
     moonshine-streaming-model.cpp

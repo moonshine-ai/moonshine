@@ -118,10 +118,17 @@ public final class AssetDownloader {
     private static final class ResolvedFile {
         final String url;
         final String relativePath;
+        /** Expected size in bytes, or {@code -1} when the manifest did not report one. */
+        final long expectedSize;
 
         ResolvedFile(String url, String relativePath) {
+            this(url, relativePath, -1);
+        }
+
+        ResolvedFile(String url, String relativePath, long expectedSize) {
             this.url = url;
             this.relativePath = relativePath;
+            this.expectedSize = expectedSize;
         }
     }
 
@@ -155,7 +162,11 @@ public final class AssetDownloader {
         }
     }
 
-    /** Parses the {@code {"groups":[{"base_url":..,"files":[..]}]}} STT/intent manifest. */
+    /**
+     * Parses the {@code {"groups":[{"base_url":..,"files":[{...}]}]}} STT/intent manifest. Each
+     * {@code files} entry is an object with {@code name}, a fully-qualified {@code url}, and
+     * optional {@code size} / {@code checksum} / {@code checksum_type}.
+     */
     private List<ResolvedFile> filesFromGroupManifest(String json) throws IOException {
         List<ResolvedFile> result = new ArrayList<>();
         try {
@@ -166,8 +177,11 @@ public final class AssetDownloader {
                 String baseUrl = group.getString("base_url");
                 JSONArray fileArray = group.getJSONArray("files");
                 for (int f = 0; f < fileArray.length(); f++) {
-                    String file = fileArray.getString(f);
-                    result.add(new ResolvedFile(baseUrl + "/" + file, file));
+                    JSONObject file = fileArray.getJSONObject(f);
+                    String name = file.getString("name");
+                    String url = file.optString("url", baseUrl + "/" + name);
+                    long size = file.optLong("size", -1);
+                    result.add(new ResolvedFile(url, name, size));
                 }
             }
         } catch (Exception e) {
@@ -257,7 +271,9 @@ public final class AssetDownloader {
                 throw new IOException("Empty response body for " + file.url);
             }
             long remaining = body.contentLength();  // -1 if unknown
-            long totalBytes = remaining >= 0 ? existingBytes + remaining : -1;
+            // Prefer the server's Content-Length; fall back to the catalog's
+            // expected size (from the manifest) so progress UI still has a total.
+            long totalBytes = remaining >= 0 ? existingBytes + remaining : file.expectedSize;
 
             ensureSpaceAvailable(root, remaining, file.url);
 
