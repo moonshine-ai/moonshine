@@ -24,17 +24,25 @@ public final class ModelSpec {
     @Nullable public final Integer modelArch;
     /** STT only: also fetch the alphanumeric spelling model when published for the language. */
     public final boolean includeSpelling;
+    /**
+     * STT only: also fetch the optional attention decoder used by the {@code word_timestamps}
+     * transcriber option (roughly doubling the download). Leave false unless you need word-level
+     * timestamps.
+     */
+    public final boolean includeWordTimestamps;
     /** TTS only: prefixed voice id (e.g. {@code kokoro_af_heart}), or null for the default. */
     @Nullable public final String voice;
     /** INTENT only: embedding variant (e.g. {@code q4}), or null for the default. */
     @Nullable public final String variant;
 
     private ModelSpec(Type type, @Nullable String primary, @Nullable Integer modelArch,
-                      boolean includeSpelling, @Nullable String voice, @Nullable String variant) {
+                      boolean includeSpelling, boolean includeWordTimestamps,
+                      @Nullable String voice, @Nullable String variant) {
         this.type = type;
         this.primary = primary;
         this.modelArch = modelArch;
         this.includeSpelling = includeSpelling;
+        this.includeWordTimestamps = includeWordTimestamps;
         this.voice = voice;
         this.variant = variant;
     }
@@ -47,22 +55,32 @@ public final class ModelSpec {
     /** Speech-to-text model with an explicit architecture and optional spelling model. */
     public static ModelSpec stt(String language, @Nullable Integer modelArch,
                                 boolean includeSpelling) {
-        return new ModelSpec(Type.STT, language, modelArch, includeSpelling, null, null);
+        return stt(language, modelArch, includeSpelling, false);
+    }
+
+    /**
+     * Speech-to-text model with an explicit architecture, and optional spelling / word-timestamp
+     * files.
+     */
+    public static ModelSpec stt(String language, @Nullable Integer modelArch,
+                                boolean includeSpelling, boolean includeWordTimestamps) {
+        return new ModelSpec(Type.STT, language, modelArch, includeSpelling,
+                includeWordTimestamps, null, null);
     }
 
     /** Text-to-speech assets for {@code language} and optional prefixed {@code voice}. */
     public static ModelSpec tts(String language, @Nullable String voice) {
-        return new ModelSpec(Type.TTS, language, null, false, voice, null);
+        return new ModelSpec(Type.TTS, language, null, false, false, voice, null);
     }
 
     /** Intent-recognition embedding model. Pass {@code null} for the default model / variant. */
     public static ModelSpec intent(@Nullable String modelName, @Nullable String variant) {
-        return new ModelSpec(Type.INTENT, modelName, null, false, null, variant);
+        return new ModelSpec(Type.INTENT, modelName, null, false, false, null, variant);
     }
 
     /** Grapheme-to-phoneme assets for {@code language}. */
     public static ModelSpec g2p(String language) {
-        return new ModelSpec(Type.G2P, language, null, false, null, null);
+        return new ModelSpec(Type.G2P, language, null, false, false, null, null);
     }
 
     /**
@@ -80,6 +98,9 @@ public final class ModelSpec {
                 }
                 if (includeSpelling) {
                     options.add(new TranscriberOption("include_spelling", "true"));
+                }
+                if (includeWordTimestamps) {
+                    options.add(new TranscriberOption("word_timestamps", "true"));
                 }
                 break;
             case INTENT:

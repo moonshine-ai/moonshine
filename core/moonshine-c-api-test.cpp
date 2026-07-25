@@ -1287,8 +1287,26 @@ TEST_CASE("moonshine-stt-intent-dependency-api") {
               "\"https://download.moonshine.ai/model/medium-streaming-en/"
               "quantized\"") != std::string::npos);
     CHECK(json.find("\"adapter.ort\"") != std::string::npos);
+    CHECK(json.find("\"decoder_kv.ort\"") != std::string::npos);
     CHECK(json.find("\"streaming_config.json\"") != std::string::npos);
-    // English streaming carries the attention decoder extra.
+    // The attention decoder is only for word timestamps, so it is omitted
+    // unless the caller asks for it (see stt-english-streaming-word-timestamps).
+    CHECK(json.find("\"decoder_kv_with_attention.ort\"") == std::string::npos);
+    std::free(out);
+  }
+
+  SUBCASE("stt-english-streaming-word-timestamps-adds-attention-decoder") {
+    // Passing the same word_timestamps option used to construct a transcriber
+    // opts the optional attention decoder back into the manifest.
+    const moonshine_option_t opts[] = {
+        {"word_timestamps", "true"},
+    };
+    char* out = nullptr;
+    REQUIRE(moonshine_get_stt_dependencies("en", opts, 1, &out) ==
+            MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string json(out);
+    CHECK(json.find("\"decoder_kv.ort\"") != std::string::npos);
     CHECK(json.find("\"decoder_kv_with_attention.ort\"") != std::string::npos);
     std::free(out);
   }
@@ -1308,9 +1326,24 @@ TEST_CASE("moonshine-stt-intent-dependency-api") {
     CHECK(json.find("\"encoder_model.ort\"") != std::string::npos);
     CHECK(json.find("\"decoder_model_merged.ort\"") != std::string::npos);
     CHECK(json.find("\"tokenizer.bin\"") != std::string::npos);
-    CHECK(json.find("\"decoder_with_attention.ort\"") != std::string::npos);
+    // The word-timestamp decoder is opt-in, so it is absent by default.
+    CHECK(json.find("\"decoder_with_attention.ort\"") == std::string::npos);
     // Non-streaming must not list streaming files.
     CHECK(json.find("\"adapter.ort\"") == std::string::npos);
+    std::free(out);
+  }
+
+  SUBCASE("stt-english-non-streaming-word-timestamps-adds-attention-decoder") {
+    const moonshine_option_t opts[] = {
+        {"model_arch", "0"},  // MOONSHINE_MODEL_ARCH_TINY
+        {"word_timestamps", "true"},
+    };
+    char* out = nullptr;
+    REQUIRE(moonshine_get_stt_dependencies("en", opts, 2, &out) ==
+            MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string json(out);
+    CHECK(json.find("\"decoder_with_attention.ort\"") != std::string::npos);
     std::free(out);
   }
 

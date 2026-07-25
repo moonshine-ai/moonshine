@@ -12,6 +12,9 @@ import MoonshineVoice
 struct ContentView: View {
     @Binding var isRecording: Bool
     @Binding var messages: [TranscriptLine]
+    @Binding var status: String
+    /// Disables the mic button until the model has finished downloading/loading.
+    var isReady: Bool = false
     
     var body: some View {
         VStack {
@@ -44,7 +47,15 @@ struct ContentView: View {
             }
             
             Spacer()
-            
+
+            if !status.isEmpty {
+                Text(status)
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+
             HStack {
                 Spacer()
                 Button(action: {
@@ -59,6 +70,8 @@ struct ContentView: View {
                                 .fill(isRecording ? Color.red.opacity(0.2) : Color.blue.opacity(0.2))
                         )
                 }
+                .disabled(!isReady)
+                .opacity(isReady ? 1 : 0.4)
                 Spacer()
             }
         }
@@ -67,5 +80,7 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView(isRecording: .constant(false), messages: .constant([]))
+    ContentView(
+        isRecording: .constant(false), messages: .constant([]),
+        status: .constant("Ready"), isReady: true)
 }

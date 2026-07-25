@@ -49,37 +49,42 @@ final class IntentSessionModel: ObservableObject {
     }
 
     @MainActor
-    func bootstrapIfNeeded() {
+    func bootstrapIfNeeded() async {
         guard !isEngineReady else { return }
 
+        // Nothing is bundled in the app package: the Medium Streaming English
+        // speech model and the embedding model are downloaded on first run into
+        // Application Support and reused thereafter.
         let root = modelsRootDirectory()
-        let asrPath = root.appendingPathComponent("tiny-en", isDirectory: true).path
-        let embPath = root.appendingPathComponent("embeddinggemma-300m", isDirectory: true).path
-
-        guard FileManager.default.fileExists(atPath: asrPath),
-              FileManager.default.fileExists(atPath: asrPath + "/tokenizer.bin")
-        else {
-            statusMessage =
-                "Missing tiny-en in the app bundle. Rebuild after ensuring examples/ios/IntentRecognizer/moonshine-models is present (clone with Git LFS)."
-            return
-        }
-        guard FileManager.default.fileExists(atPath: embPath),
-              FileManager.default.fileExists(atPath: embPath + "/tokenizer.bin")
-        else {
-            statusMessage =
-                "Missing embeddinggemma-300m in the app bundle. Rebuild after ensuring moonshine-models is checked out with Git LFS."
-            return
-        }
+        let asrRoot = root.appendingPathComponent("medium-streaming-en", isDirectory: true)
+        let embRoot = root.appendingPathComponent("embeddinggemma-300m", isDirectory: true)
 
         do {
+            try FileManager.default.createDirectory(at: asrRoot, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: embRoot, withIntermediateDirectories: true)
+
+            let downloader = AssetDownloader()
+
+            statusMessage = "Downloading speech model (first run only)…"
+            _ = try await downloader.ensureModelPresent(
+                root: asrRoot,
+                spec: .stt(language: "en", modelArch: .mediumStreaming)
+            )
+
+            statusMessage = "Downloading intent model (first run only)…"
+            _ = try await downloader.ensureModelPresent(
+                root: embRoot,
+                spec: .intent(variant: "q4")
+            )
+
             intentRecognizer = try IntentRecognizer(
-                modelPath: embPath,
+                modelPath: embRoot.path,
                 modelArch: .gemma300m,
                 modelVariant: "q4"
             )
             try reapplyRegisteredIntents()
 
-            mic = try MicTranscriber(modelPath: asrPath, modelArch: .tiny)
+            mic = try MicTranscriber(modelPath: asrRoot.path, modelArch: .mediumStreaming)
             mic?.addListener(transcriptBridge)
 
             isEngineReady = true
@@ -244,6 +249,7 @@ final class IntentSessionModel: ObservableObject {
     }
 
     private func modelsRootDirectory() -> URL {
-        Bundle.main.bundleURL.appendingPathComponent("moonshine-models", isDirectory: true)
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return support.appendingPathComponent("moonshine-models", isDirectory: true)
     }
 }

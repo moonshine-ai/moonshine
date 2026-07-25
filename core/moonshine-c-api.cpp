@@ -1864,6 +1864,7 @@ int32_t moonshine_get_stt_dependencies(const char *language,
   try {
     std::optional<int32_t> model_arch;
     bool include_spelling = false;
+    bool include_word_timestamps = false;
     for (uint64_t i = 0; i < options_count; ++i) {
       const std::string key = normalize_option_key(options[i].name);
       const std::string value =
@@ -1880,12 +1881,19 @@ int32_t moonshine_get_stt_dependencies(const char *language,
         model_arch = parsed;
       } else if (key == "include_spelling" || key == "spelling") {
         include_spelling = bool_from_string(value.c_str());
+      } else if (key == "spelling_model_path") {
+        // The loader uses a spelling model when given its path; mirror that by
+        // adding the spelling group to the manifest.
+        include_spelling = !trim(value).empty();
+      } else if (key == "word_timestamps") {
+        include_word_timestamps = bool_from_string(value.c_str());
       }
     }
 
     const std::optional<moonshine::ModelDependencies> deps =
         moonshine::stt_model_dependencies(trim(language_str), model_arch,
-                                          include_spelling);
+                                          include_spelling,
+                                          include_word_timestamps);
     if (!deps.has_value()) {
       LOGF(
           "moonshine_get_stt_dependencies: unknown language \"%s\" or "

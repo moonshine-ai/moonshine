@@ -29,6 +29,7 @@
     "build": "npm run build:ts",
     "docs": "typedoc",
     "test": "node --test tests/*.test.mjs",
+    "test:browser": "MOONSHINE_BROWSER_TESTS=1 node --test tests/web-examples.integration.test.mjs",
     "clean": "rm -rf dist"
   },
   "keywords": [
@@ -52,6 +53,7 @@
     "directory": "wasm"
   },
   "devDependencies": {
+    "puppeteer-core": "^25.3.0",
     "typedoc": "^0.27.0",
     "typescript": "^5.6.0"
   },

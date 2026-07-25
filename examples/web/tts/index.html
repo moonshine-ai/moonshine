@@ -21,6 +21,8 @@
       }
       button[disabled] { opacity: 0.5; cursor: default; }
       #status { margin-top: 1rem; opacity: 0.75; min-height: 1.4em; }
+      #download { display: inline-block; margin-top: 0.8rem; }
+      #download[hidden] { display: none; }
     </style>
   </head>
   <body>
@@ -30,13 +32,18 @@
     <br />
     <button id="speak">Speak</button>
     <p id="status">Idle.</p>
+    <a id="download" hidden download="moonshine-tts.wav">Download WAV</a>
 
     <script type="module">
       // Load the locally-built binding when the page is opened with ?local=1
       // (e.g. via examples/web/serve.mjs); otherwise use the published copy
       // from the jsDelivr CDN.
-      const useLocal =
-        new URLSearchParams(location.search).get('local') === '1';
+      const params = new URLSearchParams(location.search);
+      const useLocal = params.get('local') === '1';
+      // With &assets=local the kokoro model is fetched from the repo (served by
+      // serve.mjs under /tts-data) instead of the CDN, so the page runs fully
+      // offline. This is what the browser integration test uses.
+      const useLocalAssets = params.get('assets') === 'local';
       const moduleUrl = useLocal
         ? '/wasm/dist/index.js'
         : 'https://cdn.jsdelivr.net/npm/@moonshine-ai/moonshine-wasm/dist/index.js';
@@ -45,6 +52,7 @@
       const speakBtn = document.getElementById('speak');
       const textEl = document.getElementById('text');
       const statusEl = document.getElementById('status');
+      const downloadEl = document.getElementById('download');
 
       let tts = null;
       // A single AudioContext, created on the first user gesture.
@@ -53,25 +61,82 @@
       async function ensureTts() {
         if (tts) return tts;
         statusEl.textContent = 'Loading TTS model (first run downloads it)…';
-        tts = await TextToSpeech.load({
-          language: 'en',
-          onProgress: (loaded, total, file) => {
-            const pct = total ? ` ${Math.round((100 * loaded) / total)}%` : '';
-            statusEl.textContent = `Downloading ${file}${pct}…`;
-          },
-        });
+        tts = await TextToSpeech.load(
+          useLocalAssets
+            ? { language: 'en_us', assetBaseUrl: '/tts-data' }
+            : {
+                language: 'en',
+                onProgress: (loaded, total, file) => {
+                  const pct = total ? ` ${Math.round((100 * loaded) / total)}%` : '';
+                  statusEl.textContent = `Downloading ${file}${pct}…`;
+                },
+              },
+        );
         return tts;
+      }
+
+      /** Wraps mono Float32 PCM as a 16-bit WAV blob (for the download link). */
+      function pcmToWavBlob(audio, sampleRate) {
+        const numFrames = audio.length;
+        const buffer = new ArrayBuffer(44 + numFrames * 2);
+        const view = new DataView(buffer);
+        const writeStr = (offset, str) => {
+          for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+        };
+        writeStr(0, 'RIFF');
+        view.setUint32(4, 36 + numFrames * 2, true);
+        writeStr(8, 'WAVE');
+        writeStr(12, 'fmt ');
+        view.setUint32(16, 16, true); // PCM fmt chunk size
+        view.setUint16(20, 1, true); // audio format = PCM
+        view.setUint16(22, 1, true); // channels
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * 2, true); // byte rate
+        view.setUint16(32, 2, true); // block align
+        view.setUint16(34, 16, true); // bits per sample
+        writeStr(36, 'data');
+        view.setUint32(40, numFrames * 2, true);
+        for (let i = 0; i < numFrames; i++) {
+          const s = Math.max(-1, Math.min(1, audio[i]));
+          view.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+        }
+        return new Blob([buffer], { type: 'audio/wav' });
+      }
+
+      /** Fire-and-forget playback so the UI/tests don't block on audio output. */
+      function play(audio, sampleRate) {
+        try {
+          const buf = audioContext.createBuffer(1, audio.length, sampleRate);
+          buf.copyToChannel(audio, 0);
+          const src = audioContext.createBufferSource();
+          src.buffer = buf;
+          src.connect(audioContext.destination);
+          src.start();
+        } catch {
+          /* playback is best-effort (e.g. no audio device in CI) */
+        }
       }
 
       speakBtn.addEventListener('click', async () => {
         speakBtn.disabled = true;
+        downloadEl.hidden = true;
         try {
-          audioContext ??= new AudioContext();
+          audioContext ??= new (window.AudioContext || window.webkitAudioContext)();
           if (audioContext.state === 'suspended') await audioContext.resume();
           const synth = await ensureTts();
           statusEl.textContent = 'Synthesizing…';
-          await synth.speak(textEl.value, audioContext);
-          statusEl.textContent = 'Done.';
+          // say() returns the raw PCM so we can both play it and offer a file.
+          const { audio, sampleRate } = synth.say(textEl.value);
+
+          const url = URL.createObjectURL(pcmToWavBlob(audio, sampleRate));
+          if (downloadEl.dataset.url) URL.revokeObjectURL(downloadEl.dataset.url);
+          downloadEl.href = url;
+          downloadEl.dataset.url = url;
+          downloadEl.hidden = false;
+          window.__ttsResult = { samples: audio.length, sampleRate };
+
+          statusEl.textContent = `Done (${audio.length} samples @ ${sampleRate} Hz).`;
+          play(audio, sampleRate);
         } catch (err) {
           statusEl.textContent = 'Error: ' + err.message;
         } finally {

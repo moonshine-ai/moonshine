@@ -953,13 +953,22 @@ MOONSHINE_EXPORT int32_t moonshine_get_tts_voices(
    ``language`` is a language code (for example ``"en"``) or English name (for
    example ``"English"``); it must not be empty.
 
-   ``options`` / ``options_count`` recognize:
+   ``options`` / ``options_count`` accept the same option list you would pass to
+   moonshine_load_transcriber_from_files, so a binding can build one set of
+   options and use it both to resolve this manifest and to load the model.
+   Options that do not change which files are needed are ignored; the ones that
+   do are honored:
      - ``model_arch``: one of the MOONSHINE_MODEL_ARCH_* constants as a decimal
        string. When omitted, the default (first) model for the language is
        used.
-     - ``include_spelling`` (bool): when true and a spelling model is published
-       for the language, its files are appended as an extra group. Defaults to
-       false.
+     - ``word_timestamps`` (bool): when true, the optional attention decoder
+       (``decoder_kv_with_attention.ort`` for streaming, or
+       ``decoder_with_attention.ort`` for non-streaming) is included for
+       languages that publish it. This file is only needed to produce word-level
+       timestamps and roughly doubles the download, so it defaults to false.
+     - ``include_spelling`` / ``spelling`` (bool), or ``spelling_model_path``
+       (non-empty path): when set and a spelling model is published for the
+       language, its files are appended as an extra group. Defaults to false.
    Other options are ignored.
 
    On success, writes a NUL-terminated JSON object to

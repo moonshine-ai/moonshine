@@ -10,9 +10,11 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import ai.moonshine.examples.intentrecognizer.databinding.ActivityMainBinding
+import ai.moonshine.voice.AssetDownloader
 import ai.moonshine.voice.IntentRecognizer
 import ai.moonshine.voice.JNI
 import ai.moonshine.voice.MicTranscriber
+import ai.moonshine.voice.ModelSpec
 import ai.moonshine.voice.TranscriptEvent
 import ai.moonshine.voice.TranscriptEventListener
 import java.io.File
@@ -20,11 +22,11 @@ import java.io.File
 class MainActivity : AppCompatActivity() {
 
     /**
-     * Bundled under `app/src/main/assets/` (Git LFS). Streaming ASR must be loaded from
-     * disk via [MicTranscriber.loadFromFiles], so we mirror assets into `filesDir` first.
+     * Downloaded on first run into `filesDir` via [AssetDownloader] (nothing is bundled in the
+     * APK). Streaming ASR is loaded from disk via [MicTranscriber.loadFromFiles].
      */
-    private val asrAssetDir = "small-streaming-en"
-    private val embedAssetDir = "embeddinggemma-300m"
+    private val asrModelDir = "medium-streaming-en"
+    private val embedModelDir = "embeddinggemma-300m"
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var adapter: PhraseAdapter
@@ -150,85 +152,67 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun bootstrapEngine() {
-        if (!hasSmallStreamingAssetsInApk()) {
-            binding.statusText.text =
-                "Missing bundled ASR weights under assets/$asrAssetDir/ " +
-                    "(small English streaming: frontend, encoder, adapter, cross_kv, " +
-                    "decoder_kv, streaming_config.json, tokenizer.bin). " +
-                    "Clone this folder with Git LFS so ONNX assets are present."
-            return
-        }
-        if (!hasEmbeddingAssetsInApk()) {
-            binding.statusText.text =
-                "Missing bundled embedding weights under assets/$embedAssetDir/ " +
-                    "(model_q4.ort, tokenizer.bin). Use Git LFS."
-            return
-        }
+        // Download the Medium Streaming English speech model and the embedding
+        // model on first run into filesDir (nothing is bundled in the APK), then
+        // load them. Downloads are blocking, so run them off the main thread.
+        binding.statusText.text = "Downloading models (first run only)…"
+        Thread {
+            try {
+                val downloader = AssetDownloader()
 
-        try {
-            val asrRoot = File(filesDir, asrAssetDir)
-            AssetDirectoryCopy.copyDirIfNeeded(
-                this,
-                asrAssetDir,
-                asrRoot,
-                "streaming_config.json",
-            )
+                val asrRoot = File(filesDir, asrModelDir).apply { mkdirs() }
+                downloader.ensureModelPresent(
+                    asrRoot,
+                    ModelSpec.stt("en", JNI.MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING, false),
+                ) { _, index, total, done, totalBytes ->
+                    val pct = if (totalBytes > 0) (done * 100 / totalBytes) else 0
+                    runOnUiThread {
+                        binding.statusText.text = "Downloading speech model $index/$total ($pct%)…"
+                    }
+                }
 
-            val embedRoot = File(filesDir, embedAssetDir)
-            AssetDirectoryCopy.copyDirIfNeeded(
-                this,
-                embedAssetDir,
-                embedRoot,
-                "tokenizer.bin",
-            )
+                val embedRoot = File(filesDir, embedModelDir).apply { mkdirs() }
+                downloader.ensureModelPresent(
+                    embedRoot,
+                    ModelSpec.intent(null, "q4"),
+                ) { _, index, total, done, totalBytes ->
+                    val pct = if (totalBytes > 0) (done * 100 / totalBytes) else 0
+                    runOnUiThread {
+                        binding.statusText.text = "Downloading intent model $index/$total ($pct%)…"
+                    }
+                }
 
-            val ir = IntentRecognizer(
-                embedRoot.absolutePath,
-                JNI.MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M,
-                "q4",
-            )
-            intentRecognizer = ir
-            applyRegisteredIntents()
+                val ir = IntentRecognizer(
+                    embedRoot.absolutePath,
+                    JNI.MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M,
+                    "q4",
+                )
+                val m = MicTranscriber()
+                m.addListener(transcriptListener)
+                m.loadFromFiles(asrRoot.absolutePath, JNI.MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING)
 
-            val m = MicTranscriber()
-            mic = m
-            m.addListener(transcriptListener)
-            m.loadFromFiles(asrRoot.absolutePath, JNI.MOONSHINE_MODEL_ARCH_SMALL_STREAMING)
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
-                PackageManager.PERMISSION_GRANTED
-            ) {
-                m.onMicPermissionGranted()
+                runOnUiThread {
+                    intentRecognizer = ir
+                    mic = m
+                    applyRegisteredIntents()
+                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+                        PackageManager.PERMISSION_GRANTED
+                    ) {
+                        m.onMicPermissionGranted()
+                    }
+                    engineReady = true
+                    binding.statusText.text = "Ready. Tap Listen to use the microphone."
+                    updateDiagnostics()
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    binding.statusText.text = "Failed to load models: ${e.message}"
+                    intentRecognizer?.close()
+                    intentRecognizer = null
+                    mic = null
+                }
             }
-
-            engineReady = true
-            binding.statusText.text = "Ready. Tap Listen to use the microphone."
-            updateDiagnostics()
-        } catch (e: Exception) {
-            binding.statusText.text = "Failed to load models: ${e.message}"
-            intentRecognizer?.close()
-            intentRecognizer = null
-            mic = null
-        }
-    }
-
-    private fun hasSmallStreamingAssetsInApk(): Boolean {
-        val n = assets.list(asrAssetDir)?.toSet() ?: return false
-        return n.containsAll(
-            setOf(
-                "frontend.ort",
-                "encoder.ort",
-                "adapter.ort",
-                "cross_kv.ort",
-                "decoder_kv.ort",
-                "streaming_config.json",
-                "tokenizer.bin",
-            ),
-        )
-    }
-
-    private fun hasEmbeddingAssetsInApk(): Boolean {
-        val n = assets.list(embedAssetDir)?.toSet() ?: return false
-        return n.contains("tokenizer.bin") && n.contains("model_q4.ort")
+        }.start()
     }
 
     private fun applyRegisteredIntents() {

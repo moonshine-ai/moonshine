@@ -58,3 +58,4 @@ pico_monitor.log
 .claude/
 .release-state/
 /plans/
+/wasm/node_modules/

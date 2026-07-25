@@ -169,7 +169,13 @@ const SttLanguageEntry* find_stt_language(const std::string& language) {
 }
 
 std::vector<std::string> stt_component_files(const std::string& language_code,
-                                             int32_t model_arch) {
+                                             int32_t model_arch,
+                                             bool include_word_timestamps) {
+  // The `*_with_attention.ort` decoders are only used to produce word-level
+  // timestamps (the `word_timestamps` transcriber option). They roughly double
+  // the download, so they are only listed when the caller opts in - matching
+  // the option they would pass when constructing the transcriber. Only English
+  // publishes an attention decoder today.
   const bool is_english = (language_code == "en");
   if (is_streaming_arch(model_arch)) {
     std::vector<std::string> files = {
@@ -177,14 +183,14 @@ std::vector<std::string> stt_component_files(const std::string& language_code,
         "encoder.ort",   "frontend.ort",         "streaming_config.json",
         "tokenizer.bin",
     };
-    if (is_english) {
+    if (is_english && include_word_timestamps) {
       files.push_back("decoder_kv_with_attention.ort");
     }
     return files;
   }
   std::vector<std::string> files = {"encoder_model.ort",
                                     "decoder_model_merged.ort", "tokenizer.bin"};
-  if (is_english) {
+  if (is_english && include_word_timestamps) {
     files.push_back("decoder_with_attention.ort");
   }
   return files;
@@ -239,7 +245,7 @@ std::vector<std::string> embedding_component_files(const std::string& variant) {
 
 std::optional<ModelDependencies> stt_model_dependencies(
     const std::string& language, std::optional<int32_t> model_arch,
-    bool include_spelling) {
+    bool include_spelling, bool include_word_timestamps) {
   const SttLanguageEntry* lang = find_stt_language(language);
   if (lang == nullptr || lang->models.empty()) {
     return std::nullopt;
@@ -262,7 +268,9 @@ std::optional<ModelDependencies> stt_model_dependencies(
 
   ModelDependencies deps;
   deps.groups.push_back(make_group(
-      model->download_url, stt_component_files(lang->code, model->model_arch)));
+      model->download_url,
+      stt_component_files(lang->code, model->model_arch,
+                          include_word_timestamps)));
 
   if (include_spelling) {
     const SpellingModelEntry* spelling = find_spelling_model(lang->code);

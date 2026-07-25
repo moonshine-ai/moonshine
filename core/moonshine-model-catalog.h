@@ -53,13 +53,16 @@ struct ModelDependencies {
 // one of the MOONSHINE_MODEL_ARCH_* constants; when absent, the first
 // (default) model registered for the language is used. When `include_spelling`
 // is true and a spelling model is published for the language, a second group
-// carrying the spelling files is appended.
+// carrying the spelling files is appended. When `include_word_timestamps` is
+// true, the optional `*_with_attention.ort` decoder (used only by the
+// `word_timestamps` transcriber option, and roughly doubling the download) is
+// included for languages that publish it; leave it false to skip that file.
 //
 // Returns std::nullopt if the language (or the language+arch combination) is
 // unknown.
 std::optional<ModelDependencies> stt_model_dependencies(
     const std::string& language, std::optional<int32_t> model_arch,
-    bool include_spelling);
+    bool include_spelling, bool include_word_timestamps);
 
 // Returns the download manifest for an intent-recognition embedding model.
 //

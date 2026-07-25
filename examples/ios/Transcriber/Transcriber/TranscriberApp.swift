@@ -14,28 +14,23 @@ struct TranscriberApp: App {
     @State private var micTranscriber: MicTranscriber? = nil
     @State private var messages: [TranscriptLine] = []
     @State private var isRecording: Bool = false
+    @State private var status: String = "Preparing…"
+    @State private var isReady: Bool = false
     
     var body: some Scene {
         WindowGroup {
-            ContentView(isRecording: $isRecording, messages: $messages)
+            ContentView(
+                isRecording: $isRecording, messages: $messages,
+                status: $status, isReady: isReady)
             .task {
-                // Initialize micTranscriber when the app starts
+                // Download the Medium Streaming English model on first run (into
+                // the app's Application Support directory, reused thereafter),
+                // then load it. Nothing is bundled in the app package.
                 do {
-                    guard let bundle = Transcriber.frameworkBundle else {
-                        print("Error: Could not find moonshine framework bundle")
-                        return
-                    }
-                    guard let resourcePath = bundle.resourcePath else {
-                        print("Error: Could not find resource path in bundle")
-                        return
-                    }
-                    let modelPath = resourcePath.appending("/models/small-streaming-en/")
-                    if (!FileManager.default.fileExists(atPath: modelPath)) {
-                        print("Error: Model path does not exist: \(modelPath)")
-                        return
-                    }
-                    let transcriber = try MicTranscriber(modelPath: modelPath, modelArch: ModelArch.smallStreaming)
-                                            
+                    let modelPath = try await downloadModel()
+                    let transcriber = try MicTranscriber(
+                        modelPath: modelPath, modelArch: ModelArch.mediumStreaming)
+
                     // Add event listeners
                     transcriber.addListener { event in
                         if event is LineStarted {
@@ -53,7 +48,10 @@ struct TranscriberApp: App {
                     
                     // Store in @State after successful initialization
                     micTranscriber = transcriber
+                    status = "Ready. Tap the mic to start."
+                    isReady = true
                 } catch {
+                    status = "Error initializing transcriber: \(error.localizedDescription)"
                     print("Error initializing transcriber: \(error)")
                 }
             }
@@ -61,6 +59,23 @@ struct TranscriberApp: App {
         .onChange(of: isRecording) { _, newIsRecording in
             handleRecordingChanged(newIsRecording)
         }
+    }
+
+    /// Downloads the Medium Streaming English model into Application Support on
+    /// first run and returns the directory to load it from.
+    func downloadModel() async throws -> String {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let root = support.appendingPathComponent(
+            "moonshine-models/medium-streaming-en", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+
+        let downloader = AssetDownloader()
+        let spec = ModelSpec.stt(language: "en", modelArch: .mediumStreaming)
+        if !downloader.isModelPresent(root: root, spec: spec) {
+            status = "Downloading Medium Streaming English model (first run only)…"
+        }
+        _ = try await downloader.ensureModelPresent(root: root, spec: spec)
+        return root.path
     }
     
     func addNewMessage(_ message: TranscriptLine) {

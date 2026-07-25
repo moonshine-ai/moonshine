@@ -22,12 +22,22 @@
         border: 1px solid rgba(128,128,128,0.4); min-height: 6rem; white-space: pre-wrap;
       }
       .live { opacity: 0.6; }
+      hr { border: none; border-top: 1px solid rgba(128,128,128,0.3); margin: 2rem 0; }
+      .row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
     </style>
   </head>
   <body>
     <h1>Moonshine — Speech to Text</h1>
     <p>Live microphone transcription running entirely on-device via WebAssembly.</p>
     <button id="toggle">Start listening</button>
+
+    <hr />
+    <p>Or transcribe an audio file (no microphone needed):</p>
+    <div class="row">
+      <input id="audioFile" type="file" accept="audio/*,.wav" />
+      <button id="transcribeFile">Transcribe file</button>
+    </div>
+
     <p id="status">Idle.</p>
     <div id="transcript" aria-live="polite"></div>
 
@@ -35,19 +45,26 @@
       // Load the locally-built binding when the page is opened with ?local=1
       // (e.g. via examples/web/serve.mjs); otherwise use the published copy
       // from the jsDelivr CDN.
-      const useLocal =
-        new URLSearchParams(location.search).get('local') === '1';
+      const params = new URLSearchParams(location.search);
+      const useLocal = params.get('local') === '1';
+      // With &assets=local the model files are fetched from the repo (served by
+      // serve.mjs) instead of the CDN, so the page runs fully offline. This is
+      // what the browser integration test uses.
+      const useLocalAssets = params.get('assets') === 'local';
       const moduleUrl = useLocal
         ? '/wasm/dist/index.js'
         : 'https://cdn.jsdelivr.net/npm/@moonshine-ai/moonshine-wasm/dist/index.js';
       const {
         MicrophoneTranscriber,
+        Transcriber,
         ModelArch,
       } = await import(moduleUrl);
 
       const toggle = document.getElementById('toggle');
       const statusEl = document.getElementById('status');
       const transcriptEl = document.getElementById('transcript');
+      const audioFileEl = document.getElementById('audioFile');
+      const transcribeFileBtn = document.getElementById('transcribeFile');
 
       let mic = null;
       let running = false;
@@ -77,7 +94,7 @@
         try {
           mic = await MicrophoneTranscriber.load({
             language: 'en',
-            modelArch: ModelArch.BaseStreaming,
+            modelArch: ModelArch.MediumStreaming,
             listeners: [listener],
             onProgress: (loaded, total, file) => {
               const pct = total ? ` ${Math.round((100 * loaded) / total)}%` : '';
@@ -107,6 +124,83 @@
       }
 
       toggle.addEventListener('click', () => (running ? stop() : start()));
+
+      // --- Transcribe-from-file path -------------------------------------
+      // Uses a batch (non-streaming) Transcriber on decoded file audio, so it
+      // works without a microphone — and, with &assets=local, without a
+      // network. The result is written to #transcript and mirrored onto
+      // window.__moonshineFileTranscript for automated tests.
+
+      let batchTranscriber = null;
+
+      async function loadBatchTranscriber() {
+        if (batchTranscriber) return batchTranscriber;
+        statusEl.textContent = 'Loading model…';
+        if (useLocalAssets) {
+          // Small tiny-en model vendored in the repo's test-assets.
+          const base = '/test-assets/tiny-en';
+          batchTranscriber = await Transcriber.loadFromUrls(
+            {
+              'encoder_model.ort': `${base}/encoder_model.ort`,
+              'decoder_model_merged.ort': `${base}/decoder_model_merged.ort`,
+              'tokenizer.bin': `${base}/tokenizer.bin`,
+            },
+            { modelArch: ModelArch.Tiny },
+          );
+        } else {
+          batchTranscriber = await Transcriber.load({
+            language: 'en',
+            modelArch: ModelArch.Base,
+            onProgress: (loaded, total, file) => {
+              const pct = total ? ` ${Math.round((100 * loaded) / total)}%` : '';
+              statusEl.textContent = `Downloading ${file}${pct}…`;
+            },
+          });
+        }
+        return batchTranscriber;
+      }
+
+      /** Decodes an audio file and downmixes/resamples it to mono 16 kHz. */
+      async function decodeAudioFile(file) {
+        const bytes = await file.arrayBuffer();
+        const decoded = await new OfflineAudioContext(1, 1, 16000).decodeAudioData(bytes);
+        const frames = Math.max(1, Math.round(decoded.duration * 16000));
+        const off = new OfflineAudioContext(1, frames, 16000);
+        const src = off.createBufferSource();
+        src.buffer = decoded;
+        src.connect(off.destination);
+        src.start();
+        const rendered = await off.startRendering();
+        return { audio: rendered.getChannelData(0), sampleRate: 16000 };
+      }
+
+      async function transcribeFile() {
+        const file = audioFileEl.files?.[0];
+        if (!file) {
+          statusEl.textContent = 'Choose an audio file first.';
+          return;
+        }
+        transcribeFileBtn.disabled = true;
+        transcriptEl.removeAttribute('data-done');
+        try {
+          const t = await loadBatchTranscriber();
+          statusEl.textContent = 'Decoding audio…';
+          const { audio, sampleRate } = await decodeAudioFile(file);
+          statusEl.textContent = 'Transcribing…';
+          const transcript = t.transcribe(audio, { sampleRate });
+          const text = transcript.lines.map((l) => l.text).join('\n');
+          transcriptEl.textContent = text;
+          window.__moonshineFileTranscript = text;
+          transcriptEl.setAttribute('data-done', '1');
+          statusEl.textContent = `Done (${transcript.lines.length} line(s)).`;
+        } catch (err) {
+          statusEl.textContent = 'Failed: ' + err.message;
+        } finally {
+          transcribeFileBtn.disabled = false;
+        }
+      }
+
+      transcribeFileBtn.addEventListener('click', transcribeFile);
     </script>
   </body>
 </html>
