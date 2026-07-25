@@ -43,6 +43,11 @@ test('STT dependency manifest is valid JSON with groups', async () => {
   const group = manifest.groups[0];
   assert.equal(typeof group.base_url, 'string');
   assert.ok(Array.isArray(group.files) && group.files.length > 0);
+  // Each file entry is an object {name, url, size, checksum, checksum_type}.
+  const file = group.files[0];
+  assert.equal(typeof file.name, 'string');
+  assert.equal(typeof file.url, 'string');
+  assert.ok('size' in file && 'checksum' in file && 'checksum_type' in file);
 });
 
 test('TTS surface is present when built with TTS support', async () => {

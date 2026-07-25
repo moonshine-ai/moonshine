@@ -403,6 +403,98 @@ def moonshine_get_tts_dependencies_string(
         moonshine_free(addr)
 
 
+def moonshine_get_stt_dependencies_string(
+    language: str,
+    options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
+) -> str:
+    """Call ``moonshine_get_stt_dependencies`` and return the JSON manifest (UTF-8)."""
+    lib = _MoonshineLib().lib
+    opt_arr, opt_n, opt_keep = moonshine_options_array(options)
+    lang_b = language.encode("utf-8") if language is not None else None
+    out_p = ctypes.c_void_p()
+    err = lib.moonshine_get_stt_dependencies(lang_b, opt_arr, opt_n, ctypes.byref(out_p))
+    if err != MOONSHINE_ERROR_NONE:
+        raise MoonshineError(
+            lib.moonshine_error_to_string(err).decode("utf-8")
+            if lib.moonshine_error_to_string(err)
+            else f"moonshine_get_stt_dependencies failed ({err})"
+        )
+    addr = out_p.value
+    if not addr:
+        return ""
+    try:
+        return ctypes.string_at(addr).decode("utf-8")
+    finally:
+        moonshine_free(addr)
+
+
+def moonshine_get_intent_dependencies_string(
+    model_name: Optional[str] = None,
+    options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
+) -> str:
+    """Call ``moonshine_get_intent_dependencies`` and return the JSON manifest (UTF-8)."""
+    lib = _MoonshineLib().lib
+    opt_arr, opt_n, opt_keep = moonshine_options_array(options)
+    name_b = model_name.encode("utf-8") if model_name is not None else None
+    out_p = ctypes.c_void_p()
+    err = lib.moonshine_get_intent_dependencies(
+        name_b, opt_arr, opt_n, ctypes.byref(out_p)
+    )
+    if err != MOONSHINE_ERROR_NONE:
+        raise MoonshineError(
+            lib.moonshine_error_to_string(err).decode("utf-8")
+            if lib.moonshine_error_to_string(err)
+            else f"moonshine_get_intent_dependencies failed ({err})"
+        )
+    addr = out_p.value
+    if not addr:
+        return ""
+    try:
+        return ctypes.string_at(addr).decode("utf-8")
+    finally:
+        moonshine_free(addr)
+
+
+def moonshine_get_stt_catalog_string() -> str:
+    """Call ``moonshine_get_stt_catalog`` and return the JSON catalog (UTF-8)."""
+    lib = _MoonshineLib().lib
+    out_p = ctypes.c_void_p()
+    err = lib.moonshine_get_stt_catalog(ctypes.byref(out_p))
+    if err != MOONSHINE_ERROR_NONE:
+        raise MoonshineError(
+            lib.moonshine_error_to_string(err).decode("utf-8")
+            if lib.moonshine_error_to_string(err)
+            else f"moonshine_get_stt_catalog failed ({err})"
+        )
+    addr = out_p.value
+    if not addr:
+        return ""
+    try:
+        return ctypes.string_at(addr).decode("utf-8")
+    finally:
+        moonshine_free(addr)
+
+
+def moonshine_get_embedding_catalog_string() -> str:
+    """Call ``moonshine_get_embedding_catalog`` and return the JSON catalog (UTF-8)."""
+    lib = _MoonshineLib().lib
+    out_p = ctypes.c_void_p()
+    err = lib.moonshine_get_embedding_catalog(ctypes.byref(out_p))
+    if err != MOONSHINE_ERROR_NONE:
+        raise MoonshineError(
+            lib.moonshine_error_to_string(err).decode("utf-8")
+            if lib.moonshine_error_to_string(err)
+            else f"moonshine_get_embedding_catalog failed ({err})"
+        )
+    addr = out_p.value
+    if not addr:
+        return ""
+    try:
+        return ctypes.string_at(addr).decode("utf-8")
+    finally:
+        moonshine_free(addr)
+
+
 def moonshine_try_get_tts_voices(
     languages: Optional[str] = None,
     options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
@@ -810,6 +902,32 @@ class _MoonshineLib:
             ctypes.c_char_p,
             ctypes.POINTER(TranscriberOptionC),
             ctypes.c_uint64,
+            ctypes.POINTER(ctypes.c_void_p),
+        ]
+
+        lib.moonshine_get_stt_dependencies.restype = ctypes.c_int32
+        lib.moonshine_get_stt_dependencies.argtypes = [
+            ctypes.c_char_p,
+            ctypes.POINTER(TranscriberOptionC),
+            ctypes.c_uint64,
+            ctypes.POINTER(ctypes.c_void_p),
+        ]
+
+        lib.moonshine_get_intent_dependencies.restype = ctypes.c_int32
+        lib.moonshine_get_intent_dependencies.argtypes = [
+            ctypes.c_char_p,
+            ctypes.POINTER(TranscriberOptionC),
+            ctypes.c_uint64,
+            ctypes.POINTER(ctypes.c_void_p),
+        ]
+
+        lib.moonshine_get_stt_catalog.restype = ctypes.c_int32
+        lib.moonshine_get_stt_catalog.argtypes = [
+            ctypes.POINTER(ctypes.c_void_p),
+        ]
+
+        lib.moonshine_get_embedding_catalog.restype = ctypes.c_int32
+        lib.moonshine_get_embedding_catalog.argtypes = [
             ctypes.POINTER(ctypes.c_void_p),
         ]
 

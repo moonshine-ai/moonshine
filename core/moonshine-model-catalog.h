@@ -17,13 +17,29 @@
 
 namespace moonshine {
 
+// A single downloadable model file, with the metadata a client needs to fetch
+// and verify it. `url` is the fully-qualified download URL (`base_url + "/" +
+// name`). `size` is the expected size in bytes, or -1 when unknown. `checksum`
+// is a base64-encoded digest of type `checksum_type` (e.g. "crc32c"), or empty
+// strings when unknown. Size/checksum come from the generated registry in
+// core/moonshine-model-file-metadata.* (see
+// scripts/generate-model-file-metadata.py); they are absent (-1 / "") until the
+// registry is regenerated for a newly published file.
+struct ModelFile {
+  std::string name;
+  std::string url;
+  int64_t size = -1;
+  std::string checksum;
+  std::string checksum_type;
+};
+
 // One set of files that share a single base URL. A model's full download list
 // is one or more of these groups: STT is a single group, plus an optional
 // second group for the alphanumeric spelling model (which lives under a
-// different CDN path). Callers download `base_url + "/" + file` for each file.
+// different CDN path). Each file already carries its full `url`.
 struct ModelDependencyGroup {
   std::string base_url;
-  std::vector<std::string> files;
+  std::vector<ModelFile> files;
 };
 
 struct ModelDependencies {
@@ -62,6 +78,37 @@ std::vector<std::string> intent_supported_models();
 
 // Published variants for an embedding model (empty if the model is unknown).
 std::vector<std::string> intent_supported_variants(const std::string& model_name);
+
+// --- Full catalog listings ------------------------------------------------
+// These expose the catalog tables themselves (languages, friendly names,
+// architectures, variants) so language bindings can present model pickers and
+// resolve defaults without maintaining their own duplicate copies.
+
+struct SttCatalogModel {
+  int32_t model_arch;      // one of the MOONSHINE_MODEL_ARCH_* constants
+  std::string download_url;
+  bool is_default;         // true for the language's default (first) model
+};
+
+struct SttCatalogLanguage {
+  std::string code;          // e.g. "en"
+  std::string english_name;  // e.g. "English"
+  std::vector<SttCatalogModel> models;
+};
+
+// All STT languages and their registered models, in catalog order.
+std::vector<SttCatalogLanguage> stt_catalog_listing();
+
+struct EmbeddingCatalogModel {
+  std::string name;          // e.g. "embeddinggemma-300m"
+  std::string english_name;  // e.g. "Embedding Gemma 300M"
+  std::string download_url;
+  std::vector<std::string> variants;
+  std::string default_variant;
+};
+
+// All embedding models, in catalog order.
+std::vector<EmbeddingCatalogModel> embedding_catalog_listing();
 
 }  // namespace moonshine
 

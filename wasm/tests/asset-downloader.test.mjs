@@ -50,10 +50,28 @@ function okResponse(url) {
   };
 }
 
-test('downloadManifest fetches every group file, keyed by basename', async () => {
+test('downloadManifest fetches every group file, keyed by name, using file.url', async () => {
   const manifest = JSON.stringify({
     groups: [
-      { base_url: 'https://cdn.example/models/en', files: ['encoder.ort', 'tokenizer.bin'] },
+      {
+        base_url: 'https://cdn.example/models/en',
+        files: [
+          {
+            name: 'encoder.ort',
+            url: 'https://cdn.example/models/en/encoder.ort',
+            size: null,
+            checksum: '',
+            checksum_type: '',
+          },
+          {
+            name: 'tokenizer.bin',
+            url: 'https://cdn.example/models/en/tokenizer.bin',
+            size: null,
+            checksum: '',
+            checksum_type: '',
+          },
+        ],
+      },
     ],
   });
   await withFetch(okResponse, async (urls) => {
@@ -67,13 +85,39 @@ test('downloadManifest fetches every group file, keyed by basename', async () =>
   });
 });
 
-test('downloadManifest normalizes slashes when joining URLs', async () => {
+test('downloadManifest falls back to joining base_url + name when url is absent', async () => {
   const manifest = JSON.stringify({
-    groups: [{ base_url: 'https://cdn.example/x/', files: ['/a.ort'] }],
+    groups: [{ base_url: 'https://cdn.example/x/', files: [{ name: '/a.ort' }] }],
   });
   await withFetch(okResponse, async (urls) => {
     await new AssetDownloader().downloadManifest(manifest);
     assert.deepEqual(urls, ['https://cdn.example/x/a.ort']);
+  });
+});
+
+test('downloadManifest rejects when a downloaded file has the wrong size', async () => {
+  const manifest = JSON.stringify({
+    groups: [
+      {
+        base_url: 'https://cdn.example/en',
+        files: [
+          {
+            name: 'tokenizer.bin',
+            url: 'https://cdn.example/en/tokenizer.bin',
+            size: 999999,
+            checksum: '',
+            checksum_type: '',
+          },
+        ],
+      },
+    ],
+  });
+  await withFetch(okResponse, async () => {
+    await assert.rejects(
+      () => new AssetDownloader().downloadManifest(manifest),
+      (err) =>
+        err instanceof MoonshineDownloadError && /size mismatch/i.test(err.message),
+    );
   });
 });
 
@@ -112,7 +156,14 @@ test('invalid manifest JSON throws a MoonshineDownloadError', async () => {
 
 test('onProgress is invoked with (loaded, total, file)', async () => {
   const manifest = JSON.stringify({
-    groups: [{ base_url: 'https://cdn.example/en', files: ['tokenizer.bin'] }],
+    groups: [
+      {
+        base_url: 'https://cdn.example/en',
+        files: [
+          { name: 'tokenizer.bin', url: 'https://cdn.example/en/tokenizer.bin' },
+        ],
+      },
+    ],
   });
   const progress = [];
   const downloader = new AssetDownloader({

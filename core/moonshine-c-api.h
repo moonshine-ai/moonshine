@@ -965,13 +965,16 @@ MOONSHINE_EXPORT int32_t moonshine_get_tts_voices(
    On success, writes a NUL-terminated JSON object to
    ``*out_dependencies_json`` and returns ``MOONSHINE_ERROR_NONE``. The shape
    is:
-     ``{"groups":[{"base_url":"https://download.moonshine.ai/model/tiny-en/quantized/tiny-en","files":["encoder_model.ort","decoder_model_merged.ort","tokenizer.bin","decoder_with_attention.ort"]}]}``
-   Download each file from ``base_url + "/" + file``. A model is a single
-   group, plus an optional second group for the spelling model (which uses a
-   different ``base_url``). The buffer is allocated with ``malloc``; release it
-   with ``free``. On failure (empty/unknown language, or an unknown
-   language+arch pair) returns a non-zero error code and sets
-   ``*out_dependencies_json`` to NULL. */
+     ``{"groups":[{"base_url":"https://download.moonshine.ai/model/tiny-en/quantized/tiny-en","files":[{"name":"encoder_model.ort","url":"https://download.moonshine.ai/model/tiny-en/quantized/tiny-en/encoder_model.ort","size":12345,"checksum":"abc==","checksum_type":"crc32c"}, ...]}]}``
+   Each entry in ``files`` is an object with ``name`` (canonical filename),
+   ``url`` (fully-qualified download URL, i.e. ``base_url + "/" + name``),
+   ``size`` (bytes, or null when unknown), ``checksum`` (base64 digest, or ""),
+   and ``checksum_type`` (e.g. "crc32c", or ""). A model is a single group,
+   plus an optional second group for the spelling model (which uses a different
+   ``base_url``). The buffer is allocated with ``malloc``; release it with
+   ``free``. On failure (empty/unknown language, or an unknown language+arch
+   pair) returns a non-zero error code and sets ``*out_dependencies_json`` to
+   NULL. */
 MOONSHINE_EXPORT int32_t moonshine_get_stt_dependencies(
     const char *language, const struct moonshine_option_t *options,
     uint64_t options_count, char **out_dependencies_json);
@@ -987,17 +990,33 @@ MOONSHINE_EXPORT int32_t moonshine_get_stt_dependencies(
    ``options`` / ``options_count`` recognize ``variant`` (aliases:
    ``model_variant``): one of ``"q4"``, ``"q8"``, ``"fp16"``, ``"fp32"``, or
    ``"q4f16"``. When omitted, the model's default variant is used. Other
-   options are ignored. The manifest includes the model's external-data sidecar
-   (``model*.onnx_data``) alongside the ``.onnx`` file and ``tokenizer.bin``.
+   options are ignored. The manifest lists the single all-in-one model file
+   (``model_<variant>.ort``) and ``tokenizer.bin``.
 
    On success, writes a NUL-terminated JSON object to
-   ``*out_dependencies_json`` (single group) and returns
-   ``MOONSHINE_ERROR_NONE``; free with ``free``. On failure (unknown model or
-   variant) returns a non-zero error code and sets ``*out_dependencies_json``
-   to NULL. */
+   ``*out_dependencies_json`` (single group, same file-object shape as
+   moonshine_get_stt_dependencies) and returns ``MOONSHINE_ERROR_NONE``; free
+   with ``free``. On failure (unknown model or variant) returns a non-zero
+   error code and sets ``*out_dependencies_json`` to NULL. */
 MOONSHINE_EXPORT int32_t moonshine_get_intent_dependencies(
     const char *model_name, const struct moonshine_option_t *options,
     uint64_t options_count, char **out_dependencies_json);
+
+/* Returns the full speech-to-text model catalog as a JSON object, so bindings
+   can build language/model pickers and resolve defaults without their own copy
+   of the tables. The shape is:
+     ``{"languages":[{"code":"en","english_name":"English","models":[{"model_arch":9,"download_url":"https://...","is_default":true}, ...]}, ...]}``
+   The buffer is allocated with ``malloc``; release it with ``free``. Returns
+   ``MOONSHINE_ERROR_NONE`` on success. */
+MOONSHINE_EXPORT int32_t moonshine_get_stt_catalog(char **out_catalog_json);
+
+/* Returns the full intent-recognition embedding model catalog as a JSON object.
+   The shape is:
+     ``{"models":[{"name":"embeddinggemma-300m","english_name":"Embedding Gemma 300M","download_url":"https://...","variants":["q4", ...],"default_variant":"q4"}]}``
+   The buffer is allocated with ``malloc``; release it with ``free``. Returns
+   ``MOONSHINE_ERROR_NONE`` on success. */
+MOONSHINE_EXPORT int32_t
+moonshine_get_embedding_catalog(char **out_catalog_json);
 
 /* Synthesizes text to speech.
    ``options`` / ``options_count``: optional per-call overrides using the same

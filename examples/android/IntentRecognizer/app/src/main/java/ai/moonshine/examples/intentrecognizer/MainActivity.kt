@@ -161,7 +161,7 @@ class MainActivity : AppCompatActivity() {
         if (!hasEmbeddingAssetsInApk()) {
             binding.statusText.text =
                 "Missing bundled embedding weights under assets/$embedAssetDir/ " +
-                    "(model_q4.onnx, model_q4.onnx_data, tokenizer.bin). Use Git LFS."
+                    "(model_q4.ort, tokenizer.bin). Use Git LFS."
             return
         }
 
@@ -228,7 +228,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun hasEmbeddingAssetsInApk(): Boolean {
         val n = assets.list(embedAssetDir)?.toSet() ?: return false
-        return n.contains("tokenizer.bin") && n.contains("model_q4.onnx")
+        return n.contains("tokenizer.bin") && n.contains("model_q4.ort")
     }
 
     private fun applyRegisteredIntents() {

@@ -1314,6 +1314,32 @@ TEST_CASE("moonshine-stt-intent-dependency-api") {
     std::free(out);
   }
 
+  SUBCASE("stt-files-are-objects-with-name-url-size-checksum") {
+    // The manifest schema deliberately makes each `files` entry an object
+    // carrying name/url/size/checksum/checksum_type (not a bare string).
+    const moonshine_option_t opts[] = {
+        {"model_arch", "0"},  // MOONSHINE_MODEL_ARCH_TINY
+    };
+    char* out = nullptr;
+    REQUIRE(moonshine_get_stt_dependencies("en", opts, 1, &out) ==
+            MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string json(out);
+    // Object keys are present.
+    CHECK(json.find("\"name\":\"encoder_model.ort\"") != std::string::npos);
+    CHECK(json.find("\"url\":") != std::string::npos);
+    CHECK(json.find("\"size\":") != std::string::npos);
+    CHECK(json.find("\"checksum\":") != std::string::npos);
+    CHECK(json.find("\"checksum_type\":") != std::string::npos);
+    // Each file's url is the base_url joined with its name.
+    CHECK(json.find("\"url\":\"https://download.moonshine.ai/model/tiny-en/"
+                    "quantized/tiny-en/encoder_model.ort\"") !=
+          std::string::npos);
+    // `files` is no longer a bare string array, so the old shape must be gone.
+    CHECK(json.find("\"files\":[\"") == std::string::npos);
+    std::free(out);
+  }
+
   SUBCASE("stt-non-english-omits-attention-extra") {
     const moonshine_option_t opts[] = {
         {"model_arch", "0"},  // MOONSHINE_MODEL_ARCH_TINY
@@ -1467,6 +1493,46 @@ TEST_CASE("moonshine-stt-intent-dependency-api") {
                                             &out) ==
           MOONSHINE_ERROR_INVALID_ARGUMENT);
     CHECK(out == nullptr);
+  }
+}
+
+TEST_CASE("moonshine-catalog-listing-api") {
+  SUBCASE("stt-catalog-null-output") {
+    CHECK(moonshine_get_stt_catalog(nullptr) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+  }
+
+  SUBCASE("embedding-catalog-null-output") {
+    CHECK(moonshine_get_embedding_catalog(nullptr) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+  }
+
+  SUBCASE("stt-catalog-lists-languages-and-models") {
+    char* out = nullptr;
+    REQUIRE(moonshine_get_stt_catalog(&out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string json(out);
+    CHECK(json.find("\"languages\"") != std::string::npos);
+    CHECK(json.find("\"code\":\"en\"") != std::string::npos);
+    CHECK(json.find("\"english_name\":\"English\"") != std::string::npos);
+    CHECK(json.find("\"model_arch\":") != std::string::npos);
+    CHECK(json.find("\"download_url\":") != std::string::npos);
+    CHECK(json.find("\"is_default\":true") != std::string::npos);
+    std::free(out);
+  }
+
+  SUBCASE("embedding-catalog-lists-models-and-variants") {
+    char* out = nullptr;
+    REQUIRE(moonshine_get_embedding_catalog(&out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string json(out);
+    CHECK(json.find("\"models\"") != std::string::npos);
+    CHECK(json.find("\"name\":\"embeddinggemma-300m\"") != std::string::npos);
+    CHECK(json.find("\"english_name\":\"Embedding Gemma 300M\"") !=
+          std::string::npos);
+    CHECK(json.find("\"variants\":") != std::string::npos);
+    CHECK(json.find("\"default_variant\":\"q4\"") != std::string::npos);
+    std::free(out);
   }
 }
 

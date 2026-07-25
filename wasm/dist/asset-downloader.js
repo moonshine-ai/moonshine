@@ -32,8 +32,15 @@ export class AssetDownloader {
         const out = new Map();
         for (const group of manifest.groups ?? []) {
             for (const file of group.files) {
-                const url = joinUrl(group.base_url, file);
-                out.set(file, await this.fetchFile(url));
+                const url = file.url ?? joinUrl(group.base_url, file.name);
+                const bytes = await this.fetchFile(url);
+                if (typeof file.size === 'number' &&
+                    file.size >= 0 &&
+                    bytes.byteLength !== file.size) {
+                    throw new MoonshineDownloadError(`Size mismatch for ${file.name}: expected ${file.size} bytes, ` +
+                        `got ${bytes.byteLength} (from ${url})`);
+                }
+                out.set(file.name, bytes);
             }
         }
         return out;
