@@ -23,13 +23,22 @@ struct TranscriberApp: App {
                 isRecording: $isRecording, messages: $messages,
                 status: $status, isReady: isReady)
             .task {
-                // Download the Medium Streaming English model on first run (into
-                // the app's Application Support directory, reused thereafter),
-                // then load it. Nothing is bundled in the app package.
+                // Download the Medium Streaming English model on first run (into a
+                // managed cache directory, reused thereafter) and construct the
+                // transcriber in one call. Nothing is bundled in the app package.
                 do {
-                    let modelPath = try await downloadModel()
-                    let transcriber = try MicTranscriber(
-                        modelPath: modelPath, modelArch: ModelArch.mediumStreaming)
+                    let transcriber = try await MicTranscriber.load(
+                        language: "en",
+                        modelArch: .mediumStreaming
+                    ) { progress in
+                        let pct =
+                            progress.bytesTotal > 0
+                            ? Int(progress.bytesDownloaded * 100 / progress.bytesTotal) : 0
+                        Task { @MainActor in
+                            status =
+                                "Downloading model \(progress.fileIndex)/\(progress.totalFiles) (\(pct)%)…"
+                        }
+                    }
 
                     // Add event listeners
                     transcriber.addListener { event in
@@ -61,23 +70,6 @@ struct TranscriberApp: App {
         }
     }
 
-    /// Downloads the Medium Streaming English model into Application Support on
-    /// first run and returns the directory to load it from.
-    func downloadModel() async throws -> String {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let root = support.appendingPathComponent(
-            "moonshine-models/medium-streaming-en", isDirectory: true)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-
-        let downloader = AssetDownloader()
-        let spec = ModelSpec.stt(language: "en", modelArch: .mediumStreaming)
-        if !downloader.isModelPresent(root: root, spec: spec) {
-            status = "Downloading Medium Streaming English model (first run only)…"
-        }
-        _ = try await downloader.ensureModelPresent(root: root, spec: spec)
-        return root.path
-    }
-    
     func addNewMessage(_ message: TranscriptLine) {
         messages.append(message)
     }

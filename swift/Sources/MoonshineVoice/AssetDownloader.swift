@@ -3,7 +3,7 @@ import Foundation
 /// Which model's files to resolve and download. Each case maps to one of the native dependency
 /// APIs (`moonshine_get_*_dependencies`), so the file list always comes from the library rather
 /// than being hardcoded here.
-public enum ModelSpec: Sendable {
+public enum ModelSpec: Sendable, Hashable {
     /// Speech-to-text transcription model. `modelArch` selects the architecture (nil = the default
     /// for the language); `includeSpelling` also fetches the alphanumeric spelling model when one
     /// is published for the language. `includeWordTimestamps` also fetches the optional attention

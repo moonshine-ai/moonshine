@@ -25,9 +25,13 @@
  * subsystem and the success/error beep diagnostics are intentionally omitted
  * for now (they depend on helpers outside the WASM binding).
  */
-import type { IntentRecognizer } from './intent-recognizer.js';
+import type { AssetDownloader } from './asset-downloader.js';
+import { ModelArch } from './enums.js';
 import type { LineCompleted, TranscriptEventListener } from './events.js';
-import type { TextToSpeech } from './text-to-speech.js';
+import { IntentRecognizer, type IntentRecognizerOptions } from './intent-recognizer.js';
+import { MicrophoneTranscriber } from './microphone-transcriber.js';
+import { type MoonshineModule } from './module.js';
+import { TextToSpeech, type TextToSpeechOptions } from './text-to-speech.js';
 export declare const InputMode: {
     readonly Free: "free";
     readonly Phrase: "phrase";
@@ -113,6 +117,57 @@ export interface DialogFlowOptions {
     audioContext?: AudioContext;
 }
 /**
+ * Options for {@link DialogFlow.load}, which downloads and wires the TTS, intent, and (optionally)
+ * microphone engines a voice dialog needs, then returns them all ready to use.
+ *
+ * Pass pre-loaded `tts` / `intentRecognizer` to reuse existing instances (or to load them from
+ * self-hosted assets via their own `loadFromUrls` factories); otherwise they are fetched from the
+ * Moonshine CDN. A single `module`, `onProgress`, and `downloader` are shared across every load.
+ */
+export interface DialogFlowLoadOptions {
+    /** STT language for the microphone transcriber (e.g. `"en"`). Default `"en"`. */
+    language?: string;
+    /** Streaming architecture for the microphone transcriber. Default {@link ModelArch.MediumStreaming}. */
+    modelArch?: ModelArch;
+    /** Build a {@link MicrophoneTranscriber} wired to the runner. Default `true`. */
+    microphone?: boolean;
+    /** Extra listeners added to the mic alongside the runner (e.g. to log user lines). */
+    micListeners?: TranscriptEventListener[];
+    /** Constraints forwarded to the microphone transcriber. */
+    audioConstraints?: MediaTrackConstraints | boolean;
+    /** A pre-loaded TTS engine. When omitted, one is loaded (from `ttsOptions` or the CDN). */
+    tts?: TextToSpeech;
+    /** Options for loading TTS when `tts` is not supplied. Defaults to a CDN load for `language`. */
+    ttsOptions?: TextToSpeechOptions;
+    /** A pre-loaded intent recognizer. When omitted, one is loaded (from `intentOptions` or the CDN). */
+    intentRecognizer?: IntentRecognizer;
+    /** Options for loading the intent recognizer when one is not supplied. */
+    intentOptions?: IntentRecognizerOptions;
+    /** Flows to register on the runner, keyed by trigger phrase. */
+    flows?: Record<string, FlowFn>;
+    /** Global handlers to register on the runner, keyed by trigger phrase. */
+    globals?: Record<string, GlobalHandler>;
+    /** Forwarded to the {@link DialogFlow} constructor. */
+    triggerThreshold?: number;
+    ignoreSttDuringTts?: boolean;
+    muteFn?: (mute: boolean) => void | Promise<void>;
+    speakFn?: (text: string) => void | Promise<void>;
+    audioContext?: AudioContext;
+    /** Shared WASM module, progress callback, and downloader across all three loads. */
+    module?: MoonshineModule;
+    onProgress?: (loaded: number, total: number | undefined, file: string) => void;
+    downloader?: AssetDownloader;
+}
+/** The wired-up engines returned by {@link DialogFlow.load}. */
+export interface DialogFlowBundle {
+    /** The runner, with `flows` / `globals` registered and driven by `mic`. */
+    dialog: DialogFlow;
+    /** The microphone transcriber, unless `microphone: false` was passed. */
+    mic?: MicrophoneTranscriber;
+    tts: TextToSpeech;
+    intent: IntentRecognizer;
+}
+/**
  * Runs generator-based conversational flows, driven by completed transcript
  * lines. Register flows against trigger phrases; when no flow is active, a
  * completed line is matched against triggers, otherwise it answers the pending
@@ -128,6 +183,16 @@ export declare class DialogFlow implements TranscriptEventListener {
     private queue;
     private triggersRegistered;
     constructor(options?: DialogFlowOptions);
+    /**
+     * Downloads (or reuses) the TTS, intent, and microphone engines a voice dialog needs, wires them
+     * together, registers the given flows/globals, and returns the ready {@link DialogFlow} plus the
+     * engines. This is the one-call equivalent of the manual "load TTS + intent + mic, then `new
+     * DialogFlow(...)`, then `registerFlow`, then `mic.addListener(runner)`" dance.
+     *
+     * Progress from all downloads is reported through a single `onProgress`. Call `await
+     * bundle.mic?.start()` to begin listening.
+     */
+    static load(options?: DialogFlowLoadOptions): Promise<DialogFlowBundle>;
     registerFlow(triggerPhrase: string, flow: FlowFn): void;
     registerGlobal(triggerPhrase: string, handler: GlobalHandler): void;
     get isActive(): boolean;

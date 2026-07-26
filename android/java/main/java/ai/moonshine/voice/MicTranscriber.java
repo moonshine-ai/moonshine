@@ -1,12 +1,14 @@
 package ai.moonshine.voice;
 
 import android.Manifest;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.util.Log;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import java.lang.ref.WeakReference;
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -47,6 +49,28 @@ public class MicTranscriber extends Transcriber {
   public void loadFromFiles(String modelRootDir, int modelArch) {
     super.loadFromFiles(modelRootDir, modelArch);
     this.isLoadedSignal.complete(null);
+  }
+
+  /**
+   * Downloads the speech-to-text model for {@code language} / {@code modelArch} (if not already
+   * present, into a managed {@link ModelCache} directory) on a background thread, then builds and
+   * returns a ready {@link MicTranscriber} through {@code callback} on the main thread.
+   *
+   * <p>The same {@code modelArch} drives both the download manifest and the load, so the caller
+   * specifies it once. Call {@link #cancel()} on the returned handle to abort.
+   *
+   * @param context any {@link Context}; the application context is retained.
+   * @param language language code (e.g. {@code "en"}).
+   * @param modelArch a {@code MOONSHINE_MODEL_ARCH_*} value.
+   */
+  public static Cancellable loadFromCatalog(Context context, String language, int modelArch,
+                                            LoadCallback<MicTranscriber> callback) {
+    ModelSpec spec = ModelSpec.stt(language, modelArch, false);
+    return CatalogLoader.load(context, Collections.singletonList(spec), directories -> {
+      MicTranscriber transcriber = new MicTranscriber();
+      transcriber.loadFromFiles(directories.get(spec).getAbsolutePath(), modelArch);
+      return transcriber;
+    }, callback);
   }
 
   public void loadFromMemory(byte[] encoderModelData, byte[] decoderModelData,

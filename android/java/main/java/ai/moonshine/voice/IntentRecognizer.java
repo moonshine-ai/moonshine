@@ -1,5 +1,9 @@
 package ai.moonshine.voice;
 
+import android.content.Context;
+
+import androidx.annotation.Nullable;
+
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -27,6 +31,27 @@ public class IntentRecognizer {
 
   public IntentRecognizer(String modelRootDir, int embeddingModelArch) {
     this(modelRootDir, embeddingModelArch, "q4");
+  }
+
+  /**
+   * Downloads the intent-recognition embedding model (if not already present, into a managed
+   * {@link ModelCache} directory) on a background thread, then builds and returns a ready
+   * {@link IntentRecognizer} through {@code callback} on the main thread.
+   *
+   * @param context            any {@link Context}; the application context is retained.
+   * @param modelName          embedding model id (e.g. {@code "embeddinggemma-300m"}), or null for
+   *                           the default.
+   * @param embeddingModelArch e.g. {@link JNI#MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M}.
+   * @param variant            e.g. {@code "q4"}, or null for the default.
+   */
+  public static Cancellable loadFromCatalog(Context context, @Nullable String modelName,
+                                            int embeddingModelArch, @Nullable String variant,
+                                            LoadCallback<IntentRecognizer> callback) {
+    ModelSpec spec = ModelSpec.intent(modelName, variant);
+    return CatalogLoader.load(context, Collections.singletonList(spec),
+        directories -> new IntentRecognizer(
+            directories.get(spec).getAbsolutePath(), embeddingModelArch, variant),
+        callback);
   }
 
   /**

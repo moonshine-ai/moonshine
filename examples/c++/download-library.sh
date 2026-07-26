@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 ARCH=$(uname -m)
 case "$ARCH" in
@@ -25,7 +26,7 @@ fi
 # directory from the archive), so the compile command is the same regardless of
 # operating system or architecture.
 rm -rf moonshine-voice
-curl -O -L https://github.com/moonshine-ai/moonshine/releases/download/v0.0.72/moonshine-voice-${PLATFORM}.tar.gz
+curl -f -O -L https://github.com/moonshine-ai/moonshine/releases/download/v0.0.73/moonshine-voice-${PLATFORM}.tar.gz
 mkdir -p moonshine-voice
 tar xzf moonshine-voice-${PLATFORM}.tar.gz -C moonshine-voice --strip-components=1
 rm moonshine-voice-${PLATFORM}.tar.gz
@@ -47,8 +48,8 @@ for MODEL_FILE in \
     frontend.ort \
     streaming_config.json \
     tokenizer.bin; do
-    curl -o ${MODEL_DIR}/${MODEL_FILE} -L ${MODEL_BASE_URL}/${MODEL_FILE}
+    curl -f -o ${MODEL_DIR}/${MODEL_FILE} -L ${MODEL_BASE_URL}/${MODEL_FILE}
 done
-curl -o two_cities.wav -L https://github.com/moonshine-ai/moonshine/raw/main/test-assets/two_cities.wav
+curl -f -o two_cities.wav -L https://github.com/moonshine-ai/moonshine/raw/main/test-assets/two_cities.wav
 
 echo "Model downloaded to ${MODEL_DIR} and sample audio saved to two_cities.wav"

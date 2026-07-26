@@ -18,5 +18,5 @@ export { MicrophoneTranscriber, type MicrophoneTranscriberOptions, } from './mic
 export { TextToSpeech, type TextToSpeechOptions, type TtsFromAssets, type TtsFromCatalog, } from './text-to-speech.js';
 export { GraphemeToPhonemizer, type GraphemeToPhonemizerOptions, } from './grapheme-to-phonemizer.js';
 export { IntentRecognizer, type IntentRecognizerOptions, type IntentFromUrlsOptions, type IntentPhrase, } from './intent-recognizer.js';
-export { DialogFlow, Dialog, DialogCancelled, DialogRestart, InputMode, spellOut, type Prompt, type Say, type Ask, type Confirm, type Choose, type FlowFn, type GlobalHandler, type DialogFlowOptions, } from './dialog-flow.js';
+export { DialogFlow, Dialog, DialogCancelled, DialogRestart, InputMode, spellOut, type Prompt, type Say, type Ask, type Confirm, type Choose, type FlowFn, type GlobalHandler, type DialogFlowOptions, type DialogFlowLoadOptions, type DialogFlowBundle, } from './dialog-flow.js';
 //# sourceMappingURL=index.d.ts.map

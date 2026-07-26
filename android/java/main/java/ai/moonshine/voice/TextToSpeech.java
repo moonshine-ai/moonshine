@@ -114,6 +114,27 @@ public class TextToSpeech {
     }
 
     /**
+     * Downloads the text-to-speech assets for {@code language} / {@code voice} (if not already
+     * present, into a managed {@link ModelCache} directory) on a background thread, then builds and
+     * returns a ready {@link TextToSpeech} through {@code callback} on the main thread.
+     *
+     * @param context  any {@link Context}; the application context is retained.
+     * @param language Moonshine language tag (e.g. {@code "en_us"}).
+     * @param voice    prefixed voice id (e.g. {@code "kokoro_af_heart"}), or null for the default.
+     */
+    public static Cancellable loadFromCatalog(Context context, String language,
+            @Nullable String voice, LoadCallback<TextToSpeech> callback) {
+        ModelSpec spec = ModelSpec.tts(language, voice);
+        return CatalogLoader.load(context, java.util.Collections.singletonList(spec), directories -> {
+            List<TranscriberOption> options = new ArrayList<>();
+            if (voice != null) {
+                options.add(new TranscriberOption("voice", voice));
+            }
+            return new TextToSpeech(language, directories.get(spec).getAbsolutePath(), options);
+        }, callback);
+    }
+
+    /**
      * Same as {@link #TextToSpeech(String, String[], String, List)} with no explicit filename keys.
      */
     public TextToSpeech(String language, String g2pRoot, List<TranscriberOption> options) {

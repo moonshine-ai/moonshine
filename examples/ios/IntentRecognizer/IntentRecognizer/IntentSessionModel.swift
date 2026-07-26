@@ -53,38 +53,34 @@ final class IntentSessionModel: ObservableObject {
         guard !isEngineReady else { return }
 
         // Nothing is bundled in the app package: the Medium Streaming English
-        // speech model and the embedding model are downloaded on first run into
-        // Application Support and reused thereafter.
-        let root = modelsRootDirectory()
-        let asrRoot = root.appendingPathComponent("medium-streaming-en", isDirectory: true)
-        let embRoot = root.appendingPathComponent("embeddinggemma-300m", isDirectory: true)
+        // speech model and the embedding model are downloaded on first run into a
+        // managed cache directory and reused thereafter. `prepareModels` fetches
+        // both up front with a single progress handler, then each engine is
+        // constructed from the directory it was written to.
+        let sttSpec = ModelSpec.stt(language: "en", modelArch: .mediumStreaming)
+        let intentSpec = ModelSpec.intent(variant: "q4")
 
         do {
-            try FileManager.default.createDirectory(at: asrRoot, withIntermediateDirectories: true)
-            try FileManager.default.createDirectory(at: embRoot, withIntermediateDirectories: true)
-
-            let downloader = AssetDownloader()
-
-            statusMessage = "Downloading speech model (first run only)…"
-            _ = try await downloader.ensureModelPresent(
-                root: asrRoot,
-                spec: .stt(language: "en", modelArch: .mediumStreaming)
-            )
-
-            statusMessage = "Downloading intent model (first run only)…"
-            _ = try await downloader.ensureModelPresent(
-                root: embRoot,
-                spec: .intent(variant: "q4")
-            )
+            statusMessage = "Downloading models (first run only)…"
+            let directories = try await Moonshine.prepareModels([sttSpec, intentSpec]) {
+                [weak self] progress in
+                let pct =
+                    progress.bytesTotal > 0
+                    ? Int(progress.bytesDownloaded * 100 / progress.bytesTotal) : 0
+                Task { @MainActor in
+                    self?.statusMessage = "Downloading \(progress.relativePath) (\(pct)%)…"
+                }
+            }
 
             intentRecognizer = try IntentRecognizer(
-                modelPath: embRoot.path,
+                modelPath: directories[intentSpec]!.path,
                 modelArch: .gemma300m,
                 modelVariant: "q4"
             )
             try reapplyRegisteredIntents()
 
-            mic = try MicTranscriber(modelPath: asrRoot.path, modelArch: .mediumStreaming)
+            mic = try MicTranscriber(
+                modelPath: directories[sttSpec]!.path, modelArch: .mediumStreaming)
             mic?.addListener(transcriptBridge)
 
             isEngineReady = true
@@ -246,10 +242,5 @@ final class IntentSessionModel: ObservableObject {
             try? await Task.sleep(nanoseconds: 1_800_000_000)
             highlightedPhraseIDs.remove(phraseID)
         }
-    }
-
-    private func modelsRootDirectory() -> URL {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return support.appendingPathComponent("moonshine-models", isDirectory: true)
     }
 }

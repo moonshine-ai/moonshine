@@ -105,4 +105,6 @@ export {
   type FlowFn,
   type GlobalHandler,
   type DialogFlowOptions,
+  type DialogFlowLoadOptions,
+  type DialogFlowBundle,
 } from './dialog-flow.js';

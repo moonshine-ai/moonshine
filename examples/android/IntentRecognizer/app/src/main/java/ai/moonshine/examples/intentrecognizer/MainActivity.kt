@@ -10,23 +10,17 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import ai.moonshine.examples.intentrecognizer.databinding.ActivityMainBinding
-import ai.moonshine.voice.AssetDownloader
+import ai.moonshine.voice.CatalogLoader
+import ai.moonshine.voice.DownloadProgress
 import ai.moonshine.voice.IntentRecognizer
 import ai.moonshine.voice.JNI
+import ai.moonshine.voice.LoadCallback
 import ai.moonshine.voice.MicTranscriber
 import ai.moonshine.voice.ModelSpec
 import ai.moonshine.voice.TranscriptEvent
 import ai.moonshine.voice.TranscriptEventListener
-import java.io.File
 
 class MainActivity : AppCompatActivity() {
-
-    /**
-     * Downloaded on first run into `filesDir` via [AssetDownloader] (nothing is bundled in the
-     * APK). Streaming ASR is loaded from disk via [MicTranscriber.loadFromFiles].
-     */
-    private val asrModelDir = "medium-streaming-en"
-    private val embedModelDir = "embeddinggemma-300m"
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var adapter: PhraseAdapter
@@ -152,67 +146,64 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun bootstrapEngine() {
-        // Download the Medium Streaming English speech model and the embedding
-        // model on first run into filesDir (nothing is bundled in the APK), then
-        // load them. Downloads are blocking, so run them off the main thread.
+        // Download the Medium Streaming English speech model and the embedding model on first run
+        // into a managed cache directory (nothing is bundled in the APK), then construct both
+        // engines. CatalogLoader does the download off the main thread and delivers progress and
+        // the result back on the main thread, so this activity no longer needs any Thread /
+        // runOnUiThread plumbing for bootstrap.
         binding.statusText.text = "Downloading models (first run only)…"
-        Thread {
-            try {
-                val downloader = AssetDownloader()
+        val sttSpec = ModelSpec.stt("en", JNI.MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING, false)
+        val intentSpec = ModelSpec.intent(null, "q4")
 
-                val asrRoot = File(filesDir, asrModelDir).apply { mkdirs() }
-                downloader.ensureModelPresent(
-                    asrRoot,
-                    ModelSpec.stt("en", JNI.MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING, false),
-                ) { _, index, total, done, totalBytes ->
-                    val pct = if (totalBytes > 0) (done * 100 / totalBytes) else 0
-                    runOnUiThread {
-                        binding.statusText.text = "Downloading speech model $index/$total ($pct%)…"
-                    }
-                }
-
-                val embedRoot = File(filesDir, embedModelDir).apply { mkdirs() }
-                downloader.ensureModelPresent(
-                    embedRoot,
-                    ModelSpec.intent(null, "q4"),
-                ) { _, index, total, done, totalBytes ->
-                    val pct = if (totalBytes > 0) (done * 100 / totalBytes) else 0
-                    runOnUiThread {
-                        binding.statusText.text = "Downloading intent model $index/$total ($pct%)…"
-                    }
-                }
-
-                val ir = IntentRecognizer(
-                    embedRoot.absolutePath,
+        CatalogLoader.load(
+            this,
+            listOf(sttSpec, intentSpec),
+            CatalogLoader.Builder<Pair<IntentRecognizer, MicTranscriber>> { directories ->
+                val recognizer = IntentRecognizer(
+                    directories[intentSpec]!!.absolutePath,
                     JNI.MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M,
                     "q4",
                 )
-                val m = MicTranscriber()
-                m.addListener(transcriptListener)
-                m.loadFromFiles(asrRoot.absolutePath, JNI.MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING)
+                val micTranscriber = MicTranscriber()
+                micTranscriber.addListener(transcriptListener)
+                micTranscriber.loadFromFiles(
+                    directories[sttSpec]!!.absolutePath,
+                    JNI.MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING,
+                )
+                Pair(recognizer, micTranscriber)
+            },
+            object : LoadCallback<Pair<IntentRecognizer, MicTranscriber>> {
+                override fun onProgress(progress: DownloadProgress) {
+                    val pct =
+                        if (progress.bytesTotal > 0)
+                            (progress.bytesDownloaded * 100 / progress.bytesTotal)
+                        else 0
+                    binding.statusText.text = "Downloading ${progress.relativePath} ($pct%)…"
+                }
 
-                runOnUiThread {
-                    intentRecognizer = ir
-                    mic = m
+                override fun onSuccess(engines: Pair<IntentRecognizer, MicTranscriber>) {
+                    intentRecognizer = engines.first
+                    mic = engines.second
                     applyRegisteredIntents()
-                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
-                        PackageManager.PERMISSION_GRANTED
+                    if (ContextCompat.checkSelfPermission(
+                            this@MainActivity, Manifest.permission.RECORD_AUDIO,
+                        ) == PackageManager.PERMISSION_GRANTED
                     ) {
-                        m.onMicPermissionGranted()
+                        engines.second.onMicPermissionGranted()
                     }
                     engineReady = true
                     binding.statusText.text = "Ready. Tap Listen to use the microphone."
                     updateDiagnostics()
                 }
-            } catch (e: Exception) {
-                runOnUiThread {
-                    binding.statusText.text = "Failed to load models: ${e.message}"
+
+                override fun onError(error: Throwable) {
+                    binding.statusText.text = "Failed to load models: ${error.message}"
                     intentRecognizer?.close()
                     intentRecognizer = null
                     mic = null
                 }
-            }
-        }.start()
+            },
+        )
     }
 
     private fun applyRegisteredIntents() {
