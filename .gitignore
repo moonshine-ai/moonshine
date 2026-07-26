@@ -59,3 +59,4 @@ pico_monitor.log
 .release-state/
 /plans/
 /wasm/node_modules/
+/wasm/dist/

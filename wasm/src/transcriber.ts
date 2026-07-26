@@ -65,6 +65,14 @@ export type TranscriberLoadOptions = (
   /** Options forwarded to the WASM module loader. */
   moduleOptions?: LoadModuleOptions;
   module?: MoonshineModule;
+  /**
+   * Extra `moonshine_option_t` entries passed to the native transcriber (see
+   * the "Transcriber options" section of the README). For example
+   * `{ skip_transcription: 'true' }` runs only the voice-activity detector and
+   * segmentation, skipping the STT model entirely — no model files are needed,
+   * so `files` may be empty in that mode.
+   */
+  options?: Record<string, string>;
 };
 
 /** Options for {@link Transcriber.loadFromUrls}. */
@@ -74,6 +82,8 @@ export interface TranscriberFromUrlsOptions {
   onProgress?: (loaded: number, total: number | undefined, file: string) => void;
   moduleOptions?: LoadModuleOptions;
   module?: MoonshineModule;
+  /** Extra native transcriber options (see {@link TranscriberLoadOptions.options}). */
+  options?: Record<string, string>;
 }
 
 const ENCODER_FILE = 'encoder_model.ort';
@@ -124,7 +134,12 @@ export class Transcriber {
         [TOKENIZER_FILE, options.tokenizer],
       ]);
       if (options.spelling) files.set(SPELLING_FILE, options.spelling);
-      return Transcriber.construct(module, files, options.modelArch ?? ModelArch.Base);
+      return Transcriber.construct(
+        module,
+        files,
+        options.modelArch ?? ModelArch.Base,
+        options.options,
+      );
     }
 
     if (isFromFiles(options)) {
@@ -132,6 +147,7 @@ export class Transcriber {
         module,
         toFileMap(options.files),
         options.modelArch ?? ModelArch.Base,
+        options.options,
       );
     }
 
@@ -150,7 +166,7 @@ export class Transcriber {
       options.includeSpelling ?? false,
     );
     const files = await downloader.downloadManifest(manifest);
-    return Transcriber.construct(module, files, arch);
+    return Transcriber.construct(module, files, arch, options.options);
   }
 
   /**
@@ -180,6 +196,7 @@ export class Transcriber {
       module,
       downloaded,
       options.modelArch ?? ModelArch.Base,
+      options.options,
     );
   }
 
@@ -188,10 +205,15 @@ export class Transcriber {
     module: MoonshineModule,
     files: Map<string, Uint8Array>,
     arch: ModelArch,
+    options?: Record<string, string>,
   ): Transcriber {
     const keys = [...files.keys()];
     const buffers = keys.map((k) => files.get(k)!);
-    const raw = wrapErrors(() => new module.Transcriber(keys, buffers, arch));
+    const optionNames = options ? Object.keys(options) : [];
+    const optionValues = optionNames.map((k) => options![k]);
+    const raw = wrapErrors(
+      () => new module.Transcriber(keys, buffers, arch, optionNames, optionValues),
+    );
     return new Transcriber(raw, module);
   }
 

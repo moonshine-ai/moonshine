@@ -12,6 +12,8 @@ export interface MoonshineModule {
     keys: string[],
     buffers: Uint8Array[],
     modelArch: number,
+    optionNames: string[],
+    optionValues: string[],
   ) => RawTranscriber;
   Stream: new (transcriber: RawTranscriber, flags: number) => RawStream;
   IntentRecognizer: new (
@@ -24,6 +26,8 @@ export interface MoonshineModule {
     language: string,
     keys: string[],
     buffers: Uint8Array[],
+    optionNames: string[],
+    optionValues: string[],
   ) => RawTextToSpeech;
   GraphemeToPhonemizer?: new (
     language: string,
@@ -38,7 +42,11 @@ export interface MoonshineModule {
   ): string;
   intentDependencies(modelName: string, variant: string): string;
   ttsDependencies?(languages: string, voice: string): string;
-  ttsVoices?(languages: string): string;
+  ttsVoices?(
+    languages: string,
+    optionNames: string[],
+    optionValues: string[],
+  ): string;
   g2pDependencies?(languages: string): string;
 }
 
