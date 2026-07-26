@@ -80,6 +80,7 @@
 
       let mic = null;
       let runner = null;
+      let tts = null;
       let audioContext = null;
       let running = false;
 
@@ -136,33 +137,43 @@
         statusEl.textContent = 'Loading models (first run downloads them)…';
         try {
           audioContext = new (window.AudioContext || window.webkitAudioContext)();
-          const [tts, intent] = await Promise.all([loadTts(), loadIntent()]);
 
-          runner = new DialogFlow({
-            tts,
-            intentRecognizer: intent,
+          // For the offline integration test, load TTS + intent from
+          // repo-served assets and hand them to DialogFlow.load; otherwise let
+          // it fetch them from the CDN. Either way, DialogFlow.load downloads
+          // any remaining models (the mic ASR), wires the runner, registers the
+          // flows, and attaches the mic — one call instead of the old
+          // load-each-engine-then-wire-them dance.
+          const preloaded = useLocalAssets
+            ? { tts: await loadTts(), intentRecognizer: await loadIntent() }
+            : {};
+
+          const bundle = await DialogFlow.load({
+            language: 'en',
+            modelArch: ModelArch.MediumStreaming,
+            microphone: useMic,
             audioContext,
+            onProgress,
+            ...preloaded,
+            flows: { 'set up wifi': wifiSetup },
+            globals: {
+              cancel: (d) => d.cancel(),
+              'start over': (d) => d.restart(),
+            },
+            micListeners: [{ onLineCompleted: (e) => log('user', e.line.text) }],
             // Log the assistant's line and synthesize it. We don't await
             // playback so the flow (and tests) never block on audio output.
             speakFn: (text) => {
               log('assistant', text);
-              try { tts.say(text); } catch { /* synth is best-effort here */ }
+              try { tts?.say(text); } catch { /* synth is best-effort here */ }
             },
           });
-          runner.registerFlow('set up wifi', wifiSetup);
-          runner.registerGlobal('cancel', (d) => d.cancel());
-          runner.registerGlobal('start over', (d) => d.restart());
 
-          if (useMic) {
-            mic = await MicrophoneTranscriber.load({
-              language: 'en',
-              modelArch: ModelArch.MediumStreaming,
-              listeners: [
-                { onLineCompleted: (e) => log('user', e.line.text) },
-                runner,
-              ],
-              onProgress,
-            });
+          runner = bundle.dialog;
+          tts = bundle.tts;
+          mic = bundle.mic ?? null;
+
+          if (mic) {
             await mic.start();
             statusEl.textContent = 'Listening… say “set up wifi”.';
             toggle.textContent = 'Stop';

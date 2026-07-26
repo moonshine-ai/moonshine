@@ -25,6 +25,11 @@
  * subsystem and the success/error beep diagnostics are intentionally omitted
  * for now (they depend on helpers outside the WASM binding).
  */
+import { ModelArch } from './enums.js';
+import { IntentRecognizer } from './intent-recognizer.js';
+import { MicrophoneTranscriber } from './microphone-transcriber.js';
+import { loadMoonshineModule } from './module.js';
+import { TextToSpeech } from './text-to-speech.js';
 export const InputMode = {
     Free: 'free',
     Phrase: 'phrase',
@@ -124,6 +129,67 @@ export class DialogFlow {
     triggersRegistered = false;
     constructor(options = {}) {
         this.options = { ignoreSttDuringTts: true, triggerThreshold: 0.7, ...options };
+    }
+    /**
+     * Downloads (or reuses) the TTS, intent, and microphone engines a voice dialog needs, wires them
+     * together, registers the given flows/globals, and returns the ready {@link DialogFlow} plus the
+     * engines. This is the one-call equivalent of the manual "load TTS + intent + mic, then `new
+     * DialogFlow(...)`, then `registerFlow`, then `mic.addListener(runner)`" dance.
+     *
+     * Progress from all downloads is reported through a single `onProgress`. Call `await
+     * bundle.mic?.start()` to begin listening.
+     */
+    static async load(options = {}) {
+        const language = options.language ?? 'en';
+        const modelArch = options.modelArch ?? ModelArch.MediumStreaming;
+        const module = options.module ?? (await loadMoonshineModule());
+        const { onProgress, downloader } = options;
+        const tts = options.tts ??
+            (await TextToSpeech.load(options.ttsOptions
+                ? { module, onProgress, downloader, ...options.ttsOptions }
+                : { language, module, onProgress, downloader }));
+        const intent = options.intentRecognizer ??
+            (await IntentRecognizer.load({
+                module,
+                onProgress,
+                downloader,
+                ...options.intentOptions,
+            }));
+        // Only pass through defined dialog options so we don't clobber the constructor's defaults
+        // (e.g. an explicit `undefined` triggerThreshold would otherwise override 0.7).
+        const dialogOptions = { tts, intentRecognizer: intent };
+        if (options.audioContext)
+            dialogOptions.audioContext = options.audioContext;
+        if (options.triggerThreshold !== undefined) {
+            dialogOptions.triggerThreshold = options.triggerThreshold;
+        }
+        if (options.ignoreSttDuringTts !== undefined) {
+            dialogOptions.ignoreSttDuringTts = options.ignoreSttDuringTts;
+        }
+        if (options.muteFn)
+            dialogOptions.muteFn = options.muteFn;
+        if (options.speakFn)
+            dialogOptions.speakFn = options.speakFn;
+        const dialog = new DialogFlow(dialogOptions);
+        for (const [phrase, flow] of Object.entries(options.flows ?? {})) {
+            dialog.registerFlow(phrase, flow);
+        }
+        for (const [phrase, handler] of Object.entries(options.globals ?? {})) {
+            dialog.registerGlobal(phrase, handler);
+        }
+        let mic;
+        if (options.microphone !== false) {
+            mic = await MicrophoneTranscriber.load({
+                language,
+                modelArch,
+                module,
+                onProgress,
+                downloader,
+                audioConstraints: options.audioConstraints,
+                listeners: [...(options.micListeners ?? []), dialog],
+            });
+        }
+        return { dialog, mic, tts, intent };
     }
     registerFlow(triggerPhrase, flow) {
         this.flows.set(triggerPhrase, flow);

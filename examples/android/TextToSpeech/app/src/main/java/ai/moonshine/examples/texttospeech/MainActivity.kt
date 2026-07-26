@@ -13,7 +13,10 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import androidx.appcompat.app.AppCompatActivity
 import ai.moonshine.examples.texttospeech.databinding.ActivityMainBinding
-import ai.moonshine.voice.AssetDownloader
+import ai.moonshine.voice.CatalogLoader
+import ai.moonshine.voice.DownloadProgress
+import ai.moonshine.voice.LoadCallback
+import ai.moonshine.voice.ModelCache
 import ai.moonshine.voice.ModelSpec
 import ai.moonshine.voice.TextToSpeech
 import ai.moonshine.voice.TranscriberOption
@@ -65,16 +68,15 @@ private val kokoroLanguages: List<KokoroLanguage> =
 class MainActivity : AppCompatActivity() {
 
     /**
-     * Only the Kokoro model (`kokoro/model.onnx` + `kokoro/config.json`) and the default voice
-     * (`kokoro/voices/af_alloy.kokorovoice`) are bundled in the APK. Everything else (G2P assets,
-     * other Kokoro voices, all Piper voices) is fetched from `download.moonshine.ai/tts/` the
-     * first time a voice that needs it is selected.
+     * Nothing is bundled in the APK. On first use of a language, the Kokoro base model, that
+     * language's G2P assets, and the selected voice are downloaded (via [CatalogLoader]) into a
+     * managed per-language cache directory ([ModelCache]) and reused thereafter. Selecting a voice
+     * that is not yet present downloads just that voice into the same directory.
      */
-    private val ttsAssetDir = "tts-data"
-
     private lateinit var binding: ActivityMainBinding
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    /** Managed cache directory for the current language; also the synthesizer's `g2p_root`. */
     private var g2pRoot: String = ""
     private var tts: TextToSpeech? = null
 
@@ -165,14 +167,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun bootstrapEngine() {
-        if (!hasBundledKokoroAssets()) {
-            showError(
-                "Bundled Kokoro model not found under assets/$ttsAssetDir/kokoro/. " +
-                    "Clone this repository with Git LFS so the model and the Alloy voice are present.",
-            )
-            return
-        }
-
         setProgressVisible(true)
         binding.loadingLabel.setText(R.string.initializing)
         binding.downloadProgress.visibility = View.GONE
@@ -180,32 +174,35 @@ class MainActivity : AppCompatActivity() {
 
         val initialLang = selectedLanguage
         val initialVoice = "kokoro_af_alloy"
+        g2pRoot = modelDirFor(initialLang.id).absolutePath
+        isDownloading = true
+        updateUiState()
 
-        thread {
-            try {
-                val destRoot = File(filesDir, ttsAssetDir)
-                AssetDirectoryCopy.copyDirIfNeeded(
-                    this,
-                    ttsAssetDir,
-                    destRoot,
-                    "kokoro/config.json",
-                )
-                g2pRoot = destRoot.absolutePath
+        // CatalogLoader downloads the base model + voice off the main thread and delivers progress
+        // and the ready synthesizer back on the main thread, so no Thread / Handler plumbing is
+        // needed here.
+        CatalogLoader.load(
+            this,
+            listOf(ModelSpec.tts(initialLang.id, initialVoice)),
+            CatalogLoader.Builder<TextToSpeech> {
+                TextToSpeech(initialLang.id, g2pRoot, listOf(TranscriberOption("voice", initialVoice)))
+            },
+            object : LoadCallback<TextToSpeech> {
+                override fun onProgress(progress: DownloadProgress) = showDownloadProgress(progress)
 
-                AssetDownloader().ensureModelPresent(
-                    destRoot,
-                    ModelSpec.tts(initialLang.id, initialVoice),
-                    ::postDownloadProgress,
-                )
-
-                mainHandler.post {
+                override fun onSuccess(synthesizer: TextToSpeech) {
+                    isDownloading = false
+                    tts?.close()
+                    tts = synthesizer
                     try {
                         refreshVoices()
                         selectedVoice =
                             availableVoices.firstOrNull { it.id == initialVoice }
                                 ?: availableVoices.firstOrNull { !it.needsDownload }
                                 ?: availableVoices.firstOrNull()
-                        recreateSynthesizer(selectedVoice?.id)
+                        if (selectedVoice?.id != initialVoice) {
+                            recreateSynthesizer(selectedVoice?.id)
+                        }
                         repopulateVoiceSpinner()
                         engineReady = true
                         hideError()
@@ -220,23 +217,23 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
-            } catch (e: Exception) {
-                mainHandler.post {
+
+                override fun onError(error: Throwable) {
+                    isDownloading = false
                     setProgressVisible(false)
-                    showError("Failed to prepare assets: ${e.message}")
+                    showError("Failed to prepare assets: ${error.message}")
                     updateUiState()
                 }
-            }
-        }
+            },
+        )
     }
 
-    private fun hasBundledKokoroAssets(): Boolean {
-        val kokoro = assets.list("$ttsAssetDir/kokoro") ?: return false
-        return kokoro.contains("config.json") && kokoro.contains("model.onnx")
-    }
+    /** Managed per-language cache directory used as the synthesizer's `g2p_root`. */
+    private fun modelDirFor(language: String): File =
+        ModelCache.directoryFor(this, ModelSpec.tts(language, null), null)
 
     private fun onLanguageChanged() {
-        if (g2pRoot.isEmpty()) return
+        g2pRoot = modelDirFor(selectedLanguage.id).absolutePath
         try {
             refreshVoices()
         } catch (e: Exception) {
@@ -264,12 +261,12 @@ class MainActivity : AppCompatActivity() {
      */
     private fun ensureAssetsThenRecreate(language: KokoroLanguage, voice: KokoroVoice) {
         if (isDownloading) return
-        val root = File(g2pRoot)
 
         if (!voice.needsDownload) {
             try {
                 selectedLanguage = language
                 selectedVoice = voice
+                g2pRoot = modelDirFor(language.id).absolutePath
                 recreateSynthesizer(voice.id)
             } catch (e: Exception) {
                 showError("Failed to load voice: ${e.message}")
@@ -282,41 +279,43 @@ class MainActivity : AppCompatActivity() {
         hideError()
         setProgressVisible(true)
         binding.loadingLabel.text = getString(R.string.initializing)
+        g2pRoot = modelDirFor(language.id).absolutePath
         updateUiState()
 
-        thread {
-            var errorMessage: String? = null
-            try {
-                AssetDownloader().ensureModelPresent(
-                    root,
-                    ModelSpec.tts(language.id, voice.id),
-                    ::postDownloadProgress,
-                )
-            } catch (e: Exception) {
-                errorMessage = "Download failed: ${e.message}"
-            }
-            mainHandler.post {
-                isDownloading = false
-                setProgressVisible(false)
-                if (errorMessage != null) {
-                    showError(errorMessage)
-                } else {
+        // Download only; the synthesizer is (re)built on the main thread in onSuccess.
+        CatalogLoader.load(
+            this,
+            listOf(ModelSpec.tts(language.id, voice.id)),
+            CatalogLoader.Builder<Unit> { },
+            object : LoadCallback<Unit> {
+                override fun onProgress(progress: DownloadProgress) = showDownloadProgress(progress)
+
+                override fun onSuccess(unused: Unit) {
+                    isDownloading = false
+                    setProgressVisible(false)
                     try {
+                        selectedLanguage = language
                         refreshVoices()
-                        val stillSelected =
+                        selectedVoice =
                             availableVoices.firstOrNull { it.id == voice.id }
                                 ?: availableVoices.firstOrNull { !it.needsDownload }
-                        selectedVoice = stillSelected
                         repopulateVoiceSpinner()
                         recreateSynthesizer(selectedVoice?.id)
                         hideError()
                     } catch (e: Exception) {
                         showError("Failed to load voice: ${e.message}")
                     }
+                    updateUiState()
                 }
-                updateUiState()
-            }
-        }
+
+                override fun onError(error: Throwable) {
+                    isDownloading = false
+                    setProgressVisible(false)
+                    showError("Download failed: ${error.message}")
+                    updateUiState()
+                }
+            },
+        )
     }
 
     private fun refreshVoices() {
@@ -571,26 +570,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Called from the download thread; posts updates to the UI thread. */
-    private fun postDownloadProgress(
-        key: String,
-        fileIndex: Int,
-        totalFiles: Int,
-        bytesDownloaded: Long,
-        bytesTotal: Long,
-    ) {
-        mainHandler.post {
-            binding.loadingLabel.text =
-                getString(R.string.downloading_asset, displayNameForKey(key), fileIndex, totalFiles)
-            val indicator = binding.downloadProgress
-            indicator.visibility = View.VISIBLE
-            if (bytesTotal > 0) {
-                indicator.isIndeterminate = false
-                val pct = ((bytesDownloaded * 100L) / bytesTotal).coerceIn(0L, 100L).toInt()
-                indicator.progress = pct
-            } else {
-                indicator.isIndeterminate = true
-            }
+    /** Called on the main thread by [CatalogLoader] as files download. */
+    private fun showDownloadProgress(progress: DownloadProgress) {
+        binding.loadingLabel.text =
+            getString(
+                R.string.downloading_asset,
+                displayNameForKey(progress.relativePath),
+                progress.fileIndex,
+                progress.totalFiles,
+            )
+        val indicator = binding.downloadProgress
+        indicator.visibility = View.VISIBLE
+        if (progress.bytesTotal > 0) {
+            indicator.isIndeterminate = false
+            val pct =
+                ((progress.bytesDownloaded * 100L) / progress.bytesTotal).coerceIn(0L, 100L).toInt()
+            indicator.progress = pct
+        } else {
+            indicator.isIndeterminate = true
         }
     }
 

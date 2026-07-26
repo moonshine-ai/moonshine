@@ -142,32 +142,6 @@ func parseArguments() -> Arguments {
     return args
 }
 
-/// Downloads a Moonshine STT model on first run into the user caches directory
-/// and returns the directory to load it from. Subsequent runs reuse the cached
-/// files (``AssetDownloader`` skips ones already present).
-func downloadModel(language: String, modelArch: ModelArch) async throws -> String {
-    let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-    let root = caches.appendingPathComponent(
-        "moonshine-models/\(language)-\(modelArch.rawValue)", isDirectory: true)
-    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-
-    let downloader = AssetDownloader()
-    let spec = ModelSpec.stt(language: language, modelArch: modelArch)
-    if !downloader.isModelPresent(root: root, spec: spec) {
-        fputs("Downloading model (first run only)…\n", stderr)
-    }
-    _ = try await downloader.ensureModelPresent(root: root, spec: spec) { progress in
-        let pct =
-            progress.bytesTotal > 0
-            ? Int(progress.bytesDownloaded * 100 / progress.bytesTotal) : 0
-        fputs(
-            "\r  \(progress.relativePath) [\(progress.fileIndex)/\(progress.totalFiles)] \(pct)%      ",
-            stderr)
-    }
-    fputs("\n", stderr)
-    return root.path
-}
-
 // MARK: - Main
 
 func main() async {
@@ -176,11 +150,25 @@ func main() async {
     // Default to the Medium Streaming English model (downloaded on first run);
     // --model-arch overrides the architecture.
     let modelArch: ModelArch = args.modelArch ?? .mediumStreaming
-    let modelPath: String
+
+    // Download the model on first run (into a managed cache directory, reused
+    // thereafter) and construct the transcriber in one call.
+    let transcriber: Transcriber
     do {
-        modelPath = try await downloadModel(language: args.language, modelArch: modelArch)
+        transcriber = try await Transcriber.load(
+            language: args.language,
+            modelArch: modelArch
+        ) { progress in
+            let pct =
+                progress.bytesTotal > 0
+                ? Int(progress.bytesDownloaded * 100 / progress.bytesTotal) : 0
+            fputs(
+                "\r  \(progress.relativePath) [\(progress.fileIndex)/\(progress.totalFiles)] \(pct)%      ",
+                stderr)
+        }
+        fputs("\n", stderr)
     } catch {
-        fputs("Error: failed to download the model: \(error)\n", stderr)
+        fputs("Error: Failed to load transcriber: \(error)\n", stderr)
         exit(1)
     }
 
@@ -193,16 +181,6 @@ func main() async {
         }
         let testAssetsPath = resourcePath.appending("/test-assets")
         args.inputFiles = [testAssetsPath.appending("/two_cities.wav")]
-    }
-
-    // Create transcriber
-    let transcriber: Transcriber
-    do {
-        transcriber = try Transcriber(modelPath: modelPath, modelArch: modelArch)
-    } catch {
-        fputs("Error: Failed to load transcriber: \(error)\n", stderr)
-        fputs("Model path: \(modelPath)\n", stderr)
-        exit(1)
     }
 
     // Process each input file
