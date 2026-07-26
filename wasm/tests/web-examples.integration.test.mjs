@@ -84,9 +84,12 @@ test('STT example transcribes an audio file with the local binding', { skip }, a
 });
 
 test('TTS example synthesizes audio and offers a WAV file', { skip }, async () => {
-  const page = await openPage('/tts/?local=1&assets=local');
+  // Force the lightweight Kokoro voice (the page defaults to the much larger
+  // ZipVoice cloning model, which is impractical to load in CI).
+  const page = await openPage('/tts/?local=1&assets=local&voice=kokoro_af_heart');
   try {
-    await page.waitForSelector('#speak');
+    // The page preloads the voice on startup, enabling #speak when ready.
+    await page.waitForSelector('#speak:not([disabled])', { timeout: 120000 });
     await page.click('#speak');
 
     await page.waitForFunction(() => window.__ttsResult && window.__ttsResult.samples > 0, {

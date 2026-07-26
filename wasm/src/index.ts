@@ -77,6 +77,9 @@ export {
   type TextToSpeechOptions,
   type TtsFromAssets,
   type TtsFromCatalog,
+  type TtsClone,
+  type TtsVoiceEntry,
+  type TtsVoicesOptions,
 } from './text-to-speech.js';
 export {
   GraphemeToPhonemizer,

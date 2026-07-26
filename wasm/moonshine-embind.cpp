@@ -13,6 +13,7 @@
 #include <emscripten/bind.h>
 #include <emscripten/val.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
@@ -47,6 +48,35 @@ std::vector<float> to_float_vector(const val &array) {
 
 std::vector<uint8_t> to_byte_vector(const val &array) {
   return emscripten::convertJSArrayToNumberVector<uint8_t>(array);
+}
+
+// Copies a JS array of strings into a std::vector<std::string>.
+std::vector<std::string> to_string_vector(const val &array) {
+  std::vector<std::string> out;
+  if (array.isUndefined() || array.isNull()) {
+    return out;
+  }
+  const size_t count = array["length"].as<size_t>();
+  out.reserve(count);
+  for (size_t i = 0; i < count; ++i) {
+    out.push_back(array[i].as<std::string>());
+  }
+  return out;
+}
+
+// Zips parallel name/value string arrays into moonshine_option_t entries. The
+// returned options borrow the c_str() pointers of `names` / `values`, so those
+// vectors must outlive the options (and the C ABI call they're passed to).
+std::vector<moonshine_option_t> make_options(
+    const std::vector<std::string> &names,
+    const std::vector<std::string> &values) {
+  std::vector<moonshine_option_t> options;
+  const size_t count = std::min(names.size(), values.size());
+  options.reserve(count);
+  for (size_t i = 0; i < count; ++i) {
+    options.push_back(moonshine_option_t{names[i].c_str(), values[i].c_str()});
+  }
+  return options;
 }
 
 // ---- Plain-old-data mirrors of the C structs, returned to JS as objects. ----
@@ -141,7 +171,13 @@ class Transcriber {
   // filesystem, so this in-memory loader is the only STT entry point. The
   // buffers are copied into `buffers_` and kept alive for the transcriber's
   // lifetime (the C ABI references model bytes directly without copying).
-  Transcriber(val keys, val buffers, uint32_t model_arch) {
+  // `option_names` / `option_values` are parallel string arrays of
+  // moonshine_option_t entries (e.g. `skip_transcription=true` to run only the
+  // VAD + segmentation and skip the STT model entirely). When they select
+  // `skip_transcription`, `keys` / `buffers` may be empty since no model files
+  // are needed.
+  Transcriber(val keys, val buffers, uint32_t model_arch, val option_names,
+              val option_values) {
     const size_t count = keys["length"].as<size_t>();
     key_strings_.reserve(count);
     buffers_.reserve(count);
@@ -160,9 +196,16 @@ class Transcriber {
       buf_ptrs.push_back(buffers_[i].data());
       buf_sizes.push_back(buffers_[i].size());
     }
+    const std::vector<std::string> opt_names = to_string_vector(option_names);
+    const std::vector<std::string> opt_values = to_string_vector(option_values);
+    const std::vector<moonshine_option_t> options =
+        make_options(opt_names, opt_values);
     handle_ = moonshine_load_transcriber_from_memory_files(
-        key_ptrs.data(), buf_ptrs.data(), buf_sizes.data(), count, model_arch,
-        nullptr, 0, MOONSHINE_HEADER_VERSION);
+        count == 0 ? nullptr : key_ptrs.data(),
+        count == 0 ? nullptr : buf_ptrs.data(),
+        count == 0 ? nullptr : buf_sizes.data(), count, model_arch,
+        options.empty() ? nullptr : options.data(), options.size(),
+        MOONSHINE_HEADER_VERSION);
     if (handle_ < 0) {
       throw_moonshine_error(handle_);
     }
@@ -352,7 +395,12 @@ class TextToSpeech {
   // Assets are supplied in memory keyed by canonical filename (see
   // moonshine_create_tts_synthesizer_from_memory). `keys` is an array of
   // strings and `buffers` an array of Uint8Arrays of matching length.
-  TextToSpeech(const std::string &language, val keys, val buffers) {
+  // `option_names` / `option_values` are parallel string arrays of
+  // moonshine_option_t entries, e.g. `voice=kokoro_af_heart` to pick a vocoder
+  // + voice, or `voice=zipvoice` together with a `zipvoice/clone_audio` buffer
+  // and `zipvoice_clone_sample_rate` for zero-shot voice cloning.
+  TextToSpeech(const std::string &language, val keys, val buffers,
+               val option_names, val option_values) {
     const size_t count = keys["length"].as<size_t>();
     key_strings_.reserve(count);
     buffers_.reserve(count);
@@ -371,9 +419,14 @@ class TextToSpeech {
       buf_ptrs.push_back(buffers_[i].data());
       buf_sizes.push_back(buffers_[i].size());
     }
+    const std::vector<std::string> opt_names = to_string_vector(option_names);
+    const std::vector<std::string> opt_values = to_string_vector(option_values);
+    const std::vector<moonshine_option_t> options =
+        make_options(opt_names, opt_values);
     handle_ = moonshine_create_tts_synthesizer_from_memory(
         language.c_str(), key_ptrs.data(), count, buf_ptrs.data(),
-        buf_sizes.data(), nullptr, 0, MOONSHINE_HEADER_VERSION);
+        buf_sizes.data(), options.empty() ? nullptr : options.data(),
+        options.size(), MOONSHINE_HEADER_VERSION);
     if (handle_ < 0) {
       throw_moonshine_error(handle_);
     }
@@ -519,9 +572,16 @@ std::string tts_dependencies(const std::string &languages,
   return out;
 }
 
-std::string tts_voices(const std::string &languages) {
+std::string tts_voices(const std::string &languages, val option_names,
+                       val option_values) {
+  const std::vector<std::string> opt_names = to_string_vector(option_names);
+  const std::vector<std::string> opt_values = to_string_vector(option_values);
+  const std::vector<moonshine_option_t> options =
+      make_options(opt_names, opt_values);
   char *json = nullptr;
-  check(moonshine_get_tts_voices(languages.c_str(), nullptr, 0, &json));
+  check(moonshine_get_tts_voices(languages.c_str(),
+                                 options.empty() ? nullptr : options.data(),
+                                 options.size(), &json));
   std::string out = json ? json : "";
   free(json);
   return out;
@@ -582,7 +642,7 @@ EMSCRIPTEN_BINDINGS(moonshine) {
       .field("similarity", &JsIntentMatch::similarity);
 
   class_<Transcriber>("Transcriber")
-      .constructor<val, val, uint32_t>()
+      .constructor<val, val, uint32_t, val, val>()
       .function("transcribe", &Transcriber::transcribe)
       .function("close", &Transcriber::close);
 
@@ -608,7 +668,7 @@ EMSCRIPTEN_BINDINGS(moonshine) {
       .field("sampleRate", &JsTtsResult::sampleRate);
 
   class_<TextToSpeech>("TextToSpeech")
-      .constructor<std::string, val, val>()
+      .constructor<std::string, val, val, val, val>()
       .function("say", &TextToSpeech::say)
       .function("close", &TextToSpeech::close);
 
