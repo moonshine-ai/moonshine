@@ -1206,8 +1206,8 @@ struct KokoroTtsEngine {
 
   /// Synthesize from an existing IPA phoneme string (skips G2P). The input is
   /// normalized to Kokoro's phoneme inventory just like the text path, so the
-  /// IPA produced by ``MoonshineG2P::text_to_ipa`` / ``moonshine_text_to_phonemes``
-  /// is accepted directly.
+  /// IPA produced by ``MoonshineG2P::text_to_ipa`` /
+  /// ``moonshine_text_to_phonemes`` is accepted directly.
   std::vector<float> synthesize_from_ipa(std::string_view ipa) {
     TIMER_START_IF(log_profiling_, kokoro_synthesize);
 
@@ -1439,8 +1439,7 @@ struct MoonshineTTS::Impl {
 
   std::vector<float> synthesize_with_overrides(std::string_view text,
                                                const SynthesisOverrides& ov) {
-    return run_with_overrides(ov,
-                              [&] { return synthesize_unlocked(text); });
+    return run_with_overrides(ov, [&] { return synthesize_unlocked(text); });
   }
 
   /// Applies ``ov`` to the active engine, invokes ``produce`` while holding the

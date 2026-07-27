@@ -38,8 +38,8 @@ TEST_CASE("speech-clip-test") {
     const float lead_in_seconds = 2.0f;
     padded.insert(padded.end(), wav_data, wav_data + wav_data_size);
 
-    const SpeechClip clip = extract_speech_clip(padded.data(), padded.size(),
-                                                wav_sample_rate);
+    const SpeechClip clip =
+        extract_speech_clip(padded.data(), padded.size(), wav_sample_rate);
     REQUIRE(clip.is_complete);
     REQUIRE(clip.audio.size() == 4 * kClipSampleRate);
     REQUIRE(clip.speech_seconds >= 2.0f);
@@ -86,8 +86,8 @@ TEST_CASE("speech-clip-test") {
     SpeechClipOptions options;
     options.clip_duration_seconds = 2.0f;
     options.minimum_speech_seconds = 1.0f;
-    const SpeechClip clip = extract_speech_clip(wav_data, wav_data_size,
-                                                wav_sample_rate, options);
+    const SpeechClip clip =
+        extract_speech_clip(wav_data, wav_data_size, wav_sample_rate, options);
     REQUIRE(clip.is_complete);
     REQUIRE(clip.audio.size() == 2 * kClipSampleRate);
   }

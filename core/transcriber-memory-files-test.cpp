@@ -168,7 +168,8 @@ int32_t load_from_bundle(const MemoryBundle& bundle, uint32_t model_arch,
 
 }  // namespace
 
-TEST_CASE("stt-memory-files: non-streaming loads from buffers and transcribes") {
+TEST_CASE(
+    "stt-memory-files: non-streaming loads from buffers and transcribes") {
   const fs::path dir = g_assets_root / "tiny-en";
   MemoryBundle bundle;
   bundle.add(dir, "encoder_model.ort");
@@ -252,8 +253,8 @@ TEST_CASE("stt-memory-files: streaming loads full buffer set and transcribes") {
   REQUIRE(moonshine_stop_stream(handle, stream) == MOONSHINE_ERROR_NONE);
 
   transcript_t* final_transcript = nullptr;
-  REQUIRE(moonshine_transcribe_stream(handle, stream, MOONSHINE_FLAG_FORCE_UPDATE,
-                                      &final_transcript) ==
+  REQUIRE(moonshine_transcribe_stream(
+              handle, stream, MOONSHINE_FLAG_FORCE_UPDATE, &final_transcript) ==
           MOONSHINE_ERROR_NONE);
   const std::string text = join_transcript_text(final_transcript);
   MESSAGE("streaming transcript: " << text);
@@ -289,7 +290,8 @@ TEST_CASE("stt-memory-files: streaming with attention decoder loads") {
               handle, stream, const_cast<float*>(audio.data()), audio.size(),
               16000, 0) == MOONSHINE_ERROR_NONE);
   transcript_t* transcript = nullptr;
-  REQUIRE(moonshine_transcribe_stream(handle, stream, MOONSHINE_FLAG_FORCE_UPDATE,
+  REQUIRE(moonshine_transcribe_stream(handle, stream,
+                                      MOONSHINE_FLAG_FORCE_UPDATE,
                                       &transcript) == MOONSHINE_ERROR_NONE);
   CHECK_FALSE(join_transcript_text(transcript).empty());
 

@@ -179,8 +179,8 @@ std::vector<std::string> stt_component_files(const std::string& language_code,
   const bool is_english = (language_code == "en");
   if (is_streaming_arch(model_arch)) {
     std::vector<std::string> files = {
-        "adapter.ort",   "cross_kv.ort",         "decoder_kv.ort",
-        "encoder.ort",   "frontend.ort",         "streaming_config.json",
+        "adapter.ort",   "cross_kv.ort", "decoder_kv.ort",
+        "encoder.ort",   "frontend.ort", "streaming_config.json",
         "tokenizer.bin",
     };
     if (is_english && include_word_timestamps) {
@@ -188,15 +188,16 @@ std::vector<std::string> stt_component_files(const std::string& language_code,
     }
     return files;
   }
-  std::vector<std::string> files = {"encoder_model.ort",
-                                    "decoder_model_merged.ort", "tokenizer.bin"};
+  std::vector<std::string> files = {
+      "encoder_model.ort", "decoder_model_merged.ort", "tokenizer.bin"};
   if (is_english && include_word_timestamps) {
     files.push_back("decoder_with_attention.ort");
   }
   return files;
 }
 
-const SpellingModelEntry* find_spelling_model(const std::string& language_code) {
+const SpellingModelEntry* find_spelling_model(
+    const std::string& language_code) {
   for (const auto& [code, entry] : spelling_catalog()) {
     if (code == language_code) {
       return &entry;
@@ -268,9 +269,8 @@ std::optional<ModelDependencies> stt_model_dependencies(
 
   ModelDependencies deps;
   deps.groups.push_back(make_group(
-      model->download_url,
-      stt_component_files(lang->code, model->model_arch,
-                          include_word_timestamps)));
+      model->download_url, stt_component_files(lang->code, model->model_arch,
+                                               include_word_timestamps)));
 
   if (include_spelling) {
     const SpellingModelEntry* spelling = find_spelling_model(lang->code);

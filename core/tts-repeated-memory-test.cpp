@@ -63,7 +63,8 @@ size_t read_rss_kb() {
     if (std::strncmp(line, "VmRSS:", 6) == 0) {
       // Parse with strtoull rather than sscanf so the conversion reports errors
       // (clang-tidy cert-err34-c flags scanf-family string-to-number use). It
-      // skips leading whitespace after "VmRSS:" and stops at the trailing " kB".
+      // skips leading whitespace after "VmRSS:" and stops at the trailing "
+      // kB".
       char *end = nullptr;
       const unsigned long long parsed = std::strtoull(line + 6, &end, 10);
       if (end != line + 6) {

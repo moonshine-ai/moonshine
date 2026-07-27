@@ -813,8 +813,8 @@ TEST_CASE("IntentRecognizer loads the embedding model from memory buffers") {
     moonshine_intent_match_t *matches = nullptr;
     uint64_t count = 0;
     CHECK(moonshine_get_closest_intents(handle, "turn on the lights", 0.0f,
-                                        &matches, &count) ==
-          MOONSHINE_ERROR_NONE);
+                                        &matches,
+                                        &count) == MOONSHINE_ERROR_NONE);
     REQUIRE(count >= 1);
     CHECK(std::string(matches[0].canonical_phrase) == "turn on the lights");
     moonshine_free_intent_matches(matches, count);

@@ -60,9 +60,8 @@ SpeechClip extract_speech_clip(const float *audio_data, size_t audio_data_size,
     const float end = start + options.clip_duration_seconds;
     float coverage = 0.0f;
     for (const auto &[segment_start, segment_end] : segments) {
-      coverage +=
-          std::max(0.0f, std::min(segment_end, end) -
-                             std::max(segment_start, start));
+      coverage += std::max(
+          0.0f, std::min(segment_end, end) - std::max(segment_start, start));
     }
     if (coverage > best_coverage) {
       best_coverage = coverage;
@@ -80,11 +79,10 @@ SpeechClip extract_speech_clip(const float *audio_data, size_t audio_data_size,
 
   size_t from = static_cast<size_t>(std::lround(best_start * kClipSampleRate));
   from = std::min(from, audio.size() - clip_sample_count);
-  result.audio.assign(audio.begin() + static_cast<ptrdiff_t>(from),
-                      audio.begin() +
-                          static_cast<ptrdiff_t>(from + clip_sample_count));
-  result.start_time_seconds =
-      static_cast<float>(from) / kClipSampleRate;
+  result.audio.assign(
+      audio.begin() + static_cast<ptrdiff_t>(from),
+      audio.begin() + static_cast<ptrdiff_t>(from + clip_sample_count));
+  result.start_time_seconds = static_cast<float>(from) / kClipSampleRate;
   result.is_complete = true;
   return result;
 }

@@ -81,8 +81,7 @@ struct FileInformationMap {
 
   /// Resolves ``key`` to bytes via ``FileInformation::load()``. Throws
   /// ``std::runtime_error`` if the key is absent or cannot be loaded.
-  void load(std::string_view key, const uint8_t** out_memory,
-            size_t* out_size);
+  void load(std::string_view key, const uint8_t** out_memory, size_t* out_size);
 
   /// Fills ``entries`` from ``(*key_list)[i].first`` -> path ``root_path /
   /// (*key_list)[i].second``, with optional in-memory bytes per row.
