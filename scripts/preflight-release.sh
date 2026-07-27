@@ -5,7 +5,9 @@
 # a development cycle to confirm the branch is shippable.
 #
 # Usage:
-#   scripts/preflight-release.sh <branch> <commit>
+#   scripts/preflight-release.sh <branch> [<commit>]
+#
+# <commit> defaults to the branch's pushed tip and may be any commit-ish.
 #
 # These checks exist because the failures they catch are expensive: the publish
 # stages push to PyPI, Maven Central, npm and GitHub Releases, none of which let
@@ -32,18 +34,30 @@ pass() {
 }
 
 main() {
-    if [ $# -ne 2 ]; then
-        echo "Usage: $0 <branch> <commit>" >&2
+    if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+        echo "Usage: $0 <branch> [<commit>]" >&2
         exit 1
     fi
 
     local branch="$1"
-    local commit="$2"
     local version="${branch#dev-v}"
+
+    if [ "${branch}" = "${version}" ]; then
+        echo "'${branch}' is not a dev-v<version> candidate branch." >&2
+        exit 1
+    fi
 
     SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
     REPO_ROOT_DIR="$(dirname "${SCRIPTS_DIR}")"
     cd "${REPO_ROOT_DIR}"
+
+    # Resolve to a sha up front. Several checks compare against one, and a
+    # symbolic ref would silently compare unequal to its own resolved tip.
+    local commit
+    if ! commit="$(git rev-parse -q --verify "${2:-origin/${branch}}^{commit}")"; then
+        echo "Could not resolve '${2:-origin/${branch}}' to a commit." >&2
+        exit 1
+    fi
 
     echo "Preflight checks for ${branch} at ${commit}:"
 
