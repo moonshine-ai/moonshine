@@ -387,15 +387,16 @@ Java_ai_moonshine_voice_JNI_moonshineLoadTranscriberFromFiles(
   }
 }
 
-// Copies a jbyteArray into `backing` and records its canonical `key`, pushing
-// the resulting {name, data, size} view into the parallel C-API arrays. A null
-// or empty array is skipped. Returns false only on an unexpected JNI failure.
+// Copies a jbyteArray into `backing` and records its canonical `key`, keeping
+// the two vectors parallel. A null or empty array is skipped.
+//
+// Deliberately records only owned values, no pointers into them: a `c_str()`
+// captured here would dangle the moment `filename_storage` grew and moved its
+// short (so internally-buffered) strings to fresh storage. The C-API pointer
+// arrays are built in finish_transcriber_from_memory once appending is done.
 static void append_memory_file(JNIEnv *env, jbyteArray jbuf, const char *key,
                                std::vector<std::string> *filename_storage,
-                               std::vector<const char *> *c_filenames,
-                               std::vector<std::vector<uint8_t>> *backing,
-                               std::vector<const uint8_t *> *c_mem,
-                               std::vector<uint64_t> *c_sizes) {
+                               std::vector<std::vector<uint8_t>> *backing) {
   if (jbuf == nullptr) {
     return;
   }
@@ -407,18 +408,27 @@ static void append_memory_file(JNIEnv *env, jbyteArray jbuf, const char *key,
   env->GetByteArrayRegion(jbuf, 0, len, reinterpret_cast<jbyte *>(copy.data()));
   filename_storage->emplace_back(key);
   backing->push_back(std::move(copy));
-  c_filenames->push_back(filename_storage->back().c_str());
-  c_mem->push_back(backing->back().data());
-  c_sizes->push_back(static_cast<uint64_t>(backing->back().size()));
 }
 
 // Shared tail for both in-memory transcriber loaders: calls the keyed C API and,
 // on success, stashes `backing` so the referenced bytes outlive this call.
 static jint finish_transcriber_from_memory(
-    std::vector<const char *> &c_filenames, std::vector<const uint8_t *> &c_mem,
-    std::vector<uint64_t> &c_sizes, jint model_arch,
+    const std::vector<std::string> &filenames, jint model_arch,
     const std::vector<moonshine_option_t> &copts,
     std::vector<std::vector<uint8_t>> backing) {
+  std::vector<const char *> c_filenames;
+  std::vector<const uint8_t *> c_mem;
+  std::vector<uint64_t> c_sizes;
+  c_filenames.reserve(filenames.size());
+  c_mem.reserve(backing.size());
+  c_sizes.reserve(backing.size());
+  for (const std::string &filename : filenames) {
+    c_filenames.push_back(filename.c_str());
+  }
+  for (const std::vector<uint8_t> &buffer : backing) {
+    c_mem.push_back(buffer.data());
+    c_sizes.push_back(static_cast<uint64_t>(buffer.size()));
+  }
   const int32_t handle = moonshine_load_transcriber_from_memory_files(
       c_filenames.data(), c_mem.data(), c_sizes.data(),
       static_cast<uint64_t>(c_filenames.size()), model_arch, copts.data(),
@@ -445,23 +455,17 @@ Java_ai_moonshine_voice_JNI_moonshineLoadTranscriberFromMemory(
     // their canonical filenames and defer to the keyed memory-files loader, so
     // this path shares the streaming-capable code in the C core.
     std::vector<std::string> filename_storage;
-    std::vector<const char *> c_filenames;
     std::vector<std::vector<uint8_t>> backing;
-    std::vector<const uint8_t *> c_mem;
-    std::vector<uint64_t> c_sizes;
     append_memory_file(env, encoder_model_data, "encoder_model.ort",
-                       &filename_storage, &c_filenames, &backing, &c_mem,
-                       &c_sizes);
+                       &filename_storage, &backing);
     append_memory_file(env, decoder_model_data, "decoder_model_merged.ort",
-                       &filename_storage, &c_filenames, &backing, &c_mem,
-                       &c_sizes);
+                       &filename_storage, &backing);
     append_memory_file(env, tokenizer_data, "tokenizer.bin", &filename_storage,
-                       &c_filenames, &backing, &c_mem, &c_sizes);
+                       &backing);
     append_memory_file(env, spelling_model_data, "spelling_cnn.ort",
-                       &filename_storage, &c_filenames, &backing, &c_mem,
-                       &c_sizes);
+                       &filename_storage, &backing);
     const jint handle = finish_transcriber_from_memory(
-        c_filenames, c_mem, c_sizes, model_arch, copts, std::move(backing));
+        filename_storage, model_arch, copts, std::move(backing));
     release_moonshine_options(env, copts, jhold);
     return handle;
   } catch (const std::exception &e) {
@@ -486,14 +490,9 @@ Java_ai_moonshine_voice_JNI_moonshineLoadTranscriberFromMemoryFiles(
       return MOONSHINE_ERROR_INVALID_ARGUMENT;
     }
     std::vector<std::string> filename_storage;
-    std::vector<const char *> c_filenames;
     std::vector<std::vector<uint8_t>> backing;
-    std::vector<const uint8_t *> c_mem;
-    std::vector<uint64_t> c_sizes;
     filename_storage.reserve(static_cast<size_t>(n));
-    c_filenames.reserve(static_cast<size_t>(n));
-    c_mem.reserve(static_cast<size_t>(n));
-    c_sizes.reserve(static_cast<size_t>(n));
+    backing.reserve(static_cast<size_t>(n));
     for (jsize i = 0; i < n; i++) {
       jstring jf = (jstring)env->GetObjectArrayElement(jfilenames, i);
       if (jf == nullptr) {
@@ -504,11 +503,10 @@ Java_ai_moonshine_voice_JNI_moonshineLoadTranscriberFromMemoryFiles(
       const std::string key(u);
       env->ReleaseStringUTFChars(jf, u);
       jbyteArray jbuf = (jbyteArray)env->GetObjectArrayElement(jmemory, i);
-      append_memory_file(env, jbuf, key.c_str(), &filename_storage,
-                         &c_filenames, &backing, &c_mem, &c_sizes);
+      append_memory_file(env, jbuf, key.c_str(), &filename_storage, &backing);
     }
     const jint handle = finish_transcriber_from_memory(
-        c_filenames, c_mem, c_sizes, model_arch, copts, std::move(backing));
+        filename_storage, model_arch, copts, std::move(backing));
     release_moonshine_options(env, copts, jhold);
     return handle;
   } catch (const std::exception &e) {
