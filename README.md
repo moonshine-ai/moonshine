@@ -70,7 +70,7 @@ Moonshine Voice ships prebuilt shared libraries for both x86_64 and arm64 Linux.
 
 <!-- doc-test: skip -->
 ```bash
-curl -O -L https://github.com/moonshine-ai/moonshine/releases/download/v0.0.72/cpp-examples.tar.gz
+curl -O -L https://github.com/moonshine-ai/moonshine/releases/download/v0.1.0/cpp-examples.tar.gz
 tar xzf cpp-examples.tar.gz
 cd c++
 ./download-library.sh
@@ -669,7 +669,7 @@ The [`examples`](examples/) folder has code samples organized by platform. We us
   - [my-dalek](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz)
   - [Pi Help Bot](https://github.com/moonshine-ai/pi-help-bot/archive/refs/heads/main.zip)
 
-The examples usually include one minimal project that just creates a transcriber and then feeds it data from a WAV file, and another that's pulling audio from a microphone using the platform's default framework for accessing audio devices. Each one is a self-contained project you can copy out of the tree: the Android samples depend on **`ai.moonshine:moonshine-voice:0.0.72`** from Maven Central, and the Apple ones pull **`MoonshineVoice`** from the Swift package.
+The examples usually include one minimal project that just creates a transcriber and then feeds it data from a WAV file, and another that's pulling audio from a microphone using the platform's default framework for accessing audio devices. Each one is a self-contained project you can copy out of the tree: the Android samples depend on **`ai.moonshine:moonshine-voice:0.1.0`** from Maven Central, and the Apple ones pull **`MoonshineVoice`** from the Swift package.
 
 None of them bundle model weights. Every engine downloads what it needs on first use — the speech model for [`Transcriber`](examples/android/Transcriber/), the voice and G2P assets for [`TextToSpeech`](examples/android/TextToSpeech/), the embedding model for `DialogFlow` — from `https://download.moonshine.ai/`, reporting progress through the `onProgress` callback the examples wire up to a label. Downloads are cached (under `filesDir` on Android, `Caches/MoonshineModels` on Apple platforms), so later launches run offline. Switching to a different voice triggers the same on-demand download for whatever that voice needs.
 
@@ -711,9 +711,9 @@ For reference purposes you can find Xcode projects with these changes applied in
 
 #### Android
 
-On Android we publish [the package to Maven](https://mvnrepository.com/artifact/ai.moonshine/moonshine-voice). To include it in your project using Android Studio and Gradle, first add the version number you want to the `gradle/libs.versions.toml` file by inserting a line in the `[versions]` section, for example `moonshineVoice = "0.0.72"`. Then in the `[libraries]` part, add a reference to the package: `moonshine-voice = { group = "ai.moonshine", name = "moonshine-voice", version.ref = "moonshineVoice" }`.
+On Android we publish [the package to Maven](https://mvnrepository.com/artifact/ai.moonshine/moonshine-voice). To include it in your project using Android Studio and Gradle, first add the version number you want to the `gradle/libs.versions.toml` file by inserting a line in the `[versions]` section, for example `moonshineVoice = "0.1.0"`. Then in the `[libraries]` part, add a reference to the package: `moonshine-voice = { group = "ai.moonshine", name = "moonshine-voice", version.ref = "moonshineVoice" }`.
 
-Finally, in your `app/build.gradle.kts` add the library to the `dependencies` list: `implementation(libs.moonshine.voice)`. The [`examples/android/Transcriber`](examples/android/Transcriber/) and [`examples/android/TextToSpeech`](examples/android/TextToSpeech/) samples use the same coordinates (`moonshineVoice = "0.0.72"` in their catalogs).
+Finally, in your `app/build.gradle.kts` add the library to the `dependencies` list: `implementation(libs.moonshine.voice)`. The [`examples/android/Transcriber`](examples/android/Transcriber/) and [`examples/android/TextToSpeech`](examples/android/TextToSpeech/) samples use the same coordinates (`moonshineVoice = "0.1.0"` in their catalogs).
 
 #### Windows/C++
 
