@@ -330,7 +330,7 @@ To define these flows, you used a [`DialogFlow`](#dialogflow) object, with callb
             f"To repeat, that's {speech_ip}."
         ])
 
-    dialog_flow.register_flow("What is my IP address?", report_ip_address)
+    dialog_flow.listen_for("What is my IP address?", report_ip_address)
 ```
 
 This registers the `report_ip_address()` function to be called whenever the user says anything similar to "What is my IP address?". The matching is done semantically, so alternative phrasings like "Tell me your IP address" or "Can you tell me the local IP address?" should trigger it too. You can register as many top-level conversation starters as you'd like, the system will listen out and route to the closest in meaning.
@@ -389,7 +389,7 @@ For more complex conversations, like setting up a new wifi network, you can defi
                 "Please check the network name and password and try again."
             )
 
-    dialog_flow.register_flow("Connect to Wi-Fi", connect_to_wifi)
+    dialog_flow.listen_for("Connect to Wi-Fi", connect_to_wifi)
 ```
 
 The first thing the function does is ask the user to give them the name of the network they want to join, through the call:
@@ -466,7 +466,7 @@ An agent needs a speech-to-text `Transcriber` object to receive input and a `Tex
     mic_transcriber.start()
 ```
 
-The `add_commands()` function calls `register_flow()` for all of the phrases the agent should recognize.
+The `add_commands()` function calls `listen_for()` for all of the phrases the agent should recognize.
 
 ### Getting Started with Text to Speech
 
@@ -1285,46 +1285,65 @@ A runner that drives generator-based conversational flows, and the entry point f
 
 A flow is an ordinary Python generator function that takes a [`Dialog`](#dialog) as its argument and yields prompt objects back to the runner. The runner carries out each prompt (speaking text, waiting for the user's response) and resumes the generator with the answer via `.send()`. This lets you write multi-step, branching conversations using regular Python control flow, including loops and exception handlers, without any async machinery. Trigger matching, confirmation, and option selection are all done semantically through the embedding model, so alternative phrasings will work without you needing to enumerate them.
 
-- <a id="dialogflow-init"></a>`__init__()`: Constructs the runner with optional TTS and audio plumbing hooks. All arguments are keyword-only.
-  - `tts`: An optional [`TextToSpeech`](#texttospeech) instance used to speak prompts. When set, the runner calls `tts.say(text)` and blocks on `tts.wait()` before resuming the flow. If `tts.play_success` and `tts.play_error` are available they're auto-wired as the recognition-cue beep callbacks.
-  - `use_embeddings`: A boolean (default `True`) controlling whether phrases are matched semantically. When set, the embedding model that drives trigger matching is downloaded and loaded the first time a match is needed, and released by [`close()`](#dialogflow-close). Pass `False` to fall back to case-insensitive substring matching and load no model, which is what tests and offline smoke checks usually want.
-  - `speak_fn`: Optional callable `(text) -> None` that speaks the text and blocks until playback finishes. Overrides `tts` when set, which is useful for tests and alternative TTS backends.
-  - `mute_fn`: Optional callable `(should_mute: bool) -> None` invoked before and after each spoken prompt so you can silence the microphone while the assistant is talking, to avoid the agent transcribing itself.
-  - `spelling_mode_fn`: Optional callable `(active: bool) -> None` invoked whenever the runner enters or leaves a `SPELLED` / `DIGITS` prompt. Wire this to the underlying transcriber's `set_transcribe_flags()` to flip `MOONSHINE_FLAG_SPELLING_MODE` on only while spelled input is expected, so the spelling-CNN fusion path is used for password and code dictation without perturbing free-form recognition.
-  - `success_beep_fn`: Optional callable `() -> None` played the moment a completed transcript line is recognized, just before any TTS response begins. Defaults to `tts.play_success()` when `tts` exposes one. Pass `lambda: None` to silence.
-  - `error_beep_fn`: Optional callable `() -> None` played when a completed transcript line isn't recognized: no trigger matched, no active flow could interpret it, and no global handler took it. Defaults to `tts.play_error()` when available.
-  - `trigger_threshold`: A float between 0 and 1 setting the minimum embedding-similarity score required for an utterance to count as matching a registered trigger phrase. Defaults to `0.7`.
-  - `spell_feedback`: A boolean (default `True`) that controls whether every character recognized during a `SPELLED` / `DIGITS` prompt is spoken back to the user as confirmation, along with `"deleting <character>"` for undo commands. Pass `False` to silence the character-by-character echo (for example when no TTS is wired up).
-  - `ignore_stt_during_tts`: A boolean (default `True`). When set, every utterance that arrives while the runner is mid-prompt (i.e. the TTS is actively speaking) is dropped before it can advance the flow, match a global trigger, or be matched at all. This guards against self-capture on devices with weak echo cancellation. Disable only when you have reliable echo cancellation and want barge-in.
-  - `log_io`: A boolean (default `False`). When enabled, every utterance the runner receives and every prompt the assistant speaks is logged to stderr in a clean `user: ...` / `assistant: ...` format. Distinct from `debug`: this is the user-facing dialogue transcript without the verbose internal trace.
-  - `debug`: A boolean (default `False`). When enabled, stage-transition traces with per-step and cumulative timings are written to stderr, which is useful for diagnosing latency or missing-beep issues.
+- <a id="dialogflow-init"></a>`__init__()`: Constructs an unconfigured runner. Takes no arguments — configure it with the chainable setters below, then call [`load()`](#dialogflow-load).
 
-- <a id="dialogflow-register-flow"></a>`register_flow()`: Registers a flow generator function to be started whenever the trigger phrase is matched against an incoming utterance.
+Every setter returns the runner, so a whole voice interface can be built in one expression, and every one of them has a working default. Call them before `load()`.
+
+- <a id="dialogflow-language"></a>`language()`: Sets the language used for both recognition and speech. Defaults to `"en"`.
+- <a id="dialogflow-model-arch"></a>`model_arch()`: Picks a specific speech recognition model size instead of the default for the language.
+- <a id="dialogflow-voice"></a>`voice()`: Chooses the synthesis voice used to speak prompts.
+- <a id="dialogflow-speech-options"></a>`speech_options()`: Passes a dictionary of advanced options straight through to the [`TextToSpeech`](#texttospeech) synthesizer.
+- <a id="dialogflow-models-from"></a>`models_from()`: Reads and caches model files under the given directory instead of the default cache location.
+- <a id="dialogflow-microphone"></a>`microphone()`: Whether `load()` should open a microphone. Defaults to `True`. Turn it off to drive the runner from text with [`handle_utterance()`](#dialogflow-handle-utterance).
+- <a id="dialogflow-speech"></a>`speech()`: Whether `load()` should open a speech synthesizer. Defaults to `True`. Turn it off for a silent runner: prompts are still logged and flows still advance, they just aren't spoken.
+- <a id="dialogflow-output-device"></a>`output_device()`: Pins playback to a specific audio output device, for machines where the host default isn't the speaker you want.
+- <a id="dialogflow-trigger-threshold"></a>`trigger_threshold()`: The similarity a phrase must reach to fire, between 0 and 1. Defaults to `0.7`. Raise it when triggers fire on unrelated speech, lower it when they don't fire on genuine attempts.
+- <a id="dialogflow-use-embeddings"></a>`use_embeddings()`: Whether to match phrases by meaning. Defaults to `True`, which downloads a small language model so "set up wifi" also fires on "I need to get online". Turn it off to fall back to case-insensitive substring matching and load no model, which is what offline tests usually want.
+- <a id="dialogflow-beeps"></a>`beeps()`: Whether to play the recognition cue tones. Defaults to `True`, which plays a short "got it" tone when an utterance matches and a distinct "didn't get that" tone when nothing does, so a misrecognition never ends in silence.
+- <a id="dialogflow-spell-feedback"></a>`spell_feedback()`: Whether to echo each character during spelled input. Defaults to `True`, speaking back `"haitch"` for `"h"` and `"deleting <character>"` for an undo, so the user hears that the right letter came off the end.
+- <a id="dialogflow-barge-in"></a>`barge_in()`: Whether the user can interrupt the assistant mid-prompt. Off by default, because an utterance arriving while the assistant is talking is usually the microphone hearing the speakers. Enable it only when you have reliable echo cancellation.
+- <a id="dialogflow-log-io"></a>`log_io()`: Logs the dialogue to stderr as `user: ...` / `assistant: ...` lines. Off by default. This is the user-facing transcript; use `debug()` for the verbose internal trace.
+- <a id="dialogflow-debug"></a>`debug()`: Traces every internal stage transition, with timings, to stderr.
+- <a id="dialogflow-on-progress"></a>`on_progress()`: Reports model download and load progress as `(fraction, name)`.
+- <a id="dialogflow-on-heard"></a>`on_heard()`: Reports every utterance the runner receives from the microphone.
+- <a id="dialogflow-on-said"></a>`on_said()`: Reports every prompt the runner speaks.
+- <a id="dialogflow-on-error"></a>`on_error()`: Reports errors raised by a flow or by the audio pipeline. Without a handler the runner prints them to stderr and carries on; a flow that raises is torn down either way, so one bad turn can't wedge the runner.
+- <a id="dialogflow-speak-with"></a>`speak_with()`: Speaks prompts with your own callable instead of the built-in synthesizer. It must block until playback finishes, since the runner resumes the flow as soon as it returns. Setting this stops `load()` creating a synthesizer.
+- <a id="dialogflow-use-text-to-speech"></a>`use_text_to_speech()`: Speaks with an existing [`TextToSpeech`](#texttospeech) instead of creating one.
+- <a id="dialogflow-use-mic-transcriber"></a>`use_mic_transcriber()`: Listens to an existing [`MicTranscriber`](#mictranscriber), or any object with the same `add_listener` / `start` / `stop` shape — a plain [`Transcriber`](#transcriber) fed from a file works, which is handy for testing a flow against recorded audio.
+
+The runner won't close a synthesizer or transcriber it didn't create.
+
+- <a id="dialogflow-listen-for"></a>`listen_for()`: Starts a flow whenever the user says something like the trigger phrase.
   - `trigger_phrase`: A canonical phrase that is embedded once at registration time and compared against utterances via cosine similarity, so alternative phrasings of the same meaning will all start the flow.
   - `flow`: A callable that takes a [`Dialog`](#dialog) and returns a generator yielding prompts. Typically a generator function.
 
-- <a id="dialogflow-unregister-flow"></a>`unregister_flow()`: Removes a previously registered flow. Returns `True` if a flow was removed, `False` otherwise.
+- <a id="dialogflow-unregister-flow"></a>`unregister_flow()`: Removes a flow registered with `listen_for()`. Returns `True` if a flow was removed, `False` otherwise.
   - `trigger_phrase`: The trigger phrase used when the flow was registered.
 
-- <a id="dialogflow-register-global"></a>`register_global()`: Registers a phrase that is always live, even while a flow is running. Useful for commands like "cancel" or "start over" that should interrupt any in-progress conversation.
-  - `trigger_phrase`: The canonical phrase to match, in the same way as `register_flow()`.
+- <a id="dialogflow-always"></a>`always()`: Registers a phrase that stays live even while a flow is running. Useful for commands like "cancel" or "start over" that should interrupt any in-progress conversation.
+  - `trigger_phrase`: The canonical phrase to match, in the same way as `listen_for()`.
   - `handler`: A callable that takes the current [`Dialog`](#dialog) and returns an optional prompt to speak (or `None`). The handler can also call `d.cancel()` or `d.restart()` to abandon or reset the active flow.
 
-- <a id="dialogflow-process-utterance"></a>`process_utterance()`: Routes an utterance manually, without going through transcript events. Returns `True` if the utterance was consumed by a flow or a global handler, `False` otherwise. Useful for unit tests, or for driving the runner from input sources other than a `Transcriber`.
+- <a id="dialogflow-load"></a>`load()`: Downloads and opens everything the runner needs — the phrase-matching model, a speech synthesizer, and a microphone transcriber — skipping any you've supplied or turned off. Blocking, since the first call may have to download models; report progress with `on_progress()`. Returns the runner.
+
+- <a id="dialogflow-start-listening"></a>`start_listening()`: Starts listening on the microphone, calling `load()` first if you haven't. Returns as soon as the microphone is live: transcript lines arrive on the audio thread and drive your flows from there, so the caller is free to sleep, run a UI, or do anything else.
+
+- <a id="dialogflow-stop-listening"></a>`stop_listening()`: Stops listening. Safe to call when already stopped.
+
+- <a id="dialogflow-handle-utterance"></a>`handle_utterance()`: Routes an utterance manually, without going through transcript events. Returns `True` if the utterance was consumed by a flow or a global handler, `False` otherwise. Useful for unit tests, or for driving the runner from input sources other than a `Transcriber`.
   - `utterance`: The string to route.
 
-- <a id="dialogflow-cancel-active"></a>`cancel_active()`: Abandons the currently running flow, if any. Returns `True` if a flow was canceled.
+- <a id="dialogflow-cancel"></a>`cancel()`: Abandons the currently running flow, if any. Returns `True` if a flow was canceled.
 
-- <a id="dialogflow-say"></a>`say()`: Speaks `text` through the configured TTS, outside any flow. Useful for welcome messages, status announcements, and error notifications that don't need a full flow registration. Blocks until playback finishes, and shares the same playback path as in-flow prompts so `mute_fn` and self-capture suppression still apply.
+- <a id="dialogflow-say"></a>`say()`: Speaks `text` outside any flow. Useful for welcome messages, status announcements, and error notifications that don't need a full flow registration. Blocks until playback finishes, and shares the same playback path as in-flow prompts, so mic muting and self-capture suppression still apply.
   - `text`: The string to speak.
 
-- <a id="dialogflow-close"></a>`close()`: Releases the embedding model, if this runner loaded one. Safe to call more than once, and safe to call on a runner that never loaded a model.
+- <a id="dialogflow-close"></a>`close()`: Stops listening and releases everything the runner opened. Only closes what it created itself: a synthesizer or transcriber you passed in stays yours to close. Safe to call more than once, and safe on a runner that never loaded anything.
 
 - `is_active`: A read-only boolean property that's `True` when a flow is currently in progress.
 - `active_trigger`: A read-only property returning the trigger phrase of the active flow, or `None` if no flow is running.
 - `registered_flows`: A read-only list of all registered flow trigger phrases.
-
-`DialogFlow` also implements the [`TranscriptEventListener`](#transcripteventlistener) interface, so once you attach it via `transcriber.add_listener(dialog_flow)`, completed lines are routed automatically through `process_utterance()` without you having to call it yourself.
 
 #### Dialog
 
@@ -1356,7 +1375,7 @@ The context object passed as the first argument to every flow function. Each met
   - `timeout`: Seconds to wait for a response. Defaults to 8 seconds.
   - `max_retries`: Number of reprompts before raising `NoMatchError`. Defaults to 2.
 
-- <a id="dialog-cancel"></a>`cancel()`: Raises `DialogCancelled` into the generator to abandon the active flow entirely. Typically called from a global handler registered with `DialogFlow.register_global()`.
+- <a id="dialog-cancel"></a>`cancel()`: Raises `DialogCancelled` into the generator to abandon the active flow entirely. Typically called from a global handler registered with `DialogFlow.always()`.
 
 - <a id="dialog-restart"></a>`restart()`: Raises `DialogRestart` into the generator to restart the active flow from the beginning. Typically called from a global handler.
 

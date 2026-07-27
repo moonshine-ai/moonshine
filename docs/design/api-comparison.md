@@ -696,7 +696,18 @@ would have meant two ways to do trigger matching, one of which requires the
 caller to assemble the pieces. The intent-recognition sample apps go with it,
 and the Raspberry Pi `my-dalek` demo is ported to `DialogFlow` globals.
 
-Python's `DialogFlow` is otherwise unchanged for now. It predates this work and
-its `MicTranscriber` already has the right name; aligning it with the
-construct-configure-load pattern is follow-up work so that all four bindings
-read the same.
+Python's `DialogFlow` moves to the same construct-configure-load pattern, so all
+four bindings read the same. It predates this work, and used to be constructed
+with a dozen keyword arguments and handed a `TextToSpeech` and a
+`MicTranscriber` the application had built itself; it now opens all three models
+on `load()` and its microphone on `start_listening()`. The registration and
+routing methods are renamed to match the other bindings — `register_flow` to
+`listen_for`, `register_global` to `always`, `process_utterance` to
+`handle_utterance`, and `cancel_active` to `cancel` — and the constructor
+arguments become chainable setters. This is a breaking change for the Python
+binding too.
+
+The flows themselves are untouched: they stay generator functions driven by
+`yield`, which is the idiomatic Python equivalent of the promise, continuation
+and blocking-queue mechanisms used elsewhere, and the whole engine is built
+around it.

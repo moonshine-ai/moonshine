@@ -78,15 +78,18 @@ commands = {
 
 dalek = DialogFlow()
 for phrase, handler in commands.items():
-    dalek.register_global(phrase, handler)
+    dalek.always(phrase, handler)
+
+dalek.load()
+dalek.start_listening()
 ```
 
 `DialogFlow` is the entry point for voice interfaces. Here we only register
 "globals" — single-shot commands that are live at all times — but the same
-runner also handles multi-turn conversations through `register_flow`, where it
-can ask a question, wait for the answer, and confirm it. Either way it
-downloads and loads the models it needs for you the first time it hears
-something.
+runner also handles multi-turn conversations through `listen_for`, where it can
+ask a question, wait for the answer, and confirm it. Either way, `load()`
+downloads and opens the models it needs and `start_listening()` opens the
+microphone, so there's nothing else to wire up.
 
 In a real project each function would have code that controls the robot's wheels, or activates its sink-plunger death-ray, but since I've had trouble understanding Davros's documentation, I've left acquiring the hardware and implementing those as an exercise for the reader.
 

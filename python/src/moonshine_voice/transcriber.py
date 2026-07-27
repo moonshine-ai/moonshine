@@ -85,7 +85,7 @@ class Error:
 # without poking at the class. The class attributes below stay for
 # backwards-compat with existing callers that read them as
 # ``Transcriber.MOONSHINE_FLAG_SPELLING_MODE``.
-MOONSHINE_HEADER_VERSION = 20000
+MOONSHINE_HEADER_VERSION = 30000
 MOONSHINE_FLAG_FORCE_UPDATE = 1 << 0
 # See ``MOONSHINE_FLAG_SPELLING_MODE`` in core/moonshine-c-api.h.
 MOONSHINE_FLAG_SPELLING_MODE = 1 << 1

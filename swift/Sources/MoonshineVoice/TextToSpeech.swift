@@ -72,7 +72,7 @@ public class TextToSpeech: @unchecked Sendable {
     }
 
     /// Moonshine header version constant.
-    public static let moonshineHeaderVersion: Int32 = 20000
+    public static let moonshineHeaderVersion: Int32 = 30000
 
     /// Canonical asset key under which a ZipVoice clone reference clip is supplied.
     private static let cloneAudioKey = "zipvoice/clone_audio"

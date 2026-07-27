@@ -146,13 +146,12 @@ stream.close()
 ## Voice Commands
 
 Voice commands go through `DialogFlow`. Register the phrases you want to listen
-for and it handles the rest: it downloads the embedding model, matches what the
+for and it handles the rest: it downloads the speech recognition, speech
+synthesis and phrase-matching models, opens the microphone, matches what the
 user said semantically rather than by exact wording, and runs your handler.
 
 ```python
-from moonshine_voice import DialogFlow, MicTranscriber, get_model_for_language
-
-runner = DialogFlow()
+from moonshine_voice import DialogFlow
 
 def lights_on(d):
     print("\n💡 LIGHTS ON!")
@@ -160,34 +159,37 @@ def lights_on(d):
 def lights_off(d):
     print("\n🌑 LIGHTS OFF!")
 
-runner.register_global("turn on the lights", lights_on)
-runner.register_global("turn off the lights", lights_off)
+runner = (
+    DialogFlow()
+    .always("turn on the lights", lights_on)
+    .always("turn off the lights", lights_off)
+)
 ```
 
-Then create a `MicTranscriber`, add the runner as a listener, and start the
-audio stream. `DialogFlow` is a `TranscriptEventListener`, so completed lines
-flow straight into it:
+`load()` downloads and opens everything it needs, and `start_listening()` opens
+the microphone. There's nothing else to construct:
 
 ```python
-model_path, model_arch = get_model_for_language("en")
-mic_transcriber = MicTranscriber(model_path=model_path, model_arch=model_arch)
-mic_transcriber.add_listener(runner)
-
-mic_transcriber.start()
+runner.load()
+runner.start_listening()
 try:
     while True:
         time.sleep(0.1)
 except KeyboardInterrupt:
     print("\n\nStopping...", file=sys.stderr)
 finally:
-    mic_transcriber.stop()
-    mic_transcriber.close()
     runner.close()
 ```
 
+Configuration is chainable, and everything has a working default — `language()`,
+`voice()`, `trigger_threshold()`, `on_heard()` / `on_said()` / `on_error()` for
+observing the conversation, and `use_mic_transcriber()` / `use_text_to_speech()`
+when you'd rather supply your own. To drive a runner from text instead of audio,
+turn the microphone off with `microphone(False)` and feed it `handle_utterance()`.
+
 For multi-turn conversations — asking a question, confirming an answer,
-spelling out a password — register a flow instead of a global. See
-`examples/python/dialog_flow.py`, or run `moonshine-voice dialog`.
+spelling out a password — register a flow with `listen_for()` instead of a
+global. See `examples/python/dialog_flow.py`, or run `moonshine-voice dialog`.
 
 ## Multiple Languages
 

@@ -9,7 +9,7 @@ public class Transcriber {
     private var defaultStream: Stream? = nil
 
     /// Moonshine header version constant.
-    public static let moonshineHeaderVersion: Int32 = 20000
+    public static let moonshineHeaderVersion: Int32 = 30000
 
     /// Get the bundle for the moonshine framework (where resources are located).
     /// - Returns: The framework bundle, or nil if not found

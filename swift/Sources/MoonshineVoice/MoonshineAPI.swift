@@ -35,7 +35,7 @@ internal final class MoonshineAPI: @unchecked Sendable {
         path: String,
         modelArch: ModelArch,
         options: [TranscriberOption]? = nil,
-        moonshineVersion: Int32 = 20000
+        moonshineVersion: Int32 = 30000
     ) throws -> Int32 {
         let pathCString = path.cString(using: .utf8)!
 
@@ -356,7 +356,7 @@ internal final class MoonshineAPI: @unchecked Sendable {
     func createTtsSynthesizerFromFiles(
         language: String,
         options: [TranscriberOption]? = nil,
-        moonshineVersion: Int32 = 20000
+        moonshineVersion: Int32 = 30000
     ) throws -> Int32 {
         let langCString = language.cString(using: .utf8)!
 
@@ -415,7 +415,7 @@ internal final class MoonshineAPI: @unchecked Sendable {
         memoryPtrs: [UnsafePointer<UInt8>?],
         memorySizes: [UInt64],
         options: [TranscriberOption]? = nil,
-        moonshineVersion: Int32 = 20000
+        moonshineVersion: Int32 = 30000
     ) throws -> Int32 {
         precondition(filenames.count == memoryPtrs.count && filenames.count == memorySizes.count)
         let langCString = language.cString(using: .utf8)!

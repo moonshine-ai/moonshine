@@ -11,7 +11,7 @@ from moonshine_voice.errors import MoonshineError
 # Constants (moonshine-c-api.h)
 # ---------------------------------------------------------------------------
 
-MOONSHINE_HEADER_VERSION = 20000
+MOONSHINE_HEADER_VERSION = 30000
 
 MOONSHINE_ERROR_NONE = 0
 MOONSHINE_ERROR_UNKNOWN = -1
