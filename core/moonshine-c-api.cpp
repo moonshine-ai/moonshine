@@ -273,6 +273,20 @@ int32_t moonshine_load_transcriber_from_memory(
     }
   }
 
+  // This entry point only understands a fixed encoder/decoder/tokenizer set,
+  // so it can't express the assets newer architectures need. Clients built
+  // against a current header have to move to the filename-keyed loader, but
+  // ones built against an older header still pass that older version here and
+  // keep working.
+  if (moonshine_version >= MOONSHINE_FROM_MEMORY_REMOVED_VERSION) {
+    LOGF(
+        "moonshine_load_transcriber_from_memory() is no longer supported for "
+        "clients built against Moonshine %d or newer (this caller passed %d). "
+        "Use moonshine_load_transcriber_from_memory_files() instead.",
+        MOONSHINE_FROM_MEMORY_REMOVED_VERSION, moonshine_version);
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+
   Transcriber *transcriber = nullptr;
   try {
     TranscriberOptions transcriber_options;

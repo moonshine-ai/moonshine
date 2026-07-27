@@ -9,9 +9,8 @@ Three ways to run it:
 
 * Default – interactive keyboard mode: prompts are printed to stdout,
   you type replies on stdin.  Fast, no audio hardware required.
-* ``--mic`` – live microphone + TTS mode: the :class:`MicTranscriber`
-  gathers user input and the assistant speaks through
-  :class:`TextToSpeech`.
+* ``--mic`` – live microphone mode: :class:`DialogFlow` opens the
+  microphone and speaks its prompts aloud.
 * ``--scripted`` – canned-answer mode: drives the same flow from a
   pre-defined list of utterances, useful for smoke tests.
 """
@@ -19,24 +18,9 @@ Three ways to run it:
 import argparse
 import sys
 import time
-from typing import Iterable
+from collections.abc import Iterable
 
-from typing import Optional
-
-from moonshine_voice import (
-    DialogFlow,
-    IntentRecognizer,
-    MicTranscriber,
-    SPELLED,
-    TextToSpeech,
-    TranscriptEventListener,
-    get_embedding_model,
-    get_model_for_language,
-    get_spelling_model_path,
-    spell_out,
-)
-from moonshine_voice.transcriber import MOONSHINE_FLAG_SPELLING_MODE
-
+from moonshine_voice import SPELLED, DialogFlow, spell_out
 
 # ---------------------------------------------------------------------------
 # Flow definitions
@@ -95,162 +79,45 @@ def _apply_wifi_config(ssid: str, password: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Terminal transcript printer
-# ---------------------------------------------------------------------------
-
-
-class TranscriptPrinter(TranscriptEventListener):
-    """Echoes in-progress transcripts and logs every completed line.
-
-    When ``--log-io`` is on, ``DialogFlow`` itself emits a
-    ``user: …`` line for every completed utterance (including
-    self-capture annotations); set ``log_user_completed=False``
-    so we only print the partial / overwrite stream and skip the
-    final completed-line print to avoid duplicates.
-    """
-
-    def __init__(self, *, log_user_completed: bool = True):
-        self.last_len = 0
-        self._log_user_completed = log_user_completed
-
-    def _overwrite(self, text: str) -> None:
-        print(f"\r{text}", end="", flush=True)
-        if len(text) < self.last_len:
-            print(" " * (self.last_len - len(text)), end="", flush=True)
-        self.last_len = len(text)
-
-    def on_line_started(self, event):
-        self.last_len = 0
-
-    def on_line_text_changed(self, event):
-        self._overwrite(f"user (partial): {event.line.text}")
-
-    def on_line_completed(self, event):
-        if self.last_len:
-            # Wipe the in-progress line so the finalized log starts clean.
-            print(f"\r{' ' * self.last_len}\r", end="", flush=True)
-            self.last_len = 0
-        if self._log_user_completed:
-            print(f"user: {event.line.text}", flush=True)
-
-
-# ---------------------------------------------------------------------------
 # Live microphone mode
 # ---------------------------------------------------------------------------
 
 
 def run_live(args: argparse.Namespace) -> None:
-    print("Loading transcription model...", file=sys.stderr)
-    model_path, model_arch = get_model_for_language(args.language)
-
-    print("Loading embedding model...", file=sys.stderr)
-    embedding_model_path, embedding_model_arch = get_embedding_model(
-        args.embedding_model, args.quantization
-    )
-
-    print("Creating intent recognizer...", file=sys.stderr)
-    intent_recognizer = IntentRecognizer(
-        model_path=embedding_model_path,
-        model_arch=embedding_model_arch,
-        model_variant=args.quantization,
-        threshold=args.threshold,
-    )
-
-    # Pre-fetch the alphanumeric spelling-CNN if one is published for
-    # this language; DialogFlow flips MOONSHINE_FLAG_SPELLING_MODE on
-    # only while the active prompt is in SPELLED / DIGITS mode (so
-    # password / code dictation gets the C++ spelling-fusion path
-    # without perturbing free-form recognition or trigger matching).
-    print("Creating microphone transcriber...", file=sys.stderr)
-    spelling_model_path: Optional[str] = None
-    try:
-        spelling_model_path = get_spelling_model_path(args.language)
-    except Exception as e:
-        print(
-            f"Spelling model: lookup failed ({e!r}); SPELLED mode will "
-            "fall back to matcher-only classification.",
-            file=sys.stderr,
-        )
-    if spelling_model_path is not None:
-        print(f"Spelling model: loaded {spelling_model_path}.", file=sys.stderr)
-
-    mic = MicTranscriber(
-        model_path=model_path,
-        model_arch=model_arch,
-        spelling_model_path=spelling_model_path,
-    )
-
-    tts = None
-    if not args.no_tts:
-        print("Creating TTS (this can take a moment on first run)...", file=sys.stderr)
-        tts_kwargs = {}
-        if getattr(args, "tts_options", None):
-            tts_kwargs["options"] = dict(args.tts_options)
-        # Forward ``--debug`` into TextToSpeech so its synth/play traces
-        # interleave with the DialogFlow ones — handy when the success
-        # / error beeps don't seem to be making it to the speaker.
-        # ``--output-device`` pins playback to a specific PortAudio
-        # device for cases where the host default isn't connected to
-        # speakers.
-        tts = TextToSpeech(
-            language=args.language,
-            debug=getattr(args, "debug", False),
-            output_device=getattr(args, "output_device", None),
-            **tts_kwargs,
-        )
-
-    def mute(should_mute: bool) -> None:
-        # Stop the mic from recording our own speech while we're talking.
-        mic._should_listen = not should_mute
-
-    def set_spelling_mode(active: bool) -> None:
-        """Toggle the C++ spelling-CNN fusion path on the live mic stream."""
-        mic.set_transcribe_flags(MOONSHINE_FLAG_SPELLING_MODE if active else 0)
-
     log_io = getattr(args, "log_io", False)
 
-    def speak(text: str) -> None:
-        """Log every spoken prompt and (optionally) pass it through TTS.
-
-        When ``--log-io`` is on the runner emits its own
-        ``assistant: …`` line for every prompt; suppress the local
-        print to avoid duplicates.
-        """
-        if not log_io:
-            print(f"assistant: {text}", flush=True)
-        if tts is not None:
-            tts.say(text)
-            try:
-                tts.wait()
-            except Exception:
-                pass
-
-    runner = DialogFlow(
-        # Pass ``tts`` alongside ``speak_fn`` so DialogFlow can auto-wire
-        # the success / error beeps to ``tts.play_success`` /
-        # ``tts.play_error`` (no-op when --no-tts strips the synth, since
-        # ``tts`` will be ``None`` and the beep callbacks stay unset).
-        tts=tts,
-        speak_fn=speak,
-        intent_recognizer=intent_recognizer,
-        mute_fn=mute,
-        spelling_mode_fn=(
-            set_spelling_mode if spelling_model_path is not None else None
-        ),
-        spell_feedback=True,
-        log_io=log_io,
-        debug=getattr(args, "debug", False),
+    # DialogFlow opens the recognizer, the synthesizer and the microphone
+    # itself, so all this needs to describe is the conversation.
+    runner = (
+        DialogFlow()
+        .language(args.language)
+        .speech(not args.no_tts)
+        .trigger_threshold(args.threshold)
+        .log_io(log_io)
+        .debug(getattr(args, "debug", False))
+        .on_progress(
+            lambda fraction, name: print(
+                f"Loading {name}... {fraction:.0%}", file=sys.stderr
+            )
+        )
+        .listen_for("set up wifi", setup_wifi)
+        .listen_for("configure wifi", setup_wifi)
+        .listen_for("onboard me", full_onboarding)
+        .listen_for("set the timezone", set_timezone)
+        .always("cancel", lambda d: d.cancel())
+        .always("start over", lambda d: d.restart())
     )
-    runner.register_flow("set up wifi", setup_wifi)
-    runner.register_flow("configure wifi", setup_wifi)
-    runner.register_flow("onboard me", full_onboarding)
-    runner.register_flow("set the timezone", set_timezone)
+    if getattr(args, "output_device", None) is not None:
+        runner.output_device(args.output_device)
+    if getattr(args, "tts_options", None):
+        runner.speech_options(dict(args.tts_options))
+    if not log_io:
+        # With --log-io the runner prints both sides of the conversation
+        # itself, so only echo when it's off.
+        runner.on_heard(lambda text: print(f"user: {text}", flush=True))
+        runner.on_said(lambda text: print(f"assistant: {text}", flush=True))
 
-    runner.register_global("cancel", lambda d: d.cancel())
-    runner.register_global("start over", lambda d: d.restart())
-
-    mic.add_listener(TranscriptPrinter(log_user_completed=not log_io))
-    mic.add_listener(runner)
+    runner.load()
 
     print(
         "\n🎤 Ready. Try saying 'set up wifi' or 'onboard me' "
@@ -259,16 +126,53 @@ def run_live(args: argparse.Namespace) -> None:
     )
     print("Press Ctrl+C to stop.\n", file=sys.stderr)
 
-    mic.start()
+    runner.start_listening()
     try:
         while True:
             time.sleep(0.1)
     except KeyboardInterrupt:
         print("\nStopping...", file=sys.stderr)
     finally:
-        mic.stop()
-        mic.close()
-        intent_recognizer.close()
+        runner.close()
+
+
+# ---------------------------------------------------------------------------
+# Text-driven modes (no audio hardware)
+# ---------------------------------------------------------------------------
+
+
+def _build_text_runner(*, debug: bool = False) -> DialogFlow:
+    """A runner with no microphone or synthesizer, printing prompts to stdout.
+
+    Trigger, confirmation and choice matching still goes through the
+    embedding model, so the first run may download it.
+    """
+    return (
+        DialogFlow()
+        .microphone(False)
+        .speak_with(lambda text: print(f"assistant: {text}", flush=True))
+        .debug(debug)
+        .on_progress(
+            lambda fraction, name: print(
+                f"Loading {name}... {fraction:.0%}", file=sys.stderr
+            )
+        )
+        .listen_for("set up wifi", setup_wifi)
+        .listen_for("configure wifi", setup_wifi)
+        .listen_for("onboard me", full_onboarding)
+        .listen_for("set the timezone", set_timezone)
+        .always("cancel", lambda d: d.cancel())
+        .always("start over", lambda d: d.restart())
+        .load()
+    )
+
+
+def _resolve_trigger(flow_name: str) -> str:
+    return {
+        "wifi": "set up wifi",
+        "onboard": "onboard me",
+        "timezone": "set the timezone",
+    }.get(flow_name, flow_name)
 
 
 # ---------------------------------------------------------------------------
@@ -279,8 +183,6 @@ def run_live(args: argparse.Namespace) -> None:
 def run_interactive(
     flow_name: str,
     *,
-    embedding_model: str = "embeddinggemma-300m",
-    quantization: str = "q4",
     debug: bool = False,
 ) -> None:
     """Keyboard-driven demo – prompts go to stdout, replies come from stdin.
@@ -290,53 +192,22 @@ def run_interactive(
     goes through the embedding model (first run may download it).
     """
 
-    def speak(text: str) -> None:
-        print(f"assistant: {text}", flush=True)
-
-    print(
-        f"Loading embedding model (variant={quantization}) – first run may download...",
-        file=sys.stderr,
-    )
-    embedding_model_path, embedding_model_arch = get_embedding_model(
-        embedding_model, quantization
-    )
-    intent_recognizer = IntentRecognizer(
-        model_path=embedding_model_path,
-        model_arch=embedding_model_arch,
-        model_variant=quantization,
-    )
-
-    runner = DialogFlow(
-        speak_fn=speak,
-        intent_recognizer=intent_recognizer,
-        debug=debug,
-    )
-    runner.register_flow("set up wifi", setup_wifi)
-    runner.register_flow("configure wifi", setup_wifi)
-    runner.register_flow("onboard me", full_onboarding)
-    runner.register_flow("set the timezone", set_timezone)
-    runner.register_global("cancel", lambda d: d.cancel())
-    runner.register_global("start over", lambda d: d.restart())
-
-    trigger_map = {
-        "wifi": "set up wifi",
-        "onboard": "onboard me",
-        "timezone": "set the timezone",
-    }
-    trigger = trigger_map.get(flow_name, flow_name)
+    runner = _build_text_runner(debug=debug)
+    trigger = _resolve_trigger(flow_name)
 
     print(f"user:      {trigger}")
-    runner.process_utterance(trigger)
+    runner.handle_utterance(trigger)
     while runner.is_active:
         try:
             answer = input("you>      ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
-            runner.cancel_active()
+            runner.cancel()
             break
         if not answer:
             continue
-        runner.process_utterance(answer)
+        runner.handle_utterance(answer)
+    runner.close()
 
 
 # ---------------------------------------------------------------------------
@@ -348,8 +219,6 @@ def run_scripted(
     flow_name: str,
     answers: Iterable[str],
     *,
-    embedding_model: str = "embeddinggemma-300m",
-    quantization: str = "q4",
     debug: bool = False,
 ) -> None:
     """Drive a flow from a pre-canned list of utterances.
@@ -360,47 +229,17 @@ def run_scripted(
     model (first run may download it).
     """
 
-    def speak(text: str) -> None:
-        print(f"assistant: {text}")
-
-    print(
-        f"Loading embedding model (variant={quantization}) – first run may download...",
-        file=sys.stderr,
-    )
-    embedding_model_path, embedding_model_arch = get_embedding_model(
-        embedding_model, quantization
-    )
-    intent_recognizer = IntentRecognizer(
-        model_path=embedding_model_path,
-        model_arch=embedding_model_arch,
-        model_variant=quantization,
-    )
-
-    runner = DialogFlow(
-        speak_fn=speak,
-        intent_recognizer=intent_recognizer,
-        debug=debug,
-    )
-    runner.register_flow("set up wifi", setup_wifi)
-    runner.register_flow("onboard me", full_onboarding)
-    runner.register_flow("set the timezone", set_timezone)
-    runner.register_global("cancel", lambda d: d.cancel())
-    runner.register_global("start over", lambda d: d.restart())
-
-    trigger_map = {
-        "wifi": "set up wifi",
-        "onboard": "onboard me",
-        "timezone": "set the timezone",
-    }
-    trigger = trigger_map.get(flow_name, flow_name)
+    runner = _build_text_runner(debug=debug)
+    trigger = _resolve_trigger(flow_name)
 
     print(f"user:      {trigger}")
-    runner.process_utterance(trigger)
+    runner.handle_utterance(trigger)
     for answer in answers:
         print(f"user:      {answer}")
-        runner.process_utterance(answer)
+        runner.handle_utterance(answer)
         if not runner.is_active:
             break
+    runner.close()
 
 
 # ---------------------------------------------------------------------------
@@ -411,8 +250,6 @@ def run_scripted(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--language", default="en")
-    parser.add_argument("--embedding-model", default="embeddinggemma-300m")
-    parser.add_argument("--quantization", default="q4")
     parser.add_argument("--threshold", type=float, default=0.7)
     parser.add_argument(
         "--no-tts",
@@ -532,15 +369,11 @@ def main() -> None:
         run_scripted(
             args.flow,
             canned[args.flow],
-            embedding_model=args.embedding_model,
-            quantization=args.quantization,
             debug=args.debug,
         )
     else:
         run_interactive(
             args.flow,
-            embedding_model=args.embedding_model,
-            quantization=args.quantization,
             debug=args.debug,
         )
 

@@ -90,9 +90,18 @@ extern "C" {
    You should pass this version to moonshine_load_transcriber so that newer
    versions of the library can emulate any older behavior that has changed.
    The format is MAJOR * 10000 + MINOR * 100 + PATCH.
-   For example, version 2.0.0 would be 20000.
-   For example, version 2.3.7 would be 20307.                                */
-#define MOONSHINE_HEADER_VERSION (20000)
+   For example, version 3.0.0 would be 30000.
+   For example, version 3.2.7 would be 30207.                                */
+#define MOONSHINE_HEADER_VERSION (30000)
+
+/* The first header version that no longer supports
+   moonshine_load_transcriber_from_memory. A client passing this version or
+   newer gets MOONSHINE_ERROR_INVALID_ARGUMENT back from that call, along with
+   a logged explanation, and should use
+   moonshine_load_transcriber_from_memory_files instead. Clients built against
+   an earlier header keep the old behavior, so existing binaries are
+   unaffected.                                                               */
+#define MOONSHINE_FROM_MEMORY_REMOVED_VERSION (30000)
 
 /* Supported model architectures.                                            */
 #define MOONSHINE_MODEL_ARCH_TINY (0)
@@ -377,6 +386,12 @@ MOONSHINE_EXPORT int32_t moonshine_load_transcriber_from_files(
 
 /* **DEPRECATED** Use moonshine_load_transcriber_from_memory_files instead.
    This function is deprecated and will be removed in a future version.
+
+   Callers that pass a `moonshine_version` of
+   MOONSHINE_FROM_MEMORY_REMOVED_VERSION or newer are refused: the call logs an
+   explanation and returns MOONSHINE_ERROR_INVALID_ARGUMENT without loading
+   anything. Only clients built against an earlier header, which pass that
+   earlier version here, can still use it.
 
    Loads models from memory. The `encoder_model_data`, `decoder_model_data` and
    `tokenizer_data` parameters are the data arrays for the models in binary

@@ -282,13 +282,28 @@ TEST_CASE("moonshine-test-v2") {
     };
     const uint64_t options_count = sizeof(options) / sizeof(options[0]);
 
+    // moonshine_load_transcriber_from_memory is deprecated and refuses
+    // clients built against MOONSHINE_FROM_MEMORY_REMOVED_VERSION or newer, so
+    // this passes the last version that still supports it to check that
+    // existing binaries keep working.
+    const int32_t legacy_version = MOONSHINE_FROM_MEMORY_REMOVED_VERSION - 1;
     int32_t transcriber_handle = moonshine_load_transcriber_from_memory(
         encoder_model_data.data(), encoder_model_data.size(),
         decoder_model_data.data(), decoder_model_data.size(),
         tokenizer_data.data(), tokenizer_data.size(),
         /*spelling_model_data=*/nullptr, /*spelling_model_data_size=*/0,
-        model_arch, options, options_count, MOONSHINE_HEADER_VERSION);
+        model_arch, options, options_count, legacy_version);
     REQUIRE(transcriber_handle >= 0);
+
+    // A client built against the current header has to use
+    // moonshine_load_transcriber_from_memory_files instead.
+    const int32_t refused_handle = moonshine_load_transcriber_from_memory(
+        encoder_model_data.data(), encoder_model_data.size(),
+        decoder_model_data.data(), decoder_model_data.size(),
+        tokenizer_data.data(), tokenizer_data.size(),
+        /*spelling_model_data=*/nullptr, /*spelling_model_data_size=*/0,
+        model_arch, options, options_count, MOONSHINE_HEADER_VERSION);
+    REQUIRE(refused_handle == MOONSHINE_ERROR_INVALID_ARGUMENT);
 
     struct transcript_t* transcript = nullptr;
     int32_t transcribe_error = moonshine_transcribe_without_streaming(
