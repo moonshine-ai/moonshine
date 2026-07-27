@@ -30,6 +30,7 @@
 #include <cstring>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -83,10 +84,12 @@ int fail(const std::string& message) {
 void print_group_manifest(const std::string& json_text) {
   const nlohmann::json parsed = nlohmann::json::parse(json_text);
   for (const auto& group : parsed.at("groups")) {
-    const std::string base_url = group.at("base_url").get<std::string>();
     for (const auto& file : group.at("files")) {
-      const std::string name = file.get<std::string>();
-      std::cout << base_url << "/" << name << "\t" << name << "\n";
+      // Each entry is a file object; its "url" is already fully qualified
+      // (base_url + "/" + name), so the group's base_url is not needed here.
+      const std::string name = file.at("name").get<std::string>();
+      const std::string url = file.at("url").get<std::string>();
+      std::cout << url << "\t" << name << "\n";
     }
   }
 }
@@ -109,7 +112,7 @@ int manifest_stt(const std::vector<std::string>& spec) {
     return fail("moonshine_get_stt_dependencies failed");
   }
   print_group_manifest(out);
-  std::free(out);
+  moonshine_free_buffer(out);
   return 0;
 }
 
@@ -129,7 +132,7 @@ int manifest_intent(const std::vector<std::string>& spec) {
     return fail("moonshine_get_intent_dependencies failed");
   }
   print_group_manifest(out);
-  std::free(out);
+  moonshine_free_buffer(out);
   return 0;
 }
 
@@ -151,7 +154,7 @@ int manifest_tts(const std::vector<std::string>& spec) {
     return fail("moonshine_get_tts_dependencies failed");
   }
   const nlohmann::json keys = nlohmann::json::parse(out);
-  std::free(out);
+  moonshine_free_buffer(out);
   for (const auto& entry : keys) {
     const std::string key = entry.get<std::string>();
     // Skip in-memory override labels (no path component), like the Python
@@ -175,7 +178,7 @@ int manifest_g2p(const std::vector<std::string>& spec) {
     return fail("moonshine_get_g2p_dependencies failed");
   }
   const std::string csv(out);
-  std::free(out);
+  moonshine_free_buffer(out);
   size_t start = 0;
   while (start <= csv.size()) {
     const size_t comma = csv.find(',', start);
@@ -209,19 +212,19 @@ std::vector<float> load_speech_or_tone() {
     float* data = nullptr;
     size_t count = 0;
     int32_t sample_rate = 0;
-    if (load_wav_data(path, &data, &count, &sample_rate) && data != nullptr &&
-        count > 0) {
-      // Cap to ~5 seconds to keep the test fast.
-      const size_t max_samples =
-          static_cast<size_t>(sample_rate > 0 ? sample_rate : 16000) * 5;
-      const size_t used = count < max_samples ? count : max_samples;
-      std::vector<float> audio(data, data + used);
-      std::free(data);
-      return audio;
+    const bool loaded = load_wav_data(path, &data, &count, &sample_rate);
+    // load_wav_data hands back a raw C-allocated buffer; adopt it in a
+    // unique_ptr with a std::free deleter so it is released on every path
+    // without a bare deallocation call (see STYLE_GUIDE.md).
+    const std::unique_ptr<float, decltype(&std::free)> owned(data, &std::free);
+    if (!loaded || data == nullptr || count == 0) {
+      continue;
     }
-    if (data != nullptr) {
-      std::free(data);
-    }
+    // Cap to ~5 seconds to keep the test fast.
+    const size_t max_samples =
+        static_cast<size_t>(sample_rate > 0 ? sample_rate : 16000) * 5;
+    const size_t used = count < max_samples ? count : max_samples;
+    return std::vector<float>(data, data + used);
   }
   std::vector<float> audio(16000, 0.0f);
   for (size_t i = 0; i < audio.size(); ++i) {
@@ -344,15 +347,13 @@ int run_tts(const std::string& root, const std::vector<std::string>& spec) {
   const int32_t err = moonshine_text_to_speech(
       handle, "Hello world.", nullptr, 0, &audio, &audio_size, &sample_rate);
   if (err != MOONSHINE_ERROR_NONE || audio_size == 0) {
-    if (audio != nullptr) {
-      std::free(audio);
-    }
+    moonshine_free_buffer(audio);
     moonshine_free_tts_synthesizer(handle);
     return fail("tts synthesis failed or produced no audio");
   }
   std::cerr << "tts ok: " << audio_size << " samples at " << sample_rate
             << " Hz\n";
-  std::free(audio);
+  moonshine_free_buffer(audio);
   moonshine_free_tts_synthesizer(handle);
   return 0;
 }
