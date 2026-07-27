@@ -334,9 +334,8 @@ void Transcriber::load_from_memory_files(uint32_t model_arch) {
           ort_api->ReleaseSession(*session);
           *session = nullptr;
         }
-        int32_t err = ort_session_from_memory(ort_api, ort_env,
-                                              ort_session_options, data, size,
-                                              session);
+        int32_t err = ort_session_from_memory(
+            ort_api, ort_env, ort_session_options, data, size, session);
         if (err != 0 || *session == nullptr) {
           LOGF("Warning: Failed to load %s from memory\n", label);
         }
@@ -388,7 +387,8 @@ void Transcriber::load_from_memory_files(uint32_t model_arch) {
         this->streaming_model->config, model_arch);
     if (load_error != 0) {
       throw std::runtime_error(
-          "Failed to load Moonshine streaming models from memory. Error code: " +
+          "Failed to load Moonshine streaming models from memory. Error "
+          "code: " +
           std::to_string(load_error));
     }
     this->streaming_state.reset(this->streaming_model->config);
@@ -437,11 +437,11 @@ void Transcriber::load_from_memory_files(uint32_t model_arch) {
       size_t attn_size = 0;
       this->options.model_files.load("decoder_with_attention.ort", &attn_data,
                                      &attn_size);
-      replace_session_from_memory(
-          this->stt_model->ort_api, this->stt_model->ort_env,
-          this->stt_model->ort_session_options,
-          &this->stt_model->decoder_session, attn_data, attn_size,
-          "decoder_with_attention.ort");
+      replace_session_from_memory(this->stt_model->ort_api,
+                                  this->stt_model->ort_env,
+                                  this->stt_model->ort_session_options,
+                                  &this->stt_model->decoder_session, attn_data,
+                                  attn_size, "decoder_with_attention.ort");
     } else if (this->options.model_files.contains("alignment_model.ort")) {
       const uint8_t *align_data = nullptr;
       size_t align_size = 0;

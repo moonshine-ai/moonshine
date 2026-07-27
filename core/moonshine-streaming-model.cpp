@@ -154,9 +154,8 @@ MoonshineStreamingModel::MoonshineStreamingModel(
       tokenizer(nullptr),
       log_ort_run(log_ort_run) {
   ort_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
-  LOG_ORT_ERROR(ort_api,
-                ort_create_env(ort_api, ORT_LOGGING_LEVEL_WARNING,
-                               "MoonshineStreamingModel", &ort_env));
+  LOG_ORT_ERROR(ort_api, ort_create_env(ort_api, ORT_LOGGING_LEVEL_WARNING,
+                                        "MoonshineStreamingModel", &ort_env));
   LOG_ORT_ERROR(ort_api,
                 ort_api->CreateCpuMemoryInfo(
                     OrtDeviceAllocator, OrtMemTypeDefault, &ort_memory_info));

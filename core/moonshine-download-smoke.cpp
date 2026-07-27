@@ -21,17 +21,17 @@
 // HTTP lives entirely in the bash harness (curl); this tool never touches the
 // network. It only resolves manifests and exercises the on-disk load path.
 
+#include <nlohmann/json.h>
+
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <cmath>
 #include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
-
-#include <nlohmann/json.h>
 
 #include "debug-utils.h"
 #include "moonshine-c-api.h"
@@ -78,7 +78,8 @@ int fail(const std::string& message) {
 // ------------------------------ manifest mode ------------------------------
 
 // Emits "<url>\t<relative_path>" for every file in a {"groups":[...]} manifest
-// produced by moonshine_get_stt_dependencies / moonshine_get_intent_dependencies.
+// produced by moonshine_get_stt_dependencies /
+// moonshine_get_intent_dependencies.
 void print_group_manifest(const std::string& json_text) {
   const nlohmann::json parsed = nlohmann::json::parse(json_text);
   for (const auto& group : parsed.at("groups")) {
@@ -178,9 +179,8 @@ int manifest_g2p(const std::vector<std::string>& spec) {
   size_t start = 0;
   while (start <= csv.size()) {
     const size_t comma = csv.find(',', start);
-    const std::string key =
-        csv.substr(start, comma == std::string::npos ? std::string::npos
-                                                     : comma - start);
+    const std::string key = csv.substr(
+        start, comma == std::string::npos ? std::string::npos : comma - start);
     if (!key.empty() && key.find('/') != std::string::npos) {
       std::cout << kTtsCdnBase << url_encode_path(key) << "\t" << key << "\n";
     }
@@ -263,12 +263,11 @@ int run_stt(const std::string& root, const std::vector<std::string>& spec) {
       return fail("failed to create stream");
     }
     moonshine_start_stream(handle, stream);
-    err = moonshine_transcribe_add_audio_to_stream(
-        handle, stream, audio.data(), audio.size(), 16000, 0);
+    err = moonshine_transcribe_add_audio_to_stream(handle, stream, audio.data(),
+                                                   audio.size(), 16000, 0);
     if (err == MOONSHINE_ERROR_NONE) {
-      err = moonshine_transcribe_stream(handle, stream,
-                                        MOONSHINE_FLAG_FORCE_UPDATE,
-                                        &transcript);
+      err = moonshine_transcribe_stream(
+          handle, stream, MOONSHINE_FLAG_FORCE_UPDATE, &transcript);
     }
     if (err == MOONSHINE_ERROR_NONE && transcript != nullptr) {
       line_count = transcript->line_count;

@@ -719,9 +719,9 @@ MOONSHINE_EXPORT int32_t moonshine_create_intent_recognizer(
    need to remain valid for the duration of this call.
 
    `model_arch` should be one of the MOONSHINE_EMBEDDING_MODEL_ARCH_* constants.
-   `model_variant` selects the variant ("fp32", "fp16", "q8", "q4", "q4f16"; NULL
-   defaults to "q4") and is only used to pick the model file when the filename
-   keys do not make it unambiguous.
+   `model_variant` selects the variant ("fp32", "fp16", "q8", "q4", "q4f16";
+   NULL defaults to "q4") and is only used to pick the model file when the
+   filename keys do not make it unambiguous.
 
    Returns a non-negative handle on success, or a negative error code on
    failure.
@@ -1034,8 +1034,9 @@ MOONSHINE_EXPORT int32_t moonshine_get_tts_voices(
    On success, writes a NUL-terminated JSON object to
    ``*out_dependencies_json`` and returns ``MOONSHINE_ERROR_NONE``. The shape
    is:
-     ``{"groups":[{"base_url":"https://download.moonshine.ai/model/tiny-en/quantized/tiny-en","files":[{"name":"encoder_model.ort","url":"https://download.moonshine.ai/model/tiny-en/quantized/tiny-en/encoder_model.ort","size":12345,"checksum":"abc==","checksum_type":"crc32c"}, ...]}]}``
-   Each entry in ``files`` is an object with ``name`` (canonical filename),
+     ``{"groups":[{"base_url":"https://download.moonshine.ai/model/tiny-en/quantized/tiny-en","files":[{"name":"encoder_model.ort","url":"https://download.moonshine.ai/model/tiny-en/quantized/tiny-en/encoder_model.ort","size":12345,"checksum":"abc==","checksum_type":"crc32c"},
+   ...]}]}`` Each entry in ``files`` is an object with ``name`` (canonical
+   filename),
    ``url`` (fully-qualified download URL, i.e. ``base_url + "/" + name``),
    ``size`` (bytes, or null when unknown), ``checksum`` (base64 digest, or ""),
    and ``checksum_type`` (e.g. "crc32c", or ""). A model is a single group,
@@ -1074,15 +1075,18 @@ MOONSHINE_EXPORT int32_t moonshine_get_intent_dependencies(
 /* Returns the full speech-to-text model catalog as a JSON object, so bindings
    can build language/model pickers and resolve defaults without their own copy
    of the tables. The shape is:
-     ``{"languages":[{"code":"en","english_name":"English","models":[{"model_arch":9,"download_url":"https://...","is_default":true}, ...]}, ...]}``
-   The buffer is allocated with ``malloc``; release it with ``free``. Returns
+     ``{"languages":[{"code":"en","english_name":"English","models":[{"model_arch":9,"download_url":"https://...","is_default":true},
+   ...]}, ...]}`` The buffer is allocated with ``malloc``; release it with
+   ``free``. Returns
    ``MOONSHINE_ERROR_NONE`` on success. */
 MOONSHINE_EXPORT int32_t moonshine_get_stt_catalog(char **out_catalog_json);
 
 /* Returns the full intent-recognition embedding model catalog as a JSON object.
    The shape is:
-     ``{"models":[{"name":"embeddinggemma-300m","english_name":"Embedding Gemma 300M","download_url":"https://...","variants":["q4", ...],"default_variant":"q4"}]}``
-   The buffer is allocated with ``malloc``; release it with ``free``. Returns
+     ``{"models":[{"name":"embeddinggemma-300m","english_name":"Embedding Gemma
+   300M","download_url":"https://...","variants":["q4",
+   ...],"default_variant":"q4"}]}`` The buffer is allocated with ``malloc``;
+   release it with ``free``. Returns
    ``MOONSHINE_ERROR_NONE`` on success. */
 MOONSHINE_EXPORT int32_t
 moonshine_get_embedding_catalog(char **out_catalog_json);

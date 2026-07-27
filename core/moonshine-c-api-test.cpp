@@ -700,11 +700,12 @@ TEST_CASE("moonshine-phonemes-to-speech-c-api") {
     uint64_t n = 0;
     int32_t sr = 0;
     // NULL phonemes / output pointers are rejected before synthesis.
-    CHECK(moonshine_phonemes_to_speech(h, nullptr, nullptr, 0, &audio, &n,
-                                       &sr) == MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(
+        moonshine_phonemes_to_speech(h, nullptr, nullptr, 0, &audio, &n, &sr) ==
+        MOONSHINE_ERROR_INVALID_ARGUMENT);
     CHECK(moonshine_phonemes_to_speech(h, "h\u0259\u02c8lo\u028a", nullptr, 0,
-                                       nullptr, &n,
-                                       &sr) == MOONSHINE_ERROR_INVALID_ARGUMENT);
+                                       nullptr, &n, &sr) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
     moonshine_free_tts_synthesizer(h);
   }
 
@@ -1298,14 +1299,14 @@ TEST_CASE("moonshine-stt-intent-dependency-api") {
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.find("\"groups\"") != std::string::npos);
-    CHECK(json.find(
-              "\"https://download.moonshine.ai/model/medium-streaming-en/"
-              "quantized\"") != std::string::npos);
+    CHECK(json.find("\"https://download.moonshine.ai/model/medium-streaming-en/"
+                    "quantized\"") != std::string::npos);
     CHECK(json.find("\"adapter.ort\"") != std::string::npos);
     CHECK(json.find("\"decoder_kv.ort\"") != std::string::npos);
     CHECK(json.find("\"streaming_config.json\"") != std::string::npos);
     // The attention decoder is only for word timestamps, so it is omitted
-    // unless the caller asks for it (see stt-english-streaming-word-timestamps).
+    // unless the caller asks for it (see
+    // stt-english-streaming-word-timestamps).
     CHECK(json.find("\"decoder_kv_with_attention.ort\"") == std::string::npos);
     std::free(out);
   }
@@ -1335,9 +1336,8 @@ TEST_CASE("moonshine-stt-intent-dependency-api") {
             MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
-    CHECK(json.find(
-              "\"https://download.moonshine.ai/model/tiny-en/quantized/"
-              "tiny-en\"") != std::string::npos);
+    CHECK(json.find("\"https://download.moonshine.ai/model/tiny-en/quantized/"
+                    "tiny-en\"") != std::string::npos);
     CHECK(json.find("\"encoder_model.ort\"") != std::string::npos);
     CHECK(json.find("\"decoder_model_merged.ort\"") != std::string::npos);
     CHECK(json.find("\"tokenizer.bin\"") != std::string::npos);
@@ -1397,9 +1397,8 @@ TEST_CASE("moonshine-stt-intent-dependency-api") {
             MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
-    CHECK(json.find(
-              "\"https://download.moonshine.ai/model/tiny-ja/quantized/"
-              "tiny-ja\"") != std::string::npos);
+    CHECK(json.find("\"https://download.moonshine.ai/model/tiny-ja/quantized/"
+                    "tiny-ja\"") != std::string::npos);
     CHECK(json.find("\"encoder_model.ort\"") != std::string::npos);
     CHECK(json.find("\"decoder_with_attention.ort\"") == std::string::npos);
     std::free(out);
@@ -1588,12 +1587,12 @@ TEST_CASE("moonshine-extract-speech-clip-api") {
   SUBCASE("rejects bad arguments") {
     const std::vector<float> quiet(16000 * 6, 0.0f);
     moonshine_speech_clip_t clip{};
-    CHECK(moonshine_extract_speech_clip(quiet.data(), quiet.size(), 16000, 
+    CHECK(moonshine_extract_speech_clip(quiet.data(), quiet.size(), 16000,
                                         nullptr, 0, nullptr) ==
           MOONSHINE_ERROR_INVALID_ARGUMENT);
-    CHECK(moonshine_extract_speech_clip(nullptr, 16, 16000, nullptr, 0,
-                                        &clip) ==
-          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(
+        moonshine_extract_speech_clip(nullptr, 16, 16000, nullptr, 0, &clip) ==
+        MOONSHINE_ERROR_INVALID_ARGUMENT);
     CHECK(moonshine_extract_speech_clip(quiet.data(), 0, 16000, nullptr, 0,
                                         &clip) ==
           MOONSHINE_ERROR_INVALID_ARGUMENT);

@@ -80,7 +80,8 @@ std::vector<std::string> stt_supported_languages();
 std::vector<std::string> intent_supported_models();
 
 // Published variants for an embedding model (empty if the model is unknown).
-std::vector<std::string> intent_supported_variants(const std::string& model_name);
+std::vector<std::string> intent_supported_variants(
+    const std::string& model_name);
 
 // --- Full catalog listings ------------------------------------------------
 // These expose the catalog tables themselves (languages, friendly names,
@@ -88,9 +89,9 @@ std::vector<std::string> intent_supported_variants(const std::string& model_name
 // resolve defaults without maintaining their own duplicate copies.
 
 struct SttCatalogModel {
-  int32_t model_arch;      // one of the MOONSHINE_MODEL_ARCH_* constants
+  int32_t model_arch;  // one of the MOONSHINE_MODEL_ARCH_* constants
   std::string download_url;
-  bool is_default;         // true for the language's default (first) model
+  bool is_default;  // true for the language's default (first) model
 };
 
 struct SttCatalogLanguage {

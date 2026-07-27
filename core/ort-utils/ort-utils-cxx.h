@@ -17,8 +17,7 @@ inline void ort_append_execution_providers(
 // use_per_session_threads=false there), otherwise a plain per-session Env is
 // correct. Use for every Ort::Env so the wasm-threaded build can create
 // sessions.
-inline Ort::Env make_ort_env(OrtLoggingLevel logging_level,
-                             const char *logid) {
+inline Ort::Env make_ort_env(OrtLoggingLevel logging_level, const char *logid) {
 #if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
   Ort::ThreadingOptions threading_options;
   return Ort::Env(threading_options, logging_level, logid);

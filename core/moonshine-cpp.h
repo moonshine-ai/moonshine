@@ -1282,7 +1282,8 @@ inline Transcriber Transcriber::loadFromMemory(
     const std::vector<std::pair<std::string, std::string>> &options) {
   // Map the classic (encoder, decoder, tokenizer[, spelling]) buffers onto
   // their canonical filenames and defer to the general keyed loader so every
-  // in-memory path funnels through moonshine_load_transcriber_from_memory_files.
+  // in-memory path funnels through
+  // moonshine_load_transcriber_from_memory_files.
   std::map<std::string, std::pair<const uint8_t *, size_t>> modelFiles = {
       {"encoder_model.ort", {encoderData, encoderDataSize}},
       {"decoder_model_merged.ort", {decoderData, decoderDataSize}},

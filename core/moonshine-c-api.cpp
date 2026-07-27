@@ -332,8 +332,7 @@ int32_t moonshine_load_transcriber_from_memory_files(
         options_count, moonshine_version);
     for (uint64_t i = 0; i < file_count; i++) {
       LOGF("  file[%" PRIu64 "] = %s (%" PRIu64 " bytes)", i,
-           filenames[i] ? filenames[i] : "(null)",
-           memory_sizes[i]);
+           filenames[i] ? filenames[i] : "(null)", memory_sizes[i]);
     }
   }
 
@@ -647,8 +646,7 @@ int32_t moonshine_create_intent_recognizer_from_memory(
   IntentRecognizer *recognizer = nullptr;
   try {
     IntentRecognizerOptions recognizer_options;
-    recognizer_options.model_arch =
-        static_cast<EmbeddingModelArch>(model_arch);
+    recognizer_options.model_arch = static_cast<EmbeddingModelArch>(model_arch);
     recognizer_options.model_variant = model_variant ? model_variant : "q4";
     recognizer_options.model_data = model_data;
     recognizer_options.model_data_size = model_data_size;
@@ -1183,8 +1181,8 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
         if (leg != tf.entries.end() && leg->second.memory != nullptr &&
             leg->second.memory_size > 0) {
           const FileInformation &src = leg->second;
-          tf.entries[canon_k] = FileInformation{
-              std::filesystem::path(canon_k), src.memory, src.memory_size};
+          tf.entries[canon_k] = FileInformation{std::filesystem::path(canon_k),
+                                                src.memory, src.memory_size};
         }
       }
     }
@@ -1332,8 +1330,9 @@ int32_t moonshine_phonemes_to_speech(int32_t tts_synthesizer_handle,
     const std::vector<std::pair<std::string, std::string>> tts_pairs =
         tts_option_pairs_from_c(options, options_count);
     const std::vector<float> wave =
-        tts_pairs.empty() ? synth->synthesize_from_phonemes(phonemes)
-                          : synth->synthesize_from_phonemes(phonemes, tts_pairs);
+        tts_pairs.empty()
+            ? synth->synthesize_from_phonemes(phonemes)
+            : synth->synthesize_from_phonemes(phonemes, tts_pairs);
     *out_sample_rate = moonshine_tts::MoonshineTTS::kSampleRateHz;
     *out_audio_data_size = wave.size();
     *out_audio_data = nullptr;
@@ -1945,15 +1944,14 @@ int32_t moonshine_get_stt_dependencies(const char *language,
     bool include_word_timestamps = false;
     for (uint64_t i = 0; i < options_count; ++i) {
       const std::string key = normalize_option_key(options[i].name);
-      const std::string value =
-          options[i].value != nullptr ? std::string(options[i].value)
-                                      : std::string();
+      const std::string value = options[i].value != nullptr
+                                    ? std::string(options[i].value)
+                                    : std::string();
       if (key == "model_arch") {
         const std::optional<int32_t> parsed = parse_int_option(value);
         if (!parsed.has_value()) {
-          LOGF(
-              "moonshine_get_stt_dependencies: invalid model_arch \"%s\"\n",
-              value.c_str());
+          LOGF("moonshine_get_stt_dependencies: invalid model_arch \"%s\"\n",
+               value.c_str());
           return MOONSHINE_ERROR_INVALID_ARGUMENT;
         }
         model_arch = parsed;
@@ -2013,9 +2011,9 @@ int32_t moonshine_get_intent_dependencies(const char *model_name,
     std::string variant;
     for (uint64_t i = 0; i < options_count; ++i) {
       const std::string key = normalize_option_key(options[i].name);
-      const std::string value =
-          options[i].value != nullptr ? std::string(options[i].value)
-                                      : std::string();
+      const std::string value = options[i].value != nullptr
+                                    ? std::string(options[i].value)
+                                    : std::string();
       if (key == "variant" || key == "model_variant") {
         variant = trim(value);
       }
