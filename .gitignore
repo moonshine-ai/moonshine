@@ -38,6 +38,7 @@ xcuserdata/
 /examples/c++/medium-streaming-en/
 /examples/c++/two_cities.wav
 /examples/c++/transcriber
+/examples/c++/text-to-speech
 Package.resolved
 /examples/windows/cli-transcriber/moonshine-voice-windows-x86_64/
 /examples/windows/cli-transcriber/x64/
@@ -49,8 +50,6 @@ Package.resolved
 out.wav
 /scripts/data/
 output.wav
-text-to-speech
-transcriber
 build-*/
 /eval-results.txt
 .vscode/
