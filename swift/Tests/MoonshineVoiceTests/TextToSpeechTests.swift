@@ -39,7 +39,7 @@ final class TextToSpeechTests: XCTestCase {
         let tts = try TextToSpeech(language: "en_us", g2pRoot: dataPath)
         defer { tts.close() }
 
-        XCTAssertEqual(tts.language, "en_us")
+        XCTAssertEqual(tts.languageTag, "en_us")
     }
 
     func testCreateSynthesizerWithVoice() throws {
@@ -51,7 +51,7 @@ final class TextToSpeechTests: XCTestCase {
         )
         defer { tts.close() }
 
-        XCTAssertEqual(tts.language, "en_us")
+        XCTAssertEqual(tts.languageTag, "en_us")
     }
 
     func testCreateSynthesizerInvalidLanguage() throws {
@@ -71,7 +71,7 @@ final class TextToSpeechTests: XCTestCase {
         let tts = try TextToSpeech(language: "en_us", g2pRoot: dataPath)
         defer { tts.close() }
 
-        let result = try tts.synthesize(text: "Hello world!")
+        let result = try tts.synthesize("Hello world!")
 
         XCTAssertGreaterThan(result.samples.count, 0, "Should produce audio samples")
         XCTAssertGreaterThan(result.sampleRateHz, 0, "Sample rate should be positive")
@@ -83,9 +83,9 @@ final class TextToSpeechTests: XCTestCase {
         let tts = try TextToSpeech(language: "en_us", g2pRoot: dataPath)
         defer { tts.close() }
 
-        let shortResult = try tts.synthesize(text: "Hi.")
+        let shortResult = try tts.synthesize("Hi.")
         let longResult = try tts.synthesize(
-            text: "This is a longer sentence that should produce more audio samples than a short one."
+            "This is a longer sentence that should produce more audio samples than a short one."
         )
 
         XCTAssertGreaterThan(
@@ -107,7 +107,7 @@ final class TextToSpeechTests: XCTestCase {
         )
         defer { tts.close() }
 
-        let result = try tts.synthesize(text: "Testing with a specific voice.")
+        let result = try tts.synthesize("Testing with a specific voice.")
 
         XCTAssertGreaterThan(result.samples.count, 0, "Should produce audio samples")
         XCTAssertGreaterThan(result.sampleRateHz, 0, "Sample rate should be positive")
@@ -118,9 +118,9 @@ final class TextToSpeechTests: XCTestCase {
         let tts = try TextToSpeech(language: "en_us", g2pRoot: dataPath)
         defer { tts.close() }
 
-        let normalResult = try tts.synthesize(text: "Testing speed control.")
+        let normalResult = try tts.synthesize("Testing speed control.")
         let fastResult = try tts.synthesize(
-            text: "Testing speed control.",
+            "Testing speed control.",
             options: [TranscriberOption(name: "speed", value: "1.5")]
         )
 
@@ -138,7 +138,7 @@ final class TextToSpeechTests: XCTestCase {
         let tts = try TextToSpeech(language: "en_us", g2pRoot: dataPath)
         defer { tts.close() }
 
-        let result = try tts.synthesize(text: "Hello world!")
+        let result = try tts.synthesize("Hello world!")
 
         // Verify samples are in a reasonable range (PCM float, approximately -1..1)
         let maxAbs = result.samples.map { abs($0) }.max() ?? 0
@@ -154,9 +154,9 @@ final class TextToSpeechTests: XCTestCase {
         let tts = try TextToSpeech(language: "en_us", g2pRoot: dataPath)
         defer { tts.close() }
 
-        let result1 = try tts.synthesize(text: "First sentence.")
-        let result2 = try tts.synthesize(text: "Second sentence.")
-        let result3 = try tts.synthesize(text: "Third sentence.")
+        let result1 = try tts.synthesize("First sentence.")
+        let result2 = try tts.synthesize("Second sentence.")
+        let result3 = try tts.synthesize("Third sentence.")
 
         XCTAssertGreaterThan(result1.samples.count, 0)
         XCTAssertGreaterThan(result2.samples.count, 0)
@@ -167,27 +167,25 @@ final class TextToSpeechTests: XCTestCase {
 
     // MARK: - Say Tests
 
-    func testSayDefaultDevice() throws {
+    func testSayDefaultDevice() async throws {
         let dataPath = try Self.getTtsDataPath()
         let tts = try TextToSpeech(language: "en_us", g2pRoot: dataPath)
         defer { tts.close() }
 
         // This will play audio on the default device; mainly tests that it
-        // doesn't crash.
-        tts.say("Hello from Swift TTS.")
-        tts.wait()
+        // doesn't crash and that say returns only once playback is done.
+        try await tts.say("Hello from Swift TTS.")
+        XCTAssertFalse(tts.isTalking())
     }
 
-    func testSayMultipleCalls() throws {
+    func testSayMultipleCalls() async throws {
         let dataPath = try Self.getTtsDataPath()
         let tts = try TextToSpeech(language: "en_us", g2pRoot: dataPath)
         defer { tts.close() }
 
         // Verify the engine caching works across repeated calls.
-        tts.say("First.")
-        tts.say("Second.")
-        tts.say("Third.")
-        tts.wait()
+        try await tts.say(["First.", "Second.", "Third."])
+        XCTAssertFalse(tts.isTalking())
     }
 
     // MARK: - Static Query Tests
@@ -251,7 +249,7 @@ final class TextToSpeechTests: XCTestCase {
         let tts = try TextToSpeech(
             language: "en_us", g2pRoot: dataPath, voice: "zipvoice_american_female")
         defer { tts.close() }
-        let result = try tts.synthesize(text: "Hello from ZipVoice.")
+        let result = try tts.synthesize("Hello from ZipVoice.")
         XCTAssertGreaterThan(result.samples.count, 0)
         XCTAssertEqual(result.sampleRateHz, 24000)
     }
@@ -272,8 +270,27 @@ final class TextToSpeechTests: XCTestCase {
             cloneTranscript: "This is a reference clip."
         )
         defer { tts.close() }
-        let result = try tts.synthesize(text: "Cloning a custom voice.")
+        let result = try tts.synthesize("Cloning a custom voice.")
         XCTAssertEqual(result.sampleRateHz, 24000)
+    }
+
+    @available(iOS 15.0, macOS 12.0, *)
+    func testLoadingInCloneModeWaitsForAVoice() async throws {
+        let dataPath = try Self.getTtsDataPath()
+        // There is no engine to build until cloneFrom() supplies a reference
+        // voice, so load() prepares the assets rather than failing.
+        let tts = TextToSpeech()
+            .language("en_us")
+            .cloning()
+            .modelsFrom(URL(fileURLWithPath: dataPath))
+        defer { tts.close() }
+
+        try await tts.load()
+        XCTAssertFalse(tts.isCloned)
+        XCTAssertThrowsError(try tts.synthesize("Hello")) { error in
+            XCTAssertTrue("\(error)".contains("cloneFrom()"),
+                          "Expected the error to point at cloneFrom(), got \(error)")
+        }
     }
 
     // MARK: - Device Enumeration (macOS only)

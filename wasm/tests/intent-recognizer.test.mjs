@@ -1,12 +1,14 @@
-// Intent-recognition tests. The dependency-manifest check and the invalid-path
-// error mirror Swift's IntentRecognizerTests / Android's IntentRecognizerTest
-// (testCreateIntentRecognizer_invalidPath_throws). The full register/match path
-// needs the embedding model, which is download-only, so it is opt-in via
-// MOONSHINE_DOWNLOAD_TESTS=1 (matching AssetDownloaderNetworkTests).
+// Intent-recognition tests. IntentRecognizer is internal — DialogFlow is the
+// public way to match phrases — so these import the module directly rather than
+// through the package entry point. The dependency-manifest check and the
+// invalid-path error mirror Swift's IntentRecognizerTests / Android's
+// IntentRecognizerTest (testCreateIntentRecognizer_invalidPath_throws). The full
+// register/match path needs the embedding model, which is download-only, so it
+// is opt-in via MOONSHINE_DOWNLOAD_TESTS=1 (matching AssetDownloaderNetworkTests).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { importApi, loadRawModule } from './helpers.mjs';
+import { importInternal, loadRawModule } from './helpers.mjs';
 
 const mod = await loadRawModule();
 
@@ -39,7 +41,7 @@ const matchSkip = downloadTests
   : 'set MOONSHINE_DOWNLOAD_TESTS=1 to download the embedding model and run';
 
 test('registers phrases and finds the closest intent', { skip: matchSkip }, async () => {
-  const { IntentRecognizer } = await importApi();
+  const { IntentRecognizer } = await importInternal('intent-recognizer.js');
   const recognizer = await IntentRecognizer.load({ variant: 'q4', module: mod });
   try {
     recognizer.register(['turn on the lights', 'play some music']);

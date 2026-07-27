@@ -51,7 +51,11 @@ export interface Transcript {
   readonly lines: readonly TranscriptLine[];
 }
 
-/** A ranked intent match from {@link IntentRecognizer.closestIntents}. */
+/**
+ * A ranked intent match from `IntentRecognizer.closestIntents`.
+ *
+ * @internal Intent matching is reached through {@link DialogFlow}.
+ */
 export interface IntentMatch {
   readonly canonicalPhrase: string;
   readonly similarity: number;

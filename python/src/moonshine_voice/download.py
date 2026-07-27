@@ -243,11 +243,13 @@ def get_embedding_model(
                  If None, uses the default variant (q4).
 
     Returns:
-        Tuple of (model_path, model_arch) for use with IntentRecognizer.
+        Tuple of (model_path, model_arch).
+
+    DialogFlow downloads this model on demand, so calling this directly is only
+    needed to warm the cache ahead of time (e.g. before going offline).
 
     Example:
         >>> model_path, model_arch = get_embedding_model("embeddinggemma-300m", "q4")
-        >>> recognizer = IntentRecognizer(model_path=model_path, model_arch=model_arch)
     """
     catalog = _embedding_catalog()
     if model_name not in catalog:

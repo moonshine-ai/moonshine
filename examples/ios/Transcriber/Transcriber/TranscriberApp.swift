@@ -11,87 +11,78 @@ import MoonshineVoice
 
 @main
 struct TranscriberApp: App {
-    @State private var micTranscriber: MicTranscriber? = nil
-    @State private var messages: [TranscriptLine] = []
-    @State private var isRecording: Bool = false
-    @State private var status: String = "Preparing…"
-    @State private var isReady: Bool = false
-    
+    @StateObject private var session = TranscriptionSession()
+
     var body: some Scene {
         WindowGroup {
-            ContentView(
-                isRecording: $isRecording, messages: $messages,
-                status: $status, isReady: isReady)
-            .task {
-                // Download the Medium Streaming English model on first run (into a
-                // managed cache directory, reused thereafter) and construct the
-                // transcriber in one call. Nothing is bundled in the app package.
-                do {
-                    let transcriber = try await MicTranscriber.load(
-                        language: "en",
-                        modelArch: .mediumStreaming
-                    ) { progress in
-                        let pct =
-                            progress.bytesTotal > 0
-                            ? Int(progress.bytesDownloaded * 100 / progress.bytesTotal) : 0
-                        Task { @MainActor in
-                            status =
-                                "Downloading model \(progress.fileIndex)/\(progress.totalFiles) (\(pct)%)…"
-                        }
-                    }
+            ContentView(session: session)
+                .task { await session.prepare() }
+        }
+    }
+}
 
-                    // Add event listeners
-                    transcriber.addListener { event in
-                        if event is LineStarted {
-                            addNewMessage(event.line)
-                        } else if event is LineTextChanged {
-                            updateLatestMessage(event.line)
-                        } else if event is LineCompleted {
-                            if event.line.text.isEmpty {
-                                messages.removeLast()
-                            } else {
-                                updateLatestMessage(event.line)
-                            }
-                        }
-                    }
-                    
-                    // Store in @State after successful initialization
-                    micTranscriber = transcriber
-                    status = "Ready. Tap the mic to start."
-                    isReady = true
-                } catch {
-                    status = "Error initializing transcriber: \(error.localizedDescription)"
-                    print("Error initializing transcriber: \(error)")
+/// Owns the transcriber and republishes what it hears on the main thread.
+@MainActor
+final class TranscriptionSession: ObservableObject {
+    @Published var lines: [String] = []
+    /// The line currently being spoken, still changing as more audio arrives.
+    @Published var liveText: String = ""
+    @Published var status: String = "Preparing…"
+    @Published var isReady: Bool = false
+    @Published var isRecording: Bool = false
+
+    private var mic: MicTranscriber?
+
+    /// Downloads the streaming English model on first run — no language, model,
+    /// or microphone permission handling needed here.
+    func prepare() async {
+        guard mic == nil else { return }
+
+        let transcriber = MicTranscriber()
+            .onText { [weak self] text in
+                Task { @MainActor in self?.liveText = text }
+            }
+            .onLine { [weak self] line in
+                Task { @MainActor in
+                    self?.liveText = ""
+                    if !line.text.isEmpty { self?.lines.append(line.text) }
                 }
             }
-        }
-        .onChange(of: isRecording) { _, newIsRecording in
-            handleRecordingChanged(newIsRecording)
+            .onError { [weak self] error in
+                Task { @MainActor in self?.status = "Error: \(error.localizedDescription)" }
+            }
+            .onProgress { [weak self] fraction, file in
+                let name = (file as NSString).lastPathComponent
+                Task { @MainActor in
+                    self?.status = "Downloading \(name) \(Int(fraction * 100))%…"
+                }
+            }
+
+        do {
+            try await transcriber.load()
+            mic = transcriber
+            status = "Ready. Tap the mic to start."
+            isReady = true
+        } catch {
+            status = "Couldn't load the model: \(error.localizedDescription)"
         }
     }
 
-    func addNewMessage(_ message: TranscriptLine) {
-        messages.append(message)
-    }
-    
-    func updateLatestMessage(_ message: TranscriptLine) {
-        messages[messages.count - 1] = message
-    }
-
-    func handleRecordingChanged(_ isRecording: Bool) {
-        guard let micTranscriber = micTranscriber else { return }
-        if isRecording {
-            do {
-                try micTranscriber.start()
-            } catch {
-                print("Error starting micTranscriber: \(error)")
+    func toggleRecording() {
+        guard let mic else { return }
+        do {
+            if isRecording {
+                try mic.stop()
+                isRecording = false
+                status = "Ready. Tap the mic to start."
+            } else {
+                try mic.start()
+                isRecording = true
+                status = "Listening…"
             }
-        } else {
-            do {
-                try micTranscriber.stop()
-            } catch {
-                print("Error stopping micTranscriber: \(error)")
-            }
+        } catch {
+            isRecording = false
+            status = "Microphone error: \(error.localizedDescription)"
         }
     }
 }

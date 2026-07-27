@@ -36,7 +36,7 @@ public struct DownloadProgress: Sendable {
 }
 
 /// Downloads the model/data files a Moonshine engine needs into an app-chosen directory, then hands
-/// back that directory for loading with ``Transcriber``, ``TextToSpeech``, or ``IntentRecognizer``.
+/// back that directory for loading with ``Transcriber``, ``MicTranscriber``, or ``TextToSpeech``.
 ///
 /// This is **opt-in**: apps that bundle their models never need it, and default behavior is
 /// unchanged. Downloads are resolved from the native dependency catalog, written atomically (via a

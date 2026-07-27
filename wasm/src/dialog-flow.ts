@@ -1,79 +1,37 @@
 /**
- * Generator-based dialog-flow runner, a TypeScript port of the Python
- * `dialog_flow.py`. A *flow* is a generator function that yields prompts and
- * resumes with the user's answer:
+ * Voice dialogs: the one-call way to build a speech interface.
  *
  * ```ts
- * function* setupWifi(d: Dialog) {
- *   const ssid = yield d.ask("What's the name of your wifi network?");
- *   if (!(yield d.confirm(`I heard ${ssid}. Is that right?`))) {
- *     yield d.say("No problem, let's start over.");
- *     return;
+ * const dialog = new DialogFlow();
+ *
+ * dialog.listenFor('set up wifi', async (d) => {
+ *   const ssid = await d.ask("What's the name of your wifi network?");
+ *   if (await d.confirm(`I heard ${ssid}. Is that right?`)) {
+ *     await d.say(`Done. Connecting to ${ssid}.`);
  *   }
- *   yield d.say(`Great, connecting to ${ssid}.`);
- * }
+ * });
+ *
+ * await dialog.load();
+ * await dialog.startListening();
  * ```
  *
- * The runner is a {@link TranscriptEventListener}, so it composes with a
- * {@link Stream} / {@link MicrophoneTranscriber} exactly like the Python
- * version composes with `MicTranscriber`. Because the browser TTS path is
- * asynchronous, the runner is async internally (it awaits playback between
- * generator sends) and serializes incoming utterances.
+ * `load()` downloads and wires everything a voice interface needs: a streaming
+ * speech-to-text model, an intent model for matching trigger phrases, a
+ * text-to-speech voice, and a microphone. A flow is an ordinary async function,
+ * so it reads top to bottom and `try` / `finally` work the way you expect.
  *
- * Scope note vs. the Python runner: this initial web port implements FREE-form
- * asks plus confirm/choose matching. The SPELLED/DIGITS alphanumeric dictation
- * subsystem and the success/error beep diagnostics are intentionally omitted
- * for now (they depend on helpers outside the WASM binding).
+ * Scope note vs. the Python runner: this port implements free-form asks plus
+ * confirm/choose matching. The alphanumeric dictation subsystem and the
+ * success/error beep diagnostics are not here yet.
  */
 
-import type { AssetDownloader } from './asset-downloader.js';
+import { AssetDownloader } from './asset-downloader.js';
 import { ModelArch } from './enums.js';
 import type { LineCompleted, TranscriptEventListener } from './events.js';
-import { IntentRecognizer, type IntentRecognizerOptions } from './intent-recognizer.js';
-import { MicrophoneTranscriber } from './microphone-transcriber.js';
+import { IntentRecognizer } from './intent-recognizer.js';
+import { MicTranscriber, type ProgressCallback } from './mic-transcriber.js';
 import { loadMoonshineModule, type MoonshineModule } from './module.js';
-import { TextToSpeech, type TextToSpeechOptions } from './text-to-speech.js';
-
-export const InputMode = {
-  Free: 'free',
-  Phrase: 'phrase',
-} as const;
-export type InputMode = (typeof InputMode)[keyof typeof InputMode];
-
-// --- Prompt objects a flow yields to the runner ----------------------------
-
-export interface Say {
-  readonly kind: 'say';
-  readonly text: string;
-}
-
-export interface Ask {
-  readonly kind: 'ask';
-  readonly prompt: string;
-  readonly mode: InputMode;
-  readonly timeoutMs?: number;
-  readonly noInputReprompt?: string;
-  readonly maxRetries: number;
-}
-
-export interface Confirm {
-  readonly kind: 'confirm';
-  readonly prompt: string;
-  readonly maxRetries: number;
-  readonly yesPhrases: readonly string[];
-  readonly noPhrases: readonly string[];
-  readonly noInputReprompt?: string;
-}
-
-export interface Choose {
-  readonly kind: 'choose';
-  readonly prompt: string;
-  readonly options: Readonly<Record<string, readonly string[]>>;
-  readonly maxRetries: number;
-  readonly noInputReprompt?: string;
-}
-
-export type Prompt = Say | Ask | Confirm | Choose;
+import { TextToSpeech } from './text-to-speech.js';
 
 const DEFAULT_YES = [
   'yes', 'yeah', 'yep', 'correct', "that's right", 'sure', 'affirmative',
@@ -84,14 +42,17 @@ const DEFAULT_NO = [
   "don't do it", 'stop',
 ];
 
-// --- Flow-control exceptions thrown into / out of the generator ------------
+const DEFAULT_TRIGGER_THRESHOLD = 0.7;
 
+/** Thrown into a flow when the user (or a global handler) cancels it. */
 export class DialogCancelled extends Error {
   constructor() {
     super('DialogCancelled');
     this.name = 'DialogCancelled';
   }
 }
+
+/** Thrown into a flow when it should start again from the top. */
 export class DialogRestart extends Error {
   constructor() {
     super('DialogRestart');
@@ -99,560 +60,601 @@ export class DialogRestart extends Error {
   }
 }
 
-/** Context object handed to a flow as its first argument. Performs no I/O. */
-export class Dialog {
-  readonly triggerPhrase: string;
-  readonly state: Record<string, unknown> = {};
-  private lastSpokenPrompt?: string;
+/** Thrown out of `ask` / `confirm` / `choose` after the retries run out. */
+export class DialogNoMatch extends Error {
+  constructor(message = 'No matching answer') {
+    super(message);
+    this.name = 'DialogNoMatch';
+  }
+}
 
-  constructor(triggerPhrase = '') {
+export interface AskOptions {
+  /** Give up waiting after this long and re-prompt. */
+  timeoutMs?: number;
+  /** Spoken when the answer wasn't understood. `{prompt}` is substituted. */
+  reprompt?: string;
+  /** How many times to re-prompt before giving up. Defaults to 2. */
+  maxRetries?: number;
+}
+
+export interface ConfirmOptions extends AskOptions {
+  yesPhrases?: string[];
+  noPhrases?: string[];
+}
+
+/**
+ * The conversation, handed to a flow as its only argument. Every method speaks
+ * and then waits, so a flow is just straight-line code.
+ */
+export class Dialog {
+  /** The phrase that started this flow. */
+  readonly triggerPhrase: string;
+  /** Scratch space for the flow's own use; the runner never touches it. */
+  readonly state: Record<string, unknown> = {};
+
+  private readonly runner: DialogFlow;
+
+  constructor(runner: DialogFlow, triggerPhrase = '') {
+    this.runner = runner;
     this.triggerPhrase = triggerPhrase;
   }
 
-  say(text: string): Say {
-    this.lastSpokenPrompt = text;
-    return { kind: 'say', text };
+  /** Speaks `text` and waits for playback to finish. */
+  async say(text: string): Promise<void> {
+    await this.runner.speakInFlow(text);
   }
 
-  ask(
-    prompt: string,
-    options: {
-      mode?: InputMode;
-      timeoutMs?: number;
-      noInputReprompt?: string;
-      maxRetries?: number;
-    } = {},
-  ): Ask {
-    this.lastSpokenPrompt = prompt;
-    return {
-      kind: 'ask',
+  /** Asks an open question and returns what the user said. */
+  async ask(prompt: string, options: AskOptions = {}): Promise<string> {
+    return this.runner.promptForAnswer<string>(prompt, options, (text) =>
+      text ? { ok: true, value: text } : { ok: false },
+    );
+  }
+
+  /** Asks a yes/no question. */
+  async confirm(prompt: string, options: ConfirmOptions = {}): Promise<boolean> {
+    const yes = options.yesPhrases ?? DEFAULT_YES;
+    const no = options.noPhrases ?? DEFAULT_NO;
+    return this.runner.promptForAnswer<boolean>(
       prompt,
-      mode: options.mode ?? InputMode.Free,
-      timeoutMs: options.timeoutMs,
-      noInputReprompt:
-        options.noInputReprompt ?? "Sorry, I didn't catch that. {prompt}",
-      maxRetries: options.maxRetries ?? 2,
-    };
+      {
+        maxRetries: 1,
+        reprompt: "Sorry, I didn't catch that. Was that a yes or a no? {prompt}",
+        ...options,
+      },
+      (text) => {
+        if (matchesAny(text, yes)) return { ok: true, value: true };
+        if (matchesAny(text, no)) return { ok: true, value: false };
+        return { ok: false };
+      },
+    );
   }
 
-  confirm(
-    prompt: string,
-    options: {
-      maxRetries?: number;
-      yesPhrases?: string[];
-      noPhrases?: string[];
-      noInputReprompt?: string;
-    } = {},
-  ): Confirm {
-    this.lastSpokenPrompt = prompt;
-    return {
-      kind: 'confirm',
-      prompt,
-      maxRetries: options.maxRetries ?? 1,
-      yesPhrases: options.yesPhrases ?? DEFAULT_YES,
-      noPhrases: options.noPhrases ?? DEFAULT_NO,
-      noInputReprompt:
-        options.noInputReprompt ??
-        "Sorry, I didn't catch that. Was that a yes or a no? {prompt}",
-    };
-  }
-
-  choose(
+  /**
+   * Offers a set of choices and returns the key of the one picked. Each key
+   * maps to the phrases that select it; the key itself always counts.
+   */
+  async choose(
     prompt: string,
     options: Record<string, string[]>,
-    settings: { maxRetries?: number; noInputReprompt?: string } = {},
-  ): Choose {
-    this.lastSpokenPrompt = prompt;
-    return {
-      kind: 'choose',
-      prompt,
-      options,
-      maxRetries: settings.maxRetries ?? 2,
-      noInputReprompt:
-        settings.noInputReprompt ?? "Sorry, I didn't catch that. {prompt}",
-    };
+    settings: AskOptions = {},
+  ): Promise<string> {
+    return this.runner.promptForAnswer<string>(prompt, settings, (text) => {
+      for (const [key, phrases] of Object.entries(options)) {
+        if (matchesAny(text, [key, ...phrases])) return { ok: true, value: key };
+      }
+      return { ok: false };
+    });
   }
 
+  /** Abandons the flow. */
   cancel(): never {
     throw new DialogCancelled();
   }
 
+  /** Runs the flow again from the beginning. */
   restart(): never {
     throw new DialogRestart();
   }
-
-  replayLastPrompt(): Say | undefined {
-    return this.lastSpokenPrompt !== undefined
-      ? { kind: 'say', text: this.lastSpokenPrompt }
-      : undefined;
-  }
 }
 
-export type FlowFn = (d: Dialog) => Generator<Prompt, void, any>;
-export type GlobalHandler = (d: Dialog) => Prompt | void;
+export type FlowFn = (dialog: Dialog) => void | Promise<void>;
+export type GlobalHandler = (dialog: Dialog) => void | Promise<void>;
 
-export interface DialogFlowOptions {
-  /** TTS used to speak prompts. `speakFn` overrides it. */
-  tts?: TextToSpeech;
-  /** Custom speak function: `(text) => Promise<void>` resolving after playback. */
-  speakFn?: (text: string) => void | Promise<void>;
-  /** Intent recognizer used for embedding-based trigger matching. */
-  intentRecognizer?: IntentRecognizer;
-  /** Similarity threshold for trigger matching (0–1). */
-  triggerThreshold?: number;
-  /** Invoked with `true` before speaking and `false` after (mic muting). */
-  muteFn?: (mute: boolean) => void | Promise<void>;
-  /** Drop utterances that arrive while the assistant is speaking. */
-  ignoreSttDuringTts?: boolean;
-  /** Optional shared AudioContext for TTS playback. */
-  audioContext?: AudioContext;
+interface PendingAnswer {
+  resolve(text: string): void;
+  reject(error: Error): void;
+  timer?: ReturnType<typeof setTimeout>;
 }
 
-/**
- * Options for {@link DialogFlow.load}, which downloads and wires the TTS, intent, and (optionally)
- * microphone engines a voice dialog needs, then returns them all ready to use.
- *
- * Pass pre-loaded `tts` / `intentRecognizer` to reuse existing instances (or to load them from
- * self-hosted assets via their own `loadFromUrls` factories); otherwise they are fetched from the
- * Moonshine CDN. A single `module`, `onProgress`, and `downloader` are shared across every load.
- */
-export interface DialogFlowLoadOptions {
-  /** STT language for the microphone transcriber (e.g. `"en"`). Default `"en"`. */
-  language?: string;
-  /** Streaming architecture for the microphone transcriber. Default {@link ModelArch.MediumStreaming}. */
-  modelArch?: ModelArch;
-  /** Build a {@link MicrophoneTranscriber} wired to the runner. Default `true`. */
-  microphone?: boolean;
-  /** Extra listeners added to the mic alongside the runner (e.g. to log user lines). */
-  micListeners?: TranscriptEventListener[];
-  /** Constraints forwarded to the microphone transcriber. */
-  audioConstraints?: MediaTrackConstraints | boolean;
+type Interpretation<T> = { ok: true; value: T } | { ok: false };
 
-  /** A pre-loaded TTS engine. When omitted, one is loaded (from `ttsOptions` or the CDN). */
-  tts?: TextToSpeech;
-  /** Options for loading TTS when `tts` is not supplied. Defaults to a CDN load for `language`. */
-  ttsOptions?: TextToSpeechOptions;
-
-  /** A pre-loaded intent recognizer. When omitted, one is loaded (from `intentOptions` or the CDN). */
-  intentRecognizer?: IntentRecognizer;
-  /** Options for loading the intent recognizer when one is not supplied. */
-  intentOptions?: IntentRecognizerOptions;
-
-  /** Flows to register on the runner, keyed by trigger phrase. */
-  flows?: Record<string, FlowFn>;
-  /** Global handlers to register on the runner, keyed by trigger phrase. */
-  globals?: Record<string, GlobalHandler>;
-
-  /** Forwarded to the {@link DialogFlow} constructor. */
-  triggerThreshold?: number;
-  ignoreSttDuringTts?: boolean;
-  muteFn?: (mute: boolean) => void | Promise<void>;
-  speakFn?: (text: string) => void | Promise<void>;
-  audioContext?: AudioContext;
-
-  /** Shared WASM module, progress callback, and downloader across all three loads. */
-  module?: MoonshineModule;
-  onProgress?: (loaded: number, total: number | undefined, file: string) => void;
-  downloader?: AssetDownloader;
-}
-
-/** The wired-up engines returned by {@link DialogFlow.load}. */
-export interface DialogFlowBundle {
-  /** The runner, with `flows` / `globals` registered and driven by `mic`. */
-  dialog: DialogFlow;
-  /** The microphone transcriber, unless `microphone: false` was passed. */
-  mic?: MicrophoneTranscriber;
-  tts: TextToSpeech;
-  intent: IntentRecognizer;
-}
-
-interface ActiveFlow {
-  flowFn: FlowFn;
-  triggerPhrase: string;
-  dialog: Dialog;
-  generator: Generator<Prompt, void, any>;
-  currentPrompt?: Prompt;
-  retryCount: number;
-}
-
-/**
- * Runs generator-based conversational flows, driven by completed transcript
- * lines. Register flows against trigger phrases; when no flow is active, a
- * completed line is matched against triggers, otherwise it answers the pending
- * prompt.
- */
-export class DialogFlow implements TranscriptEventListener {
-  private readonly options: DialogFlowOptions;
+export class DialogFlow {
   private readonly flows = new Map<string, FlowFn>();
   private readonly globals = new Map<string, GlobalHandler>();
-  private active?: ActiveFlow;
-  private speaking = false;
-  /** Serializes async utterance processing so flows advance one at a time. */
-  private queue: Promise<void> = Promise.resolve();
-  private triggersRegistered = false;
 
-  constructor(options: DialogFlowOptions = {}) {
-    this.options = { ignoreSttDuringTts: true, triggerThreshold: 0.7, ...options };
+  private languageCode = 'en';
+  private arch: ModelArch = ModelArch.MediumStreaming;
+  private voiceId?: string;
+  private wantsMicrophone = true;
+  private threshold = DEFAULT_TRIGGER_THRESHOLD;
+  private assetBase?: string;
+  private context?: AudioContext;
+  private progressCallback?: ProgressCallback;
+  private speakOverride?: (text: string) => void | Promise<void>;
+  private heardCallbacks: Array<(text: string) => void> = [];
+  private saidCallbacks: Array<(text: string) => void> = [];
+  private errorCallbacks: Array<(error: Error) => void> = [];
+
+  private mod?: MoonshineModule;
+  private sharedDownloader?: AssetDownloader;
+  private tts?: TextToSpeech;
+  private intent?: IntentRecognizer;
+  private mic?: MicTranscriber;
+  private ownsTts = true;
+  private ownsMic = true;
+
+  private activeDialog?: Dialog;
+  private activeTriggerPhrase?: string;
+  private pending?: PendingAnswer;
+  private speaking = false;
+  private triggersRegistered = false;
+  /** Serializes utterance handling so one flow advances at a time. */
+  private queue: Promise<void> = Promise.resolve();
+  /**
+   * Woken when the runner comes to rest, meaning the flow either finished or
+   * is parked waiting for the next thing the user says. Handing an utterance
+   * in resolves at that point rather than when the whole flow completes, which
+   * would deadlock: the flow is waiting for the utterance after this one.
+   */
+  private settleWaiters: Array<() => void> = [];
+
+  constructor() {
+    // "cancel" and "start over" are what people actually say to a voice
+    // interface, so they work without every application registering them.
+    this.globals.set('cancel', (d) => d.cancel());
+    this.globals.set('start over', (d) => d.restart());
+  }
+
+  // --- Configuration ---
+
+  /** Speech-to-text and synthesis language. Defaults to `"en"`. */
+  language(code: string): this {
+    this.languageCode = code;
+    return this;
+  }
+
+  /** Overrides the streaming speech-to-text model. */
+  modelArch(arch: ModelArch): this {
+    this.arch = arch;
+    return this;
+  }
+
+  /** Voice used for spoken prompts, e.g. `"kokoro_af_heart"`. */
+  voice(id: string): this {
+    this.voiceId = id;
+    return this;
+  }
+
+  /** Fetches all model assets from a base URL you host instead of the CDN. */
+  modelsFrom(baseUrl: string): this {
+    this.assetBase = baseUrl;
+    return this;
+  }
+
+  /** Set to false to drive the dialog from text instead of a microphone. */
+  microphone(enabled: boolean): this {
+    this.wantsMicrophone = enabled;
+    return this;
+  }
+
+  /** Similarity a trigger phrase needs to match, 0 to 1. Defaults to 0.7. */
+  triggerThreshold(threshold: number): this {
+    this.threshold = threshold;
+    return this;
+  }
+
+  audioContext(context: AudioContext): this {
+    this.context = context;
+    return this;
+  }
+
+  /** Combined download progress for every model, as a `0..1` fraction. */
+  onProgress(callback: ProgressCallback): this {
+    this.progressCallback = callback;
+    return this;
+  }
+
+  /** Called with each thing the user says. */
+  onHeard(callback: (text: string) => void): this {
+    this.heardCallbacks.push(callback);
+    return this;
+  }
+
+  /** Called with each thing the assistant says. */
+  onSaid(callback: (text: string) => void): this {
+    this.saidCallbacks.push(callback);
+    return this;
+  }
+
+  /** Called when a flow throws something the runner doesn't handle itself. */
+  onError(callback: (error: Error) => void): this {
+    this.errorCallbacks.push(callback);
+    return this;
+  }
+
+  /** Replaces the built-in synthesizer, e.g. to route prompts somewhere else. */
+  speakWith(speak: (text: string) => void | Promise<void>): this {
+    this.speakOverride = speak;
+    return this;
+  }
+
+  /** Registers a flow to run when the user says something like `phrase`. */
+  listenFor(phrase: string, flow: FlowFn): this {
+    this.flows.set(phrase, flow);
+    this.triggersRegistered = false;
+    return this;
   }
 
   /**
-   * Downloads (or reuses) the TTS, intent, and microphone engines a voice dialog needs, wires them
-   * together, registers the given flows/globals, and returns the ready {@link DialogFlow} plus the
-   * engines. This is the one-call equivalent of the manual "load TTS + intent + mic, then `new
-   * DialogFlow(...)`, then `registerFlow`, then `mic.addListener(runner)`" dance.
-   *
-   * Progress from all downloads is reported through a single `onProgress`. Call `await
-   * bundle.mic?.start()` to begin listening.
+   * Registers a handler that runs whenever `phrase` is heard, even in the
+   * middle of a flow. This is how `cancel` and `start over` are implemented.
    */
-  static async load(options: DialogFlowLoadOptions = {}): Promise<DialogFlowBundle> {
-    const language = options.language ?? 'en';
-    const modelArch = options.modelArch ?? ModelArch.MediumStreaming;
-    const module = options.module ?? (await loadMoonshineModule());
-    const { onProgress, downloader } = options;
+  always(phrase: string, handler: GlobalHandler): this {
+    this.globals.set(phrase, handler);
+    this.triggersRegistered = false;
+    return this;
+  }
 
-    const tts =
-      options.tts ??
-      (await TextToSpeech.load(
-        options.ttsOptions
-          ? { module, onProgress, downloader, ...options.ttsOptions }
-          : ({ language, module, onProgress, downloader } as TextToSpeechOptions),
-      ));
+  useModule(module: MoonshineModule): this {
+    this.mod = module;
+    return this;
+  }
 
-    const intent =
-      options.intentRecognizer ??
-      (await IntentRecognizer.load({
-        module,
-        onProgress,
-        downloader,
-        ...options.intentOptions,
-      }));
+  useDownloader(downloader: AssetDownloader): this {
+    this.sharedDownloader = downloader;
+    return this;
+  }
 
-    // Only pass through defined dialog options so we don't clobber the constructor's defaults
-    // (e.g. an explicit `undefined` triggerThreshold would otherwise override 0.7).
-    const dialogOptions: DialogFlowOptions = { tts, intentRecognizer: intent };
-    if (options.audioContext) dialogOptions.audioContext = options.audioContext;
-    if (options.triggerThreshold !== undefined) {
-      dialogOptions.triggerThreshold = options.triggerThreshold;
-    }
-    if (options.ignoreSttDuringTts !== undefined) {
-      dialogOptions.ignoreSttDuringTts = options.ignoreSttDuringTts;
-    }
-    if (options.muteFn) dialogOptions.muteFn = options.muteFn;
-    if (options.speakFn) dialogOptions.speakFn = options.speakFn;
+  useTextToSpeech(tts: TextToSpeech): this {
+    this.tts = tts;
+    this.ownsTts = false;
+    return this;
+  }
 
-    const dialog = new DialogFlow(dialogOptions);
-    for (const [phrase, flow] of Object.entries(options.flows ?? {})) {
-      dialog.registerFlow(phrase, flow);
-    }
-    for (const [phrase, handler] of Object.entries(options.globals ?? {})) {
-      dialog.registerGlobal(phrase, handler);
-    }
+  useMicTranscriber(mic: MicTranscriber): this {
+    this.mic = mic;
+    this.ownsMic = false;
+    return this;
+  }
 
-    let mic: MicrophoneTranscriber | undefined;
-    if (options.microphone !== false) {
-      mic = await MicrophoneTranscriber.load({
-        language,
-        modelArch,
-        module,
-        onProgress,
-        downloader,
-        audioConstraints: options.audioConstraints,
-        listeners: [...(options.micListeners ?? []), dialog],
+  // --- Lifecycle ---
+
+  /** Downloads and wires every model the dialog needs. */
+  async load(): Promise<this> {
+    this.mod ??= await loadMoonshineModule();
+    const progress = this.progressCallback;
+
+    if (this.assetBase && !this.sharedDownloader) {
+      // The intent model is fetched through a manifest, so redirecting it to a
+      // self-hosted base URL happens at the downloader.
+      this.sharedDownloader = new AssetDownloader({
+        baseUrl: this.assetBase,
+        onProgress: progress
+          ? (loaded, total, file) =>
+              progress(total ? Math.min(1, loaded / total) : 0, file)
+          : undefined,
       });
     }
 
-    return { dialog, mic, tts, intent };
+    if (!this.tts) {
+      const tts = new TextToSpeech().language(this.languageCode).useModule(this.mod);
+      if (this.voiceId) tts.voice(this.voiceId);
+      if (this.assetBase) tts.modelsFrom(this.assetBase);
+      if (this.context) tts.audioContext(this.context);
+      if (progress) tts.onProgress(progress);
+      if (this.sharedDownloader) tts.useDownloader(this.sharedDownloader);
+      this.tts = await tts.load();
+    }
+
+    this.intent ??= await IntentRecognizer.load({
+      module: this.mod,
+      downloader: this.sharedDownloader,
+      onProgress: progress
+        ? (loaded, total, file) =>
+            progress(total ? Math.min(1, loaded / total) : 0, file)
+        : undefined,
+    });
+
+    if (this.wantsMicrophone && !this.mic) {
+      const mic = new MicTranscriber()
+        .language(this.languageCode)
+        .modelArch(this.arch);
+      if (this.assetBase) mic.modelsFrom(this.assetBase);
+      if (progress) mic.onProgress(progress);
+      this.mic = await mic.load();
+    }
+    this.mic?.addListener(this.transcriptListener());
+    return this;
   }
 
-  registerFlow(triggerPhrase: string, flow: FlowFn): void {
-    this.flows.set(triggerPhrase, flow);
-    this.triggersRegistered = false;
+  /** Opens the microphone and starts responding to trigger phrases. */
+  async startListening(): Promise<void> {
+    if (!this.mic) {
+      throw new Error(
+        'No microphone. Call load() first, or use handleUtterance() for text input.',
+      );
+    }
+    await this.mic.start();
   }
 
-  registerGlobal(triggerPhrase: string, handler: GlobalHandler): void {
-    this.globals.set(triggerPhrase, handler);
-    this.triggersRegistered = false;
+  async stopListening(): Promise<void> {
+    await this.mic?.stop();
   }
 
-  get isActive(): boolean {
-    return this.active !== undefined;
-  }
-
-  get activeTrigger(): string | undefined {
-    return this.active?.triggerPhrase;
-  }
-
-  // --- TranscriptEventListener ---
-
-  onLineCompleted(event: LineCompleted): void {
-    const utterance = event.line.text.trim();
-    if (!utterance) return;
-    if (this.options.ignoreSttDuringTts && this.speaking) return;
-    // Chain onto the queue so overlapping completed lines are serialized.
-    this.queue = this.queue.then(() => this.processUtterance(utterance)).catch(() => {});
-  }
-
-  /** Speaks `text` outside any flow (welcome messages, announcements). */
+  /** Says something outside any flow, e.g. a welcome message. */
   async say(text: string): Promise<void> {
     if (text) await this.speak(text);
   }
 
-  // --- Core dispatch ---
+  /**
+   * Feeds in an utterance the dialog didn't hear itself. Useful for text input
+   * and for tests. Resolves once the flow has advanced as far as it can.
+   */
+  handleUtterance(text: string): Promise<void> {
+    const utterance = text.trim();
+    if (!utterance) return Promise.resolve();
+    for (const cb of this.heardCallbacks) cb(utterance);
+    this.queue = this.queue
+      .then(() => this.dispatch(utterance))
+      .catch(() => {});
+    return this.queue;
+  }
 
-  private async processUtterance(utterance: string): Promise<void> {
+  /** True while a flow is running. */
+  get isActive(): boolean {
+    return this.activeDialog !== undefined;
+  }
+
+  /** The trigger phrase of the running flow, if any. */
+  get activeTrigger(): string | undefined {
+    return this.activeTriggerPhrase;
+  }
+
+  /** Abandons the running flow. Returns false if there wasn't one. */
+  cancel(): boolean {
+    if (!this.activeDialog) return false;
+    this.rejectPending(new DialogCancelled());
+    this.activeDialog = undefined;
+    this.activeTriggerPhrase = undefined;
+    return true;
+  }
+
+  close(): void {
+    if (this.ownsMic) this.mic?.close();
+    if (this.ownsTts) this.tts?.close();
+    this.intent?.close();
+    this.mic = undefined;
+    this.tts = undefined;
+    this.intent = undefined;
+  }
+
+  // --- Internals used by Dialog ---
+
+  /** @internal */
+  async speakInFlow(text: string): Promise<void> {
+    await this.speak(text);
+  }
+
+  /**
+   * Speaks a prompt, waits for an answer, and re-prompts until `interpret`
+   * accepts one or the retries run out.
+   * @internal
+   */
+  async promptForAnswer<T>(
+    prompt: string,
+    options: AskOptions,
+    interpret: (text: string) => Interpretation<T>,
+  ): Promise<T> {
+    const maxRetries = options.maxRetries ?? 2;
+    const reprompt = options.reprompt ?? "Sorry, I didn't catch that. {prompt}";
+    for (let attempt = 0; ; attempt++) {
+      const line = attempt === 0 ? prompt : reprompt.replace('{prompt}', prompt);
+      await this.speak(line);
+
+      let answer: string;
+      try {
+        answer = await this.waitForAnswer(options.timeoutMs);
+      } catch (err) {
+        if (err instanceof DialogNoMatch && attempt < maxRetries) continue;
+        throw err;
+      }
+
+      const result = interpret(answer.trim());
+      if (result.ok) return result.value;
+      if (attempt >= maxRetries) {
+        throw new DialogNoMatch(`Gave up understanding: "${answer}"`);
+      }
+    }
+  }
+
+  // --- Internals ---
+
+  private transcriptListener(): TranscriptEventListener {
+    return {
+      onLineCompleted: (event: LineCompleted) => {
+        if (this.speaking) return; // don't transcribe our own voice
+        void this.handleUtterance(event.line.text);
+      },
+    };
+  }
+
+  private waitForAnswer(timeoutMs?: number): Promise<string> {
+    const answer = new Promise<string>((resolve, reject) => {
+      const entry: PendingAnswer = { resolve, reject };
+      if (timeoutMs !== undefined) {
+        entry.timer = setTimeout(() => {
+          if (this.pending === entry) this.pending = undefined;
+          reject(new DialogNoMatch('Timed out waiting for an answer'));
+        }, timeoutMs);
+      }
+      this.pending = entry;
+    });
+    this.notifySettled();
+    return answer;
+  }
+
+  /** Resolves the next time the runner finishes a flow or parks on a prompt. */
+  private settledSignal(): Promise<void> {
+    return new Promise<void>((resolve) => this.settleWaiters.push(resolve));
+  }
+
+  private notifySettled(): void {
+    const waiters = this.settleWaiters;
+    this.settleWaiters = [];
+    for (const resolve of waiters) resolve();
+  }
+
+  private resolvePending(text: string): boolean {
+    const entry = this.pending;
+    if (!entry) return false;
+    this.pending = undefined;
+    if (entry.timer) clearTimeout(entry.timer);
+    entry.resolve(text);
+    return true;
+  }
+
+  private rejectPending(error: Error): void {
+    const entry = this.pending;
+    if (!entry) return;
+    this.pending = undefined;
+    if (entry.timer) clearTimeout(entry.timer);
+    entry.reject(error);
+  }
+
+  private async dispatch(utterance: string): Promise<void> {
+    // Globals win over everything, so "cancel" works mid-question.
     const trigger = this.matchTrigger(utterance);
-
-    if (trigger?.kind === 'global') {
-      await this.invokeGlobal(trigger.phrase);
+    if (trigger && this.globals.has(trigger)) {
+      const settled = this.settledSignal();
+      await this.invokeGlobal(trigger);
+      // A global that cancelled or restarted the flow left it unwinding, so
+      // wait for it to come to rest. One that just spoke did not.
+      if (this.activeDialog && !this.pending) await settled;
       return;
     }
-    if (this.active) {
-      await this.deliverToActive(this.active, utterance);
+    if (this.pending) {
+      const settled = this.settledSignal();
+      this.resolvePending(utterance);
+      await settled;
       return;
     }
-    if (trigger?.kind === 'flow') {
-      await this.startFlow(trigger.phrase);
+    if (this.activeDialog) return; // busy between prompts; drop the line
+    if (trigger && this.flows.has(trigger)) {
+      const settled = this.settledSignal();
+      void this.runFlow(trigger);
+      await settled;
     }
   }
 
-  private matchTrigger(
-    utterance: string,
-  ): { kind: 'global' | 'flow'; phrase: string } | undefined {
-    const phrase = this.bestTriggerPhrase(utterance);
-    if (phrase === undefined) return undefined;
-    if (this.globals.has(phrase)) return { kind: 'global', phrase };
-    if (this.flows.has(phrase)) return { kind: 'flow', phrase };
-    return undefined;
-  }
-
-  private bestTriggerPhrase(utterance: string): string | undefined {
+  private matchTrigger(utterance: string): string | undefined {
     const phrases = [...this.globals.keys(), ...this.flows.keys()];
     if (phrases.length === 0) return undefined;
 
-    const recognizer = this.options.intentRecognizer;
-    if (recognizer) {
+    if (this.intent) {
       if (!this.triggersRegistered) {
-        recognizer.clear();
-        recognizer.register(phrases);
+        this.intent.clear();
+        this.intent.register(phrases);
         this.triggersRegistered = true;
       }
-      const best = recognizer.bestIntent(utterance, this.options.triggerThreshold ?? 0);
-      return best?.canonicalPhrase;
+      return this.intent.bestIntent(utterance, this.threshold)?.canonicalPhrase;
     }
-    // Fallback: case-insensitive substring match.
     const lower = utterance.toLowerCase();
-    return phrases.find((p) => lower.includes(p.toLowerCase()));
+    return phrases.find((phrase) => lower.includes(phrase.toLowerCase()));
   }
 
-  private async startFlow(triggerPhrase: string): Promise<void> {
-    const flowFn = this.flows.get(triggerPhrase);
-    if (!flowFn) return;
-    const dialog = new Dialog(triggerPhrase);
-    this.active = {
-      flowFn,
-      triggerPhrase,
-      dialog,
-      generator: flowFn(dialog),
-      retryCount: 0,
-    };
-    await this.advance(this.active, undefined);
-  }
-
-  private async deliverToActive(active: ActiveFlow, utterance: string): Promise<void> {
-    const prompt = active.currentPrompt;
-    if (!prompt) return;
-    const result = this.interpret(prompt, utterance);
-
-    if (result.status === 'reprompt') {
-      active.retryCount++;
-      if (active.retryCount > getMaxRetries(prompt)) {
-        await this.throwInto(active, new NoMatchError());
-        return;
-      }
-      await this.speak(result.text);
-      return;
-    }
-    active.retryCount = 0;
-    await this.advance(active, result.value);
-  }
-
-  private async advance(active: ActiveFlow, value: unknown): Promise<void> {
-    for (;;) {
-      let res: IteratorResult<Prompt, void>;
-      try {
-        res = active.generator.next(value);
-      } catch (err) {
-        this.finishFlow(active);
-        if (err instanceof DialogRestart) {
-          await this.restartFlow(active);
+  private async runFlow(triggerPhrase: string): Promise<void> {
+    const flow = this.flows.get(triggerPhrase);
+    if (!flow) return;
+    try {
+      for (;;) {
+        const dialog = new Dialog(this, triggerPhrase);
+        this.activeDialog = dialog;
+        this.activeTriggerPhrase = triggerPhrase;
+        try {
+          await flow(dialog);
+          return;
+        } catch (err) {
+          if (err instanceof DialogRestart) continue; // round again
+          if (err instanceof DialogCancelled) return;
+          if (err instanceof DialogNoMatch) {
+            await this.speak("Sorry, I didn't get that. Let's start over.");
+            return;
+          }
+          for (const cb of this.errorCallbacks) {
+            cb(err instanceof Error ? err : new Error(String(err)));
+          }
+          return;
         }
-        return;
       }
-      if (res.done) {
-        this.finishFlow(active);
-        return;
-      }
-      const prompt = res.value;
-      if (prompt.kind === 'say') {
-        await this.speak(prompt.text);
-        value = undefined;
-        continue;
-      }
-      // Ask / Confirm / Choose: speak the prompt and wait for the next line.
-      active.currentPrompt = prompt;
-      active.retryCount = 0;
-      if (prompt.prompt) await this.speak(prompt.prompt);
-      return;
+    } finally {
+      this.activeDialog = undefined;
+      this.activeTriggerPhrase = undefined;
+      this.notifySettled();
     }
-  }
-
-  private async throwInto(active: ActiveFlow, err: Error): Promise<void> {
-    let res: IteratorResult<Prompt, void>;
-    try {
-      res = active.generator.throw(err);
-    } catch (thrown) {
-      this.finishFlow(active);
-      if (thrown instanceof DialogRestart) await this.restartFlow(active);
-      return;
-    }
-    if (res.done) {
-      this.finishFlow(active);
-      return;
-    }
-    const prompt = res.value;
-    if (prompt.kind === 'say') {
-      await this.speak(prompt.text);
-      await this.advance(active, undefined);
-    } else {
-      active.currentPrompt = prompt;
-      active.retryCount = 0;
-      if (prompt.prompt) await this.speak(prompt.prompt);
-    }
-  }
-
-  private async restartFlow(previous: ActiveFlow): Promise<void> {
-    const dialog = new Dialog(previous.triggerPhrase);
-    this.active = {
-      flowFn: previous.flowFn,
-      triggerPhrase: previous.triggerPhrase,
-      dialog,
-      generator: previous.flowFn(dialog),
-      retryCount: 0,
-    };
-    await this.advance(this.active, undefined);
-  }
-
-  private finishFlow(active: ActiveFlow): void {
-    if (this.active === active) this.active = undefined;
-  }
-
-  cancelActive(): boolean {
-    if (!this.active) return false;
-    try {
-      this.active.generator.return?.();
-    } catch {
-      /* ignore */
-    }
-    this.finishFlow(this.active);
-    return true;
   }
 
   private async invokeGlobal(triggerPhrase: string): Promise<void> {
     const handler = this.globals.get(triggerPhrase);
     if (!handler) return;
-    const dialog = this.active?.dialog ?? new Dialog(triggerPhrase);
-    let prompt: Prompt | void;
+    const dialog = this.activeDialog ?? new Dialog(this, triggerPhrase);
     try {
-      prompt = handler(dialog);
+      await handler(dialog);
     } catch (err) {
-      if (err instanceof DialogCancelled) {
-        if (this.active) this.finishFlow(this.active);
-      } else if (err instanceof DialogRestart) {
-        if (this.active) await this.restartFlow(this.active);
-      }
-      return;
-    }
-    if (prompt?.kind === 'say') await this.speak(prompt.text);
-  }
-
-  // --- Answer interpretation ---
-
-  private interpret(
-    prompt: Prompt,
-    utterance: string,
-  ):
-    | { status: 'ok'; value: unknown }
-    | { status: 'reprompt'; text: string } {
-    const text = utterance.trim();
-    switch (prompt.kind) {
-      case 'ask':
-        if (!text) return this.reprompt(prompt);
-        return { status: 'ok', value: text };
-      case 'confirm': {
-        if (matchesAny(text, prompt.yesPhrases)) return { status: 'ok', value: true };
-        if (matchesAny(text, prompt.noPhrases)) return { status: 'ok', value: false };
-        return this.reprompt(prompt);
-      }
-      case 'choose': {
-        for (const [key, phrases] of Object.entries(prompt.options)) {
-          if (matchesAny(text, [key, ...phrases])) return { status: 'ok', value: key };
+      if (err instanceof DialogCancelled || err instanceof DialogRestart) {
+        // Hand the interruption to the flow, which is parked in an `await`.
+        if (this.pending) {
+          this.rejectPending(err);
+        } else if (err instanceof DialogCancelled) {
+          this.activeDialog = undefined;
+          this.activeTriggerPhrase = undefined;
         }
-        return this.reprompt(prompt);
+        return;
       }
-      default:
-        return { status: 'ok', value: text };
+      throw err;
     }
   }
-
-  private reprompt(prompt: Prompt): { status: 'reprompt'; text: string } {
-    const template =
-      ('noInputReprompt' in prompt && prompt.noInputReprompt) || '{prompt}';
-    const promptText = 'prompt' in prompt ? prompt.prompt : '';
-    return { status: 'reprompt', text: template.replace('{prompt}', promptText) };
-  }
-
-  // --- TTS ---
 
   private async speak(text: string): Promise<void> {
     if (!text) return;
+    for (const cb of this.saidCallbacks) cb(text);
     this.speaking = true;
+    this.mic?.mute(true);
     try {
-      await this.options.muteFn?.(true);
-      if (this.options.speakFn) {
-        await this.options.speakFn(text);
-      } else if (this.options.tts) {
-        await this.options.tts.speak(text, this.options.audioContext);
+      if (this.speakOverride) {
+        await this.speakOverride(text);
+      } else if (this.tts) {
+        await this.tts.say(text);
       } else {
         // eslint-disable-next-line no-console
-        console.log(`[DialogFlow say] ${text}`);
+        console.log(`[DialogFlow] ${text}`);
       }
     } finally {
-      await this.options.muteFn?.(false);
+      this.mic?.mute(false);
       this.speaking = false;
     }
   }
 }
 
-class NoMatchError extends Error {
-  constructor() {
-    super('NoMatchError');
-    this.name = 'NoMatchError';
-  }
-}
-
-function getMaxRetries(prompt: Prompt): number {
-  return 'maxRetries' in prompt ? prompt.maxRetries : 0;
-}
-
 function matchesAny(utterance: string, phrases: readonly string[]): boolean {
   const lower = utterance.toLowerCase();
-  return phrases.some((p) => {
-    const needle = p.toLowerCase();
+  return phrases.some((phrase) => {
+    const needle = phrase.toLowerCase();
     return lower === needle || lower.includes(needle);
   });
 }
 
 /** Renders a string as a space-separated spoken form for reading back. */
-export function spellOut(s: string): string {
-  return s.split('').join(' ');
+export function spellOut(value: string): string {
+  return value.split('').join(' ');
 }

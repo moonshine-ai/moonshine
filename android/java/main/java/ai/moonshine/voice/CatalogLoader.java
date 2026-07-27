@@ -26,9 +26,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * to construct the engine(s) from the resolved directories and delivers the result (or error) on
  * the main thread.
  *
- * <p>Single-model apps should prefer the per-engine wrappers ({@code MicTranscriber.loadFromCatalog},
- * {@code IntentRecognizer.loadFromCatalog}, {@code TextToSpeech.loadFromCatalog}); use this directly
- * when an app needs several models before it can start (e.g. ASR + intent embedding).
+ * <p>Most apps do not need this: {@link MicTranscriber#load()}, {@link TextToSpeech#load()} and
+ * {@link DialogFlow#load()} download what they need themselves, blocking on the caller's own
+ * background thread. Reach for this when you want the callback-and-cancellation shape instead, or
+ * need a per-file progress UI that the {@code 0..1} {@link ProgressCallback} does not give you.
  */
 public final class CatalogLoader {
 

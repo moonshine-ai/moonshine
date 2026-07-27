@@ -24,7 +24,7 @@ public class JNI {
     public static final int MOONSHINE_FLAG_SPELLING_MODE = 1 << 1;
 
     /** Embedding model architecture for intent recognition (Gemma 300M). */
-    public static final int MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M = 0;
+    static final int MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M = 0;
 
     /** Pass to TTS/G2P create calls; must match native {@code moonshine-c-api.h}. */
     public static final int MOONSHINE_HEADER_VERSION = 20000;
@@ -84,27 +84,30 @@ public class JNI {
     public static native Transcript moonshineTranscribeStream(int transcriber_handle,
             int stream_handle, int flags);
 
-    public static native int moonshineCreateIntentRecognizer(String model_path,
+    // Intent recognition backs DialogFlow's trigger-phrase matching and is not
+    // part of the library's public surface, so these stay package-private.
+
+    static native int moonshineCreateIntentRecognizer(String model_path,
             int embedding_model_arch, String model_variant);
 
-    public static native void moonshineFreeIntentRecognizer(int intent_recognizer_handle);
+    static native void moonshineFreeIntentRecognizer(int intent_recognizer_handle);
 
-    public static native int moonshineRegisterIntent(int intent_recognizer_handle,
+    static native int moonshineRegisterIntent(int intent_recognizer_handle,
             String canonical_phrase, float[] embedding, int priority);
 
-    public static native int moonshineUnregisterIntent(int intent_recognizer_handle,
+    static native int moonshineUnregisterIntent(int intent_recognizer_handle,
             String canonical_phrase);
 
     /** Returns null on failure. */
-    public static native IntentMatch[] moonshineGetClosestIntents(
+    static native IntentMatch[] moonshineGetClosestIntents(
             int intent_recognizer_handle, String utterance, float tolerance_threshold);
 
-    public static native int moonshineGetIntentCount(int intent_recognizer_handle);
+    static native int moonshineGetIntentCount(int intent_recognizer_handle);
 
-    public static native int moonshineClearIntents(int intent_recognizer_handle);
+    static native int moonshineClearIntents(int intent_recognizer_handle);
 
     /** Returns null on failure. */
-    public static native float[] moonshineCalculateIntentEmbedding(
+    static native float[] moonshineCalculateIntentEmbedding(
             int intent_recognizer_handle, String sentence);
 
     public static native int moonshineCreateTtsSynthesizerFromFiles(String language,
@@ -145,11 +148,20 @@ public class JNI {
      *                  {@code null} for the default model.
      * @param options   Optional options; recognizes {@code variant}.
      */
-    public static native String moonshineGetIntentDependencies(String modelName,
+    static native String moonshineGetIntentDependencies(String modelName,
             TranscriberOption[] options);
 
     public static native String moonshineGetTtsVoices(String languages,
             TranscriberOption[] options);
+
+    /**
+     * Finds the best short window of speech in a recording, for voice cloning
+     * (see {@code moonshine_extract_speech_clip}). Returns a {@link SpeechClip}
+     * whose {@code audio} is null until enough speech has been heard, which is
+     * how incremental capture knows to keep listening.
+     */
+    public static native SpeechClip moonshineExtractSpeechClip(float[] audioData, int sampleRate,
+            float clipDurationSeconds, float minimumSpeechSeconds);
 
     public static native TtsSynthesisResult moonshineTextToSpeech(int tts_synthesizer_handle,
             String text, TranscriberOption[] options);

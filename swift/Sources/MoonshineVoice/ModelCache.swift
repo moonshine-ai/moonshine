@@ -2,7 +2,7 @@ import Foundation
 
 /// Default, binding-managed on-disk location for models downloaded via the high-level
 /// ``MicTranscriber/load(language:modelArch:cacheDirectory:includeSpelling:includeWordTimestamps:options:downloader:onProgress:)``
-/// (and the sibling `load` factories on ``Transcriber``, ``IntentRecognizer``, ``TextToSpeech``).
+/// (and the sibling `load` factories on ``Transcriber`` and ``TextToSpeech``).
 ///
 /// Apps that want to control where models live can pass an explicit directory to those factories
 /// (or keep using ``AssetDownloader`` directly); this type just provides a sensible default so the

@@ -22,46 +22,6 @@ private func resolveDirectory(for spec: ModelSpec, override: URL?) throws -> URL
 }
 
 @available(iOS 15.0, macOS 12.0, *)
-extension MicTranscriber {
-    /// Downloads the speech-to-text model for `language` (if not already present) and returns a
-    /// ready ``MicTranscriber``.
-    ///
-    /// - Parameters:
-    ///   - language: Language code (e.g. `"en"`).
-    ///   - modelArch: Architecture to download and load. Defaults to `.mediumStreaming`.
-    ///   - cacheDirectory: Where to store the model. When nil, a managed ``ModelCache`` directory
-    ///     is used.
-    ///   - updateInterval: Seconds between automatic streaming updates.
-    ///   - includeSpelling: Also fetch the alphanumeric spelling model when published.
-    ///   - includeWordTimestamps: Also fetch the optional attention decoder for word timestamps.
-    ///   - options: Extra transcriber options forwarded to the constructor.
-    ///   - downloader: The ``AssetDownloader`` to use (override for custom sessions / tests).
-    ///   - onProgress: Optional per-file download progress.
-    public static func load(
-        language: String,
-        modelArch: ModelArch = .mediumStreaming,
-        cacheDirectory: URL? = nil,
-        updateInterval: TimeInterval = 0.5,
-        includeSpelling: Bool = false,
-        includeWordTimestamps: Bool = false,
-        options: [TranscriberOption]? = nil,
-        downloader: AssetDownloader = AssetDownloader(),
-        onProgress: (@Sendable (DownloadProgress) -> Void)? = nil
-    ) async throws -> MicTranscriber {
-        let spec = ModelSpec.stt(
-            language: language, modelArch: modelArch, includeSpelling: includeSpelling,
-            includeWordTimestamps: includeWordTimestamps)
-        let directory = try resolveDirectory(for: spec, override: cacheDirectory)
-        _ = try await downloader.ensureModelPresent(root: directory, spec: spec, onProgress: onProgress)
-        return try MicTranscriber(
-            modelPath: directory.path,
-            modelArch: modelArch,
-            updateInterval: updateInterval,
-            options: options)
-    }
-}
-
-@available(iOS 15.0, macOS 12.0, *)
 extension Transcriber {
     /// Downloads the speech-to-text model for `language` (if not already present) and returns a
     /// ready ``Transcriber`` for file/batch transcription.
@@ -88,7 +48,7 @@ extension Transcriber {
 extension IntentRecognizer {
     /// Downloads the intent-recognition embedding model (if not already present) and returns a
     /// ready ``IntentRecognizer``.
-    public static func load(
+    static func load(
         modelName: String = "embeddinggemma-300m",
         modelArch: EmbeddingModelArch = .gemma300m,
         variant: String = "q4",
@@ -101,26 +61,6 @@ extension IntentRecognizer {
         _ = try await downloader.ensureModelPresent(root: directory, spec: spec, onProgress: onProgress)
         return try IntentRecognizer(
             modelPath: directory.path, modelArch: modelArch, modelVariant: variant)
-    }
-}
-
-@available(iOS 15.0, macOS 12.0, *)
-extension TextToSpeech {
-    /// Downloads the text-to-speech assets for `language` / `voice` (if not already present) and
-    /// returns a ready ``TextToSpeech`` synthesizer.
-    public static func load(
-        language: String,
-        voice: String? = nil,
-        cacheDirectory: URL? = nil,
-        options: [TranscriberOption]? = nil,
-        downloader: AssetDownloader = AssetDownloader(),
-        onProgress: (@Sendable (DownloadProgress) -> Void)? = nil
-    ) async throws -> TextToSpeech {
-        let spec = ModelSpec.tts(language: language, voice: voice)
-        let directory = try resolveDirectory(for: spec, override: cacheDirectory)
-        _ = try await downloader.ensureModelPresent(root: directory, spec: spec, onProgress: onProgress)
-        return try TextToSpeech(
-            language: language, g2pRoot: directory.path, voice: voice, options: options)
     }
 }
 

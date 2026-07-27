@@ -1,11 +1,15 @@
 package ai.moonshine.voice;
 
-/** One ranked intent from {@link IntentRecognizer#getClosestIntents}. */
-public final class IntentMatch {
-  public final String canonicalPhrase;
-  public final float similarity;
+/**
+ * One ranked intent from {@link IntentRecognizer#getClosestIntents}.
+ *
+ * <p>Internal to the library; intent matching is reached through {@link DialogFlow}.
+ */
+final class IntentMatch {
+  final String canonicalPhrase;
+  final float similarity;
 
-  public IntentMatch(String canonicalPhrase, float similarity) {
+  IntentMatch(String canonicalPhrase, float similarity) {
     this.canonicalPhrase = canonicalPhrase;
     this.similarity = similarity;
   }

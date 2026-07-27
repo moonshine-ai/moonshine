@@ -48,6 +48,21 @@ export interface MoonshineModule {
     optionValues: string[],
   ): string;
   g2pDependencies?(languages: string): string;
+  extractSpeechClip?(
+    audio: Float32Array,
+    sampleRate: number,
+    clipDurationSeconds: number,
+    minimumSpeechSeconds: number,
+  ): RawSpeechClip;
+}
+
+/** Result of {@link MoonshineModule.extractSpeechClip}. */
+export interface RawSpeechClip {
+  /** 16 kHz mono PCM; `undefined` until `isComplete`. */
+  audio?: Float32Array;
+  startTime: number;
+  speechDuration: number;
+  isComplete: boolean;
 }
 
 export interface RawTranscriber {

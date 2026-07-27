@@ -1,11 +1,6 @@
 package ai.moonshine.examples.texttospeech
 
-import android.media.AudioAttributes
-import android.media.AudioFormat
-import android.media.AudioTrack
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
@@ -13,15 +8,11 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import androidx.appcompat.app.AppCompatActivity
 import ai.moonshine.examples.texttospeech.databinding.ActivityMainBinding
-import ai.moonshine.voice.CatalogLoader
-import ai.moonshine.voice.DownloadProgress
-import ai.moonshine.voice.LoadCallback
 import ai.moonshine.voice.ModelCache
 import ai.moonshine.voice.ModelSpec
 import ai.moonshine.voice.TextToSpeech
 import ai.moonshine.voice.TranscriberOption
-import java.io.File
-import kotlin.concurrent.thread
+import java.util.concurrent.Executors
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -68,16 +59,15 @@ private val kokoroLanguages: List<KokoroLanguage> =
 class MainActivity : AppCompatActivity() {
 
     /**
-     * Nothing is bundled in the APK. On first use of a language, the Kokoro base model, that
-     * language's G2P assets, and the selected voice are downloaded (via [CatalogLoader]) into a
-     * managed per-language cache directory ([ModelCache]) and reused thereafter. Selecting a voice
-     * that is not yet present downloads just that voice into the same directory.
+     * Nothing is bundled in the APK. The synthesizer downloads the Kokoro base model, the
+     * language's G2P assets, and the selected voice on first use, into a managed per-language
+     * cache directory ([ModelCache]) that it reuses thereafter.
      */
     private lateinit var binding: ActivityMainBinding
-    private val mainHandler = Handler(Looper.getMainLooper())
 
-    /** Managed cache directory for the current language; also the synthesizer's `g2p_root`. */
-    private var g2pRoot: String = ""
+    /** Moonshine's blocking calls (load, say) run here. */
+    private val worker = Executors.newSingleThreadExecutor()
+
     private var tts: TextToSpeech? = null
 
     private var selectedLanguage: KokoroLanguage =
@@ -87,7 +77,7 @@ class MainActivity : AppCompatActivity() {
 
     private var engineReady = false
     private var isSpeaking = false
-    private var isDownloading = false
+    private var isLoading = false
     private var spokenWelcome = false
 
     private var suppressSpinnerCallbacks = false
@@ -111,12 +101,15 @@ class MainActivity : AppCompatActivity() {
             },
         )
 
-        bootstrapEngine()
+        refreshVoices()
+        repopulateVoiceSpinner()
+        loadSynthesizer("kokoro_af_alloy")
     }
 
     override fun onDestroy() {
         tts?.close()
         tts = null
+        worker.shutdown()
         super.onDestroy()
     }
 
@@ -139,7 +132,10 @@ class MainActivity : AppCompatActivity() {
                     val lang = kokoroLanguages.getOrNull(position) ?: return
                     if (lang.id == selectedLanguage.id) return
                     selectedLanguage = lang
-                    onLanguageChanged()
+                    selectedVoice = null
+                    refreshVoices()
+                    repopulateVoiceSpinner()
+                    loadSynthesizer(selectedVoice?.id)
                 }
 
                 override fun onNothingSelected(parent: AdapterView<*>?) {}
@@ -159,180 +155,84 @@ class MainActivity : AppCompatActivity() {
                     val voice = availableVoices.getOrNull(position) ?: return
                     if (voice.id == selectedVoice?.id) return
                     selectedVoice = voice
-                    ensureAssetsThenRecreate(selectedLanguage, voice)
+                    loadSynthesizer(voice.id)
                 }
 
                 override fun onNothingSelected(parent: AdapterView<*>?) {}
             }
     }
 
-    private fun bootstrapEngine() {
+    /**
+     * Builds a synthesizer for the current language and `voiceId`, downloading whatever it needs.
+     * `load()` blocks, so it runs on the worker; the `0..1` progress fraction it reports comes
+     * back here and drives the progress bar.
+     */
+    private fun loadSynthesizer(voiceId: String?) {
+        if (isLoading) return
+        isLoading = true
+        engineReady = false
+        hideError()
         setProgressVisible(true)
         binding.loadingLabel.setText(R.string.initializing)
-        binding.downloadProgress.visibility = View.GONE
-        hideError()
-
-        val initialLang = selectedLanguage
-        val initialVoice = "kokoro_af_alloy"
-        g2pRoot = modelDirFor(initialLang.id).absolutePath
-        isDownloading = true
         updateUiState()
 
-        // CatalogLoader downloads the base model + voice off the main thread and delivers progress
-        // and the ready synthesizer back on the main thread, so no Thread / Handler plumbing is
-        // needed here.
-        CatalogLoader.load(
-            this,
-            listOf(ModelSpec.tts(initialLang.id, initialVoice)),
-            CatalogLoader.Builder<TextToSpeech> {
-                TextToSpeech(initialLang.id, g2pRoot, listOf(TranscriberOption("voice", initialVoice)))
-            },
-            object : LoadCallback<TextToSpeech> {
-                override fun onProgress(progress: DownloadProgress) = showDownloadProgress(progress)
+        val language = selectedLanguage
+        val synthesizer = TextToSpeech(this)
+            .language(language.id)
+            .onProgress { fraction, file -> runOnUiThread { showProgress(fraction, file) } }
+        if (voiceId != null) {
+            synthesizer.voice(voiceId)
+        }
 
-                override fun onSuccess(synthesizer: TextToSpeech) {
-                    isDownloading = false
+        worker.execute {
+            try {
+                synthesizer.load()
+                runOnUiThread {
+                    isLoading = false
+                    setProgressVisible(false)
                     tts?.close()
                     tts = synthesizer
-                    try {
-                        refreshVoices()
-                        selectedVoice =
-                            availableVoices.firstOrNull { it.id == initialVoice }
-                                ?: availableVoices.firstOrNull { !it.needsDownload }
-                                ?: availableVoices.firstOrNull()
-                        if (selectedVoice?.id != initialVoice) {
-                            recreateSynthesizer(selectedVoice?.id)
-                        }
-                        repopulateVoiceSpinner()
-                        engineReady = true
-                        hideError()
-                    } catch (e: Exception) {
-                        showError("Failed to initialize TTS: ${e.message}")
-                    } finally {
-                        setProgressVisible(false)
-                        updateUiState()
-                        if (engineReady && !spokenWelcome) {
-                            spokenWelcome = true
-                            speakWelcome()
-                        }
+                    engineReady = true
+                    refreshVoices()
+                    repopulateVoiceSpinner()
+                    updateUiState()
+                    if (!spokenWelcome) {
+                        spokenWelcome = true
+                        speakUtterance("Welcome to Moonshine Text to Speech")
                     }
                 }
-
-                override fun onError(error: Throwable) {
-                    isDownloading = false
+            } catch (e: Exception) {
+                synthesizer.close()
+                runOnUiThread {
+                    isLoading = false
                     setProgressVisible(false)
-                    showError("Failed to prepare assets: ${error.message}")
+                    showError("Failed to load voice: ${e.message}")
                     updateUiState()
                 }
-            },
-        )
-    }
-
-    /** Managed per-language cache directory used as the synthesizer's `g2p_root`. */
-    private fun modelDirFor(language: String): File =
-        ModelCache.directoryFor(this, ModelSpec.tts(language, null), null)
-
-    private fun onLanguageChanged() {
-        g2pRoot = modelDirFor(selectedLanguage.id).absolutePath
-        try {
-            refreshVoices()
-        } catch (e: Exception) {
-            showError("Failed to list voices for ${selectedLanguage.displayName}: ${e.message}")
-            updateUiState()
-            return
-        }
-        val preferred =
-            availableVoices.firstOrNull { !it.needsDownload }
-                ?: availableVoices.firstOrNull()
-        selectedVoice = preferred
-        repopulateVoiceSpinner()
-        if (preferred == null) {
-            recreateSynthesizer(null)
-            updateUiState()
-        } else {
-            ensureAssetsThenRecreate(selectedLanguage, preferred)
+            }
         }
     }
 
     /**
-     * Download whatever `voice` needs (if anything), then rebuild the synthesizer for
-     * `language` + `voice`. Progress is shown in the download UI; UI controls stay disabled
-     * until the operation finishes.
+     * Lists the voices for the current language, marking the ones already on disk. All voices of
+     * a language share one cache directory, so pointing `g2p_root` at it is enough.
      */
-    private fun ensureAssetsThenRecreate(language: KokoroLanguage, voice: KokoroVoice) {
-        if (isDownloading) return
-
-        if (!voice.needsDownload) {
-            try {
-                selectedLanguage = language
-                selectedVoice = voice
-                g2pRoot = modelDirFor(language.id).absolutePath
-                recreateSynthesizer(voice.id)
-            } catch (e: Exception) {
-                showError("Failed to load voice: ${e.message}")
-            }
-            updateUiState()
-            return
-        }
-
-        isDownloading = true
-        hideError()
-        setProgressVisible(true)
-        binding.loadingLabel.text = getString(R.string.initializing)
-        g2pRoot = modelDirFor(language.id).absolutePath
-        updateUiState()
-
-        // Download only; the synthesizer is (re)built on the main thread in onSuccess.
-        CatalogLoader.load(
-            this,
-            listOf(ModelSpec.tts(language.id, voice.id)),
-            CatalogLoader.Builder<Unit> { },
-            object : LoadCallback<Unit> {
-                override fun onProgress(progress: DownloadProgress) = showDownloadProgress(progress)
-
-                override fun onSuccess(unused: Unit) {
-                    isDownloading = false
-                    setProgressVisible(false)
-                    try {
-                        selectedLanguage = language
-                        refreshVoices()
-                        selectedVoice =
-                            availableVoices.firstOrNull { it.id == voice.id }
-                                ?: availableVoices.firstOrNull { !it.needsDownload }
-                        repopulateVoiceSpinner()
-                        recreateSynthesizer(selectedVoice?.id)
-                        hideError()
-                    } catch (e: Exception) {
-                        showError("Failed to load voice: ${e.message}")
-                    }
-                    updateUiState()
-                }
-
-                override fun onError(error: Throwable) {
-                    isDownloading = false
-                    setProgressVisible(false)
-                    showError("Download failed: ${error.message}")
-                    updateUiState()
-                }
-            },
-        )
-    }
-
     private fun refreshVoices() {
-        val json =
-            TextToSpeech.getTtsVoices(
+        val root = ModelCache.directoryFor(this, ModelSpec.tts(selectedLanguage.id, null), null)
+        availableVoices = try {
+            val json = TextToSpeech.getTtsVoices(
                 selectedLanguage.id,
-                listOf(TranscriberOption("g2p_root", g2pRoot)),
+                listOf(TranscriberOption("g2p_root", root.absolutePath)),
             )
-        availableVoices = parseVoices(json, selectedLanguage)
-        if (availableVoices.isNotEmpty()) {
-            val currentId = selectedVoice?.id
-            if (currentId == null || availableVoices.none { it.id == currentId }) {
-                selectedVoice = availableVoices.firstOrNull { !it.needsDownload }
-                    ?: availableVoices.first()
-            }
-        } else {
-            selectedVoice = null
+            parseVoices(json, selectedLanguage)
+        } catch (e: Exception) {
+            showError("Failed to list voices for ${selectedLanguage.displayName}: ${e.message}")
+            emptyList()
+        }
+        val currentId = selectedVoice?.id
+        if (currentId == null || availableVoices.none { it.id == currentId }) {
+            selectedVoice = availableVoices.firstOrNull { !it.needsDownload }
+                ?: availableVoices.firstOrNull()
         }
     }
 
@@ -409,21 +309,6 @@ class MainActivity : AppCompatActivity() {
         return "$pretty (Piper)"
     }
 
-    private fun recreateSynthesizer(voiceId: String?) {
-        tts?.close()
-        tts = null
-        val opts = ArrayList<TranscriberOption>()
-        if (voiceId != null) {
-            opts.add(TranscriberOption("voice", voiceId))
-        }
-        tts =
-            TextToSpeech(
-                selectedLanguage.id,
-                g2pRoot,
-                opts,
-            )
-    }
-
     private fun repopulateVoiceSpinner() {
         val labels = availableVoices.map { it.displayName }
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, labels)
@@ -438,19 +323,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateUiState() {
-        val busy = !engineReady || isSpeaking || isDownloading
+        val busy = !engineReady || isSpeaking || isLoading
         binding.languageSpinner.isEnabled = !busy
         binding.voiceSpinner.isEnabled = !busy && availableVoices.isNotEmpty()
         binding.inputText.isEnabled = !busy
 
         // When the input is empty, pressing Speak says "Hello world" (see speakCurrentText),
-        // so we only need a usable engine/voice to enable the button.
-        val canSpeak =
-            engineReady &&
-                !isSpeaking &&
-                !isDownloading &&
-                selectedVoice?.needsDownload == false
-        binding.speakButton.isEnabled = canSpeak
+        // so we only need a usable engine to enable the button.
+        binding.speakButton.isEnabled = engineReady && !isSpeaking && !isLoading
         binding.speakButton.text =
             if (isSpeaking) {
                 getString(R.string.speaking)
@@ -459,136 +339,41 @@ class MainActivity : AppCompatActivity() {
             }
     }
 
-    private fun speakWelcome() {
-        speakUtterance("Welcome to Moonshine Text to Speech")
-    }
-
     private fun speakCurrentText() {
         val text = binding.inputText.text?.toString()?.trim().orEmpty()
         speakUtterance(text.ifEmpty { "Hello world" })
     }
 
-    /**
-     * Synthesize PCM and play it via a plain [AudioTrack].
-     *
-     * We deliberately do not use `TextToSpeech.say()` / `AudioTrack.Builder.setContext()` here
-     * because on some Android 15 emulators `audioserver` fails `validateUidPackagePair` for the
-     * caller's UID and `AudioTrack` fails to initialize (see `logcat`: `AudioTrack-JNI ... Error`
-     * `-22 initializing AudioTrack`). Building the track without `setContext` sidesteps that path.
-     */
+    /** `say` synthesizes and plays, returning once the audio has finished. */
     private fun speakUtterance(text: String) {
-        val t = tts ?: return
+        val synthesizer = tts ?: return
         isSpeaking = true
         updateUiState()
-        thread {
+        worker.execute {
             var errorMessage: String? = null
             try {
-                val result = t.synthesize(text)
-                val samples = result.samples ?: FloatArray(0)
-                val sampleRate = result.sampleRateHz
-                if (samples.isNotEmpty() && sampleRate > 0) {
-                    playSamples(samples, sampleRate)
-                }
+                synthesizer.say(text)
             } catch (e: Exception) {
                 errorMessage = "Speech failed: ${e.message}"
-            } finally {
-                mainHandler.post {
-                    isSpeaking = false
-                    if (errorMessage != null) {
-                        binding.errorText.text = errorMessage
-                        binding.errorText.visibility = View.VISIBLE
-                    }
-                    updateUiState()
+            }
+            val message = errorMessage
+            runOnUiThread {
+                isSpeaking = false
+                if (message != null) {
+                    showError(message)
                 }
+                updateUiState()
             }
         }
     }
 
-    private fun playSamples(samples: FloatArray, sampleRate: Int) {
-        val minBuf =
-            AudioTrack.getMinBufferSize(
-                sampleRate,
-                AudioFormat.CHANNEL_OUT_MONO,
-                AudioFormat.ENCODING_PCM_FLOAT,
-            )
-        if (minBuf <= 0) {
-            throw RuntimeException("AudioTrack.getMinBufferSize failed for sampleRate=$sampleRate")
-        }
-        val attrs =
-            AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                .build()
-        val format =
-            AudioFormat.Builder()
-                .setSampleRate(sampleRate)
-                .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
-                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                .build()
-        val track =
-            AudioTrack.Builder()
-                .setAudioAttributes(attrs)
-                .setAudioFormat(format)
-                .setBufferSizeInBytes(minBuf.coerceAtLeast(samples.size * 4).coerceAtMost(minBuf * 8))
-                .setTransferMode(AudioTrack.MODE_STREAM)
-                .build()
-        try {
-            if (track.state != AudioTrack.STATE_INITIALIZED) {
-                throw RuntimeException("AudioTrack failed to initialize (state=${track.state})")
-            }
-            track.play()
-            var offset = 0
-            while (offset < samples.size) {
-                val wrote =
-                    track.write(
-                        samples,
-                        offset,
-                        samples.size - offset,
-                        AudioTrack.WRITE_BLOCKING,
-                    )
-                if (wrote <= 0) {
-                    throw RuntimeException("AudioTrack.write returned $wrote")
-                }
-                offset += wrote
-            }
-            val deadline = System.nanoTime() + 60_000_000_000L
-            while (System.nanoTime() < deadline) {
-                if (track.playbackHeadPosition >= samples.size - 1) break
-                try {
-                    Thread.sleep(10)
-                } catch (_: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                    break
-                }
-            }
-        } finally {
-            try {
-                track.stop()
-            } catch (_: Exception) {
-            }
-            track.release()
-        }
-    }
-
-    /** Called on the main thread by [CatalogLoader] as files download. */
-    private fun showDownloadProgress(progress: DownloadProgress) {
+    private fun showProgress(fraction: Float, file: String) {
         binding.loadingLabel.text =
-            getString(
-                R.string.downloading_asset,
-                displayNameForKey(progress.relativePath),
-                progress.fileIndex,
-                progress.totalFiles,
-            )
+            getString(R.string.downloading_asset, displayNameForKey(file))
         val indicator = binding.downloadProgress
         indicator.visibility = View.VISIBLE
-        if (progress.bytesTotal > 0) {
-            indicator.isIndeterminate = false
-            val pct =
-                ((progress.bytesDownloaded * 100L) / progress.bytesTotal).coerceIn(0L, 100L).toInt()
-            indicator.progress = pct
-        } else {
-            indicator.isIndeterminate = true
-        }
+        indicator.isIndeterminate = false
+        indicator.progress = (fraction * 100).toInt().coerceIn(0, 100)
     }
 
     /** Keep the progress label short: show just the filename, not the full asset key. */
@@ -606,7 +391,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showError(message: String) {
-        engineReady = tts != null && g2pRoot.isNotEmpty()
         binding.errorText.text = message
         binding.errorText.visibility = View.VISIBLE
     }

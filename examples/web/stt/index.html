@@ -54,11 +54,7 @@
       const moduleUrl = useLocal
         ? '/wasm/dist/index.js'
         : 'https://cdn.jsdelivr.net/npm/@moonshine-ai/moonshine-wasm/dist/index.js';
-      const {
-        MicrophoneTranscriber,
-        Transcriber,
-        ModelArch,
-      } = await import(moduleUrl);
+      const { MicTranscriber, Transcriber, ModelArch } = await import(moduleUrl);
 
       const toggle = document.getElementById('toggle');
       const statusEl = document.getElementById('status');
@@ -82,25 +78,19 @@
         }
       }
 
-      const listener = {
-        onLineTextChanged: (e) => render(e.line.text),
-        onLineCompleted: (e) => { lines.set(e.line.id, e.line.text); render(); },
-        onError: (e) => { statusEl.textContent = 'Error: ' + e.error.message; },
-      };
-
       async function start() {
         statusEl.textContent = 'Loading model (first run downloads it)…';
         toggle.disabled = true;
         try {
-          mic = await MicrophoneTranscriber.load({
-            language: 'en',
-            modelArch: ModelArch.MediumStreaming,
-            listeners: [listener],
-            onProgress: (loaded, total, file) => {
-              const pct = total ? ` ${Math.round((100 * loaded) / total)}%` : '';
-              statusEl.textContent = `Downloading ${file}${pct}…`;
-            },
-          });
+          mic = new MicTranscriber()
+            .onText((text) => render(text))
+            .onLine((line) => { lines.set(line.id, line.text); render(); })
+            .onError((error) => { statusEl.textContent = 'Error: ' + error.message; })
+            .onProgress((fraction, file) => {
+              statusEl.textContent = `Downloading ${file} ${Math.round(100 * fraction)}%…`;
+            });
+
+          await mic.load();
           await mic.start();
           running = true;
           statusEl.textContent = 'Listening… speak now.';

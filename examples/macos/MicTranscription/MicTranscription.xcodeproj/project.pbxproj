@@ -50,7 +50,7 @@
 			path = Sources/MicTranscription;
 			sourceTree = "<group>";
 		};
-		B8B49A6A12013730.0.7254E = {
+		B8B49A6A12013730B0F6054E = {
 			isa = PBXGroup;
 			children = (
 				7EEA7A59511F12BB6EA396A3 /* MicTranscription */,
@@ -98,7 +98,7 @@
 				Base,
 				en,
 			);
-			mainGroup = B8B49A6A12013730.0.7254E;
+			mainGroup = B8B49A6A12013730B0F6054E;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				E68EFCE52E5CBD663A132D80 /* XCRemoteSwiftPackageReference "moonshine-swift" */,

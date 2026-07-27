@@ -21,15 +21,15 @@ import org.json.JSONObject;
 
 /**
  * Downloads the model/data files a Moonshine engine needs into an app-chosen directory, then hands
- * back that directory for loading with {@link Transcriber}, {@link TextToSpeech}, or
- * {@link IntentRecognizer}.
+ * back that directory for loading with {@link Transcriber}, {@link MicTranscriber}, or
+ * {@link TextToSpeech}.
  *
  * <p>This is <b>opt-in</b>: apps that bundle their models never need it and default behavior is
  * unchanged. File lists come from the native dependency catalog (via
- * {@link Transcriber#getSttDependencies}, {@link IntentRecognizer#getIntentDependencies},
- * {@link TextToSpeech#getTtsDependencies}, {@link TextToSpeech#getG2pDependencies}), downloads are
- * written atomically (through a {@code .part} file), resume across interruptions with HTTP Range,
- * and report progress through an optional listener.
+ * {@link Transcriber#getSttDependencies}, {@link TextToSpeech#getTtsDependencies},
+ * {@link TextToSpeech#getG2pDependencies}, and the intent-model equivalent that
+ * {@link DialogFlow} uses), downloads are written atomically (through a {@code .part} file),
+ * resume across interruptions with HTTP Range, and report progress through an optional listener.
  *
  * <p>{@link #ensureModelPresent} performs blocking network I/O; call it off the main thread (or use
  * {@link MoonshineDownloadWorker} to run it under WorkManager with network constraints and retry).

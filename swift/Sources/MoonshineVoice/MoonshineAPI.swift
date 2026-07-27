@@ -130,6 +130,57 @@ internal final class MoonshineAPI: @unchecked Sendable {
         return parseTranscript(transcriptPtr)
     }
 
+    /// Find the best short window of speech in a recording, for voice cloning.
+    ///
+    /// Wraps ``moonshine_extract_speech_clip``. Returns `nil` when the recording
+    /// does not yet contain enough speech, which is how the incremental capture
+    /// path knows to keep listening.
+    func extractSpeechClip(
+        audioData: [Float],
+        sampleRate: Int32,
+        clipDurationSeconds: Float,
+        minimumSpeechSeconds: Float
+    ) throws -> (audio: [Float]?, startTime: Float, speechDuration: Float) {
+        let options = [
+            TranscriberOption(
+                name: "clip_duration_seconds", value: String(clipDurationSeconds)),
+            TranscriberOption(
+                name: "minimum_speech_seconds", value: String(minimumSpeechSeconds)),
+        ]
+        let nameCStrings = options.map { $0.name.cString(using: .utf8)! }
+        let valueCStrings = options.map { $0.value.cString(using: .utf8)! }
+        let optionStructs = (0..<options.count).map { i -> moonshine_option_t in
+            moonshine_option_t(
+                name: nameCStrings[i].withUnsafeBufferPointer { $0.baseAddress },
+                value: valueCStrings[i].withUnsafeBufferPointer { $0.baseAddress }
+            )
+        }
+
+        var clip = moonshine_speech_clip_t()
+        let error = withExtendedLifetime((nameCStrings, valueCStrings, optionStructs)) {
+            audioData.withUnsafeBufferPointer { audio in
+                optionStructs.withUnsafeBufferPointer { opts in
+                    moonshine_extract_speech_clip(
+                        audio.baseAddress,
+                        UInt64(audioData.count),
+                        sampleRate,
+                        opts.baseAddress,
+                        UInt64(options.count),
+                        &clip
+                    )
+                }
+            }
+        }
+        try checkError(error)
+
+        guard clip.is_complete != 0, let samples = clip.audio_data, clip.audio_length > 0 else {
+            return (nil, clip.start_time, clip.speech_duration)
+        }
+        let audio = Array(UnsafeBufferPointer(start: samples, count: Int(clip.audio_length)))
+        moonshine_free_buffer(samples)
+        return (audio, clip.start_time, clip.speech_duration)
+    }
+
     /// Create a stream for real-time transcription.
     func createStream(transcriberHandle: Int32, flags: UInt32) throws -> Int32 {
         let handle = moonshine_create_stream(transcriberHandle, flags)

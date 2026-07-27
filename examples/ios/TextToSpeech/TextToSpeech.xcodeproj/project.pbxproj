@@ -8,11 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		A10001012F0762A200CE654B /* MoonshineVoice in Frameworks */ = {isa = PBXBuildFile; productRef = A10001022F0762A200CE654C /* MoonshineVoice */; };
-		A10001032F09C4D70066D587 /* tts-data in Resources */ = {isa = PBXBuildFile; fileRef = A10001042F09C4D70066D587 /* tts-data */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		A10001042F09C4D70066D587 /* tts-data */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "tts-data"; sourceTree = "<group>"; };
 		A10001052F0762A100CE654A /* TextToSpeech.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TextToSpeech.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -39,7 +37,6 @@
 		A10001082F0762A100CE654A = {
 			isa = PBXGroup;
 			children = (
-				A10001042F09C4D70066D587 /* tts-data */,
 				A10001062F0762A100CE654A /* TextToSpeech */,
 				A10001092F0762A100CE654A /* Products */,
 			);
@@ -121,7 +118,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10001032F09C4D70066D587 /* tts-data in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

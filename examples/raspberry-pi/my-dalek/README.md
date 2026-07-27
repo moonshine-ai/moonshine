@@ -37,8 +37,6 @@ python my-dalek.py
 You should see output like this:
 
 ```bash
-Registered 6 intents
-
 ============================================================
 🎤 Listening for voice commands...
 Try saying phrases with the same meaning as these actions:
@@ -58,18 +56,18 @@ As the instructions suggest, try saying some phrases you might use to control a 
 If you look at the code, you will see that we have a set of functions that we match to the phrases that should trigger them:
 
 ```python
-def on_move_forward(trigger: str, utterance: str, similarity: float):
-    print(f"Moving forward with {similarity:.0%} confidence")
-def on_move_backward(trigger: str, utterance: str, similarity: float):
-    print(f"Moving backward with {similarity:.0%} confidence")
-def on_turn_left(trigger: str, utterance: str, similarity: float):
-    print(f"Turning left with {similarity:.0%} confidence")
-def on_turn_right(trigger: str, utterance: str, similarity: float):
-    print(f"Turning right with {similarity:.0%} confidence")
-def on_exterminate(trigger: str, utterance: str, similarity: float):
-    print(f"EXTERMINATE! with {similarity:.0%} confidence")
+def on_move_forward(d):
+    print("Moving forward")
+def on_move_backward(d):
+    print("Moving backward")
+def on_turn_left(d):
+    print("Turning left")
+def on_turn_right(d):
+    print("Turning right")
+def on_exterminate(d):
+    print("EXTERMINATE!")
 
-intents = {
+commands = {
     "move forward": on_move_forward,
     "move backward": on_move_backward,
     "turn left": on_turn_left,
@@ -77,7 +75,18 @@ intents = {
     "kill all humans": on_exterminate,
     "exterminate": on_exterminate,
 }
+
+dalek = DialogFlow()
+for phrase, handler in commands.items():
+    dalek.register_global(phrase, handler)
 ```
+
+`DialogFlow` is the entry point for voice interfaces. Here we only register
+"globals" — single-shot commands that are live at all times — but the same
+runner also handles multi-turn conversations through `register_flow`, where it
+can ask a question, wait for the answer, and confirm it. Either way it
+downloads and loads the models it needs for you the first time it hears
+something.
 
 In a real project each function would have code that controls the robot's wheels, or activates its sink-plunger death-ray, but since I've had trouble understanding Davros's documentation, I've left acquiring the hardware and implementing those as an exercise for the reader.
 

@@ -379,6 +379,52 @@ class IntentRecognizer {
   int32_t handle_ = -1;
 };
 
+// ---------------------------------------------------------------------------
+// Speech clip extraction (voice cloning reference clips)
+// ---------------------------------------------------------------------------
+
+struct JsSpeechClip {
+  val audio = val::undefined();  // Float32Array, 16 kHz mono; empty if !ready
+  float startTime = 0.0f;
+  float speechDuration = 0.0f;
+  bool isComplete = false;
+};
+
+// Wraps moonshine_extract_speech_clip. `clipDurationSeconds` and
+// `minimumSpeechSeconds` mirror the C options of the same name. Safe to call
+// repeatedly on a growing buffer: `isComplete` reports whether enough speech
+// has been captured yet.
+JsSpeechClip extract_speech_clip(val audio, int32_t sample_rate,
+                                 float clip_duration_seconds,
+                                 float minimum_speech_seconds) {
+  const std::vector<float> pcm = to_float_vector(audio);
+  JsSpeechClip result;
+  if (pcm.empty()) {
+    return result;
+  }
+  const std::string clip_duration = std::to_string(clip_duration_seconds);
+  const std::string minimum_speech = std::to_string(minimum_speech_seconds);
+  const moonshine_option_t options[] = {
+      {"clip_duration_seconds", clip_duration.c_str()},
+      {"minimum_speech_seconds", minimum_speech.c_str()},
+  };
+  moonshine_speech_clip_t clip{};
+  check(moonshine_extract_speech_clip(pcm.data(), pcm.size(), sample_rate,
+                                      options, 2, &clip));
+  result.startTime = clip.start_time;
+  result.speechDuration = clip.speech_duration;
+  result.isComplete = clip.is_complete != 0;
+  if (clip.audio_data != nullptr && clip.audio_length > 0) {
+    result.audio = val::global("Float32Array")
+                       .new_(static_cast<double>(clip.audio_length));
+    val heap = val(
+        emscripten::typed_memory_view(clip.audio_length, clip.audio_data));
+    result.audio.call<void>("set", heap);
+    moonshine_free_buffer(clip.audio_data);
+  }
+  return result;
+}
+
 #if defined(MOONSHINE_C_API_MOONSHINE_TTS) && MOONSHINE_C_API_MOONSHINE_TTS
 
 // ---------------------------------------------------------------------------
@@ -641,6 +687,12 @@ EMSCRIPTEN_BINDINGS(moonshine) {
       .field("canonicalPhrase", &JsIntentMatch::canonicalPhrase)
       .field("similarity", &JsIntentMatch::similarity);
 
+  value_object<JsSpeechClip>("MoonshineSpeechClip")
+      .field("audio", &JsSpeechClip::audio)
+      .field("startTime", &JsSpeechClip::startTime)
+      .field("speechDuration", &JsSpeechClip::speechDuration)
+      .field("isComplete", &JsSpeechClip::isComplete);
+
   class_<Transcriber>("Transcriber")
       .constructor<val, val, uint32_t, val, val>()
       .function("transcribe", &Transcriber::transcribe)
@@ -685,4 +737,5 @@ EMSCRIPTEN_BINDINGS(moonshine) {
   function("version", &version);
   function("sttDependencies", &stt_dependencies);
   function("intentDependencies", &intent_dependencies);
+  function("extractSpeechClip", &extract_speech_clip);
 }

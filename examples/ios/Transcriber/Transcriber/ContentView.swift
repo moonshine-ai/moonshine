@@ -10,22 +10,19 @@ import SwiftUI
 import MoonshineVoice
 
 struct ContentView: View {
-    @Binding var isRecording: Bool
-    @Binding var messages: [TranscriptLine]
-    @Binding var status: String
-    /// Disables the mic button until the model has finished downloading/loading.
-    var isReady: Bool = false
-    
+    @ObservedObject var session: TranscriptionSession
+
     var body: some View {
         VStack {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
-                        ForEach(messages, id: \.lineId) { message in
-                            Text(message.text)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal)
-                                .padding(.vertical, 4)
+                        ForEach(Array(session.lines.enumerated()), id: \.offset) { _, line in
+                            transcriptText(line)
+                        }
+                        if !session.liveText.isEmpty {
+                            transcriptText(session.liveText)
+                                .foregroundColor(.secondary)
                         }
                         // Bottom anchor for scrolling
                         Color.clear
@@ -34,22 +31,18 @@ struct ContentView: View {
                     }
                     .padding(.vertical)
                 }
-                .onChange(of: messages.count) { _, _ in
-                    withAnimation {
-                        proxy.scrollTo("bottom", anchor: .bottom)
-                    }
+                .onChange(of: session.lines.count) { _, _ in
+                    withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
-                .onChange(of: messages.last?.text) { _, _ in
-                    withAnimation {
-                        proxy.scrollTo("bottom", anchor: .bottom)
-                    }
+                .onChange(of: session.liveText) { _, _ in
+                    withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
             }
-            
+
             Spacer()
 
-            if !status.isEmpty {
-                Text(status)
+            if !session.status.isEmpty {
+                Text(session.status)
                     .font(.footnote)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -58,29 +51,34 @@ struct ContentView: View {
 
             HStack {
                 Spacer()
-                Button(action: {
-                    isRecording.toggle()
-                }) {
-                    Image(systemName: isRecording ? "mic.fill" : "mic")
+                Button(action: { session.toggleRecording() }) {
+                    Image(systemName: session.isRecording ? "mic.fill" : "mic")
                         .font(.system(size: 36))
-                        .foregroundColor(isRecording ? .red : .blue)
+                        .foregroundColor(session.isRecording ? .red : .blue)
                         .padding()
                         .background(
                             Circle()
-                                .fill(isRecording ? Color.red.opacity(0.2) : Color.blue.opacity(0.2))
+                                .fill(
+                                    session.isRecording
+                                        ? Color.red.opacity(0.2) : Color.blue.opacity(0.2))
                         )
                 }
-                .disabled(!isReady)
-                .opacity(isReady ? 1 : 0.4)
+                .disabled(!session.isReady)
+                .opacity(session.isReady ? 1 : 0.4)
                 Spacer()
             }
         }
         .padding()
     }
+
+    private func transcriptText(_ text: String) -> some View {
+        Text(text)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal)
+            .padding(.vertical, 4)
+    }
 }
 
 #Preview {
-    ContentView(
-        isRecording: .constant(false), messages: .constant([]),
-        status: .constant("Ready"), isReady: true)
+    ContentView(session: TranscriptionSession())
 }

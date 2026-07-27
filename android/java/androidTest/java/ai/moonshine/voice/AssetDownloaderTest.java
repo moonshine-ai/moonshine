@@ -97,9 +97,13 @@ public class AssetDownloaderTest {
         downloader.ensureModelPresent(root, spec, null);
         assertTrue(downloader.isModelPresent(root, spec));
 
-        TextToSpeech tts = new TextToSpeech("en_us", root.getAbsolutePath(),
-                Collections.singletonList(new TranscriberOption("voice", "kokoro_af_heart")));
+        TextToSpeech tts = new TextToSpeech(
+                InstrumentationRegistry.getInstrumentation().getTargetContext())
+                .language("en_us")
+                .voice("kokoro_af_heart")
+                .modelsFrom(root);
         try {
+            tts.load();
             TtsSynthesisResult result = tts.synthesize("Hello from the download test.");
             assertTrue(result != null);
             assertTrue("synthesis produced no audio", result.samples.length > 0);

@@ -1,13 +1,15 @@
 # Moonshine Voice for the Web (WebAssembly)
 
 `@moonshine-ai/moonshine-wasm` runs Moonshine Voice — fast, accurate,
-on-device speech-to-text, text-to-speech, and voice intent recognition —
-directly in the browser via WebAssembly. No audio ever leaves the device.
+on-device speech-to-text, text-to-speech, and voice interfaces — directly in the
+browser via WebAssembly. No audio ever leaves the device.
 
 The API mirrors the Python, Swift, and Android bindings: a thin embind bridge
-over the Moonshine C ABI, wrapped in an idiomatic TypeScript layer
-(`Transcriber`, `Stream`, `MicrophoneTranscriber`, `TextToSpeech`,
-`GraphemeToPhonemizer`, `IntentRecognizer`, `DialogFlow`).
+over the Moonshine C ABI, wrapped in an idiomatic TypeScript layer. The three
+entry points are `DialogFlow` for voice interfaces, `MicTranscriber` for live
+transcription, and `TextToSpeech` for synthesis and voice cloning. Each is
+constructed with `new`, configured with chainable setters, and prepared with a
+single `await load()`.
 
 ## Install
 
@@ -18,18 +20,13 @@ npm install @moonshine-ai/moonshine-wasm
 ## Quick start — streaming speech to text
 
 ```ts
-import { MicrophoneTranscriber, ModelArch } from '@moonshine-ai/moonshine-wasm';
+import { MicTranscriber } from '@moonshine-ai/moonshine-wasm';
 
-const mic = await MicrophoneTranscriber.load({
-  language: 'en',
-  modelArch: ModelArch.MediumStreaming,
-  listeners: [
-    {
-      onLineTextChanged: (e) => console.log('…', e.line.text),
-      onLineCompleted: (e) => console.log('✓', e.line.text),
-    },
-  ],
-});
+const mic = new MicTranscriber()
+  .onText((text) => console.log('…', text))
+  .onLine((line) => console.log('✓', line.text));
+
+await mic.load();
 await mic.start();
 // … later …
 await mic.stop();
@@ -52,28 +49,45 @@ transcriber.close();
 ```ts
 import { TextToSpeech } from '@moonshine-ai/moonshine-wasm';
 
-const tts = await TextToSpeech.load({ language: 'en' });
-await tts.speak('Hello from Moonshine.');
+const tts = new TextToSpeech();
+await tts.load();
+await tts.say('Hello from Moonshine.');
 tts.close();
 ```
 
-## Intent recognition + dialog flows
+Cloning a voice takes one more call. Pass a URL, a `File`, a `Blob`, or raw PCM;
+the binding trims it to a few seconds of speech and transcribes that clip for
+the vocoder:
 
 ```ts
-import { IntentRecognizer, DialogFlow } from '@moonshine-ai/moonshine-wasm';
+await tts.cloneFrom('some-speech.wav');
+await tts.say('Now I sound like the recording.');
+```
 
-const intent = await IntentRecognizer.load();
+## Dialog flows
 
-const runner = new DialogFlow({ intentRecognizer: intent, tts });
-runner.registerFlow('set up wifi', function* (d) {
-  const ssid = yield d.ask("What's your wifi network?");
-  if (yield d.confirm(`Connect to ${ssid}?`)) {
-    yield d.say(`Connecting to ${ssid}.`);
+`DialogFlow` is the whole voice interface: it downloads the speech, intent, and
+voice models, opens the microphone, matches trigger phrases, and runs the flow.
+Flow bodies are ordinary `async` functions.
+
+```ts
+import { DialogFlow } from '@moonshine-ai/moonshine-wasm';
+
+const dialog = new DialogFlow();
+
+dialog.listenFor('set up wifi', async (d) => {
+  const ssid = await d.ask("What's your wifi network?");
+  if (await d.confirm(`Connect to ${ssid}?`)) {
+    await d.say(`Connecting to ${ssid}.`);
   }
 });
-// Feed completed transcript lines to `runner` (it's a TranscriptEventListener):
-mic.addListener(runner);
+
+await dialog.load();
+await dialog.startListening();
 ```
+
+"cancel" and "start over" work at any point without being registered. Attach
+`dialog.onHeard(...)` and `dialog.onSaid(...)` to log the conversation.
 
 ## Models are downloaded at runtime
 

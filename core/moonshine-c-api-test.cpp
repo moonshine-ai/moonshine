@@ -1569,6 +1569,85 @@ TEST_CASE("moonshine-catalog-listing-api") {
   }
 }
 
+TEST_CASE("moonshine-extract-speech-clip-api") {
+  SUBCASE("rejects bad arguments") {
+    const std::vector<float> quiet(16000 * 6, 0.0f);
+    moonshine_speech_clip_t clip{};
+    CHECK(moonshine_extract_speech_clip(quiet.data(), quiet.size(), 16000, 
+                                        nullptr, 0, nullptr) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(moonshine_extract_speech_clip(nullptr, 16, 16000, nullptr, 0,
+                                        &clip) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(moonshine_extract_speech_clip(quiet.data(), 0, 16000, nullptr, 0,
+                                        &clip) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(moonshine_extract_speech_clip(quiet.data(), quiet.size(), 0, nullptr,
+                                        0, &clip) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+  }
+
+  SUBCASE("silence yields no clip") {
+    const std::vector<float> quiet(16000 * 6, 0.0f);
+    moonshine_speech_clip_t clip{};
+    REQUIRE(moonshine_extract_speech_clip(quiet.data(), quiet.size(), 16000,
+                                          nullptr, 0,
+                                          &clip) == MOONSHINE_ERROR_NONE);
+    CHECK(clip.is_complete == 0);
+    CHECK(clip.audio_data == nullptr);
+    CHECK(clip.audio_length == 0);
+  }
+
+  SUBCASE("speech yields a four second clip") {
+    const std::string wav_path = "two_cities.wav";
+    if (!std::filesystem::exists(wav_path)) {
+      MESSAGE("skip: " << wav_path << " not found");
+      return;
+    }
+    float* wav_data = nullptr;
+    size_t wav_data_size = 0;
+    int32_t wav_sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
+                          &wav_sample_rate));
+
+    moonshine_speech_clip_t clip{};
+    REQUIRE(moonshine_extract_speech_clip(wav_data, wav_data_size,
+                                          wav_sample_rate, nullptr, 0,
+                                          &clip) == MOONSHINE_ERROR_NONE);
+    CHECK(clip.is_complete == 1);
+    REQUIRE(clip.audio_data != nullptr);
+    CHECK(clip.audio_length == 4 * 16000);
+    CHECK(clip.speech_duration >= 2.0f);
+    moonshine_free_buffer(clip.audio_data);
+  }
+
+  SUBCASE("options control the clip length") {
+    const std::string wav_path = "two_cities.wav";
+    if (!std::filesystem::exists(wav_path)) {
+      MESSAGE("skip: " << wav_path << " not found");
+      return;
+    }
+    float* wav_data = nullptr;
+    size_t wav_data_size = 0;
+    int32_t wav_sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
+                          &wav_sample_rate));
+
+    const moonshine_option_t options[] = {
+        {.name = "clip_duration_seconds", .value = "2"},
+        {.name = "minimum_speech_seconds", .value = "1"},
+    };
+    moonshine_speech_clip_t clip{};
+    REQUIRE(moonshine_extract_speech_clip(wav_data, wav_data_size,
+                                          wav_sample_rate, options, 2,
+                                          &clip) == MOONSHINE_ERROR_NONE);
+    CHECK(clip.is_complete == 1);
+    REQUIRE(clip.audio_data != nullptr);
+    CHECK(clip.audio_length == 2 * 16000);
+    moonshine_free_buffer(clip.audio_data);
+  }
+}
+
 // Full ZipVoice synthesis needs the model bundle under ``<data>/zipvoice`` (not
 // committed in bulk). These cases exercise the built-in-voice and user-PCM
 // paths when the assets are present, and skip cleanly otherwise.

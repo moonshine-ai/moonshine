@@ -76,9 +76,9 @@
           <label class="form-check-label" for="cloneToggle">Clone my own voice</label>
         </div>
         <p class="subtle small mb-2">
-          Records from your microphone and captures a ~4&nbsp;second sample of speech
-          using Moonshine's on-device voice-activity detection (no transcription),
-          then speaks in your voice.
+          Records from your microphone until it has heard about four seconds of
+          speech, then speaks in your voice. Finding the speech in the recording
+          and transcribing it for the vocoder both happen inside the library.
         </p>
         <div class="d-flex align-items-center gap-2">
           <button id="record" class="btn btn-sm btn-outline-light" disabled>Record sample</button>
@@ -116,15 +116,10 @@
       const moduleUrl = useLocal
         ? '/wasm/dist/index.js'
         : 'https://cdn.jsdelivr.net/npm/@moonshine-ai/moonshine-wasm/dist/index.js';
-      const { TextToSpeech, Transcriber, ModelArch, loadMoonshineModule } =
-        await import(moduleUrl);
+      const { TextToSpeech, loadMoonshineModule } = await import(moduleUrl);
 
       const LANGUAGE = 'en_us';
       const ASSET_BASE = useLocalAssets ? '/tts-data' : undefined;
-      const TARGET_SR = 16000;
-      const CLONE_WINDOW_SEC = 4; // desired clone clip length
-      const CLONE_MIN_SPEECH_SEC = 2; // "majority" of the 4s window
-      const CLONE_MAX_RECORD_SEC = 20; // give up (use best window) after this
 
       // A representative voice id per engine; its prefix selects which engine's
       // voices `TextToSpeech.voices` enumerates and which vocoder is loaded.
@@ -154,19 +149,17 @@
       let tts = null; // current TextToSpeech instance
       let ttsReady = null; // Promise resolving to the current tts
       let loadToken = 0; // guards against overlapping (re)loads
-      let clonePcm = null; // extracted 16k mono reference clip
-      let cloneTranscript = ''; // transcript of the reference clip
-      let clipTranscriber = null; // real STT model, used once per captured clip
+      let clonedVoice = null; // the VoiceClone captured by "Record sample"
       let audioContext = null;
 
       function setStatus(text) { els.status.textContent = text; }
 
-      function onProgress(loaded, total, file) {
+      function onProgress(fraction, file) {
         els.progressWrap.style.display = 'block';
-        const pct = total ? Math.round((100 * loaded) / total) : 0;
+        const pct = Math.round(100 * fraction);
         els.progressBar.style.width = `${pct}%`;
         const name = (file || '').split('/').pop();
-        setStatus(`Downloading ${name}${total ? ` ${pct}%` : ''}…`);
+        setStatus(`Downloading ${name} ${pct}%…`);
       }
       function hideProgress() { els.progressWrap.style.display = 'none'; }
 
@@ -211,36 +204,24 @@
         tts = null;
         ttsReady = (async () => {
           try {
-            let instance;
-            if (isCloneMode()) {
-              if (!clonePcm) {
-                setStatus('Record a voice sample to enable cloning.');
-                return null;
-              }
-              setStatus('Loading ZipVoice cloning model…');
-              instance = await TextToSpeech.load({
-                language: LANGUAGE,
-                assetBaseUrl: ASSET_BASE,
-                clone: {
-                  audio: clonePcm,
-                  sampleRate: TARGET_SR,
-                  // ZipVoice needs a transcript of the reference clip to align
-                  // tokens to frames; without one its duration predictor
-                  // diverges. We obtain it with a single STT pass on the clip.
-                  transcript: cloneTranscript,
-                },
-                onProgress,
-              });
-            } else {
-              const voice = els.voice.value;
-              setStatus('Loading voice…');
-              instance = await TextToSpeech.load({
-                language: LANGUAGE,
-                voice,
-                assetBaseUrl: ASSET_BASE,
-                onProgress,
-              });
-            }
+            const cloning = isCloneMode();
+            setStatus(cloning ? 'Loading ZipVoice cloning model…' : 'Loading voice…');
+
+            const instance = new TextToSpeech()
+              .language(LANGUAGE)
+              .useModule(module)
+              .onProgress(onProgress);
+            if (ASSET_BASE) instance.modelsFrom(ASSET_BASE);
+            // .cloning() pulls the cloning engine up front so the first
+            // cloneFrom() after a recording is quick.
+            if (cloning) instance.cloning();
+            else instance.voice(els.voice.value);
+
+            await instance.load();
+            // The clip trimming and its transcription happen inside cloneFrom;
+            // all this page hands over is the captured sample.
+            if (cloning && clonedVoice) await instance.cloneFrom(clonedVoice);
+
             if (token !== loadToken) {
               instance.close(); // superseded by a newer selection
               return null;
@@ -248,8 +229,12 @@
             tts = instance;
             previous?.close();
             hideProgress();
-            setStatus('Ready.');
-            els.speak.disabled = false;
+            if (cloning && !clonedVoice) {
+              setStatus('Record a voice sample to enable cloning.');
+            } else {
+              setStatus('Ready.');
+              els.speak.disabled = false;
+            }
             return instance;
           } catch (err) {
             if (token === loadToken) {
@@ -299,7 +284,9 @@
           const synth = (await ttsReady) ?? (await applySelection());
           if (!synth) return;
           setStatus('Synthesizing…');
-          const { audio, sampleRate } = synth.say(els.text.value);
+          // synthesize() returns the PCM so the page can offer a download;
+          // synth.say() would play it directly instead.
+          const { audio, sampleRate } = synth.synthesize(els.text.value);
 
           const blob = pcmToWavBlob(audio, sampleRate);
           const url = URL.createObjectURL(blob);
@@ -320,172 +307,41 @@
         }
       }
 
-      // --- Voice cloning capture (VAD-only, no transcription) ------------------
-
-      /** Linear resampler to 16 kHz mono. */
-      function resampleTo16k(input, inputRate) {
-        if (inputRate === TARGET_SR) return input;
-        const ratio = inputRate / TARGET_SR;
-        const outLength = Math.floor(input.length / ratio);
-        const output = new Float32Array(outLength);
-        for (let i = 0; i < outLength; i++) {
-          const pos = i * ratio;
-          const idx = Math.floor(pos);
-          const frac = pos - idx;
-          const a = input[idx] ?? 0;
-          const b = input[idx + 1] ?? a;
-          output[i] = a + (b - a) * frac;
-        }
-        return output;
-      }
+      // --- Voice cloning capture ----------------------------------------------
 
       /**
-       * Finds the start (in seconds) of a CLONE_WINDOW_SEC window whose speech
-       * coverage (from VAD segments) is at least CLONE_MIN_SPEECH_SEC. Returns
-       * the best-covered qualifying window, or null if none yet.
+       * Records a reference sample and clones it. Everything that used to live
+       * here — resampling, running a voice-activity pass to find four seconds of
+       * actual speech, and transcribing the clip so the vocoder can align it —
+       * is inside `startCloning` and `cloneFrom` now.
        */
-      function findSpeechWindow(lines, totalDuration) {
-        if (totalDuration < CLONE_WINDOW_SEC) return null;
-        const segments = lines.map((l) => [l.startTime, l.startTime + l.duration]);
-        let best = null;
-        let bestCover = 0;
-        const limit = totalDuration - CLONE_WINDOW_SEC;
-        for (let ws = 0; ws <= limit + 1e-6; ws += 0.1) {
-          const we = ws + CLONE_WINDOW_SEC;
-          let cover = 0;
-          for (const [s, e] of segments) {
-            cover += Math.max(0, Math.min(e, we) - Math.max(s, ws));
-          }
-          if (cover > bestCover) { bestCover = cover; best = ws; }
-        }
-        return bestCover >= CLONE_MIN_SPEECH_SEC ? best : null;
-      }
-
-      function concatChunks(chunks, total) {
-        const out = new Float32Array(total);
-        let offset = 0;
-        for (const c of chunks) { out.set(c, offset); offset += c.length; }
-        return out;
-      }
-
-      /**
-       * Records from the microphone and returns a 4-second mono@16k clip that is
-       * mostly speech, using a Moonshine transcriber in `skip_transcription`
-       * mode (VAD + segmentation only — no STT model is downloaded or run).
-       */
-      async function recordCloneClip() {
-        const media = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const ac = new AudioContext();
-        const inputRate = ac.sampleRate;
-        const source = ac.createMediaStreamSource(media);
-        const node = ac.createScriptProcessor(4096, 1, 1);
-
-        const vad = await Transcriber.load({
-          files: new Map(), // no model files needed in skip_transcription mode
-          modelArch: ModelArch.Tiny,
-          options: { skip_transcription: 'true' },
-          module,
-        });
-        const stream = vad.createStream();
-        stream.start();
-
-        const chunks = [];
-        let total = 0;
-        let settle;
-        const done = new Promise((resolve) => (settle = resolve));
-
-        const cleanup = async () => {
-          node.disconnect();
-          source.disconnect();
-          media.getTracks().forEach((t) => t.stop());
-          try { stream.stop(); } catch {}
-          stream.close();
-          vad.close();
-          await ac.close();
-        };
-
-        node.onaudioprocess = (event) => {
-          const rs = resampleTo16k(new Float32Array(event.inputBuffer.getChannelData(0)), inputRate);
-          chunks.push(rs);
-          total += rs.length;
-          const seconds = total / TARGET_SR;
-          stream.addAudio(rs, TARGET_SR);
-          const transcript = stream.transcribe();
-          const start = findSpeechWindow(transcript.lines, seconds);
-          if (start != null) {
-            settle({ start });
-          } else if (seconds >= CLONE_MAX_RECORD_SEC) {
-            // Fall back to the best window we can (may be mostly silence).
-            const fallback = findSpeechWindow(transcript.lines, seconds);
-            settle({ start: fallback ?? Math.max(0, seconds - CLONE_WINDOW_SEC) });
-          } else {
-            els.cloneStatus.textContent = `Listening… ${seconds.toFixed(1)}s`;
-          }
-        };
-
-        source.connect(node);
-        node.connect(ac.destination);
-
-        const { start } = await done;
-        const recording = concatChunks(chunks, total);
-        await cleanup();
-
-        const from = Math.floor(start * TARGET_SR);
-        const clip = recording.slice(from, from + CLONE_WINDOW_SEC * TARGET_SR);
-        return clip;
-      }
-
-      /**
-       * Loads (once) a real Moonshine STT model used only to transcribe the
-       * captured clone clip. The capture loop itself uses `skip_transcription`
-       * (VAD only), so this heavier model runs a single time per sample rather
-       * than continuously while recording.
-       */
-      async function ensureClipTranscriber() {
-        if (clipTranscriber) return clipTranscriber;
-        if (useLocalAssets) {
-          const base = '/test-assets/tiny-en';
-          clipTranscriber = await Transcriber.loadFromUrls(
-            {
-              'encoder_model.ort': `${base}/encoder_model.ort`,
-              'decoder_model_merged.ort': `${base}/decoder_model_merged.ort`,
-              'tokenizer.bin': `${base}/tokenizer.bin`,
-            },
-            { modelArch: ModelArch.Tiny, module },
-          );
-        } else {
-          clipTranscriber = await Transcriber.load({
-            language: 'en',
-            modelArch: ModelArch.Base,
-            module,
-            onProgress,
-          });
-        }
-        return clipTranscriber;
-      }
-
       async function onRecord() {
         els.record.disabled = true;
         els.cloneStatus.classList.add('pulse');
         els.cloneStatus.textContent = 'Requesting microphone…';
         try {
-          clonePcm = await recordCloneClip();
-          els.cloneStatus.textContent = 'Transcribing sample…';
-          const stt = await ensureClipTranscriber();
-          const transcript = stt.transcribe(clonePcm, { sampleRate: TARGET_SR });
-          cloneTranscript = transcript.lines
-            .map((l) => l.text)
-            .join(' ')
-            .trim();
+          const synth = await ttsReady;
+          if (!synth) return;
+
+          const clone = synth.startCloning();
+          clone.onProgress((recorded, speech) => {
+            els.cloneStatus.textContent =
+              `Listening… ${recorded.toFixed(1)}s (${speech.toFixed(1)}s of speech)`;
+          });
+          clone.onReady(() => {
+            els.cloneStatus.textContent = 'Got enough — you can stop talking.';
+          });
+
+          await clone.fromMicrophone();
           els.cloneStatus.classList.remove('pulse');
-          if (!cloneTranscript) {
-            els.cloneStatus.textContent = 'No speech detected — try recording again.';
-            clonePcm = null;
-            return;
-          }
+          els.cloneStatus.textContent = 'Cloning your voice…';
+
+          await synth.cloneFrom(clone);
+          clonedVoice = clone;
           els.cloneStatus.textContent =
-            `Captured ${(clonePcm.length / TARGET_SR).toFixed(1)}s: “${cloneTranscript}” ✓`;
-          await applySelection();
+            `Cloned from ${(clone.audio.length / clone.sampleRate).toFixed(1)}s of speech ✓`;
+          els.speak.disabled = false;
+          setStatus('Ready.');
         } catch (err) {
           els.cloneStatus.classList.remove('pulse');
           els.cloneStatus.textContent = 'Mic error: ' + err.message;
@@ -506,7 +362,7 @@
       }
 
       els.engine.addEventListener('change', async () => {
-        clonePcm = null;
+        clonedVoice = null;
         els.cloneToggle.checked = false;
         await populateVoices(currentEngine());
         syncCloneUi();
@@ -517,9 +373,7 @@
 
       els.cloneToggle.addEventListener('change', async () => {
         syncCloneUi();
-        // Entering clone mode without a sample just waits for a recording.
-        if (!isCloneMode() || clonePcm) await applySelection();
-        else setStatus('Record a voice sample to enable cloning.');
+        await applySelection();
       });
 
       els.record.addEventListener('click', onRecord);

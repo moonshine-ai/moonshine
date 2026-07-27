@@ -70,9 +70,7 @@ struct TtsVoice: Identifiable, Hashable {
 /// Lightweight description of an ongoing asset download, surfaced to SwiftUI.
 struct DownloadStatus: Equatable {
     let fileName: String
-    let fileIndex: Int
-    let totalFiles: Int
-    let fraction: Double?  // nil when server didn't report Content-Length
+    let fraction: Double
 }
 
 /// Observable model that owns the TTS synthesizer, mirrors Android's on-demand
@@ -91,7 +89,6 @@ class TTSModel: ObservableObject {
     @Published var errorMessage: String? = nil
 
     private var tts: MoonshineVoice.TextToSpeech? = nil
-    private var g2pRoot: URL?
 
     func initialize() {
         #if os(iOS)
@@ -107,66 +104,13 @@ class TTSModel: ObservableObject {
         Task { await bootstrap() }
     }
 
-    // MARK: - Bootstrap / asset staging
+    // MARK: - Bootstrap
 
     private func bootstrap() async {
         isBootstrapping = true
         errorMessage = nil
-        do {
-            let root = try prepareG2PRoot()
-            g2pRoot = root
-            // Fetch whatever the default en_us + af_alloy bundle needs beyond the
-            // Kokoro model/voice we ship inside the app.
-            try await downloadAssets(
-                g2pRoot: root, language: selectedLanguage.id, voice: "kokoro_af_alloy")
-            try createSynthesizer(voice: "kokoro_af_alloy")
-            refreshVoices(preferVoice: "kokoro_af_alloy")
-            isReady = true
-        } catch {
-            errorMessage = "Failed to initialize TTS: \(error.localizedDescription)"
-        }
+        await createSynthesizer(voice: "kokoro_af_alloy")
         isBootstrapping = false
-    }
-
-    /// Copies the read-only `tts-data/` bundle into a writable Application Support
-    /// location on first launch, returning the writable URL.
-    private func prepareG2PRoot() throws -> URL {
-        let fm = FileManager.default
-        let support = try fm.url(
-            for: .applicationSupportDirectory, in: .userDomainMask,
-            appropriateFor: nil, create: true)
-        let root = support.appendingPathComponent("tts-data", isDirectory: true)
-        try fm.createDirectory(at: root, withIntermediateDirectories: true)
-
-        guard let bundled = Bundle.main.url(forResource: "tts-data", withExtension: nil) else {
-            return root
-        }
-        try copyBundledTree(from: bundled, to: root, fm: fm)
-        return root
-    }
-
-    /// Copy each file from the bundled read-only tree into the writable root,
-    /// skipping files that already exist (cached from a previous launch).
-    private func copyBundledTree(from src: URL, to dst: URL, fm: FileManager) throws {
-        guard
-            let enumerator = fm.enumerator(
-                at: src, includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles])
-        else { return }
-        for case let url as URL in enumerator {
-            let rel = url.path.replacingOccurrences(of: src.path + "/", with: "")
-            let target = dst.appendingPathComponent(rel)
-            let isDir =
-                (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-            if isDir {
-                try fm.createDirectory(at: target, withIntermediateDirectories: true)
-            } else if !fm.fileExists(atPath: target.path) {
-                try fm.createDirectory(
-                    at: target.deletingLastPathComponent(),
-                    withIntermediateDirectories: true)
-                try fm.copyItem(at: url, to: target)
-            }
-        }
     }
 
     // MARK: - Public language / voice switching
@@ -183,110 +127,75 @@ class TTSModel: ObservableObject {
         if let preferred = preferred {
             changeVoice(preferred)
         } else {
-            Task { await ensureAssetsThenRecreate(voice: nil) }
+            Task { await createSynthesizer(voice: nil) }
         }
     }
 
     func changeVoice(_ voice: TtsVoice?) {
         selectedVoice = voice
-        Task { await ensureAssetsThenRecreate(voice: voice?.id) }
+        Task { await createSynthesizer(voice: voice?.id) }
     }
 
     func speak(_ text: String) {
         guard let tts = tts, !text.isEmpty else { return }
         isSpeaking = true
-        let currentTts = tts
-        currentTts.say(text)
-        Task.detached { [weak self] in
-            currentTts.wait()
-            await MainActor.run { [weak self] in
-                self?.isSpeaking = false
+        Task {
+            // say returns once the audio has finished playing.
+            do {
+                try await tts.say(text)
+            } catch {
+                errorMessage = "Playback failed: \(error.localizedDescription)"
             }
+            isSpeaking = false
         }
     }
 
-    // MARK: - Download + synthesizer refresh
+    // MARK: - Synthesizer refresh
 
-    private func ensureAssetsThenRecreate(voice: String?) async {
-        guard let root = g2pRoot else { return }
+    /// Builds a synthesizer for `voice`, downloading whatever it needs. The
+    /// engine reports its own progress as a `0..1` fraction, so the app no
+    /// longer decides which files to fetch or where to put them.
+    private func createSynthesizer(voice: String?) async {
         errorMessage = nil
+        isReady = false
+        isDownloading = selectedVoice?.needsDownload != false
 
-        let needsDownload = selectedVoice?.needsDownload == true
-        if needsDownload {
-            isDownloading = true
-            do {
-                try await downloadAssets(
-                    g2pRoot: root,
-                    language: selectedLanguage.id,
-                    voice: voice)
-                refreshVoices(preferVoice: voice)
-            } catch {
-                errorMessage = "Download failed: \(error.localizedDescription)"
-                isDownloading = false
-                return
+        let instance = MoonshineVoice.TextToSpeech()
+            .language(selectedLanguage.id)
+            .onProgress { [weak self] fraction, file in
+                let snapshot = DownloadStatus(
+                    fileName: (file as NSString).lastPathComponent, fraction: fraction)
+                Task { @MainActor in self?.downloadStatus = snapshot }
             }
-            isDownloading = false
-        }
+        if let voice { instance.voice(voice) }
 
         do {
-            try createSynthesizer(voice: voice)
-            // Refresh voice states once everything is on disk.
-            refreshVoices(preferVoice: voice)
+            try await instance.load()
+            tts?.close()
+            tts = instance
+            isReady = true
         } catch {
+            instance.close()
             errorMessage = "Failed to create synthesizer: \(error.localizedDescription)"
         }
-    }
-
-    private func downloadAssets(
-        g2pRoot: URL, language: String, voice: String?
-    ) async throws {
-        let statusCallback: @Sendable (DownloadProgress) -> Void = { [weak self] p in
-            let fraction: Double? = p.bytesTotal > 0
-                ? min(1.0, Double(p.bytesDownloaded) / Double(p.bytesTotal)) : nil
-            let fileName = (p.relativePath as NSString).lastPathComponent
-            let snapshot = DownloadStatus(
-                fileName: fileName,
-                fileIndex: p.fileIndex,
-                totalFiles: p.totalFiles,
-                fraction: fraction
-            )
-            Task { @MainActor in
-                self?.downloadStatus = snapshot
-            }
-        }
-        defer {
-            Task { @MainActor in self.downloadStatus = nil }
-        }
-        // Uses the library's opt-in downloader; the file list is resolved from the native TTS
-        // dependency catalog rather than being hardcoded in the app.
-        try await AssetDownloader().ensureModelPresent(
-            root: g2pRoot,
-            spec: .tts(language: language, voice: voice),
-            onProgress: statusCallback
-        )
-    }
-
-    private func createSynthesizer(voice: String?) throws {
-        guard let root = g2pRoot else { return }
-        tts?.close()
-        tts = nil
-        isReady = false
-        tts = try MoonshineVoice.TextToSpeech(
-            language: selectedLanguage.id,
-            g2pRoot: root.path,
-            voice: voice
-        )
-        isReady = true
+        downloadStatus = nil
+        isDownloading = false
+        // Refresh voice states once everything is on disk.
+        refreshVoices(preferVoice: voice)
     }
 
     // MARK: - Voice list
 
+    /// Lists the voices for the current language, marking the ones already on
+    /// disk. All voices of a language share one cache directory, so pointing
+    /// `g2p_root` at it is enough to get accurate availability.
     private func refreshVoices(preferVoice: String?) {
-        guard let root = g2pRoot else { return }
+        let cache = try? ModelCache.directory(
+            for: .tts(language: selectedLanguage.id, voice: nil))
         do {
             let json = try MoonshineVoice.TextToSpeech.getVoices(
                 languages: selectedLanguage.id,
-                options: [TranscriberOption(name: "g2p_root", value: root.path)]
+                options: cache.map { [TranscriberOption(name: "g2p_root", value: $0.path)] }
             )
             availableVoices = parseVoices(json: json, language: selectedLanguage)
         } catch {

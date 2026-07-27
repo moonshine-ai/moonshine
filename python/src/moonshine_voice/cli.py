@@ -32,9 +32,9 @@ COMMANDS: Dict[str, Tuple[str, str]] = {
         "moonshine_voice.tts",
         "Synthesize speech from text to a WAV file or audio device.",
     ),
-    "intent": (
-        "moonshine_voice.intent_recognizer",
-        "Recognize spoken intents from the mic or a WAV file.",
+    "dialog": (
+        "moonshine_voice.dialog_flow",
+        "Run a spoken dialog flow (wifi setup) from the microphone.",
     ),
     "download": (
         "moonshine_voice.download",
