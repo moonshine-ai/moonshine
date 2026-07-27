@@ -30,6 +30,11 @@ moonshine_tensor_t *moonshine_tensor_from_shape_and_dtype(
     fprintf(stderr, "Shape is empty\n");
     return nullptr;
   }
+  // Resolve the element size before allocating anything. An unsupported dtype
+  // throws from here, and moonshine_tensor_t is plain C that every failure path
+  // below has to free by hand -- so a throw once the allocations exist escapes
+  // without running any of that cleanup and leaks them.
+  const size_t bytes_per_element = moonshine_dtype_to_bytes_per_element(dtype);
   moonshine_tensor_t *moonshine_tensor = static_cast<moonshine_tensor_t *>(
       DEBUG_CALLOC(1, sizeof(moonshine_tensor_t)));
   moonshine_tensor->dtype = dtype;
@@ -38,7 +43,6 @@ moonshine_tensor_t *moonshine_tensor_from_shape_and_dtype(
   std::memcpy(moonshine_tensor->shape, shape.data(),
               shape.size() * sizeof(int64_t));
   moonshine_tensor->shape_count = shape.size();
-  const size_t bytes_per_element = moonshine_dtype_to_bytes_per_element(dtype);
   // Guard against integer overflow from a crafted or oversized shape. The
   // previous std::accumulate multiplied the dimensions as signed int64, which
   // is undefined behaviour on overflow and can wrap to a small element count --

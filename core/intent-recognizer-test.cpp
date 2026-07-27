@@ -38,13 +38,14 @@ std::vector<uint8_t> read_file_bytes(const std::string &path) {
   }
   const std::streamsize size = file.tellg();
   file.seekg(0, std::ios::beg);
-  std::vector<uint8_t> bytes(static_cast<size_t>(size));
-  if (size > 0 &&
-      !file.read(static_cast<char *>(static_cast<void *>(bytes.data())),
-                 size)) {
+  // Read into a char buffer so istream::read gets the char* it wants directly.
+  // Reading into a uint8_t vector instead would need one of the pointer casts
+  // this file is not cleared to introduce (core/.banned-constructs-allowlist).
+  std::string chars(static_cast<size_t>(size), '\0');
+  if (size > 0 && !file.read(chars.data(), size)) {
     return {};
   }
-  return bytes;
+  return std::vector<uint8_t>(chars.begin(), chars.end());
 }
 
 // True when the all-in-one .ort model + tokenizer are present for the memory

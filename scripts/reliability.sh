@@ -3,9 +3,10 @@
 # Periodic reliability driver. Run this from the Mac (or any dev machine). It:
 #
 #   1. Runs the fast, local static checks (formatting + banned constructs).
-#   2. Syncs the working tree to a native Linux x86 box over SSH (so even
-#      uncommitted changes are exercised), preserving the box's large model /
-#      test assets.
+#   2. Mirrors the working tree to a native Linux x86 box over SSH (so even
+#      uncommitted changes are exercised, and files deleted locally cannot
+#      linger there to shadow their replacements), preserving the box's
+#      accumulated fuzzing corpora.
 #   3. Runs scripts/reliability-remote.sh there (ASan/UBSan build + test suite,
 #      clang-tidy, a ThreadSanitizer rebuild + threaded tests, a long-stream
 #      memory regression test, and time-boxed per-module fuzzing).
@@ -67,15 +68,28 @@ trap 'rm -f "${IGNORE_LIST}"' EXIT
   && git ls-files --others --ignored --exclude-standard --directory ) \
   | sed 's#^#/#' >"${IGNORE_LIST}"
 
-# Overlay our source onto the box without --delete. The box is a plain rsync
-# target (not a git checkout), so we must ship everything the build, tests, and
-# fuzzers need: that includes test-assets/ (~190MB of models/fixtures the tests
-# and fuzz seeds load), the ~2.4GB TTS data (core/moonshine-tts/data, required
-# by the repeated-use TTS memory test), and the Linux onnxruntime libs. We still
-# skip .git and the non-Linux onnxruntime prebuilt libraries (~950MB) that this
+# Mirror our source onto the box. It is a plain rsync target (not a git
+# checkout), so we must ship everything the build, tests, and fuzzers need: that
+# includes test-assets/ (~190MB of models/fixtures the tests and fuzz seeds
+# load), the ~2.4GB TTS data (core/moonshine-tts/data, required by the
+# repeated-use TTS memory test), and the Linux onnxruntime libs. We still skip
+# .git and the non-Linux onnxruntime prebuilt libraries (~950MB) that this
 # Linux-x86 run never links against.
+#
+# --delete is load-bearing rather than tidiness. Without it a file that was
+# renamed, moved, or deleted locally survives on the box forever, and a leftover
+# header keeps winning the include lookup over its replacement: a stale
+# core/moonshine-tts/src/file-information.h shadowed core/moonshine-utils/
+# file-information.h for weeks after the move, failing the build here and
+# nowhere else. Every path excluded below is also protected from deletion, so
+# local build output is safe; the protect rules cover the box-only fuzzing
+# state, which has no local counterpart and so never appears in the ignore list.
+# The corpora earn that protection by being accumulated coverage rather than
+# regenerable output.
 ssh "${RELIABILITY_HOST}" "mkdir -p '${REMOTE_DIR}'"
-rsync -az --stats \
+rsync -az --stats --delete \
+  --filter 'protect /core/reliability/corpus/' \
+  --filter 'protect /core/reliability/artifacts/' \
   --exclude-from="${IGNORE_LIST}" \
   --exclude '/.git/' \
   --exclude '/core/third-party/onnxruntime/lib/android/' \
