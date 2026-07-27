@@ -26,7 +26,7 @@ Optional, any time: check the branch is still shippable without starting a
 build.
 
 ```bash
-scripts/preflight-release.sh dev-v0.1.1 origin/dev-v0.1.1
+scripts/preflight-release.sh dev-v0.1.1
 ```
 
 ## Step 3 — ship
