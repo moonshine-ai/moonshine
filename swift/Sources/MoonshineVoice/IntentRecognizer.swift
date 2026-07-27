@@ -1,23 +1,26 @@
 import Foundation
 
 /// One ranked intent match from ``IntentRecognizer.getClosestIntents(utterance:toleranceThreshold:)``.
-public struct IntentMatch: Equatable, Sendable {
-    public let canonicalPhrase: String
-    public let similarity: Float
+struct IntentMatch: Equatable, Sendable {
+    let canonicalPhrase: String
+    let similarity: Float
 
-    public init(canonicalPhrase: String, similarity: Float) {
+    init(canonicalPhrase: String, similarity: Float) {
         self.canonicalPhrase = canonicalPhrase
         self.similarity = similarity
     }
 }
 
 /// Semantic intent recognizer (synchronous ranking via embedding similarity).
-public final class IntentRecognizer: @unchecked Sendable {
+///
+/// Internal to the binding. ``DialogFlow`` is the supported way to match spoken
+/// phrases; it owns a recognizer and routes trigger phrases through it.
+final class IntentRecognizer: @unchecked Sendable {
     private let api = MoonshineAPI.shared
     private var handle: Int32
 
     /// Create an intent recognizer from an embedding model directory on disk.
-    public init(
+    init(
         modelPath: String,
         modelArch: EmbeddingModelArch = .gemma300m,
         modelVariant: String = "q4"
@@ -33,7 +36,7 @@ public final class IntentRecognizer: @unchecked Sendable {
         close()
     }
 
-    public func close() {
+    func close() {
         if handle >= 0 {
             api.freeIntentRecognizer(handle)
             handle = -1
@@ -45,7 +48,7 @@ public final class IntentRecognizer: @unchecked Sendable {
     ///   - canonicalPhrase: The phrase to register.
     ///   - embedding: Optional pre-computed embedding. Pass `nil` to auto-compute.
     ///   - priority: Higher-priority intents rank above lower-priority ones.
-    public func registerIntent(
+    func registerIntent(
         canonicalPhrase: String,
         embedding: [Float]? = nil,
         priority: Int32 = 0
@@ -71,17 +74,17 @@ public final class IntentRecognizer: @unchecked Sendable {
     /// Calculate the embedding vector for a sentence.
     /// - Parameter sentence: The input text to embed.
     /// - Returns: The embedding vector.
-    public func calculateEmbedding(sentence: String) throws -> [Float] {
+    func calculateEmbedding(sentence: String) throws -> [Float] {
         try api.calculateIntentEmbedding(handle: handle, sentence: sentence)
     }
 
     /// - Returns: `true` if the phrase was removed, `false` if it was not registered.
-    public func unregisterIntent(canonicalPhrase: String) throws -> Bool {
+    func unregisterIntent(canonicalPhrase: String) throws -> Bool {
         try api.unregisterIntentRecognizerIntent(handle: handle, canonicalPhrase: canonicalPhrase)
     }
 
     /// Returns up to six matches at or above ``toleranceThreshold``, sorted by descending similarity.
-    public func getClosestIntents(utterance: String, toleranceThreshold: Float) throws -> [IntentMatch] {
+    func getClosestIntents(utterance: String, toleranceThreshold: Float) throws -> [IntentMatch] {
         let raw = try api.getClosestIntents(
             intentRecognizerHandle: handle,
             utterance: utterance,
@@ -90,11 +93,11 @@ public final class IntentRecognizer: @unchecked Sendable {
         return raw.map { IntentMatch(canonicalPhrase: $0.canonicalPhrase, similarity: $0.similarity) }
     }
 
-    public func intentCount() throws -> Int32 {
+    func intentCount() throws -> Int32 {
         try api.getIntentRecognizerIntentCount(handle: handle)
     }
 
-    public func clearIntents() throws {
+    func clearIntents() throws {
         try api.clearIntentRecognizerIntents(handle: handle)
     }
 }

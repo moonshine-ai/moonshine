@@ -19,7 +19,7 @@ moonshine-voice mic
 
 Installing the package adds a `moonshine-voice` command (with a shorter
 `moonshine` alias) that groups the built-in tools as subcommands: `mic`,
-`transcribe`, `tts`, `intent`, `download`, and `g2p`. Run
+`transcribe`, `tts`, `dialog`, `download`, and `g2p`. Run
 `moonshine-voice --help`, or `moonshine-voice <command> --help` for a specific
 tool. Each subcommand is equivalent to `python -m moonshine_voice.<module>`, so
 either invocation style works.
@@ -145,51 +145,33 @@ stream.close()
 
 ## Voice Commands
 
-We also provide voice command recognition using the `IntentRecognizer` module. It captures transcribed audio from a `MicTranscriber` and invokes callback functions that match your programmed intents. Since it relies on an embedding model, you can use a helper function to get started:
+Voice commands go through `DialogFlow`. Register the phrases you want to listen
+for and it handles the rest: it downloads the embedding model, matches what the
+user said semantically rather than by exact wording, and runs your handler.
 
 ```python
-from moonshine_voice import (
-    MicTranscriber,
-    IntentRecognizer,
-    ModelArch,
-    EmbeddingModelArch,
-    get_embedding_model,
-    get_model_for_language
-)
+from moonshine_voice import DialogFlow, MicTranscriber, get_model_for_language
 
-# Download and load the embedding model for intent recognition
-embedding_model_path, embedding_model_arch = get_embedding_model()
+runner = DialogFlow()
+
+def lights_on(d):
+    print("\n💡 LIGHTS ON!")
+
+def lights_off(d):
+    print("\n🌑 LIGHTS OFF!")
+
+runner.register_global("turn on the lights", lights_on)
+runner.register_global("turn off the lights", lights_off)
 ```
 
-Next, create a recognizer and register your intent callbacks:
+Then create a `MicTranscriber`, add the runner as a listener, and start the
+audio stream. `DialogFlow` is a `TranscriptEventListener`, so completed lines
+flow straight into it:
 
 ```python
-intent_recognizer = IntentRecognizer(
-    model_path=embedding_model_path,
-    model_arch=embedding_model_arch
-)
-
-def on_lights_on(trigger: str, utterance: str, similarity: float):
-    """Handler for turning lights on."""
-    print(f"\n💡 LIGHTS ON! (matched '{trigger}' with {similarity:.0%} confidence)")
-
-def on_lights_off(trigger: str, utterance: str, similarity: float):
-    """Handler for turning lights off."""
-    print(f"\n🌑 LIGHTS OFF! (matched '{trigger}' with {similarity:.0%} confidence)")
-
-intent_recognizer.register_intent("turn on the lights", on_lights_on)
-intent_recognizer.register_intent("turn off the lights", on_lights_off)
-```
-
-Finally, create a `MicTranscriber`, connect it to your `IntentRecognizer`, and start the audio stream:
-
-```python
-# Get the transcription model and initialize a MicTranscriber
 model_path, model_arch = get_model_for_language("en")
 mic_transcriber = MicTranscriber(model_path=model_path, model_arch=model_arch)
-
-# The intent recognizer will process completed transcript lines and invoke trigger handlers
-mic_transcriber.add_listener(intent_recognizer)
+mic_transcriber.add_listener(runner)
 
 mic_transcriber.start()
 try:
@@ -198,10 +180,14 @@ try:
 except KeyboardInterrupt:
     print("\n\nStopping...", file=sys.stderr)
 finally:
-    intent_recognizer.close()
     mic_transcriber.stop()
     mic_transcriber.close()
+    runner.close()
 ```
+
+For multi-turn conversations — asking a question, confirming an answer,
+spelling out a password — register a flow instead of a global. See
+`examples/python/dialog_flow.py`, or run `moonshine-voice dialog`.
 
 ## Multiple Languages
 

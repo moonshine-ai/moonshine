@@ -46,6 +46,11 @@ export interface AssetDownloaderOptions {
   cacheName?: string;
   /** Called with (loadedBytes, totalBytes|undefined, currentFile). */
   onProgress?: (loaded: number, total: number | undefined, file: string) => void;
+  /**
+   * Fetches manifest files from here instead of the base URL the manifest names,
+   * so applications can host the assets themselves.
+   */
+  baseUrl?: string;
 }
 
 const DEFAULT_CACHE = 'moonshine-models-v1';
@@ -57,10 +62,12 @@ const DEFAULT_CACHE = 'moonshine-models-v1';
 export class AssetDownloader {
   private readonly cacheName: string;
   private readonly onProgress?: AssetDownloaderOptions['onProgress'];
+  private readonly baseUrl?: string;
 
   constructor(options: AssetDownloaderOptions = {}) {
     this.cacheName = options.cacheName ?? DEFAULT_CACHE;
     this.onProgress = options.onProgress;
+    this.baseUrl = options.baseUrl;
   }
 
   /**
@@ -79,7 +86,9 @@ export class AssetDownloader {
     const out = new Map<string, Uint8Array>();
     for (const group of manifest.groups ?? []) {
       for (const file of group.files) {
-        const url = file.url ?? joinUrl(group.base_url, file.name);
+        const url = this.baseUrl
+          ? joinUrl(this.baseUrl, file.name)
+          : (file.url ?? joinUrl(group.base_url, file.name));
         const bytes = await this.fetchFile(url);
         if (
           typeof file.size === 'number' &&

@@ -60,6 +60,16 @@ public class TextToSpeechTest {
         assertFalse("zipvoice engine should not list kokoro voices", json.contains("kokoro_"));
     }
 
+    /** Real speech, so the clone path's voice-activity search has something to find. */
+    private static Utils.WavData speechSamples() {
+        Context ctx = InstrumentationRegistry.getInstrumentation().getContext();
+        try {
+            return Utils.loadWavFromAssets(ctx, "beckett.wav");
+        } catch (IOException e) {
+            throw new RuntimeException("beckett.wav is missing from the test assets", e);
+        }
+    }
+
     /** Resolves a bundled ZipVoice model tree, or null when it is not present in the test APK. */
     private static String findZipVoiceRoot() {
         Context ctx = InstrumentationRegistry.getInstrumentation().getContext();
@@ -98,10 +108,13 @@ public class TextToSpeechTest {
     public void testZipVoiceBuiltinVoiceSynthesizes() {
         String root = findZipVoiceRoot();
         org.junit.Assume.assumeTrue("ZipVoice model bundle not present in test assets", root != null);
-        TextToSpeech tts = new TextToSpeech("en_us", root,
-                java.util.Collections.singletonList(
-                        new TranscriberOption("voice", "zipvoice_american_female")));
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        TextToSpeech tts = new TextToSpeech(context)
+                .language("en_us")
+                .voice("zipvoice_american_female")
+                .modelsFrom(new File(root));
         try {
+            tts.load();
             TtsSynthesisResult result = tts.synthesize("Hello from ZipVoice on Android.");
             assertTrue(result != null);
             assertTrue(result.samples.length > 0);
@@ -112,16 +125,19 @@ public class TextToSpeechTest {
     }
 
     @Test
-    public void testZipVoiceClonePcmSynthesizes() {
+    public void testCloneFromPcmSynthesizes() {
         String root = findZipVoiceRoot();
         org.junit.Assume.assumeTrue("ZipVoice model bundle not present in test assets", root != null);
-        float[] pcm = new float[24000];
-        for (int i = 0; i < pcm.length; i++) {
-            pcm[i] = (float) (0.05 * Math.sin(2.0 * Math.PI * 150.0 * i / 24000.0));
-        }
-        TextToSpeech tts = TextToSpeech.fromZipVoiceClone("en_us", pcm, 24000,
-                "This is a reference clip.", root, null);
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Utils.WavData reference = speechSamples();
+        TextToSpeech tts = new TextToSpeech(context)
+                .language("en_us")
+                .modelsFrom(new File(root))
+                .cloning(true);
         try {
+            tts.load();
+            tts.cloneFrom(reference.data, reference.sampleRate, "This is a reference clip.");
+            assertTrue("cloneFrom should mark the engine as cloned", tts.isCloned());
             TtsSynthesisResult result = tts.synthesize("Cloning a custom voice.");
             assertTrue(result != null);
             assertTrue(result.sampleRateHz == 24000);

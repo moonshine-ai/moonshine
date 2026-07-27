@@ -71,9 +71,8 @@ class CachedEmbeddings:
     Instances duck-type as an embedding backend: call
     :meth:`calculate_embedding` with a phrase and you get back a vector.
     Hits are served from memory in O(1); misses fall through to the
-    optional ``fallback`` backend (typically the real
-    :class:`IntentRecognizer`), or raise :class:`KeyError` if none is
-    configured.
+    optional ``fallback`` backend (typically the real embedding
+    model), or raise :class:`KeyError` if none is configured.
 
     Parameters
     ----------
@@ -200,10 +199,9 @@ class CachedEmbeddings:
         """Return the cosine similarity between two embedding vectors.
 
         The cache itself does not implement similarity scoring – it
-        delegates to the configured ``fallback`` backend (typically an
-        :class:`~moonshine_voice.IntentRecognizer`) so the underlying
-        native ``moonshine_calculate_embedding_distance`` C function is
-        used.  Raises :class:`RuntimeError` when no fallback is
+        delegates to the configured ``fallback`` backend (typically the
+        real embedding model) so the underlying native
+        ``moonshine_calculate_embedding_distance`` C function is used.  Raises :class:`RuntimeError` when no fallback is
         configured.
         """
         if self._fallback is None:

@@ -809,6 +809,51 @@ MOONSHINE_EXPORT int32_t moonshine_calculate_embedding_distance(
     int32_t intent_recognizer_handle, const float *embedding_a,
     const float *embedding_b, uint64_t embedding_size, float *out_similarity);
 
+/* ------------------------------ SPEECH CLIPS --------------------------- */
+
+/* A short window of mostly-speech audio pulled out of a longer recording,
+   returned by moonshine_extract_speech_clip. */
+struct moonshine_speech_clip_t {
+  /* 16 kHz mono PCM. NULL unless ``is_complete`` is non-zero. Allocated with
+     malloc; release with moonshine_free_buffer. */
+  float *audio_data;
+  uint64_t audio_length;
+  /* Where the window starts in the input recording, in seconds. */
+  float start_time;
+  /* How much of the window is speech, in seconds. Useful for showing progress
+     while the caller is still recording. */
+  float speech_duration;
+  /* Non-zero once a window with enough speech in it was found. */
+  int32_t is_complete;
+};
+
+/* Finds the best short window of speech in a recording, for use as the
+   reference clip in zero-shot voice cloning.
+
+   Runs the built-in voice-activity detector (no model files or downloads
+   required) over ``audio_data``, slides a window of ``clip_duration_seconds``
+   across the result, and returns the window with the most speech in it. If no
+   window contains at least ``minimum_speech_seconds`` of speech,
+   ``out_clip->is_complete`` is zero and no audio is returned; the caller should
+   record more and call again. This makes the function safe to call repeatedly
+   on a growing buffer, which is how the streaming voice-capture APIs in the
+   language bindings are built.
+
+   The returned clip is always 16 kHz mono regardless of ``sample_rate``.
+
+   Recognised ``options``:
+     ``clip_duration_seconds``  length of the window (default 4).
+     ``minimum_speech_seconds`` speech required in it (default 2).
+     ``vad_threshold``          speech probability threshold (default 0.5).
+
+   Returns zero on success, or a non-zero error code on failure. The error code
+   can be converted to a human-readable string using moonshine_error_to_string.
+*/
+MOONSHINE_EXPORT int32_t moonshine_extract_speech_clip(
+    const float *audio_data, uint64_t audio_length, int32_t sample_rate,
+    const struct moonshine_option_t *options, uint64_t options_count,
+    struct moonshine_speech_clip_t *out_clip);
+
 /* ------------------------------ TEXT TO SPEECH ------------------------- */
 
 /* Creates a text to speech synthesizer from files on disk.

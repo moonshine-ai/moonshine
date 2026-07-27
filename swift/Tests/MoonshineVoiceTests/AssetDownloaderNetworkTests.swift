@@ -84,7 +84,7 @@ final class AssetDownloaderNetworkTests: XCTestCase {
             language: "en_us", g2pRoot: tempRoot.path, voice: "kokoro_af_heart")
         defer { tts.close() }
 
-        let result = try tts.synthesize(text: "Hello from the download test.")
+        let result = try tts.synthesize("Hello from the download test.")
         XCTAssertGreaterThan(result.samples.count, 0, "synthesis produced no audio")
         XCTAssertGreaterThan(result.sampleRateHz, 0)
     }

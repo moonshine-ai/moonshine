@@ -134,17 +134,34 @@ def test_g2p_prints_ipa():
     assert result.stdout.strip(), describe(result)
 
 
-def test_intent_recognizer_triggers_intents():
+def test_intent_recognizer_matches_transcribed_command():
+    """The intent recognizer is internal (DialogFlow owns one), so this drives
+    the module directly rather than through a CLI demo."""
+    moonshine_voice = pytest.importorskip("moonshine_voice")
+    from moonshine_voice.intent_recognizer import IntentRecognizer
+
     wav_path = REPO_ROOT / "test-assets" / "intent.wav"
-    result = run_module(
-        "intent_recognizer",
-        "--wav-file", str(wav_path),
-        "--quantization", "q4",
-        "--intents", "move forward,move backward,turn left,turn right",
+    audio, sample_rate = moonshine_voice.load_wav_file(str(wav_path))
+    model_path, model_arch = moonshine_voice.get_model_for_language("en")
+    transcriber = moonshine_voice.Transcriber(model_path, model_arch)
+    try:
+        transcript = transcriber.transcribe_without_streaming(audio, sample_rate)
+    finally:
+        transcriber.close()
+    utterance = " ".join(line.text for line in transcript.lines).strip()
+    assert utterance, "expected the clip to transcribe to something"
+
+    embedding_path, embedding_arch = moonshine_voice.get_embedding_model(variant="q4")
+    recognizer = IntentRecognizer(
+        model_path=embedding_path, model_arch=embedding_arch, model_variant="q4"
     )
-    assert result.returncode == 0, describe(result)
-    combined = result.stdout + result.stderr
-    assert "triggered" in combined.lower(), describe(result)
+    try:
+        for phrase in ("move forward", "move backward", "turn left", "turn right"):
+            recognizer.register_intent(phrase)
+        matches = recognizer.get_closest_intents(utterance, 0.0)
+    finally:
+        recognizer.close()
+    assert matches, f"no intent matched {utterance!r}"
 
 
 def test_download_g2p_assets():

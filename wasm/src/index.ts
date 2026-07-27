@@ -1,10 +1,15 @@
 /**
- * @moonshine-ai/moonshine-wasm — idiomatic WebAssembly binding for Moonshine
- * Voice. Mirrors the object model of the Python, Swift, and Android bindings.
+ * @moonshine-ai/moonshine-wasm — WebAssembly binding for Moonshine Voice.
+ * Mirrors the object model of the Python, Swift, and Android bindings.
  *
- * Phase 1 (STT): {@link Transcriber}, {@link Stream}, {@link MicrophoneTranscriber}.
- * Phase 2 (TTS): {@link TextToSpeech}, {@link GraphemeToPhonemizer}.
- * Phase 3 (Intent + dialog): {@link IntentRecognizer}, {@link DialogFlow}.
+ * The three entry points are {@link DialogFlow} for voice interfaces,
+ * {@link MicTranscriber} for live transcription, and {@link TextToSpeech} for
+ * speech synthesis and voice cloning. Each is constructed with `new`,
+ * configured with chainable setters, and prepared with a single `await load()`.
+ *
+ * {@link Transcriber}, {@link Stream}, {@link GraphemeToPhonemizer}, and
+ * {@link AssetDownloader} are the lower-level pieces those are built from, for
+ * applications that need them directly.
  */
 
 export {
@@ -12,6 +17,7 @@ export {
   resetMoonshineModule,
   type LoadModuleOptions,
   type MoonshineModule,
+  type RawSpeechClip,
 } from './module.js';
 
 export {
@@ -25,7 +31,6 @@ export {
 
 export {
   ModelArch,
-  EmbeddingModelArch,
   TranscribeFlags,
   modelArchToString,
   stringToModelArch,
@@ -36,7 +41,6 @@ export type {
   SpeakerSpan,
   TranscriptLine,
   Transcript,
-  IntentMatch,
   TtsSynthesisResult,
 } from './types.js';
 
@@ -66,48 +70,34 @@ export {
   type TranscriberFromUrlsOptions,
 } from './transcriber.js';
 export { Stream } from './stream.js';
-export {
-  MicrophoneTranscriber,
-  type MicrophoneTranscriberOptions,
-} from './microphone-transcriber.js';
+export { MicTranscriber, type ProgressCallback } from './mic-transcriber.js';
 
-// Phase 2 (TTS) — only usable if the module was built with TTS support.
+// Only usable if the module was built with TTS support.
 export {
   TextToSpeech,
-  type TextToSpeechOptions,
-  type TtsFromAssets,
-  type TtsFromCatalog,
-  type TtsClone,
+  type CloneSource,
   type TtsVoiceEntry,
   type TtsVoicesOptions,
 } from './text-to-speech.js';
+export {
+  VoiceClone,
+  extractSpeechClip,
+  type VoiceCloneOptions,
+} from './voice-clone.js';
 export {
   GraphemeToPhonemizer,
   type GraphemeToPhonemizerOptions,
 } from './grapheme-to-phonemizer.js';
 
-// Phase 3 (Intent + DialogFlow).
-export {
-  IntentRecognizer,
-  type IntentRecognizerOptions,
-  type IntentFromUrlsOptions,
-  type IntentPhrase,
-} from './intent-recognizer.js';
 export {
   DialogFlow,
   Dialog,
   DialogCancelled,
   DialogRestart,
-  InputMode,
+  DialogNoMatch,
   spellOut,
-  type Prompt,
-  type Say,
-  type Ask,
-  type Confirm,
-  type Choose,
+  type AskOptions,
+  type ConfirmOptions,
   type FlowFn,
   type GlobalHandler,
-  type DialogFlowOptions,
-  type DialogFlowLoadOptions,
-  type DialogFlowBundle,
 } from './dialog-flow.js';

@@ -1,0 +1,51 @@
+name: PR target branch
+
+# `main` holds only released code, so pull requests belong on the current
+# dev-v<version> candidate branch. GitHub offers main as the default PR target
+# because it is the default branch (which it has to be, so the landing page
+# shows the released docs), so this catches the easy mistake.
+#
+# See docs/release-process.md.
+
+on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  check-base:
+    if: github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reject PRs targeting main
+        run: |
+          # ls-remote rather than for-each-ref: the checkout only creates a
+          # local ref for the PR itself, so origin/dev-v* would come back empty.
+          candidate="$(git ls-remote --heads origin 'dev-v*' \
+            | sed -E 's#.*refs/heads/##' | sort -V | tail -n1)"
+
+          echo "::error::Pull requests must target the development candidate" \
+            "branch, not main."
+          {
+            echo "### This pull request targets \`main\`"
+            echo
+            echo "\`main\` only ever contains released code, so that the README"
+            echo "on the repo landing page describes the binaries people can"
+            echo "actually install. All development lands on the candidate"
+            echo "branch first."
+            echo
+            if [ -n "${candidate}" ]; then
+              echo "Retarget this PR at \`${candidate}\`."
+            else
+              echo "No \`dev-v*\` candidate branch exists right now; ask a"
+              echo "maintainer to cut one with \`scripts/start-candidate.sh\`."
+            fi
+            echo
+            echo "See [docs/release-process.md](docs/release-process.md)."
+          } >> "${GITHUB_STEP_SUMMARY}"
+          exit 1

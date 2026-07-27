@@ -62,6 +62,7 @@ SOFTWARE.
 #include "moonshine-tensor-view.h"
 #include "moonshine-tts.h"
 #include "ort-utils.h"
+#include "speech-clip.h"
 #include "string-utils.h"
 #include "transcriber.h"
 
@@ -1001,6 +1002,69 @@ void maybe_autotranscribe_zipvoice_clone(
   } while (0)
 
 }  // namespace
+
+int32_t moonshine_extract_speech_clip(const float *audio_data,
+                                      uint64_t audio_length,
+                                      int32_t sample_rate,
+                                      const moonshine_option_t *options,
+                                      uint64_t options_count,
+                                      moonshine_speech_clip_t *out_clip) {
+  if (out_clip == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  *out_clip = moonshine_speech_clip_t{};
+  if (audio_data == nullptr || audio_length == 0 || sample_rate <= 0) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  if (options_count > 0 && options == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+
+  OptionVector option_vector = parse_option_vector(options, options_count);
+  OptionVector uncommon_options = parse_common_options(option_vector);
+  if (log_api_calls) {
+    LOGF("moonshine_extract_speech_clip(audio_length=%" PRIu64
+         ", sample_rate=%d, options_count=%" PRIu64 ")",
+         audio_length, sample_rate, options_count);
+  }
+
+  SpeechClipOptions clip_options;
+  for (const auto &[key, value] : uncommon_options) {
+    if (key == "clip_duration_seconds") {
+      clip_options.clip_duration_seconds = float_from_string(value);
+    } else if (key == "minimum_speech_seconds") {
+      clip_options.minimum_speech_seconds = float_from_string(value);
+    } else if (key == "vad_threshold") {
+      clip_options.vad_threshold = float_from_string(value);
+    }
+  }
+
+  SpeechClip clip;
+  try {
+    clip = extract_speech_clip(audio_data, static_cast<size_t>(audio_length),
+                               sample_rate, clip_options);
+  } catch (const std::exception &e) {
+    LOGF("moonshine_extract_speech_clip failed: %s", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+
+  out_clip->start_time = clip.start_time_seconds;
+  out_clip->speech_duration = clip.speech_seconds;
+  out_clip->is_complete = clip.is_complete ? 1 : 0;
+  if (!clip.is_complete || clip.audio.empty()) {
+    return MOONSHINE_ERROR_NONE;
+  }
+
+  const size_t byte_count = clip.audio.size() * sizeof(float);
+  float *buffer = static_cast<float *>(std::malloc(byte_count));
+  if (buffer == nullptr) {
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+  std::memcpy(buffer, clip.audio.data(), byte_count);
+  out_clip->audio_data = buffer;
+  out_clip->audio_length = static_cast<uint64_t>(clip.audio.size());
+  return MOONSHINE_ERROR_NONE;
+}
 
 int32_t moonshine_create_tts_synthesizer_from_files(
     const char *language, const char **filenames, uint64_t filenames_count,

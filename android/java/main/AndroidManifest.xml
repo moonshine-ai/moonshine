@@ -9,4 +9,19 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Required only by MicTranscriber and the microphone side of DialogFlow.
+         Declaring it here means an app that records speech does not have to
+         declare or request anything itself; MicrophonePermissionActivity puts
+         the system dialog up on demand. Apps that only synthesize speech can
+         remove it with tools:node="remove". -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <application>
+        <activity
+            android:name="ai.moonshine.voice.MicrophonePermissionActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+    </application>
+
 </manifest>

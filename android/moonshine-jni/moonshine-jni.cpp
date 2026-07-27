@@ -999,6 +999,51 @@ Java_ai_moonshine_voice_JNI_moonshineGetTtsVoices(JNIEnv *env, jobject /* this *
 }
 
 extern "C" JNIEXPORT jobject JNICALL
+Java_ai_moonshine_voice_JNI_moonshineExtractSpeechClip(
+    JNIEnv *env, jobject /* this */, jfloatArray audio_data, jint sample_rate,
+    jfloat clip_duration_seconds, jfloat minimum_speech_seconds) {
+  try {
+    if (audio_data == nullptr) {
+      return nullptr;
+    }
+    jfloat *audio = env->GetFloatArrayElements(audio_data, nullptr);
+    const jsize audio_length = env->GetArrayLength(audio_data);
+    const std::string clip_duration = std::to_string(clip_duration_seconds);
+    const std::string minimum_speech = std::to_string(minimum_speech_seconds);
+    const moonshine_option_t options[2] = {
+        {"clip_duration_seconds", clip_duration.c_str()},
+        {"minimum_speech_seconds", minimum_speech.c_str()},
+    };
+    moonshine_speech_clip_t clip = {};
+    const int32_t err = moonshine_extract_speech_clip(
+        audio, static_cast<uint64_t>(audio_length), sample_rate, options, 2,
+        &clip);
+    env->ReleaseFloatArrayElements(audio_data, audio, JNI_ABORT);
+    if (err != MOONSHINE_ERROR_NONE) {
+      return nullptr;
+    }
+    jfloatArray jaudio = nullptr;
+    if (clip.audio_data != nullptr && clip.audio_length > 0) {
+      jaudio = env->NewFloatArray(static_cast<jsize>(clip.audio_length));
+      env->SetFloatArrayRegion(jaudio, 0,
+                               static_cast<jsize>(clip.audio_length),
+                               clip.audio_data);
+    }
+    moonshine_free_buffer(clip.audio_data);
+    jclass clipClass = get_class(env, "ai/moonshine/voice/SpeechClip");
+    jmethodID ctor = get_method(env, clipClass, "<init>", "([FFFZ)V");
+    jobject result = env->NewObject(clipClass, ctor, jaudio, clip.start_time,
+                                    clip.speech_duration,
+                                    clip.is_complete != 0 ? JNI_TRUE : JNI_FALSE);
+    env->DeleteLocalRef(clipClass);
+    return result;
+  } catch (const std::exception &e) {
+    ALOGE("moonshineExtractSpeechClip: %s\n", e.what());
+    return nullptr;
+  }
+}
+
+extern "C" JNIEXPORT jobject JNICALL
 Java_ai_moonshine_voice_JNI_moonshineTextToSpeech(JNIEnv *env, jobject /* this */,
                                                   jint tts_handle, jstring text,
                                                   jobjectArray joptions) {

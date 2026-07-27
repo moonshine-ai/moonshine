@@ -105,6 +105,7 @@ set(MOONSHINE_SRC_FILES
     moonshine-streaming-model.cpp
     voice-activity-detector.cpp
     silero-vad.cpp
+    speech-clip.cpp
     resampler.cpp
     transcriber.cpp
     gemma-embedding-model.cpp
@@ -536,6 +537,42 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
         )
     else()
         target_link_libraries(voice-activity-detector-test PRIVATE
+            ort-utils
+            ${ONNXRUNTIME_LIB_PATH}
+        )
+    endif()
+
+    add_executable(speech-clip-test speech-clip-test.cpp speech-clip.cpp voice-activity-detector.cpp resampler.cpp silero-vad.cpp)
+    set_target_properties(speech-clip-test PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(speech-clip-test PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+        ${CMAKE_CURRENT_LIST_DIR}/ort-utils
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
+    )
+
+    copy_onnxruntime_dll(speech-clip-test)
+
+    if (IOS OR MOONSHINE_BUILD_SWIFT)
+        set_target_properties(speech-clip-test PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.speech-clip-test"
+            MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        )
+        target_link_libraries(speech-clip-test PRIVATE
+            ort-utils
+            ${ONNXRUNTIME_LIB_PATH}
+            "-framework CoreFoundation"
+            "-framework Foundation"
+        )
+    else()
+        target_link_libraries(speech-clip-test PRIVATE
             ort-utils
             ${ONNXRUNTIME_LIB_PATH}
         )

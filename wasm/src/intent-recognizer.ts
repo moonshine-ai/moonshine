@@ -1,7 +1,10 @@
 /**
- * Intent recognition, mirroring the Python/Swift `IntentRecognizer`. Registers
- * canonical phrases and finds the closest match to an utterance using the
- * embedding model.
+ * Intent recognition: registers canonical phrases and finds the closest match
+ * to an utterance using the embedding model.
+ *
+ * This is internal to the binding. {@link DialogFlow} is the supported way to
+ * match spoken phrases; it owns a recognizer and routes trigger phrases through
+ * it, so nothing here is exported from the package entry point.
  *
  * The embedding model ships as a single all-in-one `.ort` file (plus
  * `tokenizer.bin`) and is loaded entirely from in-memory buffers via the

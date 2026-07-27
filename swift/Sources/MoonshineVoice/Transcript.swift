@@ -1,7 +1,7 @@
 import Foundation
 
 /// A single word with timing information.
-public struct WordTiming {
+public struct WordTiming: Sendable {
     /// The word text.
     public let word: String
     /// Start time in seconds (absolute, from start of audio/stream).
@@ -19,7 +19,7 @@ public struct WordTiming {
 /// sliding window (`diarization_cluster_window_sec`, default 120s) as more
 /// speech arrives. Assignments for older audio are frozen. Watch
 /// `TranscriptLine.haveSpeakersChanged` to detect revisions.
-public struct SpeakerSpan {
+public struct SpeakerSpan: Sendable {
     /// Time offset from the start of the audio or stream in seconds.
     public let startTime: Float
     /// Length of the span in seconds.
@@ -35,7 +35,7 @@ public struct SpeakerSpan {
 }
 
 /// A single line of transcription.
-public struct TranscriptLine {
+public struct TranscriptLine: Sendable {
     /// UTF-8 encoded transcription text.
     public let text: String
     
@@ -114,7 +114,7 @@ public struct TranscriptLine {
 }
 
 /// A complete transcript containing multiple lines.
-public struct Transcript {
+public struct Transcript: Sendable {
     /// All lines of the transcript.
     public let lines: [TranscriptLine]
     

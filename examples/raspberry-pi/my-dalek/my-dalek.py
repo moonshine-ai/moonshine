@@ -3,13 +3,10 @@ import sys
 import time
 
 from moonshine_voice import (
+    DialogFlow,
     MicTranscriber,
-    Transcriber,
-    load_wav_file,
     TranscriptEventListener,
-    IntentRecognizer,
     get_model_for_language,
-    get_embedding_model,
 )
 
 parser = argparse.ArgumentParser(
@@ -22,24 +19,12 @@ parser.add_argument(
     help="Model architecture to use for transcription",
 )
 parser.add_argument(
-    "--embedding-model",
-    type=str,
-    default="embeddinggemma-300m",
-    help="Embedding model name (default: embeddinggemma-300m)",
-)
-parser.add_argument(
     "--threshold",
     type=float,
-    default=0.8,
-    help="Similarity threshold for intent matching (default: 0.8)",
+    default=0.7,
+    help="Similarity threshold for command matching (default: 0.7)",
 )
 args = parser.parse_args()
-
-def on_intent_triggered_on(trigger: str, utterance: str, similarity: float):
-    """Handler for when an intent is triggered."""
-    print(
-        f"\n'{trigger.upper()}' triggered by '{utterance}' with {similarity:.0%} confidence"
-    )
 
 class TranscriptPrinter(TranscriptEventListener):
     """Listener that prints transcript updates to the terminal."""
@@ -68,40 +53,22 @@ class TranscriptPrinter(TranscriptEventListener):
 print("Loading transcription model...", file=sys.stderr)
 model_path, model_arch = get_model_for_language("en", args.model_arch)
 
-# Download and load the embedding model for intent recognition
-quantization = "q4"
-print(
-    f"Loading embedding model ({args.embedding_model}, variant={quantization})...",
-    file=sys.stderr,
-)
-embedding_model_path, embedding_model_arch = get_embedding_model(
-    args.embedding_model, quantization
-)
+def on_move_forward(d):
+    print("Moving forward")
+def on_move_backward(d):
+    print("Moving backward")
+def on_turn_left(d):
+    print("Turning left")
+def on_turn_right(d):
+    print("Turning right")
+def on_exterminate(d):
+    print("EXTERMINATE!")
 
-# Create the intent recognizer (implements TranscriptEventListener)
-print(
-    f"Creating intent recognizer (threshold={args.threshold})...", file=sys.stderr
-)
-intent_recognizer = IntentRecognizer(
-    model_path=embedding_model_path,
-    model_arch=embedding_model_arch,
-    model_variant=quantization,
-    threshold=args.threshold,
-)
-
-def on_move_forward(trigger: str, utterance: str, similarity: float):
-    print(f"Moving forward with {similarity:.0%} confidence")
-def on_move_backward(trigger: str, utterance: str, similarity: float):
-    print(f"Moving backward with {similarity:.0%} confidence")
-def on_turn_left(trigger: str, utterance: str, similarity: float):
-    print(f"Turning left with {similarity:.0%} confidence")
-def on_turn_right(trigger: str, utterance: str, similarity: float):
-    print(f"Turning right with {similarity:.0%} confidence")
-def on_exterminate(trigger: str, utterance: str, similarity: float):
-    print(f"EXTERMINATE! with {similarity:.0%} confidence")
-
-# Register intents with their trigger phrases and handlers
-intents = {
+# DialogFlow matches what it hears against these phrases semantically, using an
+# embedding model it downloads and loads the first time a command comes in.
+# These are "globals": single-shot commands that stay live at all times, as
+# opposed to the multi-turn conversations you'd register with register_flow.
+commands = {
     "move forward": on_move_forward,
     "move backward": on_move_backward,
     "turn left": on_turn_left,
@@ -109,24 +76,29 @@ intents = {
     "kill all humans": on_exterminate,
     "exterminate": on_exterminate,
 }
-for intent, handler in intents.items():
-    intent_recognizer.register_intent(intent, handler)
-
-print(f"Registered {intent_recognizer.intent_count} intents", file=sys.stderr)
+# The beeps are the runner's audio cues for matched / unmatched speech; this
+# example reports what it heard in text instead, so silence them.
+dalek = DialogFlow(
+    trigger_threshold=args.threshold,
+    success_beep_fn=lambda: None,
+    error_beep_fn=lambda: None,
+)
+for phrase, handler in commands.items():
+    dalek.register_global(phrase, handler)
 
 transcriber = MicTranscriber(model_path=model_path, model_arch=model_arch)
 
-# Add both the transcript printer and intent recognizer as listeners
-# The intent recognizer will process completed lines and trigger handlers
+# Add both the transcript printer and the command runner as listeners. The
+# runner processes completed lines and calls the matching handler.
 transcript_printer = TranscriptPrinter()
 transcriber.add_listener(transcript_printer)
-transcriber.add_listener(intent_recognizer)
+transcriber.add_listener(dalek)
 
 print("\n" + "=" * 60, file=sys.stderr)
 print("🎤 Listening for voice commands...", file=sys.stderr)
 print("Try saying phrases with the same meaning as these actions:", file=sys.stderr)
-for intent in intents.keys():
-    print(f"  - '{intent}'", file=sys.stderr)
+for phrase in commands.keys():
+    print(f"  - '{phrase}'", file=sys.stderr)
 print(
     "We're doing fuzzy matching of natural language, so phrases like 'Go forward' or 'Move ahead' or 'Advance' will trigger the 'move forward' action, for example."
 )
@@ -141,6 +113,6 @@ try:
 except KeyboardInterrupt:
     print("\n\nStopping...", file=sys.stderr)
 finally:
-    intent_recognizer.close()
     transcriber.stop()
     transcriber.close()
+    dalek.close()

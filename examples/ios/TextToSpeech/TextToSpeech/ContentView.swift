@@ -115,17 +115,11 @@ struct ContentView: View {
             ProgressView("Initializing TTS...")
         } else if let status = model.downloadStatus {
             VStack(spacing: 6) {
-                Text(
-                    "Downloading \(status.fileName) (\(status.fileIndex)/\(status.totalFiles))"
-                )
-                .font(.caption)
-                .foregroundColor(.secondary)
-                if let fraction = status.fraction {
-                    ProgressView(value: fraction)
-                        .progressViewStyle(.linear)
-                } else {
-                    ProgressView().progressViewStyle(.linear)
-                }
+                Text("Downloading \(status.fileName)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                ProgressView(value: status.fraction)
+                    .progressViewStyle(.linear)
             }
             .padding(.horizontal)
         } else if !model.isReady && model.errorMessage == nil {

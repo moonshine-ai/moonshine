@@ -56,6 +56,7 @@ struct Arguments {
     var assetRoot: String = ""
     var language: String = "en_us"
     var voice: String? = nil
+    var clone: String? = nil
     var text: String = "Hello! This is a test of the Moonshine text to speech."
     var speed: String? = nil
     var device: String? = nil
@@ -71,9 +72,10 @@ func printUsage() {
         Usage: TextToSpeech [options]
 
         Options:
-          --asset-root, -r PATH     Path to TTS assets directory (default: auto-detect)
+          --asset-root, -r PATH     Path to TTS assets directory (default: download them)
           --language, -l LANG       Language tag, e.g. en_us, de, fr (default: en_us)
           --voice, -v VOICE         Voice ID, e.g. kokoro_af_heart (default: engine default)
+          --clone, -c PATH          Speak in the voice from this WAV recording
           --text, -t TEXT           Text to synthesize (default: greeting)
           --speed, -s SPEED         Speech rate multiplier, e.g. 1.5 (default: 1.0)
           --device, -d DEVICE       Audio output device index or name substring
@@ -113,6 +115,13 @@ func parseArguments() -> Arguments {
                 exit(1)
             }
             args.voice = remaining[i]
+        case "--clone", "-c":
+            i += 1
+            guard i < remaining.count else {
+                fputs("Error: \(arg) requires a value\n", stderr)
+                exit(1)
+            }
+            args.clone = remaining[i]
         case "--text", "-t":
             i += 1
             guard i < remaining.count else {
@@ -161,7 +170,9 @@ func parseArguments() -> Arguments {
 
 // MARK: - Asset Root Resolution
 
-func resolveAssetRoot(_ explicit: String, sourceFile: String = #filePath) -> String {
+/// Finds a local copy of the TTS assets, or returns nil to let the library
+/// download them into its own cache.
+func resolveAssetRoot(_ explicit: String, sourceFile: String = #filePath) -> String? {
     if !explicit.isEmpty {
         return explicit
     }
@@ -195,10 +206,7 @@ func resolveAssetRoot(_ explicit: String, sourceFile: String = #filePath) -> Str
             return url.path
         }
     }
-    fputs(
-        "Error: Could not find TTS assets. Use --asset-root to specify the path to tts-data/.\n",
-        stderr)
-    exit(1)
+    return nil
 }
 
 // MARK: - Device Resolution
@@ -244,7 +252,7 @@ func resolveDevice(_ spec: String) -> AudioDeviceID {
 
 // MARK: - Main
 
-func main() {
+func main() async {
     let args = parseArguments()
 
     // Handle --list-devices
@@ -268,7 +276,7 @@ func main() {
         do {
             let json = try MoonshineVoice.TextToSpeech.getVoices(
                 languages: args.language,
-                options: [TranscriberOption(name: "g2p_root", value: assetRoot)]
+                options: assetRoot.map { [TranscriberOption(name: "g2p_root", value: $0)] }
             )
             print("Voices for '\(args.language)':")
             print(json)
@@ -279,23 +287,33 @@ func main() {
         return
     }
 
-    // Create TTS synthesizer
-    let tts: MoonshineVoice.TextToSpeech
-    do {
-        print("Creating TTS synthesizer for language '\(args.language)'...")
-        tts = try MoonshineVoice.TextToSpeech(
-            language: args.language,
-            g2pRoot: assetRoot,
-            voice: args.voice
-        )
-    } catch {
-        fputs("Error: Failed to create TTS synthesizer: \(error)\n", stderr)
-        exit(1)
+    // Construct, configure, load. Without --asset-root the voice is fetched
+    // from the Moonshine CDN and cached for next time.
+    let tts = MoonshineVoice.TextToSpeech().language(args.language)
+    if let voice = args.voice {
+        tts.voice(voice)
+        print("Voice: \(voice)")
+    }
+    if let assetRoot { tts.modelsFrom(URL(fileURLWithPath: assetRoot)) }
+    if args.clone != nil { tts.cloning() }
+    tts.onProgress { fraction, file in
+        fputs("\r  \(file) \(Int(fraction * 100))%      ", stderr)
     }
     defer { tts.close() }
 
-    if let voice = args.voice {
-        print("Voice: \(voice)")
+    do {
+        print("Loading text-to-speech for language '\(args.language)'...")
+        try await tts.load()
+        // Finding the speech in the recording and transcribing it for the
+        // vocoder both happen inside cloneFrom.
+        if let clone = args.clone {
+            print("Cloning the voice in \(clone)...")
+            try await tts.cloneFrom(clone)
+        }
+        fputs("\n", stderr)
+    } catch {
+        fputs("\nError: failed to load text-to-speech: \(error)\n", stderr)
+        exit(1)
     }
 
     // Build per-call options
@@ -305,11 +323,11 @@ func main() {
         print("Speed: \(speed)x")
     }
 
-    if let outputPath = args.output {
-        // Write to WAV file
-        do {
+    do {
+        if let outputPath = args.output {
+            // synthesize returns the samples instead of playing them.
             print("Synthesizing: \"\(args.text)\"")
-            let result = try tts.synthesize(text: args.text, options: synthOptions)
+            let result = try tts.synthesize(args.text, options: synthOptions)
             let duration = Double(result.samples.count) / Double(result.sampleRateHz)
             print(
                 String(
@@ -318,13 +336,7 @@ func main() {
 
             try writeWav(path: outputPath, samples: result.samples, sampleRate: result.sampleRateHz)
             print("Written to \(outputPath)")
-        } catch {
-            fputs("Error: \(error)\n", stderr)
-            exit(1)
-        }
-    } else {
-        // Play audio
-        do {
+        } else {
             var deviceID: AudioDeviceID? = nil
             if let deviceSpec = args.device {
                 deviceID = resolveDevice(deviceSpec)
@@ -335,14 +347,14 @@ func main() {
             }
 
             print("Synthesizing and playing: \"\(args.text)\"")
-            tts.say(args.text, device: deviceID, options: synthOptions)
-            tts.wait()
+            // say returns once the audio has finished playing.
+            try await tts.say(args.text, device: deviceID, options: synthOptions)
             print("Playback complete.")
-        } catch {
-            fputs("Error: \(error)\n", stderr)
-            exit(1)
         }
+    } catch {
+        fputs("Error: \(error)\n", stderr)
+        exit(1)
     }
 }
 
-main()
+await main()

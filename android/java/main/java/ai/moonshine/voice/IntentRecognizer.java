@@ -1,9 +1,5 @@
 package ai.moonshine.voice;
 
-import android.content.Context;
-
-import androidx.annotation.Nullable;
-
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -11,8 +7,11 @@ import java.util.List;
 /**
  * Semantic intent recognizer: registers canonical phrases and ranks them against
  * an utterance via {@link JNI#moonshineGetClosestIntents}.
+ *
+ * <p>Internal to the library. {@link DialogFlow} is the supported way to match
+ * spoken phrases; it owns a recognizer and routes trigger phrases through it.
  */
-public class IntentRecognizer {
+class IntentRecognizer {
   private int handle = -1;
 
   /**
@@ -20,7 +19,7 @@ public class IntentRecognizer {
    * @param embeddingModelArch e.g. {@link JNI#MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M}
    * @param modelVariant e.g. {@code "q4"}; pass null for native default
    */
-  public IntentRecognizer(String modelRootDir, int embeddingModelArch, String modelVariant) {
+  IntentRecognizer(String modelRootDir, int embeddingModelArch, String modelVariant) {
     JNI.ensureLibraryLoaded();
     String variant = modelVariant != null ? modelVariant : "q4";
     this.handle = JNI.moonshineCreateIntentRecognizer(modelRootDir, embeddingModelArch, variant);
@@ -29,29 +28,8 @@ public class IntentRecognizer {
     }
   }
 
-  public IntentRecognizer(String modelRootDir, int embeddingModelArch) {
+  IntentRecognizer(String modelRootDir, int embeddingModelArch) {
     this(modelRootDir, embeddingModelArch, "q4");
-  }
-
-  /**
-   * Downloads the intent-recognition embedding model (if not already present, into a managed
-   * {@link ModelCache} directory) on a background thread, then builds and returns a ready
-   * {@link IntentRecognizer} through {@code callback} on the main thread.
-   *
-   * @param context            any {@link Context}; the application context is retained.
-   * @param modelName          embedding model id (e.g. {@code "embeddinggemma-300m"}), or null for
-   *                           the default.
-   * @param embeddingModelArch e.g. {@link JNI#MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M}.
-   * @param variant            e.g. {@code "q4"}, or null for the default.
-   */
-  public static Cancellable loadFromCatalog(Context context, @Nullable String modelName,
-                                            int embeddingModelArch, @Nullable String variant,
-                                            LoadCallback<IntentRecognizer> callback) {
-    ModelSpec spec = ModelSpec.intent(modelName, variant);
-    return CatalogLoader.load(context, Collections.singletonList(spec),
-        directories -> new IntentRecognizer(
-            directories.get(spec).getAbsolutePath(), embeddingModelArch, variant),
-        callback);
   }
 
   /**
@@ -65,8 +43,7 @@ public class IntentRecognizer {
    *                  {@code null} for the default model.
    * @param options   Optional options; recognizes {@code variant}.
    */
-  public static String getIntentDependencies(String modelName,
-                                             List<TranscriberOption> options) {
+  static String getIntentDependencies(String modelName, List<TranscriberOption> options) {
     JNI.ensureLibraryLoaded();
     TranscriberOption[] optionsArray =
         (options == null || options.isEmpty())
@@ -88,14 +65,14 @@ public class IntentRecognizer {
     }
   }
 
-  public void close() {
+  void close() {
     if (handle >= 0) {
       JNI.moonshineFreeIntentRecognizer(handle);
       handle = -1;
     }
   }
 
-  public void registerIntent(String canonicalPhrase) {
+  void registerIntent(String canonicalPhrase) {
     registerIntent(canonicalPhrase, null, 0);
   }
 
@@ -106,7 +83,7 @@ public class IntentRecognizer {
    * @param embedding       optional pre-computed embedding (null to auto-compute)
    * @param priority        higher-priority intents rank above lower-priority ones
    */
-  public void registerIntent(String canonicalPhrase, float[] embedding, int priority) {
+  void registerIntent(String canonicalPhrase, float[] embedding, int priority) {
     checkHandle();
     int err = JNI.moonshineRegisterIntent(handle, canonicalPhrase, embedding, priority);
     if (err != JNI.MOONSHINE_ERROR_NONE) {
@@ -120,7 +97,7 @@ public class IntentRecognizer {
    * @param sentence the input text to embed
    * @return the embedding vector, or null on failure
    */
-  public float[] calculateEmbedding(String sentence) {
+  float[] calculateEmbedding(String sentence) {
     checkHandle();
     float[] result = JNI.moonshineCalculateIntentEmbedding(handle, sentence);
     if (result == null) {
@@ -130,7 +107,7 @@ public class IntentRecognizer {
   }
 
   /** @return true if the phrase was removed */
-  public boolean unregisterIntent(String canonicalPhrase) {
+  boolean unregisterIntent(String canonicalPhrase) {
     checkHandle();
     int err = JNI.moonshineUnregisterIntent(handle, canonicalPhrase);
     if (err == JNI.MOONSHINE_ERROR_NONE) {
@@ -142,7 +119,7 @@ public class IntentRecognizer {
     throw new RuntimeException("moonshineUnregisterIntent failed: " + err);
   }
 
-  public List<IntentMatch> getClosestIntents(String utterance, float toleranceThreshold) {
+  List<IntentMatch> getClosestIntents(String utterance, float toleranceThreshold) {
     checkHandle();
     IntentMatch[] arr =
         JNI.moonshineGetClosestIntents(handle, utterance, toleranceThreshold);
@@ -152,7 +129,7 @@ public class IntentRecognizer {
     return Collections.unmodifiableList(Arrays.asList(arr));
   }
 
-  public int getIntentCount() {
+  int getIntentCount() {
     checkHandle();
     int n = JNI.moonshineGetIntentCount(handle);
     if (n < 0) {
@@ -161,7 +138,7 @@ public class IntentRecognizer {
     return n;
   }
 
-  public void clearIntents() {
+  void clearIntents() {
     checkHandle();
     int err = JNI.moonshineClearIntents(handle);
     if (err != JNI.MOONSHINE_ERROR_NONE) {

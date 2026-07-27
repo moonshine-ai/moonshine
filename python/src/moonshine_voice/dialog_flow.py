@@ -26,9 +26,26 @@ runner and resumes with the user's answer:
         else:
             yield d.say("Okay, nothing changed.")
 
-The :class:`DialogFlow` runner is a :class:`TranscriptEventListener`, so it
-composes with :class:`MicTranscriber` the same way :class:`IntentRecognizer`
-does.  It has no asyncio dependency – flows are driven synchronously from
+Register the flow against a trigger phrase and let the runner do the rest:
+
+    dialog = (
+        DialogFlow()
+        .language("en")
+        .listen_for("set up wifi", setup_wifi)
+        .always("cancel", lambda d: d.cancel())
+    )
+    dialog.load()
+    dialog.start_listening()
+
+:meth:`DialogFlow.load` downloads and opens the speech recognition,
+speech synthesis and phrase-matching models, and
+:meth:`DialogFlow.start_listening` opens the microphone, so a voice
+interface needs no other objects.  Supply your own with
+:meth:`DialogFlow.use_mic_transcriber` / :meth:`DialogFlow.use_text_to_speech`
+when you already have them, or drive the runner from text with
+:meth:`DialogFlow.handle_utterance`.
+
+There is no asyncio dependency – flows are driven synchronously from
 whatever thread delivers transcript events, so flows can be unit-tested
 without any audio, TTS, or event loop.
 """
@@ -40,6 +57,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import (
     Any,
     Callable,
@@ -52,6 +70,7 @@ from typing import (
     Protocol,
     Sequence,
     Tuple,
+    Union,
 )
 
 from moonshine_voice.alphanumeric_listener import (
@@ -66,13 +85,14 @@ from moonshine_voice.download import (
     get_model_for_language,
     get_spelling_model_path,
 )
-from moonshine_voice.intent_recognizer import IntentRecognizer
+from moonshine_voice.errors import MoonshineError
 from moonshine_voice.mic_transcriber import MicTranscriber
 from moonshine_voice.transcriber import (
     MOONSHINE_FLAG_SPELLING_MODE,
     Error,
     LineCompleted,
     LineStarted,
+    ModelArch,
     TranscriptEventListener,
 )
 from moonshine_voice.tts import TextToSpeech, _parse_options_cli
@@ -212,8 +232,8 @@ class NoMatchError(DialogError):
 class EmbeddingBackend(Protocol):
     """Minimal interface the phrase matcher needs from an embedding source.
 
-    :class:`moonshine_voice.IntentRecognizer` satisfies this protocol via
-    its :meth:`calculate_embedding` and :meth:`distance` methods – the
+    The internal intent recognizer satisfies this protocol via its
+    :meth:`calculate_embedding` and :meth:`distance` methods – the
     latter is a thin wrapper around the native
     ``moonshine_calculate_embedding_distance`` C API so scoring happens
     in C rather than Python.
@@ -229,8 +249,8 @@ class EmbeddingBackend(Protocol):
 class PhraseMatcher:
     """Match an utterance to one of several key→phrases groups via embeddings.
 
-    This is a tiny wrapper around an :class:`EmbeddingBackend` (typically
-    an :class:`IntentRecognizer`).  At construction time, the backend is
+    This is a tiny wrapper around an :class:`EmbeddingBackend`.  At
+    construction time, the backend is
     used to compute an embedding for every phrase in every group; at
     match time, the utterance is embedded once and compared against
     every phrase using cosine similarity.  The key of the best-scoring
@@ -243,7 +263,7 @@ class PhraseMatcher:
     Example::
 
         yes_no = PhraseMatcher(
-            intent_recognizer,
+            embedding_backend,
             {"yes": ["yes", "sure", "please"],
              "no":  ["no", "nope", "cancel"]},
             threshold=0.6,
@@ -437,6 +457,27 @@ class _AlphaSession:
         self.buffer: List[str] = []
 
 
+class _TranscriptBridge(TranscriptEventListener):
+    """Feeds a transcriber's events into a :class:`DialogFlow`.
+
+    Kept separate from the runner so that ``DialogFlow.on_error`` can be
+    the public "tell me when something went wrong" setter rather than the
+    transcript-event callback of the same name.
+    """
+
+    def __init__(self, runner: "DialogFlow"):
+        self._runner = runner
+
+    def on_line_started(self, event: LineStarted) -> None:
+        self._runner._on_line_started(event)
+
+    def on_line_completed(self, event: LineCompleted) -> None:
+        self._runner._on_line_completed(event)
+
+    def on_error(self, event: Error) -> None:
+        self._runner._on_transcriber_error(event)
+
+
 class _ActiveFlow:
     """Per-session state for a running flow."""
 
@@ -450,12 +491,25 @@ class _ActiveFlow:
         self.alpha_session: Optional[_AlphaSession] = None
 
 
-class DialogFlow(TranscriptEventListener):
+class DialogFlow:
     """Runner that drives generator-based conversational flows.
 
-    Register flow functions against trigger phrases; completed transcript
-    lines are routed either to the configured intent recognizer (when no
-    flow is active) or to the currently suspended generator (when one is).
+    Configure with the chainable setters, register flows with
+    :meth:`listen_for` and :meth:`always`, then call :meth:`load` to open
+    the models and :meth:`start_listening` to go live::
+
+        dialog = (
+            DialogFlow()
+            .language("en")
+            .listen_for("set up wifi", setup_wifi)
+            .always("cancel", lambda d: d.cancel())
+        )
+        dialog.load()
+        dialog.start_listening()
+
+    Completed transcript lines are routed either to a matching trigger
+    phrase (when no flow is active) or to the currently suspended
+    generator (when one is).
 
     The runner is synchronous: when a flow yields a :class:`Say`, the
     runner speaks and blocks until the utterance has been played, then
@@ -464,143 +518,51 @@ class DialogFlow(TranscriptEventListener):
     the prompt and returns control to the caller; the next completed
     transcript line resumes the generator.
 
-    Args:
-        tts: Optional :class:`TextToSpeech` used to speak prompts.  If
-            set, prompts are spoken via ``tts.say(text)`` and the runner
-            blocks on ``tts.wait()`` before advancing the flow.
-        intent_recognizer: Optional :class:`IntentRecognizer` used for
-            matching trigger phrases to registered flows and for routing
-            utterances when no flow is active.  When omitted, trigger
-            matching falls back to case-insensitive substring matching.
-        transcriber: Reserved for future per-prompt biasing hooks.
-        speak_fn: Optional callable ``(text) -> None`` that speaks the text
-            and blocks until playback finishes.  Overrides ``tts``.  Useful
-            for tests and alternative TTS backends.
-        mute_fn: Optional callable ``(should_mute: bool) -> None`` invoked
-            before and after each spoken prompt so callers can silence the
-            microphone while the assistant is talking.
-        spell_feedback: If ``True`` (default), every character recognised
-            during a ``SPELLED`` / ``DIGITS`` prompt is spoken back to
-            the user using :func:`spoken_form` (``"haitch"`` for
-            ``"h"``, ``"capital ay"`` for ``"A"``, ``"hash"`` for
-            ``"#"``, etc.), and "delete" / "backspace" / "undo" /
-            "scratch that" commands are echoed as
-            ``"deleting <character>"`` so the user hears confirmation
-            that the right letter came off the end of the buffer.
-            Matches the behaviour of ``AlphanumericListener(tts=…)``
-            but routes through this runner's own
-            ``speak_fn``/``tts`` so the same mic-mute and logging
-            apply.  Pass ``spell_feedback=False`` to silence the
-            character-by-character echo (e.g. when no TTS is wired
-            up and audible output would just be log spam).
-        spelling_mode_fn: Optional callable
-            ``(active: bool) -> None`` invoked whenever the runner
-            enters or leaves a ``SPELLED`` / ``DIGITS`` prompt.  Wire
-            this to the underlying transcriber's
-            ``set_transcribe_flags`` to flip
-            ``MOONSHINE_FLAG_SPELLING_MODE`` on only while spelled
-            input is expected, so the C++ spelling-CNN fusion path is
-            used for password / code / digit dictation but doesn't
-            perturb free-form recognition or trigger-phrase matching.
-            Pairs with constructing the transcriber with a
-            ``spelling_model_path``; when no model is loaded the flag
-            is a no-op so leaving this ``None`` is also fine.
-        log_io: If ``True``, every utterance the runner receives from
-            the STT and every prompt it asks the TTS to speak is
-            logged to stderr in a clean ``user: …`` / ``assistant: …``
-            format.  Distinct from ``debug``: ``log_io`` is the
-            user-facing dialogue transcript (just inputs and
-            outputs), while ``debug`` is the verbose internal
-            stage-transition trace with timings.  Off by default so
-            existing callers that already format their own
-            transcript via ``speak_fn`` or a transcript listener
-            don't end up with duplicate lines; turn it on for a
-            quick inline trace when you don't care to wire up your
-            own logging.
-        ignore_stt_during_tts: If ``True`` (default), every utterance
-            that arrives while the runner is mid-prompt (i.e. the
-            TTS is actively speaking) is dropped before it can
-            advance the flow, match a global trigger, or fall
-            through to the intent recognizer.  This is a software
-            guard on top of the optional hardware ``mute_fn`` —
-            ``mute_fn`` minimises self-capture but on devices with
-            weak echo cancellation the STT can still latch onto
-            in-flight audio captured just before the mute, or onto
-            speaker bleed that the cancellation didn't fully
-            suppress.  Disable (``False``) only when you have
-            reliable echo cancellation *and* want barge-in: callers
-            still get the utterance via the regular
-            ``TranscriptEventListener`` path.
-        success_beep_fn: Optional callable ``() -> None`` invoked the
-            moment a completed transcript line is recognized — i.e.
-            it matched a trigger phrase or was successfully
-            interpreted as the answer to an active prompt — and
-            *before* any TTS response begins.  Gives the user a
-            short audible cue that "I heard you and understood"
-            before the assistant starts replying.  When omitted,
-            falls back to ``tts.play_success()`` if the configured
-            ``tts`` exposes one (e.g. the bundled
-            :class:`TextToSpeech`); pass any callable to override
-            (e.g. play a custom WAV) or ``lambda: None`` to
-            silence.
-        error_beep_fn: Optional callable ``() -> None`` invoked when
-            a completed transcript line *isn't* recognized — no
-            trigger matched, no active flow could interpret it as
-            an answer, and no global handler took it.  Pairs with
-            ``success_beep_fn`` so misrecognitions don't end in
-            silence: the user hears a distinct "didn't get that"
-            cue immediately, and the runner then reprompts /
-            abandons / forwards to the intent recognizer as before.
-            Same fallback as ``success_beep_fn`` — auto-wired to
-            ``tts.play_error()`` when available.
+    The runner mutes its microphone while the assistant is talking and
+    flips the C++ spelling-CNN fusion path on for the duration of a
+    ``SPELLED`` / ``DIGITS`` prompt, so neither needs wiring up by hand.
+
     """
 
-    def __init__(
-        self,
-        *,
-        tts: Optional[Any] = None,
-        intent_recognizer: Optional[Any] = None,
-        transcriber: Optional[Any] = None,
-        speak_fn: Optional[Callable[[str], None]] = None,
-        mute_fn: Optional[Callable[[bool], None]] = None,
-        spelling_mode_fn: Optional[Callable[[bool], None]] = None,
-        success_beep_fn: Optional[Callable[[], None]] = None,
-        error_beep_fn: Optional[Callable[[], None]] = None,
-        phrase_matcher_factory: Optional[PhraseMatcherFactory] = None,
-        cached_embeddings: Optional[CachedEmbeddings] = None,
-        trigger_threshold: float = 0.7,
-        spell_feedback: bool = True,
-        log_io: bool = False,
-        ignore_stt_during_tts: bool = True,
-        debug: bool = False,
-    ):
-        self._tts = tts
-        self._intent_recognizer = intent_recognizer
-        self._transcriber = transcriber
-        self._speak_fn = speak_fn
-        self._mute_fn = mute_fn
-        self._spelling_mode_fn = spelling_mode_fn
-        # Auto-wire success/error beeps from ``tts`` when the caller
-        # didn't pass an explicit callback.  We duck-type both
-        # methods so backends without beep support (e.g. test stubs
-        # that only implement ``say``) silently skip the cue rather
-        # than raising.  Callers who want to disable the beeps even
-        # when ``tts`` supports them can pass ``lambda: None``.
-        if success_beep_fn is None and tts is not None:
-            method = getattr(tts, "play_success", None)
-            if callable(method):
-                success_beep_fn = method
-        if error_beep_fn is None and tts is not None:
-            method = getattr(tts, "play_error", None)
-            if callable(method):
-                error_beep_fn = method
-        self._success_beep_fn = success_beep_fn
-        self._error_beep_fn = error_beep_fn
+    def __init__(self) -> None:
+        # -- model configuration, applied by :meth:`load` -------------------
+        self._language = "en"
+        self._model_arch: Optional[ModelArch] = None
+        self._voice: Optional[str] = None
+        self._model_root: Optional[Path] = None
+        self._wants_microphone = True
+        self._wants_speech = True
+        self._output_device: Optional[Any] = None
+        self._tts_options: Optional[Dict[str, Any]] = None
+
+        # -- engines --------------------------------------------------------
+        self._tts: Optional[Any] = None
+        self._mic: Optional[Any] = None
+        self._owns_tts = False
+        self._owns_mic = False
+        self._listening = False
+        self._bridge = _TranscriptBridge(self)
+        self._bridged: List[Any] = []
+
+        # -- observer callbacks ---------------------------------------------
+        self._progress_fn: Optional[Callable[[float, str], None]] = None
+        self._heard_fn: Optional[Callable[[str], None]] = None
+        self._said_fn: Optional[Callable[[str], None]] = None
+        self._error_fn: Optional[Callable[[BaseException], None]] = None
+
+        self._speak_fn: Optional[Callable[[str], None]] = None
+        self._mute_fn: Optional[Callable[[bool], None]] = None
+        self._spelling_mode_fn: Optional[Callable[[bool], None]] = None
+        self._success_beep_fn: Optional[Callable[[], None]] = None
+        self._error_beep_fn: Optional[Callable[[], None]] = None
+        self._beeps_enabled = True
+
+        self._use_embeddings = True
         self._spelling_mode_active = False
-        self._trigger_threshold = float(trigger_threshold)
-        self._spell_feedback = bool(spell_feedback)
-        self._log_io = bool(log_io)
-        self._ignore_stt_during_tts = bool(ignore_stt_during_tts)
+        self._trigger_threshold = 0.7
+        self._spell_feedback = True
+        self._log_io = False
+        self._ignore_stt_during_tts = True
         self._speaking = False
         # Transcript line IDs whose ``LineStarted`` event fired while
         # the assistant was talking; populated in :meth:`on_line_started`
@@ -610,36 +572,24 @@ class DialogFlow(TranscriptEventListener):
         # delivers transcript events is independent of the thread driving
         # the flow.
         self._suspect_line_ids: set = set()
-        self._debug = bool(debug)
+        self._debug = False
         self._log_start: Optional[float] = None
         self._log_last: Optional[float] = None
 
-        # Wire up an :class:`EmbeddingBackend` that the default
-        # :class:`PhraseMatcher` factory will use.  Library-level
-        # constants (e.g. the default yes/no phrases) have their
-        # embeddings shipped via ``assets/cached_embeddings.tsv`` and
-        # loaded by :class:`CachedEmbeddings`; cache misses (typically
-        # user utterances) fall through to ``intent_recognizer``.  A
-        # caller who wants to skip the cache entirely can pass
-        # ``cached_embeddings=CachedEmbeddings(path="/dev/null")`` or
-        # provide their own ``phrase_matcher_factory``.
-        if cached_embeddings is None and intent_recognizer is not None:
-            cached_embeddings = CachedEmbeddings(fallback=intent_recognizer)
-        self._cached_embeddings = cached_embeddings
-
-        if phrase_matcher_factory is None:
-            backend = cached_embeddings or intent_recognizer
-            if backend is not None:
-                def _default_factory(
-                    phrases_by_key: Mapping[str, Sequence[str]],
-                    threshold: float,
-                ) -> Optional[PhraseMatcher]:
-                    return PhraseMatcher(
-                        backend, phrases_by_key, threshold=threshold
-                    )
-
-                phrase_matcher_factory = _default_factory
-        self._phrase_matcher_factory = phrase_matcher_factory
+        # The default :class:`PhraseMatcher` factory runs on an
+        # :class:`EmbeddingBackend`.  Library-level constants (e.g. the
+        # default yes/no phrases) have their embeddings shipped via
+        # ``assets/cached_embeddings.tsv`` and loaded by
+        # :class:`CachedEmbeddings`; cache misses (typically user
+        # utterances) fall through to the embedding model, which
+        # :meth:`_embedding_backend` loads on first use so that merely
+        # constructing a runner never downloads anything.
+        self._cached_embeddings: Optional[CachedEmbeddings] = None
+        self._owned_recognizer: Optional[Any] = None
+        self._backend: Optional[Any] = None
+        self._phrase_matcher_factory: Optional[PhraseMatcherFactory] = (
+            self._default_phrase_matcher
+        )
 
         self._flows: Dict[str, FlowFn] = {}
         self._globals: Dict[str, GlobalHandler] = {}
@@ -657,36 +607,293 @@ class DialogFlow(TranscriptEventListener):
         self._spelled_matcher: Optional[AlphanumericMatcher] = None
         self._digits_matcher: Optional[AlphanumericMatcher] = None
 
+    def _default_phrase_matcher(
+        self,
+        phrases_by_key: Mapping[str, Sequence[str]],
+        threshold: float,
+    ) -> Optional[PhraseMatcher]:
+        backend = self._embedding_backend()
+        if backend is None:
+            return None
+        return PhraseMatcher(backend, phrases_by_key, threshold=threshold)
+
+    # -- configuration -------------------------------------------------------
+    #
+    # Every setter returns ``self`` so a runner can be built in one
+    # expression, and all of them must be called before :meth:`load`.
+
+    def language(self, code: str) -> "DialogFlow":
+        """Set the language for both recognition and speech (default ``"en"``)."""
+        self._language = code
+        return self
+
+    def model_arch(self, arch: ModelArch) -> "DialogFlow":
+        """Pick a specific speech recognition model size."""
+        self._model_arch = arch
+        return self
+
+    def voice(self, voice_id: str) -> "DialogFlow":
+        """Choose the synthesis voice used to speak prompts."""
+        self._voice = voice_id
+        return self
+
+    def models_from(self, directory: Union[str, Path]) -> "DialogFlow":
+        """Read and cache model files under ``directory`` instead of the default cache."""
+        self._model_root = Path(directory)
+        return self
+
+    def microphone(self, enabled: bool = True) -> "DialogFlow":
+        """Whether :meth:`load` should open a microphone (default ``True``).
+
+        Turn this off to drive the runner from text with
+        :meth:`handle_utterance`, or when you supply your own transcriber
+        via :meth:`use_mic_transcriber`.
+        """
+        self._wants_microphone = bool(enabled)
+        return self
+
+    def speech(self, enabled: bool = True) -> "DialogFlow":
+        """Whether :meth:`load` should open a synthesizer (default ``True``).
+
+        Turn this off for a silent runner: prompts are still logged and
+        flows still advance, they just aren't spoken aloud.
+        """
+        self._wants_speech = bool(enabled)
+        return self
+
+    def output_device(self, device: Union[int, str]) -> "DialogFlow":
+        """Pin speech playback to a specific audio output device.
+
+        Needed on machines where the host default isn't the speaker you
+        want — a Raspberry Pi that defaults to HDMI while the speakers
+        are on the 3.5 mm jack, for example.
+        """
+        self._output_device = device
+        return self
+
+    def trigger_threshold(self, threshold: float) -> "DialogFlow":
+        """Set the similarity a phrase must reach to fire (default ``0.7``).
+
+        Raise it towards ``1.0`` to demand a closer match when triggers
+        are firing on unrelated speech; lower it when they aren't firing
+        on genuine attempts.
+        """
+        self._trigger_threshold = float(threshold)
+        self._invalidate_trigger_matcher()
+        return self
+
+    def on_progress(self, callback: Callable[[float, str], None]) -> "DialogFlow":
+        """Report model download and load progress as ``(fraction, filename)``."""
+        self._progress_fn = callback
+        return self
+
+    def on_heard(self, callback: Callable[[str], None]) -> "DialogFlow":
+        """Report every utterance the runner receives from the microphone."""
+        self._heard_fn = callback
+        return self
+
+    def on_said(self, callback: Callable[[str], None]) -> "DialogFlow":
+        """Report every prompt the runner speaks."""
+        self._said_fn = callback
+        return self
+
+    def on_error(
+        self, callback: Callable[[BaseException], None]
+    ) -> "DialogFlow":
+        """Report errors raised by a flow or by the audio pipeline.
+
+        Without a handler the runner prints the error to stderr and
+        carries on; a flow that raises is always torn down either way, so
+        one bad turn can't wedge the runner.
+        """
+        self._error_fn = callback
+        return self
+
+    def speak_with(self, speak: Callable[[str], None]) -> "DialogFlow":
+        """Speak prompts with your own callable instead of the built-in synthesizer.
+
+        ``speak(text)`` must block until playback has finished, since the
+        runner resumes the flow as soon as it returns.  Setting this stops
+        :meth:`load` from creating a synthesizer of its own.
+        """
+        self._speak_fn = speak
+        return self
+
+    def beeps(self, enabled: bool = True) -> "DialogFlow":
+        """Whether to play the recognition cue tones (default ``True``).
+
+        The runner plays a short "got it" tone the moment an utterance
+        matches a trigger or answers a prompt, and a distinct "didn't get
+        that" tone when nothing matched, so a misrecognition never ends in
+        silence.
+        """
+        self._beeps_enabled = bool(enabled)
+        return self
+
+    def spell_feedback(self, enabled: bool = True) -> "DialogFlow":
+        """Whether to echo each character during spelled input (default ``True``).
+
+        Every character recognised during a ``SPELLED`` / ``DIGITS``
+        prompt is spoken back using :func:`spoken_form` (``"haitch"`` for
+        ``"h"``, ``"capital ay"`` for ``"A"``, ``"hash"`` for ``"#"``),
+        and a "delete" / "scratch that" is echoed as ``"deleting
+        <character>"`` so the user hears that the right letter came off
+        the end.  Turn it off when there's no audio output and the echo
+        would just be log spam.
+        """
+        self._spell_feedback = bool(enabled)
+        return self
+
+    def log_io(self, enabled: bool = True) -> "DialogFlow":
+        """Log the dialogue to stderr as ``user: …`` / ``assistant: …`` lines.
+
+        This is the user-facing transcript of inputs and outputs; use
+        :meth:`debug` for the verbose internal trace.  Off by default so
+        callers that already format their own transcript don't end up
+        with duplicate lines.
+        """
+        self._log_io = bool(enabled)
+        return self
+
+    def barge_in(self, enabled: bool = True) -> "DialogFlow":
+        """Allow the user to interrupt the assistant mid-prompt (default off).
+
+        By default every utterance that arrives while the assistant is
+        talking is dropped, because it's usually the microphone hearing
+        the speakers.  That's a software guard on top of muting the mic:
+        muting minimises self-capture, but on devices with weak echo
+        cancellation the recognizer can still latch onto audio captured
+        just before the mute, or onto speaker bleed the cancellation
+        didn't suppress.  Enable barge-in only when you have reliable
+        echo cancellation.
+        """
+        self._ignore_stt_during_tts = not bool(enabled)
+        return self
+
+    def debug(self, enabled: bool = True) -> "DialogFlow":
+        """Trace every internal stage transition, with timings, to stderr."""
+        self._debug = bool(enabled)
+        return self
+
+    def use_embeddings(self, enabled: bool = True) -> "DialogFlow":
+        """Whether to match phrases semantically (default ``True``).
+
+        With embeddings on, the runner downloads a small language model
+        on :meth:`load` and matches what the user said against trigger
+        phrases by meaning, so "set up wifi" also fires on "I need to get
+        online".  Turn it off to fall back to case-insensitive substring
+        matching and load no model, which is what offline tests usually
+        want.
+        """
+        self._use_embeddings = bool(enabled)
+        return self
+
+    def use_cached_embeddings(
+        self, cache: CachedEmbeddings
+    ) -> "DialogFlow":
+        """Supply pre-computed phrase embeddings, bypassing the model for hits."""
+        self._cached_embeddings = cache
+        self._backend = cache
+        return self
+
+    def use_phrase_matcher(
+        self, factory: PhraseMatcherFactory
+    ) -> "DialogFlow":
+        """Replace the built-in phrase matching with your own implementation."""
+        self._phrase_matcher_factory = factory
+        return self
+
+    def use_text_to_speech(self, tts: Any) -> "DialogFlow":
+        """Speak with an existing :class:`TextToSpeech` instead of creating one.
+
+        The runner won't close a synthesizer it didn't create.
+        """
+        self._tts = tts
+        self._owns_tts = False
+        return self
+
+    def use_mic_transcriber(self, transcriber: Any) -> "DialogFlow":
+        """Listen to an existing transcriber instead of opening a microphone.
+
+        Accepts a :class:`MicTranscriber` or any object with the same
+        ``add_listener`` / ``start`` / ``stop`` shape — a plain
+        :class:`Transcriber` fed from a file works, which is handy for
+        testing a flow against recorded audio.  The runner won't close a
+        transcriber it didn't create.
+        """
+        self._mic = transcriber
+        self._owns_mic = False
+        self._attach_bridge(transcriber)
+        return self
+
+    # -- embedding backend ---------------------------------------------------
+
+    def _embedding_backend(self) -> Optional[Any]:
+        """The embedding backend, loading the intent model on first use.
+
+        Downloading and loading the embedding model is deferred to the
+        first match so that constructing a runner — which applications do
+        during startup, and tests do constantly — stays cheap.  Returns
+        *None* when the runner was built with ``use_embeddings=False``,
+        which leaves matching to the substring fallback.
+        """
+        with self._lock:
+            if self._backend is not None:
+                return self._backend
+            if not self._use_embeddings:
+                return None
+            from moonshine_voice.intent_recognizer import IntentRecognizer
+
+            model_path, model_arch = get_embedding_model()
+            self._owned_recognizer = IntentRecognizer(
+                model_path=model_path, model_arch=model_arch
+            )
+            self._backend = CachedEmbeddings(fallback=self._owned_recognizer)
+            return self._backend
+
+    def close(self) -> None:
+        """Release the embedding model, if this runner loaded one."""
+        with self._lock:
+            recognizer, self._owned_recognizer = self._owned_recognizer, None
+            self._backend = self._cached_embeddings
+        if recognizer is not None:
+            recognizer.close()
+
     # -- registration -------------------------------------------------------
 
-    def register_flow(self, trigger_phrase: str, flow: FlowFn) -> None:
-        """Register a flow function to be started when ``trigger_phrase`` fires.
+    def listen_for(self, trigger_phrase: str, flow: FlowFn) -> "DialogFlow":
+        """Start ``flow`` whenever the user says something like ``trigger_phrase``.
 
-        Trigger matching is always embedding-based: the phrase is embedded
-        once at registration time and compared against the utterance's
-        embedding at match time via cosine similarity.
+        Matching is by meaning rather than by wording: the phrase is
+        embedded once here and compared against each utterance's embedding
+        by cosine similarity, so "set up wifi" also fires on "I need to
+        get online".
         """
         if not callable(flow):
             raise TypeError("flow must be callable")
         self._flows[trigger_phrase] = flow
         self._invalidate_trigger_matcher()
+        return self
 
     def unregister_flow(self, trigger_phrase: str) -> bool:
+        """Remove a flow registered with :meth:`listen_for`."""
         removed = self._flows.pop(trigger_phrase, None) is not None
         if removed:
             self._invalidate_trigger_matcher()
         return removed
 
-    def register_global(self, trigger_phrase: str, handler: GlobalHandler) -> None:
-        """Register a phrase that is always live, even while a flow runs.
+    def always(self, trigger_phrase: str, handler: GlobalHandler) -> "DialogFlow":
+        """Register a phrase that stays live even while a flow is running.
 
         ``handler`` receives the current :class:`Dialog` (a fresh one when
         no flow is active) and may return a :class:`Prompt` to speak, or
         *None*.  It may also raise :class:`DialogCancelled` or
-        :class:`DialogRestart` to influence the active flow.
+        :class:`DialogRestart` to influence the active flow, which is how
+        "cancel" and "start over" are usually wired up.
         """
         self._globals[trigger_phrase] = handler
         self._invalidate_trigger_matcher()
+        return self
 
     def _invalidate_trigger_matcher(self) -> None:
         self._trigger_matcher = None
@@ -707,9 +914,9 @@ class DialogFlow(TranscriptEventListener):
     def registered_flows(self) -> List[str]:
         return list(self._flows.keys())
 
-    # -- TranscriptEventListener implementation -----------------------------
+    # -- transcript events, delivered by _TranscriptBridge ------------------
 
-    def on_line_started(self, event: LineStarted) -> None:
+    def _on_line_started(self, event: LineStarted) -> None:
         """Tag any transcript line that opens while we're talking.
 
         Streaming ASRs commonly finalise a ``LineCompleted`` event
@@ -743,7 +950,7 @@ class DialogFlow(TranscriptEventListener):
             "(opened during TTS playback)"
         )
 
-    def on_line_completed(self, event: LineCompleted) -> None:
+    def _on_line_completed(self, event: LineCompleted) -> None:
         if not event.line or not event.line.text:
             return
         utterance = event.line.text.strip()
@@ -767,14 +974,25 @@ class DialogFlow(TranscriptEventListener):
                         flush=True,
                     )
                 return
-        self.process_utterance(utterance)
+        self.handle_utterance(utterance)
 
-    def on_error(self, event: Error) -> None:
-        pass
+    def _on_transcriber_error(self, event: Error) -> None:
+        message = getattr(event, "message", None) or str(event)
+        self._report_error(MoonshineError(message))
+
+    def _report_error(self, error: BaseException) -> None:
+        """Hand an error to the caller's handler, or print it if there isn't one."""
+        if self._error_fn is None:
+            print(f"DialogFlow: {error}", file=sys.stderr, flush=True)
+            return
+        try:
+            self._error_fn(error)
+        except Exception as e:
+            print(f"DialogFlow: on_error handler failed: {e!r}", file=sys.stderr)
 
     # -- core dispatch ------------------------------------------------------
 
-    def process_utterance(self, utterance: str) -> bool:
+    def handle_utterance(self, utterance: str) -> bool:
         """Route an utterance.
 
         Returns ``True`` if it was consumed by a flow or a global handler,
@@ -851,18 +1069,10 @@ class DialogFlow(TranscriptEventListener):
             self._start_flow(trigger_phrase)
             return True
 
-        # Nothing in DialogFlow's domain matched.  Forward to the
-        # intent recognizer (if any) for app-level handling, and then
-        # play the "didn't get that" cue regardless: from the
-        # runner's point of view the line wasn't recognized as a
-        # flow trigger, global, or active-prompt answer, and
-        # silence here is a bad experience.
-        if self._intent_recognizer is not None:
-            self._log("process_utterance: forwarding to intent recognizer")
-            try:
-                self._intent_recognizer.process_utterance(utterance)
-            except Exception as e:
-                print(f"DialogFlow: intent recognizer error: {e}", file=sys.stderr)
+        # Nothing in DialogFlow's domain matched, so play the "didn't get
+        # that" cue: the line wasn't a flow trigger, a global, or an
+        # answer to the active prompt, and silence here is a bad
+        # experience.
         self._log("process_utterance: no handler matched")
         self._play_error_beep()
         return False
@@ -1153,7 +1363,7 @@ class DialogFlow(TranscriptEventListener):
         # perturbed by the spelling-CNN fuser.
         self._set_spelling_mode(False)
 
-    def cancel_active(self) -> bool:
+    def cancel(self) -> bool:
         """Abandon any currently running flow.  Returns ``True`` if there was one."""
         with self._lock:
             active = self._active
@@ -1173,22 +1383,20 @@ class DialogFlow(TranscriptEventListener):
         application deliver welcome messages, status announcements,
         error notifications, and the like without first registering a
         single-shot flow.  Safe to call concurrently with an active
-        flow – it just routes through the same ``_speak`` path the
-        runner uses for in-flow prompts, so:
+        flow – it just routes through the same path the runner uses for
+        in-flow prompts, so:
 
-        * ``mute_fn`` is invoked around playback (if configured) so
-          the mic is silenced while the assistant talks.
-        * ``_speaking`` is set across playback and the
-          ``on_line_started`` hook tags any STT lines that open during
-          this window as self-capture, so they get dropped on
-          completion (when ``ignore_stt_during_tts`` is on).
-        * ``log_io`` emits a clean ``assistant: ...`` line, matching
+        * the microphone is muted across playback so the assistant
+          doesn't hear itself.
+        * lines the recognizer opens during playback are tagged as
+          self-capture and dropped on completion, unless
+          :meth:`barge_in` is on.
+        * :meth:`log_io` emits a clean ``assistant: ...`` line, matching
           the format used for in-flow speech.
 
         Blocks until playback finishes – mirrors the behaviour of an
         in-flow ``Say``.  Empty / ``None`` ``text`` is a no-op.  When
-        no ``speak_fn`` or ``tts`` is configured the text is printed
-        to stdout (same fallback as in-flow ``Say``).
+        nothing is configured to speak, the text is printed to stdout.
         """
         if not text:
             return
@@ -1833,8 +2041,9 @@ def _run_beep_diagnostic(
 
 
 if __name__ == "__main__":
+    # No explicit prog: argparse reads argv[0], which the console script sets to
+    # "moonshine-voice dialog" so the usage line matches how it was invoked.
     parser = argparse.ArgumentParser(
-        prog="python -m moonshine_voice.dialog_flow",
         description=(
             "Live microphone + TTS demo of DialogFlow, wired up to a "
             "wifi-setup flow.  Say 'set up wifi' to start, 'cancel' to "
@@ -1847,11 +2056,6 @@ if __name__ == "__main__":
         "--language",
         default="en",
         help="Language for mic transcription and TTS (default: en).",
-    )
-    parser.add_argument(
-        "--quantization",
-        default="q4",
-        help="Embedding model variant (default: q4).",
     )
     parser.add_argument(
         "--no-tts",
@@ -2002,18 +2206,6 @@ if __name__ == "__main__":
     print("Loading transcription model...", file=sys.stderr)
     _model_path, _model_arch = get_model_for_language(args.language)
 
-    print(
-        f"Loading embedding model (variant={args.quantization}) – "
-        "first run may download...",
-        file=sys.stderr,
-    )
-    _embed_path, _embed_arch = get_embedding_model(variant=args.quantization)
-    intent_recognizer = IntentRecognizer(
-        model_path=_embed_path,
-        model_arch=_embed_arch,
-        model_variant=args.quantization,
-    )
-
     # Pre-fetch the alphanumeric spelling-CNN if one is published for
     # this language; DialogFlow flips MOONSHINE_FLAG_SPELLING_MODE on
     # only while the active prompt is in SPELLED / DIGITS mode (so
@@ -2116,7 +2308,6 @@ if __name__ == "__main__":
         # beeps quietly become no-ops.
         tts=tts,
         speak_fn=speak,
-        intent_recognizer=intent_recognizer,
         mute_fn=mute,
         spelling_mode_fn=(
             set_spelling_mode if spelling_model_path is not None else None
@@ -2147,4 +2338,4 @@ if __name__ == "__main__":
     finally:
         mic.stop()
         mic.close()
-        intent_recognizer.close()
+        runner.close()

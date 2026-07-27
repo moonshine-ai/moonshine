@@ -37,7 +37,11 @@ export function stringToModelArch(name: string): ModelArch {
   return Number(entry[0]) as ModelArch;
 }
 
-/** Embedding-model architectures for intent recognition. */
+/**
+ * Embedding-model architectures for intent recognition.
+ *
+ * @internal Intent matching is reached through {@link DialogFlow}.
+ */
 export enum EmbeddingModelArch {
   Gemma300M = 0,
 }

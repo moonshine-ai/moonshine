@@ -64,13 +64,7 @@
       const moduleUrl = useLocal
         ? '/wasm/dist/index.js'
         : 'https://cdn.jsdelivr.net/npm/@moonshine-ai/moonshine-wasm/dist/index.js';
-      const {
-        MicrophoneTranscriber,
-        IntentRecognizer,
-        TextToSpeech,
-        DialogFlow,
-        ModelArch,
-      } = await import(moduleUrl);
+      const { TextToSpeech, DialogFlow } = await import(moduleUrl);
 
       const toggle = document.getElementById('toggle');
       const statusEl = document.getElementById('status');
@@ -78,10 +72,7 @@
       const utteranceEl = document.getElementById('utterance');
       const sendBtn = document.getElementById('send');
 
-      let mic = null;
-      let runner = null;
-      let tts = null;
-      let audioContext = null;
+      let dialog = null;
       let running = false;
 
       function log(role, text) {
@@ -92,43 +83,28 @@
         logEl.scrollTop = logEl.scrollHeight;
       }
 
-      // The flow: a generator that yields prompts and resumes with answers.
-      function* wifiSetup(d) {
-        const ssid = yield d.ask("What's the name of your wifi network?");
-        if (!(yield d.confirm(`I heard ${ssid}. Is that right?`))) {
-          yield d.say("No problem, let's start over.");
+      /** The flow: an ordinary async function, read top to bottom. */
+      async function wifiSetup(d) {
+        const ssid = await d.ask("What's the name of your wifi network?");
+        if (!(await d.confirm(`I heard ${ssid}. Is that right?`))) {
+          await d.say("No problem, let's start over.");
           return;
         }
-        if (yield d.confirm('Apply these changes?')) {
-          yield d.say(`Done. Connecting to ${ssid}.`);
+        if (await d.confirm('Apply these changes?')) {
+          await d.say(`Done. Connecting to ${ssid}.`);
         } else {
-          yield d.say('Okay, nothing changed.');
+          await d.say('Okay, nothing changed.');
         }
       }
 
-      function onProgress(loaded, total, file) {
-        const pct = total ? ` ${Math.round((100 * loaded) / total)}%` : '';
-        statusEl.textContent = `Downloading ${file}${pct}…`;
-      }
+      // Only needed for the offline integration test, where the voice assets
+      // and the intent model are served from different repo paths. The voice
+      // comes in as a pre-built engine; modelsFrom points the intent model at
+      // its own base. Normally load() fetches all of this from the CDN itself.
+      const LOCAL_INTENT_BASE = '/test-assets/embeddinggemma-300m-ONNX';
 
-      async function loadTts() {
-        return useLocalAssets
-          ? TextToSpeech.load({ language: 'en_us', assetBaseUrl: '/tts-data' })
-          : TextToSpeech.load({ language: 'en', onProgress });
-      }
-
-      async function loadIntent() {
-        if (useLocalAssets) {
-          const base = '/test-assets/embeddinggemma-300m-ONNX';
-          return IntentRecognizer.loadFromUrls(
-            {
-              'model_q4.ort': `${base}/model_q4.ort`,
-              'tokenizer.bin': `${base}/tokenizer.bin`,
-            },
-            { variant: 'q4' },
-          );
-        }
-        return IntentRecognizer.load({ onProgress });
+      function loadLocalTts() {
+        return new TextToSpeech().language('en_us').modelsFrom('/tts-data').load();
       }
 
       /** Builds the dialog runner (and, unless disabled, the microphone). */
@@ -136,45 +112,27 @@
         toggle.disabled = true;
         statusEl.textContent = 'Loading models (first run downloads them)…';
         try {
-          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          dialog = new DialogFlow()
+            .microphone(useMic)
+            .onHeard((text) => log('user', text))
+            .onSaid((text) => log('assistant', text))
+            .onProgress((fraction, file) => {
+              statusEl.textContent = `Downloading ${file} ${Math.round(100 * fraction)}%…`;
+            });
 
-          // For the offline integration test, load TTS + intent from
-          // repo-served assets and hand them to DialogFlow.load; otherwise let
-          // it fetch them from the CDN. Either way, DialogFlow.load downloads
-          // any remaining models (the mic ASR), wires the runner, registers the
-          // flows, and attaches the mic — one call instead of the old
-          // load-each-engine-then-wire-them dance.
-          const preloaded = useLocalAssets
-            ? { tts: await loadTts(), intentRecognizer: await loadIntent() }
-            : {};
+          dialog.listenFor('set up wifi', wifiSetup);
 
-          const bundle = await DialogFlow.load({
-            language: 'en',
-            modelArch: ModelArch.MediumStreaming,
-            microphone: useMic,
-            audioContext,
-            onProgress,
-            ...preloaded,
-            flows: { 'set up wifi': wifiSetup },
-            globals: {
-              cancel: (d) => d.cancel(),
-              'start over': (d) => d.restart(),
-            },
-            micListeners: [{ onLineCompleted: (e) => log('user', e.line.text) }],
-            // Log the assistant's line and synthesize it. We don't await
-            // playback so the flow (and tests) never block on audio output.
-            speakFn: (text) => {
-              log('assistant', text);
-              try { tts?.say(text); } catch { /* synth is best-effort here */ }
-            },
-          });
+          if (useLocalAssets) {
+            dialog.useTextToSpeech(await loadLocalTts()).modelsFrom(LOCAL_INTENT_BASE);
+          }
 
-          runner = bundle.dialog;
-          tts = bundle.tts;
-          mic = bundle.mic ?? null;
+          // One call downloads the speech-to-text, intent and voice models,
+          // wires them together, and attaches the microphone. "cancel" and
+          // "start over" work without being registered.
+          await dialog.load();
 
-          if (mic) {
-            await mic.start();
+          if (useMic) {
+            await dialog.startListening();
             statusEl.textContent = 'Listening… say “set up wifi”.';
             toggle.textContent = 'Stop';
           } else {
@@ -191,9 +149,9 @@
 
       async function stop() {
         toggle.disabled = true;
-        await mic?.stop();
-        mic?.close();
-        mic = null;
+        await dialog?.stopListening();
+        dialog?.close();
+        dialog = null;
         running = false;
         window.__dialogReady = false;
         statusEl.textContent = 'Stopped.';
@@ -201,13 +159,12 @@
         toggle.disabled = false;
       }
 
-      // Feed a typed utterance to the runner exactly like a completed STT line.
+      // Feed a typed utterance in exactly as if it had been heard.
       function sendUtterance() {
         const text = utteranceEl.value.trim();
-        if (!text || !runner) return;
-        log('user', text);
-        runner.onLineCompleted({ line: { id: Date.now(), text } });
+        if (!text || !dialog) return;
         utteranceEl.value = '';
+        dialog.handleUtterance(text);
       }
 
       toggle.addEventListener('click', () => (running ? stop() : start()));

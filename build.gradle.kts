@@ -33,6 +33,11 @@ android {
     sourceSets {
         getByName("main") {
             java.srcDirs("android/java/main")
+            // The sources live outside the default src/main tree, so the
+            // manifest beside them has to be pointed at explicitly or the
+            // library's permissions and MicrophonePermissionActivity never
+            // reach the consuming app.
+            manifest.srcFile("android/java/main/AndroidManifest.xml")
         }
         getByName("androidTest") {
             java.srcDirs("android/java/androidTest")

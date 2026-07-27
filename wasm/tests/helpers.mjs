@@ -36,6 +36,14 @@ export function importApi() {
   return import(path.join(DIST, 'index.js'));
 }
 
+/**
+ * Imports a built module that the package deliberately does not re-export, e.g.
+ * `'intent-recognizer.js'`, which DialogFlow owns on the caller's behalf.
+ */
+export function importInternal(file) {
+  return import(path.join(DIST, file));
+}
+
 /** Loads the raw embind module directly (for low-level surface checks). */
 export async function loadRawModule() {
   const factory = (await import(path.join(DIST, 'moonshine.mjs'))).default;

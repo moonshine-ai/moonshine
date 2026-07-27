@@ -1,155 +1,316 @@
 package ai.moonshine.voice;
 
-import android.Manifest;
 import android.content.Context;
-import android.content.pm.PackageManager;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-import java.lang.ref.WeakReference;
+
+import androidx.annotation.Nullable;
+
+import java.io.File;
 import java.util.Collections;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
+/**
+ * Live speech-to-text from the device microphone.
+ *
+ * <pre>{@code
+ * MicTranscriber mic = new MicTranscriber(this)
+ *         .onText(text -> binding.liveTranscript.setText(text))
+ *         .onLine(line -> appendFinal(line.text));
+ *
+ * executor.execute(() -> {
+ *     mic.load();
+ *     mic.start();
+ * });
+ * }</pre>
+ *
+ * <p>Construction is cheap and synchronous, chained setters configure, and
+ * {@link #load()} is the one slow call: it downloads the speech-to-text model
+ * if it is not cached yet, then loads it. {@link #start()} asks for the
+ * microphone permission if the user has not granted it, so an app does not have
+ * to declare, request, and hand back the grant itself.
+ *
+ * <p>{@link #load()} and {@link #start()} block, so call them off the main
+ * thread. Callbacks come back <i>on</i> the main thread, which is where an app
+ * wants them, so no {@code runOnUiThread} wrapper is needed.
+ */
 public class MicTranscriber extends Transcriber {
-  private boolean isRunning = false;
-  private boolean isMicCaptureLoopStarted = false;
-  private MicCaptureProcessor micCaptureProcessor;
-  private CompletableFuture<Void> isLoadedSignal = new CompletableFuture<>();
-  private CompletableFuture<Void> hasMicPermissionSignal =
-      new CompletableFuture<>();
 
-  public MicTranscriber() {
-    super();
-    // When both isLoadedSignal and hasMicPermissionSignal are complete, run
-    // startProcessing()
-    CompletableFuture.allOf(isLoadedSignal, hasMicPermissionSignal)
-        .thenRun(this::startProcessing);
-  }
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    private static final int SAMPLE_RATE = 16000;
 
-  // These load* methods are overridden to complete the CompletableFuture when
-  // the transcriber is loaded, so we can continue with other post-loading
-  // actions.
-  public void loadFromAssets(AppCompatActivity parentContext,
-                             String modelRootDir, int modelArch) {
-    super.loadFromAssets(parentContext, modelRootDir, modelArch);
-    this.isLoadedSignal.complete(null);
-  }
+    private final Context appContext;
 
-  public void loadFromAssets(AppCompatActivity parentContext,
-                             String modelRootDir, String spellingAssetPath,
-                             int modelArch) {
-    super.loadFromAssets(parentContext, modelRootDir, spellingAssetPath,
-                         modelArch);
-    this.isLoadedSignal.complete(null);
-  }
+    private String languageCode = "en";
+    private int arch = JNI.MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING;
+    private boolean includeSpelling = false;
+    @Nullable private File modelDirectory;
+    @Nullable private ProgressCallback progressCallback;
+    private boolean deliverOnMainThread = true;
 
-  public void loadFromFiles(String modelRootDir, int modelArch) {
-    super.loadFromFiles(modelRootDir, modelArch);
-    this.isLoadedSignal.complete(null);
-  }
+    private final List<Consumer<String>> textHandlers = new CopyOnWriteArrayList<>();
+    private final List<Consumer<TranscriptLine>> lineHandlers = new CopyOnWriteArrayList<>();
+    private final List<Consumer<Throwable>> errorHandlers = new CopyOnWriteArrayList<>();
 
-  /**
-   * Downloads the speech-to-text model for {@code language} / {@code modelArch} (if not already
-   * present, into a managed {@link ModelCache} directory) on a background thread, then builds and
-   * returns a ready {@link MicTranscriber} through {@code callback} on the main thread.
-   *
-   * <p>The same {@code modelArch} drives both the download manifest and the load, so the caller
-   * specifies it once. Call {@link #cancel()} on the returned handle to abort.
-   *
-   * @param context any {@link Context}; the application context is retained.
-   * @param language language code (e.g. {@code "en"}).
-   * @param modelArch a {@code MOONSHINE_MODEL_ARCH_*} value.
-   */
-  public static Cancellable loadFromCatalog(Context context, String language, int modelArch,
-                                            LoadCallback<MicTranscriber> callback) {
-    ModelSpec spec = ModelSpec.stt(language, modelArch, false);
-    return CatalogLoader.load(context, Collections.singletonList(spec), directories -> {
-      MicTranscriber transcriber = new MicTranscriber();
-      transcriber.loadFromFiles(directories.get(spec).getAbsolutePath(), modelArch);
-      return transcriber;
-    }, callback);
-  }
+    private volatile boolean running = false;
+    private volatile boolean muted = false;
+    @Nullable private MicCaptureProcessor micCaptureProcessor;
+    @Nullable private Thread micThread;
+    @Nullable private Thread processingThread;
+    private final Object captureLock = new Object();
 
-  public void loadFromMemory(byte[] encoderModelData, byte[] decoderModelData,
-                             byte[] tokenizerData, int modelArch) {
-    super.loadFromMemory(encoderModelData, decoderModelData, tokenizerData,
-                         modelArch);
-    this.isLoadedSignal.complete(null);
-  }
-
-  public void loadFromMemory(byte[] encoderModelData, byte[] decoderModelData,
-                             byte[] tokenizerData, byte[] spellingModelData,
-                             int modelArch) {
-    super.loadFromMemory(encoderModelData, decoderModelData, tokenizerData,
-                         spellingModelData, modelArch);
-    this.isLoadedSignal.complete(null);
-  }
-
-  public void onMicPermissionGranted() {
-    this.hasMicPermissionSignal.complete(null);
-  }
-
-  private void startProcessing() {
-    startMicCaptureLoop();
-    startAudioProcessingLoop();
-  }
-
-  private void startAudioProcessingLoop() {
-    Thread audioProcessingThread = new Thread(new Runnable() {
-      @Override
-      public void run() {
-        Log.d("MainActivity", "Starting audio processing thread");
-        audioProcessingLoop();
-      }
-    });
-    audioProcessingThread.start();
-  }
-
-  private void startMicCaptureLoop() {
-    if (isMicCaptureLoopStarted) {
-      return;
+    public MicTranscriber(Context context) {
+        super();
+        if (context == null) {
+            throw new IllegalArgumentException("context is required");
+        }
+        this.appContext = context.getApplicationContext();
+        addListener(this::dispatch);
     }
-    isMicCaptureLoopStarted = true;
-    micCaptureProcessor = new MicCaptureProcessor();
-    Thread micThread = new Thread(micCaptureProcessor);
-    micThread.start();
-  }
 
-  public void stop() {
-    super.stop();
-    this.isRunning = false;
-  }
+    // -- Configuration -------------------------------------------------------
 
-  public void start() {
-    super.start();
-    this.isRunning = true;
-  }
-
-  private void audioProcessingLoop() {
-    int streamHandle = createStream();
-    startStream(streamHandle);
-    this.isRunning = true;
-    boolean wasRunning = this.isRunning;
-    while (!Thread.currentThread().isInterrupted()) {
-      float[] audioData = micCaptureProcessor.consumeAudio();
-      if (!this.isRunning && !wasRunning) {
-        continue;
-      }
-      if (this.isRunning && !wasRunning) {
-        startStream(streamHandle);
-      }
-      if (this.isRunning || wasRunning) {
-        addAudioToStream(streamHandle, audioData, 16000);
-      }
-      if (!this.isRunning && wasRunning) {
-        stopStream(streamHandle);
-      }
-      wasRunning = this.isRunning;
+    /** Language to transcribe, as a code like {@code "en"}. Defaults to English. */
+    public MicTranscriber language(String code) {
+        this.languageCode = code;
+        return this;
     }
-    stopStream(streamHandle);
-    freeStream(streamHandle);
-  }
+
+    /**
+     * Picks a different speech-to-text model, e.g.
+     * {@link JNI#MOONSHINE_MODEL_ARCH_TINY_STREAMING} for a smaller download on
+     * slower hardware. Defaults to the medium streaming model.
+     */
+    public MicTranscriber modelArch(int modelArch) {
+        this.arch = modelArch;
+        return this;
+    }
+
+    /**
+     * Also downloads the spelling model and turns on spelling fusion, which
+     * makes letter-by-letter dictation ("W I F I") come out right.
+     */
+    public MicTranscriber spelling(boolean enabled) {
+        this.includeSpelling = enabled;
+        setTranscribeFlags(enabled ? JNI.MOONSHINE_FLAG_SPELLING_MODE : 0);
+        return this;
+    }
+
+    /** Loads models from {@code directory} rather than downloading them. */
+    public MicTranscriber modelsFrom(File directory) {
+        this.modelDirectory = directory;
+        return this;
+    }
+
+    /** Called as the model downloads, with a {@code 0..1} fraction. */
+    public MicTranscriber onProgress(ProgressCallback callback) {
+        this.progressCallback = callback;
+        return this;
+    }
+
+    /**
+     * Called with the text of the line currently being spoken, which is revised
+     * as more audio arrives. Use it for the live, in-progress display.
+     */
+    public MicTranscriber onText(Consumer<String> handler) {
+        textHandlers.add(handler);
+        return this;
+    }
+
+    /** Called once per finished line, when the speaker pauses. */
+    public MicTranscriber onLine(Consumer<TranscriptLine> handler) {
+        lineHandlers.add(handler);
+        return this;
+    }
+
+    /** Called when capture or transcription fails after {@link #start()}. */
+    public MicTranscriber onError(Consumer<Throwable> handler) {
+        errorHandlers.add(handler);
+        return this;
+    }
+
+    /**
+     * Set false to receive callbacks on the audio thread instead of the main
+     * thread. Only worth doing when a callback feeds something that is not UI
+     * and the extra hop matters.
+     */
+    public MicTranscriber callbacksOnMainThread(boolean enabled) {
+        this.deliverOnMainThread = enabled;
+        return this;
+    }
+
+    // -- Lifecycle -----------------------------------------------------------
+
+    /**
+     * Downloads the model if needed and loads it. Blocks; call from a
+     * background thread.
+     */
+    public void load() {
+        if (isLoaded()) {
+            return;
+        }
+        try {
+            ModelSpec spec = ModelSpec.stt(languageCode, arch, includeSpelling);
+            File directory = Models.ensureOne(appContext, spec, modelDirectory, progressCallback);
+            loadFromFiles(directory.getAbsolutePath(), arch);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load the speech-to-text model", e);
+        }
+    }
+
+    /**
+     * Opens the microphone and starts transcribing, prompting for the recording
+     * permission if it has not been granted. Blocks while the user answers, so
+     * call from a background thread.
+     */
+    @Override
+    public void start() {
+        if (!isLoaded()) {
+            throw new IllegalStateException("Call load() before start().");
+        }
+        MicrophonePermission.ensureGranted(appContext);
+        synchronized (captureLock) {
+            if (micThread == null) {
+                micCaptureProcessor = new MicCaptureProcessor();
+                micThread = new Thread(micCaptureProcessor, "moonshine-mic-capture");
+                micThread.setDaemon(true);
+                micThread.start();
+            }
+            if (processingThread == null) {
+                processingThread = new Thread(this::audioProcessingLoop, "moonshine-mic-transcribe");
+                processingThread.setDaemon(true);
+                processingThread.start();
+            }
+        }
+        running = true;
+    }
+
+    /** Stops transcribing and flushes the trailing line. */
+    @Override
+    public void stop() {
+        running = false;
+    }
+
+    /**
+     * Drops incoming audio while muted, without tearing down the microphone.
+     * {@link DialogFlow} uses this so the assistant does not transcribe itself.
+     */
+    public void mute(boolean muted) {
+        this.muted = muted;
+    }
+
+    public boolean isRunning() {
+        return running;
+    }
+
+    /** Stops capture and releases the model. */
+    @Override
+    public void close() {
+        running = false;
+        Thread mic;
+        Thread processing;
+        synchronized (captureLock) {
+            mic = micThread;
+            processing = processingThread;
+            micThread = null;
+            processingThread = null;
+            micCaptureProcessor = null;
+        }
+        if (mic != null) {
+            mic.interrupt();
+        }
+        if (processing != null) {
+            processing.interrupt();
+            try {
+                processing.join(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        super.close();
+    }
+
+    // -- Internals -----------------------------------------------------------
+
+    private void dispatch(TranscriptEvent event) {
+        if (event instanceof TranscriptEvent.LineTextChanged) {
+            TranscriptLine line = ((TranscriptEvent.LineTextChanged) event).line;
+            String text = line.text != null ? line.text : "";
+            for (Consumer<String> handler : textHandlers) {
+                deliver(() -> handler.accept(text));
+            }
+        } else if (event instanceof TranscriptEvent.LineCompleted) {
+            TranscriptLine line = ((TranscriptEvent.LineCompleted) event).line;
+            for (Consumer<TranscriptLine> handler : lineHandlers) {
+                deliver(() -> handler.accept(line));
+            }
+        }
+    }
+
+    private void reportError(Throwable error) {
+        if (errorHandlers.isEmpty()) {
+            Log.e("MoonshineMic", "Microphone transcription failed", error);
+            return;
+        }
+        for (Consumer<Throwable> handler : errorHandlers) {
+            deliver(() -> handler.accept(error));
+        }
+    }
+
+    private void deliver(Runnable action) {
+        if (deliverOnMainThread && Looper.myLooper() != Looper.getMainLooper()) {
+            MAIN.post(action);
+        } else {
+            action.run();
+        }
+    }
+
+    private void audioProcessingLoop() {
+        int streamHandle = createStream();
+        boolean streaming = false;
+        try {
+            while (!Thread.currentThread().isInterrupted()) {
+                MicCaptureProcessor capture;
+                synchronized (captureLock) {
+                    capture = micCaptureProcessor;
+                }
+                if (capture == null) {
+                    break;
+                }
+                float[] audio = capture.consumeAudio();
+                boolean wantStreaming = running && !muted;
+                if (wantStreaming && !streaming) {
+                    startStream(streamHandle);
+                    streaming = true;
+                }
+                if (streaming && audio.length > 0) {
+                    addAudioToStream(streamHandle, audio, SAMPLE_RATE);
+                }
+                if (!wantStreaming && streaming) {
+                    stopStream(streamHandle);
+                    streaming = false;
+                }
+                if (audio.length == 0) {
+                    // Nothing captured yet; idle briefly rather than spinning.
+                    Thread.sleep(10);
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (Throwable error) {
+            reportError(error);
+        } finally {
+            try {
+                if (streaming) {
+                    stopStream(streamHandle);
+                }
+                freeStream(streamHandle);
+            } catch (Throwable ignored) {
+                // The transcriber may already have been freed by close().
+            }
+        }
+    }
 }

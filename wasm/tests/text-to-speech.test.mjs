@@ -41,11 +41,19 @@ const synthSkip = !ttsSupported
     ? 'kokoro TTS assets not vendored locally (download-only)'
     : false;
 
-test('synthesizes non-empty mono PCM for a short phrase', { skip: synthSkip }, async () => {
+async function loadLocalTts() {
   const { TextToSpeech } = await importApi();
-  const tts = await TextToSpeech.load({ language: 'en_us', assets, module: mod });
+  return new TextToSpeech()
+    .language('en_us')
+    .assets(assets)
+    .useModule(mod)
+    .load();
+}
+
+test('synthesizes non-empty mono PCM for a short phrase', { skip: synthSkip }, async () => {
+  const tts = await loadLocalTts();
   try {
-    const { audio, sampleRate } = tts.say('Hello world.');
+    const { audio, sampleRate } = tts.synthesize('Hello world.');
     assert.ok(audio instanceof Float32Array);
     assert.ok(audio.length > 0);
     assert.ok(sampleRate > 0);
@@ -55,13 +63,47 @@ test('synthesizes non-empty mono PCM for a short phrase', { skip: synthSkip }, a
 });
 
 test('longer text produces at least as many samples', { skip: synthSkip }, async () => {
-  const { TextToSpeech } = await importApi();
-  const tts = await TextToSpeech.load({ language: 'en_us', assets, module: mod });
+  const tts = await loadLocalTts();
   try {
-    const short = tts.say('Hi.');
-    const long = tts.say('Hello there, this is a much longer sentence to speak.');
+    const short = tts.synthesize('Hi.');
+    const long = tts.synthesize('Hello there, this is a much longer sentence to speak.');
     assert.ok(long.audio.length >= short.audio.length);
     assert.equal(long.sampleRate, short.sampleRate);
+  } finally {
+    tts.close();
+  }
+});
+
+test('configuration setters chain and return the engine', async () => {
+  const { TextToSpeech } = await importApi();
+  const tts = new TextToSpeech();
+  assert.equal(tts.language('en_us'), tts);
+  assert.equal(tts.voice('kokoro_af_heart'), tts);
+  assert.equal(tts.modelsFrom('https://example.test/tts'), tts);
+  assert.equal(tts.cloning(), tts);
+  assert.equal(tts.useModule(mod), tts);
+  assert.equal(tts.isCloned, false);
+});
+
+test('synthesizing before load() is a clear error', async () => {
+  const { TextToSpeech } = await importApi();
+  const tts = new TextToSpeech();
+  assert.throws(() => tts.synthesize('Hello'), /load\(\)/);
+});
+
+test('loading in clone mode waits for a voice to clone', { skip: skipSurface }, async () => {
+  const { TextToSpeech } = await importApi();
+  // There is no engine to build until cloneFrom() supplies a reference voice,
+  // so load() only fetches the assets rather than failing.
+  const tts = new TextToSpeech()
+    .language('en_us')
+    .cloning()
+    .assets(new Map())
+    .useModule(mod);
+  try {
+    await tts.load();
+    assert.equal(tts.isCloned, false);
+    assert.throws(() => tts.synthesize('Hello'), /cloneFrom\(\)/);
   } finally {
     tts.close();
   }

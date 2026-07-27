@@ -111,31 +111,46 @@ test('TTS example synthesizes audio and offers a WAV file', { skip }, async () =
   }
 });
 
-test('Dialog-flow example drives a flow from typed input', { skip }, async () => {
+test('Dialog-flow example runs a whole conversation from typed input', { skip }, async () => {
   const page = await openPage('/dialog-flow/?local=1&assets=local&nomic=1');
+
+  /** Reads the assistant's side of the on-page log. */
+  const assistantLines = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('#log .assistant')].map((el) => el.textContent),
+    );
+
+  /** Types an utterance and waits for the assistant's next line to match. */
+  async function say(text, expected) {
+    const before = (await assistantLines()).length;
+    await page.type('#utterance', text);
+    await page.click('#send');
+    await page.waitForFunction(
+      (count, pattern) => {
+        const lines = [...document.querySelectorAll('#log .assistant')];
+        return lines.length > count && new RegExp(pattern, 'i').test(lines[count].textContent);
+      },
+      { timeout: 120000 },
+      before,
+      expected,
+    );
+  }
+
   try {
     // nomic=1 auto-builds the runner (TTS + intent recognizer) without a mic.
     await page.waitForFunction(() => window.__dialogReady === true, { timeout: 120000 });
 
-    await page.type('#utterance', 'set up wifi');
-    await page.click('#send');
+    // Each answer drives the flow one step further; the flow body is a plain
+    // async function, so the whole conversation runs to completion.
+    await say('set up wifi', 'wifi network');
+    await say('home network', 'is that right');
+    await say('yes', 'apply these changes');
+    await say('yes', 'connecting to');
 
-    // The flow's first prompt asks for the wifi network name; it is spoken via
-    // speakFn, which logs an `assistant:` line.
-    await page.waitForFunction(
-      () =>
-        [...document.querySelectorAll('#log .assistant')].some((el) =>
-          /wifi network/i.test(el.textContent),
-        ),
-      { timeout: 120000 },
-    );
-
-    const assistantLines = await page.evaluate(() =>
-      [...document.querySelectorAll('#log .assistant')].map((el) => el.textContent),
-    );
+    const lines = await assistantLines();
     assert.ok(
-      assistantLines.some((t) => /wifi network/i.test(t)),
-      `expected an assistant prompt about the wifi network, got: ${JSON.stringify(assistantLines)}`,
+      lines.some((t) => /home network/i.test(t)),
+      `expected the answer to be read back, got: ${JSON.stringify(lines)}`,
     );
   } finally {
     await page.close();

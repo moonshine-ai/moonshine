@@ -10,6 +10,10 @@ import android.util.Log;
 
 import androidx.annotation.Nullable;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -18,173 +22,498 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * On-device text-to-speech via the Moonshine native API (Kokoro / Piper / ZipVoice under a
- * {@code g2p_root} tree). Select ZipVoice zero-shot voice cloning with a {@code voice=zipvoice_<id>}
- * option (built-in reference voice) or {@link #fromZipVoiceClone} (your own reference clip).
+ * On-device text-to-speech.
  *
- * <p>This mirrors the Python {@code moonshine_voice.TextToSpeech} surface for create / {@link #synthesize}
- * / {@link #close}, without any automatic asset download. Populate {@code g2p_root} on disk (or use
- * {@link #fromMemory}) before calling.
+ * <pre>{@code
+ * TextToSpeech tts = new TextToSpeech(context);
+ * tts.load();
+ * tts.say("Hello world!");
+ * }</pre>
  *
- * <p>{@link #say} queues text for background synthesis and playback and returns immediately.
- * Synthesis of the next utterance is pipelined with playback of the current one. Use {@link #stop()}
- * to cancel pending utterances and halt playback, {@link #waitUntilDone()} to block until all
- * queued utterances finish, and {@link #isTalking()} to poll the current state.
+ * <p>Cloning a voice is one more line, and the awkward parts — finding the
+ * speech in the reference recording, and transcribing it so the vocoder knows
+ * what was said — happen inside the library:
+ *
+ * <pre>{@code
+ * tts.cloneFrom("some-speech.wav");
+ * tts.say("Hello in your voice!");
+ * }</pre>
+ *
+ * <p>{@link #say} plays audio and returns when playback finishes;
+ * {@link #synthesize} returns the raw PCM instead, for callers doing their own
+ * mixing or encoding. Both block, as do {@link #load()} and {@link #cloneFrom},
+ * so call them off the main thread.
  */
 public class TextToSpeech {
+
+    /** Canonical asset key under which a ZipVoice clone reference clip is supplied. */
+    private static final String CLONE_AUDIO_KEY = "zipvoice/clone_audio";
+    /** The only engine that can clone an arbitrary reference voice. */
+    private static final String CLONE_VOICE = "zipvoice";
+    /** Reference clips are resampled to this rate before cloning. */
+    private static final int CLONE_SAMPLE_RATE = 16000;
+
+    private final Context appContext;
     private int handle = -1;
-    private final String language;
+
+    // Deferred configuration, applied by load().
+    private String languageTag = "en";
+    @Nullable private String voiceId;
+    @Nullable private File assetDirectory;
+    private final List<TranscriberOption> extraOptions = new ArrayList<>();
+    @Nullable private ProgressCallback progressCallback;
+    private boolean cloningWanted = false;
+    @Nullable private AudioDeviceInfo outputDevice;
+
+    /** The clip the current voice was cloned from, if any. */
+    @Nullable private float[] cloneSamples;
+    @Nullable private String cloneTranscript;
+    /** Loaded lazily, the first time a clone clip needs transcribing. */
+    @Nullable private Transcriber clipTranscriber;
 
     private final Object sayLock = new Object();
-    /** {@code -1} means default output route (no {@link AudioTrack#setPreferredDevice}). */
+    /** {@code Integer.MIN_VALUE} means no track has been built yet. */
     private int sayCachedDeviceId = Integer.MIN_VALUE;
     private int sayCachedSampleRateHz;
-    @Nullable
-    private AudioTrack sayCachedTrack;
-
-    // -- Queue infrastructure ------------------------------------------------
-
-    private static final Object SHUTDOWN_SENTINEL = new Object();
-
-    private static class SayRequest {
-        final String text;
-        final Context appContext;
-        @Nullable final AudioDeviceInfo outputDevice;
-        @Nullable final List<TranscriberOption> options;
-
-        SayRequest(String text, Context appContext, @Nullable AudioDeviceInfo outputDevice,
-                   @Nullable List<TranscriberOption> options) {
-            this.text = text;
-            this.appContext = appContext;
-            this.outputDevice = outputDevice;
-            this.options = options;
-        }
-    }
-
-    private static class PlayItem {
-        final float[] samples;
-        final int sampleRate;
-        final Context appContext;
-        @Nullable final AudioDeviceInfo outputDevice;
-
-        PlayItem(float[] samples, int sampleRate, Context appContext,
-                 @Nullable AudioDeviceInfo outputDevice) {
-            this.samples = samples;
-            this.sampleRate = sampleRate;
-            this.appContext = appContext;
-            this.outputDevice = outputDevice;
-        }
-    }
-
-    @SuppressWarnings("rawtypes")
-    private final LinkedBlockingQueue sayQueue = new LinkedBlockingQueue();
-    @SuppressWarnings("rawtypes")
-    private final ArrayBlockingQueue playQueue = new ArrayBlockingQueue(1);
-    private volatile boolean stopRequested = false;
-    @Nullable private Thread synthThread;
-    @Nullable private Thread playThread;
-    private final Object workerLock = new Object();
-
-    private final AtomicInteger pendingCount = new AtomicInteger(0);
-    private final Object pendingLock = new Object();
+    @Nullable private AudioTrack sayCachedTrack;
 
     /**
-     * Load TTS from files on disk (optional {@code filenames} keys; same semantics as the C API).
-     *
-     * @param language Moonshine language tag (e.g. {@code en_us}).
-     * @param filenames  Canonical asset keys, or {@code null} / empty to resolve from {@code g2p_root} only.
-     * @param g2pRoot    Directory containing G2P and vocoder assets; stored as option {@code g2p_root}.
-     * @param options    Additional {@link TranscriberOption} entries (e.g. {@code voice}).
+     * Creates a synthesizer that has not loaded any assets yet. Configure it
+     * with the chainable setters, then call {@link #load()}.
      */
-    public TextToSpeech(String language, String[] filenames, String g2pRoot,
-            List<TranscriberOption> options) {
-        this.language = language;
+    public TextToSpeech(Context context) {
+        if (context == null) {
+            throw new IllegalArgumentException("context is required");
+        }
         JNI.ensureLibraryLoaded();
-        List<TranscriberOption> opts = new ArrayList<>();
-        opts.add(new TranscriberOption("g2p_root", g2pRoot));
-        if (options != null) {
-            opts.addAll(options);
-        }
-        int h = JNI.moonshineCreateTtsSynthesizerFromFiles(language, filenames,
-                opts.toArray(new TranscriberOption[0]));
-        if (h < 0) {
-            throw new RuntimeException(JNI.moonshineErrorToString(h));
-        }
-        this.handle = h;
+        this.appContext = context.getApplicationContext();
+    }
+
+    // -- Configuration -------------------------------------------------------
+
+    /** Synthesis language, e.g. {@code "en"} or {@code "en_us"}. Defaults to English. */
+    public TextToSpeech language(String code) {
+        this.languageTag = code;
+        return this;
+    }
+
+    /** Voice id, e.g. {@code "kokoro_af_heart"}. Defaults to the engine's own default. */
+    public TextToSpeech voice(String id) {
+        this.voiceId = id;
+        return this;
+    }
+
+    /** Loads voice assets from a directory you supply rather than the Moonshine CDN. */
+    public TextToSpeech modelsFrom(File directory) {
+        this.assetDirectory = directory;
+        return this;
     }
 
     /**
-     * Downloads the text-to-speech assets for {@code language} / {@code voice} (if not already
-     * present, into a managed {@link ModelCache} directory) on a background thread, then builds and
-     * returns a ready {@link TextToSpeech} through {@code callback} on the main thread.
-     *
-     * @param context  any {@link Context}; the application context is retained.
-     * @param language Moonshine language tag (e.g. {@code "en_us"}).
-     * @param voice    prefixed voice id (e.g. {@code "kokoro_af_heart"}), or null for the default.
+     * Fetches the cloning engine during {@link #load()} rather than on the first
+     * {@link #cloneFrom(String)}, so the first clone is quick.
      */
-    public static Cancellable loadFromCatalog(Context context, String language,
-            @Nullable String voice, LoadCallback<TextToSpeech> callback) {
-        ModelSpec spec = ModelSpec.tts(language, voice);
-        return CatalogLoader.load(context, java.util.Collections.singletonList(spec), directories -> {
-            List<TranscriberOption> options = new ArrayList<>();
+    public TextToSpeech cloning(boolean enabled) {
+        this.cloningWanted = enabled;
+        return this;
+    }
+
+    /** Asset download progress, as a {@code 0..1} fraction plus the file being fetched. */
+    public TextToSpeech onProgress(ProgressCallback callback) {
+        this.progressCallback = callback;
+        return this;
+    }
+
+    /** Routes playback to a specific device (see {@link #getAudioOutputDevices}). */
+    public TextToSpeech outputDevice(@Nullable AudioDeviceInfo device) {
+        this.outputDevice = device;
+        return this;
+    }
+
+    /** Escape hatch for options the chainable setters don't cover. */
+    public TextToSpeech options(List<TranscriberOption> options) {
+        if (options != null) {
+            this.extraOptions.addAll(options);
+        }
+        return this;
+    }
+
+    /** The language tag this synthesizer will use. */
+    public String getLanguage() {
+        return languageTag;
+    }
+
+    // -- Loading -------------------------------------------------------------
+
+    /**
+     * Downloads the voice assets if needed and prepares the synthesizer. Blocks;
+     * call from a background thread.
+     */
+    public void load() {
+        if (cloningWanted && cloneSamples == null) {
+            // The cloning engine can't exist until there's a voice to clone, so
+            // all load() can usefully do is fetch its assets into the cache that
+            // the first cloneFrom() reads from.
+            ensureAssets(CLONE_VOICE);
+            return;
+        }
+        build(voiceId);
+    }
+
+    public boolean isLoaded() {
+        return handle >= 0;
+    }
+
+    /** True once a voice has been cloned into this synthesizer. */
+    public boolean isCloned() {
+        return cloneSamples != null;
+    }
+
+    /**
+     * Clones the voice in a recording and uses it for subsequent synthesis.
+     *
+     * <p>{@code source} may be a path to a local WAV file or an {@code http(s)}
+     * URL. The library trims the recording down to a few seconds of actual
+     * speech and transcribes that clip for the vocoder, downloading a small
+     * speech-to-text model the first time it needs to.
+     */
+    public void cloneFrom(String source) {
+        cloneFrom(source, null);
+    }
+
+    /**
+     * As {@link #cloneFrom(String)}, but with the words of the clip supplied, for
+     * callers who already know what the reference recording says.
+     */
+    public void cloneFrom(String source, @Nullable String transcript) {
+        WavReader.Audio audio;
+        try {
+            if (source.startsWith("http://") || source.startsWith("https://")) {
+                try (InputStream stream = new URL(source).openStream()) {
+                    audio = WavReader.read(stream);
+                }
+            } else {
+                audio = WavReader.read(new File(source));
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Couldn't read the recording to clone from: " + source, e);
+        }
+        cloneFrom(audio.samples, audio.sampleRate, transcript);
+    }
+
+    /** Clones the voice in a local WAV file. */
+    public void cloneFrom(File file) {
+        cloneFrom(file.getAbsolutePath(), null);
+    }
+
+    /** Clones the voice in {@code samples} (mono float PCM in -1..1). */
+    public void cloneFrom(float[] samples, int sampleRate) {
+        cloneFrom(samples, sampleRate, null);
+    }
+
+    /** Clones the voice in {@code samples}, with the words of the clip supplied. */
+    public void cloneFrom(float[] samples, int sampleRate, @Nullable String transcript) {
+        float[] clip = clipForCloning(samples, sampleRate);
+        cloneSamples = clip;
+        cloneTranscript = transcript != null ? transcript : transcribeClip(clip);
+        build(CLONE_VOICE);
+    }
+
+    /** Clones the voice captured by a {@link VoiceClone}. */
+    public void cloneFrom(VoiceClone clone) {
+        cloneFrom(clone, null);
+    }
+
+    /** Clones the voice captured by a {@link VoiceClone}, with a known transcript. */
+    public void cloneFrom(VoiceClone clone, @Nullable String transcript) {
+        float[] audio = clone.getAudio();
+        if (audio == null) {
+            throw new IllegalStateException(
+                    "That VoiceClone has not captured enough speech yet - wait for onReady.");
+        }
+        cloneFrom(audio, clone.getSampleRate(), transcript);
+    }
+
+    /**
+     * Starts capturing a reference voice from the microphone, for cloning. The
+     * returned object reports when it has heard enough.
+     */
+    public VoiceClone startCloning() {
+        return new VoiceClone(appContext);
+    }
+
+    /** As {@link #startCloning()}, with the clip length and speech minimum tuned. */
+    public VoiceClone startCloning(float clipDurationSeconds, float minimumSpeechSeconds) {
+        return new VoiceClone(appContext, clipDurationSeconds, minimumSpeechSeconds);
+    }
+
+    // -- Synthesis -----------------------------------------------------------
+
+    /**
+     * Synthesizes text to mono float PCM without playing it. Use {@link #say}
+     * to hear it instead.
+     */
+    public TtsSynthesisResult synthesize(String text) {
+        return synthesize(text, null);
+    }
+
+    /** As {@link #synthesize(String)}, with per-call options such as {@code speed}. */
+    public TtsSynthesisResult synthesize(String text, @Nullable List<TranscriberOption> options) {
+        checkLoaded();
+        TtsSynthesisResult result = JNI.moonshineTextToSpeech(handle, text, toArray(options));
+        if (result == null) {
+            throw new RuntimeException("moonshineTextToSpeech failed");
+        }
+        return result;
+    }
+
+    /**
+     * Synthesizes speech directly from IPA phonemes, skipping grapheme-to-phoneme
+     * conversion.
+     *
+     * <p>{@code phonemes} is an International Phonetic Alphabet string, as produced by
+     * {@link GraphemeToPhonemizer#toIpa}. Passing the phonemes for the same language yields audio
+     * equivalent to {@link #synthesize(String)} on the original text, but lets you inspect or edit
+     * the phonemes in between (e.g. to fix a name's pronunciation).
+     */
+    public TtsSynthesisResult synthesizeFromPhonemes(String phonemes) {
+        return synthesizeFromPhonemes(phonemes, null);
+    }
+
+    /** As {@link #synthesizeFromPhonemes(String)}, with per-call options. */
+    public TtsSynthesisResult synthesizeFromPhonemes(String phonemes,
+            @Nullable List<TranscriberOption> options) {
+        checkLoaded();
+        TtsSynthesisResult result = JNI.moonshinePhonemesToSpeech(handle, phonemes,
+                toArray(options));
+        if (result == null) {
+            throw new RuntimeException("moonshinePhonemesToSpeech failed");
+        }
+        return result;
+    }
+
+    // -- say / stop / wait / isTalking ---------------------------------------
+
+    /**
+     * Speaks {@code text} out loud, returning once playback finishes. Blocks;
+     * call from a background thread.
+     *
+     * <p>Utterances play in the order they were requested, and synthesis of the
+     * next one is pipelined with playback of the current one, so several
+     * concurrent {@code say} calls still come out in order without gaps.
+     * {@link #stop()} cancels everything queued and halts the audio playing now,
+     * which makes the waiting calls return early.
+     */
+    public void say(String text) {
+        say(text, null);
+    }
+
+    /** As {@link #say(String)}, with per-call synthesis options such as {@code speed}. */
+    public void say(String text, @Nullable List<TranscriberOption> options) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+        enqueue(text, options);
+        waitUntilDone();
+    }
+
+    /** Speaks each string in order, returning once the last one finishes. */
+    public void say(String[] texts) {
+        if (texts == null) {
+            return;
+        }
+        for (String text : texts) {
+            if (text != null && !text.isEmpty()) {
+                enqueue(text, null);
+            }
+        }
+        waitUntilDone();
+    }
+
+    /**
+     * Queues {@code text} without waiting for it, for callers that just want the
+     * audio to start and have somewhere else to be.
+     */
+    public void sayInBackground(String text) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+        enqueue(text, null);
+    }
+
+    /** Blocks until all queued utterances have been synthesized and played. */
+    public void waitUntilDone() {
+        synchronized (pendingLock) {
+            while (pendingCount.get() > 0) {
+                try {
+                    pendingLock.wait(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+        }
+    }
+
+    /**
+     * Clears the utterance queue and stops any audio currently playing.
+     *
+     * <p>Returns once all pending utterances are discarded and the active playback (if any)
+     * has been halted. It is safe to call {@link #say} again afterwards.
+     */
+    public void stop() {
+        stopRequested = true;
+
+        drainQueue(sayQueue);
+        drainQueue(playQueue);
+
+        synchronized (sayLock) {
+            if (sayCachedTrack != null) {
+                try {
+                    sayCachedTrack.stop();
+                    sayCachedTrack.flush();
+                } catch (Exception ignored) {
+                }
+            }
+        }
+
+        joinWorkers();
+        pendingCount.set(0);
+        synchronized (pendingLock) {
+            pendingLock.notifyAll();
+        }
+    }
+
+    /** True if utterances are queued, being synthesized, or currently playing. */
+    public boolean isTalking() {
+        return pendingCount.get() > 0;
+    }
+
+    // -- Load internals ------------------------------------------------------
+
+    /**
+     * (Re)creates the native synthesizer for {@code voice}, downloading its assets.
+     *
+     * <p>The old engine is only torn down once the new one exists, so a failed
+     * clone leaves the caller with a working synthesizer.
+     */
+    private void build(@Nullable String voice) {
+        File directory = ensureAssets(voice);
+        List<TranscriberOption> options = new ArrayList<>(extraOptions);
+        options.add(new TranscriberOption("g2p_root", directory.getAbsolutePath()));
+
+        final int next;
+        if (cloneSamples != null) {
+            options.add(new TranscriberOption("voice", CLONE_VOICE));
+            options.add(new TranscriberOption("zipvoice_clone_sample_rate",
+                    Integer.toString(CLONE_SAMPLE_RATE)));
+            if (cloneTranscript != null && !cloneTranscript.isEmpty()) {
+                options.add(new TranscriberOption("zipvoice_clone_transcript", cloneTranscript));
+            }
+            next = JNI.moonshineCreateTtsSynthesizerFromMemory(languageTag,
+                    new String[] {CLONE_AUDIO_KEY},
+                    new byte[][] {floatPcmToLeBytes(cloneSamples)},
+                    options.toArray(new TranscriberOption[0]));
+        } else {
             if (voice != null) {
                 options.add(new TranscriberOption("voice", voice));
             }
-            return new TextToSpeech(language, directories.get(spec).getAbsolutePath(), options);
-        }, callback);
+            next = JNI.moonshineCreateTtsSynthesizerFromFiles(languageTag, null,
+                    options.toArray(new TranscriberOption[0]));
+        }
+        if (next < 0) {
+            throw new RuntimeException(JNI.moonshineErrorToString(next));
+        }
+        if (handle >= 0) {
+            JNI.moonshineFreeTtsSynthesizer(handle);
+        }
+        handle = next;
+    }
+
+    private File ensureAssets(@Nullable String voice) {
+        if (assetDirectory != null) {
+            return assetDirectory;
+        }
+        try {
+            return Models.ensureOne(appContext, ModelSpec.tts(languageTag, voice), null,
+                    progressCallback);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to download the text-to-speech assets", e);
+        }
     }
 
     /**
-     * Same as {@link #TextToSpeech(String, String[], String, List)} with no explicit filename keys.
+     * Trims a reference recording to the few seconds of speech ZipVoice wants,
+     * resampling to 16 kHz on the way.
      */
-    public TextToSpeech(String language, String g2pRoot, List<TranscriberOption> options) {
-        this(language, null, g2pRoot, options);
+    private float[] clipForCloning(float[] samples, int sampleRate) {
+        if (sampleRate == CLONE_SAMPLE_RATE && samples.length <= CLONE_SAMPLE_RATE * 10) {
+            return samples;
+        }
+        SpeechClip clip = JNI.moonshineExtractSpeechClip(samples, sampleRate, 4f, 2f);
+        if (clip != null && clip.audio != null) {
+            return clip.audio;
+        }
+        // Nothing clearly speech-like. Rather than refuse outright, take the best
+        // window the detector found - a poor clone beats no clone for a caller
+        // who explicitly handed us this recording.
+        clip = JNI.moonshineExtractSpeechClip(samples, sampleRate, 4f, 0f);
+        if (clip != null && clip.audio != null) {
+            return clip.audio;
+        }
+        throw new IllegalArgumentException(
+                "Couldn't find enough speech in that recording to clone from.");
     }
 
     /**
-     * Create from in-memory bytes per canonical key; {@code memory[i]} may be {@code null} or empty to load
-     * that key from disk under {@code g2p_root}.
+     * Transcribes a clone clip so the vocoder knows what the reference voice
+     * said. The speech-to-text model this needs is an implementation detail, so
+     * it is loaded here rather than being the caller's problem. Cloning still
+     * works without a transcript, just less faithfully, so a failure here is
+     * swallowed rather than sinking the whole operation.
      */
-    public static TextToSpeech fromMemory(String language, String[] filenames, byte[][] memory,
-            String g2pRoot, List<TranscriberOption> options) {
-        JNI.ensureLibraryLoaded();
-        List<TranscriberOption> opts = new ArrayList<>();
-        opts.add(new TranscriberOption("g2p_root", g2pRoot));
-        if (options != null) {
-            opts.addAll(options);
+    @Nullable
+    private String transcribeClip(float[] clip) {
+        try {
+            if (clipTranscriber == null) {
+                Transcriber transcriber = new Transcriber();
+                ModelSpec spec = ModelSpec.stt(sttLanguage(languageTag),
+                        JNI.MOONSHINE_MODEL_ARCH_BASE, false);
+                File directory = Models.ensureOne(appContext, spec, assetDirectory,
+                        progressCallback);
+                transcriber.loadFromFiles(directory.getAbsolutePath(),
+                        JNI.MOONSHINE_MODEL_ARCH_BASE);
+                clipTranscriber = transcriber;
+            }
+            Transcript transcript = clipTranscriber.transcribeWithoutStreaming(clip,
+                    CLONE_SAMPLE_RATE);
+            StringBuilder text = new StringBuilder();
+            if (transcript != null && transcript.lines != null) {
+                for (TranscriptLine line : transcript.lines) {
+                    if (line.text == null || line.text.isEmpty()) {
+                        continue;
+                    }
+                    if (text.length() > 0) {
+                        text.append(' ');
+                    }
+                    text.append(line.text);
+                }
+            }
+            String result = text.toString().trim();
+            return result.isEmpty() ? null : result;
+        } catch (Exception e) {
+            Log.w("MoonshineTTS", "Couldn't transcribe the clone clip; cloning without it", e);
+            return null;
         }
-        int h = JNI.moonshineCreateTtsSynthesizerFromMemory(language, filenames, memory,
-                opts.toArray(new TranscriberOption[0]));
-        if (h < 0) {
-            throw new RuntimeException(JNI.moonshineErrorToString(h));
-        }
-        return new TextToSpeech(language, h);
     }
 
-    /**
-     * ZipVoice zero-shot voice cloning from an in-memory reference clip (mono float PCM in -1..1).
-     *
-     * <p>To use a built-in reference voice instead, pass {@code voice=zipvoice_<id>} (e.g.
-     * {@code zipvoice_american_female}) via the {@code options} of the normal constructors.
-     *
-     * @param clonePcm        Reference clip to clone as mono float PCM.
-     * @param sampleRateHz    Sample rate of {@code clonePcm}.
-     * @param cloneTranscript Transcript of the clip (may be {@code null}/empty; cloning quality is better with it).
-     * @param g2pRoot         Directory containing the ZipVoice model assets.
-     */
-    public static TextToSpeech fromZipVoiceClone(String language, float[] clonePcm, int sampleRateHz,
-            @Nullable String cloneTranscript, String g2pRoot, @Nullable List<TranscriberOption> options) {
-        List<TranscriberOption> opts = new ArrayList<>();
-        if (options != null) {
-            opts.addAll(options);
+    /** TTS languages are regional ({@code en_us}); speech-to-text ones are not ({@code en}). */
+    private static String sttLanguage(String ttsLanguage) {
+        int cut = ttsLanguage.indexOf('_');
+        if (cut < 0) {
+            cut = ttsLanguage.indexOf('-');
         }
-        opts.add(new TranscriberOption("voice", "zipvoice"));
-        opts.add(new TranscriberOption("zipvoice_clone_sample_rate", Integer.toString(sampleRateHz)));
-        if (cloneTranscript != null && !cloneTranscript.isEmpty()) {
-            opts.add(new TranscriberOption("zipvoice_clone_transcript", cloneTranscript));
-        }
-        return fromMemory(language, new String[]{"zipvoice/clone_audio"},
-                new byte[][]{floatPcmToLeBytes(clonePcm)}, g2pRoot, opts);
+        return cut > 0 ? ttsLanguage.substring(0, cut) : ttsLanguage;
     }
 
     private static byte[] floatPcmToLeBytes(float[] pcm) {
@@ -196,14 +525,22 @@ public class TextToSpeech {
         return bb.array();
     }
 
-    private TextToSpeech(String language, int handle) {
-        this.language = language;
-        this.handle = handle;
+    private void checkLoaded() {
+        if (handle < 0) {
+            throw new IllegalStateException(cloningWanted
+                            ? "Call cloneFrom() before synthesizing with a cloned voice."
+                            : "Call load() before synthesizing.");
+        }
     }
 
-    public String getLanguage() {
-        return language;
+    private static TranscriberOption[] toArray(@Nullable List<TranscriberOption> options) {
+        if (options == null || options.isEmpty()) {
+            return null;
+        }
+        return options.toArray(new TranscriberOption[0]);
     }
+
+    // -- Dependency queries --------------------------------------------------
 
     /** Comma-separated G2P asset keys (see {@code moonshine_get_g2p_dependencies}). */
     public static String getG2pDependencies(String languages, List<TranscriberOption> options) {
@@ -235,163 +572,44 @@ public class TextToSpeech {
         return json;
     }
 
-    private static TranscriberOption[] toArray(List<TranscriberOption> options) {
-        if (options == null || options.isEmpty()) {
-            return null;
+    // -- Queue infrastructure ------------------------------------------------
+
+    private static class SayRequest {
+        final String text;
+        @Nullable final List<TranscriberOption> options;
+
+        SayRequest(String text, @Nullable List<TranscriberOption> options) {
+            this.text = text;
+            this.options = options;
         }
-        return options.toArray(new TranscriberOption[0]);
     }
 
-    /**
-     * Synthesize text to mono float PCM (approximately -1..1) and sample rate in Hz.
-     * Optional per-call options are forwarded to the native layer (currently unused by the engine).
-     */
-    public TtsSynthesisResult synthesize(String text, List<TranscriberOption> options) {
-        TtsSynthesisResult r = JNI.moonshineTextToSpeech(handle, text, toArray(options));
-        if (r == null) {
-            throw new RuntimeException("moonshineTextToSpeech failed");
+    private static class PlayItem {
+        final float[] samples;
+        final int sampleRate;
+
+        PlayItem(float[] samples, int sampleRate) {
+            this.samples = samples;
+            this.sampleRate = sampleRate;
         }
-        return r;
     }
 
-    public TtsSynthesisResult synthesize(String text) {
-        return synthesize(text, null);
-    }
+    private final LinkedBlockingQueue<SayRequest> sayQueue = new LinkedBlockingQueue<>();
+    private final ArrayBlockingQueue<PlayItem> playQueue = new ArrayBlockingQueue<>(1);
+    private volatile boolean stopRequested = false;
+    @Nullable private Thread synthThread;
+    @Nullable private Thread playThread;
+    private final Object workerLock = new Object();
 
-    /**
-     * Synthesize speech directly from IPA phonemes, skipping grapheme-to-phoneme conversion.
-     *
-     * <p>{@code phonemes} is an International Phonetic Alphabet string, as produced by
-     * {@link GraphemeToPhonemizer#toIpa} / the native {@code moonshine_text_to_phonemes}. Passing
-     * the phonemes for the same language yields audio equivalent to {@link #synthesize(String)} on
-     * the original text, but lets you inspect or edit the phonemes in between (e.g. to fix a name's
-     * pronunciation). Optional per-call options (e.g. {@code speed}) are forwarded to the native
-     * layer.
-     */
-    public TtsSynthesisResult synthesizeFromPhonemes(String phonemes, List<TranscriberOption> options) {
-        TtsSynthesisResult r = JNI.moonshinePhonemesToSpeech(handle, phonemes, toArray(options));
-        if (r == null) {
-            throw new RuntimeException("moonshinePhonemesToSpeech failed");
-        }
-        return r;
-    }
+    private final AtomicInteger pendingCount = new AtomicInteger(0);
+    private final Object pendingLock = new Object();
 
-    public TtsSynthesisResult synthesizeFromPhonemes(String phonemes) {
-        return synthesizeFromPhonemes(phonemes, null);
-    }
-
-    // -- Queued say / stop / wait / isTalking --------------------------------
-
-    /**
-     * Queue {@code text} for synthesis and playback, returning immediately.
-     *
-     * <p>Utterances are played in order. Synthesis of the next utterance is pipelined with playback
-     * of the current one so there is minimal gap between consecutive utterances. Call {@link #stop()}
-     * to cancel all pending utterances and halt the currently-playing audio.
-     */
-    public void say(Context context, String text) {
-        say(context, text, null, null);
-    }
-
-    /**
-     * Same as {@link #say(Context, String)} but routes output to {@code outputDevice} when non-null
-     * (see {@link AudioTrack#setPreferredDevice}).
-     */
-    public void say(Context context, String text, @Nullable AudioDeviceInfo outputDevice) {
-        say(context, text, outputDevice, null);
-    }
-
-    /**
-     * Queue {@code text} for synthesis and playback with options, returning immediately.
-     */
-    @SuppressWarnings("unchecked")
-    public void say(Context context, String text, @Nullable AudioDeviceInfo outputDevice,
-            @Nullable List<TranscriberOption> synthesizeOptions) {
-        if (context == null) {
-            throw new IllegalArgumentException("context is required");
-        }
-        Context appContext = context.getApplicationContext();
+    private void enqueue(String text, @Nullable List<TranscriberOption> options) {
+        checkLoaded();
         pendingCount.incrementAndGet();
-        sayQueue.add(new SayRequest(text, appContext, outputDevice, synthesizeOptions));
+        sayQueue.add(new SayRequest(text, options));
         ensureWorkers();
     }
-
-    /**
-     * Queue each string for synthesis and playback, returning immediately.
-     *
-     * <p>Equivalent to calling {@link #say(Context, String)} once per element in order.
-     */
-    public void say(Context context, String[] texts) {
-        say(context, texts, null, null);
-    }
-
-    /**
-     * Queue each string for synthesis and playback with options, returning immediately.
-     */
-    public void say(Context context, String[] texts, @Nullable AudioDeviceInfo outputDevice,
-            @Nullable List<TranscriberOption> synthesizeOptions) {
-        if (context == null) {
-            throw new IllegalArgumentException("context is required");
-        }
-        if (texts == null) return;
-        Context appContext = context.getApplicationContext();
-        for (String text : texts) {
-            pendingCount.incrementAndGet();
-            //noinspection unchecked
-            sayQueue.add(new SayRequest(text, appContext, outputDevice, synthesizeOptions));
-        }
-        ensureWorkers();
-    }
-
-    /**
-     * Block until all queued utterances have been synthesized and played.
-     */
-    public void waitUntilDone() {
-        synchronized (pendingLock) {
-            while (pendingCount.get() > 0) {
-                try {
-                    pendingLock.wait(100);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return;
-                }
-            }
-        }
-    }
-
-    /**
-     * Clear the utterance queue and stop any audio currently playing.
-     *
-     * <p>Returns once all pending utterances are discarded and the active playback (if any)
-     * has been halted. It is safe to call {@link #say} again afterwards.
-     */
-    public void stop() {
-        stopRequested = true;
-
-        drainQueue(sayQueue);
-        drainQueue(playQueue);
-
-        synchronized (sayLock) {
-            if (sayCachedTrack != null) {
-                try {
-                    sayCachedTrack.stop();
-                    sayCachedTrack.flush();
-                } catch (Exception ignored) {
-                }
-            }
-        }
-
-        joinWorkers();
-    }
-
-    /**
-     * Returns {@code true} if utterances are queued, being synthesized, or currently playing.
-     */
-    public boolean isTalking() {
-        return pendingCount.get() > 0;
-    }
-
-    // -- Worker threads ------------------------------------------------------
 
     private void ensureWorkers() {
         synchronized (workerLock) {
@@ -413,22 +631,20 @@ public class TextToSpeech {
 
     private void synthWorker() {
         while (!stopRequested) {
-            Object raw;
+            SayRequest request;
             try {
-                raw = sayQueue.poll(100, TimeUnit.MILLISECONDS);
+                request = sayQueue.poll(100, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
                 break;
             }
-            if (raw == null) continue;
-            if (raw == SHUTDOWN_SENTINEL) break;
+            if (request == null) continue;
             if (stopRequested) {
                 decrementPending();
                 break;
             }
 
-            SayRequest req = (SayRequest) raw;
             try {
-                TtsSynthesisResult result = synthesize(req.text, req.options);
+                TtsSynthesisResult result = synthesize(request.text, request.options);
                 float[] samples = result.samples != null ? result.samples : new float[0];
                 int sampleRate = result.sampleRateHz;
                 if (sampleRate <= 0 || samples.length == 0) {
@@ -439,8 +655,7 @@ public class TextToSpeech {
                     decrementPending();
                     break;
                 }
-                PlayItem item = new PlayItem(samples, sampleRate, req.appContext, req.outputDevice);
-                //noinspection unchecked
+                PlayItem item = new PlayItem(samples, sampleRate);
                 while (!stopRequested) {
                     if (playQueue.offer(item, 100, TimeUnit.MILLISECONDS)) break;
                 }
@@ -449,6 +664,7 @@ public class TextToSpeech {
                     break;
                 }
             } catch (Exception e) {
+                Log.w("MoonshineTTS", "Synthesis failed", e);
                 decrementPending();
             }
         }
@@ -456,23 +672,22 @@ public class TextToSpeech {
 
     private void playWorker() {
         while (!stopRequested) {
-            Object raw;
+            PlayItem item;
             try {
-                raw = playQueue.poll(100, TimeUnit.MILLISECONDS);
+                item = playQueue.poll(100, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
                 break;
             }
-            if (raw == null) continue;
-            if (raw == SHUTDOWN_SENTINEL) break;
+            if (item == null) continue;
             if (stopRequested) {
                 decrementPending();
                 break;
             }
 
-            PlayItem item = (PlayItem) raw;
             try {
                 playOneItem(item);
-            } catch (Exception ignored) {
+            } catch (Exception e) {
+                Log.w("MoonshineTTS", "Playback failed", e);
             } finally {
                 decrementPending();
             }
@@ -480,11 +695,11 @@ public class TextToSpeech {
     }
 
     private void playOneItem(PlayItem item) {
-        int wantDeviceId = item.outputDevice != null ? item.outputDevice.getId() : -1;
+        AudioDeviceInfo device = outputDevice;
+        int wantDeviceId = device != null ? device.getId() : -1;
         synchronized (sayLock) {
             if (stopRequested) return;
-            AudioTrack track = obtainSayTrackLocked(item.appContext, wantDeviceId,
-                    item.outputDevice, item.sampleRate);
+            AudioTrack track = obtainSayTrackLocked(wantDeviceId, device, item.sampleRate);
             playPcmFloat(track, item.samples);
         }
     }
@@ -537,23 +752,23 @@ public class TextToSpeech {
         }
     }
 
-    @SuppressWarnings("rawtypes")
-    private static void drainQueue(java.util.concurrent.BlockingQueue queue) {
+    private static void drainQueue(java.util.concurrent.BlockingQueue<?> queue) {
         while (queue.poll() != null) { /* discard */ }
     }
 
     private void joinWorkers() {
-        Thread st, pt;
+        Thread st;
+        Thread pt;
         synchronized (workerLock) {
             st = synthThread;
             pt = playThread;
         }
         try {
-            if (st != null && st.isAlive()) st.join(2000);
+            if (st != null && st.isAlive() && st != Thread.currentThread()) st.join(2000);
         } catch (InterruptedException ignored) {
         }
         try {
-            if (pt != null && pt.isAlive()) pt.join(2000);
+            if (pt != null && pt.isAlive() && pt != Thread.currentThread()) pt.join(2000);
         } catch (InterruptedException ignored) {
         }
         synchronized (workerLock) {
@@ -565,7 +780,7 @@ public class TextToSpeech {
     // -- Audio track management ----------------------------------------------
 
     /**
-     * Lists output devices suitable for {@link #say(Context, String, AudioDeviceInfo)} (e.g. speaker,
+     * Lists output devices suitable for {@link #outputDevice(AudioDeviceInfo)} (e.g. speaker,
      * wired headset, USB audio).
      */
     public static AudioDeviceInfo[] getAudioOutputDevices(Context context) {
@@ -580,8 +795,8 @@ public class TextToSpeech {
         return am.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
     }
 
-    private AudioTrack obtainSayTrackLocked(Context appContext, int wantDeviceId,
-            @Nullable AudioDeviceInfo outputDevice, int sampleRateHz) {
+    private AudioTrack obtainSayTrackLocked(int wantDeviceId, @Nullable AudioDeviceInfo device,
+            int sampleRateHz) {
         if (sayCachedTrack != null
                 && wantDeviceId == sayCachedDeviceId
                 && sampleRateHz == sayCachedSampleRateHz) {
@@ -602,11 +817,12 @@ public class TextToSpeech {
                 AudioFormat.CHANNEL_OUT_MONO,
                 AudioFormat.ENCODING_PCM_FLOAT);
         if (minBufBytes <= 0) {
-            throw new RuntimeException("AudioTrack.getMinBufferSize failed for sampleRate=" + sampleRateHz);
+            throw new RuntimeException("AudioTrack.getMinBufferSize failed for sampleRate="
+                    + sampleRateHz);
         }
         AudioTrack track = buildAudioTrack(appContext, attrs, format, minBufBytes);
-        if (outputDevice != null) {
-            track.setPreferredDevice(outputDevice);
+        if (device != null) {
+            track.setPreferredDevice(device);
         }
         sayCachedTrack = track;
         sayCachedDeviceId = wantDeviceId;
@@ -679,6 +895,7 @@ public class TextToSpeech {
         sayCachedSampleRateHz = 0;
     }
 
+    /** Releases the synthesizer, its playback resources, and any clone-clip model. */
     public void close() {
         stopRequested = true;
         drainQueue(sayQueue);
@@ -691,6 +908,10 @@ public class TextToSpeech {
         if (handle >= 0) {
             JNI.moonshineFreeTtsSynthesizer(handle);
             handle = -1;
+        }
+        if (clipTranscriber != null) {
+            clipTranscriber.close();
+            clipTranscriber = null;
         }
     }
 

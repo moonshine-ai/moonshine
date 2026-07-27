@@ -43,7 +43,7 @@
 # Defaults:
 #   --repo moonshine-ai/moonshine
 #   Archives: one asset per example app, named <platform>-<project>.tar.gz
-#   (e.g. android-Transcriber.tar.gz, ios-IntentRecognizer.tar.gz). Names are
+#   (e.g. android-Transcriber.tar.gz, ios-TextToSpeech.tar.gz). Names are
 #   resolved from this repo's examples/android and examples/ios directories.
 
 set -euo pipefail

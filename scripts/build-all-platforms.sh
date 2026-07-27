@@ -5,17 +5,21 @@
 # Usage:
 #   ./scripts/build-all-platforms.sh [RELEASE_REF]
 #
-# This builds and publishes a per-release branch (release-v<version>), NOT your
-# live working tree or origin/main, so you can keep editing `main` while this
-# long-running build is in flight. Normally you cut the branch first with
-# scripts/prepare-release.sh, then run this with no arguments and it builds the
-# newest release-v* branch.
+# This builds and publishes the development candidate branch (dev-v<version>),
+# NOT your live working tree, from an isolated worktree so you can keep editing
+# while the long-running build is in flight. The branch is cut by
+# scripts/start-candidate.sh; run this with no arguments and it builds the
+# newest dev-v* branch.
 #
 # The branch is the source of truth. build-all refreshes the v<version> tag to
 # the branch HEAD (GitHub Releases / SwiftPM need a tag) -- you never move tags
 # by hand. The local platforms build from an isolated git worktree at the branch
-# HEAD; each remote host resets to the same branch HEAD. To fold a fix mid-
-# release, add a commit to the branch (see scripts/patch-release.sh) and re-run.
+# HEAD; each remote host resets to the same branch HEAD. To fold in a late fix,
+# add a commit to the branch and re-run.
+#
+# The final stage fast-forwards main to the commit it just published, which is
+# what keeps main's README describing the binaries users can actually install.
+# See scripts/start-candidate.sh for the full process.
 #
 # Resumable: each stage drops a breadcrumb under .release-state/<version>/ when
 # it completes, so re-running the script (e.g. after a failure, or after folding
@@ -23,10 +27,12 @@
 # off. Set RELEASE_FRESH=1 to discard the breadcrumbs and rebuild every stage.
 #
 # Environment:
-#   RELEASE_REF            - release branch (or tag/sha) to build. Defaults to
-#                            the first argument, or the newest release-v* branch.
+#   RELEASE_REF            - candidate branch (or tag/sha) to build. Defaults to
+#                            the first argument, or the newest dev-v* branch.
 #   RELEASE_FRESH          - if non-empty, ignore/clear resume breadcrumbs and
 #                            rebuild every stage.
+#   RELEASE_SKIP_PREFLIGHT - if non-empty, skip scripts/preflight-release.sh.
+#                            Only for deliberately unusual rebuilds.
 #   LINUX_CLOUD_HOST       - SSH host for Linux cloud
 #   LINUX_CLOUD_INSTANCE   - GCP instance name for the Linux VM (optional)
 #   LINUX_CLOUD_ZONE       - GCP zone for the Linux VM (e.g. us-central1-b)
@@ -260,19 +266,19 @@ main() {
 
     trap cleanup EXIT
 
-    # A release is built from its per-release branch's HEAD; build-all is the
+    # A release is built from the candidate branch's HEAD; build-all is the
     # single place that manages the matching v<version> tag. RELEASE_REF is the
-    # branch to build (default: newest release-v* branch); it may also be an
+    # branch to build (default: newest dev-v* branch); it may also be an
     # explicit tag/sha for rebuilding an older release.
     RELEASE_REF="${RELEASE_REF:-${1:-}}"
     git -C "${REPO_ROOT_DIR}" fetch origin --tags --prune --force
     if [ -z "${RELEASE_REF}" ]; then
         RELEASE_REF="$( { git -C "${REPO_ROOT_DIR}" for-each-ref \
                 --format='%(refname:short)' \
-                'refs/heads/release-v*' 'refs/remotes/origin/release-v*'; } 2>/dev/null \
+                'refs/heads/dev-v*' 'refs/remotes/origin/dev-v*'; } 2>/dev/null \
             | sed -E 's#^origin/##' | sort -u -V | tail -n1 )"
         if [ -z "${RELEASE_REF}" ]; then
-            echo "No release-v* branch found. Run scripts/prepare-release.sh first." >&2
+            echo "No dev-v* branch found. Run scripts/start-candidate.sh first." >&2
             exit 1
         fi
     fi
@@ -282,9 +288,9 @@ main() {
     # build it as-is and leave tags alone.
     RELEASE_BRANCH=""
     VERSION=""
-    if [[ "${RELEASE_REF}" == release-v* ]]; then
+    if [[ "${RELEASE_REF}" == dev-v* ]]; then
         RELEASE_BRANCH="${RELEASE_REF}"
-        VERSION="${RELEASE_REF#release-v}"
+        VERSION="${RELEASE_REF#dev-v}"
         if git -C "${REPO_ROOT_DIR}" rev-parse -q --verify \
                 "refs/remotes/origin/${RELEASE_BRANCH}^{commit}" >/dev/null; then
             BUILD_COMMITISH="origin/${RELEASE_BRANCH}"
@@ -309,6 +315,14 @@ main() {
         STATE_KEY="${RELEASE_REF//\//-}"
     fi
 
+    # Check everything that has to be true before the first artifact goes out.
+    # This runs before the tag is moved, so a failed preflight leaves no trace.
+    # Skipped for explicit tag/sha rebuilds, which are deliberately reproducing
+    # an old state rather than shipping a new one.
+    if [ -n "${RELEASE_BRANCH}" ] && [ -z "${RELEASE_SKIP_PREFLIGHT:-}" ]; then
+        "${SCRIPTS_DIR}/preflight-release.sh" "${RELEASE_BRANCH}" "${BUILD_COMMIT}"
+    fi
+
     # Refresh the v<version> tag to the branch HEAD and push it, so the publish
     # stages (and the GitHub Releases they create) have a tag pointing at exactly
     # what we're building. Only for release branches with a real version; an
@@ -322,24 +336,23 @@ main() {
         git -C "${REPO_ROOT_DIR}" push --force origin "refs/tags/${TAG}"
     fi
 
-    # How each remote host syncs to the build point: for a release branch, reset
-    # to the pushed branch HEAD; for a tag/sha, check it out detached. Built here
-    # (bash + PowerShell variants) and injected into the ssh commands below.
+    # How each remote host syncs to the build point. Every host checks out the
+    # single BUILD_COMMIT resolved above, detached, rather than tracking the
+    # branch HEAD. The candidate branch is also the development branch, so a
+    # commit pushed while this multi-hour build is in flight would otherwise be
+    # picked up by whichever stages had not started yet, silently producing a
+    # release built from a mix of commits. Pinning the sha means a run is
+    # reproducible and development never has to freeze; a re-run re-resolves
+    # the branch HEAD and the remaining stages move to the new commit together.
     #
-    # The branch checkout uses -f (matching the tag/sha path below) so a remote
-    # CI host force-syncs to the pushed HEAD, discarding any drift in its
-    # working tree: stale local modifications or in-the-way untracked files
-    # (e.g. left behind by manual debugging) would otherwise make a plain
-    # `git checkout` abort with "local changes would be overwritten" and fail the
-    # whole release. -f overwrites only the conflicting paths, so unrelated
-    # untracked build caches are left intact.
-    if [ -n "${RELEASE_BRANCH}" ]; then
-        REMOTE_GIT_SYNC="git fetch origin --tags --prune --force && git checkout -f -B '${RELEASE_BRANCH}' 'origin/${RELEASE_BRANCH}'"
-        WIN_GIT_SYNC="git fetch origin --tags --prune --force ; git checkout -f -B ${RELEASE_BRANCH} origin/${RELEASE_BRANCH}"
-    else
-        REMOTE_GIT_SYNC="git fetch origin --tags --prune --force && git checkout -f '${RELEASE_REF}'"
-        WIN_GIT_SYNC="git fetch origin --tags --prune --force ; git checkout -f ${RELEASE_REF}"
-    fi
+    # The checkout uses -f so a remote CI host discards any drift in its working
+    # tree: stale local modifications or in-the-way untracked files (e.g. left
+    # behind by manual debugging) would otherwise make a plain `git checkout`
+    # abort with "local changes would be overwritten" and fail the whole
+    # release. -f overwrites only the conflicting paths, so unrelated untracked
+    # build caches are left intact.
+    REMOTE_GIT_SYNC="git fetch origin --tags --prune --force && git checkout -f --detach '${BUILD_COMMIT}'"
+    WIN_GIT_SYNC="git fetch origin --tags --prune --force ; git checkout -f --detach ${BUILD_COMMIT}"
 
     # Resume breadcrumbs live in the main checkout (NOT the worktree, which is
     # recreated every run), keyed by version so different releases don't collide.
@@ -397,11 +410,18 @@ main() {
     run_stage pi      stage_pi
     run_stage windows stage_windows
 
+    # Everything is published, so main can now advance to what shipped. This is
+    # a stage rather than a manual follow-up because skipping it is what let
+    # main's docs drift away from the released binaries in the first place.
     if [ -n "${RELEASE_BRANCH}" ] && [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        run_stage finish-release \
+            scripts/finish-release.sh "${RELEASE_BRANCH}" "${BUILD_COMMIT}"
         echo "All stages complete for ${RELEASE_REF} (tag v${VERSION} at ${BUILD_COMMIT})."
-        echo "You can now merge ${RELEASE_BRANCH} into main to sync version strings."
+        echo "main now points at the released commit."
+        echo "Start the next cycle with scripts/start-candidate.sh <next_version>."
     else
         echo "All stages complete for ${RELEASE_REF} (${BUILD_COMMIT})."
+        echo "Rebuild of an explicit ref: main was left alone."
     fi
 }
 

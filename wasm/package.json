@@ -1,6 +1,6 @@
 {
   "name": "@moonshine-ai/moonshine-wasm",
-  "version": "0.0.68",
+  "version": "0.0.72",
   "description": "Fast, accurate, on-device speech-to-text, text-to-speech, and voice intent recognition in the browser via WebAssembly.",
   "type": "module",
   "types": "./dist/index.d.ts",

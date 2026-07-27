@@ -190,7 +190,8 @@ public class Transcriber {
     this.getDefaultStreamHandle();
   }
 
-  protected void finalize() throws Throwable {
+  /** Releases the native model. The instance cannot be used afterwards. */
+  public void close() {
     if (this.transcriberHandle >= 0) {
       if (this.defaultStreamHandle >= 0) {
         JNI.moonshineFreeStream(this.transcriberHandle,
@@ -200,6 +201,14 @@ public class Transcriber {
       JNI.moonshineFreeTranscriber(this.transcriberHandle);
       this.transcriberHandle = -1;
     }
+  }
+
+  /** True once one of the {@code load*} methods has succeeded. */
+  public boolean isLoaded() { return this.transcriberHandle >= 0; }
+
+  protected void finalize() throws Throwable {
+    close();
+    super.finalize();
   }
 
   public Transcript transcribeWithoutStreaming(float[] audioData,
