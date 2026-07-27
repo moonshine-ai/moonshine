@@ -369,9 +369,7 @@ void Transcriber::load_from_memory_files(uint32_t model_arch) {
         this->options.log_ort_run, this->options.ort_provider_names,
         this->options.coreml_cache_dir);
 
-    const std::string config_json(
-        static_cast<const char *>(static_cast<const void *>(config_data)),
-        config_size);
+    const std::string config_json(config_data, config_data + config_size);
     int32_t config_error =
         this->streaming_model->load_config_from_string(config_json);
     if (config_error != 0) {

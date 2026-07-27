@@ -55,8 +55,14 @@ SpeechClip extract_speech_clip(const float *audio_data, size_t audio_data_size,
 
   float best_start = 0.0f;
   float best_coverage = 0.0f;
-  for (float start = 0.0f; start <= last_start + 1e-6f;
-       start += kWindowStepSeconds) {
+  // Count the windows up front and derive each start by multiplication rather
+  // than walking a float counter, which would drift over a long recording.
+  const int64_t window_count =
+      last_start < 0.0f
+          ? 0
+          : static_cast<int64_t>((last_start + 1e-6f) / kWindowStepSeconds) + 1;
+  for (int64_t window = 0; window < window_count; ++window) {
+    const float start = static_cast<float>(window) * kWindowStepSeconds;
     const float end = start + options.clip_duration_seconds;
     float coverage = 0.0f;
     for (const auto &[segment_start, segment_end] : segments) {

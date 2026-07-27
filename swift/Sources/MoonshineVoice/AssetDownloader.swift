@@ -387,9 +387,20 @@ public final class AssetDownloader: @unchecked Sendable {
     private func ensureSpaceAvailable(forVolumeAt directory: URL, needBytes: Int64, url: URL) throws {
         guard needBytes > 0 else { return }
         let values = try? directory.resourceValues(forKeys: [
-            .volumeAvailableCapacityForImportantUsageKey
+            .volumeAvailableCapacityForImportantUsageKey,
+            .volumeAvailableCapacityKey,
         ])
-        guard let available = values?.volumeAvailableCapacityForImportantUsage else { return }
+        // Prefer the important-usage figure, which counts space macOS/iOS could purge on our
+        // behalf. It is not always populated, though: some Macs report 0 for every path on the
+        // boot volume with tens of gigabytes genuinely free, which would refuse every download.
+        // So a non-positive answer means "unknown" here, not "full": fall back to the plain
+        // available capacity, and skip the check entirely if that is unavailable too. This is
+        // only a courtesy check -- an actual out-of-space condition still surfaces from the
+        // write itself as .fileWrite.
+        let important = values?.volumeAvailableCapacityForImportantUsage ?? 0
+        let available =
+            important > 0 ? important : Int64(values?.volumeAvailableCapacity ?? 0)
+        guard available > 0 else { return }
         // Keep a small safety margin so we do not fill the volume completely.
         let margin: Int64 = 8 * 1024 * 1024
         if available < needBytes + margin {
