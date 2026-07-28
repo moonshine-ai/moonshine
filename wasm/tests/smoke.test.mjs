@@ -31,7 +31,7 @@ test('core STT classes are registered', async () => {
   const mod = await loadModule();
   assert.equal(typeof mod.Transcriber, 'function');
   assert.equal(typeof mod.Stream, 'function');
-  assert.equal(typeof mod.IntentRecognizer, 'function');
+  assert.equal(typeof mod.EmbeddingModel, 'function');
 });
 
 test('STT dependency manifest is valid JSON with groups', async () => {

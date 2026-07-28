@@ -3,7 +3,8 @@
 A Swift command-line assistant that walks you through setting up wifi by voice,
 mirroring the web `dialog-flow` demo and the Python `dialog_flow.py` script.
 
-`DialogFlow` owns the speech-to-text, intent, and text-to-speech engines, so the
+`DialogFlow` owns the speech-to-text, embedding, and text-to-speech engines, so
+the
 interesting part of the program is the flow itself — ordinary `async` code that
 asks a question and gets an answer back:
 
@@ -37,7 +38,7 @@ point without being registered, because `DialogFlow` provides them:
 
 ## Notes
 
-- The speech, intent, and voice models are downloaded on first run into
+- The speech, embedding, and voice models are downloaded on first run into
   `~/Library/Caches/MoonshineModels/` and reused afterwards. The first run
   fetches roughly a gigabyte, so give it a minute.
 - The microphone is muted while the assistant is speaking, so it does not

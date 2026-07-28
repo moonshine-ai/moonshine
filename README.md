@@ -177,7 +177,7 @@ The Moonshine API is designed to take care of the details around capturing and t
   - [Porting](#porting)
 - [Downloading Models](#downloading-models)
   - [Speech to Text Models](#speech-to-text-models)
-  - [Intent Recognition Models](#intent-recognition-models)
+  - [Embedding Models](#embedding-models)
   - [Text to Speech Models](#text-to-speech-models)
 - [Benchmarking](#benchmarking)
 
@@ -191,7 +191,7 @@ The basic flow is:
 - Attach an `EventListener` that gets called when important things occur, like the end of a phrase or an action being triggered, so your application can respond.
 - Use a `TextToSpeech` object to make it a two-way conversation.
 
-Traditionally, adding a voice interface to an application or product required integrating a lot of different libraries to handle all the processing that's needed to capture audio and turn it into something actionable. The main steps involved are microphone capture, voice activity detection (to break a continuous stream of audio into sections of speech), speech to text, speaker identification, and intent recognition. Each of these steps typically involved a different framework, which greatly increased the complexity of integrating, optimizing, and maintaining these dependencies.
+Traditionally, adding a voice interface to an application or product required integrating a lot of different libraries to handle all the processing that's needed to capture audio and turn it into something actionable. The main steps involved are microphone capture, voice activity detection (to break a continuous stream of audio into sections of speech), speech to text, speaker identification, and phrase matching. Each of these steps typically involved a different framework, which greatly increased the complexity of integrating, optimizing, and maintaining these dependencies.
 
 Moonshine Voice includes all of these stages in a single library, and abstracts away everything but the essential information your application needs to respond to user speech, whether you want to transcribe it or trigger actions.
 
@@ -217,9 +217,9 @@ A [**TranscriptEventListener**](python/src/moonshine_voice/transcriber.py#L266) 
 
 A [**TextToSpeech**](python/src/moonshine_voice/tts.py#L20) object synthesizes audio for playback to the user.
 
-A [**DialogFlow**](python/src/moonshine_voice/dialog_flow.py#L453) object manages conversations between the user and an agent. It's also a TranscriptEventListener, so you can attach it to a transcriber and have it invoke a callback whenever someone says something close in meaning to a phrase you registered — the basis of voice command recognition.
+A [**DialogFlow**](python/src/moonshine_voice/dialog_flow.py#L547) object manages conversations between the user and an agent. It opens the transcriber, microphone, and speech synthesizer it needs itself, and invokes a callback whenever someone says something close in meaning to a phrase you registered — the basis of voice command recognition.
 
-A [**Dialog**](python/src/moonshine_voice/dialog_flow.py#L335) object is created for each conversational exchange, and allows the agent to hold a multi-step discussion with the user.
+A [**Dialog**](python/src/moonshine_voice/dialog_flow.py#L408) object is created for each conversational exchange, and allows the agent to hold a multi-step discussion with the user.
 
 ### Getting Started with Transcription
 
@@ -250,6 +250,7 @@ class TestListener(TranscriptEventListener):
     def on_line_completed(self, event):
         print(f"Line completed: {event.line.text}")
 
+listener = TestListener()
 transcriber.add_listener(listener)
 ```
 
@@ -316,7 +317,7 @@ We offer some guarantees about these events:
 
 Many applications need a voice agent that can understand what users are saying and respond appropriately. To make this as straightforward as possible, we let you define different conversational flows. A flow can be as simple as responding to a query, or be a multi-step, branching conversation that takes actions.
 
-To define these flows, you used a [`DialogFlow`](#dialogflow) object, with callbacks that take [`Dialog`](#dialog) arguments. Here's an example of a simple flow, taken from the [github.com/moonshine-ai/pi-help-bot](https://github.com/moonshine-ai/pi-help-bot) sample code:
+To define these flows, you use a [`DialogFlow`](#dialogflow) object, with callbacks that take [`Dialog`](#dialog) arguments. Here's an example of a simple flow, taken from the [github.com/moonshine-ai/pi-help-bot](https://github.com/moonshine-ai/pi-help-bot) sample code:
 
 ```python
     def report_ip_address(d: Dialog):
@@ -439,34 +440,32 @@ Password input is tricky, because they consist of arbitrary letters, digits, and
 
 The flow also works with other control structures like exception handlers, so you can specify your conversations using idiomatic code, even for error recovery.
 
+#### Agent Setup
+
+Once your flows are written, the only setup left is to register them and go live. `DialogFlow` opens everything it needs itself — the speech recognition model, the microphone, and the speech synthesizer — so there's nothing to wire together:
+
+```python
+    dialog_flow = (
+        DialogFlow()
+        .language("en")
+        .listen_for("What is my IP address?", report_ip_address)
+        .listen_for("Connect to Wi-Fi", connect_to_wifi)
+        .always("cancel", lambda d: d.cancel())
+    )
+
+    dialog_flow.start_listening()
+```
+
+Every configuration method returns the runner, so a whole voice interface can be built in a single expression, and each one has a working default. `listen_for()` registers the conversation starters, and `always()` registers phrases like "cancel" that stay live even while a flow is running.
+
+`start_listening()` opens and downloads whatever is missing on first use (the embedding model used for matching, the speech to text model for your language, and a synthesizer), then returns as soon as the microphone is live. Speech arrives on the audio thread and drives your flows from there, so your own code is free to sleep, run a UI, or do anything else. If you want the loading to happen at a moment of your choosing rather than on the first `start_listening()` call, call `load()` yourself beforehand and pass `on_progress()` a callback to report download progress. Call `close()` when you're finished to release everything the runner opened.
+
 To give this a try for yourself, run this built-in example:
 
 <!-- doc-test: parse-only -->
 ```bash
 python -m moonshine_voice.dialog_flow
 ```
-
-### Agent Setup
-
-An agent needs a speech-to-text `Transcriber` object to receive input and a `TextToSpeech` object to respond. `DialogFlow` understands the input, downloading and loading the embedding model it needs on first use:
-
-```python
-    tts = TextToSpeech(args.tts_language)
-
-    model_path, model_arch = get_model_for_language(args.language)
-    mic_transcriber = MicTranscriber(
-        model_path=model_path, model_arch=model_arch
-    )
-
-    dialog_flow = DialogFlow(tts=tts)
-    add_commands(dialog_flow, tts)
-
-    mic_transcriber.add_listener(dialog_flow)
-
-    mic_transcriber.start()
-```
-
-The `add_commands()` function calls `listen_for()` for all of the phrases the agent should recognize.
 
 ### Getting Started with Text to Speech
 
@@ -698,7 +697,7 @@ moonshine-voice --help
 | `moonshine-voice transcribe` | Transcribe a WAV file (optionally with speaker IDs / word timestamps). |
 | `moonshine-voice tts` | Synthesize speech from text to a WAV file or audio device. |
 | `moonshine-voice dialog` | Run a spoken dialog flow (wifi setup) from the microphone. |
-| `moonshine-voice download` | Download STT, TTS, G2P, or intent model assets. |
+| `moonshine-voice download` | Download STT, TTS, G2P, or embedding model assets. |
 | `moonshine-voice g2p` | Convert text to phonemes (IPA). |
 
 Run `moonshine-voice <command> --help` for the options each one accepts. Every subcommand is equivalent to running the underlying module directly, so `moonshine-voice mic --language en` and `python -m moonshine_voice.mic_transcriber --language en` do exactly the same thing.
@@ -741,9 +740,8 @@ This will run test audio through a transcriber, and write out the audio it has r
 
 If you're running into errors it can be hard to keep track of the timeline of your interactions with the library. The `log_api_calls` option will print out the underlying API calls that have been triggered to the console, so you can investigate any ordering or timing issues.
 
-<!-- doc-test: skip -->
 ```bash
-uv run -m moonshine_voice.transcriber --options='log_api_calls=true'
+moonshine-voice transcribe --options='log_api_calls=true'
 ```
 
 ### Building from Source
@@ -802,28 +800,36 @@ You can also optionally request a specific model architecture using the `model-a
 The download script will log the location of the downloaded model files and the model architecture, for example:
 
 ```text
-encoder_model.ort: 100%|███████████████████████████████████████████████████████| 29.9M/29.9M [00:00<00:00, 34.5MB/s]
-decoder_model_merged.ort: 100%|██████████████████████████████████████████████████| 104M/104M [00:02<00:00, 52.6MB/s]
-tokenizer.bin: 100%|█████████████████████████████████████████████████████████████| 244k/244k [00:00<00:00, 1.44MB/s]
-Model download url: https://download.moonshine.ai/model/base-en/quantized/base-en
-Model components: ['encoder_model.ort', 'decoder_model_merged.ort', 'tokenizer.bin']
-Model arch: 1
-Downloaded model path: /Users/petewarden/Library/Caches/moonshine_voice/download.moonshine.ai/model/base-en/quantized/base-en
+adapter.ort: 100%|██████████████████████████████████████████████████████████████| 3.48M/3.48M [00:00<00:00, 18.6MB/s]
+cross_kv.ort: 100%|█████████████████████████████████████████████████████████████| 11.0M/11.0M [00:00<00:00, 39.4MB/s]
+decoder_kv.ort: 100%|███████████████████████████████████████████████████████████████| 139M/139M [00:01<00:00, 100MB/s]
+encoder.ort: 100%|██████████████████████████████████████████████████████████████| 89.8M/89.8M [00:01<00:00, 83.1MB/s]
+frontend.ort: 100%|█████████████████████████████████████████████████████████████| 45.3M/45.3M [00:00<00:00, 65.7MB/s]
+streaming_config.json: 100%|██████████████████████████████████████████████████████| 513/513 [00:00<00:00, 1.88MB/s]
+tokenizer.bin: 100%|█████████████████████████████████████████████████████████████| 244k/244k [00:00<00:00, 3.06MB/s]
+spelling_cnn.ort: 100%|█████████████████████████████████████████████████████████| 1.59M/1.59M [00:00<00:00, 10.2MB/s]
+spelling_cnn_meta.json: 100%|█████████████████████████████████████████████████████| 622/622 [00:00<00:00, 1.72MB/s]
+Model download url: https://download.moonshine.ai/model/medium-streaming-en/quantized
+Model components: ['adapter.ort', 'cross_kv.ort', 'decoder_kv.ort', 'encoder.ort', 'frontend.ort', 'streaming_config.json', 'tokenizer.bin']
+Model arch: 5
+Downloaded model path: /Users/petewarden/Library/Caches/moonshine_voice/download.moonshine.ai/model/medium-streaming-en/quantized
 ```
+
+Since no architecture was requested here, this downloaded Medium Streaming (architecture 5), the highest-quality English model. The two `spelling_cnn` files at the end are the alphanumeric spelling model, which the downloader fetches alongside the main model when one is published for the language.
 
 The last two lines tell you which model architecture is being used, and where the model files are on disk. By default it uses your user cache directory, which is `~/Library/Caches/moonshine_voice` on MacOS, but you can use a different location by setting the `MOONSHINE_VOICE_CACHE` environment variable before running the script.
 
-#### Intent Recognition Models
+#### Embedding Models
 
 The download module also helps you obtain the assets needed to match spoken phrases, primarily a sentence embedding model. `DialogFlow` fetches this for you on first use, so you only need this command to warm the cache ahead of time — before shipping a device that will be offline, for example.
 
 ```bash
-moonshine-voice download --intent
+moonshine-voice download --embedding
 ```
 
 ```text
-model_q4.onnx: 100%|███████████████████████████████████████████████| 507k/507k [00:00<00:00, 4.59MB/s]
-model_q4.onnx_data: 100%|██████████████████████████████████████████| 188M/188M [00:06<00:00, 32.6MB/s]
+model_q4.ort: 100%|████████████████████████████████████████████████| 189M/189M [00:02<00:00, 90.1MB/s]
+tokenizer.bin: 100%|███████████████████████████████████████████████| 2.46M/2.46M [00:00<00:00, 13.9MB/s]
 Embedding model path: /Users/petewarden/Library/Caches/moonshine_voice/download.moonshine.ai/model/embeddinggemma-300m
 /Users/petewarden/Library/Caches/moonshine_voice/download.moonshine.ai/model/embeddinggemma-300m
 ```
@@ -875,8 +881,8 @@ try await downloader.ensureModelPresent(root: modelDir, spec: .stt(language: "en
 }
 let transcriber = try Transcriber(modelPath: modelDir.path, modelArch: .tiny)
 
-// Intent recognition (the embeddinggemma-300m model is large — a few hundred MB even at q4):
-try await downloader.ensureModelPresent(root: intentDir, spec: .intent(variant: "q4"))
+// Text embeddings (the embeddinggemma-300m model is large — a few hundred MB even at q4):
+try await downloader.ensureModelPresent(root: embeddingDir, spec: .embedding(variant: "q4"))
 
 // Text to speech (files land under the directory you pass as g2p_root):
 try await downloader.ensureModelPresent(root: ttsRoot, spec: .tts(language: "en_us", voice: "kokoro_af_heart"))
@@ -904,11 +910,11 @@ OneTimeWorkRequest request =
 WorkManager.getInstance(context).enqueue(request);
 ```
 
-`ModelSpec` also has `tts(language, voice)`, `intent(modelName, variant)`, and `g2p(language)` factories, matching the Swift specs. The library manifest declares the `INTERNET` and `ACCESS_NETWORK_STATE` permissions, which merge into your app automatically; observe `MoonshineDownloadWorker` progress via `WorkInfo.getProgress()` using the worker's `PROGRESS_*` data keys. Using the downloader pulls in OkHttp and WorkManager transitively; apps that bundle their models still ship these but never invoke the network path.
+`ModelSpec` also has `tts(language, voice)`, `embedding(modelName, variant)`, and `g2p(language)` factories, matching the Swift specs. The library manifest declares the `INTERNET` and `ACCESS_NETWORK_STATE` permissions, which merge into your app automatically; observe `MoonshineDownloadWorker` progress via `WorkInfo.getProgress()` using the worker's `PROGRESS_*` data keys. Using the downloader pulls in OkHttp and WorkManager transitively; apps that bundle their models still ship these but never invoke the network path.
 
 ##### Where files go
 
-You pick the destination directory, so choose one appropriate for your platform's cache/storage policy (for example `URL.cachesDirectory` on Apple platforms, or `context.getFilesDir()` / `context.getCacheDir()` on Android). Files are laid out under that directory exactly as the loaders expect: STT and intent files use their bare filenames, while TTS/G2P assets keep their canonical relative paths (e.g. `en_us/dict.tsv`) so the engine can find them from the root alone.
+You pick the destination directory, so choose one appropriate for your platform's cache/storage policy (for example `URL.cachesDirectory` on Apple platforms, or `context.getFilesDir()` / `context.getCacheDir()` on Android). Files are laid out under that directory exactly as the loaders expect: STT and embedding files use their bare filenames, while TTS/G2P assets keep their canonical relative paths (e.g. `en_us/dict.tsv`) so the engine can find them from the root alone.
 
 ##### Testing the download path
 
@@ -939,7 +945,7 @@ The percentage is helpful because it approximates how much of a compute load the
 
 The latency metric needs a bit of explanation. What most applications care about is how soon they are notified about a phrase after the user has finished talking, since this determines how fast the product can respond. As with any user interface, the time between speech ending and the app doing something determines how responsive the voice interface feels, with a goal of keeping it below 200ms. The latency figure logged here is the average time between when the library determines the user has stopped talking and the delivery of the final transcript of that phrase to the client. This is where streaming models have the most impact, since they do a lot of their work upfront, while speech is still happening, so they can usually finish very quickly.
 
-By default the benchmark binary uses the Tiny English model that's embedded in the framework, but you can pass in the `--model-path` and `--model-arch` parameters to choose [one that you've downloaded](#downloading-models).
+By default the benchmark binary uses the Tiny English model and the `two_cities.wav` recording from this repository's `test-assets` folder, which is why it's run from the build directory, but you can pass in the `--model-path`, `--model-arch`, and `--wav-path` parameters to choose [a model you've downloaded](#downloading-models) or a different recording.
 
 You can also choose how often the transcript should be updated using the `--transcription-interval` argument. This defaults to 0.5 seconds, but the right value will depend on how fast your application needs updates. Longer intervals reduce the compute required a bit, at the cost of slower updates.
 
@@ -1134,10 +1140,9 @@ We have `safetensors` versions of the models linked from our organization on HF,
 This documentation covers the Python API, but the same functions and classes are present in all the other supported languages, just with native adaptations (for example CamelCase). You should be able to use this as a reference for all platforms the library runs on.
 
 - [Data Structures](#data-structures)
-  - [TranscriberLine](#transcriberline)
+  - [TranscriptLine](#transcriptline)
   - [Transcript](#transcript)
   - [TranscriptEvent](#transcriptevent)
-  - [IntentMatch](#intentmatch)
   - [TtsVoiceEntry](#ttsvoiceentry)
   - [TtsVoicesByAvailability](#ttsvoicesbyavailability)
 - [Classes](#classes)
@@ -1152,7 +1157,7 @@ This documentation covers the Python API, but the same functions and classes are
 
 ### Data Structures
 
-#### TranscriberLine
+#### TranscriptLine
 
 Represents a single "line" or speech segment in a transcript. It includes information about the timing, speaker, and text content of the utterance, as well as state such as whether the speech is ongoing or done. If you're building an application that involves transcription, this data structure has all of the information available about each line of speech. Be aware that each line can be updated multiple times with new text and other information as the user keeps speaking.
 
@@ -1178,24 +1183,17 @@ Represents a single "line" or speech segment in a transcript. It includes inform
 
   Be aware that speaker spans are *mutable*: the diarization algorithm re-clusters the entire audio history on a cadence, so the spans of any line - including completed ones - can move, merge, split, or change speaker on any transcription call. Watch the `have_speakers_changed` flag (or the `LineSpeakersChanged` event) to catch revisions.
 
+- `words`: An array of per-word timings, empty unless the `word_timestamps` option is enabled (which `identify_speakers` turns on for you). Each entry has the `word` itself, its `start` and `end` times in seconds, and a `confidence` value.
+
 - `audio_data`: An array of 32-bit floats representing the raw audio data that the line is based on, as 16KHz mono PCM data between 0.0 and 1.0. This can be useful for further processing (for example to drive a visual indicator or to feed into a specialized speech to text model after the line is complete).
 
 #### Transcript
 
-A Transcript contains a list of TranscriberLines, arranged in descending time order. The transcript is reset at every `Transcriber.start()` call, so if you need to retain information from it, you should make explicit copies. Most applications won't work with this structure, since all of the same information is available through event callbacks.
+A Transcript contains a list of TranscriptLines, arranged in descending time order. The transcript is reset at every `Transcriber.start()` call, so if you need to retain information from it, you should make explicit copies. Most applications won't work with this structure, since all of the same information is available through event callbacks.
 
 #### TranscriptEvent
 
-Contains information about a change to the transcript. It has four subclasses, which are explained in more detail in [the transcription event flow section](#transcription-event-flow). Most of the information is contained in the `line` member, but there's also a `stream_handle` that your application can use to tell the source of a line if you're running multiple streams.
-
-#### IntentMatch
-
-A dataclass representing a matched intent, returned by `get_closest_intents()` and passed to `set_on_intent()` callbacks.
-
-- `canonical_phrase`: The string representing the canonical command, exactly as you registered it with the recognizer.
-- `utterance`: The text of the utterance that triggered the match.
-- `similarity`: A float value that reflects how confident the recognizer is that the utterance has the same meaning as the command, with zero being the least confident and one the most.
-- `trigger_phrase`: Read-only alias for `canonical_phrase` (backward compatibility).
+Contains information about a change to the transcript. It has five subclasses — `LineStarted`, `LineUpdated`, `LineTextChanged`, `LineSpeakersChanged`, and `LineCompleted` — which are explained in more detail in [the transcription event flow section](#transcription-event-flow). Most of the information is contained in the `line` member, but there's also a `stream_handle` that your application can use to tell the source of a line if you're running multiple streams.
 
 #### TtsVoiceEntry
 
@@ -1228,12 +1226,13 @@ Handles the speech to text pipeline.
     - `vad_threshold`: Controls the sensitivity of the initial voice-activity detection stage that decides how to break raw audio into segments. This defaults to 0.5, with lower values creating longer segments, potentially with more background noise sections, and higher values breaking up speech into smaller chunks, at the risk of losing some actual speech by clipping. If you set it to zero, it disables the VAD entirely, though speech will still be broken up into `vad_max_segment_duration` sized chunks.
     - `save_input_wav_path`: One of the most common causes of poor transcription quality is incorrect conversion or corruption of the audio that's fed into the pipeline. If you set this option to a folder path, the transcriber will save out exactly what it has received as 16KHz mono WAV files, so you can ensure that your input audio is as you expect.
     - `log_api_calls`: Another debugging option, turning this on causes all calls to the C API entry points in the library to write out information on their arguments to stderr or the console each time they're run.
-    - `log_ort_runs`: Prints information about the ONNXRuntime inference runs and how long they take.
+    - `log_ort_run`: Prints information about the ONNXRuntime inference runs and how long they take.
     - `ort_providers`: A comma-separated, ordered list of the ONNX Runtime execution providers the models should try to use, for example `"CoreML,CPU"` on macOS or `"NNAPI,CPU"` on Android. The names are case-insensitive and accept either the short form (`CPU`, `CoreML`, `NNAPI`) or the full ONNX Runtime name (`CPUExecutionProvider`, `CoreMLExecutionProvider`, `NNAPIExecutionProvider`). Providers are appended in the order given, and ONNX Runtime falls back to later entries for any operations an earlier provider can't handle, so it's good practice to always list `CPU` last as a catch-all. If you leave this unset the library runs CPU-only. Requesting a provider that isn't available on the current platform (such as `CoreML` off Apple hardware, or `NNAPI` off Android) is an error. The alias `ort_provider` is also accepted.
     - `coreml_cache_dir`: A directory path where the CoreML execution provider caches its compiled models on macOS and iOS. Compiling a model for CoreML is expensive, so pointing this at a persistent, writable folder lets subsequent runs reuse the cached artifacts and start up much faster. This only has an effect when `CoreML` is included in `ort_providers`.
     - `vad_window_duration`: The VAD runs every 30ms, but to get higher-confidence values we average the results over time. This value is the time in seconds to average over. The default is 0.5s, shorter durations will spot speech faster at the cost of lower accuracy, higher values may increase accuracy, but at the cost of missing shorter utterances.
     - `vad_look_behind_sample_count`: Because we're averaging over time, the mean VAD signal will lag behind the initial speech detection. To compensate for that, when speech is detected we pull in some of the audio immediately before the average passed the threshold. This value is the number of samples to prepend, and defaults to 8192 (all at 16KHz).
     - `vad_max_segment_duration`: It can be hard to find gaps in rapid-fire speech, but a lot of applications want their text in chunks that aren't endless. This option sets the longest duration a line can be before it's marked as complete and a new segment is started. The default is 15 seconds, and to increase the chance that a natural break is found, the `vad_threshold` is linearly decreased over time from two thirds of the maximum duration until the maximum is reached.
+    - `word_timestamps`: A boolean (default false) that fills in each line's `words` array with per-word timings. This needs the optional attention decoder that sits alongside the main model files (`decoder_kv_with_attention.ort` for streaming architectures, `decoder_with_attention.ort` otherwise), so ask the downloader for it when you fetch the model. Turning on `identify_speakers` enables this automatically, since speaker spans are mapped onto the line text using word timings.
     - `identify_speakers`: A boolean (default false) that controls whether to run the speaker diarization stage of the pipeline. When enabled, each line carries a `speaker_spans` array describing who spoke when, including UTF-8 character ranges into the line text. Word timestamps are enabled automatically in this mode. This runs a C++ port of the [pyannote community-1 pipeline](https://github.com/moonshine-ai/cpp-annote) inline inside transcription calls, which adds significant compute. Streaming sessions bound VBx re-clustering to a sliding window (see `diarization_cluster_window_sec`); batch/one-shot transcription still uses full-history clustering. For tests, `test-assets/endgame_nagg_nell.wav` is a ~28 second synthetic two-speaker clip (ZipVoice TTS, Beckett's *Endgame* dialogue); regenerate it with `python3 scripts/generate-diarization-test-audio.py`.
     - `diarization_cluster_cadence`: A float (default 2.0) giving the minimum number of seconds of new audio between diarization re-clustering passes. Raising this reduces compute on long sessions, at the cost of slower refinement of speaker assignments.
     - `diarization_analyze_cadence`: A float (default 0, meaning the model default of 1.0) giving the number of seconds between diarization segmentation/embedding model runs.
@@ -1269,7 +1268,7 @@ Handles the speech to text pipeline.
 
 #### MicTranscriber
 
-This class supports the []`start()`](#transcriber-start), [`stop()`](#transcriber-stop) and listener functions of [`Transcriber`](#transcriber), but internally creates and attaches to the system's microphone input, so you don't need to call [`add_audio()`](#transcriber-add-audio) yourself. In Python this uses the [`sounddevice` library](), but in other languages the class uses the native audio API under the hood.
+This class supports the [`start()`](#transcriber-start), [`stop()`](#transcriber-stop) and listener functions of [`Transcriber`](#transcriber), but internally creates and attaches to the system's microphone input, so you don't need to call [`add_audio()`](#transcriber-add-audio) yourself. In Python this uses the [`sounddevice` library](https://python-sounddevice.readthedocs.io/), but in other languages the class uses the native audio API under the hood.
 
 #### Stream
 
@@ -1277,11 +1276,11 @@ The access point for when you need to feed multiple audio inputs into a single t
 
 #### TranscriptEventListener
 
-A convenience class to derive from to create your own listener code. Override any or all of `on_line_started()`, `on_line_updated()`, `on_line_text_changed()`, and `on_line_completed()`, and they'll be called back when the corresponding event occurs.
+A convenience class to derive from to create your own listener code. Override any or all of `on_line_started()`, `on_line_updated()`, `on_line_text_changed()`, `on_line_speakers_changed()`, `on_line_completed()`, and `on_error()`, and they'll be called back when the corresponding event occurs. Every method has a no-op default, so you only need to write the ones you care about.
 
 #### DialogFlow
 
-A runner that drives generator-based conversational flows, and the entry point for voice interfaces. You register flow functions against trigger phrases, and the runner routes completed transcript lines either to trigger matching (when no flow is active) or to the currently suspended generator (when one is). Matching is semantic, using an embedding model that the runner downloads and loads the first time it needs one. It implements the [`TranscriptEventListener`](#transcripteventlistener) interface, so you attach it to a `Transcriber` or `MicTranscriber` with [`add_listener()`](#transcriber-add-listener). See [Getting Started with a Conversational Agent](#getting-started-with-a-conversational-agent) for usage examples.
+A runner that drives generator-based conversational flows, and the entry point for voice interfaces. You register flow functions against trigger phrases, and the runner routes completed transcript lines either to trigger matching (when no flow is active) or to the currently suspended generator (when one is). Matching is semantic, using an embedding model that the runner downloads and loads the first time it needs one. [`load()`](#dialogflow-load) opens the microphone transcriber and speech synthesizer for you, so there's no listener to wire up by hand; pass [`use_mic_transcriber()`](#dialogflow-use-mic-transcriber) if you'd rather it listened to a transcriber you already have. See [Getting Started with a Conversational Agent](#getting-started-with-a-conversational-agent) for usage examples.
 
 A flow is an ordinary Python generator function that takes a [`Dialog`](#dialog) as its argument and yields prompt objects back to the runner. The runner carries out each prompt (speaking text, waiting for the user's response) and resumes the generator with the answer via `.send()`. This lets you write multi-step, branching conversations using regular Python control flow, including loops and exception handlers, without any async machinery. Trigger matching, confirmation, and option selection are all done semantically through the embedding model, so alternative phrasings will work without you needing to enumerate them.
 

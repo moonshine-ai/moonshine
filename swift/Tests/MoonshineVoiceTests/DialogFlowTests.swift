@@ -4,7 +4,7 @@ import XCTest
 @testable import MoonshineVoice
 
 /// Drives ``DialogFlow`` from text rather than a microphone, so these run
-/// without downloading any models: with no intent recognizer loaded the runner
+/// without downloading any models: with no embedding model loaded the runner
 /// falls back to substring matching, and ``DialogFlow/speakWith(_:)`` captures
 /// the prompts instead of playing them.
 @available(iOS 15.0, macOS 12.0, *)

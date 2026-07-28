@@ -15,8 +15,8 @@ public enum ModelSpec: Sendable, Hashable {
     /// Text-to-speech voice. `voice` is a prefixed id (e.g. `kokoro_af_heart`,
     /// `piper_en_US-lessac-medium`); nil uses the language default.
     case tts(language: String, voice: String? = nil)
-    /// Intent-recognition embedding model. `variant` is e.g. `q4` (nil = default).
-    case intent(modelName: String = "embeddinggemma-300m", variant: String? = nil)
+    /// Text embedding model. `variant` is e.g. `q4` (nil = default).
+    case embedding(modelName: String = "embeddinggemma-300m", variant: String? = nil)
     /// Grapheme-to-phoneme assets for a language (lexicons / ONNX bundles).
     case g2p(language: String)
 }
@@ -153,12 +153,12 @@ public final class AssetDownloader: @unchecked Sendable {
             let json = try api.getSttDependencies(language: language, options: options)
             return try filesFromGroupManifest(json)
 
-        case .intent(let modelName, let variant):
+        case .embedding(let modelName, let variant):
             var options: [TranscriberOption] = []
             if let variant = variant {
                 options.append(TranscriberOption(name: "variant", value: variant))
             }
-            let json = try api.getIntentDependencies(modelName: modelName, options: options)
+            let json = try api.getEmbeddingDependencies(modelName: modelName, options: options)
             return try filesFromGroupManifest(json)
 
         case .tts(let language, let voice):
@@ -181,7 +181,7 @@ public final class AssetDownloader: @unchecked Sendable {
     }
 
     /// Parses the `{"groups":[{"base_url":..,"files":[{...}]}]}` manifest emitted by the STT and
-    /// intent dependency APIs. Each `files` entry is an object carrying `name`, a fully-qualified
+    /// embedding dependency APIs. Each `files` entry is an object carrying `name`, a fully-qualified
     /// `url`, and optional `size` / `checksum` / `checksum_type`. Files are downloaded from their
     /// `url` (falling back to `base_url + "/" + name`) and stored under their bare filename.
     private func filesFromGroupManifest(_ json: String) throws -> [ResolvedFile] {

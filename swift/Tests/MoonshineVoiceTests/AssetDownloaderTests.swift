@@ -5,7 +5,7 @@ import XCTest
 
 /// Exercises ``AssetDownloader`` end-to-end against a mocked ``URLProtocol`` so no real network or
 /// CDN is required. The native dependency catalog still resolves the real file lists, so these
-/// tests also guard that the STT/intent/TTS manifests stay parseable and non-empty.
+/// tests also guard that the STT/embedding/TTS manifests stay parseable and non-empty.
 @available(iOS 15.0, macOS 12.0, *)
 final class AssetDownloaderTests: XCTestCase {
 
@@ -140,12 +140,12 @@ final class AssetDownloaderTests: XCTestCase {
             "include_spelling should add the spelling model files")
     }
 
-    // MARK: - Intent / TTS
+    // MARK: - Embedding / TTS
 
-    func testDownloadsIntentModel() async throws {
+    func testDownloadsEmbeddingModel() async throws {
         installStandardHandler()
         let downloader = makeDownloader()
-        let spec = ModelSpec.intent(variant: "q4")
+        let spec = ModelSpec.embedding(variant: "q4")
         _ = try await downloader.ensureModelPresent(root: tempRoot, spec: spec)
         try assertAllFilesMatchBody(under: tempRoot)
         XCTAssertTrue(downloader.isModelPresent(root: tempRoot, spec: spec))

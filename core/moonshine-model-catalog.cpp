@@ -282,7 +282,7 @@ std::optional<ModelDependencies> stt_model_dependencies(
   return deps;
 }
 
-std::optional<ModelDependencies> intent_model_dependencies(
+std::optional<ModelDependencies> embedding_model_dependencies(
     const std::string& model_name, const std::string& variant) {
   const EmbeddingModelEntry* model = find_embedding_model(model_name);
   if (model == nullptr) {
@@ -312,7 +312,7 @@ std::vector<std::string> stt_supported_languages() {
   return codes;
 }
 
-std::vector<std::string> intent_supported_models() {
+std::vector<std::string> embedding_supported_models() {
   std::vector<std::string> names;
   for (const EmbeddingModelEntry& entry : embedding_catalog()) {
     names.push_back(entry.name);
@@ -320,7 +320,7 @@ std::vector<std::string> intent_supported_models() {
   return names;
 }
 
-std::vector<std::string> intent_supported_variants(
+std::vector<std::string> embedding_supported_variants(
     const std::string& model_name) {
   const EmbeddingModelEntry* model = find_embedding_model(model_name);
   if (model == nullptr) {

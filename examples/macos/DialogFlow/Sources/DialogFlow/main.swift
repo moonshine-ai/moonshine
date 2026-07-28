@@ -48,7 +48,7 @@ func main() async {
     defer { dialog.close() }
 
     do {
-        // One call downloads the speech, intent, and voice models and wires the
+        // One call downloads the speech, embedding, and voice models and wires the
         // three engines together.
         try await dialog.load()
         fputs("\n", stderr)

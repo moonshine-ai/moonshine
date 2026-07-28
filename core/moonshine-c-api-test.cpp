@@ -1266,12 +1266,12 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
   }
 }
 
-TEST_CASE("moonshine-stt-intent-dependency-api") {
+TEST_CASE("moonshine-stt-embedding-dependency-api") {
   SUBCASE("null-output-pointer") {
     CHECK(moonshine_get_stt_dependencies("en", nullptr, 0, nullptr) ==
           MOONSHINE_ERROR_INVALID_ARGUMENT);
-    CHECK(moonshine_get_intent_dependencies("embeddinggemma-300m", nullptr, 0,
-                                            nullptr) ==
+    CHECK(moonshine_get_embedding_dependencies("embeddinggemma-300m", nullptr,
+                                               0, nullptr) ==
           MOONSHINE_ERROR_INVALID_ARGUMENT);
   }
 
@@ -1279,8 +1279,8 @@ TEST_CASE("moonshine-stt-intent-dependency-api") {
     char* out = nullptr;
     CHECK(moonshine_get_stt_dependencies("en", nullptr, 1, &out) ==
           MOONSHINE_ERROR_INVALID_ARGUMENT);
-    CHECK(moonshine_get_intent_dependencies("embeddinggemma-300m", nullptr, 1,
-                                            &out) ==
+    CHECK(moonshine_get_embedding_dependencies("embeddinggemma-300m", nullptr,
+                                               1, &out) ==
           MOONSHINE_ERROR_INVALID_ARGUMENT);
   }
 
@@ -1471,10 +1471,11 @@ TEST_CASE("moonshine-stt-intent-dependency-api") {
     CHECK(out == nullptr);
   }
 
-  SUBCASE("intent-default-variant-is-q4") {
+  SUBCASE("embedding-default-variant-is-q4") {
     char* out = nullptr;
-    REQUIRE(moonshine_get_intent_dependencies("embeddinggemma-300m", nullptr, 0,
-                                              &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_embedding_dependencies("embeddinggemma-300m", nullptr,
+                                                 0,
+                                                 &out) == MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.find("\"https://download.moonshine.ai/model/"
@@ -1486,24 +1487,24 @@ TEST_CASE("moonshine-stt-intent-dependency-api") {
     std::free(out);
   }
 
-  SUBCASE("intent-null-model-name-uses-default") {
+  SUBCASE("embedding-null-model-name-uses-default") {
     char* out = nullptr;
-    REQUIRE(moonshine_get_intent_dependencies(nullptr, nullptr, 0, &out) ==
+    REQUIRE(moonshine_get_embedding_dependencies(nullptr, nullptr, 0, &out) ==
             MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     CHECK(std::string(out).find("\"model_q4.ort\"") != std::string::npos);
     std::free(out);
   }
 
-  SUBCASE("intent-q8-maps-to-model-quantized") {
+  SUBCASE("embedding-q8-maps-to-model-quantized") {
     // The C++ embedding loader resolves the q8 variant to model_quantized
     // (model_q8 is not published), so the manifest must match.
     const moonshine_option_t opts[] = {
         {"variant", "q8"},
     };
     char* out = nullptr;
-    REQUIRE(moonshine_get_intent_dependencies("embeddinggemma-300m", opts, 1,
-                                              &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_embedding_dependencies("embeddinggemma-300m", opts, 1,
+                                                 &out) == MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.find("\"model_quantized.ort\"") != std::string::npos);
@@ -1511,33 +1512,34 @@ TEST_CASE("moonshine-stt-intent-dependency-api") {
     std::free(out);
   }
 
-  SUBCASE("intent-fp32-uses-bare-model-ort") {
+  SUBCASE("embedding-fp32-uses-bare-model-ort") {
     const moonshine_option_t opts[] = {
         {"variant", "fp32"},
     };
     char* out = nullptr;
-    REQUIRE(moonshine_get_intent_dependencies("embeddinggemma-300m", opts, 1,
-                                              &out) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_get_embedding_dependencies("embeddinggemma-300m", opts, 1,
+                                                 &out) == MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.find("\"model.ort\"") != std::string::npos);
     std::free(out);
   }
 
-  SUBCASE("intent-unknown-model") {
+  SUBCASE("embedding-unknown-model") {
     char* out = nullptr;
-    CHECK(moonshine_get_intent_dependencies("not-a-model", nullptr, 0, &out) ==
-          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(
+        moonshine_get_embedding_dependencies("not-a-model", nullptr, 0, &out) ==
+        MOONSHINE_ERROR_INVALID_ARGUMENT);
     CHECK(out == nullptr);
   }
 
-  SUBCASE("intent-unknown-variant") {
+  SUBCASE("embedding-unknown-variant") {
     const moonshine_option_t opts[] = {
         {"variant", "q3"},
     };
     char* out = nullptr;
-    CHECK(moonshine_get_intent_dependencies("embeddinggemma-300m", opts, 1,
-                                            &out) ==
+    CHECK(moonshine_get_embedding_dependencies("embeddinggemma-300m", opts, 1,
+                                               &out) ==
           MOONSHINE_ERROR_INVALID_ARGUMENT);
     CHECK(out == nullptr);
   }

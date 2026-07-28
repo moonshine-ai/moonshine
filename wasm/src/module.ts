@@ -16,12 +16,12 @@ export interface MoonshineModule {
     optionValues: string[],
   ) => RawTranscriber;
   Stream: new (transcriber: RawTranscriber, flags: number) => RawStream;
-  IntentRecognizer: new (
+  EmbeddingModel: new (
     keys: string[],
     buffers: Uint8Array[],
     modelArch: number,
     modelVariant: string,
-  ) => RawIntentRecognizer;
+  ) => RawEmbeddingModel;
   TextToSpeech?: new (
     language: string,
     keys: string[],
@@ -40,7 +40,7 @@ export interface MoonshineModule {
     modelArch: string,
     includeSpelling: boolean,
   ): string;
-  intentDependencies(modelName: string, variant: string): string;
+  embeddingDependencies(modelName: string, variant: string): string;
   ttsDependencies?(languages: string, voice: string): string;
   ttsVoices?(
     languages: string,
@@ -78,11 +78,9 @@ export interface RawStream {
   close(): void;
 }
 
-export interface RawIntentRecognizer {
-  registerIntent(phrase: string, priority: number): void;
-  unregisterIntent(phrase: string): void;
-  clearIntents(): void;
-  closestIntents(utterance: string, threshold: number): any;
+export interface RawEmbeddingModel {
+  calculateEmbedding(sentence: string): Float32Array;
+  distance(embeddingA: Float32Array, embeddingB: Float32Array): number;
   close(): void;
 }
 

@@ -27,10 +27,12 @@
 #   2. Develop. Commit to dev-v0.1.0 as you normally would to main.
 #
 #   3. Build and publish:
-#        scripts/build-all-platforms.sh
-#      Builds the newest dev-v* branch (override with RELEASE_REF), refreshes
-#      the v<version> tag from its HEAD, runs every publish stage, and finishes
-#      by fast-forwarding main to what it just shipped.
+#        scripts/build-all-platforms.sh          # dry run: builds, uploads nothing
+#        scripts/build-all-platforms.sh publish  # the real thing
+#      Builds the newest dev-v* branch (override with RELEASE_REF). With
+#      `publish` it also refreshes the v<version> tag from its HEAD, runs every
+#      publish stage, and finishes by fast-forwarding main to what it just
+#      shipped.
 #
 #   4. Start the next cycle with step 1 again.
 #
@@ -214,9 +216,14 @@ main() {
 Candidate branch ${branch} is ready and you are standing on it.
 
 All development for this cycle goes here, not on main. When it is time to
-ship, run:
+ship, rehearse the whole release first (builds and tests everything, uploads
+nothing):
 
   scripts/build-all-platforms.sh
+
+Then ship it for real:
+
+  scripts/build-all-platforms.sh publish
 
 That builds ${branch}, publishes every artifact, refreshes the ${tag} tag, and
 finishes by fast-forwarding main to the released commit.

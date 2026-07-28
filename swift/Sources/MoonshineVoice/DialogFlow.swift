@@ -17,7 +17,7 @@ import Foundation
 /// ```
 ///
 /// ``load()`` downloads and wires everything a voice interface needs: a
-/// streaming speech-to-text model, an intent model for matching trigger
+/// streaming speech-to-text model, an embedding model for matching trigger
 /// phrases, a text-to-speech voice, and a microphone. A flow is an ordinary
 /// async function, so it reads top to bottom and `try` / `defer` work the way
 /// you expect.
@@ -107,10 +107,14 @@ public final class Dialog: @unchecked Sendable {
         settings.maxRetries = options.maxRetries ?? 1
         settings.reprompt =
             options.reprompt ?? "Sorry, I didn't catch that. Was that a yes or a no? {prompt}"
-        return try await runner.promptForAnswer(prompt: prompt, options: settings) { text in
-            if matchesAny(text, yesPhrases) { return true }
-            if matchesAny(text, noPhrases) { return false }
-            return nil
+        return try await runner.promptForAnswer(prompt: prompt, options: settings) { [runner] text in
+            switch runner.matchKey(
+                text, groups: [("yes", yesPhrases), ("no", noPhrases)])
+            {
+            case "yes": return true
+            case "no": return false
+            default: return nil
+            }
         }
     }
 
@@ -121,11 +125,10 @@ public final class Dialog: @unchecked Sendable {
         options choices: [String: [String]],
         settings: AskOptions = AskOptions()
     ) async throws -> String {
-        return try await runner.promptForAnswer(prompt: prompt, options: settings) { text in
-            for (key, phrases) in choices {
-                if matchesAny(text, [key] + phrases) { return key }
-            }
-            return nil
+        return try await runner.promptForAnswer(prompt: prompt, options: settings) { [runner] text in
+            // The key itself always counts as one of its phrases.
+            return runner.matchKey(
+                text, groups: choices.map { (key: $0.key, phrases: [$0.key] + $0.value) })
         }
     }
 
@@ -146,6 +149,9 @@ public typealias FlowFunction = @Sendable (Dialog) async throws -> Void
 @available(iOS 15.0, macOS 12.0, *)
 public final class DialogFlow: @unchecked Sendable {
     private static let defaultTriggerThreshold: Float = 0.7
+    /// Prompt answers ("yes", "the blue one") are short and varied, so they
+    /// match on a looser threshold than trigger phrases.
+    private static let promptThreshold: Float = 0.55
 
     private var flowOrder: [String] = []
     private var flows: [String: FlowFunction] = [:]
@@ -165,7 +171,8 @@ public final class DialogFlow: @unchecked Sendable {
     private var errorHandlers: [@Sendable (Error) -> Void] = []
 
     private var tts: TextToSpeech?
-    private var intent: IntentRecognizer?
+    private var embedding: EmbeddingModel?
+    private var matcher = PhraseMatcher(model: nil)
     private var mic: MicTranscriber?
     private var ownsTts = true
     private var ownsMic = true
@@ -176,7 +183,6 @@ public final class DialogFlow: @unchecked Sendable {
     private var pending: CheckedContinuation<String, Error>?
     private var pendingTimeout: Task<Void, Never>?
     private var speaking = false
-    private var triggersRegistered = false
     /// Serializes utterance handling so one flow advances at a time.
     private var queueTask: Task<Void, Never>?
     /// Woken when the runner comes to rest, meaning the flow either finished or
@@ -281,7 +287,6 @@ public final class DialogFlow: @unchecked Sendable {
     public func listenFor(_ phrase: String, _ flow: @escaping FlowFunction) -> Self {
         if flows[phrase] == nil { flowOrder.append(phrase) }
         flows[phrase] = flow
-        triggersRegistered = false
         return self
     }
 
@@ -291,7 +296,6 @@ public final class DialogFlow: @unchecked Sendable {
     public func always(_ phrase: String, _ handler: @escaping FlowFunction) -> Self {
         if globals[phrase] == nil { globalOrder.append(phrase) }
         globals[phrase] = handler
-        triggersRegistered = false
         return self
     }
 
@@ -323,10 +327,12 @@ public final class DialogFlow: @unchecked Sendable {
             ownsTts = true
         }
 
-        if intent == nil {
-            intent = try await IntentRecognizer.load(
+        if embedding == nil {
+            let model = try await EmbeddingModel.load(
                 cacheDirectory: modelDirectory,
                 onProgress: fractionReporter(progressHandler))
+            embedding = model
+            matcher = PhraseMatcher(model: model)
         }
 
         if wantsMicrophone, mic == nil {
@@ -412,10 +418,11 @@ public final class DialogFlow: @unchecked Sendable {
     public func close() {
         if ownsMic { mic?.close() }
         if ownsTts { tts?.close() }
-        intent?.close()
+        embedding?.close()
         mic = nil
         tts = nil
-        intent = nil
+        embedding = nil
+        matcher = PhraseMatcher(model: nil)
     }
 
     // MARK: - Internals used by Dialog
@@ -575,21 +582,14 @@ public final class DialogFlow: @unchecked Sendable {
     private func matchTrigger(_ utterance: String) -> String? {
         let phrases = globalOrder + flowOrder
         guard !phrases.isEmpty else { return nil }
+        return matcher.match(utterance, phrases: phrases, threshold: threshold)
+    }
 
-        if let intent {
-            if !triggersRegistered {
-                try? intent.clearIntents()
-                for phrase in phrases {
-                    try? intent.registerIntent(canonicalPhrase: phrase)
-                }
-                triggersRegistered = true
-            }
-            let matches = try? intent.getClosestIntents(
-                utterance: utterance, toleranceThreshold: threshold)
-            return matches?.first?.canonicalPhrase
-        }
-        let lower = utterance.lowercased()
-        return phrases.first { lower.contains($0.lowercased()) }
+    /// The key of the group whose phrases best match `utterance`, used by
+    /// ``Dialog/confirm(_:yesPhrases:noPhrases:options:)`` and
+    /// ``Dialog/choose(_:options:settings:)``.
+    func matchKey(_ utterance: String, groups: [(key: String, phrases: [String])]) -> String? {
+        return matcher.match(utterance, groups: groups, threshold: DialogFlow.promptThreshold)
     }
 
     private func runFlow(_ triggerPhrase: String, flow: @escaping FlowFunction) async {
@@ -674,14 +674,6 @@ private final class SettleSignal: @unchecked Sendable {
             }
             if alreadySignalled { continuation.resume() }
         }
-    }
-}
-
-private func matchesAny(_ utterance: String, _ phrases: [String]) -> Bool {
-    let lower = utterance.lowercased()
-    return phrases.contains { phrase in
-        let needle = phrase.lowercased()
-        return lower == needle || lower.contains(needle)
     }
 }
 

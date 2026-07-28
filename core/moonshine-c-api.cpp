@@ -53,7 +53,6 @@ SOFTWARE.
 
 #include "bin-tokenizer.h"
 #include "debug-utils.h"
-#include "intent-recognizer.h"
 #include "moonshine-asset-catalog.h"
 #include "moonshine-g2p.h"
 #include "moonshine-model-catalog.h"
@@ -64,6 +63,7 @@ SOFTWARE.
 #include "ort-utils.h"
 #include "speech-clip.h"
 #include "string-utils.h"
+#include "text-embedder.h"
 #include "transcriber.h"
 
 // Defined as a macro to ensure we get meaningful line numbers in the error
@@ -517,57 +517,44 @@ int32_t moonshine_transcribe_stream(int32_t transcriber_handle,
   return MOONSHINE_ERROR_NONE;
 }
 
-/* ------------------------------ INTENT RECOGNIZER ------------------------- */
+/* ------------------------------ EMBEDDING MODEL --------------------------- */
 
 namespace {
 
-std::mutex intent_recognizer_map_mutex;
-std::map<int32_t, IntentRecognizer *> intent_recognizer_map;
-int32_t next_intent_recognizer_handle = 0;
+std::mutex embedding_model_map_mutex;
+std::map<int32_t, TextEmbedder *> embedding_model_map;
+int32_t next_embedding_model_handle = 0;
 
-int32_t allocate_intent_recognizer_handle(IntentRecognizer *recognizer) {
-  std::lock_guard<std::mutex> lock(intent_recognizer_map_mutex);
-  int32_t handle = next_intent_recognizer_handle++;
-  intent_recognizer_map[handle] = recognizer;
+int32_t allocate_embedding_model_handle(TextEmbedder *embedder) {
+  std::lock_guard<std::mutex> lock(embedding_model_map_mutex);
+  int32_t handle = next_embedding_model_handle++;
+  embedding_model_map[handle] = embedder;
   return handle;
 }
 
-void free_intent_recognizer_handle(int32_t handle) {
-  // Note: Caller must hold intent_recognizer_map_mutex
-  delete intent_recognizer_map[handle];
-  intent_recognizer_map[handle] = nullptr;
-  intent_recognizer_map.erase(handle);
+void free_embedding_model_handle(int32_t handle) {
+  // Note: Caller must hold embedding_model_map_mutex
+  delete embedding_model_map[handle];
+  embedding_model_map[handle] = nullptr;
+  embedding_model_map.erase(handle);
 }
 
-#define CHECK_INTENT_RECOGNIZER_HANDLE(handle)                         \
-  do {                                                                 \
-    if (handle < 0 || !intent_recognizer_map.contains(handle)) {       \
-      LOGF("Moonshine intent recognizer handle is invalid: handle %d", \
-           handle);                                                    \
-      return MOONSHINE_ERROR_INVALID_HANDLE;                           \
-    }                                                                  \
+#define CHECK_EMBEDDING_MODEL_HANDLE(handle)                                  \
+  do {                                                                        \
+    if (handle < 0 || !embedding_model_map.contains(handle)) {                \
+      LOGF("Moonshine embedding model handle is invalid: handle %d", handle); \
+      return MOONSHINE_ERROR_INVALID_HANDLE;                                  \
+    }                                                                         \
   } while (0)
-
-char *duplicate_c_string(const char *s) {
-  if (s == nullptr) {
-    return nullptr;
-  }
-  std::size_t n = std::strlen(s) + 1;
-  char *out = static_cast<char *>(std::malloc(n));
-  if (out != nullptr) {
-    std::memcpy(out, s, n);
-  }
-  return out;
-}
 
 }  // namespace
 
-int32_t moonshine_create_intent_recognizer(const char *model_path,
-                                           uint32_t model_arch,
-                                           const char *model_variant) {
+int32_t moonshine_create_embedding_model(const char *model_path,
+                                         uint32_t model_arch,
+                                         const char *model_variant) {
   if (log_api_calls) {
     LOGF(
-        "moonshine_create_intent_recognizer(model_path=%s, model_arch=%d, "
+        "moonshine_create_embedding_model(model_path=%s, model_arch=%d, "
         "model_variant=%s)",
         model_path, model_arch, model_variant ? model_variant : "q4");
   }
@@ -577,23 +564,23 @@ int32_t moonshine_create_intent_recognizer(const char *model_path,
     return MOONSHINE_ERROR_INVALID_ARGUMENT;
   }
 
-  IntentRecognizer *recognizer = nullptr;
+  TextEmbedder *embedder = nullptr;
   try {
-    IntentRecognizerOptions options;
+    TextEmbedderOptions options;
     options.model_path = model_path;
     options.model_arch = static_cast<EmbeddingModelArch>(model_arch);
     options.model_variant = model_variant ? model_variant : "q4";
 
-    recognizer = new IntentRecognizer(options);
+    embedder = new TextEmbedder(options);
   } catch (const std::exception &e) {
-    delete recognizer;
-    LOGF("Failed to create intent recognizer: %s", e.what());
+    delete embedder;
+    LOGF("Failed to create embedding model: %s", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
-  return allocate_intent_recognizer_handle(recognizer);
+  return allocate_embedding_model_handle(embedder);
 }
 
-int32_t moonshine_create_intent_recognizer_from_memory(
+int32_t moonshine_create_embedding_model_from_memory(
     uint32_t model_arch, const char *model_variant, const char **filenames,
     uint64_t filenames_count, const uint8_t **memory,
     const uint64_t *memory_sizes, const struct moonshine_option_t *options,
@@ -607,7 +594,7 @@ int32_t moonshine_create_intent_recognizer_from_memory(
   }
   if (log_api_calls) {
     LOGF(
-        "moonshine_create_intent_recognizer_from_memory(model_arch=%d, "
+        "moonshine_create_embedding_model_from_memory(model_arch=%d, "
         "model_variant=%s, filenames_count=%" PRIu64 ")",
         model_arch, model_variant ? model_variant : "q4", filenames_count);
     for (uint64_t i = 0; i < filenames_count; i++) {
@@ -616,7 +603,7 @@ int32_t moonshine_create_intent_recognizer_from_memory(
     }
   }
 
-  // Resolve the model and tokenizer buffers from the keyed files. The intent
+  // Resolve the model and tokenizer buffers from the keyed files. The embedding
   // manifest contains exactly two assets: the all-in-one model (a `.ort`, or a
   // legacy self-contained `.onnx`) and `tokenizer.bin`, so the model is simply
   // the non-tokenizer entry.
@@ -643,192 +630,45 @@ int32_t moonshine_create_intent_recognizer_from_memory(
     return MOONSHINE_ERROR_INVALID_ARGUMENT;
   }
 
-  IntentRecognizer *recognizer = nullptr;
+  TextEmbedder *embedder = nullptr;
   try {
-    IntentRecognizerOptions recognizer_options;
-    recognizer_options.model_arch = static_cast<EmbeddingModelArch>(model_arch);
-    recognizer_options.model_variant = model_variant ? model_variant : "q4";
-    recognizer_options.model_data = model_data;
-    recognizer_options.model_data_size = model_data_size;
-    recognizer_options.tokenizer_data = tokenizer_data;
-    recognizer_options.tokenizer_data_size = tokenizer_data_size;
-    recognizer = new IntentRecognizer(recognizer_options);
+    TextEmbedderOptions embedder_options;
+    embedder_options.model_arch = static_cast<EmbeddingModelArch>(model_arch);
+    embedder_options.model_variant = model_variant ? model_variant : "q4";
+    embedder_options.model_data = model_data;
+    embedder_options.model_data_size = model_data_size;
+    embedder_options.tokenizer_data = tokenizer_data;
+    embedder_options.tokenizer_data_size = tokenizer_data_size;
+    embedder = new TextEmbedder(embedder_options);
   } catch (const std::exception &e) {
-    delete recognizer;
-    LOGF("Failed to create intent recognizer from memory: %s", e.what());
+    delete embedder;
+    LOGF("Failed to create embedding model from memory: %s", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
-  return allocate_intent_recognizer_handle(recognizer);
+  return allocate_embedding_model_handle(embedder);
 }
 
-void moonshine_free_intent_recognizer(int32_t intent_recognizer_handle) {
+void moonshine_free_embedding_model(int32_t embedding_model_handle) {
   if (log_api_calls) {
-    LOGF("moonshine_free_intent_recognizer(handle=%d)",
-         intent_recognizer_handle);
+    LOGF("moonshine_free_embedding_model(handle=%d)", embedding_model_handle);
   }
-  std::lock_guard<std::mutex> lock(intent_recognizer_map_mutex);
-  if (intent_recognizer_map.contains(intent_recognizer_handle)) {
-    free_intent_recognizer_handle(intent_recognizer_handle);
+  std::lock_guard<std::mutex> lock(embedding_model_map_mutex);
+  if (embedding_model_map.contains(embedding_model_handle)) {
+    free_embedding_model_handle(embedding_model_handle);
   }
 }
 
-int32_t moonshine_register_intent(int32_t intent_recognizer_handle,
-                                  const char *canonical_phrase,
-                                  float *embedding, uint64_t embedding_size,
-                                  int32_t priority) {
-  if (log_api_calls) {
-    LOGF(
-        "moonshine_register_intent(handle=%d, canonical_phrase=%s, "
-        "embedding=%p, embedding_size=%" PRIu64 ", priority=%d)",
-        intent_recognizer_handle, canonical_phrase,
-        static_cast<void *>(embedding), embedding_size, priority);
-  }
-  CHECK_INTENT_RECOGNIZER_HANDLE(intent_recognizer_handle);
-  if (canonical_phrase == nullptr) {
-    LOGF("%s", "moonshine_register_intent: canonical_phrase is nullptr");
-    return MOONSHINE_ERROR_INVALID_ARGUMENT;
-  }
-  try {
-    intent_recognizer_map[intent_recognizer_handle]->register_intent(
-        canonical_phrase, embedding, embedding_size, priority);
-  } catch (const std::exception &e) {
-    LOGF("Failed to register intent: %s", e.what());
-    return MOONSHINE_ERROR_UNKNOWN;
-  }
-  return MOONSHINE_ERROR_NONE;
-}
-
-int32_t moonshine_unregister_intent(int32_t intent_recognizer_handle,
-                                    const char *canonical_phrase) {
-  if (log_api_calls) {
-    LOGF("moonshine_unregister_intent(handle=%d, canonical_phrase=%s)",
-         intent_recognizer_handle, canonical_phrase);
-  }
-  CHECK_INTENT_RECOGNIZER_HANDLE(intent_recognizer_handle);
-  if (canonical_phrase == nullptr) {
-    LOGF("%s", "moonshine_unregister_intent: canonical_phrase is nullptr");
-    return MOONSHINE_ERROR_INVALID_ARGUMENT;
-  }
-  try {
-    bool result =
-        intent_recognizer_map[intent_recognizer_handle]->unregister_intent(
-            canonical_phrase);
-    if (!result) {
-      return MOONSHINE_ERROR_INVALID_ARGUMENT;
-    }
-  } catch (const std::exception &e) {
-    LOGF("Failed to unregister intent: %s", e.what());
-    return MOONSHINE_ERROR_UNKNOWN;
-  }
-  return MOONSHINE_ERROR_NONE;
-}
-
-int32_t moonshine_get_closest_intents(int32_t intent_recognizer_handle,
-                                      const char *utterance,
-                                      float tolerance_threshold,
-                                      moonshine_intent_match_t **out_matches,
-                                      uint64_t *out_count) {
-  if (log_api_calls) {
-    LOGF("moonshine_get_closest_intents(handle=%d, utterance=%s, tolerance=%f)",
-         intent_recognizer_handle, utterance ? utterance : "(null)",
-         tolerance_threshold);
-  }
-  if (out_matches == nullptr || out_count == nullptr) {
-    LOGF("%s",
-         "moonshine_get_closest_intents: out_matches or out_count is nullptr");
-    return MOONSHINE_ERROR_INVALID_ARGUMENT;
-  }
-  *out_matches = nullptr;
-  *out_count = 0;
-
-  CHECK_INTENT_RECOGNIZER_HANDLE(intent_recognizer_handle);
-  if (utterance == nullptr) {
-    LOGF("%s", "moonshine_get_closest_intents: utterance is nullptr");
-    return MOONSHINE_ERROR_INVALID_ARGUMENT;
-  }
-
-  try {
-    auto ranked = intent_recognizer_map[intent_recognizer_handle]->rank_intents(
-        utterance, tolerance_threshold,
-        static_cast<size_t>(MOONSHINE_INTENT_MAX_MATCHES));
-    if (ranked.empty()) {
-      return MOONSHINE_ERROR_NONE;
-    }
-
-    const uint64_t n = static_cast<uint64_t>(ranked.size());
-    auto *arr = static_cast<moonshine_intent_match_t *>(
-        std::malloc(n * sizeof(moonshine_intent_match_t)));
-    if (arr == nullptr) {
-      return MOONSHINE_ERROR_UNKNOWN;
-    }
-    for (uint64_t i = 0; i < n; ++i) {
-      arr[i].canonical_phrase = duplicate_c_string(ranked[i].first.c_str());
-      arr[i].similarity = ranked[i].second;
-      if (arr[i].canonical_phrase == nullptr) {
-        for (uint64_t j = 0; j < i; ++j) {
-          std::free(arr[j].canonical_phrase);
-        }
-        std::free(arr);
-        return MOONSHINE_ERROR_UNKNOWN;
-      }
-    }
-    *out_matches = arr;
-    *out_count = n;
-  } catch (const std::exception &e) {
-    LOGF("Failed to get closest intents: %s", e.what());
-    return MOONSHINE_ERROR_UNKNOWN;
-  }
-  return MOONSHINE_ERROR_NONE;
-}
-
-void moonshine_free_intent_matches(moonshine_intent_match_t *matches,
-                                   uint64_t count) {
-  if (matches == nullptr) {
-    return;
-  }
-  for (uint64_t i = 0; i < count; ++i) {
-    std::free(matches[i].canonical_phrase);
-  }
-  std::free(matches);
-}
-
-int32_t moonshine_get_intent_count(int32_t intent_recognizer_handle) {
-  if (log_api_calls) {
-    LOGF("moonshine_get_intent_count(handle=%d)", intent_recognizer_handle);
-  }
-  std::lock_guard<std::mutex> lock(intent_recognizer_map_mutex);
-  if (!intent_recognizer_map.contains(intent_recognizer_handle)) {
-    return MOONSHINE_ERROR_INVALID_HANDLE;
-  }
-  return static_cast<int32_t>(
-      intent_recognizer_map[intent_recognizer_handle]->get_intent_count());
-}
-
-int32_t moonshine_clear_intents(int32_t intent_recognizer_handle) {
-  if (log_api_calls) {
-    LOGF("moonshine_clear_intents(handle=%d)", intent_recognizer_handle);
-  }
-  CHECK_INTENT_RECOGNIZER_HANDLE(intent_recognizer_handle);
-  try {
-    intent_recognizer_map[intent_recognizer_handle]->clear_intents();
-  } catch (const std::exception &e) {
-    LOGF("Failed to clear intents: %s", e.what());
-    return MOONSHINE_ERROR_UNKNOWN;
-  }
-  return MOONSHINE_ERROR_NONE;
-}
-
-int32_t moonshine_calculate_intent_embedding(int32_t intent_recognizer_handle,
-                                             const char *sentence,
-                                             float **out_embedding,
-                                             uint64_t *out_embedding_size,
-                                             const char *model_name) {
+int32_t moonshine_calculate_embedding(int32_t embedding_model_handle,
+                                      const char *sentence,
+                                      float **out_embedding,
+                                      uint64_t *out_embedding_size,
+                                      const char *model_name) {
   (void)model_name;
   if (log_api_calls) {
     LOGF(
-        "moonshine_calculate_intent_embedding(handle=%d, sentence=%s, "
+        "moonshine_calculate_embedding(handle=%d, sentence=%s, "
         "out_embedding=%p, out_embedding_size=%p, model_name=%s)",
-        intent_recognizer_handle, sentence ? sentence : "(null)",
+        embedding_model_handle, sentence ? sentence : "(null)",
         static_cast<void *>(out_embedding),
         static_cast<void *>(out_embedding_size),
         model_name ? model_name : "(null)");
@@ -839,10 +679,10 @@ int32_t moonshine_calculate_intent_embedding(int32_t intent_recognizer_handle,
   }
   *out_embedding = nullptr;
   *out_embedding_size = 0;
-  CHECK_INTENT_RECOGNIZER_HANDLE(intent_recognizer_handle);
+  CHECK_EMBEDDING_MODEL_HANDLE(embedding_model_handle);
   try {
     std::vector<float> emb =
-        intent_recognizer_map[intent_recognizer_handle]->calculate_embedding(
+        embedding_model_map[embedding_model_handle]->calculate_embedding(
             sentence);
     const uint64_t n = static_cast<uint64_t>(emb.size());
     auto *buf = static_cast<float *>(std::malloc(n * sizeof(float)));
@@ -853,15 +693,15 @@ int32_t moonshine_calculate_intent_embedding(int32_t intent_recognizer_handle,
     *out_embedding = buf;
     *out_embedding_size = n;
   } catch (const std::exception &e) {
-    LOGF("Failed to calculate intent embedding: %s", e.what());
+    LOGF("Failed to calculate embedding: %s", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
   return MOONSHINE_ERROR_NONE;
 }
 
-void moonshine_free_intent_embedding(float *embedding) { std::free(embedding); }
+void moonshine_free_embedding(float *embedding) { std::free(embedding); }
 
-int32_t moonshine_calculate_embedding_distance(int32_t intent_recognizer_handle,
+int32_t moonshine_calculate_embedding_distance(int32_t embedding_model_handle,
                                                const float *embedding_a,
                                                const float *embedding_b,
                                                uint64_t embedding_size,
@@ -870,7 +710,7 @@ int32_t moonshine_calculate_embedding_distance(int32_t intent_recognizer_handle,
     LOGF(
         "moonshine_calculate_embedding_distance(handle=%d, embedding_a=%p, "
         "embedding_b=%p, embedding_size=%" PRIu64 ", out_similarity=%p)",
-        intent_recognizer_handle, static_cast<const void *>(embedding_a),
+        embedding_model_handle, static_cast<const void *>(embedding_a),
         static_cast<const void *>(embedding_b), embedding_size,
         static_cast<void *>(out_similarity));
   }
@@ -878,13 +718,12 @@ int32_t moonshine_calculate_embedding_distance(int32_t intent_recognizer_handle,
       out_similarity == nullptr || embedding_size == 0) {
     return MOONSHINE_ERROR_INVALID_ARGUMENT;
   }
-  CHECK_INTENT_RECOGNIZER_HANDLE(intent_recognizer_handle);
+  CHECK_EMBEDDING_MODEL_HANDLE(embedding_model_handle);
   try {
     std::vector<float> a(embedding_a, embedding_a + embedding_size);
     std::vector<float> b(embedding_b, embedding_b + embedding_size);
     *out_similarity =
-        intent_recognizer_map[intent_recognizer_handle]->calculate_similarity(
-            a, b);
+        embedding_model_map[embedding_model_handle]->calculate_similarity(a, b);
   } catch (const std::exception &e) {
     LOGF("Failed to calculate embedding distance: %s", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
@@ -1990,10 +1829,10 @@ int32_t moonshine_get_stt_dependencies(const char *language,
   }
 }
 
-int32_t moonshine_get_intent_dependencies(const char *model_name,
-                                          const moonshine_option_t *options,
-                                          uint64_t options_count,
-                                          char **out_dependencies_json) {
+int32_t moonshine_get_embedding_dependencies(const char *model_name,
+                                             const moonshine_option_t *options,
+                                             uint64_t options_count,
+                                             char **out_dependencies_json) {
   if (out_dependencies_json == nullptr) {
     return MOONSHINE_ERROR_INVALID_ARGUMENT;
   }
@@ -2020,10 +1859,10 @@ int32_t moonshine_get_intent_dependencies(const char *model_name,
     }
 
     const std::optional<moonshine::ModelDependencies> deps =
-        moonshine::intent_model_dependencies(resolved_model_name, variant);
+        moonshine::embedding_model_dependencies(resolved_model_name, variant);
     if (!deps.has_value()) {
       LOGF(
-          "moonshine_get_intent_dependencies: unknown model \"%s\" or "
+          "moonshine_get_embedding_dependencies: unknown model \"%s\" or "
           "variant \"%s\"\n",
           resolved_model_name.c_str(), variant.c_str());
       return MOONSHINE_ERROR_INVALID_ARGUMENT;
@@ -2036,7 +1875,7 @@ int32_t moonshine_get_intent_dependencies(const char *model_name,
     *out_dependencies_json = buf;
     return MOONSHINE_ERROR_NONE;
   } catch (const std::exception &e) {
-    LOGF("moonshine_get_intent_dependencies failed: %s\n", e.what());
+    LOGF("moonshine_get_embedding_dependencies failed: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
 }

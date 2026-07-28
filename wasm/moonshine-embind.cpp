@@ -259,8 +259,12 @@ class Stream {
   Stream(const Stream &) = delete;
   Stream &operator=(const Stream &) = delete;
 
-  void start() { check(moonshine_start_stream(transcriber_handle_, stream_handle_)); }
-  void stop() { check(moonshine_stop_stream(transcriber_handle_, stream_handle_)); }
+  void start() {
+    check(moonshine_start_stream(transcriber_handle_, stream_handle_));
+  }
+  void stop() {
+    check(moonshine_stop_stream(transcriber_handle_, stream_handle_));
+  }
 
   void addAudio(val audio, int32_t sample_rate, uint32_t flags) {
     std::vector<float> pcm = to_float_vector(audio);
@@ -289,24 +293,19 @@ class Stream {
 };
 
 // ---------------------------------------------------------------------------
-// Intent recognizer (always compiled into the core)
+// Text embeddings (always compiled into the core)
 // ---------------------------------------------------------------------------
 
-struct JsIntentMatch {
-  std::string canonicalPhrase;
-  float similarity = 0.0f;
-};
-
-class IntentRecognizer {
+class EmbeddingModel {
  public:
   // Loads the embedding model from in-memory bytes keyed by canonical filename
-  // (see moonshine_create_intent_recognizer_from_memory). `keys` is an array of
+  // (see moonshine_create_embedding_model_from_memory). `keys` is an array of
   // strings and `buffers` an array of Uint8Arrays of matching length, matching
   // the download manifest (`model_<variant>.ort` + `tokenizer.bin`). The
   // browser has no natural filesystem, so this in-memory loader is the only
   // entry point. Buffers are copied into `buffers_` for the object's lifetime.
-  IntentRecognizer(val keys, val buffers, uint32_t model_arch,
-                   const std::string &model_variant) {
+  EmbeddingModel(val keys, val buffers, uint32_t model_arch,
+                 const std::string &model_variant) {
     const size_t count = keys["length"].as<size_t>();
     key_strings_.reserve(count);
     buffers_.reserve(count);
@@ -325,7 +324,7 @@ class IntentRecognizer {
       buf_ptrs.push_back(buffers_[i].data());
       buf_sizes.push_back(buffers_[i].size());
     }
-    handle_ = moonshine_create_intent_recognizer_from_memory(
+    handle_ = moonshine_create_embedding_model_from_memory(
         model_arch, model_variant.empty() ? nullptr : model_variant.c_str(),
         key_ptrs.data(), count, buf_ptrs.data(), buf_sizes.data(), nullptr, 0,
         MOONSHINE_HEADER_VERSION);
@@ -334,41 +333,40 @@ class IntentRecognizer {
     }
   }
 
-  ~IntentRecognizer() { close(); }
-  IntentRecognizer(const IntentRecognizer &) = delete;
-  IntentRecognizer &operator=(const IntentRecognizer &) = delete;
+  ~EmbeddingModel() { close(); }
+  EmbeddingModel(const EmbeddingModel &) = delete;
+  EmbeddingModel &operator=(const EmbeddingModel &) = delete;
 
-  void registerIntent(const std::string &phrase, int32_t priority) {
-    check(moonshine_register_intent(handle_, phrase.c_str(), nullptr, 0,
-                                    priority));
+  // Returns the embedding for `sentence` as a Float32Array.
+  val calculateEmbedding(const std::string &sentence) {
+    float *embedding = nullptr;
+    uint64_t size = 0;
+    check(moonshine_calculate_embedding(handle_, sentence.c_str(), &embedding,
+                                        &size, nullptr));
+    // Copy into a JS Float32Array before freeing the C buffer.
+    val result = val::global("Float32Array").new_(static_cast<double>(size));
+    val heap = val(emscripten::typed_memory_view(size, embedding));
+    result.call<void>("set", heap);
+    moonshine_free_embedding(embedding);
+    return result;
   }
 
-  void unregisterIntent(const std::string &phrase) {
-    check(moonshine_unregister_intent(handle_, phrase.c_str()));
-  }
-
-  void clearIntents() { check(moonshine_clear_intents(handle_)); }
-
-  std::vector<JsIntentMatch> closestIntents(const std::string &utterance,
-                                            float threshold) {
-    moonshine_intent_match_t *matches = nullptr;
-    uint64_t count = 0;
-    check(moonshine_get_closest_intents(handle_, utterance.c_str(), threshold,
-                                        &matches, &count));
-    std::vector<JsIntentMatch> out;
-    out.reserve(count);
-    for (uint64_t i = 0; i < count; ++i) {
-      out.push_back(JsIntentMatch{
-          matches[i].canonical_phrase ? matches[i].canonical_phrase : "",
-          matches[i].similarity});
+  // Cosine similarity of two equal-length embeddings, in [-1, 1].
+  float distance(val embedding_a, val embedding_b) {
+    const std::vector<float> a = to_float_vector(embedding_a);
+    const std::vector<float> b = to_float_vector(embedding_b);
+    if (a.empty() || a.size() != b.size()) {
+      throw_moonshine_error(MOONSHINE_ERROR_INVALID_ARGUMENT);
     }
-    moonshine_free_intent_matches(matches, count);
-    return out;
+    float similarity = 0.0f;
+    check(moonshine_calculate_embedding_distance(handle_, a.data(), b.data(),
+                                                 a.size(), &similarity));
+    return similarity;
   }
 
   void close() {
     if (handle_ >= 0) {
-      moonshine_free_intent_recognizer(handle_);
+      moonshine_free_embedding_model(handle_);
       handle_ = -1;
     }
   }
@@ -417,8 +415,8 @@ JsSpeechClip extract_speech_clip(val audio, int32_t sample_rate,
   if (clip.audio_data != nullptr && clip.audio_length > 0) {
     result.audio = val::global("Float32Array")
                        .new_(static_cast<double>(clip.audio_length));
-    val heap = val(
-        emscripten::typed_memory_view(clip.audio_length, clip.audio_data));
+    val heap =
+        val(emscripten::typed_memory_view(clip.audio_length, clip.audio_data));
     result.audio.call<void>("set", heap);
     moonshine_free_buffer(clip.audio_data);
   }
@@ -587,14 +585,14 @@ std::string stt_dependencies(const std::string &language,
   return out;
 }
 
-std::string intent_dependencies(const std::string &model_name,
-                                const std::string &variant) {
+std::string embedding_dependencies(const std::string &model_name,
+                                   const std::string &variant) {
   std::vector<moonshine_option_t> options;
   if (!variant.empty()) {
     options.push_back(moonshine_option_t{"variant", variant.c_str()});
   }
   char *json = nullptr;
-  check(moonshine_get_intent_dependencies(
+  check(moonshine_get_embedding_dependencies(
       model_name.empty() ? nullptr : model_name.c_str(),
       options.empty() ? nullptr : options.data(), options.size(), &json));
   std::string out = json ? json : "";
@@ -650,7 +648,6 @@ EMSCRIPTEN_BINDINGS(moonshine) {
   register_vector<JsWord>("MoonshineWordVector");
   register_vector<JsSpeakerSpan>("MoonshineSpeakerSpanVector");
   register_vector<JsLine>("MoonshineLineVector");
-  register_vector<JsIntentMatch>("MoonshineIntentMatchVector");
 
   value_object<JsWord>("MoonshineWord")
       .field("text", &JsWord::text)
@@ -683,10 +680,6 @@ EMSCRIPTEN_BINDINGS(moonshine) {
   value_object<JsTranscript>("MoonshineTranscript")
       .field("lines", &JsTranscript::lines);
 
-  value_object<JsIntentMatch>("MoonshineIntentMatch")
-      .field("canonicalPhrase", &JsIntentMatch::canonicalPhrase)
-      .field("similarity", &JsIntentMatch::similarity);
-
   value_object<JsSpeechClip>("MoonshineSpeechClip")
       .field("audio", &JsSpeechClip::audio)
       .field("startTime", &JsSpeechClip::startTime)
@@ -706,13 +699,11 @@ EMSCRIPTEN_BINDINGS(moonshine) {
       .function("transcribe", &Stream::transcribe)
       .function("close", &Stream::close);
 
-  class_<IntentRecognizer>("IntentRecognizer")
+  class_<EmbeddingModel>("EmbeddingModel")
       .constructor<val, val, uint32_t, std::string>()
-      .function("registerIntent", &IntentRecognizer::registerIntent)
-      .function("unregisterIntent", &IntentRecognizer::unregisterIntent)
-      .function("clearIntents", &IntentRecognizer::clearIntents)
-      .function("closestIntents", &IntentRecognizer::closestIntents)
-      .function("close", &IntentRecognizer::close);
+      .function("calculateEmbedding", &EmbeddingModel::calculateEmbedding)
+      .function("distance", &EmbeddingModel::distance)
+      .function("close", &EmbeddingModel::close);
 
 #if defined(MOONSHINE_C_API_MOONSHINE_TTS) && MOONSHINE_C_API_MOONSHINE_TTS
   value_object<JsTtsResult>("MoonshineTtsResult")
@@ -736,6 +727,6 @@ EMSCRIPTEN_BINDINGS(moonshine) {
 
   function("version", &version);
   function("sttDependencies", &stt_dependencies);
-  function("intentDependencies", &intent_dependencies);
+  function("embeddingDependencies", &embedding_dependencies);
   function("extractSpeechClip", &extract_speech_clip);
 }

@@ -40,7 +40,7 @@ import java.util.function.Consumer;
  * }</pre>
  *
  * <p>{@link #load()} downloads and wires everything a voice interface needs: a
- * streaming speech-to-text model, an intent model for matching trigger phrases,
+ * streaming speech-to-text model, an embedding model for matching trigger phrases,
  * a text-to-speech voice, and a microphone. A flow is ordinary blocking code
  * running on its own thread, so it reads top to bottom and {@code try} /
  * {@code finally} work the way you expect.
@@ -48,6 +48,11 @@ import java.util.function.Consumer;
 public final class DialogFlow {
 
     private static final float DEFAULT_TRIGGER_THRESHOLD = 0.7f;
+    /**
+     * Prompt answers ("yes", "the blue one") are short and varied, so they match
+     * on a looser threshold than trigger phrases.
+     */
+    private static final float PROMPT_THRESHOLD = 0.55f;
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
     /** A conversation, written as straight-line code. */
@@ -153,8 +158,11 @@ public final class DialogFlow {
             settings.reprompt = options.reprompt != null ? options.reprompt
                     : "Sorry, I didn't catch that. Was that a yes or a no? {prompt}";
             Boolean answer = promptForAnswer(prompt, settings, text -> {
-                if (matchesAny(text, yesPhrases)) return Boolean.TRUE;
-                if (matchesAny(text, noPhrases)) return Boolean.FALSE;
+                String key = matchKey(text, Arrays.asList(
+                        new PhraseMatcher.Group("yes", yesPhrases),
+                        new PhraseMatcher.Group("no", noPhrases)));
+                if ("yes".equals(key)) return Boolean.TRUE;
+                if ("no".equals(key)) return Boolean.FALSE;
                 return null;
             });
             return Boolean.TRUE.equals(answer);
@@ -172,14 +180,15 @@ public final class DialogFlow {
         public String choose(String prompt, Map<String, List<String>> choices,
                 AskOptions options) {
             return promptForAnswer(prompt, options, text -> {
+                List<PhraseMatcher.Group> groups = new ArrayList<>();
                 for (Map.Entry<String, List<String>> choice : choices.entrySet()) {
-                    List<String> phrases = new ArrayList<>(choice.getValue());
+                    // The key itself always counts as one of its phrases.
+                    List<String> phrases = new ArrayList<>();
                     phrases.add(choice.getKey());
-                    if (matchesAny(text, phrases)) {
-                        return choice.getKey();
-                    }
+                    phrases.addAll(choice.getValue());
+                    groups.add(new PhraseMatcher.Group(choice.getKey(), phrases));
                 }
-                return null;
+                return matchKey(text, groups);
             });
         }
 
@@ -220,11 +229,11 @@ public final class DialogFlow {
             new CopyOnWriteArrayList<>();
 
     @Nullable private TextToSpeech tts;
-    @Nullable private IntentRecognizer intent;
+    @Nullable private EmbeddingModel embedding;
+    private PhraseMatcher matcher = new PhraseMatcher(null);
     @Nullable private MicTranscriber mic;
     private boolean ownsTts = true;
     private boolean ownsMic = true;
-    private boolean triggersRegistered = false;
 
     private final ExecutorService flowExecutor = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "moonshine-dialog-flow");
@@ -327,7 +336,6 @@ public final class DialogFlow {
             flowOrder.add(phrase);
         }
         flows.put(phrase, flow);
-        triggersRegistered = false;
         return this;
     }
 
@@ -340,7 +348,6 @@ public final class DialogFlow {
             globalOrder.add(phrase);
         }
         globals.put(phrase, handler);
-        triggersRegistered = false;
         return this;
     }
 
@@ -379,15 +386,17 @@ public final class DialogFlow {
             ownsTts = true;
         }
 
-        if (intent == null) {
+        if (embedding == null) {
             try {
-                ModelSpec spec = ModelSpec.intent(null, null);
+                ModelSpec spec = ModelSpec.embedding(null, null);
                 File directory = Models.ensureOne(appContext, spec, modelDirectory,
                         progressCallback);
-                intent = new IntentRecognizer(directory.getAbsolutePath(),
+                EmbeddingModel model = new EmbeddingModel(directory.getAbsolutePath(),
                         JNI.MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M, null);
+                embedding = model;
+                matcher = new PhraseMatcher(model);
             } catch (Exception e) {
-                throw new RuntimeException("Failed to load the intent-matching model", e);
+                throw new RuntimeException("Failed to load the phrase-matching model", e);
             }
         }
 
@@ -531,12 +540,13 @@ public final class DialogFlow {
         if (ownsTts && tts != null) {
             tts.close();
         }
-        if (intent != null) {
-            intent.close();
+        if (embedding != null) {
+            embedding.close();
         }
         mic = null;
         tts = null;
-        intent = null;
+        embedding = null;
+        matcher = new PhraseMatcher(null);
     }
 
     // -- Internals used by Dialog --------------------------------------------
@@ -720,38 +730,16 @@ public final class DialogFlow {
         if (phrases.isEmpty()) {
             return null;
         }
-        IntentRecognizer recognizer = intent;
-        if (recognizer != null) {
-            synchronized (lock) {
-                if (!triggersRegistered) {
-                    recognizer.clearIntents();
-                    for (String phrase : phrases) {
-                        recognizer.registerIntent(phrase);
-                    }
-                    triggersRegistered = true;
-                }
-            }
-            List<IntentMatch> matches = recognizer.getClosestIntents(utterance, threshold);
-            return matches.isEmpty() ? null : matches.get(0).canonicalPhrase;
-        }
-        String lower = utterance.toLowerCase();
-        for (String phrase : phrases) {
-            if (lower.contains(phrase.toLowerCase())) {
-                return phrase;
-            }
-        }
-        return null;
+        return matcher.match(utterance, phrases.toArray(new String[0]), threshold);
     }
 
-    private static boolean matchesAny(String utterance, List<String> phrases) {
-        String lower = utterance.toLowerCase();
-        for (String phrase : phrases) {
-            String needle = phrase.toLowerCase();
-            if (lower.equals(needle) || lower.contains(needle)) {
-                return true;
-            }
-        }
-        return false;
+    /**
+     * The key of the group whose phrases best match {@code utterance}, used by
+     * {@link Dialog#confirm} and {@link Dialog#choose}.
+     */
+    @Nullable
+    private String matchKey(String utterance, List<PhraseMatcher.Group> groups) {
+        return matcher.match(utterance, groups, PROMPT_THRESHOLD);
     }
 
     /** Renders a string as a space-separated spoken form for reading back. */

@@ -1,8 +1,8 @@
 #include <jni.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
-#include <algorithm>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -109,7 +109,8 @@ static std::unique_ptr<transcript_t> c_transcript_from_jobject(
   return transcript;
 }
 
-static jobject c_transcript_to_jobject(JNIEnv *env, struct transcript_t *transcript) {
+static jobject c_transcript_to_jobject(JNIEnv *env,
+                                       struct transcript_t *transcript) {
   jclass listClass = get_class(env, "java/util/ArrayList");
   jmethodID addMethod =
       get_method(env, listClass, "add", "(Ljava/lang/Object;)Z");
@@ -165,12 +166,10 @@ static jobject c_transcript_to_jobject(JNIEnv *env, struct transcript_t *transcr
       jmethodID spanConstructor = get_method(env, spanClass, "<init>", "()V");
       jfieldID spanStartField = get_field(env, spanClass, "startTime", "F");
       jfieldID spanDurationField = get_field(env, spanClass, "duration", "F");
-      jfieldID spanSpeakerIdField =
-          get_field(env, spanClass, "speakerId", "J");
+      jfieldID spanSpeakerIdField = get_field(env, spanClass, "speakerId", "J");
       jfieldID spanSpeakerIndexField =
           get_field(env, spanClass, "speakerIndex", "I");
-      jfieldID spanStartCharField =
-          get_field(env, spanClass, "startChar", "J");
+      jfieldID spanStartCharField = get_field(env, spanClass, "startChar", "J");
       jfieldID spanEndCharField = get_field(env, spanClass, "endChar", "J");
 
       jclass spanListClass = get_class(env, "java/util/ArrayList");
@@ -203,24 +202,20 @@ static jobject c_transcript_to_jobject(JNIEnv *env, struct transcript_t *transcr
 
     // Populate word timestamps if available
     if (line->words != nullptr && line->word_count > 0) {
-      jclass wordClass =
-          get_class(env, "ai/moonshine/voice/WordTiming");
-      jmethodID wordConstructor =
-          get_method(env, wordClass, "<init>", "()V");
+      jclass wordClass = get_class(env, "ai/moonshine/voice/WordTiming");
+      jmethodID wordConstructor = get_method(env, wordClass, "<init>", "()V");
       jfieldID wordTextField =
           get_field(env, wordClass, "word", "Ljava/lang/String;");
       jfieldID wordStartField = get_field(env, wordClass, "start", "F");
       jfieldID wordEndField = get_field(env, wordClass, "end", "F");
-      jfieldID wordConfField =
-          get_field(env, wordClass, "confidence", "F");
+      jfieldID wordConfField = get_field(env, wordClass, "confidence", "F");
 
       jclass wordListClass = get_class(env, "java/util/ArrayList");
       jmethodID wordListConstructor =
           get_method(env, wordListClass, "<init>", "()V");
       jmethodID wordListAdd =
           get_method(env, wordListClass, "add", "(Ljava/lang/Object;)Z");
-      jobject wordsList =
-          env->NewObject(wordListClass, wordListConstructor);
+      jobject wordsList = env->NewObject(wordListClass, wordListConstructor);
 
       for (uint64_t j = 0; j < line->word_count; j++) {
         const transcript_word_t *w = &line->words[j];
@@ -236,8 +231,8 @@ static jobject c_transcript_to_jobject(JNIEnv *env, struct transcript_t *transcr
         env->DeleteLocalRef(jword);
       }
 
-      jfieldID wordsField = get_field(env, lineClass, "words",
-                                      "Ljava/util/List;");
+      jfieldID wordsField =
+          get_field(env, lineClass, "words", "Ljava/util/List;");
       env->SetObjectField(jline, wordsField, wordsList);
       env->DeleteLocalRef(wordsList);
       env->DeleteLocalRef(wordClass);
@@ -410,8 +405,8 @@ static void append_memory_file(JNIEnv *env, jbyteArray jbuf, const char *key,
   backing->push_back(std::move(copy));
 }
 
-// Shared tail for both in-memory transcriber loaders: calls the keyed C API and,
-// on success, stashes `backing` so the referenced bytes outlive this call.
+// Shared tail for both in-memory transcriber loaders: calls the keyed C API
+// and, on success, stashes `backing` so the referenced bytes outlive this call.
 static jint finish_transcriber_from_memory(
     const std::vector<std::string> &filenames, jint model_arch,
     const std::vector<moonshine_option_t> &copts,
@@ -629,9 +624,11 @@ Java_ai_moonshine_voice_JNI_moonshineTranscribeStream(JNIEnv *env,
     ALOGD("moonshineTranscribeStream: start transcribe stream");
     int transcription_error = moonshine_transcribe_stream(
         transcriber_handle, stream_handle, flags, &transcript);
-    ALOGD("moonshineTranscribeStream: transcription error: %d", transcription_error);
+    ALOGD("moonshineTranscribeStream: transcription error: %d",
+          transcription_error);
     if (transcription_error != 0) {
-      ALOGE("moonshineTranscribeStream: transcription error: %d", transcription_error);
+      ALOGE("moonshineTranscribeStream: transcription error: %d",
+            transcription_error);
       return nullptr;
     }
     ALOGD("moonshineTranscribeStream: transcript=%p", (void *)transcript);
@@ -799,9 +796,9 @@ Java_ai_moonshine_voice_JNI_moonshineFreeTtsSynthesizer(JNIEnv * /* env */,
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_ai_moonshine_voice_JNI_moonshineGetG2pDependencies(JNIEnv *env,
-                                                      jobject /* this */,
-                                                      jstring languages,
-                                                      jobjectArray joptions) {
+                                                        jobject /* this */,
+                                                        jstring languages,
+                                                        jobjectArray joptions) {
   try {
     std::vector<moonshine_option_t> copts;
     std::vector<std::pair<jstring, jstring>> jhold;
@@ -813,8 +810,8 @@ Java_ai_moonshine_voice_JNI_moonshineGetG2pDependencies(JNIEnv *env,
       lang_ptr = env->GetStringUTFChars(languages, nullptr);
     }
     char *out = nullptr;
-    const int32_t err = moonshine_get_g2p_dependencies(
-        lang_ptr, copts.data(), copts.size(), &out);
+    const int32_t err = moonshine_get_g2p_dependencies(lang_ptr, copts.data(),
+                                                       copts.size(), &out);
     release_moonshine_options(env, copts, jhold);
     if (languages != nullptr && lang_ptr != nullptr) {
       env->ReleaseStringUTFChars(languages, lang_ptr);
@@ -839,9 +836,9 @@ Java_ai_moonshine_voice_JNI_moonshineGetG2pDependencies(JNIEnv *env,
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_ai_moonshine_voice_JNI_moonshineGetTtsDependencies(JNIEnv *env,
-                                                      jobject /* this */,
-                                                      jstring languages,
-                                                      jobjectArray joptions) {
+                                                        jobject /* this */,
+                                                        jstring languages,
+                                                        jobjectArray joptions) {
   try {
     std::vector<moonshine_option_t> copts;
     std::vector<std::pair<jstring, jstring>> jhold;
@@ -853,8 +850,8 @@ Java_ai_moonshine_voice_JNI_moonshineGetTtsDependencies(JNIEnv *env,
       lang_ptr = env->GetStringUTFChars(languages, nullptr);
     }
     char *out = nullptr;
-    const int32_t err = moonshine_get_tts_dependencies(
-        lang_ptr, copts.data(), copts.size(), &out);
+    const int32_t err = moonshine_get_tts_dependencies(lang_ptr, copts.data(),
+                                                       copts.size(), &out);
     release_moonshine_options(env, copts, jhold);
     if (languages != nullptr && lang_ptr != nullptr) {
       env->ReleaseStringUTFChars(languages, lang_ptr);
@@ -893,8 +890,8 @@ Java_ai_moonshine_voice_JNI_moonshineGetSttDependencies(JNIEnv *env,
       lang_ptr = env->GetStringUTFChars(language, nullptr);
     }
     char *out = nullptr;
-    const int32_t err = moonshine_get_stt_dependencies(
-        lang_ptr, copts.data(), copts.size(), &out);
+    const int32_t err = moonshine_get_stt_dependencies(lang_ptr, copts.data(),
+                                                       copts.size(), &out);
     release_moonshine_options(env, copts, jhold);
     if (language != nullptr && lang_ptr != nullptr) {
       env->ReleaseStringUTFChars(language, lang_ptr);
@@ -918,10 +915,9 @@ Java_ai_moonshine_voice_JNI_moonshineGetSttDependencies(JNIEnv *env,
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_ai_moonshine_voice_JNI_moonshineGetIntentDependencies(JNIEnv *env,
-                                                           jobject /* this */,
-                                                           jstring model_name,
-                                                           jobjectArray joptions) {
+Java_ai_moonshine_voice_JNI_moonshineGetEmbeddingDependencies(
+    JNIEnv *env, jobject /* this */, jstring model_name,
+    jobjectArray joptions) {
   try {
     std::vector<moonshine_option_t> copts;
     std::vector<std::pair<jstring, jstring>> jhold;
@@ -933,7 +929,7 @@ Java_ai_moonshine_voice_JNI_moonshineGetIntentDependencies(JNIEnv *env,
       model_ptr = env->GetStringUTFChars(model_name, nullptr);
     }
     char *out = nullptr;
-    const int32_t err = moonshine_get_intent_dependencies(
+    const int32_t err = moonshine_get_embedding_dependencies(
         model_ptr, copts.data(), copts.size(), &out);
     release_moonshine_options(env, copts, jhold);
     if (model_name != nullptr && model_ptr != nullptr) {
@@ -952,13 +948,14 @@ Java_ai_moonshine_voice_JNI_moonshineGetIntentDependencies(JNIEnv *env,
     std::free(out);
     return env->NewStringUTF(sanitized.c_str());
   } catch (const std::exception &e) {
-    ALOGE("moonshineGetIntentDependencies: %s\n", e.what());
+    ALOGE("moonshineGetEmbeddingDependencies: %s\n", e.what());
     return nullptr;
   }
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_ai_moonshine_voice_JNI_moonshineGetTtsVoices(JNIEnv *env, jobject /* this */,
+Java_ai_moonshine_voice_JNI_moonshineGetTtsVoices(JNIEnv *env,
+                                                  jobject /* this */,
                                                   jstring languages,
                                                   jobjectArray joptions) {
   try {
@@ -972,8 +969,8 @@ Java_ai_moonshine_voice_JNI_moonshineGetTtsVoices(JNIEnv *env, jobject /* this *
       lang_ptr = env->GetStringUTFChars(languages, nullptr);
     }
     char *out = nullptr;
-    const int32_t err = moonshine_get_tts_voices(lang_ptr, copts.data(),
-                                                 copts.size(), &out);
+    const int32_t err =
+        moonshine_get_tts_voices(lang_ptr, copts.data(), copts.size(), &out);
     release_moonshine_options(env, copts, jhold);
     if (languages != nullptr && lang_ptr != nullptr) {
       env->ReleaseStringUTFChars(languages, lang_ptr);
@@ -1023,16 +1020,15 @@ Java_ai_moonshine_voice_JNI_moonshineExtractSpeechClip(
     jfloatArray jaudio = nullptr;
     if (clip.audio_data != nullptr && clip.audio_length > 0) {
       jaudio = env->NewFloatArray(static_cast<jsize>(clip.audio_length));
-      env->SetFloatArrayRegion(jaudio, 0,
-                               static_cast<jsize>(clip.audio_length),
+      env->SetFloatArrayRegion(jaudio, 0, static_cast<jsize>(clip.audio_length),
                                clip.audio_data);
     }
     moonshine_free_buffer(clip.audio_data);
     jclass clipClass = get_class(env, "ai/moonshine/voice/SpeechClip");
     jmethodID ctor = get_method(env, clipClass, "<init>", "([FFFZ)V");
-    jobject result = env->NewObject(clipClass, ctor, jaudio, clip.start_time,
-                                    clip.speech_duration,
-                                    clip.is_complete != 0 ? JNI_TRUE : JNI_FALSE);
+    jobject result = env->NewObject(
+        clipClass, ctor, jaudio, clip.start_time, clip.speech_duration,
+        clip.is_complete != 0 ? JNI_TRUE : JNI_FALSE);
     env->DeleteLocalRef(clipClass);
     return result;
   } catch (const std::exception &e) {
@@ -1042,7 +1038,8 @@ Java_ai_moonshine_voice_JNI_moonshineExtractSpeechClip(
 }
 
 extern "C" JNIEXPORT jobject JNICALL
-Java_ai_moonshine_voice_JNI_moonshineTextToSpeech(JNIEnv *env, jobject /* this */,
+Java_ai_moonshine_voice_JNI_moonshineTextToSpeech(JNIEnv *env,
+                                                  jobject /* this */,
                                                   jint tts_handle, jstring text,
                                                   jobjectArray joptions) {
   try {
@@ -1059,9 +1056,9 @@ Java_ai_moonshine_voice_JNI_moonshineTextToSpeech(JNIEnv *env, jobject /* this *
     float *out_audio = nullptr;
     uint64_t out_size = 0;
     int32_t out_sr = 0;
-    const int32_t err = moonshine_text_to_speech(
-        tts_handle, text_ptr, copts.data(), copts.size(), &out_audio, &out_size,
-        &out_sr);
+    const int32_t err =
+        moonshine_text_to_speech(tts_handle, text_ptr, copts.data(),
+                                 copts.size(), &out_audio, &out_size, &out_sr);
     env->ReleaseStringUTFChars(text, text_ptr);
     release_moonshine_options(env, copts, jhold);
     if (err != MOONSHINE_ERROR_NONE) {
@@ -1092,9 +1089,11 @@ Java_ai_moonshine_voice_JNI_moonshineTextToSpeech(JNIEnv *env, jobject /* this *
 }
 
 extern "C" JNIEXPORT jobject JNICALL
-Java_ai_moonshine_voice_JNI_moonshinePhonemesToSpeech(
-    JNIEnv *env, jobject /* this */, jint tts_handle, jstring phonemes,
-    jobjectArray joptions) {
+Java_ai_moonshine_voice_JNI_moonshinePhonemesToSpeech(JNIEnv *env,
+                                                      jobject /* this */,
+                                                      jint tts_handle,
+                                                      jstring phonemes,
+                                                      jobjectArray joptions) {
   try {
     std::vector<moonshine_option_t> copts;
     std::vector<std::pair<jstring, jstring>> jhold;
@@ -1296,9 +1295,11 @@ Java_ai_moonshine_voice_JNI_moonshineFreeGraphemeToPhonemizer(
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_ai_moonshine_voice_JNI_moonshineTextToPhonemes(
-    JNIEnv *env, jobject /* this */, jint g2p_handle, jstring text,
-    jobjectArray joptions) {
+Java_ai_moonshine_voice_JNI_moonshineTextToPhonemes(JNIEnv *env,
+                                                    jobject /* this */,
+                                                    jint g2p_handle,
+                                                    jstring text,
+                                                    jobjectArray joptions) {
   try {
     std::vector<moonshine_option_t> copts;
     std::vector<std::pair<jstring, jstring>> jhold;
@@ -1336,9 +1337,9 @@ Java_ai_moonshine_voice_JNI_moonshineTextToPhonemes(
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_ai_moonshine_voice_JNI_moonshineCreateIntentRecognizer(
-    JNIEnv *env, jobject /* this */, jstring model_path,
-    jint embedding_arch, jstring model_variant) {
+Java_ai_moonshine_voice_JNI_moonshineCreateEmbeddingModel(
+    JNIEnv *env, jobject /* this */, jstring model_path, jint embedding_arch,
+    jstring model_variant) {
   try {
     if (model_path == nullptr) {
       return MOONSHINE_ERROR_INVALID_ARGUMENT;
@@ -1348,7 +1349,7 @@ Java_ai_moonshine_voice_JNI_moonshineCreateIntentRecognizer(
     if (model_variant != nullptr) {
       var_ptr = env->GetStringUTFChars(model_variant, nullptr);
     }
-    const int32_t handle = moonshine_create_intent_recognizer(
+    const int32_t handle = moonshine_create_embedding_model(
         path_ptr, static_cast<uint32_t>(embedding_arch),
         var_ptr != nullptr ? var_ptr : "q4");
     env->ReleaseStringUTFChars(model_path, path_ptr);
@@ -1357,161 +1358,77 @@ Java_ai_moonshine_voice_JNI_moonshineCreateIntentRecognizer(
     }
     return handle;
   } catch (const std::exception &e) {
-    ALOGE("moonshineCreateIntentRecognizer: %s\n", e.what());
+    ALOGE("moonshineCreateEmbeddingModel: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_ai_moonshine_voice_JNI_moonshineFreeIntentRecognizer(
-    JNIEnv * /* env */, jobject /* this */, jint intent_handle) {
-  moonshine_free_intent_recognizer(intent_handle);
-}
-
-extern "C" JNIEXPORT jint JNICALL
-Java_ai_moonshine_voice_JNI_moonshineRegisterIntent(JNIEnv *env, jobject /* this */,
-                                                    jint intent_handle,
-                                                    jstring canonical_phrase,
-                                                    jfloatArray embedding,
-                                                    jint priority) {
-  try {
-    if (canonical_phrase == nullptr) {
-      return MOONSHINE_ERROR_INVALID_ARGUMENT;
-    }
-    const char *phrase = env->GetStringUTFChars(canonical_phrase, nullptr);
-    float *emb_ptr = nullptr;
-    uint64_t emb_size = 0;
-    if (embedding != nullptr) {
-      emb_ptr = env->GetFloatArrayElements(embedding, nullptr);
-      emb_size = static_cast<uint64_t>(env->GetArrayLength(embedding));
-    }
-    const int32_t err = moonshine_register_intent(intent_handle, phrase,
-                                                   emb_ptr, emb_size, priority);
-    if (emb_ptr != nullptr) {
-      env->ReleaseFloatArrayElements(embedding, emb_ptr, JNI_ABORT);
-    }
-    env->ReleaseStringUTFChars(canonical_phrase, phrase);
-    return err;
-  } catch (const std::exception &e) {
-    ALOGE("moonshineRegisterIntent: %s\n", e.what());
-    return MOONSHINE_ERROR_UNKNOWN;
-  }
-}
-
-extern "C" JNIEXPORT jint JNICALL
-Java_ai_moonshine_voice_JNI_moonshineUnregisterIntent(
-    JNIEnv *env, jobject /* this */, jint intent_handle,
-    jstring canonical_phrase) {
-  try {
-    if (canonical_phrase == nullptr) {
-      return MOONSHINE_ERROR_INVALID_ARGUMENT;
-    }
-    const char *phrase = env->GetStringUTFChars(canonical_phrase, nullptr);
-    const int32_t err = moonshine_unregister_intent(intent_handle, phrase);
-    env->ReleaseStringUTFChars(canonical_phrase, phrase);
-    return err;
-  } catch (const std::exception &e) {
-    ALOGE("moonshineUnregisterIntent: %s\n", e.what());
-    return MOONSHINE_ERROR_UNKNOWN;
-  }
-}
-
-extern "C" JNIEXPORT jobjectArray JNICALL
-Java_ai_moonshine_voice_JNI_moonshineGetClosestIntents(
-    JNIEnv *env, jobject /* this */, jint intent_handle, jstring utterance,
-    jfloat tolerance) {
-  try {
-    if (utterance == nullptr) {
-      return nullptr;
-    }
-    const char *utter = env->GetStringUTFChars(utterance, nullptr);
-    moonshine_intent_match_t *matches = nullptr;
-    uint64_t count = 0;
-    const int32_t err = moonshine_get_closest_intents(
-        intent_handle, utter, tolerance, &matches, &count);
-    env->ReleaseStringUTFChars(utterance, utter);
-    if (err != MOONSHINE_ERROR_NONE) {
-      if (matches != nullptr) {
-        moonshine_free_intent_matches(matches, count);
-      }
-      return nullptr;
-    }
-
-    jclass match_class = get_class(env, "ai/moonshine/voice/IntentMatch");
-    jmethodID ctor =
-        get_method(env, match_class, "<init>", "(Ljava/lang/String;F)V");
-    const jsize n = static_cast<jsize>(count);
-    jobjectArray arr = env->NewObjectArray(n, match_class, nullptr);
-    if (arr == nullptr) {
-      moonshine_free_intent_matches(matches, count);
-      env->DeleteLocalRef(match_class);
-      return nullptr;
-    }
-    for (jsize i = 0; i < n; ++i) {
-      const char *ph =
-          matches[i].canonical_phrase ? matches[i].canonical_phrase : "";
-      jstring jphrase = env->NewStringUTF(ph);
-      jobject obj =
-          env->NewObject(match_class, ctor, jphrase, matches[i].similarity);
-      env->DeleteLocalRef(jphrase);
-      env->SetObjectArrayElement(arr, i, obj);
-      env->DeleteLocalRef(obj);
-    }
-    moonshine_free_intent_matches(matches, count);
-    env->DeleteLocalRef(match_class);
-    return arr;
-  } catch (const std::exception &e) {
-    ALOGE("moonshineGetClosestIntents: %s\n", e.what());
-    return nullptr;
-  }
-}
-
-extern "C" JNIEXPORT jint JNICALL
-Java_ai_moonshine_voice_JNI_moonshineGetIntentCount(JNIEnv * /* env */,
-                                                    jobject /* this */,
-                                                    jint intent_handle) {
-  return moonshine_get_intent_count(intent_handle);
-}
-
-extern "C" JNIEXPORT jint JNICALL
-Java_ai_moonshine_voice_JNI_moonshineClearIntents(JNIEnv * /* env */,
-                                                jobject /* this */,
-                                                jint intent_handle) {
-  try {
-    return moonshine_clear_intents(intent_handle);
-  } catch (const std::exception &e) {
-    ALOGE("moonshineClearIntents: %s\n", e.what());
-    return MOONSHINE_ERROR_UNKNOWN;
-  }
+Java_ai_moonshine_voice_JNI_moonshineFreeEmbeddingModel(
+    JNIEnv * /* env */, jobject /* this */, jint embedding_model_handle) {
+  moonshine_free_embedding_model(embedding_model_handle);
 }
 
 extern "C" JNIEXPORT jfloatArray JNICALL
-Java_ai_moonshine_voice_JNI_moonshineCalculateIntentEmbedding(
-    JNIEnv *env, jobject /* this */, jint intent_handle, jstring sentence) {
+Java_ai_moonshine_voice_JNI_moonshineCalculateEmbedding(
+    JNIEnv *env, jobject /* this */, jint embedding_model_handle,
+    jstring sentence) {
   try {
     if (sentence == nullptr) {
       return nullptr;
     }
-    const char *sent = env->GetStringUTFChars(sentence, nullptr);
-    float *out_embedding = nullptr;
-    uint64_t out_size = 0;
-    const int32_t err = moonshine_calculate_intent_embedding(
-        intent_handle, sent, &out_embedding, &out_size, nullptr);
-    env->ReleaseStringUTFChars(sentence, sent);
-    if (err != MOONSHINE_ERROR_NONE || out_embedding == nullptr) {
-      moonshine_free_intent_embedding(out_embedding);
+    const char *text = env->GetStringUTFChars(sentence, nullptr);
+    float *embedding = nullptr;
+    uint64_t embedding_size = 0;
+    const int32_t err = moonshine_calculate_embedding(
+        embedding_model_handle, text, &embedding, &embedding_size, nullptr);
+    env->ReleaseStringUTFChars(sentence, text);
+    if (err != MOONSHINE_ERROR_NONE || embedding == nullptr) {
+      if (embedding != nullptr) {
+        moonshine_free_embedding(embedding);
+      }
       return nullptr;
     }
-    const jsize n = static_cast<jsize>(out_size);
-    jfloatArray result = env->NewFloatArray(n);
+    jfloatArray result = env->NewFloatArray(static_cast<jsize>(embedding_size));
     if (result != nullptr) {
-      env->SetFloatArrayRegion(result, 0, n, out_embedding);
+      env->SetFloatArrayRegion(result, 0, static_cast<jsize>(embedding_size),
+                               embedding);
     }
-    moonshine_free_intent_embedding(out_embedding);
+    moonshine_free_embedding(embedding);
     return result;
   } catch (const std::exception &e) {
-    ALOGE("moonshineCalculateIntentEmbedding: %s\n", e.what());
+    ALOGE("moonshineCalculateEmbedding: %s\n", e.what());
     return nullptr;
   }
 }
 
+extern "C" JNIEXPORT jfloat JNICALL
+Java_ai_moonshine_voice_JNI_moonshineCalculateEmbeddingDistance(
+    JNIEnv *env, jobject /* this */, jint embedding_model_handle,
+    jfloatArray embedding_a, jfloatArray embedding_b) {
+  try {
+    if (embedding_a == nullptr || embedding_b == nullptr) {
+      return 0.0F;
+    }
+    const jsize size_a = env->GetArrayLength(embedding_a);
+    const jsize size_b = env->GetArrayLength(embedding_b);
+    if (size_a == 0 || size_a != size_b) {
+      return 0.0F;
+    }
+    float *values_a = env->GetFloatArrayElements(embedding_a, nullptr);
+    float *values_b = env->GetFloatArrayElements(embedding_b, nullptr);
+    float similarity = 0.0F;
+    const int32_t err = moonshine_calculate_embedding_distance(
+        embedding_model_handle, values_a, values_b,
+        static_cast<uint64_t>(size_a), &similarity);
+    env->ReleaseFloatArrayElements(embedding_a, values_a, JNI_ABORT);
+    env->ReleaseFloatArrayElements(embedding_b, values_b, JNI_ABORT);
+    if (err != MOONSHINE_ERROR_NONE) {
+      return 0.0F;
+    }
+    return similarity;
+  } catch (const std::exception &e) {
+    ALOGE("moonshineCalculateEmbeddingDistance: %s\n", e.what());
+    return 0.0F;
+  }
+}
