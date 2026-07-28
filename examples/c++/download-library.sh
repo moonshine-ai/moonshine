@@ -26,7 +26,7 @@ fi
 # directory from the archive), so the compile command is the same regardless of
 # operating system or architecture.
 rm -rf moonshine-voice
-curl -f -O -L https://github.com/moonshine-ai/moonshine/releases/download/v0.1.0/moonshine-voice-${PLATFORM}.tar.gz
+curl -f -O -L https://github.com/moonshine-ai/moonshine/releases/download/v0.1.1/moonshine-voice-${PLATFORM}.tar.gz
 mkdir -p moonshine-voice
 tar xzf moonshine-voice-${PLATFORM}.tar.gz -C moonshine-voice --strip-components=1
 rm moonshine-voice-${PLATFORM}.tar.gz
