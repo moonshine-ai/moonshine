@@ -51,6 +51,24 @@ CORPUS_ROOT="${CORE_DIR}/reliability/corpus"
 ORT_LIB_DIR="${CORE_DIR}/third-party/onnxruntime/lib/linux/x86_64"
 TSAN_SUPPRESSIONS="${CORE_DIR}/reliability/tsan-suppressions.txt"
 
+# Every build tree a sanitizer configure owns. The per-module directories are
+# hard-coded absolute paths inside those CMake projects, so only one sanitizer
+# build can own them at a time -- and whatever a previous run left there is
+# reused, which is why they must be wiped before *both* configures rather than
+# only the ThreadSanitizer one. Two ways that bites: a run that dies during the
+# TSan stage leaves thread-instrumented objects for the next run's ASan build to
+# link, and because the sync preserves the dev machine's mtimes a source file can
+# be *older* than a leftover object, so make skips recompiling it and the run
+# silently tests code that is no longer in the tree.
+SANITIZER_BUILD_DIRS=(
+  "${BUILD_DIR}"
+  "${TSAN_BUILD_DIR}"
+  "${CORE_DIR}/moonshine-utils/build"
+  "${CORE_DIR}/bin-tokenizer/build"
+  "${CORE_DIR}/ort-utils/build"
+  "${CORE_DIR}/moonshine-tts/build"
+)
+
 FUZZ_SECONDS="${FUZZ_SECONDS:-900}"
 TIDY_UPDATE_BASELINE="${TIDY_UPDATE_BASELINE:-0}"
 TIDY_BASELINE="${CORE_DIR}/.clang-tidy-baseline"
@@ -134,7 +152,7 @@ mkdir -p "${ARTIFACTS_DIR}"
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- Configuring sanitizer build ---"
-rm -rf "${BUILD_DIR}" "${FUZZ_BUILD_DIR}"
+rm -rf "${SANITIZER_BUILD_DIRS[@]}" "${FUZZ_BUILD_DIR}"
 if ! cmake -S "${CORE_DIR}" -B "${BUILD_DIR}" \
       -DMOONSHINE_RELIABILITY=ON \
       -DCMAKE_C_COMPILER="${CC}" \
@@ -337,11 +355,7 @@ elif [[ "${TEST_WORKDIR}" != "${REPO_ROOT_DIR}/test-assets" ]]; then
   echo "  skip: test-assets missing (threaded tests need fixtures)"
 else
   echo "  full clean rebuild with -fsanitize=thread"
-  rm -rf "${BUILD_DIR}" "${TSAN_BUILD_DIR}" \
-    "${CORE_DIR}/moonshine-utils/build" \
-    "${CORE_DIR}/bin-tokenizer/build" \
-    "${CORE_DIR}/ort-utils/build" \
-    "${CORE_DIR}/moonshine-tts/build"
+  rm -rf "${SANITIZER_BUILD_DIRS[@]}"
   tsan_built=1
   if ! cmake -S "${CORE_DIR}" -B "${TSAN_BUILD_DIR}" \
         -DMOONSHINE_RELIABILITY=ON \
@@ -436,6 +450,21 @@ export ASAN_OPTIONS="abort_on_error=1:halt_on_error=1:detect_leaks=1:print_stack
 
 echo ""
 echo "--- Fuzzing (${FUZZ_SECONDS}s per target) ---"
+# libFuzzer reports any single allocation over -malloc_limit_mb (which defaults
+# to -rss_limit_mb, 2048) as an out-of-memory failure. That is the behaviour we
+# want almost everywhere: these modules parse small inputs, so a multi-gigabyte
+# allocation is a bug worth failing on. moonshine_tensor_from_shape_and_dtype is
+# the exception -- it deliberately serves tensors up to kMaxTensorBytes (8 GiB)
+# before rejecting a shape as corrupt, so the tensor-view target has to be
+# allowed past that bound or libFuzzer flags a *permitted* allocation as a crash
+# (a 1-D shape of 2^30 float32 elements asks for exactly 4 GiB). The ceiling
+# stays finite, and well clear of 8 GiB, so a genuine runaway still trips it.
+fuzz_limit_mb() {
+  case "$1" in
+    fuzz_tensor_view) echo 12288 ;;
+    *) echo 2048 ;;
+  esac
+}
 run_fuzzer() {
   local name="$1"
   local bin="${FUZZ_BUILD_DIR}/${name}"
@@ -450,9 +479,13 @@ run_fuzzer() {
   for seed in "$@"; do
     [[ -e "${seed}" ]] && cp "${seed}" "${corpus}/" 2>/dev/null || true
   done
+  local limit_mb
+  limit_mb="$(fuzz_limit_mb "${name}")"
   echo "  fuzz ${name}"
   if ! "${bin}" "${corpus}" \
         -max_total_time="${FUZZ_SECONDS}" \
+        -rss_limit_mb="${limit_mb}" \
+        -malloc_limit_mb="${limit_mb}" \
         -artifact_prefix="${ARTIFACTS_DIR}/${name}-" \
         -print_final_stats=1 \
         >"${ARTIFACTS_DIR}/fuzz-${name}.log" 2>&1; then
