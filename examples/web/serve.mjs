@@ -24,7 +24,7 @@
 // CDN — handy for offline, hermetic testing:
 //
 //   /wasm/...        -> <repo>/wasm/...                 (the built binding)
-//   /test-assets/... -> <repo>/test-assets/...          (small STT/intent models)
+//   /test-assets/... -> <repo>/test-assets/...          (small STT/embedding models)
 //   /tts-data/...    -> <repo>/core/moonshine-tts/data/ (the kokoro TTS assets)
 
 import http from 'node:http';

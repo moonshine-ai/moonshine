@@ -186,8 +186,8 @@ class Choose(Prompt):
     """Speak ``prompt`` and resume with the key of the matched option.
 
     ``options`` maps option keys to canonical phrases.  Matching is done
-    against the union of the key and its phrases, using the intent
-    recognizer when available and falling back to substring matching.
+    against the union of the key and its phrases, using the embedding
+    model when available and falling back to substring matching.
     """
 
     prompt: str
@@ -231,7 +231,7 @@ class NoMatchError(DialogError):
 class EmbeddingBackend(Protocol):
     """Minimal interface the phrase matcher needs from an embedding source.
 
-    The internal intent recognizer satisfies this protocol via its
+    The internal embedding model satisfies this protocol via its
     :meth:`calculate_embedding` and :meth:`distance` methods – the
     latter is a thin wrapper around the native
     ``moonshine_calculate_embedding_distance`` C API so scoring happens
@@ -638,7 +638,7 @@ class DialogFlow:
         # :meth:`_embedding_backend` loads on first use so that merely
         # constructing a runner never downloads anything.
         self._cached_embeddings: Optional[CachedEmbeddings] = None
-        self._owned_recognizer: Optional[Any] = None
+        self._owned_model: Optional[Any] = None
         self._backend: Optional[Any] = None
         self._phrase_matcher_factory: Optional[PhraseMatcherFactory] = (
             self._default_phrase_matcher
@@ -899,16 +899,16 @@ class DialogFlow:
                 return self._backend
             if not self._use_embeddings:
                 return None
-            from moonshine_voice.intent_recognizer import IntentRecognizer
+            from moonshine_voice.embedding_model import EmbeddingModel
 
             self._report_progress(0.0, "embedding model")
             model_path, model_arch = get_embedding_model(
                 cache_root=self._model_root
             )
-            self._owned_recognizer = IntentRecognizer(
+            self._owned_model = EmbeddingModel(
                 model_path=model_path, model_arch=model_arch
             )
-            self._backend = CachedEmbeddings(fallback=self._owned_recognizer)
+            self._backend = CachedEmbeddings(fallback=self._owned_model)
             self._report_progress(1.0, "embedding model")
             return self._backend
 
@@ -1049,7 +1049,7 @@ class DialogFlow:
         """
         self.stop_listening()
         with self._lock:
-            recognizer, self._owned_recognizer = self._owned_recognizer, None
+            embedder, self._owned_model = self._owned_model, None
             self._backend = self._cached_embeddings
             mic, self._mic = self._mic, None
             owns_mic, self._owns_mic = self._owns_mic, False
@@ -1063,7 +1063,7 @@ class DialogFlow:
                 transcriber.remove_listener(self._bridge)
             except Exception as e:
                 self._log(f"close: remove_listener failed: {e!r}")
-        for resource, owned in ((recognizer, True), (mic, owns_mic),
+        for resource, owned in ((embedder, True), (mic, owns_mic),
                                 (tts, owns_tts)):
             if resource is None or not owned:
                 continue

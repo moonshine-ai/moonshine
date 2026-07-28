@@ -71,7 +71,7 @@ export class AssetDownloader {
   }
 
   /**
-   * Downloads every file listed in a `{groups:[...]}` manifest (STT / intent),
+   * Downloads every file listed in a `{groups:[...]}` manifest (STT / embedding),
    * returning them keyed by canonical filename.
    */
   async downloadManifest(manifestJson: string): Promise<Map<string, Uint8Array>> {

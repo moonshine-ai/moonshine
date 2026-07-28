@@ -689,12 +689,14 @@ existing behaviour and remain public for applications that need them, but the
 entry points named above change shape, and `MicrophoneTranscriber` is renamed in
 JavaScript.
 
-`IntentRecognizer` is the exception: it becomes internal in all four bindings.
-It was only ever a way to reach the embedding model, and `DialogFlow` now owns
-one on the application's behalf, loading it on first use. Keeping it public
-would have meant two ways to do trigger matching, one of which requires the
-caller to assemble the pieces. The intent-recognition sample apps go with it,
-and the Raspberry Pi `my-dalek` demo is ported to `DialogFlow` globals.
+`IntentRecognizer` is the exception: it becomes internal in all four bindings,
+renamed `EmbeddingModel` and trimmed to embedding a sentence and scoring two
+embeddings against each other. It was only ever a way to reach the embedding
+model, and `DialogFlow` now owns one on the application's behalf, loading it on
+first use and comparing utterances to phrases itself. Keeping it public would
+have meant two ways to do trigger matching, one of which requires the caller to
+assemble the pieces. The intent-recognition sample apps go with it, and the
+Raspberry Pi `my-dalek` demo is ported to `DialogFlow` globals.
 
 Python's `DialogFlow` moves to the same construct-configure-load pattern, so all
 four bindings read the same. It predates this work, and used to be constructed

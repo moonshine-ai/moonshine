@@ -27,7 +27,6 @@ reinterpret_cast:core/moonshine-utils/file-information.cpp
 reinterpret_cast:core/spelling-model-test.cpp
 reinterpret_cast:core/transcriber-streaming-memory-test.cpp
 reinterpret_cast:core/tts-repeated-memory-test.cpp
-c_alloc:core/intent-recognizer-test.cpp
 c_alloc:core/moonshine-c-api-memory-test.cpp
 c_alloc:core/moonshine-c-api-test.cpp
 c_alloc:core/moonshine-c-api.cpp
@@ -60,6 +59,7 @@ c_alloc:core/moonshine-utils/file-information-test.cpp
 c_alloc:core/moonshine-utils/file-information.cpp
 c_alloc:core/moonshine-utils/file-information.h
 c_alloc:core/spelling-model-test.cpp
+c_alloc:core/text-embedder-test.cpp
 c_alloc:core/transcriber-memory-files-test.cpp
 c_alloc:core/transcriber-streaming-memory-test.cpp
 c_alloc:core/transcriber-test.cpp

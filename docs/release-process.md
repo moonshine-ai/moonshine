@@ -2,7 +2,8 @@
 
 `main` only ever contains released code. All development happens on a
 `dev-v<version>` candidate branch, which is folded into `main` when the release
-ships. There are exactly two commands in the whole cycle.
+ships. There are exactly two commands in the whole cycle: one to start it, and
+one to build it — run once as a rehearsal, then again with `publish`.
 
 ## Step 1 — start a cycle
 
@@ -29,10 +30,24 @@ build.
 scripts/preflight-release.sh dev-v0.1.1
 ```
 
-## Step 3 — ship
+## Step 3 — rehearse
 
 ```bash
 scripts/build-all-platforms.sh
+```
+
+Publishing is opt-in, so this is a dry run: every stage builds, tests and
+packages on every platform, and nothing leaves the machine. No tag is moved, no
+registry is touched, `main` stays where it is, and the Swift publish and
+`finish-release` stages are skipped outright because they have no non-publishing
+form. Android builds via `publishToMavenLocal`, so the Gradle publication is
+still assembled, into `~/.m2` rather than Maven Central — which is where the
+example builds then pick it up.
+
+## Step 4 — ship
+
+```bash
+scripts/build-all-platforms.sh publish
 ```
 
 This runs preflight, builds the newest `dev-v*` branch, publishes to PyPI, Maven
@@ -40,7 +55,9 @@ Central, npm, SwiftPM and GitHub Releases, and finishes by fast-forwarding
 `main` to what it just shipped and deleting the candidate branch.
 
 It is resumable — completed stages are skipped on a re-run, so if something
-fails, fix it, commit to the candidate branch, and run it again.
+fails, fix it, commit to the candidate branch, and run it again. Dry-run
+breadcrumbs are kept separately (`.release-state/<version>-dryrun/`), so a
+rehearsal can never make the real release skip an upload stage.
 
 Then go back to step 1 for the next version.
 
@@ -105,6 +122,11 @@ commits pushed mid-build are not picked up by later stages.
 candidate branch, so running `scripts/test-examples.sh` without
 `--local-examples` builds new example sources against old binaries. The release
 path is unaffected; `publish-examples.sh` passes `--local-examples`.
+
+In a dry run it passes `--local-library` instead. The examples pin an exact
+library version — Android from Maven Central, iOS from the `moonshine-swift`
+repo — which does not exist yet when nothing has been published, so a rehearsal
+builds them against this checkout's AAR and Swift package.
 
 Docs on the candidate branch still describe unreleased software. That's by
 design — it's `main` that has to be trustworthy.

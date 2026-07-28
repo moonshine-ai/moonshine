@@ -159,15 +159,6 @@ class TranscriberOptionC(ctypes.Structure):
 MoonshineOptionC = TranscriberOptionC
 
 
-class MoonshineIntentMatchC(ctypes.Structure):
-    """C struct moonshine_intent_match_t (intent recognizer)."""
-
-    _fields_ = [
-        ("canonical_phrase", ctypes.c_char_p),
-        ("similarity", ctypes.c_float),
-    ]
-
-
 class ModelArch(IntEnum):
     """Model architecture types."""
 
@@ -428,23 +419,23 @@ def moonshine_get_stt_dependencies_string(
         moonshine_free(addr)
 
 
-def moonshine_get_intent_dependencies_string(
+def moonshine_get_embedding_dependencies_string(
     model_name: Optional[str] = None,
     options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
 ) -> str:
-    """Call ``moonshine_get_intent_dependencies`` and return the JSON manifest (UTF-8)."""
+    """Call ``moonshine_get_embedding_dependencies`` and return the JSON manifest (UTF-8)."""
     lib = _MoonshineLib().lib
     opt_arr, opt_n, opt_keep = moonshine_options_array(options)
     name_b = model_name.encode("utf-8") if model_name is not None else None
     out_p = ctypes.c_void_p()
-    err = lib.moonshine_get_intent_dependencies(
+    err = lib.moonshine_get_embedding_dependencies(
         name_b, opt_arr, opt_n, ctypes.byref(out_p)
     )
     if err != MOONSHINE_ERROR_NONE:
         raise MoonshineError(
             lib.moonshine_error_to_string(err).decode("utf-8")
             if lib.moonshine_error_to_string(err)
-            else f"moonshine_get_intent_dependencies failed ({err})"
+            else f"moonshine_get_embedding_dependencies failed ({err})"
         )
     addr = out_p.value
     if not addr:
@@ -813,48 +804,15 @@ class _MoonshineLib:
             ctypes.POINTER(ctypes.POINTER(TranscriptC)),
         ]
 
-        lib.moonshine_create_intent_recognizer.restype = ctypes.c_int32
-        lib.moonshine_create_intent_recognizer.argtypes = [
+        lib.moonshine_create_embedding_model.restype = ctypes.c_int32
+        lib.moonshine_create_embedding_model.argtypes = [
             ctypes.c_char_p,
             ctypes.c_uint32,
             ctypes.c_char_p,
         ]
 
-        lib.moonshine_free_intent_recognizer.restype = None
-        lib.moonshine_free_intent_recognizer.argtypes = [ctypes.c_int32]
-
-        lib.moonshine_register_intent.restype = ctypes.c_int32
-        lib.moonshine_register_intent.argtypes = [
-            ctypes.c_int32,
-            ctypes.c_char_p,
-        ]
-
-        lib.moonshine_unregister_intent.restype = ctypes.c_int32
-        lib.moonshine_unregister_intent.argtypes = [
-            ctypes.c_int32,
-            ctypes.c_char_p,
-        ]
-
-        lib.moonshine_get_closest_intents.restype = ctypes.c_int32
-        lib.moonshine_get_closest_intents.argtypes = [
-            ctypes.c_int32,
-            ctypes.c_char_p,
-            ctypes.c_float,
-            ctypes.POINTER(ctypes.POINTER(MoonshineIntentMatchC)),
-            ctypes.POINTER(ctypes.c_uint64),
-        ]
-
-        lib.moonshine_free_intent_matches.restype = None
-        lib.moonshine_free_intent_matches.argtypes = [
-            ctypes.POINTER(MoonshineIntentMatchC),
-            ctypes.c_uint64,
-        ]
-
-        lib.moonshine_get_intent_count.restype = ctypes.c_int32
-        lib.moonshine_get_intent_count.argtypes = [ctypes.c_int32]
-
-        lib.moonshine_clear_intents.restype = ctypes.c_int32
-        lib.moonshine_clear_intents.argtypes = [ctypes.c_int32]
+        lib.moonshine_free_embedding_model.restype = None
+        lib.moonshine_free_embedding_model.argtypes = [ctypes.c_int32]
 
         lib.moonshine_create_tts_synthesizer_from_files.restype = ctypes.c_int32
         lib.moonshine_create_tts_synthesizer_from_files.argtypes = [
@@ -913,8 +871,8 @@ class _MoonshineLib:
             ctypes.POINTER(ctypes.c_void_p),
         ]
 
-        lib.moonshine_get_intent_dependencies.restype = ctypes.c_int32
-        lib.moonshine_get_intent_dependencies.argtypes = [
+        lib.moonshine_get_embedding_dependencies.restype = ctypes.c_int32
+        lib.moonshine_get_embedding_dependencies.argtypes = [
             ctypes.c_char_p,
             ctypes.POINTER(TranscriberOptionC),
             ctypes.c_uint64,

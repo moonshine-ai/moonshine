@@ -11,14 +11,17 @@ import java.util.List;
  * always comes from the library rather than being hardcoded by the app.
  *
  * <p>Build one with the static factories, e.g. {@code ModelSpec.stt("en")},
- * {@code ModelSpec.intent(null, "q4")}, or {@code ModelSpec.tts("en_us", "kokoro_af_heart")}.
+ * {@code ModelSpec.embedding(null, "q4")}, or {@code ModelSpec.tts("en_us", "kokoro_af_heart")}.
  */
 public final class ModelSpec {
 
-    public enum Type { STT, TTS, INTENT, G2P }
+    public enum Type { STT, TTS, EMBEDDING, G2P }
 
     public final Type type;
-    /** Language code / English name (STT, TTS, G2P) or embedding model id (INTENT). May be null for INTENT. */
+    /**
+     * Language code / English name (STT, TTS, G2P) or embedding model id (EMBEDDING). May be null
+     * for EMBEDDING.
+     */
     @Nullable public final String primary;
     /** STT only: a {@code MOONSHINE_MODEL_ARCH_*} value, or null for the language default. */
     @Nullable public final Integer modelArch;
@@ -32,7 +35,7 @@ public final class ModelSpec {
     public final boolean includeWordTimestamps;
     /** TTS only: prefixed voice id (e.g. {@code kokoro_af_heart}), or null for the default. */
     @Nullable public final String voice;
-    /** INTENT only: embedding variant (e.g. {@code q4}), or null for the default. */
+    /** EMBEDDING only: variant (e.g. {@code q4}), or null for the default. */
     @Nullable public final String variant;
 
     private ModelSpec(Type type, @Nullable String primary, @Nullable Integer modelArch,
@@ -73,9 +76,9 @@ public final class ModelSpec {
         return new ModelSpec(Type.TTS, language, null, false, false, voice, null);
     }
 
-    /** Intent-recognition embedding model. Pass {@code null} for the default model / variant. */
-    public static ModelSpec intent(@Nullable String modelName, @Nullable String variant) {
-        return new ModelSpec(Type.INTENT, modelName, null, false, false, null, variant);
+    /** Text embedding model. Pass {@code null} for the default model / variant. */
+    public static ModelSpec embedding(@Nullable String modelName, @Nullable String variant) {
+        return new ModelSpec(Type.EMBEDDING, modelName, null, false, false, null, variant);
     }
 
     /** Grapheme-to-phoneme assets for {@code language}. */
@@ -87,7 +90,7 @@ public final class ModelSpec {
      * Builds the option list passed to the native dependency call.
      *
      * @param root download root; used for the {@code g2p_root} option on TTS/G2P specs so the
-     *             manifest reflects on-disk state. May be null for STT/INTENT.
+     *             manifest reflects on-disk state. May be null for STT/EMBEDDING.
      */
     List<TranscriberOption> toOptions(@Nullable String root) {
         List<TranscriberOption> options = new ArrayList<>();
@@ -103,7 +106,7 @@ public final class ModelSpec {
                     options.add(new TranscriberOption("word_timestamps", "true"));
                 }
                 break;
-            case INTENT:
+            case EMBEDDING:
                 if (variant != null) {
                     options.add(new TranscriberOption("variant", variant));
                 }

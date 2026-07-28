@@ -51,16 +51,6 @@ export interface Transcript {
   readonly lines: readonly TranscriptLine[];
 }
 
-/**
- * A ranked intent match from `IntentRecognizer.closestIntents`.
- *
- * @internal Intent matching is reached through {@link DialogFlow}.
- */
-export interface IntentMatch {
-  readonly canonicalPhrase: string;
-  readonly similarity: number;
-}
-
 /** Synthesized audio returned by {@link TextToSpeech.say}. */
 export interface TtsSynthesisResult {
   /** Mono float PCM in [-1, 1]. */
@@ -119,10 +109,3 @@ export function normalizeTranscript(raw: any): Transcript {
   return { lines };
 }
 
-/** @internal Normalizes a raw embind intent-match vector. */
-export function normalizeIntentMatches(raw: any): IntentMatch[] {
-  return readVector<any>(raw).map((m) => ({
-    canonicalPhrase: m.canonicalPhrase ?? '',
-    similarity: m.similarity ?? 0,
-  }));
-}

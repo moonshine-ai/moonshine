@@ -16,7 +16,7 @@
  * ```
  *
  * `load()` downloads and wires everything a voice interface needs: a streaming
- * speech-to-text model, an intent model for matching trigger phrases, a
+ * speech-to-text model, an embedding model for matching trigger phrases, a
  * text-to-speech voice, and a microphone. A flow is an ordinary async function,
  * so it reads top to bottom and `try` / `finally` work the way you expect.
  *
@@ -28,7 +28,11 @@
 import { AssetDownloader } from './asset-downloader.js';
 import { ModelArch } from './enums.js';
 import type { LineCompleted, TranscriptEventListener } from './events.js';
-import { IntentRecognizer } from './intent-recognizer.js';
+import {
+  EmbeddingModel,
+  PhraseMatcher,
+  type PhraseGroup,
+} from './embedding-model.js';
 import { MicTranscriber, type ProgressCallback } from './mic-transcriber.js';
 import { loadMoonshineModule, type MoonshineModule } from './module.js';
 import { TextToSpeech } from './text-to-speech.js';
@@ -43,6 +47,11 @@ const DEFAULT_NO = [
 ];
 
 const DEFAULT_TRIGGER_THRESHOLD = 0.7;
+/**
+ * Prompt answers ("yes", "the blue one") are short and varied, so they match on
+ * a looser threshold than trigger phrases.
+ */
+const PROMPT_THRESHOLD = 0.55;
 
 /** Thrown into a flow when the user (or a global handler) cancels it. */
 export class DialogCancelled extends Error {
@@ -123,8 +132,12 @@ export class Dialog {
         ...options,
       },
       (text) => {
-        if (matchesAny(text, yes)) return { ok: true, value: true };
-        if (matchesAny(text, no)) return { ok: true, value: false };
+        const key = this.runner.matchKey(text, [
+          { key: 'yes', phrases: yes },
+          { key: 'no', phrases: no },
+        ]);
+        if (key === 'yes') return { ok: true, value: true };
+        if (key === 'no') return { ok: true, value: false };
         return { ok: false };
       },
     );
@@ -140,10 +153,13 @@ export class Dialog {
     settings: AskOptions = {},
   ): Promise<string> {
     return this.runner.promptForAnswer<string>(prompt, settings, (text) => {
-      for (const [key, phrases] of Object.entries(options)) {
-        if (matchesAny(text, [key, ...phrases])) return { ok: true, value: key };
-      }
-      return { ok: false };
+      // The key itself always counts as one of its phrases.
+      const groups = Object.entries(options).map(([key, phrases]) => ({
+        key,
+        phrases: [key, ...phrases],
+      }));
+      const match = this.runner.matchKey(text, groups);
+      return match ? { ok: true, value: match } : { ok: false };
     });
   }
 
@@ -189,7 +205,8 @@ export class DialogFlow {
   private mod?: MoonshineModule;
   private sharedDownloader?: AssetDownloader;
   private tts?: TextToSpeech;
-  private intent?: IntentRecognizer;
+  private embedding?: EmbeddingModel;
+  private matcher = new PhraseMatcher();
   private mic?: MicTranscriber;
   private ownsTts = true;
   private ownsMic = true;
@@ -198,7 +215,6 @@ export class DialogFlow {
   private activeTriggerPhrase?: string;
   private pending?: PendingAnswer;
   private speaking = false;
-  private triggersRegistered = false;
   /** Serializes utterance handling so one flow advances at a time. */
   private queue: Promise<void> = Promise.resolve();
   /**
@@ -292,7 +308,6 @@ export class DialogFlow {
   /** Registers a flow to run when the user says something like `phrase`. */
   listenFor(phrase: string, flow: FlowFn): this {
     this.flows.set(phrase, flow);
-    this.triggersRegistered = false;
     return this;
   }
 
@@ -302,7 +317,6 @@ export class DialogFlow {
    */
   always(phrase: string, handler: GlobalHandler): this {
     this.globals.set(phrase, handler);
-    this.triggersRegistered = false;
     return this;
   }
 
@@ -336,7 +350,7 @@ export class DialogFlow {
     const progress = this.progressCallback;
 
     if (this.assetBase && !this.sharedDownloader) {
-      // The intent model is fetched through a manifest, so redirecting it to a
+      // The embedding model is fetched through a manifest, so redirecting it to a
       // self-hosted base URL happens at the downloader.
       this.sharedDownloader = new AssetDownloader({
         baseUrl: this.assetBase,
@@ -357,14 +371,17 @@ export class DialogFlow {
       this.tts = await tts.load();
     }
 
-    this.intent ??= await IntentRecognizer.load({
-      module: this.mod,
-      downloader: this.sharedDownloader,
-      onProgress: progress
-        ? (loaded, total, file) =>
-            progress(total ? Math.min(1, loaded / total) : 0, file)
-        : undefined,
-    });
+    if (!this.embedding) {
+      this.embedding = await EmbeddingModel.load({
+        module: this.mod,
+        downloader: this.sharedDownloader,
+        onProgress: progress
+          ? (loaded, total, file) =>
+              progress(total ? Math.min(1, loaded / total) : 0, file)
+          : undefined,
+      });
+      this.matcher = new PhraseMatcher(this.embedding);
+    }
 
     if (this.wantsMicrophone && !this.mic) {
       const mic = new MicTranscriber()
@@ -433,10 +450,11 @@ export class DialogFlow {
   close(): void {
     if (this.ownsMic) this.mic?.close();
     if (this.ownsTts) this.tts?.close();
-    this.intent?.close();
+    this.embedding?.close();
     this.mic = undefined;
     this.tts = undefined;
-    this.intent = undefined;
+    this.embedding = undefined;
+    this.matcher = new PhraseMatcher();
   }
 
   // --- Internals used by Dialog ---
@@ -561,16 +579,17 @@ export class DialogFlow {
     const phrases = [...this.globals.keys(), ...this.flows.keys()];
     if (phrases.length === 0) return undefined;
 
-    if (this.intent) {
-      if (!this.triggersRegistered) {
-        this.intent.clear();
-        this.intent.register(phrases);
-        this.triggersRegistered = true;
-      }
-      return this.intent.bestIntent(utterance, this.threshold)?.canonicalPhrase;
-    }
-    const lower = utterance.toLowerCase();
-    return phrases.find((phrase) => lower.includes(phrase.toLowerCase()));
+    return this.matcher.matchPhrases(utterance, phrases, this.threshold);
+  }
+
+  /**
+   * The key of the group whose phrases best match `utterance`, used by
+   * `Dialog.confirm` and `Dialog.choose`.
+   *
+   * @internal
+   */
+  matchKey(utterance: string, groups: PhraseGroup[]): string | undefined {
+    return this.matcher.match(utterance, groups, PROMPT_THRESHOLD);
   }
 
   private async runFlow(triggerPhrase: string): Promise<void> {
@@ -644,14 +663,6 @@ export class DialogFlow {
       this.speaking = false;
     }
   }
-}
-
-function matchesAny(utterance: string, phrases: readonly string[]): boolean {
-  const lower = utterance.toLowerCase();
-  return phrases.some((phrase) => {
-    const needle = phrase.toLowerCase();
-    return lower === needle || lower.includes(needle);
-  });
 }
 
 /** Renders a string as a space-separated spoken form for reading back. */

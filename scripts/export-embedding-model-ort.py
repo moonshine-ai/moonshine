@@ -8,7 +8,7 @@ ONNX Runtime expects to resolve it by filename. This script converts each
 ``.onnx`` into a single self-contained ONNX Runtime ``.ort`` file (weights
 embedded inline in the flatbuffer), matching how the speech-to-text models ship.
 The resulting files load from a single buffer with
-``moonshine_create_intent_recognizer_from_memory`` (no sidecar).
+``moonshine_create_embedding_model_from_memory`` (no sidecar).
 
 Usage:
 

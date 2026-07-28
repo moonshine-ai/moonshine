@@ -3,8 +3,8 @@
 
 This is the single source of truth for per-file integrity metadata (expected
 size in bytes and CRC32C checksum) that the C API joins into the download
-manifest returned by moonshine_get_stt_dependencies / moonshine_get_intent_
-dependencies.
+manifest returned by moonshine_get_stt_dependencies /
+moonshine_get_embedding_dependencies.
 
 The set of files is enumerated directly from the compiled catalog (via the
 moonshine C API), so this never drifts from the catalog itself. For each file we
@@ -35,7 +35,7 @@ sys.path.insert(0, str(PYTHON_SRC))
 
 from moonshine_voice.moonshine_api import (  # noqa: E402
     moonshine_get_embedding_catalog_string,
-    moonshine_get_intent_dependencies_string,
+    moonshine_get_embedding_dependencies_string,
     moonshine_get_stt_catalog_string,
     moonshine_get_stt_dependencies_string,
 )
@@ -66,7 +66,7 @@ def enumerate_urls() -> "set[str]":
         name = model["name"]
         for variant in model.get("variants", []):
             manifest = json.loads(
-                moonshine_get_intent_dependencies_string(name, {"variant": variant})
+                moonshine_get_embedding_dependencies_string(name, {"variant": variant})
             )
             for group in manifest.get("groups", []):
                 for file_info in group.get("files", []):

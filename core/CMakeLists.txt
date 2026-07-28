@@ -109,7 +109,7 @@ set(MOONSHINE_SRC_FILES
     resampler.cpp
     transcriber.cpp
     gemma-embedding-model.cpp
-    intent-recognizer.cpp
+    text-embedder.cpp
     speaker-diarizer.cpp
     spelling-fusion.cpp
     spelling-fusion-data.cpp
@@ -814,13 +814,13 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
     )
     target_link_libraries(word-alignment-benchmark PRIVATE moonshine moonshine-utils)
 
-    add_executable(intent-recognizer-test intent-recognizer-test.cpp intent-recognizer.cpp gemma-embedding-model.cpp)
-    set_target_properties(intent-recognizer-test PROPERTIES
+    add_executable(text-embedder-test text-embedder-test.cpp text-embedder.cpp gemma-embedding-model.cpp)
+    set_target_properties(text-embedder-test PROPERTIES
         CXX_STANDARD 20
         CXX_STANDARD_REQUIRED YES
         CXX_EXTENSIONS NO
     )
-    target_include_directories(intent-recognizer-test PRIVATE
+    target_include_directories(text-embedder-test PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
         ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
         ${CMAKE_CURRENT_LIST_DIR}/ort-utils
@@ -830,16 +830,16 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
         ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
     )
 
-    copy_onnxruntime_dll(intent-recognizer-test)
+    copy_onnxruntime_dll(text-embedder-test)
 
     if (IOS OR MOONSHINE_BUILD_SWIFT)
-        set_target_properties(intent-recognizer-test PROPERTIES
+        set_target_properties(text-embedder-test PROPERTIES
             MACOSX_BUNDLE TRUE
-            MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.intent-recognizer-test"
+            MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.text-embedder-test"
             MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
             MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
         )
-        target_link_libraries(intent-recognizer-test PRIVATE
+        target_link_libraries(text-embedder-test PRIVATE
             moonshine
             bin-tokenizer
             ${ONNXRUNTIME_LIB_PATH}
@@ -847,7 +847,7 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
             "-framework Foundation"
         )
     else()
-        target_link_libraries(intent-recognizer-test PRIVATE
+        target_link_libraries(text-embedder-test PRIVATE
             moonshine
             bin-tokenizer
             ${ONNXRUNTIME_LIB_PATH}

@@ -671,22 +671,12 @@ MOONSHINE_EXPORT int32_t moonshine_transcribe_stream(
     int32_t transcriber_handle, int32_t stream_handle, uint32_t flags,
     struct transcript_t **out_transcript);
 
-/* ------------------------------ INTENT RECOGNIZER ------------------------- */
+/* ------------------------------ EMBEDDING MODEL --------------------------- */
 
-/* Supported embedding model architectures for intent recognition.           */
+/* Supported embedding model architectures.                                  */
 #define MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M (0)
 
-/* Maximum number of intent matches returned by moonshine_get_closest_intents.
- */
-#define MOONSHINE_INTENT_MAX_MATCHES (6)
-
-/* One ranked intent match from moonshine_get_closest_intents. */
-struct moonshine_intent_match_t {
-  char *canonical_phrase;
-  float similarity;
-};
-
-/* Creates an intent recognizer from files on disk.
+/* Creates an embedding model from files on disk.
 
    `model_path` should be the path to the directory containing the embedding
    model files (ONNX model and tokenizer.bin).
@@ -697,21 +687,18 @@ struct moonshine_intent_match_t {
    `model_variant` specifies which model variant to load: "fp32", "fp16", "q8",
    "q4", or "q4f16". Pass NULL to use the default "q4" variant.
 
-   Similarity filtering is done per call in moonshine_get_closest_intents via
-   `tolerance_threshold`, not at construction time.
-
    Returns a non-negative handle on success, or a negative error code on
    failure. The error code can be converted to a human-readable string using
    moonshine_error_to_string.
 */
-MOONSHINE_EXPORT int32_t moonshine_create_intent_recognizer(
+MOONSHINE_EXPORT int32_t moonshine_create_embedding_model(
     const char *model_path, uint32_t model_arch, const char *model_variant);
 
-/* Creates an intent recognizer from in-memory model buffers.
+/* Creates an embedding model from in-memory model buffers.
 
    This mirrors moonshine_load_transcriber_from_memory_files and
    moonshine_create_tts_synthesizer_from_memory: `filenames[i]` is the canonical
-   asset filename (as listed by moonshine_get_intent_dependencies, e.g.
+   asset filename (as listed by moonshine_get_embedding_dependencies, e.g.
    `model_q4.ort` and `tokenizer.bin`) and `memory[i]` / `memory_sizes[i]` are
    the corresponding bytes. The embedding model must be a single self-contained
    all-in-one `.ort` file (no external-data sidecar); the tokenizer is
@@ -726,91 +713,30 @@ MOONSHINE_EXPORT int32_t moonshine_create_intent_recognizer(
    Returns a non-negative handle on success, or a negative error code on
    failure.
 */
-MOONSHINE_EXPORT int32_t moonshine_create_intent_recognizer_from_memory(
+MOONSHINE_EXPORT int32_t moonshine_create_embedding_model_from_memory(
     uint32_t model_arch, const char *model_variant, const char **filenames,
     uint64_t filenames_count, const uint8_t **memory,
     const uint64_t *memory_sizes, const struct moonshine_option_t *options,
     uint64_t options_count, int32_t moonshine_version);
 
-/* Frees an intent recognizer and all its resources. */
-MOONSHINE_EXPORT void moonshine_free_intent_recognizer(
-    int32_t intent_recognizer_handle);
+/* Frees an embedding model and all its resources. */
+MOONSHINE_EXPORT void moonshine_free_embedding_model(
+    int32_t embedding_model_handle);
 
-/* Registers a canonical intent phrase (no callback).
-
-   `embedding` is an optional pointer to an array of floats of size
-   `embedding_size`. If `embedding` is NULL, the embedding is calculated for the
-   canonical phrase.
-   `priority` affects how intents are ranked. If a higher priority intent is
-   within the tolerance threshold, it will be ranked above lower priority
-   intents, even if their similarity is higher.
-
-   Returns zero on success, or a non-zero error code on failure.
-*/
-MOONSHINE_EXPORT int32_t moonshine_register_intent(
-    int32_t intent_recognizer_handle, const char *canonical_phrase,
-    float *embedding, uint64_t embedding_size, int32_t priority);
-
-/* Unregisters an intent by its canonical phrase.
-   Returns zero on success, or a non-zero error code on failure.
-*/
-MOONSHINE_EXPORT int32_t moonshine_unregister_intent(
-    int32_t intent_recognizer_handle, const char *canonical_phrase);
-
-/* Synchronously ranks registered intents against `utterance`.
-
-   `tolerance_threshold` is the minimum similarity (0.0–1.0, inclusive) for a
-   candidate to appear in the results.
-
-   On success, returns MOONSHINE_ERROR_NONE, sets `*out_count` to the number
-   of matches (0 to MOONSHINE_INTENT_MAX_MATCHES), and sets `*out_matches` to a
-   heap-allocated array sorted by descending similarity. Each
-   `canonical_phrase` is a separate heap allocation. When `*out_count` is zero,
-   `*out_matches` is set to NULL.
-
-   On failure, returns a non-zero error code and sets `*out_matches` to NULL and
-   `*out_count` to zero.
-
-   Release results with moonshine_free_intent_matches.
-*/
-MOONSHINE_EXPORT int32_t moonshine_get_closest_intents(
-    int32_t intent_recognizer_handle, const char *utterance,
-    float tolerance_threshold, struct moonshine_intent_match_t **out_matches,
-    uint64_t *out_count);
-
-/* Frees an array returned by moonshine_get_closest_intents (safe on NULL /
-   zero count). */
-MOONSHINE_EXPORT void moonshine_free_intent_matches(
-    struct moonshine_intent_match_t *matches, uint64_t count);
-
-/* Gets the number of registered intents.
-   Returns the count on success (>= 0), or a negative error code on failure.
-*/
-MOONSHINE_EXPORT int32_t
-moonshine_get_intent_count(int32_t intent_recognizer_handle);
-
-/* Clears all registered intents.
-   Returns zero on success, or a non-zero error code on failure.
-*/
-MOONSHINE_EXPORT int32_t
-moonshine_clear_intents(int32_t intent_recognizer_handle);
-
-/* Calculates the intent embedding for a given sentence.
+/* Calculates the embedding for a given sentence.
 
    On success, ``*out_embedding`` is set to a heap-allocated array of floats and
    ``*out_embedding_size`` is set to the number of elements. Release the array
-   with ``moonshine_free_intent_embedding``.
+   with ``moonshine_free_embedding``.
 
    Returns zero on success, or a non-zero error code on failure.
 */
-MOONSHINE_EXPORT int32_t moonshine_calculate_intent_embedding(
-    int32_t intent_recognizer_handle, const char *sentence,
-    float **out_embedding, uint64_t *out_embedding_size,
-    const char *model_name);
+MOONSHINE_EXPORT int32_t moonshine_calculate_embedding(
+    int32_t embedding_model_handle, const char *sentence, float **out_embedding,
+    uint64_t *out_embedding_size, const char *model_name);
 
-/* Frees an intent embedding returned by moonshine_calculate_intent_embedding.
- */
-MOONSHINE_EXPORT void moonshine_free_intent_embedding(float *embedding);
+/* Frees an embedding returned by moonshine_calculate_embedding. */
+MOONSHINE_EXPORT void moonshine_free_embedding(float *embedding);
 
 /* Calculates the cosine similarity between two embedding vectors.
 
@@ -821,7 +747,7 @@ MOONSHINE_EXPORT void moonshine_free_intent_embedding(float *embedding);
    Returns zero on success, or a non-zero error code on failure.
 */
 MOONSHINE_EXPORT int32_t moonshine_calculate_embedding_distance(
-    int32_t intent_recognizer_handle, const float *embedding_a,
+    int32_t embedding_model_handle, const float *embedding_a,
     const float *embedding_b, uint64_t embedding_size, float *out_similarity);
 
 /* ------------------------------ SPEECH CLIPS --------------------------- */
@@ -1049,9 +975,9 @@ MOONSHINE_EXPORT int32_t moonshine_get_stt_dependencies(
     const char *language, const struct moonshine_option_t *options,
     uint64_t options_count, char **out_dependencies_json);
 
-/* Returns the download manifest for an intent-recognition embedding model as a
-   JSON object with the same shape as moonshine_get_stt_dependencies. Load the
-   downloaded directory with moonshine_create_intent_recognizer.
+/* Returns the download manifest for an embedding model as a JSON object with
+   the same shape as moonshine_get_stt_dependencies. Load the downloaded
+   directory with moonshine_create_embedding_model.
 
    ``model_name`` is an embedding model id (for example
    ``"embeddinggemma-300m"``); pass NULL or an empty string to use the default
@@ -1068,7 +994,7 @@ MOONSHINE_EXPORT int32_t moonshine_get_stt_dependencies(
    moonshine_get_stt_dependencies) and returns ``MOONSHINE_ERROR_NONE``; free
    with ``free``. On failure (unknown model or variant) returns a non-zero
    error code and sets ``*out_dependencies_json`` to NULL. */
-MOONSHINE_EXPORT int32_t moonshine_get_intent_dependencies(
+MOONSHINE_EXPORT int32_t moonshine_get_embedding_dependencies(
     const char *model_name, const struct moonshine_option_t *options,
     uint64_t options_count, char **out_dependencies_json);
 
@@ -1081,7 +1007,7 @@ MOONSHINE_EXPORT int32_t moonshine_get_intent_dependencies(
    ``MOONSHINE_ERROR_NONE`` on success. */
 MOONSHINE_EXPORT int32_t moonshine_get_stt_catalog(char **out_catalog_json);
 
-/* Returns the full intent-recognition embedding model catalog as a JSON object.
+/* Returns the full text embedding model catalog as a JSON object.
    The shape is:
      ``{"models":[{"name":"embeddinggemma-300m","english_name":"Embedding Gemma
    300M","download_url":"https://...","variants":["q4",

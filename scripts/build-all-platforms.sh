@@ -3,7 +3,23 @@
 # Expected to be run on macOS.
 #
 # Usage:
-#   ./scripts/build-all-platforms.sh [RELEASE_REF]
+#   ./scripts/build-all-platforms.sh [RELEASE_REF] [publish]
+#
+# Publishing is opt-in. Without the `publish` argument this is a DRY RUN: every
+# stage still builds, tests and packages exactly as it would for a real release,
+# but nothing leaves the machine. Specifically, a dry run does NOT:
+#
+#   - move or push the v<version> tag
+#   - upload to PyPI, Maven Central or GitHub Releases
+#   - publish the Swift package (scripts/publish-swift.sh is skipped entirely)
+#   - fast-forward main or delete the candidate branch (finish-release is skipped)
+#
+# The Android stage uses publishToMavenLocal instead of publishAndReleaseToMaven-
+# Central in a dry run, so the Gradle publication is still assembled, into ~/.m2
+# rather than Maven Central -- which is also where publish-examples.sh picks it
+# up when it builds the examples. Dry-run breadcrumbs and the build
+# worktree are kept under separate, -dryrun-suffixed paths, so a dry run can
+# never trick a subsequent real release into skipping an upload stage.
 #
 # This builds and publishes the development candidate branch (dev-v<version>),
 # NOT your live working tree, from an isolated worktree so you can keep editing
@@ -28,7 +44,9 @@
 #
 # Environment:
 #   RELEASE_REF            - candidate branch (or tag/sha) to build. Defaults to
-#                            the first argument, or the newest dev-v* branch.
+#                            the first non-`publish` argument, or the newest
+#                            dev-v* branch.
+#   RELEASE_PUBLISH        - if non-empty, publish as if `publish` was passed.
 #   RELEASE_FRESH          - if non-empty, ignore/clear resume breadcrumbs and
 #                            rebuild every stage.
 #   RELEASE_SKIP_PREFLIGHT - if non-empty, skip scripts/preflight-release.sh.
@@ -131,6 +149,19 @@ run_stage() {
     echo "[stage] ===== ${name}: done ====="
 }
 
+# A stage that exists only to publish, and so has no meaningful dry-run form:
+# unlike the build stages, it can't be run with its upload withheld. Skipped
+# without a breadcrumb, so a later real release still runs it.
+run_publish_stage() {
+    local name="$1"
+    shift
+    if [ -z "${PUBLISH}" ]; then
+        echo "[dry-run] Skipping publish-only stage '${name}'."
+        return 0
+    fi
+    run_stage "${name}" "$@"
+}
+
 # The x86_64 Linux cloud host runs the x86_64 Android instrumentation tests
 # (Apple Silicon can't run an x86_64 emulator). One-time host setup via
 # scripts/setup-android-ci.sh: Android SDK + platform-tools + emulator, an
@@ -169,7 +200,7 @@ stage_pi() {
     ssh -p ${RPI_CLOUD_PORT} ${RPI_CLOUD_HOST} "cd moonshine \
       && ${REMOTE_GIT_SYNC} \
       && scripts/test-core.sh \
-      && scripts/build-pip.sh upload" || exit 1
+      && scripts/build-pip.sh ${UPLOAD_ARGS[*]}" || exit 1
 }
 
 # The Windows cloud host runs the CI orchestrator over SSH with
@@ -204,7 +235,7 @@ stage_windows() {
     local windows_remote_cmd='cd moonshine `
       ; '"${WIN_GIT_SYNC}"' `
       ; if ($LASTEXITCODE -ne 0) { Write-Host "git sync failed"; exit 1 } `
-      ; pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\run-windows-ci.ps1 -Upload'
+      ; pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\run-windows-ci.ps1'"${WINDOWS_UPLOAD_FLAG}"
 
     # Transient SSH/network disconnects (not build defects) have killed runs
     # mid-compile. The remote build is a clean rebuild and therefore idempotent,
@@ -266,11 +297,33 @@ main() {
 
     trap cleanup EXIT
 
+    # Arguments are order-independent: `publish` opts in to publishing, and any
+    # other bare word is the release ref. Publishing is opt-in so that the
+    # default invocation is a rehearsal -- the expensive mistakes in a release
+    # are all uploads, and no registry lets you take one back.
+    PUBLISH="${RELEASE_PUBLISH:-}"
+    local ref_arg=""
+    for arg in "$@"; do
+        case "${arg}" in
+            publish) PUBLISH=1 ;;
+            "") ;;
+            -*) echo "Unknown option: '${arg}'" >&2; exit 1 ;;
+            *)
+                if [ -n "${ref_arg}" ]; then
+                    echo "Unexpected extra argument: '${arg}' (release ref is" \
+                         "already '${ref_arg}')." >&2
+                    exit 1
+                fi
+                ref_arg="${arg}"
+                ;;
+        esac
+    done
+
     # A release is built from the candidate branch's HEAD; build-all is the
     # single place that manages the matching v<version> tag. RELEASE_REF is the
     # branch to build (default: newest dev-v* branch); it may also be an
     # explicit tag/sha for rebuilding an older release.
-    RELEASE_REF="${RELEASE_REF:-${1:-}}"
+    RELEASE_REF="${RELEASE_REF:-${ref_arg}}"
     git -C "${REPO_ROOT_DIR}" fetch origin --tags --prune --force
     if [ -z "${RELEASE_REF}" ]; then
         RELEASE_REF="$( { git -C "${REPO_ROOT_DIR}" for-each-ref \
@@ -306,6 +359,26 @@ main() {
         exit 1
     fi
     echo "Building ${RELEASE_REF} at ${BUILD_COMMIT}"
+    if [ -n "${PUBLISH}" ]; then
+        echo "Mode: PUBLISH -- artifacts will be uploaded and main will advance."
+    else
+        echo "Mode: DRY RUN -- nothing will be uploaded, no remote refs moved."
+        echo "      Re-run with 'publish' to ship."
+    fi
+
+    # Withheld from every stage that gates its upload on an argument, so a dry
+    # run exercises the same build and packaging code paths and stops short of
+    # the upload. Stages whose only job is publishing are skipped by
+    # run_publish_stage instead.
+    if [ -n "${PUBLISH}" ]; then
+        UPLOAD_ARGS=(upload)
+        ANDROID_ARGS=(publish)
+        WINDOWS_UPLOAD_FLAG=" -Upload"
+    else
+        UPLOAD_ARGS=()
+        ANDROID_ARGS=(local)
+        WINDOWS_UPLOAD_FLAG=""
+    fi
 
     # Breadcrumbs and worktree are keyed by version (stable across branch/tag) so
     # switching a build between the branch and its tag reuses the same state.
@@ -313,6 +386,14 @@ main() {
         STATE_KEY="${VERSION}"
     else
         STATE_KEY="${RELEASE_REF//\//-}"
+    fi
+    # A dry run's breadcrumbs must never be mistaken for a real release's: a
+    # build-pip stage that completed without uploading would otherwise be
+    # skipped by the subsequent publish run, and the wheel would never ship.
+    # Preflight reads the unsuffixed directory for the same reason -- a dry run
+    # is not an in-progress release.
+    if [ -z "${PUBLISH}" ]; then
+        STATE_KEY="${STATE_KEY}-dryrun"
     fi
 
     # Check everything that has to be true before the first artifact goes out.
@@ -329,11 +410,18 @@ main() {
     # explicit tag/sha build leaves tags untouched. This repo's tag is not
     # consumed by SwiftPM (that keys off the separate moonshine-swift tag), so
     # moving it is safe.
+    # A dry run leaves tags alone, locally and on the remote: the tag exists to
+    # anchor the published artifacts, and a dry run has none. Every host syncs to
+    # BUILD_COMMIT by sha, so no stage needs the tag to be in place.
     if [ -n "${RELEASE_BRANCH}" ] && [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         TAG="v${VERSION}"
-        echo "Refreshing tag ${TAG} -> ${BUILD_COMMIT} (from ${RELEASE_BRANCH} HEAD)."
-        git -C "${REPO_ROOT_DIR}" tag -f -a "${TAG}" -m "Release ${TAG}" "${BUILD_COMMIT}"
-        git -C "${REPO_ROOT_DIR}" push --force origin "refs/tags/${TAG}"
+        if [ -n "${PUBLISH}" ]; then
+            echo "Refreshing tag ${TAG} -> ${BUILD_COMMIT} (from ${RELEASE_BRANCH} HEAD)."
+            git -C "${REPO_ROOT_DIR}" tag -f -a "${TAG}" -m "Release ${TAG}" "${BUILD_COMMIT}"
+            git -C "${REPO_ROOT_DIR}" push --force origin "refs/tags/${TAG}"
+        else
+            echo "[dry-run] Would refresh tag ${TAG} -> ${BUILD_COMMIT} and push it."
+        fi
     fi
 
     # How each remote host syncs to the build point. Every host checks out the
@@ -397,18 +485,26 @@ main() {
     run_stage test-python        scripts/test-python.sh
     run_stage test-docs          scripts/test-docs.sh --skip-build
     run_stage build-swift        scripts/build-swift.sh
-    run_stage publish-swift      scripts/publish-swift.sh
+    run_publish_stage publish-swift scripts/publish-swift.sh
     run_stage test-android-arm64 scripts/test-android.sh --avd "${ANDROID_ARM64_AVD:-moonshine_api26_arm64}"
-    run_stage build-android      scripts/build-android.sh publish
-    run_stage build-pip          scripts/build-pip.sh upload
-    run_stage build-pip-docker   scripts/build-pip-docker.sh
-    run_stage publish-binary     scripts/publish-binary.sh upload
-    run_stage build-wasm         scripts/build-wasm.sh upload
-    run_stage publish-examples   scripts/publish-examples.sh
+    run_stage build-android      scripts/build-android.sh "${ANDROID_ARGS[@]}"
+    run_stage build-pip          scripts/build-pip.sh "${UPLOAD_ARGS[@]}"
+    run_stage build-pip-docker   scripts/build-pip-docker.sh "${UPLOAD_ARGS[@]}"
+    run_stage publish-binary     scripts/publish-binary.sh "${UPLOAD_ARGS[@]}"
+    run_stage build-wasm         scripts/build-wasm.sh "${UPLOAD_ARGS[@]}"
+    run_stage publish-examples   scripts/publish-examples.sh "${UPLOAD_ARGS[@]}"
 
     run_stage linux   stage_linux
     run_stage pi      stage_pi
     run_stage windows stage_windows
+
+    if [ -z "${PUBLISH}" ]; then
+        echo "Dry run complete for ${RELEASE_REF} (${BUILD_COMMIT})."
+        echo "Everything built and tested; nothing was published and main was" \
+             "left alone."
+        echo "Ship it with: scripts/build-all-platforms.sh ${RELEASE_REF} publish"
+        return 0
+    fi
 
     # Everything is published, so main can now advance to what shipped. This is
     # a stage rather than a manual follow-up because skipping it is what let

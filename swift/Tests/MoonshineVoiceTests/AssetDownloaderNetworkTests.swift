@@ -89,24 +89,23 @@ final class AssetDownloaderNetworkTests: XCTestCase {
         XCTAssertGreaterThan(result.sampleRateHz, 0)
     }
 
-    // MARK: - Intent
+    // MARK: - Embedding
 
-    /// Downloads the (large) intent-recognition embedding model and runs a trivial match. Gated by
+    /// Downloads the (large) embedding model and runs a trivial match. Gated by
     /// the same env var as the others; skip if you only want the lighter STT/TTS coverage.
-    func testDownloadsAndRunsIntentModel() async throws {
+    func testDownloadsAndRunsEmbeddingModel() async throws {
         let downloader = AssetDownloader()
-        let spec = ModelSpec.intent(variant: "q4")
+        let spec = ModelSpec.embedding(variant: "q4")
 
         _ = try await downloader.ensureModelPresent(root: tempRoot, spec: spec)
         XCTAssertTrue(downloader.isModelPresent(root: tempRoot, spec: spec))
 
-        let recognizer = try IntentRecognizer(modelPath: tempRoot.path, modelArch: .gemma300m)
-        defer { recognizer.close() }
+        let model = try EmbeddingModel(modelPath: tempRoot.path, modelArch: .gemma300m)
+        defer { model.close() }
 
-        try recognizer.registerIntent(canonicalPhrase: "turn on the lights")
-        let ranked = try recognizer.getClosestIntents(
-            utterance: "turn on the lights", toleranceThreshold: 0.0)
-        XCTAssertFalse(ranked.isEmpty)
-        XCTAssertEqual(ranked[0].canonicalPhrase, "turn on the lights")
+        let phrase = try model.calculateEmbedding("turn on the lights")
+        XCTAssertFalse(phrase.isEmpty)
+        let utterance = try model.calculateEmbedding("switch on the lights")
+        XCTAssertGreaterThan(try model.distance(phrase, utterance), 0.5)
     }
 }

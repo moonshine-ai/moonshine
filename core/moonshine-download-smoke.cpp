@@ -13,10 +13,10 @@
 //       what this test is meant to catch.
 //
 // Modalities and their [spec...] arguments:
-//   stt    <language> [<model_arch>]
-//   intent <model_name> <variant>
-//   tts    <language> <voice>
-//   g2p    <language>
+//   stt       <language> [<model_arch>]
+//   embedding <model_name> <variant>
+//   tts       <language> <voice>
+//   g2p       <language>
 //
 // HTTP lives entirely in the bash harness (curl); this tool never touches the
 // network. It only resolves manifests and exercises the on-disk load path.
@@ -44,11 +44,11 @@ namespace {
 constexpr const char* kTtsCdnBase = "https://download.moonshine.ai/tts/";
 
 void print_usage() {
-  std::cerr
-      << "Usage:\n"
-      << "  moonshine-download-smoke manifest <stt|intent|tts|g2p> [spec...]\n"
-      << "  moonshine-download-smoke run <stt|intent|tts|g2p> <root> "
-         "[spec...]\n";
+  std::cerr << "Usage:\n"
+            << "  moonshine-download-smoke manifest <stt|embedding|tts|g2p> "
+               "[spec...]\n"
+            << "  moonshine-download-smoke run <stt|embedding|tts|g2p> <root> "
+               "[spec...]\n";
 }
 
 std::string url_encode_path(const std::string& key) {
@@ -80,7 +80,7 @@ int fail(const std::string& message) {
 
 // Emits "<url>\t<relative_path>" for every file in a {"groups":[...]} manifest
 // produced by moonshine_get_stt_dependencies /
-// moonshine_get_intent_dependencies.
+// moonshine_get_embedding_dependencies.
 void print_group_manifest(const std::string& json_text) {
   const nlohmann::json parsed = nlohmann::json::parse(json_text);
   for (const auto& group : parsed.at("groups")) {
@@ -116,7 +116,7 @@ int manifest_stt(const std::vector<std::string>& spec) {
   return 0;
 }
 
-int manifest_intent(const std::vector<std::string>& spec) {
+int manifest_embedding(const std::vector<std::string>& spec) {
   const std::string model_name = spec.empty() ? "embeddinggemma-300m" : spec[0];
   std::vector<moonshine_option_t> options;
   std::string variant_value;
@@ -125,11 +125,11 @@ int manifest_intent(const std::vector<std::string>& spec) {
     options.push_back({"variant", variant_value.c_str()});
   }
   char* out = nullptr;
-  const int32_t err = moonshine_get_intent_dependencies(
+  const int32_t err = moonshine_get_embedding_dependencies(
       model_name.c_str(), options.empty() ? nullptr : options.data(),
       options.size(), &out);
   if (err != MOONSHINE_ERROR_NONE || out == nullptr) {
-    return fail("moonshine_get_intent_dependencies failed");
+    return fail("moonshine_get_embedding_dependencies failed");
   }
   print_group_manifest(out);
   moonshine_free_buffer(out);
@@ -294,31 +294,44 @@ int run_stt(const std::string& root, const std::vector<std::string>& spec) {
   return 0;
 }
 
-int run_intent(const std::string& root, const std::vector<std::string>& spec) {
+int run_embedding(const std::string& root,
+                  const std::vector<std::string>& spec) {
   const std::string variant = spec.size() >= 2 ? spec[1] : std::string("q4");
-  const int32_t handle = moonshine_create_intent_recognizer(
+  const int32_t handle = moonshine_create_embedding_model(
       root.c_str(), MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M, variant.c_str());
   if (handle < 0) {
-    return fail("failed to create intent recognizer: " +
+    return fail("failed to create embedding model: " +
                 std::string(moonshine_error_to_string(handle)));
   }
-  int32_t err =
-      moonshine_register_intent(handle, "turn on the lights", nullptr, 0, 0);
+  float* phrase = nullptr;
+  uint64_t phrase_size = 0;
+  int32_t err = moonshine_calculate_embedding(handle, "turn on the lights",
+                                              &phrase, &phrase_size, nullptr);
   if (err != MOONSHINE_ERROR_NONE) {
-    moonshine_free_intent_recognizer(handle);
-    return fail("failed to register intent");
+    moonshine_free_embedding_model(handle);
+    return fail("failed to calculate phrase embedding");
   }
-  moonshine_intent_match_t* matches = nullptr;
-  uint64_t count = 0;
-  err = moonshine_get_closest_intents(handle, "switch on the lights", 0.0f,
-                                      &matches, &count);
+  float* utterance = nullptr;
+  uint64_t utterance_size = 0;
+  err = moonshine_calculate_embedding(handle, "switch on the lights",
+                                      &utterance, &utterance_size, nullptr);
+  if (err != MOONSHINE_ERROR_NONE || utterance_size != phrase_size) {
+    moonshine_free_embedding(phrase);
+    moonshine_free_embedding(utterance);
+    moonshine_free_embedding_model(handle);
+    return fail("failed to calculate utterance embedding");
+  }
+  float similarity = 0.0f;
+  err = moonshine_calculate_embedding_distance(handle, phrase, utterance,
+                                               phrase_size, &similarity);
+  moonshine_free_embedding(phrase);
+  moonshine_free_embedding(utterance);
   if (err != MOONSHINE_ERROR_NONE) {
-    moonshine_free_intent_recognizer(handle);
-    return fail("failed to rank intents");
+    moonshine_free_embedding_model(handle);
+    return fail("failed to calculate embedding distance");
   }
-  std::cerr << "intent ok: " << count << " match(es)\n";
-  moonshine_free_intent_matches(matches, count);
-  moonshine_free_intent_recognizer(handle);
+  std::cerr << "embedding ok: similarity " << similarity << "\n";
+  moonshine_free_embedding_model(handle);
   return 0;
 }
 
@@ -402,8 +415,8 @@ int main(int argc, char** argv) {
       if (modality == "stt") {
         return manifest_stt(spec);
       }
-      if (modality == "intent") {
-        return manifest_intent(spec);
+      if (modality == "embedding") {
+        return manifest_embedding(spec);
       }
       if (modality == "tts") {
         return manifest_tts(spec);
@@ -426,8 +439,8 @@ int main(int argc, char** argv) {
       if (modality == "stt") {
         return run_stt(root, spec);
       }
-      if (modality == "intent") {
-        return run_intent(root, spec);
+      if (modality == "embedding") {
+        return run_embedding(root, spec);
       }
       if (modality == "tts") {
         return run_tts(root, spec);

@@ -98,10 +98,10 @@
       }
 
       // Only needed for the offline integration test, where the voice assets
-      // and the intent model are served from different repo paths. The voice
-      // comes in as a pre-built engine; modelsFrom points the intent model at
+      // and the embedding model are served from different repo paths. The voice
+      // comes in as a pre-built engine; modelsFrom points the embedding model at
       // its own base. Normally load() fetches all of this from the CDN itself.
-      const LOCAL_INTENT_BASE = '/test-assets/embeddinggemma-300m-ONNX';
+      const LOCAL_EMBEDDING_BASE = '/test-assets/embeddinggemma-300m-ONNX';
 
       function loadLocalTts() {
         return new TextToSpeech().language('en_us').modelsFrom('/tts-data').load();
@@ -123,10 +123,10 @@
           dialog.listenFor('set up wifi', wifiSetup);
 
           if (useLocalAssets) {
-            dialog.useTextToSpeech(await loadLocalTts()).modelsFrom(LOCAL_INTENT_BASE);
+            dialog.useTextToSpeech(await loadLocalTts()).modelsFrom(LOCAL_EMBEDDING_BASE);
           }
 
-          // One call downloads the speech-to-text, intent and voice models,
+          // One call downloads the speech-to-text, embedding and voice models,
           // wires them together, and attaches the microphone. "cancel" and
           // "start over" work without being registered.
           await dialog.load();

@@ -50,7 +50,9 @@ public final class ModelCache {
                 // distinct key prefixes), so the directory is keyed by language only.
                 builder.append("tts-").append(spec.primary);
                 break;
-            case INTENT:
+            case EMBEDDING:
+                // The "intent-" prefix predates the embedding naming; keeping it
+                // means existing on-disk caches are still found.
                 builder.append("intent-")
                         .append(spec.primary != null ? spec.primary : "default")
                         .append('-')

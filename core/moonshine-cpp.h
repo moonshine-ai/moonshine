@@ -60,7 +60,7 @@ class Stream;
 class TranscriptEventListener;
 class TextToSpeech;
 class GraphemeToPhonemizer;
-class IntentRecognizer;
+class EmbeddingModel;
 
 /* ------------------------------ ENUMS -------------------------------- */
 
@@ -74,7 +74,7 @@ enum class ModelArch {
   MEDIUM_STREAMING = MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING,
 };
 
-/// Embedding model architectures for intent recognition (C API constants).
+/// Embedding model architectures (C API constants).
 enum class EmbeddingModelArch : uint32_t {
   GEMMA_300M = MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M,
 };
@@ -872,71 +872,36 @@ class GraphemeToPhonemizer {
   void checkError(int32_t error) const;
 };
 
-/* ------------------------------ INTENT RECOGNIZER ------------------------- */
+/* ------------------------------ EMBEDDING MODEL --------------------------- */
 
-/// One ranked intent from ``IntentRecognizer::getClosestIntents``.
-struct IntentMatch {
-  std::string canonicalPhrase;
-  float similarity{0.0f};
-
-  IntentMatch() = default;
-  IntentMatch(std::string phrase, float sim)
-      : canonicalPhrase(std::move(phrase)), similarity(sim) {}
-};
-
-/// Intent recognizer wrapping the Moonshine intent C API (synchronous ranking).
-class IntentRecognizer {
+/// Embedding model wrapping the Moonshine embedding C API. Callers embed their
+/// candidate phrases once and score utterances against them with
+/// ``distance()``.
+class EmbeddingModel {
  public:
   /// Load an embedding model from disk.
   /// @throws MoonshineException if the model cannot be loaded
-  IntentRecognizer(const std::string &model_path, EmbeddingModelArch arch,
-                   const std::string &model_variant = "q4");
+  EmbeddingModel(const std::string &model_path, EmbeddingModelArch arch,
+                 const std::string &model_variant = "q4");
 
   /// Load an embedding model from in-memory buffers keyed by canonical filename
-  /// (see ``moonshine_create_intent_recognizer_from_memory``). ``modelFiles``
+  /// (see ``moonshine_create_embedding_model_from_memory``). ``modelFiles``
   /// holds the all-in-one model (``model_<variant>.ort``) and
   /// ``tokenizer.bin``. The bytes are copied during construction, so the
   /// buffers only need to outlive this call.
   /// @throws MoonshineException if the model cannot be loaded
-  static IntentRecognizer loadFromMemory(
+  static EmbeddingModel loadFromMemory(
       const std::map<std::string, std::pair<const uint8_t *, size_t>>
           &modelFiles,
       EmbeddingModelArch arch, const std::string &model_variant = "q4");
 
-  ~IntentRecognizer();
+  ~EmbeddingModel();
 
-  IntentRecognizer(IntentRecognizer &&other) noexcept;
-  IntentRecognizer &operator=(IntentRecognizer &&other) noexcept;
+  EmbeddingModel(EmbeddingModel &&other) noexcept;
+  EmbeddingModel &operator=(EmbeddingModel &&other) noexcept;
 
-  IntentRecognizer(const IntentRecognizer &) = delete;
-  IntentRecognizer &operator=(const IntentRecognizer &) = delete;
-
-  /// Register a canonical phrase to match against.
-  /// @param canonical_phrase The phrase to register.
-  /// @param embedding Optional pre-computed embedding (nullptr to
-  /// auto-compute).
-  /// @param embedding_size Number of floats in the embedding array.
-  /// @param priority Higher priority intents rank above lower ones.
-  /// @throws MoonshineException on failure
-  void registerIntent(const std::string &canonical_phrase,
-                      float *embedding = nullptr, uint64_t embedding_size = 0,
-                      int32_t priority = 0);
-
-  /// Remove a phrase. Returns false if it was not registered.
-  bool unregisterIntent(const std::string &canonical_phrase);
-
-  /// Rank registered intents by similarity (see
-  /// ``moonshine_get_closest_intents``).
-  std::vector<IntentMatch> getClosestIntents(const std::string &utterance,
-                                             float tolerance_threshold);
-
-  /// Number of registered intents.
-  /// @throws MoonshineException on invalid handle
-  int32_t intentCount() const;
-
-  /// Remove all intents.
-  /// @throws MoonshineException on failure
-  void clearIntents();
+  EmbeddingModel(const EmbeddingModel &) = delete;
+  EmbeddingModel &operator=(const EmbeddingModel &) = delete;
 
   /// Calculate the embedding vector for a sentence.
   /// @param sentence The input text to embed.
@@ -946,13 +911,18 @@ class IntentRecognizer {
   std::vector<float> calculateEmbedding(const std::string &sentence,
                                         const char *model_name = nullptr);
 
+  /// Cosine similarity between two embeddings of equal length, in [-1, 1].
+  /// @throws MoonshineException on failure
+  float distance(const std::vector<float> &embedding_a,
+                 const std::vector<float> &embedding_b);
+
   void close();
 
   int32_t getHandle() const { return handle_; }
 
  private:
   /// Adopts an already-created C API handle (used by ``loadFromMemory``).
-  explicit IntentRecognizer(int32_t handle) : handle_(handle) {}
+  explicit EmbeddingModel(int32_t handle) : handle_(handle) {}
 
   int32_t handle_;
 
@@ -1664,16 +1634,16 @@ inline void GraphemeToPhonemizer::checkError(int32_t error) const {
   }
 }
 
-inline IntentRecognizer::IntentRecognizer(const std::string &model_path,
-                                          EmbeddingModelArch arch,
-                                          const std::string &model_variant)
+inline EmbeddingModel::EmbeddingModel(const std::string &model_path,
+                                      EmbeddingModelArch arch,
+                                      const std::string &model_variant)
     : handle_(-1) {
-  handle_ = moonshine_create_intent_recognizer(
+  handle_ = moonshine_create_embedding_model(
       model_path.c_str(), static_cast<uint32_t>(arch), model_variant.c_str());
   checkError(handle_);
 }
 
-inline IntentRecognizer IntentRecognizer::loadFromMemory(
+inline EmbeddingModel EmbeddingModel::loadFromMemory(
     const std::map<std::string, std::pair<const uint8_t *, size_t>> &modelFiles,
     EmbeddingModelArch arch, const std::string &model_variant) {
   std::vector<const char *> names;
@@ -1687,7 +1657,7 @@ inline IntentRecognizer IntentRecognizer::loadFromMemory(
     datas.push_back(kv.second.first);
     sizes.push_back(static_cast<uint64_t>(kv.second.second));
   }
-  int32_t handle = moonshine_create_intent_recognizer_from_memory(
+  int32_t handle = moonshine_create_embedding_model_from_memory(
       static_cast<uint32_t>(arch),
       model_variant.empty() ? nullptr : model_variant.c_str(),
       names.empty() ? nullptr : names.data(),
@@ -1700,18 +1670,18 @@ inline IntentRecognizer IntentRecognizer::loadFromMemory(
     throw MoonshineException(errorStr ? std::string(errorStr)
                                       : "Unknown error");
   }
-  return IntentRecognizer(handle);
+  return EmbeddingModel(handle);
 }
 
-inline IntentRecognizer::~IntentRecognizer() { close(); }
+inline EmbeddingModel::~EmbeddingModel() { close(); }
 
-inline IntentRecognizer::IntentRecognizer(IntentRecognizer &&other) noexcept
+inline EmbeddingModel::EmbeddingModel(EmbeddingModel &&other) noexcept
     : handle_(other.handle_) {
   other.handle_ = -1;
 }
 
-inline IntentRecognizer &IntentRecognizer::operator=(
-    IntentRecognizer &&other) noexcept {
+inline EmbeddingModel &EmbeddingModel::operator=(
+    EmbeddingModel &&other) noexcept {
   if (this != &other) {
     close();
     handle_ = other.handle_;
@@ -1720,86 +1690,40 @@ inline IntentRecognizer &IntentRecognizer::operator=(
   return *this;
 }
 
-inline void IntentRecognizer::registerIntent(
-    const std::string &canonical_phrase, float *embedding,
-    uint64_t embedding_size, int32_t priority) {
-  checkError(moonshine_register_intent(handle_, canonical_phrase.c_str(),
-                                       embedding, embedding_size, priority));
-}
-
-inline bool IntentRecognizer::unregisterIntent(
-    const std::string &canonical_phrase) {
-  int32_t err = moonshine_unregister_intent(handle_, canonical_phrase.c_str());
-  if (err == MOONSHINE_ERROR_NONE) {
-    return true;
-  }
-  if (err == MOONSHINE_ERROR_INVALID_ARGUMENT) {
-    return false;
-  }
-  checkError(err);
-  return false;
-}
-
-inline std::vector<IntentMatch> IntentRecognizer::getClosestIntents(
-    const std::string &utterance, float tolerance_threshold) {
-  std::vector<IntentMatch> out;
-  moonshine_intent_match_t *matches = nullptr;
-  uint64_t count = 0;
-  int32_t err = moonshine_get_closest_intents(
-      handle_, utterance.c_str(), tolerance_threshold, &matches, &count);
-  if (err != MOONSHINE_ERROR_NONE) {
-    if (matches != nullptr) {
-      moonshine_free_intent_matches(matches, count);
-    }
-    checkError(err);
-    return out;
-  }
-  out.reserve(static_cast<size_t>(count));
-  for (uint64_t i = 0; i < count; ++i) {
-    const char *ph = matches[i].canonical_phrase;
-    out.emplace_back(ph ? std::string(ph) : std::string(),
-                     matches[i].similarity);
-  }
-  moonshine_free_intent_matches(matches, count);
-  return out;
-}
-
-inline int32_t IntentRecognizer::intentCount() const {
-  int32_t n = moonshine_get_intent_count(handle_);
-  if (n < 0) {
-    const char *errorStr = moonshine_error_to_string(n);
-    throw MoonshineException(errorStr ? std::string(errorStr)
-                                      : "Unknown error");
-  }
-  return n;
-}
-
-inline void IntentRecognizer::clearIntents() {
-  checkError(moonshine_clear_intents(handle_));
-}
-
-inline std::vector<float> IntentRecognizer::calculateEmbedding(
+inline std::vector<float> EmbeddingModel::calculateEmbedding(
     const std::string &sentence, const char *model_name) {
   float *out_embedding = nullptr;
   uint64_t out_size = 0;
-  checkError(moonshine_calculate_intent_embedding(
+  checkError(moonshine_calculate_embedding(
       handle_, sentence.c_str(), &out_embedding, &out_size, model_name));
   std::vector<float> result;
   if (out_embedding != nullptr && out_size > 0) {
     result.assign(out_embedding, out_embedding + out_size);
-    moonshine_free_intent_embedding(out_embedding);
+    moonshine_free_embedding(out_embedding);
   }
   return result;
 }
 
-inline void IntentRecognizer::close() {
+inline float EmbeddingModel::distance(const std::vector<float> &embedding_a,
+                                      const std::vector<float> &embedding_b) {
+  if (embedding_a.size() != embedding_b.size() || embedding_a.empty()) {
+    throw MoonshineException("Embedding sizes differ");
+  }
+  float similarity = 0.0f;
+  checkError(moonshine_calculate_embedding_distance(
+      handle_, embedding_a.data(), embedding_b.data(),
+      static_cast<uint64_t>(embedding_a.size()), &similarity));
+  return similarity;
+}
+
+inline void EmbeddingModel::close() {
   if (handle_ >= 0) {
-    moonshine_free_intent_recognizer(handle_);
+    moonshine_free_embedding_model(handle_);
     handle_ = -1;
   }
 }
 
-inline void IntentRecognizer::checkError(int32_t error) const {
+inline void EmbeddingModel::checkError(int32_t error) const {
   if (error < 0) {
     const char *errorStr = moonshine_error_to_string(error);
     std::string message = errorStr ? std::string(errorStr) : "Unknown error";

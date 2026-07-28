@@ -1,6 +1,5 @@
 package ai.moonshine.voice;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -18,7 +17,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
-import java.util.List;
 
 /**
  * End-to-end tests that exercise {@link AssetDownloader} against the <b>real</b> CDN
@@ -114,23 +112,23 @@ public class AssetDownloaderTest {
     }
 
     @Test
-    public void testDownloadsAndRunsIntentModel() throws IOException {
+    public void testDownloadsAndRunsEmbeddingModel() throws IOException {
         File root = tempDir.toFile();
         AssetDownloader downloader = new AssetDownloader();
-        ModelSpec spec = ModelSpec.intent(null, "q4");
+        ModelSpec spec = ModelSpec.embedding(null, "q4");
 
         downloader.ensureModelPresent(root, spec, null);
         assertTrue(downloader.isModelPresent(root, spec));
 
-        IntentRecognizer recognizer = new IntentRecognizer(
+        EmbeddingModel model = new EmbeddingModel(
                 root.getAbsolutePath(), JNI.MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M);
         try {
-            recognizer.registerIntent("turn on the lights");
-            List<IntentMatch> matches = recognizer.getClosestIntents("turn on the lights", 0.0f);
-            assertFalse(matches.isEmpty());
-            assertEquals("turn on the lights", matches.get(0).canonicalPhrase);
+            float[] lights = model.calculateEmbedding("turn on the lights");
+            assertTrue(lights.length > 0);
+            float[] garage = model.calculateEmbedding("close the garage door");
+            assertTrue(model.distance(lights, lights) > model.distance(lights, garage));
         } finally {
-            recognizer.close();
+            model.close();
         }
     }
 }

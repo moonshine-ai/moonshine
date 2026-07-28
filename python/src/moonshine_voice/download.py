@@ -21,7 +21,7 @@ from moonshine_voice.moonshine_api import (
     ModelArch,
     moonshine_get_embedding_catalog_string,
     moonshine_get_g2p_dependencies_string,
-    moonshine_get_intent_dependencies_string,
+    moonshine_get_embedding_dependencies_string,
     moonshine_get_stt_catalog_string,
     moonshine_get_stt_dependencies_string,
     moonshine_get_tts_voices_string,
@@ -30,7 +30,7 @@ from moonshine_voice.moonshine_api import (
 )
 
 
-# Define EmbeddingModelArch here to avoid circular import with intent_recognizer
+# Define EmbeddingModelArch here to avoid circular import with embedding_model
 class EmbeddingModelArch(IntEnum):
     """Supported embedding model architectures."""
     GEMMA_300M = 0  # embeddinggemma-300m (768-dim embeddings)
@@ -40,7 +40,7 @@ class EmbeddingModelArch(IntEnum):
 # now come from the single source of truth in the C catalog, exposed via
 # moonshine_get_stt_catalog / moonshine_get_embedding_catalog, and the per-file
 # download list (URLs, sizes, CRC32C checksums) comes from
-# moonshine_get_stt_dependencies / moonshine_get_intent_dependencies. Nothing in
+# moonshine_get_stt_dependencies / moonshine_get_embedding_dependencies. Nothing in
 # this file hardcodes filenames, URLs, or sizes anymore.
 
 
@@ -272,7 +272,7 @@ def get_embedding_model(
     # The file list (single all-in-one ``.ort`` plus ``tokenizer.bin``), their
     # URLs, sizes, and CRC32C checksums all come from the native manifest.
     manifest = json.loads(
-        moonshine_get_intent_dependencies_string(model_name, {"variant": variant})
+        moonshine_get_embedding_dependencies_string(model_name, {"variant": variant})
     )
     groups = manifest.get("groups", [])
     if not groups:
@@ -951,9 +951,9 @@ if __name__ == "__main__":
         help="Download G2P-only assets (lexicons, ONNX bundles, …)",
     )
     parser.add_argument(
-        "--intent",
+        "--embedding",
         action="store_true",
-        help="Download intent recognition assets (embedding model)",
+        help="Download text embedding assets (embedding model)",
     )
     parser.add_argument(
         "--stt",
@@ -981,8 +981,8 @@ if __name__ == "__main__":
 
     dl_root: Optional[Path] = args.root
 
-    if not args.tts and not args.g2p and not args.intent and not args.stt:
-        print("Please specify at least one of the following: --tts, --g2p, --intent, --stt", file=sys.stderr)
+    if not args.tts and not args.g2p and not args.embedding and not args.stt:
+        print("Please specify at least one of the following: --tts, --g2p, --embedding, --stt", file=sys.stderr)
         parser.print_help()
         sys.exit(1)
 
@@ -996,7 +996,7 @@ if __name__ == "__main__":
         root = download_g2p_assets(args.language, cache_root=dl_root)
         print(f"G2P assets root (use as g2p_root): {root}", file=sys.stderr)
         print(root)
-    if args.intent:
+    if args.embedding:
         model_path, model_arch = get_embedding_model(cache_root=dl_root)
         print(f"Embedding model path: {model_path}", file=sys.stderr)
         print(model_path)

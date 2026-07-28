@@ -107,8 +107,8 @@ public final class MoonshineDownloadWorker extends Worker {
             }
             case TTS:
                 return ModelSpec.tts(primary, data.getString(KEY_VOICE));
-            case INTENT:
-                return ModelSpec.intent(primary, data.getString(KEY_VARIANT));
+            case EMBEDDING:
+                return ModelSpec.embedding(primary, data.getString(KEY_VARIANT));
             case G2P:
             default:
                 return ModelSpec.g2p(primary);

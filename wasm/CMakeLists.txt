@@ -53,7 +53,7 @@ set(_MOONSHINE_WASM_LINK_FLAGS
     # node is included so the Node test suite (scripts/test-wasm.sh) can load
     # the same module the browser uses.
     "-sENVIRONMENT=web,worker,node"
-    # Every model (STT, intent, TTS) now loads from in-memory buffers via the
+    # Every model (STT, embedding, TTS) now loads from in-memory buffers via the
     # *_from_memory C APIs, so the binding needs no virtual filesystem.
     "-sEXPORTED_RUNTIME_METHODS=['HEAPU8','HEAPF32']"
     "-sSTACK_SIZE=5MB"

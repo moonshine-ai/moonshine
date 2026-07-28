@@ -6,12 +6,40 @@ VERSION="0.1.1"
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR="$(dirname "${SCRIPTS_DIR}")"
 
-"${REPO_ROOT_DIR}/scripts/test-examples.sh" --local-examples
+# Arguments:
+#   upload - attach the example archives to the GitHub release. Without it the
+#            examples are still built, tested and packaged, but nothing is
+#            uploaded. Matches scripts/publish-examples.bat, which gates on the
+#            same word.
+DO_UPLOAD=""
+case "${1:-}" in
+"") ;;
+upload) DO_UPLOAD=1 ;;
+*)
+	echo "Unknown argument: '${1}' (expected one of: <none>, upload)" >&2
+	exit 1
+	;;
+esac
+
+# The examples pin an exact library version: the Android ones resolve
+# moonshine-voice from Maven Central, the iOS ones resolve moonshine-swift from
+# GitHub. During a release those are already published by the time this runs, so
+# --local-examples (new example sources, published library) is the right test.
+# Without `upload` nothing has been published, so the same run would fail
+# resolving a version that does not exist yet; --local-library additionally
+# points the examples at this checkout's AAR (~/.m2) and swift package.
+if [[ -n "${DO_UPLOAD}" ]]; then
+	EXAMPLES_ARGS=(--local-examples)
+else
+	EXAMPLES_ARGS=(--local-library)
+fi
+
+"${REPO_ROOT_DIR}/scripts/test-examples.sh" "${EXAMPLES_ARGS[@]}"
 
 cd "${REPO_ROOT_DIR}"
 
 # Check if the GitHub release exists; create it if missing
-if ! gh release view "v${VERSION}" >/dev/null 2>&1; then
+if [[ -n "${DO_UPLOAD}" ]] && ! gh release view "v${VERSION}" >/dev/null 2>&1; then
 	gh release create "v${VERSION}" --title "v${VERSION}" --notes "Release v${VERSION}"
 fi
 
@@ -36,7 +64,9 @@ for PLATFORM_PATH in "${EXAMPLES_DIR}"/*; do
 		TAR_PATH="${TMPDIR:-/tmp}/${TAR_NAME}"
 		rm -f "${TAR_PATH}"
 		tar -czf "${TAR_PATH}" -C "${PLATFORM_PATH}" "${NAME}"
-		gh release upload "v${VERSION}" "${TAR_PATH}" --clobber
+		if [[ -n "${DO_UPLOAD}" ]]; then
+			gh release upload "v${VERSION}" "${TAR_PATH}" --clobber
+		fi
 		rm -f "${TAR_PATH}"
 	done
 done
@@ -49,6 +79,12 @@ if [[ -d "${CPP_DIR}" ]]; then
 	TAR_PATH="${TMPDIR:-/tmp}/${TAR_NAME}"
 	rm -f "${TAR_PATH}"
 	tar -czf "${TAR_PATH}" -C "${EXAMPLES_DIR}" "c++"
-	gh release upload "v${VERSION}" "${TAR_PATH}" --clobber
+	if [[ -n "${DO_UPLOAD}" ]]; then
+		gh release upload "v${VERSION}" "${TAR_PATH}" --clobber
+	fi
 	rm -f "${TAR_PATH}"
+fi
+
+if [[ -z "${DO_UPLOAD}" ]]; then
+	echo "No 'upload' argument; example archives were built and discarded."
 fi

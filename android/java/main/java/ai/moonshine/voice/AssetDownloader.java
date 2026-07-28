@@ -27,7 +27,7 @@ import org.json.JSONObject;
  * <p>This is <b>opt-in</b>: apps that bundle their models never need it and default behavior is
  * unchanged. File lists come from the native dependency catalog (via
  * {@link Transcriber#getSttDependencies}, {@link TextToSpeech#getTtsDependencies},
- * {@link TextToSpeech#getG2pDependencies}, and the intent-model equivalent that
+ * {@link TextToSpeech#getG2pDependencies}, and the embedding-model equivalent that
  * {@link DialogFlow} uses), downloads are written atomically (through a {@code .part} file),
  * resume across interruptions with HTTP Range, and report progress through an optional listener.
  *
@@ -138,8 +138,8 @@ public final class AssetDownloader {
                 String json = Transcriber.getSttDependencies(spec.primary, spec.toOptions(null));
                 return filesFromGroupManifest(json);
             }
-            case INTENT: {
-                String json = IntentRecognizer.getIntentDependencies(
+            case EMBEDDING: {
+                String json = EmbeddingModel.getEmbeddingDependencies(
                         spec.primary, spec.toOptions(null));
                 return filesFromGroupManifest(json);
             }
@@ -163,7 +163,7 @@ public final class AssetDownloader {
     }
 
     /**
-     * Parses the {@code {"groups":[{"base_url":..,"files":[{...}]}]}} STT/intent manifest. Each
+     * Parses the {@code {"groups":[{"base_url":..,"files":[{...}]}]}} STT/embedding manifest. Each
      * {@code files} entry is an object with {@code name}, a fully-qualified {@code url}, and
      * optional {@code size} / {@code checksum} / {@code checksum_type}.
      */

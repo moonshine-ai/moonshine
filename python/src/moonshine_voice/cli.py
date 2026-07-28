@@ -38,7 +38,7 @@ COMMANDS: Dict[str, Tuple[str, str]] = {
     ),
     "download": (
         "moonshine_voice.download",
-        "Download STT, TTS, G2P, or intent model assets.",
+        "Download STT, TTS, G2P, or embedding model assets.",
     ),
     "g2p": (
         "moonshine_voice.g2p",

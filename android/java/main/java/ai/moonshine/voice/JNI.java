@@ -23,7 +23,7 @@ public class JNI {
      */
     public static final int MOONSHINE_FLAG_SPELLING_MODE = 1 << 1;
 
-    /** Embedding model architecture for intent recognition (Gemma 300M). */
+    /** Embedding model architecture (Gemma 300M). */
     static final int MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M = 0;
 
     /** Pass to TTS/G2P create calls; must match native {@code moonshine-c-api.h}. */
@@ -84,31 +84,24 @@ public class JNI {
     public static native Transcript moonshineTranscribeStream(int transcriber_handle,
             int stream_handle, int flags);
 
-    // Intent recognition backs DialogFlow's trigger-phrase matching and is not
-    // part of the library's public surface, so these stay package-private.
+    // Text embeddings back DialogFlow's phrase matching and are not part of the
+    // library's public surface, so these stay package-private.
 
-    static native int moonshineCreateIntentRecognizer(String model_path,
+    static native int moonshineCreateEmbeddingModel(String model_path,
             int embedding_model_arch, String model_variant);
 
-    static native void moonshineFreeIntentRecognizer(int intent_recognizer_handle);
-
-    static native int moonshineRegisterIntent(int intent_recognizer_handle,
-            String canonical_phrase, float[] embedding, int priority);
-
-    static native int moonshineUnregisterIntent(int intent_recognizer_handle,
-            String canonical_phrase);
+    static native void moonshineFreeEmbeddingModel(int embedding_model_handle);
 
     /** Returns null on failure. */
-    static native IntentMatch[] moonshineGetClosestIntents(
-            int intent_recognizer_handle, String utterance, float tolerance_threshold);
+    static native float[] moonshineCalculateEmbedding(int embedding_model_handle,
+            String sentence);
 
-    static native int moonshineGetIntentCount(int intent_recognizer_handle);
-
-    static native int moonshineClearIntents(int intent_recognizer_handle);
-
-    /** Returns null on failure. */
-    static native float[] moonshineCalculateIntentEmbedding(
-            int intent_recognizer_handle, String sentence);
+    /**
+     * Cosine similarity of two equal-length embeddings, in {@code [-1, 1]}.
+     * Returns 0 when the arrays are null, empty, or of differing lengths.
+     */
+    static native float moonshineCalculateEmbeddingDistance(int embedding_model_handle,
+            float[] embedding_a, float[] embedding_b);
 
     public static native int moonshineCreateTtsSynthesizerFromFiles(String language,
             String[] filenames, TranscriberOption[] options);
@@ -140,15 +133,15 @@ public class JNI {
             TranscriberOption[] options);
 
     /**
-     * Returns the intent-recognition embedding model download manifest as a JSON
-     * object string (same shape as {@link #moonshineGetSttDependencies}), or
-     * {@code null} on failure.
+     * Returns the embedding model download manifest as a JSON object string
+     * (same shape as {@link #moonshineGetSttDependencies}), or {@code null} on
+     * failure.
      *
      * @param modelName Embedding model id (e.g. {@code "embeddinggemma-300m"}), or
      *                  {@code null} for the default model.
      * @param options   Optional options; recognizes {@code variant}.
      */
-    static native String moonshineGetIntentDependencies(String modelName,
+    static native String moonshineGetEmbeddingDependencies(String modelName,
             TranscriberOption[] options);
 
     public static native String moonshineGetTtsVoices(String languages,

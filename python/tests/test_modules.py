@@ -134,11 +134,12 @@ def test_g2p_prints_ipa():
     assert result.stdout.strip(), describe(result)
 
 
-def test_intent_recognizer_matches_transcribed_command():
-    """The intent recognizer is internal (DialogFlow owns one), so this drives
-    the module directly rather than through a CLI demo."""
+def test_embedding_backend_matches_transcribed_command():
+    """The embedding model is internal (DialogFlow owns one), so this drives
+    the module directly rather than through a CLI demo. It scores phrases the
+    way DialogFlow does, through calculate_embedding and distance."""
     moonshine_voice = pytest.importorskip("moonshine_voice")
-    from moonshine_voice.intent_recognizer import IntentRecognizer
+    from moonshine_voice.embedding_model import EmbeddingModel
 
     wav_path = REPO_ROOT / "test-assets" / "intent.wav"
     audio, sample_rate = moonshine_voice.load_wav_file(str(wav_path))
@@ -151,17 +152,26 @@ def test_intent_recognizer_matches_transcribed_command():
     utterance = " ".join(line.text for line in transcript.lines).strip()
     assert utterance, "expected the clip to transcribe to something"
 
+    unrelated = "bake a chocolate cake"
+    phrases = ("move forward", "move backward", "turn left", "turn right")
+
     embedding_path, embedding_arch = moonshine_voice.get_embedding_model(variant="q4")
-    recognizer = IntentRecognizer(
+    embedder = EmbeddingModel(
         model_path=embedding_path, model_arch=embedding_arch, model_variant="q4"
     )
     try:
-        for phrase in ("move forward", "move backward", "turn left", "turn right"):
-            recognizer.register_intent(phrase)
-        matches = recognizer.get_closest_intents(utterance, 0.0)
+        spoken = embedder.calculate_embedding(utterance)
+        scores = {
+            phrase: embedder.distance(
+                spoken, embedder.calculate_embedding(phrase)
+            )
+            for phrase in (*phrases, unrelated)
+        }
     finally:
-        recognizer.close()
-    assert matches, f"no intent matched {utterance!r}"
+        embedder.close()
+
+    best = max(scores, key=scores.get)
+    assert best != unrelated, f"{utterance!r} scored closest to {unrelated!r}: {scores}"
 
 
 def test_download_g2p_assets():

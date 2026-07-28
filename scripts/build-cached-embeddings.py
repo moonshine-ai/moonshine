@@ -52,7 +52,7 @@ from moonshine_voice.dialog_flow import (  # noqa: E402
     _DEFAULT_YES_PHRASES,
 )
 from moonshine_voice.download import get_embedding_model  # noqa: E402
-from moonshine_voice.intent_recognizer import IntentRecognizer  # noqa: E402
+from moonshine_voice.embedding_model import EmbeddingModel  # noqa: E402
 
 
 def _collect_library_phrases() -> List[Tuple[str, str]]:
@@ -161,7 +161,7 @@ def main() -> None:
         f"(variant={args.quantization!r}) – first run may download it..."
     )
     model_path, model_arch = get_embedding_model(args.model, args.quantization)
-    recognizer = IntentRecognizer(
+    embedder = EmbeddingModel(
         model_path=model_path,
         model_arch=model_arch,
         model_variant=args.quantization,
@@ -171,7 +171,7 @@ def main() -> None:
         rows: List[Tuple[str, List[float]]] = []
         total = len(entries)
         for idx, (group, phrase) in enumerate(entries, start=1):
-            emb = recognizer.calculate_embedding(phrase)
+            emb = embedder.calculate_embedding(phrase)
             rows.append((phrase, emb))
             if idx == 1 or idx == total or idx % 25 == 0:
                 print(
@@ -179,7 +179,7 @@ def main() -> None:
                     f"-> dim={len(emb)} (group={group})"
                 )
     finally:
-        recognizer.close()
+        embedder.close()
 
     dim = len(rows[0][1]) if rows else 0
     metadata = {

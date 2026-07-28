@@ -1,8 +1,8 @@
 import Foundation
 
-/// Embedding model architectures for intent recognition.
+/// Embedding model architectures.
 ///
-/// Internal to the binding; intent matching is reached through ``DialogFlow``.
+/// Internal to the binding; phrase matching is reached through ``DialogFlow``.
 enum EmbeddingModelArch: UInt32 {
     case gemma300m = 0
 }

@@ -176,16 +176,16 @@ download_and_run "G2P de" g2p de
 # TTS: a small Piper English voice plus the en_us G2P assets.
 download_and_run "TTS en_us (Piper lessac)" tts en_us piper_en_US-lessac-medium
 
-# Intent / embedding: q4 is the smallest published embedding variant.
-download_and_run "Intent embeddinggemma-300m q4" intent embeddinggemma-300m q4
+# Embedding: q4 is the smallest published embedding variant.
+download_and_run "Embedding embeddinggemma-300m q4" embedding embeddinggemma-300m q4
 
 # --- Extended sample (nightly): more languages and embedding variants. --------
 
 if [[ "${RUN_ALL}" -eq 1 ]]; then
     download_and_run "STT base-es" stt es 1
     download_and_run "STT base-zh" stt zh 1
-    download_and_run "Intent embeddinggemma-300m q8" intent embeddinggemma-300m q8
-    download_and_run "Intent embeddinggemma-300m fp16" intent embeddinggemma-300m fp16
+    download_and_run "Embedding embeddinggemma-300m q8" embedding embeddinggemma-300m q8
+    download_and_run "Embedding embeddinggemma-300m fp16" embedding embeddinggemma-300m fp16
 fi
 
 # --- Framework download tests (real AssetDownloader on each platform). --------

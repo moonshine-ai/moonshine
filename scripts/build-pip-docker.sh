@@ -5,14 +5,36 @@ VERSION=0.1.1
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR=$(dirname $SCRIPTS_DIR)
 
+# Arguments:
+#   upload - publish the wheels to PyPI and the C++ archives to the GitHub
+#            release. Without it the wheels and tarballs are built inside the
+#            containers and left on the (bind-mounted) host, which is the dry-run
+#            form used by scripts/build-all-platforms.sh.
+DO_UPLOAD=""
+for arg in "$@"; do
+	case "$arg" in
+	upload) DO_UPLOAD=1 ;;
+	*)
+		echo "Unknown argument: '$arg'" >&2
+		exit 1
+		;;
+	esac
+done
+
+if [[ -n "${DO_UPLOAD}" ]]; then
+	PIP_ARGS="upload"
+else
+	PIP_ARGS=""
+fi
+
 docker build --platform linux/amd64 -t moonshine-ubuntu-amd64 .
 docker build --platform linux/arm64 -t moonshine-ubuntu-arm64 .
 
 docker run --rm -v ${REPO_ROOT_DIR}:/home/user/moonshine moonshine-ubuntu-amd64 \
-	/bin/bash -c "cd /home/user/moonshine && scripts/build-pip.sh upload"
+	/bin/bash -c "cd /home/user/moonshine && scripts/build-pip.sh ${PIP_ARGS}"
 
 docker run --rm -v ${REPO_ROOT_DIR}:/home/user/moonshine moonshine-ubuntu-arm64 \
-	/bin/bash -c "cd /home/user/moonshine && scripts/build-pip.sh upload"
+	/bin/bash -c "cd /home/user/moonshine && scripts/build-pip.sh ${PIP_ARGS}"
 
 # Build BOTH Linux C++ library archives (moonshine-voice-linux-x86_64.tar.gz and
 # moonshine-voice-linux-arm64.tar.gz) inside their pinned Debian bookworm Docker
@@ -36,6 +58,11 @@ docker run --rm -v ${REPO_ROOT_DIR}:/home/user/moonshine moonshine-ubuntu-amd64 
 docker run --rm -v ${REPO_ROOT_DIR}:/home/user/moonshine moonshine-ubuntu-arm64 \
 	/bin/bash -c "cd /home/user/moonshine && scripts/publish-binary.sh"
 
-"${SCRIPTS_DIR}/gh-upload-retry.sh" "${VERSION}" \
-	"${REPO_ROOT_DIR}/moonshine-voice-linux-x86_64.tar.gz" \
-	"${REPO_ROOT_DIR}/moonshine-voice-linux-arm64.tar.gz"
+if [[ -n "${DO_UPLOAD}" ]]; then
+	"${SCRIPTS_DIR}/gh-upload-retry.sh" "${VERSION}" \
+		"${REPO_ROOT_DIR}/moonshine-voice-linux-x86_64.tar.gz" \
+		"${REPO_ROOT_DIR}/moonshine-voice-linux-arm64.tar.gz"
+else
+	echo "No 'upload' argument; leaving the Linux archives in ${REPO_ROOT_DIR}:"
+	ls -la "${REPO_ROOT_DIR}"/moonshine-voice-linux-*.tar.gz
+fi

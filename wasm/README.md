@@ -66,8 +66,9 @@ await tts.say('Now I sound like the recording.');
 
 ## Dialog flows
 
-`DialogFlow` is the whole voice interface: it downloads the speech, intent, and
-voice models, opens the microphone, matches trigger phrases, and runs the flow.
+`DialogFlow` is the whole voice interface: it downloads the speech, embedding,
+and voice models, opens the microphone, matches trigger phrases, and runs the
+flow.
 Flow bodies are ordinary `async` functions.
 
 ```ts
@@ -92,7 +93,7 @@ await dialog.startListening();
 ## Models are downloaded at runtime
 
 To keep the library small (well under 100 MB), only the VAD is embedded in the
-`.wasm`. Every other model — STT, TTS, G2P, and the intent embedding model — is
+`.wasm`. Every other model — STT, TTS, G2P, and the text embedding model — is
 fetched from the Moonshine CDN (`https://download.moonshine.ai`) the first time
 it's needed and cached in the browser via the Cache API. The exact file list and
 URLs come from the C ABI manifest helpers, so the JS never hardcodes the layout.

@@ -137,7 +137,7 @@ test('Dialog-flow example runs a whole conversation from typed input', { skip },
   }
 
   try {
-    // nomic=1 auto-builds the runner (TTS + intent recognizer) without a mic.
+    // nomic=1 auto-builds the runner (TTS + embedding model) without a mic.
     await page.waitForFunction(() => window.__dialogReady === true, { timeout: 120000 });
 
     // Each answer drives the flow one step further; the flow body is a plain
