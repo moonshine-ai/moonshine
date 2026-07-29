@@ -25,11 +25,20 @@ fi
 # named simply "moonshine-voice" (stripping the platform-specific top-level
 # directory from the archive), so the compile command is the same regardless of
 # operating system or architecture.
+#
+# Set MOONSHINE_LIBRARY_ARCHIVE to a moonshine-voice-<platform>.tar.gz you built
+# yourself to compile against that instead of the published one. Our release
+# rehearsal uses it to test this script before the archive it names exists.
 rm -rf moonshine-voice
-curl -f -O -L https://github.com/moonshine-ai/moonshine/releases/download/v0.1.1/moonshine-voice-${PLATFORM}.tar.gz
 mkdir -p moonshine-voice
-tar xzf moonshine-voice-${PLATFORM}.tar.gz -C moonshine-voice --strip-components=1
-rm moonshine-voice-${PLATFORM}.tar.gz
+if [ -n "${MOONSHINE_LIBRARY_ARCHIVE:-}" ]; then
+    echo "Using local library archive ${MOONSHINE_LIBRARY_ARCHIVE}"
+    tar xzf "${MOONSHINE_LIBRARY_ARCHIVE}" -C moonshine-voice --strip-components=1
+else
+    curl -f -O -L https://github.com/moonshine-ai/moonshine/releases/download/v0.1.1/moonshine-voice-${PLATFORM}.tar.gz
+    tar xzf moonshine-voice-${PLATFORM}.tar.gz -C moonshine-voice --strip-components=1
+    rm moonshine-voice-${PLATFORM}.tar.gz
+fi
 
 echo "Library downloaded and extracted to moonshine-voice"
 

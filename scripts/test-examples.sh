@@ -31,6 +31,10 @@
 #     (XCLocalSwiftPackageReference) instead of the remote moonshine-swift Git
 #     package. Requires swift/Moonshine.xcframework to exist; when it is missing,
 #     scripts/build-swift.sh is run to build it first.
+#   - C++: hands download-library.sh a moonshine-voice-<platform>.tar.gz packaged
+#     from this checkout by scripts/publish-binary.sh, instead of letting it fetch
+#     the published archive for a release that does not exist yet. That compiles
+#     core unless an earlier stage left a build in core/build to package as-is.
 #
 # Environment:
 #   ANDROID_HOME or ANDROID_SDK_ROOT — required for Android (unless SKIP_ANDROID=1)
@@ -60,6 +64,10 @@ USE_LOCAL_LIBRARY=0
 # Path to a Gradle init script (created at runtime when --local-library is used)
 # that injects mavenLocal() as the first dependency-resolution repository.
 LOCAL_LIBRARY_INIT_SCRIPT=""
+# Path to the library archive the C++ example is built against with
+# --local-library. Empty otherwise, which leaves download-library.sh fetching the
+# published archive as a user would.
+LOCAL_LIBRARY_ARCHIVE_CPP=""
 
 usage() {
 	cat <<'EOF'
@@ -582,6 +590,47 @@ obtain_cpp_example() {
 	fi
 }
 
+# Package this checkout's library the way the release ships it, so the C++ example
+# can be built against it. download-library.sh fetches the archive for the release
+# it was cut for, which does not exist yet when a release is rehearsed, and handing
+# the example an older published archive would defeat the point of building it
+# against the library it ships beside.
+#
+# publish-binary.sh is the only definition of what that archive contains, so call it
+# rather than assembling a lookalike here, and always call it: a
+# moonshine-voice-<platform>.tar.gz sitting at the repository root can be months
+# old, and silently testing against that would turn this check into theatre. It
+# compiles core unless an earlier stage left a build it can package as-is.
+ensure_local_library_archive_cpp() {
+	local arch
+	arch="$(uname -m)"
+	case "${arch}" in
+	arm64 | aarch64) arch=arm64 ;;
+	x86_64 | amd64) arch=x86_64 ;;
+	*) die "unsupported architecture for the C++ example: ${arch}" ;;
+	esac
+	local platform prebuilt
+	if [[ "$(uname -s)" == "Darwin" ]]; then
+		platform="macos-${arch}"
+		prebuilt="${REPO_ROOT}/core/build/moonshine.framework/Versions/A/moonshine"
+	else
+		platform="linux-${arch}"
+		prebuilt="${REPO_ROOT}/core/build/libmoonshine.so"
+	fi
+
+	if [[ -f "${prebuilt}" ]]; then
+		log "C++: packaging the existing core build in core/build for ${platform}"
+		"${SCRIPT_DIR}/publish-binary.sh" skip-build
+	else
+		log "C++: building and packaging the ${platform} library archive"
+		"${SCRIPT_DIR}/publish-binary.sh"
+	fi
+
+	local archive="${REPO_ROOT}/moonshine-voice-${platform}.tar.gz"
+	[[ -f "${archive}" ]] || die "publish-binary.sh left no archive at ${archive}"
+	LOCAL_LIBRARY_ARCHIVE_CPP="${archive}"
+}
+
 # Build and run the portable C++ transcriber example, mirroring the README
 # quickstart: download-library.sh fetches the prebuilt library plus a small
 # model and sample audio, then transcriber.cpp is compiled with a single
@@ -606,6 +655,12 @@ run_cpp_build() {
 	local cxx="${CXX:-g++}"
 	command -v "${cxx}" >/dev/null 2>&1 || die "C++ compiler '${cxx}' not found (set CXX or SKIP_CPP=1)"
 
+	# Packaging the local library rebuilds core when no earlier stage has, so only
+	# do it once we know the example is actually going to be built here.
+	if [[ "${USE_LOCAL_LIBRARY}" -eq 1 ]]; then
+		ensure_local_library_archive_cpp
+	fi
+
 	# download-library.sh always extracts into a folder named "moonshine-voice"
 	# regardless of OS/architecture, so the -I/-L paths are the same everywhere.
 	local platform_dir="moonshine-voice"
@@ -614,7 +669,7 @@ run_cpp_build() {
 		cd "${root}"
 		log "C++: fetching library, model, and sample audio via download-library.sh"
 		chmod +x ./download-library.sh
-		./download-library.sh
+		MOONSHINE_LIBRARY_ARCHIVE="${LOCAL_LIBRARY_ARCHIVE_CPP}" ./download-library.sh
 
 		log "C++: compiling transcriber.cpp against ${platform_dir}"
 		if [[ "${os}" == "Darwin" ]]; then
