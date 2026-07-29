@@ -6,7 +6,6 @@
 #include <regex>
 #include <stdexcept>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -382,7 +381,8 @@ std::string apply_narrow_intervocalic_obstruents(std::string ipa) {
     std::u32string u = spanish_unicode::utf8_to_utf32(ipa);
     bool changed = false;
     auto is_v = [](char32_t c) {
-      return c == U'a' || c == U'e' || c == U'i' || c == U'o' || c == U'u';
+      return c == U'a' || c == U'e' || c == U'i' || c == U'o' || c == U'u' ||
+             c == U'j' || c == U'w';
     };
     for (size_t i = 0; i < u.size(); ++i) {
       if (i == 0 || i + 1 >= u.size()) {
@@ -570,37 +570,26 @@ std::string letters_to_ipa_no_stress(const std::u32string &syl_lower,
       continue;
     }
 
-    if (ch == U'q' && i + 2 < n && lw[i + 1] == U'u' &&
-        (lw[i + 2] == U'e' || lw[i + 2] == U'i' || lw[i + 2] == U'é' ||
-         lw[i + 2] == U'í')) {
-      static const std::unordered_map<char32_t, const char *> vmap = {
-          {U'e', "e"}, {U'i', "i"}, {U'é', "e"}, {U'í', "i"}};
+    const bool front_after_u =
+        i + 2 < n && (lw[i + 2] == U'e' || lw[i + 2] == U'i' ||
+                      lw[i + 2] == U'é' || lw[i + 2] == U'í');
+
+    if (ch == U'q' && front_after_u && lw[i + 1] == U'u') {
       out.emplace_back("k");
-      out.emplace_back(vmap.at(lw[i + 2]));
-      i += 3;
+      i += 2;
       continue;
     }
 
-    if (ch == U'g' && i + 2 < n && lw[i + 1] == U'ü' &&
-        (lw[i + 2] == U'e' || lw[i + 2] == U'i' || lw[i + 2] == U'é' ||
-         lw[i + 2] == U'í')) {
-      static const std::unordered_map<char32_t, const char *> vmap = {
-          {U'e', "e"}, {U'i', "i"}, {U'é', "e"}, {U'í', "i"}};
+    if (ch == U'g' && front_after_u && lw[i + 1] == U'ü') {
       out.emplace_back("\xc9\xa1");  // ɡ
       out.emplace_back("w");
-      out.emplace_back(vmap.at(lw[i + 2]));
-      i += 3;
+      i += 2;
       continue;
     }
 
-    if (ch == U'g' && i + 2 < n && lw[i + 1] == U'u' &&
-        (lw[i + 2] == U'e' || lw[i + 2] == U'i' || lw[i + 2] == U'é' ||
-         lw[i + 2] == U'í')) {
-      static const std::unordered_map<char32_t, const char *> vmap = {
-          {U'e', "e"}, {U'i', "i"}, {U'é', "e"}, {U'í', "i"}};
+    if (ch == U'g' && front_after_u && lw[i + 1] == U'u') {
       out.emplace_back("\xc9\xa1");
-      out.emplace_back(vmap.at(lw[i + 2]));
-      i += 3;
+      i += 2;
       continue;
     }
 
@@ -609,19 +598,6 @@ std::string letters_to_ipa_no_stress(const std::u32string &syl_lower,
          lw[i + 1] == U'í')) {
       out.push_back(dialect.voiceless_velar_fricative);
       ++i;
-      continue;
-    }
-
-    if (ch == U'c' && i + 3 < n && lw.substr(i, 4) == U"ción") {
-      out.push_back(dialect.ce_ci_z_ipa);
-      out.emplace_back("jon");
-      i += 4;
-      continue;
-    }
-    if (ch == U'c' && i + 2 < n && lw.substr(i, 3) == U"ció") {
-      out.push_back(dialect.ce_ci_z_ipa);
-      out.emplace_back("jo");
-      i += 3;
       continue;
     }
 
@@ -672,6 +648,13 @@ std::string letters_to_ipa_no_stress(const std::u32string &syl_lower,
       const bool after_lns = (prev == U'l' || prev == U'n' || prev == U's');
       out.push_back((at_word_start || after_lns) ? dialect.trill_ipa
                                                  : dialect.tap_ipa);
+      ++i;
+      continue;
+    }
+
+    if ((ch == U'i' || ch == U'u') && i + 1 < n && is_vowel_ch(lw[i + 1]) &&
+        !should_hiatus(ch, lw[i + 1])) {
+      out.emplace_back(ch == U'i' ? "j" : "w");
       ++i;
       continue;
     }

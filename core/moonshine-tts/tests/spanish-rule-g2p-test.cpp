@@ -61,6 +61,65 @@ TEST_CASE("spanish: tap and trill are distinguished in every context") {
   }
 }
 
+TEST_CASE("spanish: rising diphthongs use glides and stress the nucleus") {
+  const std::vector<std::pair<std::string, std::string>> cases = {
+      {"sonrió", "sonrjˈo"},
+      {"sonrío", "sonrˈio"},
+      {"salió", "saljˈo"},
+      {"comió", "komjˈo"},
+      {"cambio", "kˈambjo"},
+      {"serio", "sˈeɾjo"},
+      {"radio", "rˈaðjo"},
+      {"patio", "pˈatjo"},
+      {"limpio", "lˈimpjo"},
+      {"cuando", "kwˈando"},
+      {"pueblo", "pwˈeblo"},
+      {"bueno", "bwˈeno"},
+      {"fuerte", "fwˈeɾte"},
+      {"agua", "ˈaɣwa"},
+      {"cuota", "kwˈota"},
+      {"cuidar", "kwidˈaɾ"},
+      {"antiguo", "antˈiɣwo"},
+      {"viuda", "bjˈuða"},
+      {"hielo", "jˈelo"},
+      {"huevo", "wˈeβo"},
+      {"efectuará", "efektwaɾˈa"},
+      {"continuó", "kontinwˈo"},
+      {"río", "rˈio"},
+      {"mío", "mˈio"},
+      {"día", "dˈia"},
+      {"país", "paˈis"},
+      {"queso", "kˈeso"},
+      {"guerra", "ɡˈera"},
+      {"guitarra", "ɡitˈara"},
+      {"sigue", "sˈiɣe"},
+      {"pingüino", "pinɡwˈino"},
+      {"averigüe", "aβeɾˈiɣwe"},
+  };
+  for (const char* id : {"es-ES", "es-MX"}) {
+    const auto dialect = moonshine_tts::spanish_dialect_from_cli_id(id);
+    for (const auto& [word, expected] : cases) {
+      INFO(id << " " << word);
+      CHECK(moonshine_tts::spanish_text_to_ipa(word, dialect) == expected);
+    }
+  }
+}
+
+TEST_CASE("spanish: seseo and distincion keep glides in -cion words") {
+  const auto es = moonshine_tts::spanish_dialect_from_cli_id("es-ES");
+  const auto mx = moonshine_tts::spanish_dialect_from_cli_id("es-MX");
+  CHECK(moonshine_tts::spanish_text_to_ipa("nación", es) == "naθjˈon");
+  CHECK(moonshine_tts::spanish_text_to_ipa("nación", mx) == "nasjˈon");
+  CHECK(moonshine_tts::spanish_text_to_ipa("novecientos", es) ==
+        "noβeθjˈentos");
+  CHECK(moonshine_tts::spanish_text_to_ipa("novecientos", mx) ==
+        "noβesjˈentos");
+  CHECK(moonshine_tts::spanish_text_to_ipa("cincuenta", es) == "θinkwˈenta");
+  CHECK(moonshine_tts::spanish_text_to_ipa("cincuenta", mx) == "sinkwˈenta");
+  CHECK(moonshine_tts::spanish_text_to_ipa("ciudad", es) == "θjudˈad");
+  CHECK(moonshine_tts::spanish_text_to_ipa("ciudad", mx) == "sjudˈad");
+}
+
 TEST_CASE("spanish: En 1891 matches reference IPA when golden exists") {
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
   const std::filesystem::path golden =
