@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "rule-g2p-test-support.h"
@@ -31,6 +32,34 @@ void check_wiki_parity(const std::filesystem::path& wiki,
 }
 
 }  // namespace
+
+TEST_CASE("spanish: tap and trill are distinguished in every context") {
+  const std::vector<std::pair<std::string, std::string>> cases = {
+      {"pero", "pˈeɾo"},
+      {"perro", "pˈero"},
+      {"caro", "kˈaɾo"},
+      {"carro", "kˈaro"},
+      {"oro", "ˈoɾo"},
+      {"para", "pˈaɾa"},
+      {"honra", "ˈonra"},
+      {"Israel", "isrˈael"},
+      {"enredo", "enrˈeðo"},
+      {"sonrisa", "sonrˈisa"},
+      {"alrededor", "alreðedˈoɾ"},
+      {"rosa", "rˈosa"},
+      {"por", "pˈoɾ"},
+      {"arte", "ˈaɾte"},
+      {"tren", "tɾˈen"},
+      {"tres", "tɾˈes"},
+  };
+  for (const char* id : {"es-ES", "es-MX"}) {
+    const auto dialect = moonshine_tts::spanish_dialect_from_cli_id(id);
+    for (const auto& [word, expected] : cases) {
+      INFO(id << " " << word);
+      CHECK(moonshine_tts::spanish_text_to_ipa(word, dialect) == expected);
+    }
+  }
+}
 
 TEST_CASE("spanish: En 1891 matches reference IPA when golden exists") {
   const auto repo = r::repo_root_from_tests_cpp(__FILE__);
