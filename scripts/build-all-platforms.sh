@@ -297,6 +297,16 @@ main() {
 
     trap cleanup EXIT
 
+    # A release takes hours and is meant to be left alone, but a Mac that sleeps
+    # part-way through takes the build down with it. With the lid shut it only
+    # surfaces for brief maintenance dark wakes, and in those the audio hardware
+    # stays powered down, so any stage that plays audio (the Swift TTS tests) runs
+    # against a device that never starts. Hold a power assertion for exactly as long
+    # as this script lives: caffeinate -w exits when our pid does. The system-sleep
+    # part of the assertion only holds on AC power, so keep an unattended run
+    # plugged in.
+    caffeinate -dims -w $$ &
+
     # Arguments are order-independent: `publish` opts in to publishing, and any
     # other bare word is the release ref. Publishing is opt-in so that the
     # default invocation is a rehearsal -- the expensive mistakes in a release

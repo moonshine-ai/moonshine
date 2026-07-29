@@ -167,8 +167,19 @@ final class TextToSpeechTests: XCTestCase {
 
     // MARK: - Say Tests
 
+    /// Playback needs audio hardware that is actually running, which is not a given
+    /// on an unattended machine: a Mac with the lid shut only wakes periodically for
+    /// maintenance, and during those dark wakes its audio devices stay powered down.
+    private static func requireLiveAudioOutput() throws {
+        try XCTSkipUnless(
+            TextToSpeech.audioOutputIsLive(),
+            "No audio output is running on this machine (it may be asleep); "
+                + "skipping playback test")
+    }
+
     func testSayDefaultDevice() async throws {
         let dataPath = try Self.getTtsDataPath()
+        try Self.requireLiveAudioOutput()
         let tts = try TextToSpeech(language: "en_us", g2pRoot: dataPath)
         defer { tts.close() }
 
@@ -180,6 +191,7 @@ final class TextToSpeechTests: XCTestCase {
 
     func testSayMultipleCalls() async throws {
         let dataPath = try Self.getTtsDataPath()
+        try Self.requireLiveAudioOutput()
         let tts = try TextToSpeech(language: "en_us", g2pRoot: dataPath)
         defer { tts.close() }
 
