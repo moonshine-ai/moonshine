@@ -80,6 +80,10 @@ public class TextToSpeech: @unchecked Sendable {
     private static let cloneVoice = "zipvoice"
     /// Reference clips are resampled to this rate before cloning.
     private static let cloneSampleRate: Int32 = 16000
+    /// How long a freshly started audio engine is given to render its first buffers.
+    /// A healthy device takes tens of milliseconds even on a loaded machine; one that
+    /// has not started by now never will.
+    private static let renderCycleTimeout: TimeInterval = 2.0
 
     /// Creates a synthesizer that has not loaded any assets yet.
     ///
@@ -656,9 +660,16 @@ public class TextToSpeech: @unchecked Sendable {
             )
 
             self.playbackQueue.async { [self] in
-                defer { self.finish(completion, error: nil) }
-                guard self.isGenerationCurrent(gen) else { return }
-                self.playOneItem(item, generation: gen)
+                guard self.isGenerationCurrent(gen) else {
+                    self.finish(completion, error: nil)
+                    return
+                }
+                do {
+                    try self.playOneItem(item, generation: gen)
+                    self.finish(completion, error: nil)
+                } catch {
+                    self.finish(completion, error: error)
+                }
             }
         }
     }
@@ -685,7 +696,7 @@ public class TextToSpeech: @unchecked Sendable {
         pendingCondition.unlock()
     }
 
-    private func playOneItem(_ item: PlayItem, generation gen: UInt64) {
+    private func playOneItem(_ item: PlayItem, generation gen: UInt64) throws {
         let semaphore: DispatchSemaphore
 
         sayLock.lock()
@@ -693,7 +704,7 @@ public class TextToSpeech: @unchecked Sendable {
             _ = try obtainEngine(sampleRate: item.sampleRate, device: item.deviceID)
         } catch {
             sayLock.unlock()
-            return
+            throw error
         }
         guard let playerNode = sayPlayerNode else {
             sayLock.unlock()
@@ -850,11 +861,65 @@ public class TextToSpeech: @unchecked Sendable {
             )
         }
 
+        guard Self.waitForRenderCycle(engine) else {
+            engine.stop()
+            throw MoonshineError.custom(
+                message: "The audio output device started but is not playing anything. "
+                    + "This usually means the system's audio hardware is powered down, "
+                    + "as it is when a Mac is asleep.",
+                code: -1
+            )
+        }
+
         sayEngine = engine
         sayPlayerNode = playerNode
         sayCachedSampleRate = sampleRate
 
         return engine
+    }
+
+    /// Waits for `engine` to actually render audio, returning `false` if it never does.
+    ///
+    /// A started engine is not necessarily a playing one: when the output hardware is
+    /// powered down — a Mac in a maintenance dark wake with the lid shut, say — `start()`
+    /// succeeds but the device never delivers a render callback. Calling
+    /// `AVAudioPlayerNode.play()` in that state raises an Objective-C exception ("player
+    /// did not see an IO cycle") that Swift cannot catch, so it takes the process down
+    /// rather than surfacing as a `throw`. An advancing render time is the signal that
+    /// tells a playing engine from a stalled one, so wait for one here and let the caller
+    /// report an ordinary error instead.
+    private static func waitForRenderCycle(_ engine: AVAudioEngine) -> Bool {
+        let deadline = Date().addingTimeInterval(renderCycleTimeout)
+        var firstSampleTime: AVAudioFramePosition?
+        while Date() < deadline {
+            if let renderTime = engine.outputNode.lastRenderTime, renderTime.isSampleTimeValid {
+                if let firstSampleTime {
+                    if renderTime.sampleTime > firstSampleTime { return true }
+                } else {
+                    firstSampleTime = renderTime.sampleTime
+                }
+            }
+            Thread.sleep(forTimeInterval: 0.002)
+        }
+        return false
+    }
+
+    /// Reports whether audio can be played on the default output device right now.
+    ///
+    /// Playback tests use this to skip rather than fail on a machine whose audio
+    /// hardware is asleep.
+    static func audioOutputIsLive() -> Bool {
+        let engine = AVAudioEngine()
+        // Referencing the main mixer is what connects it to the output node, so the
+        // graph has something to pull through once the engine starts.
+        _ = engine.mainMixerNode
+        do {
+            try engine.start()
+        } catch {
+            return false
+        }
+        defer { engine.stop() }
+        return waitForRenderCycle(engine)
     }
 
     private func releaseEngine() {
