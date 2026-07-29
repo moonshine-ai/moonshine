@@ -23,11 +23,12 @@ esac
 
 # The examples pin an exact library version: the Android ones resolve
 # moonshine-voice from Maven Central, the iOS ones resolve moonshine-swift from
-# GitHub. During a release those are already published by the time this runs, so
+# GitHub, and the C++ one downloads this release's library archive from GitHub
+# Releases. During a release those are already published by the time this runs, so
 # --local-examples (new example sources, published library) is the right test.
 # Without `upload` nothing has been published, so the same run would fail
-# resolving a version that does not exist yet; --local-library additionally
-# points the examples at this checkout's AAR (~/.m2) and swift package.
+# resolving a version that does not exist yet; --local-library additionally points
+# the examples at this checkout's AAR (~/.m2), swift package and library archive.
 if [[ -n "${DO_UPLOAD}" ]]; then
 	EXAMPLES_ARGS=(--local-examples)
 else
