@@ -60,10 +60,76 @@
 #   WINDOWS_CLOUD_INSTANCE - GCP instance name for the Windows VM (optional)
 #   WINDOWS_CLOUD_ZONE     - GCP zone for the Windows VM (e.g. us-central1-b)
 #   WINDOWS_CLOUD_PROJECT  - GCP project ID for the Windows VM
+#   GCP_SERVICE_ACCOUNT_KEY - path to a service account key file used for the
+#                            gcloud calls below. Optional, but see the note.
 #
 # When the LINUX_CLOUD_INSTANCE / WINDOWS_CLOUD_INSTANCE variables are set the
 # script will start the corresponding GCP VM before connecting and stop it
 # again on exit (including on error) to minimize compute costs.
+#
+# Those gcloud calls are why GCP_SERVICE_ACCOUNT_KEY exists. A personal login's
+# session expires part-way through a multi-hour release, and the next gcloud
+# command then sits at an interactive reauthentication prompt with nobody there
+# to answer it, hanging the run. Service account credentials do not expire that
+# way. The key is activated in a gcloud configuration of its own, so an
+# interactive gcloud in another terminal keeps using whatever account you had.
+#
+# The account in use is moonshine-release-ci@useful-sensors-website.iam
+# .gserviceaccount.com, which can do nothing but suspend and resume the release
+# VMs: a custom moonshineVmControl role bound on each VM individually, a
+# moonshineVmOperations role at project level so gcloud can poll the resulting
+# operation, and serviceAccountUser on the VM's own attached service account,
+# without which Compute Engine refuses to start it. Recreate it with
+# `gcloud iam service-accounts create` plus those bindings, and note that its
+# key never expires -- delete the key in IAM if the laptop holding it is lost.
+
+# Name of the throwaway gcloud configuration the service account is activated in.
+GCLOUD_RELEASE_CONFIG=moonshine-release
+
+# Authenticate gcloud as the release service account, if one is configured.
+# Everything this script runs inherits CLOUDSDK_ACTIVE_CONFIG_NAME, so the
+# credential applies to the whole run without touching the configuration an
+# interactive gcloud uses.
+gcp_use_service_account() {
+    if [ -z "${GCP_SERVICE_ACCOUNT_KEY:-}" ]; then
+        echo "GCP_SERVICE_ACCOUNT_KEY is not set; gcloud will use your own login," \
+             "which can stall this run at a reauthentication prompt."
+        return 0
+    fi
+    if [ ! -r "${GCP_SERVICE_ACCOUNT_KEY}" ]; then
+        echo "GCP_SERVICE_ACCOUNT_KEY is set to '${GCP_SERVICE_ACCOUNT_KEY}'," \
+             "which cannot be read." >&2
+        exit 1
+    fi
+
+    gcloud config configurations describe "${GCLOUD_RELEASE_CONFIG}" >/dev/null 2>&1 \
+        || gcloud config configurations create "${GCLOUD_RELEASE_CONFIG}" --no-activate
+    CLOUDSDK_ACTIVE_CONFIG_NAME="${GCLOUD_RELEASE_CONFIG}" \
+        gcloud auth activate-service-account --key-file="${GCP_SERVICE_ACCOUNT_KEY}"
+    export CLOUDSDK_ACTIVE_CONFIG_NAME="${GCLOUD_RELEASE_CONFIG}"
+    echo "gcloud authenticated as $(gcloud config get-value account 2>/dev/null)."
+}
+
+# Read each configured VM before the build starts. The stages that need these
+# run hours in, and an expired credential or a missing permission is much
+# cheaper to discover now than after a night of building.
+gcp_check_instance_access() {
+    local instance="$1"
+    local zone="$2"
+    local project="$3"
+
+    if [ -z "${instance}" ]; then
+        return 0
+    fi
+    if ! gcloud compute instances describe "${instance}" \
+            --zone="${zone}" \
+            --project="${project}" \
+            --format="value(status)" >/dev/null; then
+        echo "Cannot read GCP instance ${instance} in ${zone} (project ${project})." \
+             "Fix the gcloud credentials before starting a release." >&2
+        exit 1
+    fi
+}
 
 # Resume a GCP compute instance and wait for SSH to become available.
 gcp_resume_instance() {
@@ -306,6 +372,12 @@ main() {
     # part of the assertion only holds on AC power, so keep an unattended run
     # plugged in.
     caffeinate -dims -w $$ &
+
+    gcp_use_service_account
+    gcp_check_instance_access \
+        "${LINUX_CLOUD_INSTANCE:-}" "${LINUX_CLOUD_ZONE:-}" "${LINUX_CLOUD_PROJECT:-}"
+    gcp_check_instance_access \
+        "${WINDOWS_CLOUD_INSTANCE:-}" "${WINDOWS_CLOUD_ZONE:-}" "${WINDOWS_CLOUD_PROJECT:-}"
 
     # Arguments are order-independent: `publish` opts in to publishing, and any
     # other bare word is the release ref. Publishing is opt-in so that the

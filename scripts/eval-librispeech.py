@@ -105,6 +105,12 @@ def parse_args():
         help="HF checkpoint id for the hf backend (defaults per --model-arch).",
     )
     parser.add_argument(
+        "--model-path",
+        default=None,
+        help="Directory of .ort models to use instead of the downloaded ones. "
+        "Useful for comparing quantization recipes.",
+    )
+    parser.add_argument(
         "--dataset",
         default="hf-audio/esb-datasets-test-only-sorted",
         help="HF dataset id (default: the Open ASR Leaderboard test-only set).",
@@ -193,8 +199,11 @@ def make_moonshine_c_backend(args, streaming):
     from moonshine_voice import Transcriber, get_model_for_language, ModelArch
 
     arch = getattr(ModelArch, args.model_arch.upper())
-    language = C_ARCH_TO_LANGUAGE[args.model_arch]
-    path, arch = get_model_for_language(language, arch)
+    if args.model_path:
+        path = args.model_path
+    else:
+        language = C_ARCH_TO_LANGUAGE[args.model_arch]
+        path, arch = get_model_for_language(language, arch)
 
     options = {"max_tokens_per_second": args.max_tokens_per_second}
     if not args.enable_vad:
