@@ -14,7 +14,7 @@ set "STAGE_ROOT=!REPO_ROOT_DIR!\build\windows-cli-transcriber-stage"
 if exist "!STAGE_ROOT!" rmdir /s /q "!STAGE_ROOT!"
 set "STAGE_DIR=!STAGE_ROOT!\cli-transcriber"
 set "TAR_NAME=windows-cli-transcriber.tar.gz"
-set "MODEL_URL=https://download.moonshine.ai/model/medium-streaming-en/quantized"
+set "MODEL_URL=https://download.moonshine.ai/model/medium-streaming-en/quantized_26_07_30"
 set "BECKETT_URL=https://github.com/moonshine-ai/moonshine/raw/refs/heads/main/test-assets/beckett.wav"
 
 echo [publish-examples] Building Windows library bundle...

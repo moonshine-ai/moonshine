@@ -35,6 +35,14 @@ ModelDependencyGroup make_group(const std::string& base_url,
 // values.
 constexpr const char* kCdnModelBase = "https://download.moonshine.ai/model";
 
+// Directory holding the current English streaming weights. Re-quantized
+// releases go in a new dated directory rather than overwriting the old one, so
+// that older library versions keep resolving the weights they were tested
+// against and a rollback is a one-line change. Clients key their download cache
+// off this URL, so a new directory also guarantees a clean re-fetch instead of
+// silently reusing stale files.
+constexpr const char* kStreamingQuantizedDir = "/quantized_26_07_30";
+
 struct SttModelEntry {
   int32_t model_arch;
   std::string download_url;
@@ -88,14 +96,17 @@ const std::vector<SttLanguageEntry>& stt_catalog() {
       {"en",
        "English",
        {
-           {MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING,
-            std::string(kCdnModelBase) + "/medium-streaming-en/quantized"},
-           {MOONSHINE_MODEL_ARCH_SMALL_STREAMING,
-            std::string(kCdnModelBase) + "/small-streaming-en/quantized"},
+           {MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING, std::string(kCdnModelBase) +
+                                                       "/medium-streaming-en" +
+                                                       kStreamingQuantizedDir},
+           {MOONSHINE_MODEL_ARCH_SMALL_STREAMING, std::string(kCdnModelBase) +
+                                                      "/small-streaming-en" +
+                                                      kStreamingQuantizedDir},
            {MOONSHINE_MODEL_ARCH_BASE,
             std::string(kCdnModelBase) + "/base-en/quantized/base-en"},
-           {MOONSHINE_MODEL_ARCH_TINY_STREAMING,
-            std::string(kCdnModelBase) + "/tiny-streaming-en/quantized"},
+           {MOONSHINE_MODEL_ARCH_TINY_STREAMING, std::string(kCdnModelBase) +
+                                                     "/tiny-streaming-en" +
+                                                     kStreamingQuantizedDir},
            {MOONSHINE_MODEL_ARCH_TINY,
             std::string(kCdnModelBase) + "/tiny-en/quantized/tiny-en"},
        }},

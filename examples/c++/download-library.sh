@@ -46,7 +46,7 @@ echo "Library downloaded and extracted to moonshine-voice"
 # transcriber example can run straight out of the box (see transcriber.cpp's
 # default paths, which use the MEDIUM_STREAMING architecture).
 MODEL_DIR=medium-streaming-en
-MODEL_BASE_URL=https://download.moonshine.ai/model/medium-streaming-en/quantized
+MODEL_BASE_URL=https://download.moonshine.ai/model/medium-streaming-en/quantized_26_07_30
 mkdir -p ${MODEL_DIR}
 for MODEL_FILE in \
     adapter.ort \

@@ -50,11 +50,19 @@ def enumerate_urls() -> "set[str]":
         code = language["code"]
         for model in language.get("models", []):
             arch = model["model_arch"]
-            # include_spelling=True picks up the English spelling group too; it
-            # is a no-op for languages without a spelling model.
+            # include_spelling=True picks up the English spelling group too, and
+            # word_timestamps=True adds the optional *_with_attention.ort
+            # decoders. Both are supersets of the default manifest, so asking
+            # for them here keeps integrity metadata for every file a caller
+            # could ever request, not just the default download.
             manifest = json.loads(
                 moonshine_get_stt_dependencies_string(
-                    code, {"model_arch": arch, "include_spelling": True}
+                    code,
+                    {
+                        "model_arch": arch,
+                        "include_spelling": True,
+                        "word_timestamps": True,
+                    },
                 )
             )
             for group in manifest.get("groups", []):

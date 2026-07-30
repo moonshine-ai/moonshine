@@ -809,10 +809,10 @@ streaming_config.json: 100%|█████████████████�
 tokenizer.bin: 100%|█████████████████████████████████████████████████████████████| 244k/244k [00:00<00:00, 3.06MB/s]
 spelling_cnn.ort: 100%|█████████████████████████████████████████████████████████| 1.59M/1.59M [00:00<00:00, 10.2MB/s]
 spelling_cnn_meta.json: 100%|█████████████████████████████████████████████████████| 622/622 [00:00<00:00, 1.72MB/s]
-Model download url: https://download.moonshine.ai/model/medium-streaming-en/quantized
+Model download url: https://download.moonshine.ai/model/medium-streaming-en/quantized_26_07_30
 Model components: ['adapter.ort', 'cross_kv.ort', 'decoder_kv.ort', 'encoder.ort', 'frontend.ort', 'streaming_config.json', 'tokenizer.bin']
 Model arch: 5
-Downloaded model path: /Users/petewarden/Library/Caches/moonshine_voice/download.moonshine.ai/model/medium-streaming-en/quantized
+Downloaded model path: /Users/petewarden/Library/Caches/moonshine_voice/download.moonshine.ai/model/medium-streaming-en/quantized_26_07_30
 ```
 
 Since no architecture was requested here, this downloaded Medium Streaming (architecture 5), the highest-quality English model. The two `spelling_cnn` files at the end are the alphanumeric spelling model, which the downloader fetches alongside the main model when one is published for the language.
@@ -1056,8 +1056,7 @@ in the paper were measured with the floating-point models running in the Hugging
 Face Transformers library, not the quantized models this framework ships.** As the
 paper notes in section 4.1.2, we use the Transformers implementation to measure
 accuracy and our own C++/ONNX library to measure latency. The models you download
-here are 8-bit quantized `.ort` files chosen for on-device speed and size, so they
-trade a little accuracy for a lot of portability.
+here are 8-bit quantized `.ort` files chosen for on-device speed and size.
 
 The table below shows LibriSpeech `test-clean` WER for all three streaming models,
 comparing the paper's floating-point reference against the quantized models this
@@ -1066,9 +1065,15 @@ the VAD disabled, so they're a like-for-like comparison of raw model accuracy.
 
 | Model            | Paper (float) | Reproduced float (HF Transformers) | Shipped quantized model (this library) |
 | ---------------- | ------------- | ---------------------------------- | -------------------------------------- |
-| Tiny Streaming   | 4.49%         | 4.52%                              | 7.57%                                  |
-| Small Streaming  | 2.49%         | 2.55%                              | 3.03%                                  |
-| Medium Streaming | 2.08%         | 2.16%                              | 2.37%                                  |
+| Tiny Streaming   | 4.49%         | 4.52%                              | 4.83%                                  |
+| Small Streaming  | 2.49%         | 2.55%                              | 2.61%                                  |
+| Medium Streaming | 2.08%         | 2.16%                              | 2.17%                                  |
+
+Every shipped model is now within 0.31% WER of its floating-point reference. That
+was not always true: models published before 2026-07-30 quantized each weight
+tensor with a single scale factor, which cost Tiny Streaming 7.57% instead of
+4.83%. Switching to per-channel weight scales fixed it, for 0.5% more model size.
+See [Quantization](#quantization) for the details.
 
 #### Reproducing these numbers
 
@@ -1105,12 +1110,10 @@ chunked, real-time streaming path instead of whole-utterance transcription. Use
 
 #### Takeaways
 
-- **Quantization is the main reason the shipped models don't hit the paper's
-  numbers, and its impact shrinks quickly with model size.** The 8-bit penalty is
-  about +3.0% WER on Tiny (which has the least redundancy to spare), but only
-  +0.5% on Small and +0.2% on Medium. If you need Tiny to be as accurate as
-  possible, run the floating-point checkpoint from Hugging Face in Transformers; Small and Medium
-  are within a few tenths of a percent as shipped.
+- **8-bit quantization now costs very little accuracy at any size.** The penalty
+  against the floating-point reference is +0.31% WER on Tiny, +0.06% on Small and
+  +0.01% on Medium. There is no longer much reason to run the floating-point
+  checkpoint in Transformers just for accuracy, even on Tiny.
 - **Disable the VAD when evaluating pre-segmented data.** On already-segmented
   clips like LibriSpeech, leaving the default VAD enabled adds roughly +1.5–2%
   WER on Tiny (mostly extra insertions at segment boundaries). The VAD is there to
@@ -1129,7 +1132,13 @@ It's often useful to be able to calibrate a speech to text model towards certain
 
 We typically quantize our models to eight-bit weights across the board, and eight-bit calculations for heavy operations like MatMul. This is all post-training quantization, using a combination of OnnxRuntime's tools and [my Onnx Shrink Ray utility](https://pypi.org/project/onnx-shrink-ray/). The only anomaly in the process is the treatment of the frontend, which uses convolution layers to generate features, which produces results similar to the more traditional MEL spectrogram preprocessing, but in a learned way with standard ML operations. The inputs to this initial stage correspond to 16-bit signed integers from the raw audio data (though they're encoded as floats) so we've found it necessary to leave the convolution operations in at least B16 float precision. 
 
+We give **each output channel of a weight its own scale factor** rather than sharing one across the whole tensor. This matters far more than it sounds like it should. Our frontend convolutions are trained with weight normalization, which by construction learns a separate magnitude per output channel — on Tiny Streaming the largest channel is 17x the smallest. A single scale for the whole tensor has to cover the largest channel, so the smallest ones get only a handful of the 256 available levels. Measured on LibriSpeech `test-clean`, moving to per-channel scales took Tiny Streaming from 7.57% to 4.83% WER, Small from 3.03% to 2.61%, and Medium from 2.37% to 2.17%, while adding 0.5% to the download. Roughly 90% of that gain came from the frontend alone.
+
+If you quantize your own Moonshine-style model, this is the first thing to check. It is also why we do not fold the weight-normalization out of the exported graph even though doing so would save a little work at runtime: folding makes the per-channel magnitudes *more* extreme, not less, so it must be paired with per-channel scales rather than done on its own.
+
 You can see the options we use for the conversions in [scripts/quantize-streaming-model.sh](scripts/quantize-streaming-model.sh).
+
+Re-quantized models are published to a new dated directory on our CDN (currently `quantized_26_07_30`) instead of overwriting the previous files. That way a given version of this library always resolves the exact weights it was tested against, and your local model cache never mixes old and new files.
 
 ### HuggingFace
 
