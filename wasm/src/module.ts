@@ -110,6 +110,20 @@ type EmscriptenFactory = (opts?: Record<string, unknown>) => Promise<MoonshineMo
 let cached: Promise<MoonshineModule> | undefined;
 
 /**
+ * ONNX Runtime warns "Unknown CPU vendor" the first time it builds a session
+ * because browsers don't expose the host CPU vendor. The value only feeds
+ * execution-provider device metadata, which the wasm CPU backend ignores.
+ * Upstream stopped emitting it for wasm in ORT 1.24.3
+ * (microsoft/onnxruntime#27399); drop this once the vendored ORT is newer.
+ */
+const SUPPRESSED_STDERR = /Unknown CPU vendor\. cpuinfo_vendor value:/;
+
+function printErr(...args: unknown[]): void {
+  if (typeof args[0] === 'string' && SUPPRESSED_STDERR.test(args[0])) return;
+  console.error(...args);
+}
+
+/**
  * Resolves the Emscripten factory. By default it dynamically imports the
  * sibling `./moonshine.mjs` emitted by the build; callers can inject their own
  * via {@link LoadModuleOptions.factory} for non-standard bundling.
@@ -136,7 +150,7 @@ export function loadMoonshineModule(
     cached = (async () => {
       try {
         const factory = await resolveFactory(options);
-        const moduleArgs: Record<string, unknown> = {};
+        const moduleArgs: Record<string, unknown> = { printErr };
         if (options.locateFile) moduleArgs.locateFile = options.locateFile;
         return await factory(moduleArgs);
       } catch (err) {
