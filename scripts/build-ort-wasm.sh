@@ -49,6 +49,22 @@ set -o pipefail
 # internals lose their landing pads, while errors surfaced through the ORT API
 # are still reported to callers rather than aborting.
 #
+# Size is the other lever. This is a *minimal* build restricted to the
+# operators our models actually use
+# (core/third-party/onnxruntime/moonshine-required-operators.config, produced by
+# scripts/generate-ort-op-config.py). That drops roughly two thirds of ORT's
+# code from the linked .wasm. Two consequences follow from --minimal_build:
+#
+#   - The runtime can only load ORT-format models. A .onnx fails at session
+#     creation with a clear error, which is why everything we ship or download
+#     is converted (see scripts/convert-models-to-ort.py).
+#   - Any operator missing from the config fails at session creation too, so
+#     the config has to be regenerated whenever a model changes. CI enforces
+#     this; see scripts/check-ort-op-config.sh.
+#
+# `extended custom_ops` keeps the runtime-level optimizers a minimal build can
+# still apply, and keeps custom-op registration available for ZipVoice.
+#
 # Arguments (order-independent):
 #   single-thread - ALSO build a non-threaded SIMD fallback
 #                   (libonnxruntime_webassembly_singlethread.a) for pages that
@@ -69,6 +85,7 @@ EMSDK_VERSION="${EMSDK_VERSION:-4.0.8}"
 ORT_WASM_BUILD_DIR="${ORT_WASM_BUILD_DIR:-${HOME}/moonshine-ort-wasm}"
 
 DEST_DIR="${REPO_ROOT_DIR}/core/third-party/onnxruntime/lib/wasm"
+OP_CONFIG="${REPO_ROOT_DIR}/core/third-party/onnxruntime/moonshine-required-operators.config"
 
 BUILD_SINGLE_THREAD=""
 FORCE=""
@@ -111,6 +128,12 @@ fi
 #     test targets entirely (this also makes the build much faster).
 EXTRA_DEFINES=(onnxruntime_USE_KLEIDIAI=OFF onnxruntime_BUILD_UNIT_TESTS=OFF)
 
+if [ ! -f "${OP_CONFIG}" ]; then
+    echo "[build-ort-wasm] ERROR: operator config not found at ${OP_CONFIG}" >&2
+    echo "[build-ort-wasm] Generate it with scripts/generate-ort-op-config.py" >&2
+    exit 1
+fi
+
 ORT_SRC="${ORT_WASM_BUILD_DIR}/onnxruntime"
 if [ ! -d "${ORT_SRC}/.git" ]; then
     mkdir -p "${ORT_WASM_BUILD_DIR}"
@@ -122,6 +145,14 @@ else
     git -C "${ORT_SRC}" submodule update --init --recursive
 fi
 
+# --disable_ml_ops drops the classical-ML (ai.onnx.ml) kernels, which no
+# Moonshine model uses.
+#
+# --compile_no_warning_as_error works around ORT 1.23: in a minimal build
+# `min_ort_version_with_shape_inference` in core/session/custom_ops.cc is left
+# unused, and the build otherwise fails on -Werror,-Wunused-const-variable.
+# Drop this once the upstream fix lands in a version we pin to.
+#
 # Builds one variant and vendors its static library to $2.
 #   $1 = variant tag (simd|simd-threaded)
 #   $2 = destination path for the resulting libonnxruntime_webassembly.a
@@ -141,8 +172,12 @@ build_variant() {
             --enable_wasm_simd \
             --disable_wasm_exception_catching \
             --enable_wasm_api_exception_catching \
+            --minimal_build extended custom_ops \
+            --include_ops_by_config "${OP_CONFIG}" \
+            --disable_ml_ops \
             --skip_tests \
             --parallel \
+            --compile_no_warning_as_error \
             --emsdk_version "${EMSDK_VERSION}" \
             --cmake_extra_defines "${EXTRA_DEFINES[@]}" \
             "$@"

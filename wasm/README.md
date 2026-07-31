@@ -265,6 +265,49 @@ to link into our C++ core). `scripts/build-ort-wasm.sh` builds
 `libonnxruntime_webassembly.a` from ORT, pinned to the same version as the
 native builds for ABI compatibility with the vendored headers.
 
+### The minimal build, and what it costs you
+
+Building from source also lets us cut ORT down to the operators our models
+actually use. The archive is a *minimal* build restricted by
+`core/third-party/onnxruntime/moonshine-required-operators.config`, which drops
+about two thirds of ORT's code from the linked `.wasm`.
+
+Two rules follow, and breaking either one produces a session-creation failure
+in the browser rather than a build error:
+
+1. **Models must be ORT-format.** A minimal build cannot parse `.onnx` at all.
+   Everything shipped in `core/moonshine-tts/data` and everything the model
+   catalog points at is `.ort`; use `scripts/convert-models-to-ort.py` for
+   anything new.
+2. **The operator config must cover every model.** Adding a model, or changing
+   one so it uses a new operator, means regenerating the config and rebuilding
+   the archive:
+
+```bash
+scripts/generate-ort-op-config.py     # enumerates local + catalog models
+scripts/build-ort-wasm.sh force
+```
+
+Three kinds of model feed the config, and the third is the one that bites:
+models under `core/moonshine-tts/data`, models the native catalog can download,
+and models compiled into the library as a C array — the Silero VAD in
+`core/silero-vad-model-data.h` and the two cpp-annote diarization models. An
+embedded model is neither a file the tree walk finds nor a URL the catalog
+lists, so it was silently omitted at first, and the resulting build failed at
+runtime on a `Relu` the VAD needed. The generator now finds them by scanning
+those generated sources for the `ORTM` file magic, which means a new embedded
+model is picked up without editing anything, as long as it lives in a source
+listed in `EMBEDDED_SOURCES`.
+
+The `check-ort-op-config` ctest guards this. It runs offline against the
+bundled and embedded models, so it catches a model added to the tree; the
+catalog models are only checked by a full `generate-ort-op-config.py` run,
+which downloads several GB the first time and caches them under
+`~/.cache/moonshine-ort-op-config`. Run that before vendoring a new archive.
+
+Native builds (macOS, iOS, Android, Linux, Windows) use the prebuilt full ORT
+and are unaffected by any of this.
+
 ## Versioning
 
 The npm package version tracks the core Moonshine version (see `package.json`

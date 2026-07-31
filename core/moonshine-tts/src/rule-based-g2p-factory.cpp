@@ -20,6 +20,7 @@
 #include "english.h"
 #include "french.h"
 #include "g2p-path.h"
+#include "g2p-transformer-model.h"
 #include "german.h"
 #include "hindi.h"
 #include "italian.h"
@@ -159,6 +160,20 @@ bool g2p_onnx_bundle_includes_model_file(
     const nlohmann::json meta = nlohmann::json::parse(meta_json);
     const std::string onnx_name =
         meta.value("onnx_model_file", std::string("model.ort"));
+    // A model may ship as a split ORT pair instead of the single file named in
+    // meta.json, in which case both halves must be there. See split-weights.h.
+    const std::string split_model = g2p_split_model_file(onnx_name);
+    const std::string split_weights = g2p_split_weights_file(onnx_name);
+    const bool split_in_bundle =
+        o.asset_is_available(g2p_bundle_file_key(bundle_dir_key, split_model)) &&
+        o.asset_is_available(g2p_bundle_file_key(bundle_dir_key, split_weights));
+    const bool split_on_disk =
+        std::filesystem::is_regular_file(disk_dir / split_model) &&
+        std::filesystem::is_regular_file(disk_dir / split_weights);
+    if (split_in_bundle || split_on_disk) {
+      return true;
+    }
+
     const std::string model_key =
         g2p_bundle_file_key(bundle_dir_key, onnx_name);
     if (o.asset_is_available(model_key)) {

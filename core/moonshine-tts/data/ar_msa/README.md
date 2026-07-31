@@ -27,7 +27,26 @@
 
    By default the export runs **onnx-shrink-ray** `quantize_weights` on `model.onnx` (int8 weight storage + dequant nodes; `float_quantization=False`, weights only). To skip: `--no-shrink-weights`. To shrink an existing FP32 `model.onnx` without re-exporting: `--only-shrink` with the same `--out-dir`.
 
-3. C++ expects at least: `model.onnx`, `meta.json`, `vocab.txt`, `tokenizer_config.json` (plus any files the tokenizer saved alongside them).
+3. Convert the exported `model.onnx` into the split ORT pair that ships:
+
+   ```bash
+   python scripts/split-model-weights.py \
+     data/ar_msa/arabertv02_tashkeel_fadel_onnx/model.onnx
+   ```
+
+   This writes `model.model.ort` (the graph) and `model.weights.ort` (the int8
+   weights, dequantized once at load). The wasm runtime is a minimal ORT build
+   and cannot read `.onnx` at all, so the `.onnx` is an intermediate only and is
+   not committed. See `core/moonshine-tts/src/split-weights.h`.
+
+4. C++ expects at least: `model.model.ort`, `model.weights.ort`, `meta.json`,
+   `vocab.txt`, `tokenizer_config.json` (plus any files the tokenizer saved
+   alongside them). A single `model.ort` or `model.onnx` is also accepted on
+   disk.
+
+**After changing this model:** regenerate the wasm operator config and rebuild
+the archive, or the browser build will fail to load it. See
+"The minimal build, and what it costs you" in `wasm/README.md`.
 
 **Compatibility:** Recent `torch` + `transformers` combinations can fail inside BERT’s attention-mask handling when tracing (observed: `ValueError: Wrong shape for input_ids … or attention_mask` with torch 2.10). The checked-in ONNX was exported with an older stack; if the script fails, use a venv with pinned versions from the time of export, or adjust `scripts/export_arabic_msa_diacritizer_onnx.py` for the current `transformers` API.
 

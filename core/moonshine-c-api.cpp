@@ -1007,16 +1007,16 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
       }
     }
     {
-      // Legacy callers used in-memory key ``kokoro/model.ort``. Canonical key
-      // is ``kokoro/model.onnx``.
+      // Kokoro shipped as ONNX before it moved to ORT, so accept the old
+      // in-memory key under the canonical one.
       FileInformationMap &tf = tts_options.files;
-      const std::string canon_k{moonshine_tts::kTtsKokoroModelOnnxKey};
+      const std::string canon_k{moonshine_tts::kTtsKokoroModelKey};
       const auto canon_it = tf.entries.find(canon_k);
       const bool canon_ok = canon_it != tf.entries.end() &&
                             canon_it->second.memory != nullptr &&
                             canon_it->second.memory_size > 0;
       if (!canon_ok) {
-        const auto leg = tf.entries.find("kokoro/model.ort");
+        const auto leg = tf.entries.find("kokoro/model.onnx");
         if (leg != tf.entries.end() && leg->second.memory != nullptr &&
             leg->second.memory_size > 0) {
           const FileInformation &src = leg->second;

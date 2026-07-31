@@ -829,7 +829,7 @@ MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_files(
    moonshine_error_to_string.
 
    ``filenames[i]`` is the canonical ``MoonshineTTSOptions::files`` key (e.g.
-   ``kokoro/model.onnx``, ``kokoro/config.json``,
+   ``kokoro/model.ort``, ``kokoro/config.json``,
    ``kokoro/voices/af_heart.kokorovoice``,
    ``piper/onnx``, ``piper/onnx.json``, ``zipvoice/text_encoder.ort``,
    ``zipvoice/fm_decoder.ort``, ``zipvoice/vocoder.ort``,
@@ -1068,13 +1068,15 @@ MOONSHINE_EXPORT int32_t moonshine_phonemes_to_speech(
    ``MoonshineG2POptions::files`` in the C++ API (for example
    ``en_us/dict_filtered_heteronyms.tsv``,
    ``zh_hans/roberta_chinese_base_upos_onnx/meta.json``,
-   ``zh_hans/roberta_chinese_base_upos_onnx/model.onnx``,
-   ``en_us/g2p-config.json``, ``en_us/oov/model.onnx``,
+   ``zh_hans/roberta_chinese_base_upos_onnx/model.model.ort``,
+   ``en_us/g2p-config.json``, ``en_us/oov/model.ort``,
    ``en_us/oov/onnx-config.json``). Japanese and Arabic tok-POS / diacritizer
    bundles use the same pattern under ``ja/...`` and
-   ``ar_msa/...``. Korean rule G2P uses ``ko/dict.tsv`` only. If an ONNX
-   model uses external data files (e.g. ``model.onnx.data``), those must sit
-   beside the ``.onnx`` on disk so the runtime can open them.
+   ``ar_msa/...``. Korean rule G2P uses ``ko/dict.tsv`` only. Models that ship
+   as a split ORT pair need both ``<stem>.model.ort`` and
+   ``<stem>.weights.ort`` present. If an ONNX model uses external data files
+   (e.g. ``model.onnx.data``), those must sit beside the ``.onnx`` on disk so
+   the runtime can open them.
 */
 MOONSHINE_EXPORT int32_t moonshine_create_grapheme_to_phonemizer_from_files(
     const char *language, const char **filenames, uint64_t filenames_count,

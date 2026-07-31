@@ -770,7 +770,7 @@ std::vector<std::string> kokoro_vocoder_dependency_keys_with_options(
   resolve_lang_for_kokoro(lk, g2p, profile, g2p_dialect, opt.voice);
   maybe_align_en_profile_for_kokoro_voice(opt.voice, profile, g2p_dialect);
   std::filesystem::path model_path = resolve_path_under_root(
-      g2p.g2p_root, tts_map_path(opt.files, kTtsKokoroModelOnnxKey));
+      g2p.g2p_root, tts_map_path(opt.files, kTtsKokoroModelKey));
   resolve_disk_model_file_path(model_path);
   const std::filesystem::path voices_dir = model_path.parent_path() / "voices";
   // Dependency keys must name the *requested* voice even when the .kokorovoice
@@ -784,7 +784,7 @@ std::vector<std::string> kokoro_vocoder_dependency_keys_with_options(
     vid = select_voice_id(profile.kokoro_lang, opt.voice, profile.default_voice,
                           voices_dir, &opt.files, g2p.g2p_root);
   }
-  return {std::string(kTtsKokoroModelOnnxKey),
+  return {std::string(kTtsKokoroModelKey),
           std::string(kTtsKokoroConfigJsonKey),
           std::string("kokoro/voices/") + vid + ".kokorovoice"};
 }
@@ -802,7 +802,7 @@ std::vector<std::pair<std::string, bool>> list_kokoro_voices_with_availability(
   MoonshineTTSOptions opt_scan = opt;
   opt_scan.g2p_options = g2p;
   std::filesystem::path model_path = resolve_path_under_root(
-      g2p.g2p_root, tts_map_path(opt_scan.files, kTtsKokoroModelOnnxKey));
+      g2p.g2p_root, tts_map_path(opt_scan.files, kTtsKokoroModelKey));
   resolve_disk_model_file_path(model_path);
   const std::filesystem::path voices_dir = model_path.parent_path() / "voices";
 
@@ -1056,7 +1056,7 @@ struct KokoroTtsEngine {
     tts_files_ = std::move(opt.files);
     const std::filesystem::path& root = g2p_opt_.g2p_root;
     model_path_ = resolve_path_under_root(
-        root, tts_map_path(tts_files_, kTtsKokoroModelOnnxKey));
+        root, tts_map_path(tts_files_, kTtsKokoroModelKey));
     resolve_disk_model_file_path(model_path_);
     config_path_ = resolve_path_under_root(
         root, tts_map_path(tts_files_, kTtsKokoroConfigJsonKey));
@@ -1066,7 +1066,7 @@ struct KokoroTtsEngine {
             model_path_.c_str(), config_path_.c_str());
 
     const auto mit =
-        tts_files_.entries.find(std::string(kTtsKokoroModelOnnxKey));
+        tts_files_.entries.find(std::string(kTtsKokoroModelKey));
     const auto cit =
         tts_files_.entries.find(std::string(kTtsKokoroConfigJsonKey));
     if (mit == tts_files_.entries.end() || cit == tts_files_.entries.end()) {
@@ -1119,7 +1119,7 @@ struct KokoroTtsEngine {
     Ort::SessionOptions session_opts =
         make_ort_session_options(opt.ort_provider_names, opt.coreml_cache_dir);
     ort_add_external_initializer_files_for_onnx_model_buffer(
-        session_opts, tts_files_, kTtsKokoroModelOnnxKey);
+        session_opts, tts_files_, kTtsKokoroModelKey);
     session_ = Ort::Session(env_, onnx_buf, onnx_len, session_opts);
     model_fi.free();
     LOGF_IF(log_profiling_, "KokoroTtsEngine: ONNX model loaded (%zu bytes)",

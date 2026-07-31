@@ -42,7 +42,7 @@ public class TextToSpeechTest {
                 json.contains("zipvoice/fm_decoder.ort"));
         assertTrue("expected zipvoice vocoder key", json.contains("zipvoice/vocoder.ort"));
         assertTrue("expected zipvoice tokens key", json.contains("zipvoice/tokens.txt"));
-        assertFalse("should not mix in kokoro assets", json.contains("kokoro/model.onnx"));
+        assertFalse("should not mix in kokoro assets", json.contains("kokoro/model.ort"));
         assertFalse("should not mix in piper assets", json.contains("piper-voices"));
     }
 

@@ -26,7 +26,7 @@ test('the en_us voice catalog lists kokoro voices', { skip: skipSurface }, () =>
 test('the en_us dependency manifest lists the kokoro model + voice', { skip: skipSurface }, () => {
   const deps = JSON.parse(mod.ttsDependencies('en_us', ''));
   assert.ok(Array.isArray(deps) && deps.length > 0);
-  assert.ok(deps.includes('kokoro/model.onnx'));
+  assert.ok(deps.includes('kokoro/model.ort'));
   assert.ok(deps.includes('kokoro/config.json'));
   assert.ok(deps.some((k) => k.startsWith('kokoro/voices/')));
 });

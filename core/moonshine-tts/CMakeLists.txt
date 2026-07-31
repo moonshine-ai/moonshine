@@ -148,6 +148,8 @@ if(MOONSHINE_TTS_BUILD_ONNX)
   add_library(moonshine_tts_ort STATIC
     src/ort-session-options.cpp
     src/ort-onnx-external-data.cpp
+    src/split-weights.cpp
+    src/lang-specific/g2p-transformer-model.cpp
     src/lang-specific/onnx-g2p-models.cpp
     src/lang-specific/korean-tok-pos-onnx.cpp
     src/lang-specific/japanese-tok-pos-onnx.cpp
@@ -280,6 +282,12 @@ if(MOONSHINE_TTS_BUILD_ONNX)
   moonshine_tts_set_ort_rpath(arabic_rule_g2p_test)
   if(WIN32)
     copy_onnxruntime_dll(arabic_rule_g2p_test)
+  endif()
+
+  moonshine_tts_add_test(arabic_diac_onnx_test moonshine_tts_ort)
+  moonshine_tts_set_ort_rpath(arabic_diac_onnx_test)
+  if(WIN32)
+    copy_onnxruntime_dll(arabic_diac_onnx_test)
   endif()
 
   moonshine_tts_add_test(english_rule_g2p_test moonshine_tts_ort)

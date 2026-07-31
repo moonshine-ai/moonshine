@@ -62,7 +62,7 @@ TEST_CASE(
   const auto data = r::moonshine_tts_bundled_data_dir_relative();
   const auto onnx_dir = moonshine_tts::default_chinese_tok_pos_model_dir(data);
   const auto p = make_temp_tsv("\xe6\xb5\x8b\xe8\xaf\x95\tzh_test_ipa\n");
-  if (!std::filesystem::is_regular_file(onnx_dir / "model.onnx")) {
+  if (!r::model_present(onnx_dir)) {
     std::filesystem::remove(p);
     return;
   }

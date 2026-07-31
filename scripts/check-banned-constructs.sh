@@ -72,15 +72,51 @@ done < <(
     \) -print
 )
 
+# Rewrites a source file into just the code a gate should look at.
+#
+# Comments go, so an ordinary English sentence mentioning "a new directory"
+# does not read as a raw `new`. Deleted functions (`= delete`) go too: they are
+# the idiomatic way to suppress a copy, not an owning delete.
+scannable_source() {
+  awk '
+    BEGIN { in_block = 0 }
+    {
+      out = ""
+      i = 1
+      n = length($0)
+      while (i <= n) {
+        two = substr($0, i, 2)
+        if (in_block) {
+          if (two == "*/") { in_block = 0; i += 2 } else { i += 1 }
+        } else if (two == "/*") {
+          in_block = 1; i += 2
+        } else if (two == "//") {
+          break
+        } else {
+          out = out substr($0, i, 1); i += 1
+        }
+      }
+      gsub(/=[ \t]*delete/, "", out)
+      print out
+    }
+  ' "$1"
+}
+
 # Print repo-relative paths of first-party files matching a regex, sorted.
+#
+# Runs the cheap whole-file grep first and only re-checks the files it turns
+# up, because rewriting every source through awk costs minutes.
 scan() {
   local pattern="$1"
+  local file
   if [[ "${#files[@]}" -eq 0 ]]; then
     return 0
   fi
-  grep -lE -- "${pattern}" "${files[@]}" 2>/dev/null \
-    | sed "s#^${REPO_ROOT_DIR}/##" \
-    | LC_ALL=C sort
+  while IFS= read -r file; do
+    if scannable_source "${file}" | grep -qE -- "${pattern}"; then
+      echo "${file#"${REPO_ROOT_DIR}"/}"
+    fi
+  done < <(grep -lE -- "${pattern}" "${files[@]}" 2>/dev/null) | LC_ALL=C sort
 }
 
 if [[ "${MODE}" == "update" ]]; then

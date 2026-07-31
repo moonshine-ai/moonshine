@@ -12,6 +12,7 @@
 #include "ort-session-options.h"
 #include "ort-utils-cxx.h"
 #include "piper-voice-catalog.h"
+#include "split-weights.h"
 #include "utf8-utils.h"
 
 extern "C" {
@@ -473,13 +474,8 @@ struct PiperTTS::Impl {
   Ort::MemoryInfo mem_{
       Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)};
 
-  /// A float32 weight tensor supplied to the graph on every inference. See
-  /// ``load_split_weight_sessions`` for why these live outside the model.
-  struct SplitWeight {
-    std::string name;
-    std::vector<int64_t> shape;
-    std::vector<float> data;
-  };
+  /// Float32 weights supplied to the graph on every inference, for voices that
+  /// ship as a split ORT pair. See split-weights.h.
   std::vector<SplitWeight> split_weights_{};
 
   std::unordered_map<std::string, std::vector<int64_t>> phoneme_id_map_{};
@@ -560,14 +556,8 @@ struct PiperTTS::Impl {
     }
 
     // Split-weights voices keep their weights out of the model, so pass them
-    // alongside the text inputs. These are views over buffers we already own, so
-    // no data is copied here.
-    for (SplitWeight& weight : split_weights_) {
-      inputs.push_back(Ort::Value::CreateTensor<float>(
-          mem_, weight.data.data(), weight.data.size(), weight.shape.data(),
-          weight.shape.size()));
-      in_names.push_back(weight.name.c_str());
-    }
+    // alongside the text inputs.
+    append_split_weight_inputs(split_weights_, mem_, inputs, in_names);
 
     Ort::RunOptions run_opts{nullptr};
     const char* out_names[] = {"output"};
@@ -591,15 +581,8 @@ struct PiperTTS::Impl {
 
   /// Loads the split-weights form of a voice if it is present on disk.
   ///
-  /// An ORT-format model has its graph optimizations baked in at conversion time
-  /// and ORT does not re-apply them at load, so a voice whose weights are stored
-  /// as int8 would have to run its dequantize chain on every inference. Splitting
-  /// the voice avoids that: ``<stem>.model.ort`` is the fused graph with its
-  /// weights declared as inputs, and ``<stem>.weights.ort`` produces those
-  /// weights. Running the weights model once here keeps the dequantize off the
-  /// inference path.
-  ///
-  /// Returns false when the pair is absent, leaving the caller on the .onnx path.
+  /// Returns false when the pair is absent, leaving the caller on the .onnx
+  /// path. See split-weights.h for why voices ship this way.
   bool load_split_weight_sessions(const Ort::SessionOptions& session_opts) {
     if (onnx_path_.empty()) {
       return false;
@@ -613,52 +596,8 @@ struct PiperTTS::Impl {
       return false;
     }
 
-    std::vector<SplitWeight> weights;
-    {
-      const std::string weights_u8 = weights_path.string();
-      Ort::Session weights_session(env_, weights_u8.c_str(), session_opts);
-      Ort::AllocatorWithDefaultOptions allocator;
-      const size_t count = weights_session.GetOutputCount();
-      std::vector<std::string> names;
-      names.reserve(count);
-      for (size_t i = 0; i < count; ++i) {
-        names.emplace_back(
-            weights_session.GetOutputNameAllocated(i, allocator).get());
-      }
-      std::vector<const char*> name_ptrs;
-      name_ptrs.reserve(count);
-      for (const std::string& name : names) {
-        name_ptrs.push_back(name.c_str());
-      }
-
-      Ort::RunOptions run_opts{nullptr};
-      std::vector<Ort::Value> values = weights_session.Run(
-          run_opts, nullptr, nullptr, 0, name_ptrs.data(), name_ptrs.size());
-      if (values.size() != count) {
-        throw std::runtime_error("PiperTTS: split weights model returned " +
-                                 std::to_string(values.size()) + " of " +
-                                 std::to_string(count) + " tensors");
-      }
-
-      // Copy into our own buffers so the weights session (and the int8 data it
-      // holds) can be released before inference starts.
-      weights.reserve(count);
-      for (size_t i = 0; i < count; ++i) {
-        const auto info = values[i].GetTensorTypeAndShapeInfo();
-        if (info.GetElementType() != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
-          throw std::runtime_error("PiperTTS: split weight " + names[i] +
-                                   " is not float32");
-        }
-        const size_t elements = info.GetElementCount();
-        const float* src = values[i].GetTensorData<float>();
-        SplitWeight weight;
-        weight.name = names[i];
-        weight.shape = info.GetShape();
-        weight.data.assign(src, src + elements);
-        weights.push_back(std::move(weight));
-      }
-    }
-
+    std::vector<SplitWeight> weights =
+        run_split_weights_model(env_, weights_path, session_opts);
     const std::string model_u8 = model_path.string();
     session_ = Ort::Session(env_, model_u8.c_str(), session_opts);
     split_weights_ = std::move(weights);

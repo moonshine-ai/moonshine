@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "g2p-path.h"
+#include "g2p-transformer-model.h"
 #include "moonshine-g2p-options.h"
 #include "ort-onnx-external-data.h"
 #include "ort-session-options.h"
@@ -30,37 +31,6 @@ extern "C" {
 
 namespace moonshine_tts {
 namespace ar_wp {
-
-std::unique_ptr<Ort::Session> open_ar_session(
-    Ort::Env& env, const std::filesystem::path& model_path,
-    const std::vector<std::string>& ort_providers,
-    const std::string& coreml_cache_dir) {
-#ifdef _WIN32
-  const std::wstring w = model_path.wstring();
-  return std::make_unique<Ort::Session>(
-      env, w.c_str(),
-      make_g2p_ort_session_options(ort_providers, coreml_cache_dir));
-#else
-  const std::string u8 = model_path.string();
-  return std::make_unique<Ort::Session>(
-      env, u8.c_str(),
-      make_g2p_ort_session_options(ort_providers, coreml_cache_dir));
-#endif
-}
-
-std::unique_ptr<Ort::Session> open_ar_session_memory(
-    Ort::Env& env, const void* data, size_t len,
-    const std::vector<std::string>& ort_providers,
-    const std::string& coreml_cache_dir, const MoonshineG2POptions* opt,
-    std::string_view model_map_key) {
-  Ort::SessionOptions so =
-      make_g2p_ort_session_options(ort_providers, coreml_cache_dir);
-  if (opt != nullptr && !model_map_key.empty()) {
-    ort_add_external_initializer_files_for_onnx_model_buffer(so, opt->files,
-                                                             model_map_key);
-  }
-  return std::make_unique<Ort::Session>(env, data, len, so);
-}
 
 std::string slurp_utf8_file_ar(const std::filesystem::path& p) {
   std::ifstream in(p, std::ios::binary);
@@ -89,39 +59,6 @@ bool bundle_load_utf8_ar(const MoonshineG2POptions* opt,
     return true;
   }
   return false;
-}
-
-bool bundle_load_binary_ar(const MoonshineG2POptions* opt,
-                           std::string_view bundle_key, std::string_view file,
-                           const std::filesystem::path& disk_dir,
-                           std::vector<std::uint8_t>& out) {
-  if (opt && !bundle_key.empty()) {
-    const std::string ak = g2p_bundle_file_key(bundle_key, file);
-    if (opt->asset_is_available(ak)) {
-      out = opt->read_binary_asset(ak);
-      return true;
-    }
-  }
-  const auto p = resolve_prefer_ort_model(disk_dir, file);
-  if (!std::filesystem::is_regular_file(p)) {
-    return false;
-  }
-  std::ifstream in(p, std::ios::binary);
-  if (!in) {
-    return false;
-  }
-  in.seekg(0, std::ios::end);
-  const auto sz = in.tellg();
-  in.seekg(0, std::ios::beg);
-  if (sz < 0) {
-    return false;
-  }
-  out.resize(static_cast<size_t>(sz));
-  if (!out.empty()) {
-    in.read(reinterpret_cast<char*>(out.data()),
-            static_cast<std::streamsize>(out.size()));
-  }
-  return true;
 }
 
 std::u32string utf8_to_u32(std::string_view utf8) {
@@ -759,22 +696,12 @@ ArabicDiacOnnx::ArabicDiacOnnx(const MoonshineG2POptions* opt,
                                   model_dir_, cached_tokenizer_cfg_json_)) {
     throw std::runtime_error("ArabicDiacOnnx: missing tokenizer_config.json");
   }
-  if (ar_wp::bundle_load_binary_ar(opt, onnx_bundle_key, onnx_name, model_dir_,
-                                   onnx_model_storage_) &&
-      !onnx_model_storage_.empty()) {
-    const std::string model_map_key =
-        g2p_bundle_file_key(onnx_bundle_key, onnx_name);
-    session_ = ar_wp::open_ar_session_memory(
-        env_, onnx_model_storage_.data(), onnx_model_storage_.size(),
-        ort_providers, coreml_cache_dir, opt, model_map_key);
-  } else {
-    const auto onnx_path = resolve_prefer_ort_model(model_dir_, onnx_name);
-    if (!std::filesystem::is_regular_file(onnx_path)) {
-      throw std::runtime_error("ArabicDiacOnnx: missing " + onnx_path.string());
-    }
-    session_ = ar_wp::open_ar_session(env_, onnx_path, ort_providers,
-                                      coreml_cache_dir);
-  }
+  G2pTransformerModel model = load_g2p_transformer_model(
+      env_, opt, onnx_bundle_key, onnx_name, model_dir_, ort_providers,
+      coreml_cache_dir, "ArabicDiacOnnx");
+  session_ = std::move(model.session);
+  split_weights_ = std::move(model.split_weights);
+  onnx_model_storage_ = std::move(model.model_bytes);
   {
     Ort::AllocatorWithDefaultOptions alloc;
     auto out_ptr = session_->GetOutputNameAllocated(0, alloc);
@@ -841,28 +768,38 @@ std::string ArabicDiacOnnx::diacritize(std::string_view text_utf8) const {
 
   std::vector<int64_t> ids_mut = enc.input_ids;
   const int64_t T = static_cast<int64_t>(ids_mut.size());
-  std::vector<int64_t> mask(static_cast<size_t>(T), 1);
+  // A split model's weights are graph inputs and so cannot be pre-packed, and
+  // its MatMul takes a much slower path below this many rows. Padding up costs
+  // nothing: attention_mask zeroes the padding out.
+  const int64_t padded =
+      split_weights_.empty() ? T
+                             : std::max(T, kSplitWeightsMinSequenceLength);
+  ids_mut.resize(static_cast<size_t>(padded), pad_id_);
+  std::vector<int64_t> mask(static_cast<size_t>(padded), 0);
   for (int64_t i = 0; i < T; ++i) {
-    if (ids_mut[static_cast<size_t>(i)] == pad_id_) {
-      mask[static_cast<size_t>(i)] = 0;
+    if (ids_mut[static_cast<size_t>(i)] != pad_id_) {
+      mask[static_cast<size_t>(i)] = 1;
     }
   }
 
-  const std::array<int64_t, 2> shape{1, T};
+  const std::array<int64_t, 2> shape{1, padded};
   std::vector<Ort::Value> inputs;
   inputs.push_back(Ort::Value::CreateTensor<int64_t>(
       mem_, ids_mut.data(), ids_mut.size(), shape.data(), shape.size()));
   inputs.push_back(Ort::Value::CreateTensor<int64_t>(
       mem_, mask.data(), mask.size(), shape.data(), shape.size()));
 
-  const char* in_names[] = {"input_ids", "attention_mask"};
+  std::vector<const char*> in_names{"input_ids", "attention_mask"};
+  append_split_weight_inputs(split_weights_, mem_, inputs, in_names);
+
   const char* out_names[] = {logits_output_name_.c_str()};
-  auto outputs = session_->Run(Ort::RunOptions{nullptr}, in_names,
-                               inputs.data(), inputs.size(), out_names, 1);
+  auto outputs =
+      session_->Run(Ort::RunOptions{nullptr}, in_names.data(), inputs.data(),
+                    inputs.size(), out_names, 1);
   const float* logits = outputs[0].GetTensorData<float>();
   const auto info = outputs[0].GetTensorTypeAndShapeInfo();
   const auto oshape = info.GetShape();
-  if (oshape.size() != 3 || oshape[0] != 1 || oshape[1] != T) {
+  if (oshape.size() != 3 || oshape[0] != 1 || oshape[1] != padded) {
     throw std::runtime_error("ArabicDiacOnnx: unexpected logits shape");
   }
   const int64_t num_labels = oshape[2];

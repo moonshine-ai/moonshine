@@ -940,6 +940,22 @@ add_test(
     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/..
 )
 
+# The minimal ORT-wasm build only contains the operators listed in
+# moonshine-required-operators.config, so a model needing anything outside it
+# fails to load in the browser. Checked offline against the bundled TTS models,
+# which is where models are added; the catalog models are covered by a full
+# `scripts/generate-ort-op-config.py` run before vendoring a new archive.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if (Python3_Interpreter_FOUND)
+    add_test(
+        NAME check-ort-op-config
+        COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_LIST_DIR}/../scripts/generate-ort-op-config.py
+            --check --offline
+        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/..
+    )
+endif()
+
 # Fuzzing harnesses are only configured for the opt-in address/UBSan reliability
 # build. libFuzzer's runtime is built for the ASan-style build; the ThreadSanitizer
 # build (MOONSHINE_SANITIZER=thread) skips them entirely.

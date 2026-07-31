@@ -113,7 +113,7 @@ export function twoCities16kPath() {
 /**
  * Builds an in-memory asset map for a comma/JSON list of canonical keys, read
  * from the local TTS data tree. Returns null if any file is missing so callers
- * can skip (the large kokoro model.onnx isn't vendored in-repo).
+ * can skip (the large kokoro model.ort isn't vendored in-repo).
  */
 export function ttsAssetMapOrNull(keys) {
   const map = new Map();

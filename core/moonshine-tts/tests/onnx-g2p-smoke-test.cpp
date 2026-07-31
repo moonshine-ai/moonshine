@@ -31,11 +31,11 @@ TEST_CASE(
 }
 
 TEST_CASE("MoonshineG2P ja-JP when data/ja assets exist under repo") {
-  const auto ja_onnx = r::moonshine_tts_bundled_data_dir_relative() / "ja" /
-                       "roberta_japanese_char_luw_upos_onnx" / "model.onnx";
+  const auto ja_model_dir = r::moonshine_tts_bundled_data_dir_relative() /
+                            "ja" / "roberta_japanese_char_luw_upos_onnx";
   const auto ja_dict =
       r::moonshine_tts_bundled_data_dir_relative() / "ja" / "dict.tsv";
-  if (!std::filesystem::is_regular_file(ja_onnx) ||
+  if (!r::model_present(ja_model_dir) ||
       !std::filesystem::is_regular_file(ja_dict)) {
     return;
   }

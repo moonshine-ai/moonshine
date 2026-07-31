@@ -14,6 +14,28 @@
 
 namespace moonshine_tts::rule_g2p_test {
 
+/// True when *dir* holds a model in any of the forms the loaders accept.
+///
+/// Models ship in whichever form suits them: a split ORT pair, a single
+/// ``.ort``, or a ``.onnx``. Tests gate on the model being present at all, so
+/// checking a single hard-coded name would make them go quiet rather than fail
+/// when the shipped form changes.
+inline bool model_present(const std::filesystem::path& dir,
+                          const std::string& stem = "model") {
+  namespace fs = std::filesystem;
+  return fs::is_regular_file(dir / (stem + ".model.ort")) ||
+         fs::is_regular_file(dir / (stem + ".ort")) ||
+         fs::is_regular_file(dir / (stem + ".onnx"));
+}
+
+/// True when *dir* holds the split ORT pair specifically.
+inline bool model_ships_split(const std::filesystem::path& dir,
+                              const std::string& stem = "model") {
+  namespace fs = std::filesystem;
+  return fs::is_regular_file(dir / (stem + ".model.ort")) &&
+         fs::is_regular_file(dir / (stem + ".weights.ort"));
+}
+
 /// Directory that contains ``data/`` (lexicons, ONNX assets) and usually
 /// ``models/``. Prefers the moonshine-tts tree when it embeds ``data/``;
 /// otherwise the parent tree (monorepo layout with ``data/`` next to

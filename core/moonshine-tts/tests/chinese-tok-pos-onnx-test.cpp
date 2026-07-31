@@ -13,12 +13,14 @@ TEST_CASE("chinese tok pos: single sentence matches reference file") {
       r::moonshine_tts_bundled_data_dir_relative());
   const std::filesystem::path golden =
       r::tests_data_dir(repo) / "zh_hans" / "tok_pos_sample.txt";
-  if (!std::filesystem::is_regular_file(model / "model.onnx") ||
-      !std::filesystem::is_regular_file(golden)) {
+  if (!r::model_present(model) || !std::filesystem::is_regular_file(golden)) {
     return;
   }
   const std::string expected = r::load_ref_text_trimmed(golden);
   moonshine_tts::ChineseTokPosOnnx pipe(model, false);
+  // A split pair on disk must actually be used; falling back to a single file
+  // would still pass the golden check but lose the load-time win.
+  CHECK(pipe.uses_split_weights() == r::model_ships_split(model));
   const auto pairs = pipe.annotate("上海是一座城市。");
   CHECK(moonshine_tts::ChineseTokPosOnnx::format_annotated_line(pairs) ==
         expected);
@@ -35,8 +37,7 @@ TEST_CASE(
                     "wiki-text.txt";
   const std::filesystem::path golden =
       r::tests_data_dir(repo) / "zh_hans" / "tok_pos_wiki_filtered.txt";
-  if (!std::filesystem::is_regular_file(model / "model.onnx") ||
-      !std::filesystem::is_regular_file(wiki) ||
+  if (!r::model_present(model) || !std::filesystem::is_regular_file(wiki) ||
       !std::filesystem::is_regular_file(golden)) {
     return;
   }

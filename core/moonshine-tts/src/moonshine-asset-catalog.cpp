@@ -52,6 +52,7 @@ std::vector<std::string> chinese_g2p_keys() {
       std::string(kG2pChineseOnnxVocabKey),
       std::string(kG2pChineseOnnxTokenizerConfigKey),
       std::string(kG2pChineseOnnxModelKey),
+      std::string(kG2pChineseOnnxWeightsKey),
   };
 }
 
@@ -78,6 +79,7 @@ std::vector<std::string> arabic_g2p_keys() {
       std::string(kG2pArabicOnnxVocabKey),
       std::string(kG2pArabicOnnxTokenizerConfigKey),
       std::string(kG2pArabicOnnxModelKey),
+      std::string(kG2pArabicOnnxWeightsKey),
   };
 }
 

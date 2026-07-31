@@ -13,7 +13,7 @@ TEST_CASE("japanese tok pos: single sentence matches reference file") {
       r::moonshine_tts_bundled_data_dir_relative());
   const std::filesystem::path golden =
       r::tests_data_dir(repo) / "ja" / "tok_pos_sample.txt";
-  if (!std::filesystem::is_regular_file(model / "model.onnx") ||
+  if (!r::model_present(model) ||
       !std::filesystem::is_regular_file(golden)) {
     return;
   }
@@ -29,8 +29,7 @@ TEST_CASE(
     "japanese tok pos: long input is split and does not exceed model length") {
   const auto model = moonshine_tts::default_japanese_tok_pos_model_dir(
       r::moonshine_tts_bundled_data_dir_relative());
-  if (!std::filesystem::is_regular_file(model / "model.onnx") &&
-      !std::filesystem::is_regular_file(model / "model.ort")) {
+  if (!r::model_present(model)) {
     return;
   }
   // ja RoBERTa ONNX is shipped with max_sequence_length 128; this text must be
@@ -56,7 +55,7 @@ TEST_CASE(
       r::moonshine_tts_bundled_data_dir_relative() / "ja" / "wiki-text.txt";
   const std::filesystem::path golden =
       r::tests_data_dir(repo) / "ja" / "tok_pos_wiki_100.txt";
-  if (!std::filesystem::is_regular_file(model / "model.onnx") ||
+  if (!r::model_present(model) ||
       !std::filesystem::is_regular_file(wiki) ||
       !std::filesystem::is_regular_file(golden)) {
     return;

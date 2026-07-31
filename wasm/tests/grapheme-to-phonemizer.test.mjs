@@ -14,7 +14,10 @@ test('g2p dependency manifest lists the en_us assets', { skip: !g2pSupported && 
   const keys = mod.g2pDependencies('en_us').split(',').filter(Boolean);
   assert.ok(keys.length > 0);
   assert.ok(keys.includes('en_us/g2p-config.json'));
-  assert.ok(keys.some((k) => k.endsWith('.onnx')));
+  // Models ship as ORT: the wasm runtime is a minimal ORT build and cannot
+  // read the ONNX format at all.
+  assert.ok(keys.some((k) => k.endsWith('.ort')));
+  assert.ok(!keys.some((k) => k.endsWith('.onnx')));
 });
 
 const keys = g2pSupported

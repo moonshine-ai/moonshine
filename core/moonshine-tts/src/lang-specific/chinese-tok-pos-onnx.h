@@ -11,6 +11,8 @@
 #include <utility>
 #include <vector>
 
+#include "split-weights.h"
+
 namespace moonshine_tts {
 
 struct MoonshineG2POptions;
@@ -41,6 +43,9 @@ class ChineseTokPosOnnx {
 
   const std::filesystem::path& model_dir() const { return model_dir_; }
 
+  /// True when the model loaded as a split ORT pair rather than a single file.
+  bool uses_split_weights() const { return !split_weights_.empty(); }
+
  private:
   Ort::Env env_;
   Ort::MemoryInfo mem_;
@@ -53,6 +58,8 @@ class ChineseTokPosOnnx {
   std::string cached_vocab_txt_;
   std::string cached_tokenizer_cfg_json_;
   std::vector<std::uint8_t> onnx_model_storage_;
+  /// Non-empty when the model ships as a split ORT pair; see split-weights.h.
+  std::vector<SplitWeight> split_weights_;
 };
 
 /// ``<repo>/data/zh_hans/roberta_chinese_base_upos_onnx`` when *repo_root* is

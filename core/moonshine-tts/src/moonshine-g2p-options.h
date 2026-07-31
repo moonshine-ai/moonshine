@@ -74,9 +74,10 @@ inline constexpr std::string_view kG2pOovOnnxConfigOverrideKey =
     "oov_onnx_config";
 
 /// Chinese tokenizer + ONNX bundle files (under ``kG2pChineseOnnxDirKey``).
-/// Model basename matches
-/// ``onnx_model_file`` in ``meta.json`` (loaders still resolve a sibling
-/// ``model.ort`` via ``resolve_prefer_ort_model``).
+///
+/// The model ships as a split ORT pair rather than the ``onnx_model_file`` in
+/// ``meta.json``; see split-weights.h for why. Both halves are needed, so both
+/// are dependency keys. Loaders still accept a single ``.ort`` or ``.onnx``.
 inline constexpr std::string_view kG2pChineseOnnxMetaKey =
     "zh_hans/roberta_chinese_base_upos_onnx/meta.json";
 inline constexpr std::string_view kG2pChineseOnnxVocabKey =
@@ -84,7 +85,9 @@ inline constexpr std::string_view kG2pChineseOnnxVocabKey =
 inline constexpr std::string_view kG2pChineseOnnxTokenizerConfigKey =
     "zh_hans/roberta_chinese_base_upos_onnx/tokenizer_config.json";
 inline constexpr std::string_view kG2pChineseOnnxModelKey =
-    "zh_hans/roberta_chinese_base_upos_onnx/model.onnx";
+    "zh_hans/roberta_chinese_base_upos_onnx/model.model.ort";
+inline constexpr std::string_view kG2pChineseOnnxWeightsKey =
+    "zh_hans/roberta_chinese_base_upos_onnx/model.weights.ort";
 
 inline constexpr std::string_view kG2pJapaneseOnnxMetaKey =
     "ja/roberta_japanese_char_luw_upos_onnx/meta.json";
@@ -114,13 +117,17 @@ inline constexpr std::string_view kG2pArabicOnnxVocabKey =
     "ar_msa/arabertv02_tashkeel_fadel_onnx/vocab.txt";
 inline constexpr std::string_view kG2pArabicOnnxTokenizerConfigKey =
     "ar_msa/arabertv02_tashkeel_fadel_onnx/tokenizer_config.json";
+/// Split ORT pair, as for Chinese above.
 inline constexpr std::string_view kG2pArabicOnnxModelKey =
-    "ar_msa/arabertv02_tashkeel_fadel_onnx/model.onnx";
+    "ar_msa/arabertv02_tashkeel_fadel_onnx/model.model.ort";
+inline constexpr std::string_view kG2pArabicOnnxWeightsKey =
+    "ar_msa/arabertv02_tashkeel_fadel_onnx/model.weights.ort";
 
-/// English OOV ONNX next to ``en_us/g2p-config.json`` (``.onnx`` in-tree;
-/// ``.ort`` sibling allowed on disk).
+/// English OOV model next to ``en_us/g2p-config.json``. Ships as ``.ort``
+/// because the wasm runtime is built without ONNX-format support; a sibling
+/// ``.onnx`` is still accepted on disk.
 inline constexpr std::string_view kG2pEnglishOovModelKey =
-    "en_us/oov/model.onnx";
+    "en_us/oov/model.ort";
 inline constexpr std::string_view kG2pEnglishOovOnnxConfigKey =
     "en_us/oov/onnx-config.json";
 

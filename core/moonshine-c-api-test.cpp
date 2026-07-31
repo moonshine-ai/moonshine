@@ -965,24 +965,29 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     CHECK(csv.find("de/dict.tsv") != std::string::npos);
     CHECK(csv.find("en_us/dict_filtered_heteronyms.tsv") != std::string::npos);
     CHECK(csv.find("fr/adj.csv") != std::string::npos);
-    CHECK(csv.find("zh_hans/roberta_chinese_base_upos_onnx/model.onnx") !=
+    // Chinese ships as a split pair, so both halves must be listed.
+    CHECK(csv.find("zh_hans/roberta_chinese_base_upos_onnx/model.model.ort") !=
           std::string::npos);
-    CHECK(csv.find("zh_hans/roberta_chinese_base_upos_onnx/model.ort") ==
+    CHECK(csv.find("zh_hans/roberta_chinese_base_upos_onnx/model.weights.ort") !=
+          std::string::npos);
+    CHECK(csv.find("zh_hans/roberta_chinese_base_upos_onnx/model.onnx") ==
           std::string::npos);
     CHECK(csv.find("ja/roberta_japanese_char_luw_upos_onnx/model.ort") !=
           std::string::npos);
     std::free(out);
   }
 
-  SUBCASE("g2p-arabic-onnx-model-key-matches-meta-onnx-filename") {
+  SUBCASE("g2p-arabic-lists-both-halves-of-the-split-model") {
     char* out = nullptr;
     REQUIRE(moonshine_get_g2p_dependencies("ar_msa", nullptr, 0, &out) ==
             MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string csv(out);
-    CHECK(csv.find("ar_msa/arabertv02_tashkeel_fadel_onnx/model.onnx") !=
+    CHECK(csv.find("ar_msa/arabertv02_tashkeel_fadel_onnx/model.model.ort") !=
           std::string::npos);
-    CHECK(csv.find("ar_msa/arabertv02_tashkeel_fadel_onnx/model.ort") ==
+    CHECK(csv.find("ar_msa/arabertv02_tashkeel_fadel_onnx/model.weights.ort") !=
+          std::string::npos);
+    CHECK(csv.find("ar_msa/arabertv02_tashkeel_fadel_onnx/model.onnx") ==
           std::string::npos);
     std::free(out);
   }
@@ -1051,7 +1056,7 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     CHECK(json.size() >= 2);
     CHECK(json.front() == '[');
     CHECK(json.back() == ']');
-    CHECK(json.find("\"kokoro/model.onnx\"") != std::string::npos);
+    CHECK(json.find("\"kokoro/model.ort\"") != std::string::npos);
     CHECK(json.find("\"en_us/dict_filtered_heteronyms.tsv\"") !=
           std::string::npos);
     std::free(out);
@@ -1064,7 +1069,7 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.front() == '[');
-    CHECK(json.find("\"kokoro/model.onnx\"") != std::string::npos);
+    CHECK(json.find("\"kokoro/model.ort\"") != std::string::npos);
     std::free(out);
   }
 
@@ -1099,7 +1104,7 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.find("piper-voices") != std::string::npos);
-    CHECK(json.find("kokoro/model.onnx") == std::string::npos);
+    CHECK(json.find("kokoro/model.ort") == std::string::npos);
     std::free(out);
   }
 
@@ -1112,7 +1117,7 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
             MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
-    CHECK(json.find("\"kokoro/model.onnx\"") != std::string::npos);
+    CHECK(json.find("\"kokoro/model.ort\"") != std::string::npos);
     CHECK(json.find("piper-voices") == std::string::npos);
     std::free(out);
   }
@@ -1260,7 +1265,7 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     CHECK(json.find("\"zipvoice/fm_decoder.ort\"") != std::string::npos);
     CHECK(json.find("\"zipvoice/vocoder.ort\"") != std::string::npos);
     CHECK(json.find("\"zipvoice/tokens.txt\"") != std::string::npos);
-    CHECK(json.find("\"kokoro/model.onnx\"") == std::string::npos);
+    CHECK(json.find("\"kokoro/model.ort\"") == std::string::npos);
     CHECK(json.find("piper-voices") == std::string::npos);
     std::free(out);
   }
