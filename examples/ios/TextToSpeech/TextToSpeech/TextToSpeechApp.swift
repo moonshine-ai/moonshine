@@ -233,7 +233,7 @@ class TTSModel: ObservableObject {
                 ? formatKokoroName(String(voiceId.dropFirst("kokoro_".count)))
                 : formatPiperName(String(voiceId.dropFirst("piper_".count)))
             var displayName = "\(base) · \(engineLabel)"
-            if needsDownload { displayName += " — tap to download" }
+            if needsDownload { displayName += " (tap to download)" }
             return TtsVoice(id: voiceId, displayName: displayName, needsDownload: needsDownload)
         }
 

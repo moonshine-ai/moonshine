@@ -33,6 +33,22 @@ await mic.stop();
 mic.close();
 ```
 
+### Line identifiers
+
+`TranscriptLine.id` (and `SpeakerSpan.speakerId`) are **decimal strings**, not
+numbers. They are 64-bit values allocated as a random base incremented once per
+line, so they sit above `Number.MAX_SAFE_INTEGER`, where neighbouring doubles
+are 2048 apart — representing them as JS numbers rounded consecutive lines onto
+a single id. Treat them as opaque: compare with `===` and use them as keys, but
+do not do arithmetic on them.
+
+```ts
+const lines = new Map<string, string>();
+mic.onLine((line) => {
+  lines.set(line.id, line.text);
+});
+```
+
 ### Transcribe a buffer (non-streaming)
 
 ```ts
@@ -98,7 +114,22 @@ fetched from the Moonshine CDN (`https://download.moonshine.ai`) the first time
 it's needed and cached in the browser via the Cache API. The exact file list and
 URLs come from the C ABI manifest helpers, so the JS never hardcodes the layout.
 
-Pass `onProgress` to any `load(...)` call to drive a download UI.
+Pass `onProgress` to any `load(...)` call to drive a download UI:
+
+```ts
+const mic = new MicTranscriber().onProgress((fraction, file, bytes) => {
+  // fraction is 0..1 across the whole model, not the file in flight, so it
+  // only ever moves forwards. bytes is { loaded, total } for a byte readout.
+  bar.style.width = `${Math.round(100 * fraction)}%`;
+});
+```
+
+A model is several files, and the manifest declares each one's size, so the
+progress reported is the true percentage of the entire download rather than
+each file restarting the bar at zero. `bytes.total` is undefined in the one
+case where the sizes aren't known up front — files fetched by URL rather than
+from a manifest — and `fraction` stays at 0 there, so show an indeterminate
+bar when `total` is missing instead of a percentage.
 
 ### Self-hosting the model files
 
@@ -143,7 +174,11 @@ set these headers, build the SIMD-only fallback (see below) and load it with
 
 ## Examples
 
-See [`examples/web/`](../examples/web): `stt/`, `tts/`, and `dialog-flow/`.
+See [`examples/web/`](../examples/web): `stt/`, `tts/`, and `dialog-flow/`, with
+an index at `/` linking them together. Each page shows the Moonshine calls that
+drive it in a panel below the demo. They share a stylesheet and some chrome from
+`examples/web/assets/`, and have no build step or external dependencies.
+
 The demos import the published binding from the jsDelivr CDN by default. To
 test a locally-built binding instead, append `?local=1` to the URL (this loads
 `/wasm/dist/index.js`). After building the binding, run the dev server (which
@@ -154,6 +189,53 @@ scripts/build-wasm.sh
 node examples/web/serve.mjs
 # → http://localhost:8080/stt/?local=1
 ```
+
+### When the microphone stays silent
+
+Browsers keep their own notion of the default capture device, and it can
+disagree with the operating system's. When it is wrong Chrome does not raise an
+error — `getUserMedia` succeeds and the track delivers digital silence, so an
+application looks like it is running perfectly and simply never hears anything.
+
+`examples/web/mic-check/` diagnoses this. It reports the permission state, the
+track's `muted` flag (set when the OS is withholding audio), raw per-channel peak
+and RMS straight from the capture worklet, and whether the `AudioContext` started
+suspended. Picking a device by name there saves it, and every demo opens that
+device from then on; a saved device that later disappears is dropped so capture
+falls back to the default rather than failing forever.
+
+In your own code, name the device through the constraints each entry point takes:
+
+```js
+const devices = await navigator.mediaDevices.enumerateDevices();
+const mic = devices.find((d) => d.kind === 'audioinput' && d.label.includes('USB'));
+const audio = { deviceId: { exact: mic.deviceId } };
+
+new MicTranscriber().audioConstraints(audio);
+new DialogFlow().audioConstraints(audio);
+voiceClone.fromMicrophone({ audioConstraints: audio });
+```
+
+### Making sure you're running your rebuild
+
+When iterating on the binding it's easy to wonder whether the browser is running
+the code you just built. Two independent caches are in play:
+
+- **The HTTP cache**, holding the binding itself. The dev server sends
+  `Cache-Control: no-store` on every response, so an ordinary reload always
+  refetches — no hard reload needed. It also logs each request, so you can watch
+  the files come across as the page loads. Note that `/wasm/dist/index.js` is
+  only a re-export barrel; the file you edited usually arrives as a sibling such
+  as `/wasm/dist/mic-transcriber.js`, so look for that line specifically.
+- **The Cache Storage bucket `moonshine-models-v1`**, holding downloaded model
+  files. This one is written by the binding's `AssetDownloader` and is
+  deliberately independent of the HTTP cache, so it survives every kind of
+  reload including Shift+Cmd+R. Append `?fresh=1` to a demo URL to empty it and
+  redownload, e.g. `http://localhost:8080/stt/?local=1&fresh=1`.
+
+If a source change still doesn't show up, rebuild before reloading: the pages
+serve `wasm/dist`, which is produced by `npm run build` (TypeScript) or
+`scripts/build-wasm.sh` (the C++ core).
 
 ## Building from source
 

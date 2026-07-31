@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Microphone diagnostic | Moonshine</title>
+    <link rel="icon" href="/assets/favicon.png" type="image/png" />
+    <link rel="stylesheet" href="/assets/moonshine.css" />
+    <style>
+      .rows {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        font-family: var(--ms-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+        font-size: 13px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 20px 210px 1fr;
+        gap: 10px;
+        padding: 5px 8px;
+        border-radius: 6px;
+        align-items: baseline;
+      }
+      .row:nth-child(odd) {
+        background: rgba(255, 255, 255, 0.03);
+      }
+      .row b {
+        font-weight: 600;
+        opacity: 0.75;
+      }
+      .row span {
+        word-break: break-word;
+      }
+      .ok {
+        color: #4ade80;
+      }
+      .warn {
+        color: #fbbf24;
+      }
+      .bad {
+        color: #f87171;
+      }
+      .chan {
+        display: grid;
+        grid-template-columns: 92px 1fr 132px;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 6px;
+        font-family: var(--ms-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+        font-size: 13px;
+      }
+      .track {
+        height: 16px;
+        background: rgba(255, 255, 255, 0.07);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .fill {
+        height: 100%;
+        width: 0%;
+        border-radius: 8px;
+        background: linear-gradient(90deg, #6ea8fe, #a370f7);
+        transition: width 60ms linear;
+      }
+      .verdict {
+        padding: 14px 16px;
+        border-radius: 10px;
+        margin-top: 16px;
+        line-height: 1.55;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+      }
+      .verdict.ok {
+        background: rgba(74, 222, 128, 0.1);
+      }
+      .verdict.bad {
+        background: rgba(248, 113, 113, 0.1);
+      }
+      .verdict.warn {
+        background: rgba(251, 191, 36, 0.1);
+      }
+      select {
+        padding: 8px 10px;
+        border-radius: 8px;
+        min-width: 320px;
+        max-width: 100%;
+      }
+      #transcript {
+        min-height: 52px;
+        padding: 12px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.04);
+        margin-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="ms-shell ms-main">
+      <header class="ms-hero">
+        <h1>Microphone diagnostic</h1>
+        <p>
+          Checks every layer between your microphone and the transcriber, and reports
+          what each one actually produced. Nothing here is uploaded.
+        </p>
+      </header>
+
+      <section class="ms-card ms-stack">
+        <label for="device"><b>Input device</b></label>
+        <select id="device"><option value="">Browser default</option></select>
+        <p class="ms-small ms-muted" id="saved"></p>
+        <div>
+          <button class="ms-btn ms-btn--primary" id="run">Run diagnostic</button>
+          <button class="ms-btn" id="stop" disabled>Stop</button>
+        </div>
+        <p class="ms-muted" id="hint">
+          Press Run, then <b>talk continuously for about five seconds</b>. Device labels
+          only appear after permission is granted, so the list may fill in on the first run.
+          Whatever you pick here is remembered and used by the other demos.
+        </p>
+      </section>
+
+      <section class="ms-card ms-stack" id="liveCard" hidden>
+        <h2>Live input level</h2>
+        <p class="ms-muted">
+          Raw per-channel levels straight from the capture worklet, before any
+          downmixing. This is the ground truth for whether audio is reaching the page.
+        </p>
+        <div id="channels"></div>
+      </section>
+
+      <section class="ms-card ms-stack">
+        <h2>Report</h2>
+        <div class="rows" id="rows"></div>
+        <div id="verdict"></div>
+      </section>
+
+      <section class="ms-card ms-stack" id="e2eCard" hidden>
+        <h2>Full transcriber path</h2>
+        <p class="ms-muted">
+          Runs the real <code>MicTranscriber</code> with the same device, so we can tell a
+          capture problem apart from a transcription problem.
+        </p>
+        <div><button class="ms-btn" id="e2e">Test transcription</button></div>
+        <div id="transcript" class="ms-muted">Not started.</div>
+      </section>
+    </main>
+
+    <script type="module">
+      import {
+        pageConfig,
+        mountDevicePicker,
+        audioConstraints,
+        preferredAudioDeviceId,
+      } from '/assets/moonshine-ui.js';
+
+      const { useLocalAssets, moduleUrl } = pageConfig();
+      const els = {
+        device: document.getElementById('device'),
+        run: document.getElementById('run'),
+        stop: document.getElementById('stop'),
+        rows: document.getElementById('rows'),
+        verdict: document.getElementById('verdict'),
+        channels: document.getElementById('channels'),
+        liveCard: document.getElementById('liveCard'),
+        e2eCard: document.getElementById('e2eCard'),
+        e2e: document.getElementById('e2e'),
+        transcript: document.getElementById('transcript'),
+        saved: document.getElementById('saved'),
+      };
+
+      const MARK = { ok: '✓', warn: '!', bad: '✗', info: '·' };
+
+      function row(status, label, value) {
+        const el = document.createElement('div');
+        el.className = 'row';
+        el.innerHTML = `<span class="${status}">${MARK[status]}</span><b></b><span></span>`;
+        el.querySelector('b').textContent = label;
+        el.querySelector('span:last-child').textContent = String(value);
+        els.rows.append(el);
+      }
+
+      function verdict(status, html) {
+        els.verdict.className = `verdict ${status}`;
+        els.verdict.innerHTML = html;
+      }
+
+      /**
+       * Reports per-channel peak and RMS without any downmixing, so a device that
+       * puts its microphone on a channel other than the first is visible as such
+       * rather than as generic silence.
+       */
+      const PROBE_WORKLET = `
+        class Probe extends AudioWorkletProcessor {
+          constructor() {
+            super();
+            this.peaks = [];
+            this.sums = [];
+            this.frames = 0;
+            this.emptyBlocks = 0;
+            this.blocks = 0;
+            this.last = 0;
+          }
+          process(inputs) {
+            const input = inputs[0];
+            this.blocks++;
+            if (!input || !input.length) {
+              this.emptyBlocks++;
+            } else {
+              for (let c = 0; c < input.length; c++) {
+                const data = input[c];
+                if (!data) continue;
+                let peak = this.peaks[c] ?? 0;
+                let sum = this.sums[c] ?? 0;
+                for (let i = 0; i < data.length; i++) {
+                  const v = Math.abs(data[i]);
+                  if (v > peak) peak = v;
+                  sum += data[i] * data[i];
+                }
+                this.peaks[c] = peak;
+                this.sums[c] = sum;
+              }
+              this.frames += input[0] ? input[0].length : 0;
+            }
+            if (currentTime - this.last > 0.1) {
+              this.last = currentTime;
+              this.port.postMessage({
+                peaks: this.peaks,
+                rms: this.sums.map((s) => Math.sqrt(s / Math.max(1, this.frames))),
+                channels: input ? input.length : 0,
+                frames: this.frames,
+                blocks: this.blocks,
+                emptyBlocks: this.emptyBlocks,
+              });
+            }
+            return true;
+          }
+        }
+        registerProcessor('probe', Probe);
+      `;
+
+      let ctx;
+      let stream;
+      let latest = null;
+      const bars = [];
+
+      function renderChannels(channels) {
+        if (bars.length === channels) return;
+        els.channels.innerHTML = '';
+        bars.length = 0;
+        for (let c = 0; c < channels; c++) {
+          const wrap = document.createElement('div');
+          wrap.className = 'chan';
+          wrap.innerHTML =
+            `<span>Channel ${c}</span><div class="track"><div class="fill"></div></div>` +
+            `<span class="val ms-muted">no signal yet</span>`;
+          els.channels.append(wrap);
+          bars.push({ fill: wrap.querySelector('.fill'), val: wrap.querySelector('.val') });
+        }
+      }
+
+      // The picker writes straight through to the shared preference, so a device
+      // proven to work here is the one every other demo opens from then on.
+      const picker = mountDevicePicker(els.device, {
+        onChange: (deviceId) => {
+          els.saved.textContent = deviceId
+            ? `Saved. Every Moonshine demo on this browser will now use "${
+                els.device.selectedOptions[0]?.textContent ?? 'this device'
+              }".`
+            : 'Cleared. The demos will use the browser default again.';
+        },
+      });
+
+      async function listInputs() {
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          return devices.filter((d) => d.kind === 'audioinput');
+        } catch {
+          return [];
+        }
+      }
+
+      async function cleanup() {
+        try {
+          stream?.getTracks().forEach((t) => t.stop());
+          await ctx?.close();
+        } catch {
+          /* already torn down */
+        }
+        stream = undefined;
+        ctx = undefined;
+      }
+
+      async function run() {
+        els.run.disabled = true;
+        els.stop.disabled = false;
+        els.rows.innerHTML = '';
+        els.verdict.className = '';
+        els.verdict.innerHTML = '';
+        latest = null;
+        await cleanup();
+
+        row(window.isSecureContext ? 'ok' : 'bad', 'Secure context', window.isSecureContext);
+        row(
+          crossOriginIsolated ? 'ok' : 'warn',
+          'Cross-origin isolated',
+          crossOriginIsolated,
+        );
+        row(
+          navigator.mediaDevices ? 'ok' : 'bad',
+          'mediaDevices API',
+          !!navigator.mediaDevices,
+        );
+
+        try {
+          const perm = await navigator.permissions.query({ name: 'microphone' });
+          row(
+            perm.state === 'granted' ? 'ok' : perm.state === 'denied' ? 'bad' : 'warn',
+            'Permission',
+            perm.state,
+          );
+        } catch {
+          row('info', 'Permission', 'not queryable in this browser');
+        }
+
+        const before = await listInputs();
+        row(
+          before.length ? 'ok' : 'bad',
+          'Input devices found',
+          before.length
+            ? before.map((d) => d.label || '(unlabelled)').join(', ')
+            : 'none',
+        );
+
+        const deviceId = els.device.value;
+        row(
+          'info',
+          'Requested device',
+          deviceId
+            ? els.device.selectedOptions[0]?.textContent ?? deviceId
+            : 'browser default',
+        );
+        const constraints = deviceId ? { deviceId: { exact: deviceId } } : true;
+
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: constraints });
+        } catch (err) {
+          row('bad', 'getUserMedia', `${err.name}: ${err.message}`);
+          verdict(
+            'bad',
+            `<b>The browser refused to open the microphone.</b> <code>${err.name}</code> usually means
+             permission was denied or the selected device is unavailable. Check Chrome's
+             site permissions and, on macOS, System Settings → Privacy &amp; Security →
+             Microphone for your browser.`,
+          );
+          els.run.disabled = false;
+          return;
+        }
+        row('ok', 'getUserMedia', 'stream opened');
+        // Labels are blank until permission is granted, so refill the list now.
+        await picker.refresh();
+
+        const track = stream.getAudioTracks()[0];
+        const settings = track.getSettings();
+        row('info', 'Track label', track.label || '(none)');
+        row(track.enabled ? 'ok' : 'bad', 'Track enabled', track.enabled);
+        row(track.readyState === 'live' ? 'ok' : 'bad', 'Track readyState', track.readyState);
+        // A muted track means the OS is handing Chrome no data at all. The usual
+        // fingerprint of an OS-level permission block or a device grabbed elsewhere.
+        row(track.muted ? 'bad' : 'ok', 'Track muted (by OS)', track.muted);
+        row('info', 'Track deviceId', settings.deviceId ?? '(unspecified)');
+        row('info', 'Track channelCount', settings.channelCount ?? '(unspecified)');
+        row('info', 'Track sampleRate', settings.sampleRate ?? '(unspecified)');
+        row('info', 'Echo cancellation', settings.echoCancellation ?? '(unspecified)');
+        row('info', 'Noise suppression', settings.noiseSuppression ?? '(unspecified)');
+        row('info', 'Auto gain control', settings.autoGainControl ?? '(unspecified)');
+
+        ctx = new AudioContext();
+        row('info', 'AudioContext sampleRate', ctx.sampleRate);
+        const stateAtCreation = ctx.state;
+        // Chrome starts a context suspended unless it sees user activation; a
+        // suspended context never runs the worklet, so capture looks alive but
+        // silently produces nothing.
+        if (ctx.state !== 'running') {
+          try {
+            await ctx.resume();
+          } catch {
+            /* reported below */
+          }
+        }
+        row(
+          ctx.state === 'running' ? (stateAtCreation === 'running' ? 'ok' : 'warn') : 'bad',
+          'AudioContext state',
+          stateAtCreation === ctx.state
+            ? ctx.state
+            : `${stateAtCreation} → ${ctx.state} (after resume)`,
+        );
+
+        const url = URL.createObjectURL(
+          new Blob([PROBE_WORKLET], { type: 'application/javascript' }),
+        );
+        await ctx.audioWorklet.addModule(url);
+        URL.revokeObjectURL(url);
+
+        const source = ctx.createMediaStreamSource(stream);
+        row('info', 'Source channelCount', source.channelCount);
+        const node = new AudioWorkletNode(ctx, 'probe');
+        node.port.onmessage = (event) => {
+          latest = event.data;
+          renderChannels(latest.channels);
+          latest.peaks.forEach((peak, c) => {
+            if (!bars[c]) return;
+            bars[c].fill.style.width = `${Math.min(100, peak * 100)}%`;
+            bars[c].val.textContent = `peak ${peak.toFixed(4)}`;
+          });
+        };
+        source.connect(node);
+        node.connect(ctx.destination);
+        els.liveCard.hidden = false;
+
+        row('info', 'Capture', 'listening for 6 seconds, talk now');
+        await new Promise((r) => setTimeout(r, 6000));
+
+        node.disconnect();
+        source.disconnect();
+        summarise(track, settings, stateAtCreation);
+        els.run.disabled = false;
+        els.e2eCard.hidden = false;
+      }
+
+      function summarise(track, settings, stateAtCreation) {
+        if (!latest) {
+          row('bad', 'Worklet callbacks', 'none, the worklet never ran');
+          verdict(
+            'bad',
+            `<b>The audio graph never ran.</b> The worklet produced no callbacks at all, which
+             points at the AudioContext rather than the microphone.`,
+          );
+          return;
+        }
+
+        row('info', 'Blocks processed', latest.blocks);
+        row(
+          latest.emptyBlocks === latest.blocks ? 'bad' : 'ok',
+          'Blocks with no input',
+          `${latest.emptyBlocks} of ${latest.blocks}`,
+        );
+        row('info', 'Channels seen', latest.channels);
+        latest.peaks.forEach((peak, c) => {
+          const rms = latest.rms[c] ?? 0;
+          row(
+            peak > 0.001 ? 'ok' : 'bad',
+            `Channel ${c}`,
+            `peak ${peak.toFixed(5)}, rms ${rms.toFixed(5)}`,
+          );
+        });
+
+        const loud = latest.peaks.map((p, c) => ({ p, c })).filter((x) => x.p > 0.001);
+        const silent = latest.peaks.length > 0 && loud.length === 0;
+
+        if (silent && track.muted) {
+          verdict(
+            'bad',
+            `<b>The microphone is open but the operating system is sending no audio.</b>
+             The track reports <code>muted: true</code> and every channel is digital silence.
+             On macOS this is almost always System Settings → Privacy &amp; Security →
+             Microphone with your browser switched off, or another application holding the
+             device exclusively. It is not a Moonshine problem, and the same silence would
+             reach any web page.`,
+          );
+        } else if (silent) {
+          verdict(
+            'bad',
+            `<b>Audio is flowing but every sample is zero.</b> The device opened as
+             "${track.label || 'unknown'}" with ${latest.channels} channel(s) and produced
+             ${latest.frames} frames of pure silence. Pick a specific device from the
+             dropdown above rather than Browser default and run this again. Chrome keeps
+             its own default that can disagree with the operating system's, and when it is
+             wrong it returns silence rather than an error. A device that works here is
+             remembered and used by the other demos. Also check the headset's hardware
+             mute switch.`,
+          );
+        } else if (loud.length < latest.peaks.length) {
+          verdict(
+            'warn',
+            `<b>Audio is present on ${loud.map((x) => `channel ${x.c}`).join(', ')} only.</b>
+             This is the case the downmix fix handles: capture is working, and the
+             transcriber averages all channels, so it should receive your voice. If
+             transcription is still empty, the problem is downstream of capture, so run the
+             transcription test below.`,
+          );
+        } else {
+          const saved = preferredAudioDeviceId();
+          verdict(
+            'ok',
+            `<b>Capture is working.</b> Every channel carried signal
+             (peak ${Math.max(...latest.peaks).toFixed(3)}) at ${settings.sampleRate ?? '?'} Hz
+             into a ${stateAtCreation} AudioContext running at ${ctx.sampleRate} Hz.
+             ${
+               saved
+                 ? `This device is saved, so <a href="/stt/">the STT demo</a> and the other
+                    pages will use it too.`
+                 : `This was the browser default. If the STT demo is silent, choose the device
+                    by name above so the demos stop relying on that default.`
+             }`,
+          );
+        }
+      }
+
+      async function testEndToEnd() {
+        els.e2e.disabled = true;
+        els.transcript.textContent = 'Loading model…';
+        try {
+          const { MicTranscriber, Transcriber, ModelArch } = await import(moduleUrl);
+          let heard = '';
+
+          const mic = new MicTranscriber()
+            .audioConstraints(await audioConstraints())
+            .onText((text) => {
+              heard = text;
+              els.transcript.textContent = text || '(listening…)';
+            })
+            .onLine((line) => {
+              heard = line.text;
+              els.transcript.textContent = line.text;
+            })
+            .onError((err) => {
+              els.transcript.textContent = `Error: ${err.message}`;
+            });
+
+          if (useLocalAssets) {
+            const base = '/test-assets/tiny-streaming-en';
+            const names = [
+              'frontend.ort',
+              'encoder.ort',
+              'adapter.ort',
+              'cross_kv.ort',
+              'decoder_kv.ort',
+              'streaming_config.json',
+              'tokenizer.bin',
+            ];
+            const urls = Object.fromEntries(names.map((n) => [n, `${base}/${n}`]));
+            mic.useTranscriber(
+              await Transcriber.loadFromUrls(urls, { modelArch: ModelArch.TinyStreaming }),
+            );
+          } else {
+            await mic.load();
+          }
+
+          els.transcript.textContent = 'Listening for 10 seconds, say a full sentence…';
+          await mic.start();
+          await new Promise((r) => setTimeout(r, 10000));
+          await mic.stop();
+
+          els.transcript.textContent = heard
+            ? `Heard: "${heard}"`
+            : 'Nothing was transcribed. Capture and transcription disagree, so send this page’s report along.';
+          row(
+            heard ? 'ok' : 'bad',
+            'End-to-end transcription',
+            heard ? `"${heard}"` : 'no text produced',
+          );
+        } catch (err) {
+          els.transcript.textContent = `Failed: ${err.message}`;
+        } finally {
+          els.e2e.disabled = false;
+        }
+      }
+
+      els.run.addEventListener('click', run);
+      els.stop.addEventListener('click', async () => {
+        await cleanup();
+        els.stop.disabled = true;
+        els.run.disabled = false;
+      });
+      els.e2e.addEventListener('click', testEndToEnd);
+    </script>
+  </body>
+</html>

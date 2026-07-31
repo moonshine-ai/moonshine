@@ -44,7 +44,15 @@ interface Manifest {
 export interface AssetDownloaderOptions {
   /** Cache name used with the browser Cache API. */
   cacheName?: string;
-  /** Called with (loadedBytes, totalBytes|undefined, currentFile). */
+  /**
+   * Called with (loadedBytes, totalBytes|undefined, currentFile).
+   *
+   * A model is many files, so the byte counts are cumulative across the whole
+   * set being fetched, not per file. `total` is the sum of the sizes the
+   * manifest declares, and is undefined only when fetching files whose sizes
+   * are not known up front — report those as indeterminate rather than
+   * inventing a percentage.
+   */
   onProgress?: (loaded: number, total: number | undefined, file: string) => void;
   /**
    * Fetches manifest files from here instead of the base URL the manifest names,
@@ -56,6 +64,17 @@ export interface AssetDownloaderOptions {
 const DEFAULT_CACHE = 'moonshine-models-v1';
 
 /**
+ * Byte accounting for one multi-file download, so progress runs 0-100% across
+ * the whole model instead of restarting for every file in it.
+ */
+interface DownloadSession {
+  /** Sum of every file's declared size, or undefined when any is unknown. */
+  totalBytes?: number;
+  /** Bytes belonging to files that have already finished. */
+  completedBytes: number;
+}
+
+/**
  * Downloads model files with transparent caching. A single instance can be
  * reused across models; entries are keyed by absolute URL.
  */
@@ -63,6 +82,7 @@ export class AssetDownloader {
   private readonly cacheName: string;
   private readonly onProgress?: AssetDownloaderOptions['onProgress'];
   private readonly baseUrl?: string;
+  private session?: DownloadSession;
 
   constructor(options: AssetDownloaderOptions = {}) {
     this.cacheName = options.cacheName ?? DEFAULT_CACHE;
@@ -83,36 +103,41 @@ export class AssetDownloader {
         `Failed to parse model manifest: ${(err as Error).message}`,
       );
     }
-    const out = new Map<string, Uint8Array>();
-    for (const group of manifest.groups ?? []) {
-      for (const file of group.files) {
-        const url = this.baseUrl
-          ? joinUrl(this.baseUrl, file.name)
-          : (file.url ?? joinUrl(group.base_url, file.name));
-        const bytes = await this.fetchFile(url);
-        if (
-          typeof file.size === 'number' &&
-          file.size >= 0 &&
-          bytes.byteLength !== file.size
-        ) {
-          throw new MoonshineDownloadError(
-            `Size mismatch for ${file.name}: expected ${file.size} bytes, ` +
-              `got ${bytes.byteLength} (from ${url})`,
-          );
+    const groups = manifest.groups ?? [];
+    return this.inSession(declaredTotalBytes(groups), async () => {
+      const out = new Map<string, Uint8Array>();
+      for (const group of groups) {
+        for (const file of group.files) {
+          const url = this.baseUrl
+            ? joinUrl(this.baseUrl, file.name)
+            : (file.url ?? joinUrl(group.base_url, file.name));
+          const bytes = await this.fetchFile(url);
+          if (
+            typeof file.size === 'number' &&
+            file.size >= 0 &&
+            bytes.byteLength !== file.size
+          ) {
+            throw new MoonshineDownloadError(
+              `Size mismatch for ${file.name}: expected ${file.size} bytes, ` +
+                `got ${bytes.byteLength} (from ${url})`,
+            );
+          }
+          out.set(file.name, bytes);
         }
-        out.set(file.name, bytes);
       }
-    }
-    return out;
+      return out;
+    });
   }
 
   /** Downloads a flat list of URLs, returning bytes keyed by basename. */
   async downloadFiles(urls: string[]): Promise<Map<string, Uint8Array>> {
-    const out = new Map<string, Uint8Array>();
-    for (const url of urls) {
-      out.set(basename(url), await this.fetchFile(url));
-    }
-    return out;
+    return this.inSession(undefined, async () => {
+      const out = new Map<string, Uint8Array>();
+      for (const url of urls) {
+        out.set(basename(url), await this.fetchFile(url));
+      }
+      return out;
+    });
   }
 
   /**
@@ -125,11 +150,13 @@ export class AssetDownloader {
   ): Promise<Map<string, Uint8Array>> {
     const entries =
       files instanceof Map ? [...files.entries()] : Object.entries(files);
-    const out = new Map<string, Uint8Array>();
-    for (const [name, url] of entries) {
-      out.set(name, await this.fetchFile(url));
-    }
-    return out;
+    return this.inSession(undefined, async () => {
+      const out = new Map<string, Uint8Array>();
+      for (const [name, url] of entries) {
+        out.set(name, await this.fetchFile(url));
+      }
+      return out;
+    });
   }
 
   /** Fetches a single URL, using the Cache API when available. */
@@ -139,7 +166,8 @@ export class AssetDownloader {
       const hit = await cache.match(url);
       if (hit) {
         const buf = await hit.arrayBuffer();
-        this.onProgress?.(buf.byteLength, buf.byteLength, basename(url));
+        this.reportProgress(buf.byteLength, buf.byteLength, basename(url));
+        this.finishFile(buf.byteLength);
         return new Uint8Array(buf);
       }
     }
@@ -155,7 +183,49 @@ export class AssetDownloader {
       await cache.put(url, response.clone());
     }
     const buf = await this.readWithProgress(response, basename(url));
+    this.finishFile(buf.byteLength);
     return new Uint8Array(buf);
+  }
+
+  /**
+   * Runs `body` as a single accounted download, so progress is reported
+   * against the whole set of files rather than restarting at zero for each.
+   * Nested calls (a shared downloader fetching several models) each get their
+   * own accounting and restore the outer one when they finish.
+   */
+  private async inSession<T>(
+    totalBytes: number | undefined,
+    body: () => Promise<T>,
+  ): Promise<T> {
+    const outer = this.session;
+    this.session = { totalBytes, completedBytes: 0 };
+    try {
+      return await body();
+    } finally {
+      this.session = outer;
+    }
+  }
+
+  /** Rolls a finished file's bytes into the running total. */
+  private finishFile(bytes: number): void {
+    if (this.session) this.session.completedBytes += bytes;
+  }
+
+  private reportProgress(
+    loadedInFile: number,
+    fileTotal: number | undefined,
+    file: string,
+  ): void {
+    if (!this.onProgress) return;
+    if (!this.session) {
+      this.onProgress(loadedInFile, fileTotal, file);
+      return;
+    }
+    this.onProgress(
+      this.session.completedBytes + loadedInFile,
+      this.session.totalBytes,
+      file,
+    );
   }
 
   private async readWithProgress(
@@ -165,7 +235,7 @@ export class AssetDownloader {
     const total = Number(response.headers.get('content-length')) || undefined;
     if (!response.body || !this.onProgress) {
       const buf = await response.arrayBuffer();
-      this.onProgress?.(buf.byteLength, total, file);
+      this.reportProgress(buf.byteLength, total, file);
       return buf;
     }
     const reader = response.body.getReader();
@@ -177,7 +247,7 @@ export class AssetDownloader {
       if (value) {
         chunks.push(value);
         loaded += value.byteLength;
-        this.onProgress(loaded, total, file);
+        this.reportProgress(loaded, total, file);
       }
     }
     const merged = new Uint8Array(loaded);
@@ -199,6 +269,22 @@ export class AssetDownloader {
     }
     return undefined;
   }
+}
+
+/**
+ * Total size of a manifest, or undefined if any file leaves its size out.
+ * Partial sums would understate the download and make the bar run backwards,
+ * so an incomplete manifest is treated as no answer at all.
+ */
+function declaredTotalBytes(groups: ManifestGroup[]): number | undefined {
+  let total = 0;
+  for (const group of groups) {
+    for (const file of group.files ?? []) {
+      if (typeof file.size !== 'number' || !(file.size >= 0)) return undefined;
+      total += file.size;
+    }
+  }
+  return total;
 }
 
 function joinUrl(base: string, file: string): string {

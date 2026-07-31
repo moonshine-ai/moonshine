@@ -154,27 +154,112 @@ test('invalid manifest JSON throws a MoonshineDownloadError', async () => {
   );
 });
 
-test('onProgress is invoked with (loaded, total, file)', async () => {
+/** Byte length of the body okResponse serves for a given filename. */
+const bodySize = (name) => enc.encode(name).byteLength;
+
+/** A manifest of one group, declaring each file's real served size. */
+function sizedManifest(names, { declareSizes = true } = {}) {
+  return JSON.stringify({
+    groups: [
+      {
+        base_url: 'https://cdn.example/en',
+        files: names.map((name) => ({
+          name,
+          url: `https://cdn.example/en/${name}`,
+          ...(declareSizes ? { size: bodySize(name) } : {}),
+        })),
+      },
+    ],
+  });
+}
+
+function recordProgress() {
+  const calls = [];
+  const downloader = new AssetDownloader({
+    onProgress: (loaded, total, file) => calls.push({ loaded, total, file }),
+  });
+  return { calls, downloader };
+}
+
+test('onProgress reports bytes across the whole manifest, not per file', async () => {
+  const names = ['encoder.ort', 'decoder.ort', 'tokenizer.bin'];
+  const { calls, downloader } = recordProgress();
+  await withFetch(okResponse, () => downloader.downloadManifest(sizedManifest(names)));
+
+  const expectedTotal = names.reduce((sum, name) => sum + bodySize(name), 0);
+  assert.equal(calls.length, names.length);
+  // Every report carries the same overall total, and `loaded` accumulates
+  // rather than restarting at zero for each file.
+  for (const call of calls) assert.equal(call.total, expectedTotal);
+  assert.deepEqual(
+    calls.map((c) => c.loaded),
+    names.map((_, i) =>
+      names.slice(0, i + 1).reduce((sum, name) => sum + bodySize(name), 0),
+    ),
+  );
+  // The last report is a genuine 100%.
+  assert.equal(calls.at(-1).loaded, expectedTotal);
+  assert.equal(calls.at(-1).file, 'tokenizer.bin');
+});
+
+test('progress never goes backwards while a manifest downloads', async () => {
+  const names = ['encoder.ort', 'decoder.ort', 'tokenizer.bin', 'config.json'];
+  const { calls, downloader } = recordProgress();
+  await withFetch(okResponse, () => downloader.downloadManifest(sizedManifest(names)));
+
+  for (let i = 1; i < calls.length; i++) {
+    assert.ok(
+      calls[i].loaded >= calls[i - 1].loaded,
+      `report ${i} went backwards: ${calls[i - 1].loaded} -> ${calls[i].loaded}`,
+    );
+    assert.ok(calls[i].loaded <= calls[i].total, 'loaded overshot the total');
+  }
+});
+
+test('a manifest missing any size reports an unknown total', async () => {
+  // A partial sum would understate the download and make the bar run
+  // backwards, so callers are told the total is unknown instead.
   const manifest = JSON.stringify({
     groups: [
       {
         base_url: 'https://cdn.example/en',
         files: [
+          { name: 'encoder.ort', url: 'https://cdn.example/en/encoder.ort', size: 11 },
           { name: 'tokenizer.bin', url: 'https://cdn.example/en/tokenizer.bin' },
         ],
       },
     ],
   });
-  const progress = [];
-  const downloader = new AssetDownloader({
-    onProgress: (loaded, total, file) => progress.push([loaded, total, file]),
-  });
-  await withFetch(okResponse, async () => {
-    await downloader.downloadManifest(manifest);
-  });
-  assert.equal(progress.length, 1);
-  const [loaded, total, file] = progress[0];
-  assert.equal(file, 'tokenizer.bin');
-  assert.equal(loaded, enc.encode('tokenizer.bin').byteLength);
-  assert.equal(total, loaded);
+  const { calls, downloader } = recordProgress();
+  await withFetch(okResponse, () => downloader.downloadManifest(manifest));
+
+  assert.ok(calls.length > 0);
+  for (const call of calls) assert.equal(call.total, undefined);
+});
+
+test('downloadNamedFiles accumulates bytes with an unknown total', async () => {
+  const { calls, downloader } = recordProgress();
+  await withFetch(okResponse, () =>
+    downloader.downloadNamedFiles({
+      'a.ort': 'https://cdn.example/en/a.ort',
+      'b.ort': 'https://cdn.example/en/b.ort',
+    }),
+  );
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].loaded, bodySize('a.ort'));
+  assert.equal(calls[1].loaded, bodySize('a.ort') + bodySize('b.ort'));
+  for (const call of calls) assert.equal(call.total, undefined);
+});
+
+test('fetchFile on its own still reports just that file’s bytes', async () => {
+  const { calls, downloader } = recordProgress();
+  await withFetch(okResponse, () =>
+    downloader.fetchFile('https://cdn.example/en/tokenizer.bin'),
+  );
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].file, 'tokenizer.bin');
+  assert.equal(calls[0].loaded, bodySize('tokenizer.bin'));
+  assert.equal(calls[0].total, bodySize('tokenizer.bin'));
 });

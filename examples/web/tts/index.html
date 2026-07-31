@@ -3,172 +3,430 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Moonshine — Text to Speech</title>
-    <!-- Bootstrap 5 (CSS only). crossorigin lets it load under the COOP/COEP
-         cross-origin isolation the WASM threads build requires. -->
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-      crossorigin="anonymous"
+    <title>Text to Speech | Moonshine Voice</title>
+    <meta
+      name="description"
+      content="On-device speech synthesis and zero-shot voice cloning, running in your browser via WebAssembly."
     />
+    <meta property="og:title" content="Text to Speech | Moonshine Voice" />
+    <meta
+      property="og:description"
+      content="On-device speech synthesis and zero-shot voice cloning, running in your browser via WebAssembly."
+    />
+    <link rel="icon" href="/assets/favicon.png" type="image/png" />
+    <link rel="stylesheet" href="/assets/moonshine.css" />
     <style>
-      :root {
-        --bs-body-bg: #0f1115;
-        --bs-body-color: #e7e9ee;
+      .voices {
+        display: grid;
+        gap: 0.6rem;
+        grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
       }
-      body {
-        background: radial-gradient(1200px 600px at 50% -10%, #1b2130 0%, #0f1115 60%);
-        min-height: 100vh;
+
+      .voice {
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+        padding: 0.7rem 0.85rem;
+        border: 1px solid var(--ms-line-strong);
+        border-radius: 0.7rem;
+        background: rgba(255, 255, 255, 0.03);
+        font: inherit;
+        text-align: start;
+        color: inherit;
+        cursor: pointer;
+        transition: border-color 120ms ease, background 120ms ease;
       }
-      .app-card {
-        max-width: 680px;
-        margin: 3.5rem auto;
-        background: rgba(22, 26, 34, 0.92);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        border-radius: 1rem;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
-        backdrop-filter: blur(6px);
+
+      .voice:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.07);
       }
-      .brand-dot {
-        width: 0.7rem; height: 0.7rem; border-radius: 50%;
-        background: linear-gradient(135deg, #6ea8fe, #a370f7);
-        box-shadow: 0 0 14px rgba(110, 168, 254, 0.8);
+
+      .voice:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
       }
-      .form-label { font-weight: 600; font-size: 0.85rem; letter-spacing: 0.02em; }
-      textarea.form-control { resize: vertical; }
-      .status-line { min-height: 1.4em; font-size: 0.9rem; }
-      .subtle { color: #9aa3b2; }
-      .clone-panel {
-        border: 1px dashed rgba(163, 112, 247, 0.5);
-        border-radius: 0.75rem;
+
+      .voice.is-active {
+        border-color: rgba(110, 168, 254, 0.65);
+        background: rgba(110, 168, 254, 0.13);
+      }
+
+      .voice__name {
+        font-size: 0.95rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+
+      .voice__desc {
+        font-size: 0.8rem;
+        color: var(--ms-muted);
+      }
+
+      /* --- Voice cloning ------------------------------------------------- */
+
+      .clone {
+        margin-top: 1.25rem;
+        padding: 1.15rem 1.25rem;
+        border: 1px dashed rgba(163, 112, 247, 0.45);
+        border-radius: var(--ms-radius);
         background: rgba(163, 112, 247, 0.06);
       }
-      .pulse { animation: pulse 1.1s ease-in-out infinite; }
-      @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+      .clone__head {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+
+      .clone__head h3 {
+        margin: 0;
+        font-size: 0.98rem;
+        font-weight: 620;
+        letter-spacing: -0.01em;
+        flex: 1;
+        min-width: 12rem;
+      }
+
+      .clone__steps {
+        display: grid;
+        gap: 0.6rem;
+        margin: 1rem 0 0;
+        padding: 0;
+        list-style: none;
+        counter-reset: step;
+      }
+
+      @media (min-width: 42rem) {
+        .clone__steps {
+          grid-template-columns: repeat(3, 1fr);
+        }
+      }
+
+      .clone__steps li {
+        display: flex;
+        gap: 0.6rem;
+        font-size: 0.86rem;
+        color: var(--ms-muted);
+        counter-increment: step;
+      }
+
+      .clone__steps li::before {
+        content: counter(step);
+        display: grid;
+        place-items: center;
+        flex: none;
+        width: 1.4rem;
+        height: 1.4rem;
+        border-radius: 50%;
+        font-size: 0.72rem;
+        font-weight: 640;
+        color: #d9c6ff;
+        background: rgba(163, 112, 247, 0.22);
+      }
+
+      .clone__steps li.is-done::before {
+        content: "✓";
+        color: #0d1017;
+        background: var(--ms-good);
+      }
+
+      .clone__steps li.is-active {
+        color: var(--ms-text);
+      }
+
+      .clone__steps li.is-active::before {
+        color: #0d1017;
+        background: linear-gradient(135deg, var(--ms-accent-a), var(--ms-accent-b));
+      }
+
+      .pulse {
+        animation: pulse 1.1s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.4;
+        }
+      }
+
+      #player {
+        width: 100%;
+        margin-top: 1.1rem;
+      }
+
+      #player[hidden] {
+        display: none;
+      }
     </style>
   </head>
   <body>
-    <div class="app-card p-4 p-md-5">
-      <div class="d-flex align-items-center gap-2 mb-1">
-        <span class="brand-dot"></span>
-        <h1 class="h4 m-0">Moonshine — Text to Speech</h1>
-      </div>
-      <p class="subtle mb-4">On-device speech synthesis via WebAssembly. Pick an engine and voice, or clone your own.</p>
-
-      <div class="row g-3 mb-3">
-        <div class="col-12 col-sm-6">
-          <label for="engine" class="form-label">Engine</label>
-          <select id="engine" class="form-select">
-            <option value="zipvoice">ZipVoice (cloning)</option>
-            <option value="kokoro">Kokoro</option>
-            <option value="piper">Piper</option>
-          </select>
-        </div>
-        <div class="col-12 col-sm-6">
-          <label for="voice" class="form-label">Voice</label>
-          <select id="voice" class="form-select"></select>
-        </div>
-      </div>
-
-      <div id="clonePanel" class="clone-panel p-3 mb-3">
-        <div class="form-check form-switch mb-2">
-          <input class="form-check-input" type="checkbox" role="switch" id="cloneToggle" />
-          <label class="form-check-label" for="cloneToggle">Clone my own voice</label>
-        </div>
-        <p class="subtle small mb-2">
-          Records from your microphone until it has heard about four seconds of
-          speech, then speaks in your voice. Finding the speech in the recording
-          and transcribing it for the vocoder both happen inside the library.
+    <main class="ms-shell ms-main">
+      <header class="ms-hero">
+        <span class="ms-eyebrow">Runs entirely in your browser</span>
+        <h1>Give your app a voice. Or your own voice.</h1>
+        <p>
+          Type anything and hear it spoken by a model running
+          <strong>entirely in this browser</strong>. Then record about four seconds
+          of yourself and have it speak in your voice instead.
         </p>
-        <div class="d-flex align-items-center gap-2">
-          <button id="record" class="btn btn-sm btn-outline-light" disabled>Record sample</button>
-          <span id="cloneStatus" class="subtle small"></span>
+      </header>
+
+      <section class="ms-card">
+        <span class="ms-label">Pick a voice</span>
+        <div class="voices" id="voices"></div>
+
+        <div class="ms-field" style="margin-top: 1.25rem">
+          <label class="ms-label" for="text">What should it say?</label>
+          <textarea id="text" class="ms-textarea" rows="3">
+Hello from Moonshine. I am running right inside your browser, and nothing I say is sent to a server.</textarea
+          >
+          <div class="ms-chips" id="presets" style="margin-top: 0.6rem"></div>
         </div>
-      </div>
 
-      <label for="text" class="form-label">Text</label>
-      <textarea id="text" class="form-control mb-3" rows="3">Hello from Moonshine, running right in your browser.</textarea>
+        <div class="ms-row" style="margin-top: 1.25rem">
+          <button id="speak" class="ms-btn ms-btn--primary ms-btn--lg" type="button" disabled>
+            Speak it
+          </button>
+          <a id="download" class="ms-btn" hidden download="moonshine-tts.wav">Download WAV</a>
+        </div>
 
-      <div class="d-flex align-items-center gap-3 mb-3">
-        <button id="speak" class="btn btn-primary px-4" disabled>Speak</button>
-        <a id="download" class="btn btn-link text-decoration-none p-0" hidden download="moonshine-tts.wav">Download WAV</a>
-      </div>
+        <p id="status" class="ms-status" style="margin-top: 0.75rem">Loading…</p>
+        <div class="ms-loading">
+          <div class="ms-progress" id="progress">
+            <div class="ms-progress__bar"></div>
+          </div>
+          <p class="ms-loading__detail" id="loadingDetail"></p>
+          <p class="ms-loading-note" id="loadingNote"></p>
+        </div>
 
-      <div class="progress mb-2" style="height: 6px; display: none" id="progressWrap">
-        <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%"></div>
-      </div>
-      <p id="status" class="status-line subtle mb-3">Starting…</p>
+        <audio id="player" controls hidden></audio>
 
-      <audio id="player" class="w-100" controls></audio>
-    </div>
+        <div class="clone" id="clonePanel">
+          <div class="clone__head">
+            <h3>Clone your own voice</h3>
+            <button id="record" class="ms-btn" type="button">Record 4 seconds</button>
+          </div>
+          <ol class="clone__steps" id="cloneSteps">
+            <li data-step="0">Record about four seconds of yourself talking.</li>
+            <li data-step="1">Moonshine trims it and transcribes it for the vocoder.</li>
+            <li data-step="2">Everything you type is now spoken in your voice.</li>
+          </ol>
+          <p id="cloneStatus" class="ms-small ms-muted" style="margin: 0.85rem 0 0"></p>
+        </div>
+      </section>
+
+      <details class="ms-disclosure ms-section" id="moreOptions">
+        <summary>Engine and voice details</summary>
+        <div class="ms-disclosure__body">
+          <div class="ms-grid-2">
+            <div>
+              <label class="ms-label" for="engine">Engine</label>
+              <select id="engine" class="ms-select">
+                <option value="kokoro">Kokoro (82M params, quick to load)</option>
+                <option value="piper">Piper (lightweight, many languages)</option>
+                <option value="zipvoice">ZipVoice (highest quality, supports cloning)</option>
+              </select>
+            </div>
+            <div>
+              <label class="ms-label" for="voice">All voices</label>
+              <select id="voice" class="ms-select"></select>
+            </div>
+          </div>
+          <p class="ms-small ms-muted" style="margin: 0.85rem 0 0">
+            The cards above are a curated shortlist. This list is every voice the
+            selected engine publishes for the current language. Cloning needs
+            ZipVoice, which the page switches to on its own when you record.
+          </p>
+        </div>
+      </details>
+
+      <section class="ms-section" id="proof"></section>
+
+      <section class="ms-section">
+        <h2 class="ms-card__title">The code behind this page</h2>
+        <p class="ms-card__hint">Speaking is two calls. Cloning is one more.</p>
+        <div id="code"></div>
+      </section>
+    </main>
 
     <script type="module">
-      // Load the locally-built binding when the page is opened with ?local=1
-      // (e.g. via examples/web/serve.mjs); otherwise use the published copy from
-      // the jsDelivr CDN. With &assets=local the models are fetched from the repo
-      // (served under /tts-data) instead of the CDN, so it runs fully offline.
-      // A &voice=<id> override sets the default engine + voice (used by the
-      // offline integration test to select a lightweight voice).
-      const params = new URLSearchParams(location.search);
-      const useLocal = params.get('local') === '1';
-      const useLocalAssets = params.get('assets') === 'local';
-      const forcedVoice = params.get('voice');
-      const moduleUrl = useLocal
-        ? '/wasm/dist/index.js'
-        : 'https://cdn.jsdelivr.net/npm/@moonshine-ai/moonshine-wasm/dist/index.js';
+      import {
+        mountChrome,
+        rotatingWords,
+        PLATFORMS,
+        statStrip,
+        codePanel,
+        LoadingUi,
+        describeError,
+        modelsAreCached,
+        purgeModelCacheIfRequested,
+        pcmToWavBlob,
+        pageConfig,
+        audioConstraints,
+      } from '/assets/moonshine-ui.js';
+
+      const { params, useLocalAssets, moduleUrl } = pageConfig();
       const { TextToSpeech, loadMoonshineModule } = await import(moduleUrl);
+
+      mountChrome({
+        active: 'tts',
+        ctaTitle:
+          'Add a voice to your ' + rotatingWords(PLATFORMS) + ' app',
+      });
 
       const LANGUAGE = 'en_us';
       const ASSET_BASE = useLocalAssets ? '/tts-data' : undefined;
+      // Lets the offline integration test pin a lightweight voice.
+      const forcedVoice = params.get('voice');
 
-      // A representative voice id per engine; its prefix selects which engine's
-      // voices `TextToSpeech.voices` enumerates and which vocoder is loaded.
+      /**
+       * The shortlist shown as cards. Kokoro leads because it is much the
+       * quickest to download, which decides how long the first visit waits
+       * before hearing anything. Descriptions rather than ids, so choosing a
+       * voice does not require knowing what "af_heart" means.
+       */
+      const FEATURED = [
+        { id: 'kokoro_af_heart', name: 'Heart', desc: 'Warm American narrator' },
+        { id: 'kokoro_am_michael', name: 'Michael', desc: 'Steady American male' },
+        { id: 'kokoro_bf_emma', name: 'Emma', desc: 'Crisp British female' },
+        { id: 'kokoro_am_puck', name: 'Puck', desc: 'Bright and playful' },
+      ];
+
+      const PRESETS = [
+        'Hello from Moonshine. I am running right inside your browser, and nothing I say is sent to a server.',
+        'Your table is ready. Please make your way to the host stand.',
+        'Warning: the reactor core temperature is outside the safe operating range.',
+        'Once upon a time, in a valley nobody had bothered to name, there lived a very stubborn goat.',
+      ];
+
       const ENGINE_SAMPLE_VOICE = {
-        zipvoice: 'zipvoice_american_female',
         kokoro: 'kokoro_af_heart',
         piper: 'piper_en_US-lessac-medium',
+        zipvoice: 'zipvoice_american_female',
       };
 
       const els = {
-        engine: document.getElementById('engine'),
-        voice: document.getElementById('voice'),
-        clonePanel: document.getElementById('clonePanel'),
-        cloneToggle: document.getElementById('cloneToggle'),
-        record: document.getElementById('record'),
-        cloneStatus: document.getElementById('cloneStatus'),
+        voices: document.getElementById('voices'),
+        presets: document.getElementById('presets'),
         text: document.getElementById('text'),
         speak: document.getElementById('speak'),
         download: document.getElementById('download'),
         status: document.getElementById('status'),
-        progressWrap: document.getElementById('progressWrap'),
-        progressBar: document.getElementById('progressBar'),
+        progress: document.getElementById('progress'),
+        note: document.getElementById('loadingNote'),
+        detail: document.getElementById('loadingDetail'),
         player: document.getElementById('player'),
+        engine: document.getElementById('engine'),
+        voice: document.getElementById('voice'),
+        record: document.getElementById('record'),
+        cloneStatus: document.getElementById('cloneStatus'),
+        cloneSteps: document.getElementById('cloneSteps'),
       };
 
+      document.getElementById('proof').innerHTML = statStrip([
+        { value: '16', label: 'Languages, from Arabic to Vietnamese' },
+        { value: '~4 s', label: 'Of your speech is enough to clone a voice' },
+        { value: '82M', label: 'Parameters in the default Kokoro voice model' },
+        { value: 'MIT', label: 'Licensed grapheme-to-phoneme engine, no GPL espeak' },
+      ]);
+
+      document.getElementById('code').append(
+        codePanel({
+          file: 'speak.js',
+          code: `import { TextToSpeech } from '@moonshine-ai/moonshine-wasm';
+
+const tts = new TextToSpeech().language('en_us').voice('kokoro_af_heart');
+await tts.load();
+await tts.say('Hello from Moonshine.');
+
+// Cloning: hand it a few seconds of speech and keep going.
+await tts.cloneFrom(recording);
+await tts.say('Now I sound like you.');`,
+        }),
+      );
+
+      const loading = new LoadingUi({
+        status: els.status,
+        progress: els.progress,
+        note: els.note,
+        detail: els.detail,
+        notes: [
+          'The voice model downloads once, then synthesis is instant and offline.',
+          'Kokoro is 82 million parameters, small enough to run on a phone.',
+          'Text never leaves the page. There is no synthesis server to send it to.',
+          'Switching voices below downloads only what that voice needs.',
+        ],
+      });
+
+      // --- State ------------------------------------------------------------
+
       let module = null;
-      let tts = null; // current TextToSpeech instance
-      let ttsReady = null; // Promise resolving to the current tts
-      let loadToken = 0; // guards against overlapping (re)loads
-      let clonedVoice = null; // the VoiceClone captured by "Record sample"
+      let tts = null;
+      let ttsReady = null;
+      let loadToken = 0;
+      let clonedVoice = null;
       let audioContext = null;
+      let selectedVoice = forcedVoice ?? FEATURED[0].id;
 
-      function setStatus(text) { els.status.textContent = text; }
+      const engineOf = (voiceId) => String(voiceId).split('_')[0];
 
-      function onProgress(fraction, file) {
-        els.progressWrap.style.display = 'block';
-        const pct = Math.round(100 * fraction);
-        els.progressBar.style.width = `${pct}%`;
-        const name = (file || '').split('/').pop();
-        setStatus(`Downloading ${name} ${pct}%…`);
+      function setCloneStep(index) {
+        [...els.cloneSteps.children].forEach((li, i) => {
+          li.classList.toggle('is-active', i === index);
+          li.classList.toggle('is-done', index !== null && i < index);
+        });
       }
-      function hideProgress() { els.progressWrap.style.display = 'none'; }
 
-      const currentEngine = () => els.engine.value;
-      const isCloneMode = () => currentEngine() === 'zipvoice' && els.cloneToggle.checked;
+      // --- Voice cards + presets ---------------------------------------------
 
-      /** Populates the voice dropdown for the selected engine. */
-      async function populateVoices(engine, preferredVoice) {
-        els.voice.innerHTML = '';
+      function renderVoiceCards() {
+        els.voices.textContent = '';
+        for (const voice of FEATURED) {
+          const card = document.createElement('button');
+          card.type = 'button';
+          card.className = `voice${voice.id === selectedVoice && !clonedVoice ? ' is-active' : ''}`;
+          card.dataset.voice = voice.id;
+          card.innerHTML = `<span class="voice__name">${voice.name}</span>
+                            <span class="voice__desc">${voice.desc}</span>`;
+          card.addEventListener('click', () => pickVoice(voice.id));
+          els.voices.append(card);
+        }
+      }
+
+      for (const preset of PRESETS) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'ms-chip';
+        // A readable stub rather than the whole sentence.
+        chip.textContent = preset.split(/[.,:]/)[0].slice(0, 34) + '…';
+        chip.title = preset;
+        chip.addEventListener('click', () => {
+          els.text.value = preset;
+          els.text.focus();
+        });
+        els.presets.append(chip);
+      }
+
+      async function pickVoice(voiceId) {
+        if (voiceId === selectedVoice && !clonedVoice) return;
+        selectedVoice = voiceId;
+        clonedVoice = null;
+        setCloneStep(null);
+        els.cloneStatus.textContent = '';
+        renderVoiceCards();
+        els.engine.value = engineOf(voiceId);
+        await populateVoiceList(engineOf(voiceId), voiceId);
+        await applySelection();
+      }
+
+      /** Fills the full voice dropdown in the advanced disclosure. */
+      async function populateVoiceList(engine, preferred) {
+        els.voice.textContent = '';
         let voices = [];
         try {
           voices = await TextToSpeech.voices({
@@ -179,47 +437,39 @@
         } catch {
           /* fall back to the representative voice below */
         }
-        if (voices.length === 0) {
-          voices = [{ id: ENGINE_SAMPLE_VOICE[engine] }];
+        if (!voices.length) voices = [{ id: ENGINE_SAMPLE_VOICE[engine] }];
+        for (const voice of voices) {
+          const option = document.createElement('option');
+          option.value = voice.id;
+          option.textContent = voice.id.replace(/^(zipvoice|kokoro|piper)_/, '');
+          els.voice.append(option);
         }
-        for (const v of voices) {
-          const opt = document.createElement('option');
-          opt.value = v.id;
-          opt.textContent = v.id.replace(/^(zipvoice|kokoro|piper)_/, '');
-          els.voice.appendChild(opt);
-        }
-        const want = preferredVoice && voices.some((v) => v.id === preferredVoice)
-          ? preferredVoice
-          : voices[0].id;
-        els.voice.value = want;
+        els.voice.value = voices.some((v) => v.id === preferred) ? preferred : voices[0].id;
       }
 
-      /** Builds (and preloads) a TextToSpeech instance for the current selection. */
-      async function applySelection() {
+      // --- Loading the synthesizer -------------------------------------------
+
+      /** Builds a TextToSpeech for the current selection and preloads it. */
+      async function applySelection({ cloning = false } = {}) {
         const token = ++loadToken;
         els.speak.disabled = true;
-        hideProgress();
 
         const previous = tts;
         tts = null;
         ttsReady = (async () => {
           try {
-            const cloning = isCloneMode();
-            setStatus(cloning ? 'Loading ZipVoice cloning model…' : 'Loading voice…');
-
+            loading.setStatus('Loading…');
             const instance = new TextToSpeech()
               .language(LANGUAGE)
               .useModule(module)
-              .onProgress(onProgress);
+              .onProgress(loading.onProgress);
             if (ASSET_BASE) instance.modelsFrom(ASSET_BASE);
-            // .cloning() pulls the cloning engine up front so the first
-            // cloneFrom() after a recording is quick.
+            // .cloning() pulls the cloning engine up front, so the first
+            // cloneFrom() after a recording does not go back to the network.
             if (cloning) instance.cloning();
-            else instance.voice(els.voice.value);
+            else instance.voice(selectedVoice);
 
             await instance.load();
-            // The clip trimming and its transcription happen inside cloneFrom;
-            // all this page hands over is the captured sample.
             if (cloning && clonedVoice) await instance.cloneFrom(clonedVoice);
 
             if (token !== loadToken) {
@@ -228,18 +478,19 @@
             }
             tts = instance;
             previous?.close();
-            hideProgress();
+            loading.done();
+
             if (cloning && !clonedVoice) {
-              setStatus('Record a voice sample to enable cloning.');
+              loading.setStatus('Record a sample');
             } else {
-              setStatus('Ready.');
+              loading.setStatus('Ready', 'ready');
               els.speak.disabled = false;
             }
             return instance;
           } catch (err) {
             if (token === loadToken) {
-              hideProgress();
-              setStatus('Failed to load: ' + err.message);
+              loading.done();
+              loading.setStatus(describeError(err), 'error');
             }
             return null;
           }
@@ -247,35 +498,7 @@
         return ttsReady;
       }
 
-      // --- Synthesis + playback ------------------------------------------------
-
-      /** Wraps mono Float32 PCM as a 16-bit WAV blob. */
-      function pcmToWavBlob(audio, sampleRate) {
-        const numFrames = audio.length;
-        const buffer = new ArrayBuffer(44 + numFrames * 2);
-        const view = new DataView(buffer);
-        const writeStr = (offset, str) => {
-          for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
-        };
-        writeStr(0, 'RIFF');
-        view.setUint32(4, 36 + numFrames * 2, true);
-        writeStr(8, 'WAVE');
-        writeStr(12, 'fmt ');
-        view.setUint32(16, 16, true);
-        view.setUint16(20, 1, true);
-        view.setUint16(22, 1, true);
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, sampleRate * 2, true);
-        view.setUint16(32, 2, true);
-        view.setUint16(34, 16, true);
-        writeStr(36, 'data');
-        view.setUint32(40, numFrames * 2, true);
-        for (let i = 0; i < numFrames; i++) {
-          const s = Math.max(-1, Math.min(1, audio[i]));
-          view.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
-        }
-        return new Blob([buffer], { type: 'audio/wav' });
-      }
+      // --- Synthesis ----------------------------------------------------------
 
       async function speak() {
         els.speak.disabled = true;
@@ -283,68 +506,76 @@
         try {
           const synth = (await ttsReady) ?? (await applySelection());
           if (!synth) return;
-          setStatus('Synthesizing…');
-          // synthesize() returns the PCM so the page can offer a download;
-          // synth.say() would play it directly instead.
+          loading.setStatus('Synthesizing…');
+          // synthesize() hands back the PCM so the page can offer a download;
+          // synth.say() would just play it.
           const { audio, sampleRate } = synth.synthesize(els.text.value);
 
-          const blob = pcmToWavBlob(audio, sampleRate);
-          const url = URL.createObjectURL(blob);
+          const url = URL.createObjectURL(pcmToWavBlob(audio, sampleRate));
           if (els.player.dataset.url) URL.revokeObjectURL(els.player.dataset.url);
           els.player.src = url;
           els.player.dataset.url = url;
+          els.player.hidden = false;
           els.download.href = url;
           els.download.hidden = false;
           window.__ttsResult = { samples: audio.length, sampleRate };
-          setStatus(`Done (${audio.length} samples @ ${sampleRate} Hz).`);
 
-          // Autoplay the result (allowed here since we're inside a click gesture).
-          try { await els.player.play(); } catch { /* autoplay may be blocked */ }
+          const seconds = (audio.length / sampleRate).toFixed(1);
+          loading.setStatus(`Done, ${seconds}s of audio`, 'ready');
+          try {
+            await els.player.play();
+          } catch {
+            /* autoplay may be blocked; the controls still work */
+          }
         } catch (err) {
-          setStatus('Error: ' + err.message);
+          loading.setStatus(describeError(err), 'error');
         } finally {
           els.speak.disabled = false;
         }
       }
 
-      // --- Voice cloning capture ----------------------------------------------
+      // --- Cloning ------------------------------------------------------------
 
-      /**
-       * Records a reference sample and clones it. Everything that used to live
-       * here — resampling, running a voice-activity pass to find four seconds of
-       * actual speech, and transcribing the clip so the vocoder can align it —
-       * is inside `startCloning` and `cloneFrom` now.
-       */
       async function onRecord() {
         els.record.disabled = true;
+        setCloneStep(0);
         els.cloneStatus.classList.add('pulse');
-        els.cloneStatus.textContent = 'Requesting microphone…';
+        els.cloneStatus.textContent = 'Asking for the microphone…';
         try {
+          // Cloning only exists on ZipVoice, so switch engines behind the scenes
+          // rather than making that the visitor's problem.
+          if (engineOf(selectedVoice) !== 'zipvoice' || !tts) {
+            await applySelection({ cloning: true });
+          }
           const synth = await ttsReady;
           if (!synth) return;
 
           const clone = synth.startCloning();
           clone.onProgress((recorded, speech) => {
             els.cloneStatus.textContent =
-              `Listening… ${recorded.toFixed(1)}s (${speech.toFixed(1)}s of speech)`;
+              `Listening… ${recorded.toFixed(1)}s recorded, ${speech.toFixed(1)}s of speech`;
           });
           clone.onReady(() => {
-            els.cloneStatus.textContent = 'Got enough — you can stop talking.';
+            els.cloneStatus.textContent = 'Got enough. You can stop talking.';
           });
 
-          await clone.fromMicrophone();
+          await clone.fromMicrophone({ audioConstraints: await audioConstraints() });
           els.cloneStatus.classList.remove('pulse');
-          els.cloneStatus.textContent = 'Cloning your voice…';
+          setCloneStep(1);
+          els.cloneStatus.textContent = 'Trimming and transcribing your clip…';
 
           await synth.cloneFrom(clone);
           clonedVoice = clone;
-          els.cloneStatus.textContent =
-            `Cloned from ${(clone.audio.length / clone.sampleRate).toFixed(1)}s of speech ✓`;
+          renderVoiceCards();
+          setCloneStep(2);
+          const seconds = (clone.audio.length / clone.sampleRate).toFixed(1);
+          els.cloneStatus.textContent = `Cloned from ${seconds}s of your speech. Type something and press Speak it.`;
           els.speak.disabled = false;
-          setStatus('Ready.');
+          loading.setStatus('Ready, your voice', 'ready');
         } catch (err) {
           els.cloneStatus.classList.remove('pulse');
-          els.cloneStatus.textContent = 'Mic error: ' + err.message;
+          setCloneStep(null);
+          els.cloneStatus.textContent = describeError(err);
         } finally {
           els.record.disabled = false;
         }
@@ -352,53 +583,31 @@
 
       // --- Wiring --------------------------------------------------------------
 
-      function syncCloneUi() {
-        const zip = currentEngine() === 'zipvoice';
-        els.clonePanel.style.display = zip ? 'block' : 'none';
-        const cloning = isCloneMode();
-        els.voice.disabled = cloning;
-        els.record.disabled = !cloning;
-        if (!cloning) els.cloneStatus.textContent = '';
-      }
-
-      els.engine.addEventListener('change', async () => {
-        clonedVoice = null;
-        els.cloneToggle.checked = false;
-        await populateVoices(currentEngine());
-        syncCloneUi();
-        await applySelection();
-      });
-
-      els.voice.addEventListener('change', () => applySelection());
-
-      els.cloneToggle.addEventListener('change', async () => {
-        syncCloneUi();
-        await applySelection();
-      });
-
-      els.record.addEventListener('click', onRecord);
       els.speak.addEventListener('click', () => {
         audioContext ??= new (window.AudioContext || window.webkitAudioContext)();
         speak();
       });
+      els.record.addEventListener('click', onRecord);
 
-      // --- Startup: preload the default (ZipVoice American Female) -------------
-      async function init() {
-        setStatus('Loading engine…');
-        module = await loadMoonshineModule();
-        const defaultEngine = forcedVoice
-          ? (forcedVoice.split('_')[0] in ENGINE_SAMPLE_VOICE
-              ? forcedVoice.split('_')[0]
-              : 'zipvoice')
-          : 'zipvoice';
-        const defaultVoice = forcedVoice ?? 'zipvoice_american_female';
-        els.engine.value = defaultEngine;
-        await populateVoices(defaultEngine, defaultVoice);
-        syncCloneUi();
-        await applySelection();
+      els.engine.addEventListener('change', async () => {
+        const engine = els.engine.value;
+        await populateVoiceList(engine, ENGINE_SAMPLE_VOICE[engine]);
+        await pickVoice(els.voice.value);
+      });
+
+      els.voice.addEventListener('change', () => pickVoice(els.voice.value));
+
+      // --- Startup --------------------------------------------------------------
+
+      await purgeModelCacheIfRequested();
+      if (await modelsAreCached()) {
+        loading.setStatus('Loading…');
       }
-
-      init();
+      renderVoiceCards();
+      module = await loadMoonshineModule();
+      els.engine.value = engineOf(selectedVoice);
+      await populateVoiceList(engineOf(selectedVoice), selectedVoice);
+      await applySelection();
     </script>
   </body>
 </html>

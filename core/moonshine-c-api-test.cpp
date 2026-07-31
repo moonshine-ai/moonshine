@@ -1132,7 +1132,7 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     std::free(out);
   }
 
-  SUBCASE("tts-piper-voice-selects-onnx-basename") {
+  SUBCASE("tts-piper-voice-selects-split-ort-pair") {
     const moonshine_option_t opts[] = {
         {"voice", "piper_de_DE-thorsten-medium"},
     };
@@ -1141,7 +1141,25 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
             MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
-    CHECK(json.find("de_DE-thorsten-medium.onnx") != std::string::npos);
+    // A quantized voice ships as a split ORT pair; the config keeps the
+    // ``.onnx.json`` name whatever form the model takes.
+    CHECK(json.find("de_DE-thorsten-medium.model.ort") != std::string::npos);
+    CHECK(json.find("de_DE-thorsten-medium.weights.ort") != std::string::npos);
+    CHECK(json.find("de_DE-thorsten-medium.onnx.json") != std::string::npos);
+    std::free(out);
+  }
+
+  SUBCASE("tts-piper-unquantized-voice-selects-single-ort") {
+    const moonshine_option_t opts[] = {
+        {"voice", "piper_en_US-saikat"},
+    };
+    char* out = nullptr;
+    REQUIRE(moonshine_get_tts_dependencies("en_us", opts, 1, &out) ==
+            MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string json(out);
+    CHECK(json.find("en_US-saikat.ort") != std::string::npos);
+    CHECK(json.find("en_US-saikat.model.ort") == std::string::npos);
     std::free(out);
   }
 

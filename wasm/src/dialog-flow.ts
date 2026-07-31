@@ -33,7 +33,11 @@ import {
   PhraseMatcher,
   type PhraseGroup,
 } from './embedding-model.js';
-import { MicTranscriber, type ProgressCallback } from './mic-transcriber.js';
+import {
+  MicTranscriber,
+  wrapProgress,
+  type ProgressCallback,
+} from './mic-transcriber.js';
 import { loadMoonshineModule, type MoonshineModule } from './module.js';
 import { TextToSpeech } from './text-to-speech.js';
 
@@ -208,6 +212,7 @@ export class DialogFlow {
   private embedding?: EmbeddingModel;
   private matcher = new PhraseMatcher();
   private mic?: MicTranscriber;
+  private micConstraints: MediaTrackConstraints | boolean = true;
   private ownsTts = true;
   private ownsMic = true;
 
@@ -261,6 +266,16 @@ export class DialogFlow {
   /** Set to false to drive the dialog from text instead of a microphone. */
   microphone(enabled: boolean): this {
     this.wantsMicrophone = enabled;
+    return this;
+  }
+
+  /**
+   * Constraints for the microphone this opens, e.g. to name a capture device
+   * rather than accept the browser's default. Ignored when a transcriber is
+   * supplied through {@link useMicTranscriber}, which brings its own.
+   */
+  audioConstraints(constraints: MediaTrackConstraints | boolean): this {
+    this.micConstraints = constraints;
     return this;
   }
 
@@ -354,10 +369,7 @@ export class DialogFlow {
       // self-hosted base URL happens at the downloader.
       this.sharedDownloader = new AssetDownloader({
         baseUrl: this.assetBase,
-        onProgress: progress
-          ? (loaded, total, file) =>
-              progress(total ? Math.min(1, loaded / total) : 0, file)
-          : undefined,
+        onProgress: wrapProgress(progress),
       });
     }
 
@@ -375,10 +387,7 @@ export class DialogFlow {
       this.embedding = await EmbeddingModel.load({
         module: this.mod,
         downloader: this.sharedDownloader,
-        onProgress: progress
-          ? (loaded, total, file) =>
-              progress(total ? Math.min(1, loaded / total) : 0, file)
-          : undefined,
+        onProgress: wrapProgress(progress),
       });
       this.matcher = new PhraseMatcher(this.embedding);
     }
@@ -386,7 +395,8 @@ export class DialogFlow {
     if (this.wantsMicrophone && !this.mic) {
       const mic = new MicTranscriber()
         .language(this.languageCode)
-        .modelArch(this.arch);
+        .modelArch(this.arch)
+        .audioConstraints(this.micConstraints);
       if (this.assetBase) mic.modelsFrom(this.assetBase);
       if (progress) mic.onProgress(progress);
       this.mic = await mic.load();

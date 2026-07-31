@@ -47,6 +47,17 @@ test('batch transcription recovers the expected phrases', { skip }, () => {
   }
 });
 
+test('transcript line ids are unique, opaque strings', { skip }, () => {
+  const transcript = transcriber.transcribe(audio, { sampleRate });
+  assert.ok(transcript.lines.length > 1, 'need several lines to compare ids');
+  for (const line of transcript.lines) {
+    assert.equal(typeof line.id, 'string', 'ids must survive 64 bits intact');
+    assert.match(line.id, /^\d+$/);
+  }
+  const ids = transcript.lines.map((l) => l.id);
+  assert.equal(new Set(ids).size, ids.length, `line ids must be unique: ${ids}`);
+});
+
 test('batch transcript lines carry well-formed timing/text', { skip }, () => {
   const transcript = transcriber.transcribe(audio, { sampleRate });
   for (const line of transcript.lines) {
@@ -95,6 +106,14 @@ test('streaming emits line events and recovers the phrases', { skip }, () => {
   assert.ok(textChanged > 0, 'expected text to change while streaming');
   // Every completed line should also have started (Android's invariant).
   assert.ok(completed <= started);
+  // A clip this long segments into several lines, and each must be announced
+  // separately. Line ids are consecutive 64-bit values, so anything that
+  // narrows them (a double, say) merges every line into one and drops all but
+  // the first pair of events.
+  assert.ok(
+    started >= final.lines.length,
+    `expected a LineStarted per line, got ${started} for ${final.lines.length} lines`,
+  );
 
   const text = joinedText(final);
   for (const phrase of EXPECTED) {

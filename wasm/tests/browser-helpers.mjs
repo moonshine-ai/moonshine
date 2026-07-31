@@ -117,6 +117,10 @@ export async function launchBrowser(puppeteer, executablePath) {
       // Let TTS playback start without a gesture and stay silent in CI.
       '--autoplay-policy=no-user-gesture-required',
       '--mute-audio',
+      // Grant microphone access automatically and back it with synthetic
+      // devices, so capture paths can be exercised without real hardware.
+      '--use-fake-ui-for-media-stream',
+      '--use-fake-device-for-media-stream',
     ],
   });
 }

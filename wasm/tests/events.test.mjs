@@ -14,7 +14,8 @@ const { createDiffState, diffTranscript, dispatchError } = await import(
 
 function line(id, text, flags = {}) {
   return {
-    id,
+    // Ids arrive from the binding as decimal strings; see TranscriptLine.id.
+    id: String(id),
     text,
     startTime: 0,
     duration: 0,
@@ -46,7 +47,7 @@ test('a brand new line emits exactly one LineStarted', () => {
   const state = createDiffState();
   const { events, listener } = recorder();
   diffTranscript({ lines: [line(1, 'hello')] }, state, [listener]);
-  assert.deepEqual(events, [['started', 1, 'hello']]);
+  assert.deepEqual(events, [['started', '1', 'hello']]);
 });
 
 test('changing text on an existing line emits LineTextChanged', () => {
@@ -55,7 +56,7 @@ test('changing text on an existing line emits LineTextChanged', () => {
   diffTranscript({ lines: [line(1, 'hello')] }, state, [listener]);
   events.length = 0;
   diffTranscript({ lines: [line(1, 'hello there')] }, state, [listener]);
-  assert.deepEqual(events, [['textChanged', 1, 'hello there']]);
+  assert.deepEqual(events, [['textChanged', '1', 'hello there']]);
 });
 
 test('unchanged text does not re-emit textChanged', () => {
@@ -73,7 +74,7 @@ test('the isUpdated flag emits LineUpdated', () => {
   diffTranscript({ lines: [line(1, 'x')] }, state, [listener]);
   events.length = 0;
   diffTranscript({ lines: [line(1, 'x', { isUpdated: true })] }, state, [listener]);
-  assert.deepEqual(events, [['updated', 1, 'x']]);
+  assert.deepEqual(events, [['updated', '1', 'x']]);
 });
 
 test('the haveSpeakersChanged flag emits LineSpeakersChanged', () => {
@@ -84,7 +85,7 @@ test('the haveSpeakersChanged flag emits LineSpeakersChanged', () => {
     state,
     [listener],
   );
-  assert.ok(events.some((e) => e[0] === 'speakersChanged' && e[1] === 1));
+  assert.ok(events.some((e) => e[0] === 'speakersChanged' && e[1] === '1'));
 });
 
 test('completion emits LineCompleted exactly once', () => {
@@ -106,7 +107,37 @@ test('multiple lines each start independently', () => {
   const { events, listener } = recorder();
   diffTranscript({ lines: [line(1, 'a'), line(2, 'b')] }, state, [listener]);
   const started = events.filter((e) => e[0] === 'started').map((e) => e[1]);
-  assert.deepEqual(started, [1, 2]);
+  assert.deepEqual(started, ['1', '2']);
+});
+
+test('lines whose ids differ below double precision stay distinct', () => {
+  // The core allocates line ids as a random 64-bit base incremented by one per
+  // line (next_line_id in core/transcriber.cpp). Such ids land above 2^53,
+  // where neighbouring doubles are 2048 apart, so consecutive ids are
+  // indistinguishable as JS numbers. When the binding passed them as doubles
+  // every line in a stream collapsed onto one id: only the first line ever
+  // started or completed, and a transcript could never accumulate.
+  const first = '11912333487969440274';
+  const second = '11912333487969440275';
+  assert.equal(Number(first), Number(second), 'precondition: these collide as numbers');
+
+  const state = createDiffState();
+  const { events, listener } = recorder();
+  diffTranscript(
+    {
+      lines: [
+        line(first, 'first utterance', { isComplete: true }),
+        line(second, 'second utterance', { isComplete: true }),
+      ],
+    },
+    state,
+    [listener],
+  );
+
+  const started = events.filter((e) => e[0] === 'started').map((e) => e[1]);
+  const completed = events.filter((e) => e[0] === 'completed').map((e) => e[1]);
+  assert.deepEqual(started, [first, second]);
+  assert.deepEqual(completed, [first, second]);
 });
 
 test('a throwing listener does not break delivery to others', () => {
@@ -120,7 +151,7 @@ test('a throwing listener does not break delivery to others', () => {
   assert.doesNotThrow(() =>
     diffTranscript({ lines: [line(1, 'hi')] }, state, [bad, listener]),
   );
-  assert.deepEqual(events, [['started', 1, 'hi']]);
+  assert.deepEqual(events, [['started', '1', 'hi']]);
 });
 
 test('dispatchError routes to onError', () => {

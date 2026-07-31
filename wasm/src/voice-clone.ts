@@ -135,6 +135,10 @@ export class VoiceClone {
       audio: options.audioConstraints ?? true,
     });
     const context = new AudioContext();
+    // A context created without user activation starts suspended, and never
+    // pulls audio: recording would appear to run and capture nothing but
+    // silence until maxSeconds expired.
+    if (context.state === 'suspended') await context.resume();
     const inputRate = context.sampleRate;
     const source = context.createMediaStreamSource(mediaStream);
     const node = context.createScriptProcessor(4096, 1, 1);

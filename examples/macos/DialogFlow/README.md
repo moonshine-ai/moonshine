@@ -5,7 +5,7 @@ mirroring the web `dialog-flow` demo and the Python `dialog_flow.py` script.
 
 `DialogFlow` owns the speech-to-text, embedding, and text-to-speech engines, so
 the
-interesting part of the program is the flow itself — ordinary `async` code that
+interesting part of the program is the flow itself: ordinary `async` code that
 asks a question and gets an answer back:
 
 ```swift

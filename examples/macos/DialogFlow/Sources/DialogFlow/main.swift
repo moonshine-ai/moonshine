@@ -2,7 +2,7 @@ import Foundation
 import MoonshineVoice
 
 /// A voice-driven wifi setup, the whole thing. Say "set up wifi" to start it,
-/// "cancel" to abandon it, or "start over" to run it again — the last two are
+/// "cancel" to abandon it, or "start over" to run it again. The last two are
 /// built in, so this file never mentions them.
 ///
 /// Run with `--text` to type the answers instead of speaking them, which is

@@ -25,8 +25,27 @@ import type { TranscriptLine } from './types.js';
 
 const TARGET_SAMPLE_RATE = 16000;
 
-/** Download progress, as a `0..1` fraction plus the file being fetched. */
-export type ProgressCallback = (fraction: number, file: string) => void;
+/** Byte counts behind a progress report, covering the whole model. */
+export interface DownloadProgress {
+  /** Bytes fetched so far across every file the model needs. */
+  loaded: number;
+  /**
+   * Total bytes the model needs, from the sizes its manifest declares.
+   * Undefined when fetching files of unknown size, in which case `fraction`
+   * is meaningless and the download should be shown as indeterminate.
+   */
+  total?: number;
+}
+
+/**
+ * Download progress: a `0..1` fraction of the *entire* model, the file
+ * currently in flight, and the underlying byte counts.
+ */
+export type ProgressCallback = (
+  fraction: number,
+  file: string,
+  progress?: DownloadProgress,
+) => void;
 
 export class MicTranscriber {
   private transcriber?: Transcriber;
@@ -173,6 +192,15 @@ export class MicTranscriber {
     }
 
     this.audioContext = new AudioContext();
+    // A context created without user activation starts suspended, and a
+    // suspended context never pulls audio: the worklet is installed, the graph
+    // is connected, no error is raised, and not a single sample arrives. Since
+    // start() is reached through several awaits (model load, getUserMedia) the
+    // originating gesture can be far enough back for Chrome to withhold it, so
+    // resume explicitly rather than assuming.
+    if (this.audioContext.state === 'suspended') {
+      await this.audioContext.resume();
+    }
     const inputSampleRate = this.audioContext.sampleRate;
     this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);
 
@@ -270,6 +298,9 @@ export class MicTranscriber {
 
   private setupScriptProcessor(onChunk: (c: Float32Array) => void): void {
     const ctx = this.audioContext!;
+    // Asking for one input channel makes WebAudio downmix a multi-channel
+    // source for us, so this path needs no equivalent of the worklet's
+    // downmixToMono.
     this.scriptNode = ctx.createScriptProcessor(4096, 1, 1);
     this.scriptNode.onaudioprocess = (event) => {
       onChunk(new Float32Array(event.inputBuffer.getChannelData(0)));
@@ -281,14 +312,16 @@ export class MicTranscriber {
 
 /**
  * Adapts the `0..1` fraction callbacks the public API uses onto the
- * `(loaded, total, file)` shape the downloader reports.
+ * `(loaded, total, file)` shape the downloader reports. The downloader counts
+ * bytes across the whole model, so the fraction is a true overall percentage
+ * whenever the manifest declared its sizes.
  */
 export function wrapProgress(
   callback: ProgressCallback | undefined,
 ): ((loaded: number, total: number | undefined, file: string) => void) | undefined {
   if (!callback) return undefined;
   return (loaded, total, file) => {
-    callback(total ? Math.min(1, loaded / total) : 0, file);
+    callback(total ? Math.min(1, loaded / total) : 0, file, { loaded, total });
   };
 }
 
@@ -309,14 +342,43 @@ export function resampleTo16k(input: Float32Array, inputRate: number): Float32Ar
   return output;
 }
 
-/** AudioWorklet that forwards mono input frames to the main thread. */
+/**
+ * Averages capture channels into one mono buffer.
+ *
+ * Averaging rather than taking the first channel matters: plenty of capture
+ * devices (USB headsets, audio interfaces, dock passthroughs) open as stereo
+ * with the microphone on the right channel and digital silence on the left.
+ * Reading only channel 0 there yields a stream of zeroes, so everything appears
+ * to run and nothing is ever transcribed.
+ *
+ * Always returns a copy, because the worklet reuses its input buffers.
+ */
+export function downmixToMono(channels: readonly Float32Array[]): Float32Array {
+  if (channels.length === 1) return new Float32Array(channels[0]);
+  const frames = channels[0].length;
+  const mixed = new Float32Array(frames);
+  for (let c = 0; c < channels.length; c++) {
+    const channel = channels[c];
+    for (let i = 0; i < frames; i++) mixed[i] += channel[i];
+  }
+  for (let i = 0; i < frames; i++) mixed[i] /= channels.length;
+  return mixed;
+}
+
+/**
+ * AudioWorklet that downmixes the input to mono and forwards it to the main
+ * thread. A worklet gets its own global scope, so {@link downmixToMono} is
+ * inlined by source rather than imported — that way the function under test is
+ * literally the one that runs.
+ */
 const CAPTURE_WORKLET_SOURCE = `
+${downmixToMono.toString()}
+
 class MoonshineCaptureProcessor extends AudioWorkletProcessor {
   process(inputs) {
     const input = inputs[0];
-    if (input && input[0]) {
-      // Copy: the underlying buffer is reused by the engine.
-      this.port.postMessage(new Float32Array(input[0]));
+    if (input && input.length && input[0]) {
+      this.port.postMessage(downmixToMono(input));
     }
     return true;
   }

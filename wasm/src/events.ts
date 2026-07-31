@@ -40,11 +40,11 @@ export interface TranscriptEventListener {
 /** Tracks per-line state across snapshots so we only emit real transitions. */
 export interface DiffState {
   /** Line id -> last seen text. */
-  seenText: Map<number, string>;
+  seenText: Map<string, string>;
   /** Line ids we've emitted `onLineStarted` for. */
-  started: Set<number>;
+  started: Set<string>;
   /** Line ids we've emitted `onLineCompleted` for. */
-  completed: Set<number>;
+  completed: Set<string>;
 }
 
 export function createDiffState(): DiffState {

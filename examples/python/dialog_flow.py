@@ -2,16 +2,16 @@
 
 This example demonstrates the :class:`DialogFlow` runner driving a
 generator-based conversational flow that sets up a wifi network.  The flow
-reads top-to-bottom like a script – branching is ``if`` / ``else``, retries
+reads top-to-bottom like a script: branching is ``if`` / ``else``, retries
 are ``while``, and sub-dialogs are ``yield from``.
 
 Three ways to run it:
 
-* Default – interactive keyboard mode: prompts are printed to stdout,
+* Default, interactive keyboard mode: prompts are printed to stdout,
   you type replies on stdin.  Fast, no audio hardware required.
-* ``--mic`` – live microphone mode: :class:`DialogFlow` opens the
+* ``--mic``, live microphone mode: :class:`DialogFlow` opens the
   microphone and speaks its prompts aloud.
-* ``--scripted`` – canned-answer mode: drives the same flow from a
+* ``--scripted``, canned-answer mode: drives the same flow from a
   pre-defined list of utterances, useful for smoke tests.
 """
 
@@ -185,7 +185,7 @@ def run_interactive(
     *,
     debug: bool = False,
 ) -> None:
-    """Keyboard-driven demo – prompts go to stdout, replies come from stdin.
+    """Keyboard-driven demo: prompts go to stdout, replies come from stdin.
 
     Useful when you want to exercise the flow without any audio hardware
     or TTS latency.  All trigger / confirmation / choice matching still
@@ -272,7 +272,7 @@ def main() -> None:
         action="store_true",
         help=(
             "List PortAudio output devices and exit.  Useful when the "
-            "assistant is silent under --mic — the host default may "
+            "assistant is silent under --mic, since the host default may "
             "not be the device with speakers."
         ),
     )

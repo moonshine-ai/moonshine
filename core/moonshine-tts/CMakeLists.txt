@@ -234,6 +234,12 @@ if(MOONSHINE_TTS_BUILD_ONNX)
     copy_onnxruntime_dll(onnx_g2p_smoke_test)
   endif()
 
+  moonshine_tts_add_test(piper_voice_form_test moonshine_tts_ort)
+  moonshine_tts_set_ort_rpath(piper_voice_form_test)
+  if(WIN32)
+    copy_onnxruntime_dll(piper_voice_form_test)
+  endif()
+
   moonshine_tts_add_test(moonshine_tts_speed_test moonshine_tts_ort)
   moonshine_tts_set_ort_rpath(moonshine_tts_speed_test)
   if(WIN32)

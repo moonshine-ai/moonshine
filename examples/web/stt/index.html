@@ -3,131 +3,473 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Moonshine — Speech to Text</title>
+    <title>Speech to Text | Moonshine Voice</title>
+    <meta
+      name="description"
+      content="Real-time speech recognition running entirely in your browser via WebAssembly. No API key, no account, no audio uploaded."
+    />
+    <meta property="og:title" content="Speech to Text | Moonshine Voice" />
+    <meta
+      property="og:description"
+      content="Real-time speech recognition running entirely in your browser via WebAssembly."
+    />
+    <link rel="icon" href="/assets/favicon.png" type="image/png" />
+    <link rel="stylesheet" href="/assets/moonshine.css" />
     <style>
-      :root { color-scheme: light dark; }
-      body {
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-        max-width: 720px; margin: 3rem auto; padding: 0 1rem; line-height: 1.5;
-      }
-      h1 { font-size: 1.6rem; }
-      button {
-        font-size: 1rem; padding: 0.6rem 1.1rem; border-radius: 0.5rem;
-        border: 1px solid currentColor; background: transparent; cursor: pointer;
-      }
-      button[disabled] { opacity: 0.5; cursor: default; }
-      #status { margin: 1rem 0; opacity: 0.75; min-height: 1.4em; }
       #transcript {
-        margin-top: 1.5rem; padding: 1rem; border-radius: 0.5rem;
-        border: 1px solid rgba(128,128,128,0.4); min-height: 6rem; white-space: pre-wrap;
+        margin-top: 1.5rem;
+        padding: 1.15rem 1.25rem;
+        min-height: 9rem;
+        border: 1px solid var(--ms-line);
+        border-radius: var(--ms-radius);
+        background: rgba(9, 11, 15, 0.5);
+        font-size: 1.05rem;
+        line-height: 1.7;
       }
-      .live { opacity: 0.6; }
-      hr { border: none; border-top: 1px solid rgba(128,128,128,0.3); margin: 2rem 0; }
-      .row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+
+      #transcript:empty::before,
+      #transcript .placeholder {
+        color: var(--ms-faint);
+        font-size: 0.95rem;
+      }
+
+      .line {
+        display: flex;
+        align-items: baseline;
+        gap: 0.75rem;
+        padding: 0.15rem 0;
+      }
+
+      .line__text {
+        flex: 1;
+        text-wrap: pretty;
+      }
+
+      /* The phrase currently being spoken, still being revised. */
+      .line--live .line__text {
+        color: var(--ms-muted);
+      }
+
+      .line__latency {
+        flex: none;
+        padding: 0.1rem 0.45rem;
+        border: 1px solid rgba(61, 220, 151, 0.3);
+        border-radius: 999px;
+        font-family: var(--ms-mono);
+        font-size: 0.7rem;
+        color: var(--ms-good);
+        background: rgba(61, 220, 151, 0.08);
+        white-space: nowrap;
+      }
+
+      .latency-note {
+        margin-top: 0.75rem;
+        font-size: 0.82rem;
+        color: var(--ms-faint);
+      }
     </style>
   </head>
   <body>
-    <h1>Moonshine — Speech to Text</h1>
-    <p>Live microphone transcription running entirely on-device via WebAssembly.</p>
-    <button id="toggle">Start listening</button>
+    <main class="ms-shell ms-main">
+      <header class="ms-hero">
+        <span class="ms-eyebrow">Runs entirely in your browser</span>
+        <h1>Transcribe speech in real time, on your device.</h1>
+        <p>
+          Press the button and start talking. The model downloads once, then
+          <strong>nothing leaves this browser</strong>: no API key, no account,
+          no server. Each finished phrase is tagged with how long it actually took.
+        </p>
+      </header>
 
-    <hr />
-    <p>Or transcribe an audio file (no microphone needed):</p>
-    <div class="row">
-      <input id="audioFile" type="file" accept="audio/*,.wav" />
-      <button id="transcribeFile">Transcribe file</button>
-    </div>
+      <section class="ms-card">
+        <div class="ms-mic-row">
+          <button id="toggle" class="ms-mic" type="button" aria-label="Start listening">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" />
+              <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+            </svg>
+          </button>
+          <div class="ms-mic-row__text">
+            <div class="ms-mic-row__label" id="micLabel">Start listening</div>
+            <p id="status" class="ms-status">Loading…</p>
+          </div>
+          <div class="ms-meter" id="meter" aria-hidden="true"></div>
+        </div>
 
-    <p id="status">Idle.</p>
-    <div id="transcript" aria-live="polite"></div>
+        <div class="ms-loading">
+          <div class="ms-progress" id="progress">
+            <div class="ms-progress__bar"></div>
+          </div>
+          <p class="ms-loading__detail" id="loadingDetail"></p>
+          <p class="ms-loading-note" id="loadingNote"></p>
+        </div>
+
+        <div id="transcript" aria-live="polite">
+          <span class="placeholder">Your words will appear here.</span>
+        </div>
+        <p class="latency-note">
+          The badge on each line is the real measured time between you finishing a
+          phrase and the final transcript arriving.
+        </p>
+      </section>
+
+      <details class="ms-disclosure ms-section" id="moreOptions">
+        <summary>No microphone? Other ways to try it</summary>
+        <div class="ms-disclosure__body ms-stack">
+          <div>
+            <span class="ms-label">Microphone</span>
+            <div class="ms-row">
+              <select id="device" class="ms-input" style="max-width: 22rem"></select>
+            </div>
+            <p class="ms-muted" id="deviceNote">
+              Browsers keep their own default input, which can disagree with the one your
+              operating system is using, and when it does it returns silence rather than
+              an error. Naming the device here fixes that, and the choice is remembered.
+              The <a href="/mic-check/">microphone diagnostic</a> shows what each layer is
+              actually producing if this is still not working.
+            </p>
+          </div>
+          <div>
+            <span class="ms-label">Transcribe an audio file</span>
+            <div class="ms-row">
+              <input id="audioFile" class="ms-input" style="max-width: 20rem" type="file"
+                     accept="audio/*,.wav" />
+              <button id="transcribeFile" class="ms-btn" type="button">Transcribe file</button>
+              <button id="sampleClip" class="ms-btn ms-btn--quiet" type="button">
+                Use a sample clip
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <span class="ms-label">Model</span>
+            <div class="ms-chips" id="archChips"></div>
+            <p class="ms-small ms-muted" style="margin: 0.6rem 0 0">
+              Bigger models are more accurate and take longer to download. All of them
+              still run comfortably in real time on a laptop. Word error rates are
+              LibriSpeech <code>test-clean</code>, measured on these exact quantized
+              models.
+              <a
+                href="https://github.com/moonshine-ai/moonshine#accuracy-word-error-rate"
+                target="_blank"
+                rel="noopener"
+                >How we measure accuracy</a
+              >.
+            </p>
+          </div>
+        </div>
+      </details>
+
+      <section class="ms-section" id="proof"></section>
+
+      <section class="ms-section">
+        <h2 class="ms-card__title">The code behind this page</h2>
+        <p class="ms-card__hint">Live transcription is three calls and two callbacks.</p>
+        <div id="code"></div>
+      </section>
+    </main>
 
     <script type="module">
-      // Load the locally-built binding when the page is opened with ?local=1
-      // (e.g. via examples/web/serve.mjs); otherwise use the published copy
-      // from the jsDelivr CDN.
-      const params = new URLSearchParams(location.search);
-      const useLocal = params.get('local') === '1';
-      // With &assets=local the model files are fetched from the repo (served by
-      // serve.mjs) instead of the CDN, so the page runs fully offline. This is
-      // what the browser integration test uses.
-      const useLocalAssets = params.get('assets') === 'local';
-      const moduleUrl = useLocal
-        ? '/wasm/dist/index.js'
-        : 'https://cdn.jsdelivr.net/npm/@moonshine-ai/moonshine-wasm/dist/index.js';
+      import {
+        mountChrome,
+        rotatingWords,
+        PLATFORMS,
+        statStrip,
+        codePanel,
+        LoadingUi,
+        MicMeter,
+        describeError,
+        modelsAreCached,
+        purgeModelCacheIfRequested,
+        decodeAudioFile,
+        pageConfig,
+        mountDevicePicker,
+        audioConstraints,
+        openMicrophone,
+      } from '/assets/moonshine-ui.js';
+
+      const { useLocalAssets, moduleUrl } = pageConfig();
       const { MicTranscriber, Transcriber, ModelArch } = await import(moduleUrl);
 
-      const toggle = document.getElementById('toggle');
-      const statusEl = document.getElementById('status');
-      const transcriptEl = document.getElementById('transcript');
-      const audioFileEl = document.getElementById('audioFile');
-      const transcribeFileBtn = document.getElementById('transcribeFile');
+      mountChrome({
+        active: 'stt',
+        ctaTitle:
+          'Put real-time transcription in your ' +
+          rotatingWords(PLATFORMS) +
+          ' app',
+      });
+
+      const els = {
+        toggle: document.getElementById('toggle'),
+        micLabel: document.getElementById('micLabel'),
+        status: document.getElementById('status'),
+        progress: document.getElementById('progress'),
+        note: document.getElementById('loadingNote'),
+        detail: document.getElementById('loadingDetail'),
+        transcript: document.getElementById('transcript'),
+        meter: document.getElementById('meter'),
+        audioFile: document.getElementById('audioFile'),
+        transcribeFile: document.getElementById('transcribeFile'),
+        sampleClip: document.getElementById('sampleClip'),
+        archChips: document.getElementById('archChips'),
+        device: document.getElementById('device'),
+      };
+
+      // Switching device mid-session restarts capture, since a MediaStream is
+      // bound to the device it was opened on.
+      const devicePicker = mountDevicePicker(els.device, {
+        onChange: async () => {
+          if (!running) return;
+          await stop();
+          await start();
+        },
+      });
+
+      document.getElementById('proof').innerHTML = statStrip([
+        { value: '6.65%', label: 'HuggingFace’s OpenASR Leaderboard average, beating Whisper Large v3’s 7.44%' },
+        { value: '107 ms', label: 'End of speech to final transcript, MacBook Pro' },
+        { value: '245M', label: 'Parameters, against Whisper Large v3’s 1.5 billion' },
+        { value: '0 bytes', label: 'Data uploaded to the cloud, because the model runs here' },
+      ]);
+
+      document.getElementById('code').append(
+        codePanel({
+          file: 'live-transcription.js',
+          code: `import { MicTranscriber, ModelArch } from '@moonshine-ai/moonshine-wasm';
+
+const mic = new MicTranscriber()
+  .modelArch(ModelArch.MediumStreaming)
+  .onText((text) => showInProgress(text))
+  .onLine((line) => appendLine(line.text, line.lastTranscriptionLatencyMs));
+
+await mic.load();   // downloads the model once, then it is cached
+await mic.start();  // opens the microphone and starts transcribing`,
+        }),
+      );
+
+      const loading = new LoadingUi({
+        status: els.status,
+        progress: els.progress,
+        note: els.note,
+        detail: els.detail,
+        notes: [
+          'This is the whole speech recognition model. It runs on your CPU, not a server.',
+          'It only downloads once, and after that the demo works offline.',
+          'Whisper Large v3 is six times bigger and still less accurate on live speech.',
+          'No audio is uploaded at any point, including right now.',
+        ],
+      });
+
+      // --- Model choice -----------------------------------------------------
+      // Medium is the default: it is the accuracy the stats above quote, and
+      // first impressions are worth more here than a shorter first download.
+      // The smaller streaming models are a chip away.
+      // The WER figures are LibriSpeech test-clean, measured on the quantized
+      // models this page actually downloads, not the floating-point reference
+      // from the paper, which scores a little better.
+      const ARCHES = [
+        { id: 'tiny', arch: ModelArch.TinyStreaming, label: 'Tiny · fastest', wer: '4.83% WER' },
+        { id: 'small', arch: ModelArch.SmallStreaming, label: 'Small · balanced', wer: '2.61% WER' },
+        { id: 'medium', arch: ModelArch.MediumStreaming, label: 'Medium · most accurate', wer: '2.17% WER' },
+      ];
+      let selectedArch = ARCHES.find((a) => a.id === 'medium');
+
+      for (const entry of ARCHES) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = `ms-chip${entry === selectedArch ? ' is-active' : ''}`;
+        chip.textContent = `${entry.label} (${entry.wer})`;
+        chip.addEventListener('click', () => selectArch(entry));
+        entry.el = chip;
+        els.archChips.append(chip);
+      }
+
+      async function selectArch(entry) {
+        if (entry === selectedArch) return;
+        selectedArch = entry;
+        for (const other of ARCHES) other.el.classList.toggle('is-active', other === entry);
+        if (running) await stop();
+        mic?.close();
+        mic = null;
+        micReady = null;
+        warmStart();
+      }
+
+      // --- Live transcription ----------------------------------------------
 
       let mic = null;
+      let micReady = null;
       let running = false;
-      // Completed lines keyed by id, plus a live in-progress line.
+      let meter = null;
       const lines = new Map();
 
-      function render(liveLine) {
-        const parts = [...lines.values()];
-        transcriptEl.textContent = parts.join('\n');
-        if (liveLine) {
-          const span = document.createElement('span');
-          span.className = 'live';
-          span.textContent = (parts.length ? '\n' : '') + liveLine;
-          transcriptEl.appendChild(span);
+      /** Redraws the transcript: completed lines, then the phrase in progress. */
+      function render(liveText) {
+        els.transcript.textContent = '';
+        for (const line of lines.values()) {
+          els.transcript.append(lineElement(line.text, line.latencyMs));
+        }
+        if (liveText) {
+          const el = lineElement(liveText, null);
+          el.classList.add('line--live');
+          els.transcript.append(el);
+        }
+        if (!lines.size && !liveText) {
+          els.transcript.innerHTML =
+            '<span class="placeholder">Your words will appear here.</span>';
         }
       }
 
-      async function start() {
-        statusEl.textContent = 'Loading model (first run downloads it)…';
-        toggle.disabled = true;
-        try {
-          mic = new MicTranscriber()
-            .onText((text) => render(text))
-            .onLine((line) => { lines.set(line.id, line.text); render(); })
-            .onError((error) => { statusEl.textContent = 'Error: ' + error.message; })
-            .onProgress((fraction, file) => {
-              statusEl.textContent = `Downloading ${file} ${Math.round(100 * fraction)}%…`;
-            });
+      function lineElement(text, latencyMs) {
+        const row = document.createElement('div');
+        row.className = 'line';
+        const body = document.createElement('span');
+        body.className = 'line__text';
+        body.textContent = text;
+        row.append(body);
+        if (latencyMs > 0) {
+          const badge = document.createElement('span');
+          badge.className = 'line__latency';
+          badge.textContent = `${Math.round(latencyMs)} ms`;
+          row.append(badge);
+        }
+        return row;
+      }
 
-          await mic.load();
+      /** Builds the transcriber for the selected model, without touching the mic. */
+      function buildMic() {
+        const instance = new MicTranscriber()
+          .modelArch(selectedArch.arch)
+          .onText((text) => render(text))
+          .onLine((line) => {
+            lines.set(line.id, {
+              text: line.text,
+              latencyMs: line.lastTranscriptionLatencyMs,
+            });
+            render();
+          })
+          .onError((error) => loading.setStatus(describeError(error), 'error'))
+          .onProgress(loading.onProgress);
+
+        if (useLocalAssets) {
+          // Offline mode: the streaming model is vendored in the repo, so load
+          // the files directly rather than resolving the CDN manifest.
+          return Transcriber.loadFromUrls(localStreamingUrls(), {
+            modelArch: ModelArch.TinyStreaming,
+          }).then((transcriber) => instance.useTranscriber(transcriber));
+        }
+        return instance.load();
+      }
+
+      function localStreamingUrls() {
+        const base = '/test-assets/tiny-streaming-en';
+        const names = [
+          'frontend.ort',
+          'encoder.ort',
+          'adapter.ort',
+          'cross_kv.ort',
+          'decoder_kv.ort',
+          'streaming_config.json',
+          'tokenizer.bin',
+        ];
+        return Object.fromEntries(names.map((name) => [name, `${base}/${name}`]));
+      }
+
+      /**
+       * Starts fetching the model as soon as the page loads, so the download
+       * overlaps with reading the page instead of stalling the first click.
+       * Best-effort: a failure here is reported when the button is pressed.
+       */
+      function warmStart() {
+        micReady = (async () => {
+          try {
+            const instance = await buildMic();
+            mic = instance;
+            loading.done();
+            loading.setStatus('Ready', 'ready');
+            els.toggle.disabled = false;
+            return instance;
+          } catch {
+            loading.done();
+            loading.setStatus('Ready');
+            els.toggle.disabled = false;
+            mic = null;
+            return null;
+          }
+        })();
+      }
+
+      async function start() {
+        els.toggle.disabled = true;
+        els.micLabel.textContent = 'Starting…';
+        try {
+          mic = (await micReady) ?? (await buildMic());
+          loading.done();
+          // Resolved here rather than at build time so a device chosen after the
+          // model warm-started still takes effect.
+          mic.audioConstraints(await audioConstraints());
           await mic.start();
           running = true;
-          statusEl.textContent = 'Listening… speak now.';
-          toggle.textContent = 'Stop';
+          els.toggle.classList.add('is-live');
+          els.toggle.setAttribute('aria-label', 'Stop listening');
+          els.micLabel.textContent = 'Listening';
+          loading.setStatus('Listening', 'ready');
+          // Device labels are blank until permission is granted, so the picker
+          // is worth refilling once a stream has been opened at least once.
+          void devicePicker.refresh();
+          attachMeter();
         } catch (err) {
-          statusEl.textContent = 'Failed to start: ' + err.message;
+          els.micLabel.textContent = 'Start listening';
+          loading.setStatus(describeError(err), 'error');
         } finally {
-          toggle.disabled = false;
+          els.toggle.disabled = false;
+        }
+      }
+
+      /**
+       * Opens a second capture of the same microphone to drive the level meter.
+       * The transcriber keeps its stream private, and permission has already
+       * been granted by this point, so this costs an extra audio graph but no
+       * second prompt.
+       */
+      async function attachMeter() {
+        try {
+          const stream = await openMicrophone();
+          meter = new MicMeter(els.meter);
+          meter.start(stream);
+          meter.stream = stream;
+        } catch {
+          // The meter is decoration; transcription works without it.
         }
       }
 
       async function stop() {
-        toggle.disabled = true;
+        els.toggle.disabled = true;
+        meter?.stop();
+        meter?.stream?.getTracks().forEach((track) => track.stop());
+        meter = null;
         await mic?.stop();
-        mic?.close();
-        mic = null;
         running = false;
-        statusEl.textContent = 'Stopped.';
-        toggle.textContent = 'Start listening';
-        toggle.disabled = false;
+        els.toggle.classList.remove('is-live');
+        els.toggle.setAttribute('aria-label', 'Start listening');
+        els.micLabel.textContent = 'Start listening';
+        loading.setStatus(lines.size ? 'Stopped' : 'Ready');
+        els.toggle.disabled = false;
       }
 
-      toggle.addEventListener('click', () => (running ? stop() : start()));
+      els.toggle.addEventListener('click', () => (running ? stop() : start()));
 
-      // --- Transcribe-from-file path -------------------------------------
-      // Uses a batch (non-streaming) Transcriber on decoded file audio, so it
-      // works without a microphone — and, with &assets=local, without a
-      // network. The result is written to #transcript and mirrored onto
-      // window.__moonshineFileTranscript for automated tests.
+      // --- Transcribe from a file ------------------------------------------
+      // A batch (non-streaming) Transcriber over decoded file audio, so the demo
+      // works with no microphone, and with &assets=local, no network either.
 
       let batchTranscriber = null;
 
       async function loadBatchTranscriber() {
         if (batchTranscriber) return batchTranscriber;
-        statusEl.textContent = 'Loading model…';
+        loading.setStatus('Loading…');
         if (useLocalAssets) {
-          // Small tiny-en model vendored in the repo's test-assets.
           const base = '/test-assets/tiny-en';
           batchTranscriber = await Transcriber.loadFromUrls(
             {
@@ -141,56 +483,79 @@
           batchTranscriber = await Transcriber.load({
             language: 'en',
             modelArch: ModelArch.Base,
-            onProgress: (loaded, total, file) => {
-              const pct = total ? ` ${Math.round((100 * loaded) / total)}%` : '';
-              statusEl.textContent = `Downloading ${file}${pct}…`;
-            },
+            onProgress: (loaded, total, file) =>
+              loading.onProgress(total ? loaded / total : 0, file, { loaded, total }),
           });
         }
         return batchTranscriber;
       }
 
-      /** Decodes an audio file and downmixes/resamples it to mono 16 kHz. */
-      async function decodeAudioFile(file) {
-        const bytes = await file.arrayBuffer();
-        const decoded = await new OfflineAudioContext(1, 1, 16000).decodeAudioData(bytes);
-        const frames = Math.max(1, Math.round(decoded.duration * 16000));
-        const off = new OfflineAudioContext(1, frames, 16000);
-        const src = off.createBufferSource();
-        src.buffer = decoded;
-        src.connect(off.destination);
-        src.start();
-        const rendered = await off.startRendering();
-        return { audio: rendered.getChannelData(0), sampleRate: 16000 };
+      async function transcribeAudio(source) {
+        els.transcribeFile.disabled = true;
+        els.sampleClip.disabled = true;
+        els.transcript.removeAttribute('data-done');
+        try {
+          const transcriber = await loadBatchTranscriber();
+          loading.setStatus('Decoding…');
+          const { audio, sampleRate } = await decodeAudioFile(source);
+          loading.setStatus('Transcribing…');
+          const transcript = transcriber.transcribe(audio, { sampleRate });
+
+          lines.clear();
+          for (const line of transcript.lines) {
+            lines.set(line.id, {
+              text: line.text,
+              latencyMs: line.lastTranscriptionLatencyMs,
+            });
+          }
+          render();
+
+          const text = transcript.lines.map((line) => line.text).join('\n');
+          window.__moonshineFileTranscript = text;
+          els.transcript.setAttribute('data-done', '1');
+          loading.done();
+          loading.setStatus(
+            `Done, ${transcript.lines.length} line${transcript.lines.length === 1 ? '' : 's'}`,
+            'ready',
+          );
+        } catch (err) {
+          loading.done();
+          loading.setStatus(describeError(err), 'error');
+        } finally {
+          els.transcribeFile.disabled = false;
+          els.sampleClip.disabled = false;
+        }
       }
 
-      async function transcribeFile() {
-        const file = audioFileEl.files?.[0];
+      els.transcribeFile.addEventListener('click', () => {
+        const file = els.audioFile.files?.[0];
         if (!file) {
-          statusEl.textContent = 'Choose an audio file first.';
+          loading.setStatus('Choose a file first', 'error');
           return;
         }
-        transcribeFileBtn.disabled = true;
-        transcriptEl.removeAttribute('data-done');
-        try {
-          const t = await loadBatchTranscriber();
-          statusEl.textContent = 'Decoding audio…';
-          const { audio, sampleRate } = await decodeAudioFile(file);
-          statusEl.textContent = 'Transcribing…';
-          const transcript = t.transcribe(audio, { sampleRate });
-          const text = transcript.lines.map((l) => l.text).join('\n');
-          transcriptEl.textContent = text;
-          window.__moonshineFileTranscript = text;
-          transcriptEl.setAttribute('data-done', '1');
-          statusEl.textContent = `Done (${transcript.lines.length} line(s)).`;
-        } catch (err) {
-          statusEl.textContent = 'Failed: ' + err.message;
-        } finally {
-          transcribeFileBtn.disabled = false;
-        }
-      }
+        transcribeAudio(file);
+      });
 
-      transcribeFileBtn.addEventListener('click', transcribeFile);
+      els.sampleClip.addEventListener('click', async () => {
+        loading.setStatus('Fetching clip…');
+        try {
+          const response = await fetch('/test-assets/two_cities_16k.wav');
+          await transcribeAudio(await response.arrayBuffer());
+        } catch (err) {
+          loading.setStatus(describeError(err), 'error');
+        }
+      });
+
+      // --- Startup ----------------------------------------------------------
+
+      els.toggle.disabled = true;
+      await purgeModelCacheIfRequested();
+      if (await modelsAreCached()) {
+        loading.setStatus('Ready', 'ready');
+      } else {
+        loading.setStatus('Loading…');
+      }
+      warmStart();
     </script>
   </body>
 </html>

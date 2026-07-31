@@ -1,10 +1,14 @@
-// Bundled Piper ONNX stems, kept in sync with
-// ``moonshine-tts/data/*/piper-voices/*.onnx``. Regenerate the initializer from
-// that tree when adding voices (see repo ``data`` layout).
+// Bundled Piper voice stems, kept in sync with
+// ``moonshine-tts/data/*/piper-voices/``. Regenerate the initializer from that
+// tree when adding voices (see repo ``data`` layout). Voices are stored in ORT
+// format, so a stem's files are ``<stem>.model.ort`` + ``<stem>.weights.ort`` or
+// ``<stem>.ort``, always beside a ``<stem>.onnx.json`` config;
+// ``piper_voice_form_test`` checks this file against what is actually there.
 
 #include "piper-voice-catalog.h"
 
 #include <unordered_map>
+#include <unordered_set>
 
 namespace moonshine_tts {
 
@@ -121,6 +125,23 @@ const std::vector<std::string>& piper_bundled_voice_stems_for_data_subdir(
   static const std::vector<std::string> k_empty{};
   const auto it = k.find(data_subdir);
   return it == k.end() ? k_empty : it->second;
+}
+
+bool piper_voice_ships_split(const std::string& stem) {
+  // Almost every voice is quantized and so ships split. Listing the exceptions
+  // keeps this table short; ``piper_voice_form_test`` fails if the data tree and
+  // this set disagree.
+  static const std::unordered_set<std::string> k_single_file_voices = {
+      "en_US-saikat",
+  };
+  return k_single_file_voices.find(stem) == k_single_file_voices.end();
+}
+
+std::vector<std::string> piper_voice_model_filenames(const std::string& stem) {
+  if (!piper_voice_ships_split(stem)) {
+    return {stem + ".ort"};
+  }
+  return {stem + ".model.ort", stem + ".weights.ort"};
 }
 
 }  // namespace moonshine_tts

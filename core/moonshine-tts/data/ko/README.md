@@ -4,9 +4,9 @@
 
 - **`dict.tsv`** — Hangul word → IPA (broad Seoul-style inventory after normalization), used by C++ `KoreanRuleG2p` (lexicon + internal Hangul rule pipeline).
 
-- **`piper-voices/ko_KR-melotts-medium.onnx`** (+ **`.onnx.json`**) — Piper VITS (22.05 kHz, medium) trained on MeloTTS-style synthetic Korean. Used by C++ `PiperTTS` (`--lang ko`), `moonshine_tts` (Piper fallback), and `speak.py --engine piper --lang ko`. Repo root symlinks `data/ko/piper-voices/ko_KR-melotts-medium.onnx*` point here.
+- **`piper-voices/ko_KR-melotts-medium.model.ort`** + **`.weights.ort`** (+ **`.onnx.json`**) — Piper VITS (22.05 kHz, medium) trained on MeloTTS-style synthetic Korean. Used by C++ `PiperTTS` (`--lang ko`), `moonshine_tts` (Piper fallback), and `speak.py --engine piper --lang ko`.
 
-Weights may be **int8-packed** with `onnx-shrink-ray` (see below); the JSON sidecar is unchanged.
+Weights are **int8-packed** with `onnx-shrink-ray` (see below) and the voice ships in ORT format as a split pair, so the dequantize runs once at load rather than on every inference; see `scripts/split-model-weights.py`. The JSON sidecar keeps its `.onnx.json` name regardless. The original `.onnx` is no longer in the tree but remains on the CDN at `https://download.moonshine.ai/tts/ko/piper-voices/ko_KR-melotts-medium.onnx`.
 
 ### MeloTTS
 
@@ -16,7 +16,7 @@ The file `ko_KR-melotts-medium.onnx` is **not** the MeloTTS model: it is a **Pip
 
 ### Re-export ONNX from a MeloTTS training checkpoint
 
-Use `training/piper_korean/export_melotts_checkpoint_to_cpp.sh` (writes `data/ko/piper-voices/ko_KR-melotts-medium.onnx` + JSON and refreshes `data/ko/piper-voices` symlinks).
+Use `training/piper_korean/export_melotts_checkpoint_to_cpp.sh` (writes `data/ko/piper-voices/ko_KR-melotts-medium.onnx` + JSON and refreshes `data/ko/piper-voices` symlinks), then convert the export to the shipped ORT form with `python scripts/convert-models-to-ort.py core/moonshine-tts/data/ko` and delete the `.onnx`.
 
 ### Optional: int8 weight packing (`onnx-shrink-ray`)
 

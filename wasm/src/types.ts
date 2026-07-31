@@ -19,8 +19,13 @@ export interface WordTiming {
 export interface SpeakerSpan {
   readonly startTime: number;
   readonly duration: number;
-  /** Stable speaker id within the stream (opaque; safe for keying/display). */
-  readonly speakerId: number;
+  /**
+   * Stable speaker id within the stream (opaque; safe for keying/display).
+   *
+   * A decimal string because the underlying id is 64-bit; see
+   * {@link TranscriptLine.id}.
+   */
+  readonly speakerId: string;
   /** Order the speaker first appeared, starting at 0. */
   readonly speakerIndex: number;
   /** UTF-8 byte offset into the line text where this span begins. */
@@ -34,8 +39,15 @@ export interface TranscriptLine {
   readonly text: string;
   readonly startTime: number;
   readonly duration: number;
-  /** Stable identifier for the line. */
-  readonly id: number;
+  /**
+   * Stable, opaque identifier for the line, unique within a stream.
+   *
+   * A decimal string rather than a number: the id is 64-bit and lands well
+   * above `Number.MAX_SAFE_INTEGER`, so representing it as a JS number would
+   * round distinct lines onto the same value. Compare with `===` and use it as
+   * a key; do not do arithmetic on it.
+   */
+  readonly id: string;
   readonly isComplete: boolean;
   readonly isUpdated: boolean;
   readonly isNew: boolean;
@@ -84,7 +96,8 @@ export function normalizeTranscript(raw: any): Transcript {
     text: line.text ?? '',
     startTime: line.startTime ?? 0,
     duration: line.duration ?? 0,
-    id: line.id ?? 0,
+    // String() guards against an older module handing back a numeric id.
+    id: line.id === undefined || line.id === null ? '0' : String(line.id),
     isComplete: !!line.isComplete,
     isUpdated: !!line.isUpdated,
     isNew: !!line.isNew,
@@ -100,7 +113,10 @@ export function normalizeTranscript(raw: any): Transcript {
     speakerSpans: readVector<any>(line.speakerSpans).map((s) => ({
       startTime: s.startTime ?? 0,
       duration: s.duration ?? 0,
-      speakerId: s.speakerId ?? 0,
+      speakerId:
+        s.speakerId === undefined || s.speakerId === null
+          ? '0'
+          : String(s.speakerId),
       speakerIndex: s.speakerIndex ?? 0,
       startChar: s.startChar ?? 0,
       endChar: s.endChar ?? 0,

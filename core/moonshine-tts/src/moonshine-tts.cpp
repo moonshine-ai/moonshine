@@ -875,11 +875,12 @@ std::vector<std::string> piper_vocoder_dependency_keys_with_options(
   if (g2p.g2p_root.empty()) {
     g2p.g2p_root = std::filesystem::current_path();
   }
-  std::string o;
+  std::vector<std::string> models;
   std::string j;
-  if (piper_default_model_bundle_relative_paths(language, g2p, &o, &j,
+  if (piper_default_model_bundle_relative_paths(language, g2p, &models, &j,
                                                 opt.voice)) {
-    return {std::move(o), std::move(j)};
+    models.push_back(std::move(j));
+    return models;
   }
   return {};
 }

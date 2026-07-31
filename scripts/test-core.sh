@@ -90,6 +90,7 @@ fi
 "${MOONSHINE_TTS_BUILD_DIR}/cmudict_tsv_test"
 "${MOONSHINE_TTS_BUILD_DIR}/json_config_test"
 "${MOONSHINE_TTS_BUILD_DIR}/english_hand_oov_test"
+"${MOONSHINE_TTS_BUILD_DIR}/piper_voice_form_test"
 "${MOONSHINE_TTS_BUILD_DIR}/onnx_g2p_smoke_test"
 "${MOONSHINE_TTS_BUILD_DIR}/korean_tok_pos_onnx_test"
 "${MOONSHINE_TTS_BUILD_DIR}/japanese_tok_pos_onnx_test"

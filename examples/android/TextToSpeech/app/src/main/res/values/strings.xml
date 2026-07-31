@@ -8,5 +8,5 @@
     <string name="hint_enter_text">Enter text to speak…</string>
     <string name="initializing">Initializing TTS…</string>
     <string name="downloading_asset">Downloading %1$s</string>
-    <string name="voice_suffix_downloadable">— tap to download</string>
+    <string name="voice_suffix_downloadable">(tap to download)</string>
 </resources>

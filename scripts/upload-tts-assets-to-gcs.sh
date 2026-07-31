@@ -25,6 +25,11 @@
 #                              "--delete-unmatched-destination-objects" to remove remote objects absent locally;
 #                              this replaces gsutil's "-d".)
 #
+# Do not pass --delete-unmatched-destination-objects casually. Piper voices ship as
+# ORT now and their `.onnx` originals are no longer in this tree, but released
+# clients still ask for `.onnx` keys, so deleting remote objects that are absent
+# locally would break them. The default (no deletes) is what keeps them working.
+#
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

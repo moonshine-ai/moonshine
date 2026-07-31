@@ -64,6 +64,13 @@ async function openPage(urlPath) {
 test('STT example transcribes an audio file with the local binding', { skip }, async () => {
   const page = await openPage('/stt/?local=1&assets=local');
   try {
+    // The page leads with the microphone; file transcription lives in a
+    // disclosure, which has to be open before the button can be clicked.
+    await page.waitForSelector('#moreOptions');
+    await page.evaluate(() => {
+      document.getElementById('moreOptions').open = true;
+    });
+
     const input = await page.waitForSelector('#audioFile');
     await input.uploadFile(TWO_CITIES_WAV);
     await page.click('#transcribeFile');
@@ -151,6 +158,103 @@ test('Dialog-flow example runs a whole conversation from typed input', { skip },
     assert.ok(
       lines.some((t) => /home network/i.test(t)),
       `expected the answer to be read back, got: ${JSON.stringify(lines)}`,
+    );
+  } finally {
+    await page.close();
+  }
+});
+
+// Chrome maintains its own "default" capture device, and when it disagrees with
+// the operating system's it returns a live track of digital silence rather than
+// an error. The only reliable workaround is naming a device explicitly, so the
+// choice is saved and shared. These tests pin down that it is actually applied,
+// and that a saved device which later disappears degrades to the default rather
+// than wedging capture permanently.
+const DEVICE_KEY = 'moonshine.audioInputDeviceId';
+
+/** Records the constraints of every getUserMedia call the page makes. */
+async function recordMicRequests(page) {
+  await page.evaluateOnNewDocument(() => {
+    window.__gum = [];
+    const real = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = (constraints) => {
+      window.__gum.push(JSON.parse(JSON.stringify(constraints)));
+      return real(constraints);
+    };
+  });
+}
+
+test('STT example opens the saved capture device', { skip }, async () => {
+  const page = await browser.newPage();
+  try {
+    // Seed the preference with a real, non-default fake device. Device ids are
+    // origin-scoped, so this has to happen on the served origin.
+    await page.goto(`${server.origin}/stt/?local=1&assets=local`, { waitUntil: 'load' });
+    const chosen = await page.evaluate(async (key) => {
+      const granted = await navigator.mediaDevices.getUserMedia({ audio: true });
+      granted.getTracks().forEach((t) => t.stop());
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const device = devices.find(
+        (d) => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default',
+      );
+      localStorage.setItem(key, device.deviceId);
+      return device.deviceId;
+    }, DEVICE_KEY);
+
+    await recordMicRequests(page);
+    await page.goto(`${server.origin}/stt/?local=1&assets=local`, { waitUntil: 'load' });
+    await page.waitForSelector('#toggle:not([disabled])', { timeout: 120000 });
+    await page.click('#toggle');
+    await page.waitForFunction(() => (window.__gum ?? []).length > 0, { timeout: 60000 });
+
+    const requests = await page.evaluate(() => window.__gum);
+    assert.ok(requests.length > 0, 'expected the page to open a microphone');
+    for (const request of requests) {
+      assert.equal(
+        request.audio?.deviceId?.exact,
+        chosen,
+        `every capture should name the saved device, got ${JSON.stringify(request)}`,
+      );
+    }
+
+    // The picker should reflect the saved choice rather than silently diverging.
+    assert.equal(await page.$eval('#device', (el) => el.value), chosen);
+  } finally {
+    await page.close();
+  }
+});
+
+test('STT example falls back when the saved device is gone', { skip }, async () => {
+  const page = await browser.newPage();
+  try {
+    await page.goto(`${server.origin}/stt/?local=1&assets=local`, { waitUntil: 'load' });
+    await page.evaluate((key) => localStorage.setItem(key, 'no-such-device'), DEVICE_KEY);
+
+    await recordMicRequests(page);
+    await page.goto(`${server.origin}/stt/?local=1&assets=local`, { waitUntil: 'load' });
+    await page.waitForSelector('#toggle:not([disabled])', { timeout: 120000 });
+    await page.click('#toggle');
+    await page.waitForFunction(() => (window.__gum ?? []).length > 0, { timeout: 60000 });
+
+    const requests = await page.evaluate(() => window.__gum);
+    for (const request of requests) {
+      assert.equal(
+        request.audio,
+        true,
+        `a missing device should fall back to the default, got ${JSON.stringify(request)}`,
+      );
+    }
+    assert.equal(
+      await page.evaluate((key) => localStorage.getItem(key), DEVICE_KEY),
+      null,
+      'the stale device id should be forgotten, not retried forever',
+    );
+    // Capture should genuinely reach the running state, not merely not crash.
+    // start() only labels the button once mic.start() has resolved, which is
+    // after the getUserMedia call waited on above.
+    await page.waitForFunction(
+      () => document.getElementById('micLabel').textContent.trim() === 'Listening',
+      { timeout: 60000 },
     );
   } finally {
     await page.close();

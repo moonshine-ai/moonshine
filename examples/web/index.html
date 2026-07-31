@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Moonshine Voice | on-device speech demos</title>
+    <meta
+      name="description"
+      content="Speech to text, text to speech, and voice agents running entirely in your browser via WebAssembly. No API key, no account, no audio leaves your device."
+    />
+    <meta property="og:title" content="Moonshine Voice | on-device speech demos" />
+    <meta
+      property="og:description"
+      content="Speech to text, text to speech, and voice agents running entirely in your browser via WebAssembly."
+    />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="/assets/favicon.png" type="image/png" />
+    <link rel="stylesheet" href="/assets/moonshine.css" />
+    <style>
+      .demo-grid {
+        display: grid;
+        gap: 1rem;
+        margin-top: 2rem;
+      }
+
+      @media (min-width: 52rem) {
+        .demo-grid {
+          grid-template-columns: repeat(3, 1fr);
+        }
+      }
+
+      .demo-card {
+        display: flex;
+        flex-direction: column;
+        padding: 1.5rem;
+        border: 1px solid var(--ms-line);
+        border-radius: var(--ms-radius-lg);
+        background: linear-gradient(180deg, rgba(27, 33, 48, 0.7), rgba(22, 26, 34, 0.92));
+        color: inherit;
+        transition: border-color 140ms ease, transform 140ms ease;
+      }
+
+      .demo-card:hover {
+        text-decoration: none;
+        transform: translateY(-2px);
+        border-color: rgba(110, 168, 254, 0.45);
+      }
+
+      .demo-card h2 {
+        margin: 0.85rem 0 0.4rem;
+        font-size: 1.1rem;
+        font-weight: 620;
+        letter-spacing: -0.02em;
+      }
+
+      .demo-card p {
+        margin: 0;
+        font-size: 0.92rem;
+        color: var(--ms-muted);
+        flex: 1;
+        text-wrap: pretty;
+      }
+
+      .demo-card__go {
+        margin-top: 1.1rem;
+        font-size: 0.9rem;
+        font-weight: 550;
+        color: var(--ms-accent-a);
+      }
+
+      .demo-card__icon {
+        display: grid;
+        place-items: center;
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: 0.7rem;
+        background: rgba(110, 168, 254, 0.12);
+        border: 1px solid rgba(110, 168, 254, 0.25);
+      }
+
+      .demo-card__icon svg {
+        width: 1.25rem;
+        height: 1.25rem;
+        stroke: var(--ms-accent-a);
+        fill: none;
+        stroke-width: 1.7;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="ms-shell ms-main">
+      <header class="ms-hero">
+        <span class="ms-eyebrow">Everything here runs in this tab</span>
+        <h1>Voice interfaces that never leave the device.</h1>
+        <p>
+          Three live demos of <strong>Moonshine Voice</strong> compiled to WebAssembly.
+          The models download once, then run on your own CPU: no API key, no account,
+          and not a single byte of audio sent to a server.
+        </p>
+      </header>
+
+      <div class="demo-grid">
+        <a class="demo-card" href="/stt/">
+          <span class="demo-card__icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" />
+              <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+            </svg>
+          </span>
+          <h2>Speech to Text</h2>
+          <p>
+            Live transcription that keeps up with you as you talk, with the actual
+            per-phrase latency shown next to every line.
+          </p>
+          <span class="demo-card__go">Try the microphone →</span>
+        </a>
+
+        <a class="demo-card" href="/tts/">
+          <span class="demo-card__icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 9v6h4l5 4V5L8 9H4Z" />
+              <path d="M17 9a4 4 0 0 1 0 6" />
+            </svg>
+          </span>
+          <h2>Text to Speech</h2>
+          <p>
+            Natural voices in 16 languages, plus a zero-shot clone of your own voice
+            from about four seconds of speech.
+          </p>
+          <span class="demo-card__go">Hear a voice →</span>
+        </a>
+
+        <a class="demo-card" href="/dialog-flow/">
+          <span class="demo-card__icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M21 12a8 8 0 0 1-11.4 7.2L3 21l1.8-6.6A8 8 0 1 1 21 12Z" />
+              <path d="M8.5 12h.01M12 12h.01M15.5 12h.01" />
+            </svg>
+          </span>
+          <h2>Voice Agent</h2>
+          <p>
+            A multi-step spoken conversation, triggered by meaning rather than exact
+            wording. Say it however you like.
+          </p>
+          <span class="demo-card__go">Start talking →</span>
+        </a>
+      </div>
+
+      <section class="ms-section" id="proof"></section>
+
+      <section class="ms-section">
+        <div class="ms-card">
+          <h2 class="ms-card__title">Why it is worth the download</h2>
+          <p class="ms-card__hint">
+            Moonshine's streaming models were built for live speech rather than
+            batch files, which is where the difference shows up.
+          </p>
+          <p class="ms-small ms-muted" style="margin: 0">
+            Whisper has to wait for a 30-second window before it can start work.
+            Moonshine transcribes incrementally while you are still talking, so the
+            final transcript lands about a tenth of a second after you stop, roughly
+            a hundred times sooner than Whisper Large v3 on the same machine, and with
+            a lower word error rate. On this page that means you can hold a
+            conversation with a model running on your laptop's CPU.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <script type="module">
+      import { mountChrome, statStrip } from '/assets/moonshine-ui.js';
+
+      mountChrome({ active: 'home', ctaTitle: 'Ship a voice interface this afternoon.' });
+
+      document.getElementById('proof').innerHTML = statStrip([
+        { value: '6.65%', label: 'HuggingFace’s OpenASR Leaderboard average, beating Whisper Large v3’s 7.44%' },
+        { value: '107 ms', label: 'From end of speech to final transcript, on a MacBook Pro' },
+        { value: '245M', label: 'Parameters, against Whisper Large v3’s 1.5 billion' },
+        { value: '0 bytes', label: 'Audio uploaded anywhere, on any of these pages' },
+      ]);
+    </script>
+  </body>
+</html>

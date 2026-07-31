@@ -85,7 +85,7 @@ dalek.start_listening()
 ```
 
 `DialogFlow` is the entry point for voice interfaces. Here we only register
-"globals" — single-shot commands that are live at all times — but the same
+"globals" (single-shot commands that are live at all times), but the same
 runner also handles multi-turn conversations through `listen_for`, where it can
 ask a question, wait for the answer, and confirm it. Either way, `load()`
 downloads and opens the models it needs and `start_listening()` opens the

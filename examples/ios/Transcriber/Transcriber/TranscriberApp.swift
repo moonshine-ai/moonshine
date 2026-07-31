@@ -33,7 +33,7 @@ final class TranscriptionSession: ObservableObject {
 
     private var mic: MicTranscriber?
 
-    /// Downloads the streaming English model on first run — no language, model,
+    /// Downloads the streaming English model on first run. No language, model,
     /// or microphone permission handling needed here.
     func prepare() async {
         guard mic == nil else { return }

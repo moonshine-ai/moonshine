@@ -28,6 +28,27 @@ set -o pipefail
 # the Emscripten build of libmoonshine to also use -pthread and the page to be
 # cross-origin isolated (COOP/COEP) so SharedArrayBuffer is available.
 #
+# Exception handling is the single biggest performance lever in this build, so
+# it is worth spelling out. ORT's default wasm configuration turns on
+# `-s DISABLE_EXCEPTION_CATCHING=0`, i.e. Emscripten's *JavaScript* exception
+# handling. Under that model every C++ call that needs an unwind landing pad is
+# lowered to an `invoke_*` trampoline that leaves wasm, runs a JS function, and
+# re-enters wasm - three boundary crossings per call.
+#
+# That is ruinous for kernels that call a small throwing helper in an inner
+# loop. The worst offender for us is ConvInteger (the quantized convolutions in
+# the Kokoro TTS model): for 1-D kernels it falls back to ORT's generic im2col,
+# which calls math::NextPosition() once per output element, and NextPosition
+# contains an ORT_ENFORCE and so can throw. Profiling browser TTS showed ~66% of
+# total synthesis time spent in those trampolines, and building with the flags
+# below took Kokoro from a real-time factor of 2.6 to 0.59 (4.4x) with no change
+# in output. See scripts/bench-wasm-tts.mjs / scripts/profile-wasm-tts.mjs.
+#
+# Disabling exception *catching* while keeping it at the API boundary is the
+# same configuration Microsoft ships for the onnxruntime-web packages: ORT
+# internals lose their landing pads, while errors surfaced through the ORT API
+# are still reported to callers rather than aborting.
+#
 # Arguments (order-independent):
 #   single-thread - ALSO build a non-threaded SIMD fallback
 #                   (libonnxruntime_webassembly_singlethread.a) for pages that
@@ -68,6 +89,9 @@ mkdir -p "${DEST_DIR}"
 
 if [ -z "${FORCE}" ] && [ -f "${DEST_DIR}/libonnxruntime_webassembly.a" ]; then
     echo "[build-ort-wasm] ${DEST_DIR}/libonnxruntime_webassembly.a already exists; pass 'force' to rebuild."
+    echo "[build-ort-wasm] NOTE: archives vendored before the exception-handling"
+    echo "[build-ort-wasm] change (see the header comment) are ~4x slower at TTS;"
+    echo "[build-ort-wasm] rebuild with 'force' if yours predates it."
     if [ -z "${BUILD_SINGLE_THREAD}" ] || [ -f "${DEST_DIR}/libonnxruntime_webassembly_singlethread.a" ]; then
         exit 0
     fi
@@ -115,6 +139,8 @@ build_variant() {
             --config Release \
             --build_wasm_static_lib \
             --enable_wasm_simd \
+            --disable_wasm_exception_catching \
+            --enable_wasm_api_exception_catching \
             --skip_tests \
             --parallel \
             --emsdk_version "${EMSDK_VERSION}" \

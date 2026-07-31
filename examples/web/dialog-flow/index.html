@@ -3,122 +3,480 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Moonshine — Dialog Flow</title>
+    <title>Voice Agent | Moonshine Voice</title>
+    <meta
+      name="description"
+      content="A multi-step spoken conversation running entirely in your browser. Triggered by meaning rather than exact wording."
+    />
+    <meta property="og:title" content="Voice Agent | Moonshine Voice" />
+    <meta
+      property="og:description"
+      content="A multi-step spoken conversation running entirely in your browser, triggered by meaning rather than exact wording."
+    />
+    <link rel="icon" href="/assets/favicon.png" type="image/png" />
+    <link rel="stylesheet" href="/assets/moonshine.css" />
     <style>
-      :root { color-scheme: light dark; }
-      body {
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-        max-width: 720px; margin: 3rem auto; padding: 0 1rem; line-height: 1.5;
+      .split {
+        display: grid;
+        gap: 1rem;
+        align-items: start;
       }
-      h1 { font-size: 1.6rem; }
-      button {
-        font-size: 1rem; padding: 0.6rem 1.1rem; border-radius: 0.5rem;
-        border: 1px solid currentColor; background: transparent; cursor: pointer;
+
+      @media (min-width: 60rem) {
+        .split {
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        }
       }
-      button[disabled] { opacity: 0.5; cursor: default; }
-      #status { margin: 1rem 0; opacity: 0.75; min-height: 1.4em; }
+
+      /* --- Conversation --------------------------------------------------- */
+
       #log {
-        margin-top: 1.5rem; padding: 1rem; border-radius: 0.5rem;
-        border: 1px solid rgba(128,128,128,0.4); min-height: 8rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+        min-height: 15rem;
+        max-height: 26rem;
+        overflow-y: auto;
+        padding: 1.1rem;
+        border: 1px solid var(--ms-line);
+        border-radius: var(--ms-radius);
+        background: rgba(9, 11, 15, 0.5);
       }
-      .user { color: #2a7; }
-      .assistant { color: #4af; }
-      hr { border: none; border-top: 1px solid rgba(128,128,128,0.3); margin: 1.5rem 0; }
-      .row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
-      #utterance { flex: 1; min-width: 12rem; font: inherit; padding: 0.5rem;
-        border-radius: 0.5rem; border: 1px solid rgba(128,128,128,0.4); }
+
+      #log .placeholder {
+        margin: auto;
+        font-size: 0.92rem;
+        color: var(--ms-faint);
+        text-align: center;
+        text-wrap: balance;
+      }
+
+      .msg {
+        display: flex;
+        max-width: 85%;
+      }
+
+      .msg .bubble {
+        padding: 0.55rem 0.85rem;
+        border-radius: 1rem;
+        font-size: 0.95rem;
+        line-height: 1.5;
+        text-wrap: pretty;
+      }
+
+      .msg.user {
+        align-self: flex-end;
+      }
+
+      .msg.user .bubble {
+        border-bottom-right-radius: 0.3rem;
+        color: #0d1017;
+        background: linear-gradient(135deg, var(--ms-accent-a), var(--ms-accent-b));
+      }
+
+      .msg.assistant,
+      .msg.pending {
+        align-self: flex-start;
+      }
+
+      .msg.assistant .bubble,
+      .msg.pending .bubble {
+        border: 1px solid var(--ms-line-strong);
+        border-bottom-left-radius: 0.3rem;
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      /* Three dots shown while the agent is speaking or thinking. */
+      .typing {
+        display: inline-flex;
+        gap: 0.22rem;
+        padding: 0.15rem 0;
+      }
+
+      .typing span {
+        width: 0.4rem;
+        height: 0.4rem;
+        border-radius: 50%;
+        background: var(--ms-muted);
+        animation: bounce 1.1s ease-in-out infinite;
+      }
+
+      .typing span:nth-child(2) {
+        animation-delay: 0.15s;
+      }
+
+      .typing span:nth-child(3) {
+        animation-delay: 0.3s;
+      }
+
+      @keyframes bounce {
+        0%,
+        60%,
+        100% {
+          transform: translateY(0);
+          opacity: 0.45;
+        }
+        30% {
+          transform: translateY(-0.25rem);
+          opacity: 1;
+        }
+      }
+
+      .note {
+        align-self: center;
+        max-width: 90%;
+        font-size: 0.83rem;
+        color: var(--ms-faint);
+        text-align: center;
+        text-wrap: balance;
+      }
+
+      .phrasing {
+        margin: 0 0 0.5rem;
+        font-size: 0.88rem;
+        color: var(--ms-muted);
+      }
+
+      .listening-dot {
+        display: inline-block;
+        width: 0.5rem;
+        height: 0.5rem;
+        margin-inline-end: 0.4rem;
+        border-radius: 50%;
+        background: var(--ms-good);
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.25;
+        }
+      }
     </style>
   </head>
   <body>
-    <h1>Moonshine — Dialog Flow</h1>
-    <p>
-      A voice-driven conversation running fully on-device. Say
-      <strong>“set up wifi”</strong> to start the flow, or “cancel” / “start over”
-      at any time.
-    </p>
-    <button id="toggle">Start</button>
+    <main class="ms-shell ms-main">
+      <header class="ms-hero">
+        <span class="ms-eyebrow">Speech, matching, and synthesis, all on-device</span>
+        <h1>Say it however you like. It still works.</h1>
+        <p>
+          A voice agent that matches what you <strong>meant</strong>, not the exact
+          words you used. Ask it to set up wifi any way you please and it runs the
+          same multi-step conversation: speech recognition, phrase matching, and
+          the voice answering you all running in this tab.
+        </p>
+      </header>
 
-    <hr />
-    <p>Or type what you'd say (drives the same flow without a microphone):</p>
-    <div class="row">
-      <input id="utterance" type="text" placeholder="e.g. set up wifi" />
-      <button id="send">Send</button>
-    </div>
+      <div class="split">
+        <section class="ms-card">
+          <div class="ms-mic-row" style="margin-bottom: 1.1rem">
+            <button id="toggle" class="ms-mic" type="button" aria-label="Start the conversation">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" />
+                <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+              </svg>
+            </button>
+            <div class="ms-mic-row__text">
+              <div class="ms-mic-row__label" id="micLabel">Start talking</div>
+              <p id="status" class="ms-status">Loading…</p>
+            </div>
+            <div class="ms-meter" id="meter" aria-hidden="true"></div>
+          </div>
 
-    <p id="status">Idle.</p>
-    <div id="log" aria-live="polite"></div>
+          <div class="ms-loading">
+            <div class="ms-progress" id="progress">
+              <div class="ms-progress__bar"></div>
+            </div>
+            <p class="ms-loading__detail" id="loadingDetail"></p>
+            <p class="ms-loading-note" id="loadingNote"></p>
+          </div>
+
+          <div id="log" aria-live="polite">
+            <span class="placeholder">
+              The conversation will appear here. Say “set up wifi”, or anything that
+              means the same thing.
+            </span>
+          </div>
+
+          <div style="margin-top: 1.1rem">
+            <p class="phrasing">
+              All of these start the same flow. None of them is the registered phrase
+              except the first:
+            </p>
+            <div class="ms-chips" id="phrasings"></div>
+          </div>
+
+          <div class="ms-field" style="margin-top: 1.1rem">
+            <label class="ms-label" for="utterance">Or try your own wording</label>
+            <div class="ms-row">
+              <input
+                id="utterance"
+                class="ms-input"
+                style="flex: 1; min-width: 12rem; width: auto"
+                type="text"
+                placeholder="e.g. connect to a wireless network"
+              />
+              <button id="send" class="ms-btn" type="button">Send</button>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h2 class="ms-card__title">The flow, running live</h2>
+          <p class="ms-card__hint">
+            This is the whole agent. The highlighted line is the one waiting on you
+            right now.
+          </p>
+          <div id="code"></div>
+        </section>
+      </div>
+
+      <section class="ms-section" id="proof"></section>
+
+      <section class="ms-section">
+        <div class="ms-card">
+          <h2 class="ms-card__title">Why the wording does not matter</h2>
+          <p class="ms-small ms-muted" style="margin: 0">
+            Registering a phrase does not register a string to match. Moonshine embeds
+            your trigger phrases and whatever the user said into the same vector space
+            and compares them by meaning, so “configure my wireless network” reaches a
+            flow registered as “set up wifi”, sharing not one word with it, without
+            you listing a single synonym. The same
+            matching handles the answers inside the conversation, which is why “yeah,
+            go ahead” counts as a yes. “Cancel” and “start over” work everywhere
+            without being registered at all. It is a similarity score rather than
+            magic, so a distant paraphrase can still fall short. How close is close
+            enough is one number, <code>triggerThreshold</code>, which defaults to 0.7.
+          </p>
+        </div>
+      </section>
+    </main>
 
     <script type="module">
-      // Load the locally-built binding when the page is opened with ?local=1
-      // (e.g. via examples/web/serve.mjs); otherwise use the published copy
-      // from the jsDelivr CDN.
-      const params = new URLSearchParams(location.search);
-      const useLocal = params.get('local') === '1';
-      // With &assets=local, models are fetched from the repo (served by
-      // serve.mjs) instead of the CDN, so the page runs fully offline. With
-      // &nomic=1 we build the dialog runner but skip the microphone, so the
-      // flow can be driven by the text box below. The browser integration test
-      // uses both.
-      const useLocalAssets = params.get('assets') === 'local';
+      import {
+        mountChrome,
+        rotatingWords,
+        PLATFORMS,
+        statStrip,
+        codePanel,
+        markCodeStep,
+        LoadingUi,
+        MicMeter,
+        describeError,
+        modelsAreCached,
+        purgeModelCacheIfRequested,
+        pageConfig,
+        audioConstraints,
+        openMicrophone,
+      } from '/assets/moonshine-ui.js';
+
+      const { params, useLocalAssets, moduleUrl } = pageConfig();
       const noMic = params.get('nomic') === '1';
-      const moduleUrl = useLocal
-        ? '/wasm/dist/index.js'
-        : 'https://cdn.jsdelivr.net/npm/@moonshine-ai/moonshine-wasm/dist/index.js';
       const { TextToSpeech, DialogFlow } = await import(moduleUrl);
 
-      const toggle = document.getElementById('toggle');
-      const statusEl = document.getElementById('status');
-      const logEl = document.getElementById('log');
-      const utteranceEl = document.getElementById('utterance');
-      const sendBtn = document.getElementById('send');
+      mountChrome({
+        active: 'dialog',
+        ctaTitle:
+          'Add a voice agent to your ' + rotatingWords(PLATFORMS) + ' app',
+      });
 
-      let dialog = null;
-      let running = false;
+      const els = {
+        toggle: document.getElementById('toggle'),
+        micLabel: document.getElementById('micLabel'),
+        status: document.getElementById('status'),
+        progress: document.getElementById('progress'),
+        note: document.getElementById('loadingNote'),
+        detail: document.getElementById('loadingDetail'),
+        log: document.getElementById('log'),
+        meter: document.getElementById('meter'),
+        phrasings: document.getElementById('phrasings'),
+        utterance: document.getElementById('utterance'),
+        send: document.getElementById('send'),
+      };
 
-      function log(role, text) {
-        const div = document.createElement('div');
-        div.className = role;
-        div.textContent = `${role}: ${text}`;
-        logEl.appendChild(div);
-        logEl.scrollTop = logEl.scrollHeight;
+      document.getElementById('proof').innerHTML = statStrip([
+        { value: '3', label: 'Models working together: recognition, embedding, voice' },
+        { value: '0', label: 'Synonyms you have to write out by hand' },
+        { value: '2', label: 'Commands that always work: “cancel” and “start over”' },
+        { value: '100%', label: 'On-device, so the conversation never leaves this tab' },
+      ]);
+
+      // --- The code panel, and the line each step corresponds to -------------
+      // The snippet below is the flow this page actually runs. STEP_LINES maps
+      // each await in `wifiSetup` onto its line in that listing so the panel can
+      // show which one the conversation is parked on.
+      const FLOW_SOURCE = `dialog.listenFor('set up wifi', async (d) => {
+  const ssid = await d.ask("What's the name of your wifi network?");
+
+  if (!(await d.confirm(\`I heard \${ssid}. Is that right?\`))) {
+    return d.say("No problem, let's start over.");
+  }
+
+  if (await d.confirm('Apply these changes?')) {
+    await d.say(\`Done. Connecting to \${ssid}.\`);
+  } else {
+    await d.say('Okay, nothing changed.');
+  }
+});`;
+
+      const STEP_LINES = {
+        askSsid: 1,
+        confirmSsid: 3,
+        startOver: 4,
+        confirmApply: 7,
+        done: 8,
+        unchanged: 10,
+      };
+
+      const codeEl = codePanel({ file: 'wifi-agent.js', code: FLOW_SOURCE });
+      document.getElementById('code').append(codeEl);
+      const step = (name) => markCodeStep(codeEl, name === null ? null : STEP_LINES[name]);
+
+      const loading = new LoadingUi({
+        status: els.status,
+        progress: els.progress,
+        note: els.note,
+        detail: els.detail,
+        notes: [
+          'Three models are loading: speech recognition, phrase matching, and a voice.',
+          'They download once and then the whole agent works offline.',
+          'The embedding model is what lets it match meaning instead of exact words.',
+          'Nothing you say is uploaded. The conversation runs on your CPU.',
+        ],
+      });
+
+      // --- Conversation log ---------------------------------------------------
+
+      let typingEl = null;
+      let typingTimer = null;
+
+      function clearPlaceholder() {
+        els.log.querySelector('.placeholder')?.remove();
       }
 
-      /** The flow: an ordinary async function, read top to bottom. */
+      function log(role, text) {
+        clearPlaceholder();
+        hideTyping();
+        const msg = document.createElement('div');
+        msg.className = `msg ${role}`;
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        bubble.textContent = text;
+        msg.append(bubble);
+        els.log.append(msg);
+        els.log.scrollTop = els.log.scrollHeight;
+      }
+
+      /**
+       * The "agent is thinking" dots. Deliberately not classed `assistant`: it
+       * is not something the agent said, and anything reading the log back
+       * (including the browser test) would otherwise count it as an utterance.
+       */
+      function showTyping() {
+        if (typingEl) return;
+        clearPlaceholder();
+        typingEl = document.createElement('div');
+        typingEl.className = 'msg pending';
+        typingEl.innerHTML =
+          '<div class="bubble"><span class="typing"><span></span><span></span><span></span></span></div>';
+        els.log.append(typingEl);
+        els.log.scrollTop = els.log.scrollHeight;
+        // Nothing answers an utterance that matched no trigger, so give up
+        // rather than leaving the dots spinning forever.
+        typingTimer = setTimeout(hideTyping, 6000);
+      }
+
+      function hideTyping() {
+        clearTimeout(typingTimer);
+        typingEl?.remove();
+        typingEl = null;
+      }
+
+      // --- The flow -----------------------------------------------------------
+      // An ordinary async function: it reads top to bottom, and the `step()`
+      // calls exist only so the code panel beside it can follow along.
+
       async function wifiSetup(d) {
+        step('askSsid');
         const ssid = await d.ask("What's the name of your wifi network?");
+
+        step('confirmSsid');
         if (!(await d.confirm(`I heard ${ssid}. Is that right?`))) {
+          step('startOver');
           await d.say("No problem, let's start over.");
           return;
         }
+
+        step('confirmApply');
         if (await d.confirm('Apply these changes?')) {
+          step('done');
           await d.say(`Done. Connecting to ${ssid}.`);
         } else {
+          step('unchanged');
           await d.say('Okay, nothing changed.');
         }
       }
 
-      // Only needed for the offline integration test, where the voice assets
-      // and the embedding model are served from different repo paths. The voice
-      // comes in as a pre-built engine; modelsFrom points the embedding model at
-      // its own base. Normally load() fetches all of this from the CDN itself.
-      const LOCAL_EMBEDDING_BASE = '/test-assets/embeddinggemma-300m-ONNX';
+      // --- Alternate phrasings -------------------------------------------------
+      // The point of the demo: only the first of these is registered, and all of
+      // them reach the same flow. The last two share no words with it at all.
+      // Each one is checked against the default 0.7 threshold before being
+      // listed here, since an example that did not fire would undercut the page.
+      const PHRASINGS = [
+        'set up wifi',
+        'help me connect to wifi',
+        'join a wifi network',
+        'configure my wireless network',
+      ];
 
-      function loadLocalTts() {
-        return new TextToSpeech().language('en_us').modelsFrom('/tts-data').load();
+      for (const phrase of PHRASINGS) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'ms-chip';
+        chip.textContent = phrase;
+        chip.disabled = true;
+        chip.addEventListener('click', () => sendUtterance(phrase));
+        els.phrasings.append(chip);
       }
 
-      /** Builds the dialog runner (and, unless disabled, the microphone). */
+      const setChipsEnabled = (enabled) => {
+        for (const chip of els.phrasings.children) chip.disabled = !enabled;
+      };
+
+      // --- Lifecycle ------------------------------------------------------------
+
+      let dialog = null;
+      let running = false;
+      let meter = null;
+
+      // Only needed for the offline integration test, where the voice assets and
+      // the embedding model are served from different repo paths. Normally
+      // load() fetches all of this from the CDN itself.
+      const LOCAL_EMBEDDING_BASE = '/test-assets/embeddinggemma-300m-ONNX';
+
+      const loadLocalTts = () =>
+        new TextToSpeech().language('en_us').modelsFrom('/tts-data').load();
+
       async function start({ useMic = true } = {}) {
-        toggle.disabled = true;
-        statusEl.textContent = 'Loading models (first run downloads them)…';
+        els.toggle.disabled = true;
+        els.micLabel.textContent = 'Starting…';
         try {
           dialog = new DialogFlow()
             .microphone(useMic)
-            .onHeard((text) => log('user', text))
+            // Honours a device chosen on the microphone diagnostic page.
+            .audioConstraints(useMic ? await audioConstraints() : true)
+            .onHeard((text) => {
+              log('user', text);
+              showTyping();
+            })
             .onSaid((text) => log('assistant', text))
-            .onProgress((fraction, file) => {
-              statusEl.textContent = `Downloading ${file} ${Math.round(100 * fraction)}%…`;
-            });
+            .onError((error) => loading.setStatus(describeError(error), 'error'))
+            .onProgress(loading.onProgress);
 
           dialog.listenFor('set up wifi', wifiSetup);
 
@@ -126,55 +484,110 @@
             dialog.useTextToSpeech(await loadLocalTts()).modelsFrom(LOCAL_EMBEDDING_BASE);
           }
 
-          // One call downloads the speech-to-text, embedding and voice models,
-          // wires them together, and attaches the microphone. "cancel" and
-          // "start over" work without being registered.
+          // One call downloads speech-to-text, the embedding model and a voice,
+          // wires them together and attaches the microphone.
           await dialog.load();
+          loading.done();
 
           if (useMic) {
             await dialog.startListening();
-            statusEl.textContent = 'Listening… say “set up wifi”.';
-            toggle.textContent = 'Stop';
+            els.toggle.classList.add('is-live');
+            els.micLabel.textContent = 'Listening';
+            els.status.innerHTML =
+              '<span class="listening-dot"></span>Say “set up wifi”, or your own version of it.';
+            attachMeter();
           } else {
-            statusEl.textContent = 'Ready — type “set up wifi” below.';
+            els.micLabel.textContent = 'Start talking';
+            loading.setStatus('Ready', 'ready');
           }
           running = true;
+          setChipsEnabled(true);
           window.__dialogReady = true;
         } catch (err) {
-          statusEl.textContent = 'Failed to start: ' + err.message;
+          els.micLabel.textContent = 'Start talking';
+          loading.setStatus(describeError(err), 'error');
         } finally {
-          toggle.disabled = false;
+          els.toggle.disabled = false;
+        }
+      }
+
+      async function attachMeter() {
+        try {
+          const stream = await openMicrophone();
+          meter = new MicMeter(els.meter);
+          meter.start(stream);
+          meter.stream = stream;
+        } catch {
+          // Decoration only; the conversation works without it.
         }
       }
 
       async function stop() {
-        toggle.disabled = true;
+        els.toggle.disabled = true;
+        meter?.stop();
+        meter?.stream?.getTracks().forEach((track) => track.stop());
+        meter = null;
         await dialog?.stopListening();
         dialog?.close();
         dialog = null;
         running = false;
+        hideTyping();
+        step(null);
+        setChipsEnabled(false);
         window.__dialogReady = false;
-        statusEl.textContent = 'Stopped.';
-        toggle.textContent = 'Start';
-        toggle.disabled = false;
+        els.toggle.classList.remove('is-live');
+        els.micLabel.textContent = 'Start talking';
+        loading.setStatus('Stopped');
+        els.toggle.disabled = false;
       }
 
-      // Feed a typed utterance in exactly as if it had been heard.
-      function sendUtterance() {
-        const text = utteranceEl.value.trim();
-        if (!text || !dialog) return;
-        utteranceEl.value = '';
-        dialog.handleUtterance(text);
+      /** Feeds text in exactly as if it had been heard. */
+      async function sendUtterance(text) {
+        const utterance = (text ?? els.utterance.value).trim();
+        if (!utterance) return;
+        if (!dialog) {
+          loading.setStatus('Press the microphone first', 'error');
+          return;
+        }
+        if (text === undefined) els.utterance.value = '';
+
+        const before = els.log.querySelectorAll('.assistant').length;
+        await dialog.handleUtterance(utterance);
+        hideTyping();
+
+        // Matching is a similarity threshold, so some wordings genuinely miss.
+        // Saying so beats leaving the visitor staring at a silent log.
+        if (!dialog.isActive && els.log.querySelectorAll('.assistant').length === before) {
+          note('That one scored below the matching threshold, so no flow started.');
+        }
       }
 
-      toggle.addEventListener('click', () => (running ? stop() : start()));
-      sendBtn.addEventListener('click', sendUtterance);
-      utteranceEl.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') sendUtterance();
+      function note(text) {
+        clearPlaceholder();
+        const el = document.createElement('div');
+        el.className = 'note';
+        el.textContent = text;
+        els.log.append(el);
+        els.log.scrollTop = els.log.scrollHeight;
+      }
+
+      els.toggle.addEventListener('click', () => (running ? stop() : start()));
+      els.send.addEventListener('click', () => sendUtterance());
+      els.utterance.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') sendUtterance();
       });
 
-      // In no-mic mode, build the runner immediately so the text box works
-      // without a user gesture (used by the browser integration test).
+      // --- Startup ---------------------------------------------------------------
+
+      await purgeModelCacheIfRequested();
+      if (await modelsAreCached()) {
+        loading.setStatus('Ready');
+      } else {
+        loading.setStatus('Ready to download');
+      }
+
+      // In no-mic mode, build the runner immediately so the text box and chips
+      // work without a user gesture (this is what the browser test drives).
       if (noMic) start({ useMic: false });
     </script>
   </body>

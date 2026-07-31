@@ -91,10 +91,10 @@ struct JsWord {
 struct JsSpeakerSpan {
   float startTime = 0.0f;
   float duration = 0.0f;
-  // 64-bit ids are passed as doubles; JS numbers hold them fine up to 2^53,
-  // which is plenty for display/keying. The TS layer treats them as opaque.
-  double speakerId = 0.0;
+  // Passed as a decimal string, not a double: see JsLine::id.
+  std::string speakerId;
   uint32_t speakerIndex = 0;
+  // Character offsets into the line text, small enough for a double.
   double startChar = 0.0;
   double endChar = 0.0;
 };
@@ -103,7 +103,13 @@ struct JsLine {
   std::string text;
   float startTime = 0.0f;
   float duration = 0.0f;
-  double id = 0.0;
+  // A decimal string rather than a double, because the core allocates line ids
+  // as a random 64-bit base incremented by one per line (see next_line_id in
+  // core/transcriber.cpp). Such ids land above 2^53, where consecutive doubles
+  // are 2048 apart, so casting collapses every line in a stream onto a single
+  // value and the whole LineStarted/LineCompleted model breaks. The id is
+  // documented as opaque, so a string costs callers nothing and keys cleanly.
+  std::string id;
   bool isComplete = false;
   bool isUpdated = false;
   bool isNew = false;
@@ -130,7 +136,7 @@ JsTranscript convert_transcript(const transcript_t *t) {
     jl.text = line.text ? line.text : "";
     jl.startTime = line.start_time;
     jl.duration = line.duration;
-    jl.id = static_cast<double>(line.id);
+    jl.id = std::to_string(line.id);
     jl.isComplete = line.is_complete != 0;
     jl.isUpdated = line.is_updated != 0;
     jl.isNew = line.is_new != 0;
@@ -145,7 +151,7 @@ JsTranscript convert_transcript(const transcript_t *t) {
     for (uint64_t s = 0; s < line.speaker_span_count; ++s) {
       const speaker_span_t &span = line.speaker_spans[s];
       jl.speakerSpans.push_back(JsSpeakerSpan{
-          span.start_time, span.duration, static_cast<double>(span.speaker_id),
+          span.start_time, span.duration, std::to_string(span.speaker_id),
           span.speaker_index, static_cast<double>(span.start_char),
           static_cast<double>(span.end_char)});
     }

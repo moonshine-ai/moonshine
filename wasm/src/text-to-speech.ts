@@ -357,12 +357,12 @@ export class TextToSpeech {
     const downloader =
       this.downloader ??
       new AssetDownloader({ onProgress: wrapProgress(this.progressCallback) });
-    const assets = new Map<string, Uint8Array>();
-    for (const key of keys) {
-      const url = `${base}/${key.replace(/^\/+/, '')}`;
-      assets.set(key, await downloader.fetchFile(url));
-    }
-    return assets;
+    // Downloading these as one named set (rather than a file at a time) lets
+    // the downloader report progress across the whole voice.
+    const urls = new Map<string, string>(
+      keys.map((key) => [key, `${base}/${key.replace(/^\/+/, '')}`]),
+    );
+    return downloader.downloadNamedFiles(urls);
   }
 
   /**

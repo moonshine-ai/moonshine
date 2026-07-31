@@ -360,18 +360,24 @@ std::optional<EngineSpec> piper_spec() {
     return std::nullopt;
   }
   // Prefer a small, low-quality voice to keep the loop fast, else the first
-  // .onnx we find.
+  // voice we find. A voice ships as a split ORT pair, a single .ort, or the
+  // original .onnx, so key off the config that accompanies all three.
   std::string chosen;
   for (const auto &ent : fs::directory_iterator(voices, ec)) {
     if (!ent.is_regular_file()) {
       continue;
     }
-    const fs::path &p = ent.path();
-    if (p.extension() != ".onnx") {
+    const std::string name = ent.path().filename().string();
+    static const std::string kConfigSuffix = ".onnx.json";
+    if (name.size() <= kConfigSuffix.size() ||
+        name.compare(name.size() - kConfigSuffix.size(), kConfigSuffix.size(),
+                     kConfigSuffix) != 0) {
       continue;
     }
-    const std::string stem = p.stem().string();
-    if (!file_present(voices / (stem + ".onnx.json"))) {
+    const std::string stem = name.substr(0, name.size() - kConfigSuffix.size());
+    if (!file_present(voices / (stem + ".model.ort")) &&
+        !file_present(voices / (stem + ".ort")) &&
+        !file_present(voices / (stem + ".onnx"))) {
       continue;
     }
     if (chosen.empty() || stem.find("-low") != std::string::npos) {

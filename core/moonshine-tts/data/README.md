@@ -22,6 +22,24 @@ This tree mirrors assets the C++ `moonshine-tts` (speak) and `moonshine-tts-g2p`
 
 All commands below assume the **repository root** as the current working directory unless noted.
 
+## Model file formats
+
+Most models here are stored in ORT format rather than ONNX, because ORT bakes the
+graph optimizations in at conversion time and skips the protobuf parse at load.
+`scripts/convert-models-to-ort.py` produces them and explains the choice per
+model; in short there are three layouts:
+
+| Layout | Used by | Why |
+|--------|---------|-----|
+| `<stem>.model.ort` + `<stem>.weights.ort` | every Piper voice with int8 weights | Keeping the weights in a second model runs their dequantize once at load instead of on every inference, without the ~4x file growth that folding them to float32 would cause. See `scripts/split-model-weights.py`. |
+| `<stem>.ort` | Kokoro, the English OOV model, `en_US-saikat` | Float weights, so full optimization costs almost nothing in size. |
+| `<stem>.onnx` | the Chinese and Arabic G2P transformers | Their weights feed `MatMul`, which ORT pre-packs at load only for a constant operand, so moving the weights out of the graph would cost about 2.2x on inference. |
+
+Piper voices keep their `<stem>.onnx.json` config under that name whatever form
+the model takes. The original `.onnx` files are no longer in the tree but remain
+on the CDN under `https://download.moonshine.ai/tts/`, which is where to get one
+if you need to re-run a conversion or compare against upstream `piper-tts`.
+
 ## Regeneration verification (2026-03-30)
 
 Commands below were run from a clean temp output directory and compared to the parent monorepo’s `data/` / `models/` and this `moonshine-tts/data/` tree unless noted.

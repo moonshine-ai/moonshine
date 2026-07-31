@@ -1072,6 +1072,14 @@ def ensure_piper_espeak_phonemizer_uses_nfc_for_eval() -> None:
 
 
 def resolve_piper_onnx_path(asset_root: Path, piper_voice_catalog_id: str) -> Optional[Path]:
+    """Locate the original ``.onnx`` for a voice, which upstream piper-tts needs.
+
+    Moonshine ships voices as ORT now, and the upstream package cannot read that
+    format, so this comparison only runs where an ``.onnx`` is still on disk. The
+    originals remain on the CDN; fetch one with, for example::
+
+        curl -O https://download.moonshine.ai/tts/en_us/piper-voices/en_US-lessac-medium.onnx
+    """
     stem = piper_voice_catalog_id.strip()
     if stem.lower().startswith("piper_"):
         stem = stem[6:]
@@ -1279,7 +1287,11 @@ def run_language(
     if vp.piper and PiperVoiceCls is not None:
         piper_onnx = resolve_piper_onnx_path(asset_root, vp.piper)
         if piper_onnx is None:
-            upstream_p_skip = f"could not find ONNX for {vp.piper!r} under {asset_root}"
+            upstream_p_skip = (
+                f"no .onnx for {vp.piper!r} under {asset_root}; voices ship as "
+                "ORT and upstream piper-tts cannot read that "
+                "(see resolve_piper_onnx_path for how to fetch the original)"
+            )
         else:
             try:
                 upstream_piper_voice = PiperVoiceCls.load(piper_onnx)

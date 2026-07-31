@@ -109,19 +109,24 @@ class PiperTTS {
   std::unique_ptr<Impl> impl_;
 };
 
-/// Default Piper ONNX + ``*.onnx.json`` paths relative to ``g2p_root`` (under
+/// Default Piper model + ``*.onnx.json`` paths relative to ``g2p_root`` (under
 /// ``<data_subdir>/piper-voices/``). If ``onnx_model_stem`` is non-empty
-/// (basename or stem), it selects that ``*.onnx`` instead of the table default
-/// (same rules as ``PiperTTSOptions::onnx_model``).
+/// (basename or stem), it selects that voice instead of the table default (same
+/// rules as ``PiperTTSOptions::onnx_model``).
+///
+/// A voice ships either as a split ORT pair or as a single ``.ort``, so the model
+/// side is a list; see ``piper_voice_model_filenames``. The config keeps its
+/// ``.onnx.json`` name in both cases.
 bool piper_default_model_bundle_relative_paths(
     std::string_view lang_cli, const MoonshineG2POptions& opt,
-    std::string* onnx_relpath_out, std::string* onnx_json_relpath_out,
-    std::string_view onnx_model_stem = {});
+    std::vector<std::string>* model_relpaths_out,
+    std::string* onnx_json_relpath_out, std::string_view onnx_model_stem = {});
 
-/// Piper voice stems (no ``.onnx``) with availability (on-disk ``*.onnx`` or
-/// in-memory ``piper/onnx``), same resolution as ``PiperTTS``. Known voices are
-/// the language default plus any ``*.onnx`` under the resolved voices directory
-/// (union, sorted).
+/// Piper voice stems (no extension) with availability, same resolution as
+/// ``PiperTTS``: a voice counts as present when its split ORT pair, its single
+/// ``.ort``, or its original ``.onnx`` is on disk, or when ``piper/onnx`` is
+/// supplied in memory. Known voices are the language default plus every voice
+/// found under the resolved voices directory (union, sorted).
 std::vector<std::pair<std::string, bool>> piper_list_voices_with_availability(
     const PiperTTSOptions& opt);
 

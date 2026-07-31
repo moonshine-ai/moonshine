@@ -26,7 +26,7 @@ tar xzf moonshine-voice-macos-arm64.tar.gz -C moonshine-voice --strip-components
 
 ## Build
 
-The archive contains the Moonshine library inside the `lib` folder — a shared `libmoonshine.so` on Linux, a static `libmoonshine.a` on MacOS, or `moonshine.lib` on Windows. This is what you'll link against. There are also two headers, one for the low-level C API, and another for the higher-level C++ framework that's built on top of it. On Linux the `lib` folder also contains `libonnxruntime.so.1`, the ONNX Runtime shared library that `libmoonshine.so` loads at runtime.
+The archive contains the Moonshine library inside the `lib` folder: a shared `libmoonshine.so` on Linux, a static `libmoonshine.a` on MacOS, or `moonshine.lib` on Windows. This is what you'll link against. There are also two headers, one for the low-level C API, and another for the higher-level C++ framework that's built on top of it. On Linux the `lib` folder also contains `libonnxruntime.so.1`, the ONNX Runtime shared library that `libmoonshine.so` loads at runtime.
 
 Since this is a generic C++ example, I'll show the simplest possible build command lines on some common platforms. Because `download-library.sh` always extracts into a folder named `moonshine-voice`, the exact same command works on both x86_64 and 64-bit ARM within each operating system.
 
@@ -43,7 +43,7 @@ g++ transcriber.cpp \
 
 The `-Wl,-rpath,'$ORIGIN/...'` flag records a runtime library search path relative to the compiled `transcriber` binary, so it finds `libmoonshine.so` (and, through that library's own `$ORIGIN` rpath, `libonnxruntime.so.1`) without any `LD_LIBRARY_PATH`. If you prefer, drop the rpath flag and instead `export LD_LIBRARY_PATH=$(pwd)/moonshine-voice/lib` before running.
 
-You can build `text-to-speech.cpp` the same way (swap the source and `-o` output names). Note that it additionally needs the TTS voice and G2P data — pass its location with `--asset-root` (in a checkout of this repo that is `../../core/moonshine-tts/data`).
+You can build `text-to-speech.cpp` the same way (swap the source and `-o` output names). Note that it additionally needs the TTS voice and G2P data, so pass its location with `--asset-root` (in a checkout of this repo that is `../../core/moonshine-tts/data`).
 
 ### MacOS
 

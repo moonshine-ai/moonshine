@@ -25,6 +25,7 @@ extern "C" {
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <set>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -176,6 +177,76 @@ void resolve_piper_lang(const std::string& lk, const MoonshineG2POptions& opt,
   default_onnx = row->default_onnx;
 }
 
+/// Strips the extension a caller may have appended to a voice name.
+///
+/// Voices are identified by stem, but callers have long been allowed to pass
+/// ``foo.onnx``, and now also name the ORT files directly.
+std::string piper_voice_stem(std::string_view name) {
+  std::string s(trim_ascii_ws_copy(name));
+  for (const std::string_view suffix :
+       {".weights.ort", ".model.ort", ".onnx", ".ort"}) {
+    if (s.size() > suffix.size() &&
+        s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0) {
+      s.resize(s.size() - suffix.size());
+      break;
+    }
+  }
+  return s;
+}
+
+/// The file to open for a voice, or an empty path when none is on disk.
+///
+/// A voice can be present in any of three forms, preferred in this order: a
+/// split ORT pair (fastest to load, see ``load_split_weight_sessions``), a
+/// single ``.ort``, or the original ``.onnx``. Only the split pair needs both
+/// files, so it is checked as a pair.
+std::filesystem::path piper_voice_model_path(
+    const std::filesystem::path& voices_dir, const std::string& stem) {
+  const std::filesystem::path split_model = voices_dir / (stem + ".model.ort");
+  if (std::filesystem::is_regular_file(split_model) &&
+      std::filesystem::is_regular_file(voices_dir / (stem + ".weights.ort"))) {
+    return split_model;
+  }
+  for (const std::string_view suffix : {".ort", ".onnx"}) {
+    const std::filesystem::path cand = voices_dir / (stem + std::string(suffix));
+    if (std::filesystem::is_regular_file(cand)) {
+      return cand;
+    }
+  }
+  return {};
+}
+
+bool piper_voice_model_present(const std::filesystem::path& voices_dir,
+                               const std::string& stem) {
+  return !piper_voice_model_path(voices_dir, stem).empty();
+}
+
+/// Voice stems present in a directory, in any of the three model forms.
+std::vector<std::string> piper_voice_stems_on_disk(
+    const std::filesystem::path& voices_dir) {
+  std::set<std::string> stems;
+  if (!std::filesystem::is_directory(voices_dir)) {
+    return {};
+  }
+  for (const auto& ent : std::filesystem::directory_iterator(voices_dir)) {
+    if (!ent.is_regular_file()) {
+      continue;
+    }
+    const std::string name = ent.path().filename().string();
+    const std::string stem = piper_voice_stem(name);
+    if (stem != name && piper_voice_model_present(voices_dir, stem)) {
+      stems.insert(stem);
+    }
+  }
+  return {stems.begin(), stems.end()};
+}
+
+/// Resolves a voice request to the nominal ``<stem>.onnx`` path in *voices_dir*.
+///
+/// The returned path is an anchor rather than a file to open: the ``.onnx`` may
+/// not exist, since a voice can ship as ORT instead. Everything downstream
+/// derives from it, including the ``<stem>.onnx.json`` config (whose name keeps
+/// the ``.onnx`` regardless of model form) and the split-pair file names.
 std::filesystem::path pick_onnx_path(const std::filesystem::path& voices_dir,
                                      std::string_view requested,
                                      std::string_view default_basename) {
@@ -183,39 +254,28 @@ std::filesystem::path pick_onnx_path(const std::filesystem::path& voices_dir,
     throw std::runtime_error("PiperTTS: voices_dir is not a directory: " +
                              voices_dir.string());
   }
+  const auto anchor = [&](const std::string& stem) {
+    return voices_dir / (stem + ".onnx");
+  };
   if (!requested.empty()) {
-    std::string name(trim_ascii_ws_copy(requested));
-    if (name.size() < 5 || name.substr(name.size() - 5) != ".onnx") {
-      name += ".onnx";
+    const std::string stem = piper_voice_stem(requested);
+    if (piper_voice_model_present(voices_dir, stem)) {
+      return anchor(stem);
     }
-    const auto cand = voices_dir / name;
-    if (std::filesystem::is_regular_file(cand)) {
-      return cand;
-    }
-    LOGF("Requested Piper voice '%s' not found at '%s', falling back to '%s'",
-         std::string(requested).c_str(), cand.c_str(),
+    LOGF("Requested Piper voice '%s' not found in '%s', falling back to '%s'",
+         std::string(requested).c_str(), voices_dir.c_str(),
          std::string(default_basename).c_str());
   }
-  const auto d = voices_dir / std::string(default_basename);
-  if (std::filesystem::is_regular_file(d)) {
-    return d;
+  const std::string default_stem = piper_voice_stem(default_basename);
+  if (piper_voice_model_present(voices_dir, default_stem)) {
+    return anchor(default_stem);
   }
-  std::vector<std::filesystem::path> models;
-  for (const auto& ent : std::filesystem::directory_iterator(voices_dir)) {
-    if (!ent.is_regular_file()) {
-      continue;
-    }
-    const auto& p = ent.path();
-    if (p.extension() == ".onnx") {
-      models.push_back(p);
-    }
-  }
-  std::sort(models.begin(), models.end());
+  const std::vector<std::string> stems = piper_voice_stems_on_disk(voices_dir);
   if (!requested.empty()) {
     std::string available;
-    for (const auto& m : models) {
+    for (const std::string& stem : stems) {
       if (!available.empty()) available += ", ";
-      available += m.stem().string();
+      available += stem;
     }
     if (available.empty()) {
       LOG("  Available Piper voices: (none)");
@@ -223,10 +283,11 @@ std::filesystem::path pick_onnx_path(const std::filesystem::path& voices_dir,
       LOGF("  Available Piper voices: %s", available.c_str());
     }
   }
-  if (models.empty()) {
-    throw std::runtime_error("PiperTTS: no *.onnx in " + voices_dir.string());
+  if (stems.empty()) {
+    throw std::runtime_error("PiperTTS: no voice model files in " +
+                             voices_dir.string());
   }
-  return models[0];
+  return anchor(stems.front());
 }
 
 /// Piper pairs ``foo.onnx`` with ``foo.onnx.json``. If ``json_dir`` is empty,
@@ -412,6 +473,15 @@ struct PiperTTS::Impl {
   Ort::MemoryInfo mem_{
       Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)};
 
+  /// A float32 weight tensor supplied to the graph on every inference. See
+  /// ``load_split_weight_sessions`` for why these live outside the model.
+  struct SplitWeight {
+    std::string name;
+    std::vector<int64_t> shape;
+    std::vector<float> data;
+  };
+  std::vector<SplitWeight> split_weights_{};
+
   std::unordered_map<std::string, std::vector<int64_t>> phoneme_id_map_{};
   std::unordered_set<std::string> phoneme_map_keys_{};
   std::string piper_ipa_lang_key_{};
@@ -489,6 +559,16 @@ struct PiperTTS::Impl {
       in_names.push_back("sid");
     }
 
+    // Split-weights voices keep their weights out of the model, so pass them
+    // alongside the text inputs. These are views over buffers we already own, so
+    // no data is copied here.
+    for (SplitWeight& weight : split_weights_) {
+      inputs.push_back(Ort::Value::CreateTensor<float>(
+          mem_, weight.data.data(), weight.data.size(), weight.shape.data(),
+          weight.shape.size()));
+      in_names.push_back(weight.name.c_str());
+    }
+
     Ort::RunOptions run_opts{nullptr};
     const char* out_names[] = {"output"};
     auto outputs = session_.Run(run_opts, in_names.data(), inputs.data(),
@@ -507,6 +587,82 @@ struct PiperTTS::Impl {
           resample_linear(wave, native_sample_rate_, PiperTTS::kSampleRateHz);
     }
     return wave;
+  }
+
+  /// Loads the split-weights form of a voice if it is present on disk.
+  ///
+  /// An ORT-format model has its graph optimizations baked in at conversion time
+  /// and ORT does not re-apply them at load, so a voice whose weights are stored
+  /// as int8 would have to run its dequantize chain on every inference. Splitting
+  /// the voice avoids that: ``<stem>.model.ort`` is the fused graph with its
+  /// weights declared as inputs, and ``<stem>.weights.ort`` produces those
+  /// weights. Running the weights model once here keeps the dequantize off the
+  /// inference path.
+  ///
+  /// Returns false when the pair is absent, leaving the caller on the .onnx path.
+  bool load_split_weight_sessions(const Ort::SessionOptions& session_opts) {
+    if (onnx_path_.empty()) {
+      return false;
+    }
+    std::filesystem::path model_path = onnx_path_;
+    model_path.replace_extension(".model.ort");
+    std::filesystem::path weights_path = onnx_path_;
+    weights_path.replace_extension(".weights.ort");
+    if (!std::filesystem::is_regular_file(model_path) ||
+        !std::filesystem::is_regular_file(weights_path)) {
+      return false;
+    }
+
+    std::vector<SplitWeight> weights;
+    {
+      const std::string weights_u8 = weights_path.string();
+      Ort::Session weights_session(env_, weights_u8.c_str(), session_opts);
+      Ort::AllocatorWithDefaultOptions allocator;
+      const size_t count = weights_session.GetOutputCount();
+      std::vector<std::string> names;
+      names.reserve(count);
+      for (size_t i = 0; i < count; ++i) {
+        names.emplace_back(
+            weights_session.GetOutputNameAllocated(i, allocator).get());
+      }
+      std::vector<const char*> name_ptrs;
+      name_ptrs.reserve(count);
+      for (const std::string& name : names) {
+        name_ptrs.push_back(name.c_str());
+      }
+
+      Ort::RunOptions run_opts{nullptr};
+      std::vector<Ort::Value> values = weights_session.Run(
+          run_opts, nullptr, nullptr, 0, name_ptrs.data(), name_ptrs.size());
+      if (values.size() != count) {
+        throw std::runtime_error("PiperTTS: split weights model returned " +
+                                 std::to_string(values.size()) + " of " +
+                                 std::to_string(count) + " tensors");
+      }
+
+      // Copy into our own buffers so the weights session (and the int8 data it
+      // holds) can be released before inference starts.
+      weights.reserve(count);
+      for (size_t i = 0; i < count; ++i) {
+        const auto info = values[i].GetTensorTypeAndShapeInfo();
+        if (info.GetElementType() != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+          throw std::runtime_error("PiperTTS: split weight " + names[i] +
+                                   " is not float32");
+        }
+        const size_t elements = info.GetElementCount();
+        const float* src = values[i].GetTensorData<float>();
+        SplitWeight weight;
+        weight.name = names[i];
+        weight.shape = info.GetShape();
+        weight.data.assign(src, src + elements);
+        weights.push_back(std::move(weight));
+      }
+    }
+
+    const std::string model_u8 = model_path.string();
+    session_ = Ort::Session(env_, model_u8.c_str(), session_opts);
+    split_weights_ = std::move(weights);
+    return true;
   }
 
   void reload_session_from_onnx() {
@@ -543,7 +699,12 @@ struct PiperTTS::Impl {
     }
     Ort::SessionOptions session_opts =
         make_ort_session_options(ort_provider_names_, coreml_cache_dir_);
+    split_weights_.clear();
     const auto oit = tts_asset_files_.entries.find(k_piper_onnx);
+    if (oit == tts_asset_files_.entries.end() &&
+        load_split_weight_sessions(session_opts)) {
+      return;
+    }
     if (oit != tts_asset_files_.entries.end()) {
       FileInformation& of = oit->second;
       const uint8_t* ob = nullptr;
@@ -554,11 +715,18 @@ struct PiperTTS::Impl {
       session_ = Ort::Session(env_, ob, on, session_opts);
       of.free();
     } else {
+      // onnx_path_ is only an anchor; the voice may ship as .ort instead.
+      std::filesystem::path model_path =
+          piper_voice_model_path(onnx_path_.parent_path(),
+                                 piper_voice_stem(onnx_path_.filename().string()));
+      if (model_path.empty()) {
+        model_path = onnx_path_;
+      }
 #ifdef _WIN32
-      const std::wstring wmodel = onnx_path_.wstring();
+      const std::wstring wmodel = model_path.wstring();
       session_ = Ort::Session(env_, wmodel.c_str(), session_opts);
 #else
-      const std::string u8 = onnx_path_.string();
+      const std::string u8 = model_path.string();
       session_ = Ort::Session(env_, u8.c_str(), session_opts);
 #endif
     }
@@ -727,8 +895,10 @@ std::vector<std::pair<std::string, bool>> piper_list_voices_with_availability(
   if (explicit_onnx_file) {
     const std::filesystem::path onnx_path =
         resolve_path_under_root(g2p_opt.g2p_root, opt.explicit_onnx_path);
-    const std::string stem = onnx_path.stem().string();
-    if (std::filesystem::is_regular_file(onnx_path)) {
+    const std::string stem =
+        piper_voice_stem(onnx_path.filename().string());
+    if (std::filesystem::is_regular_file(onnx_path) ||
+        piper_voice_model_present(onnx_path.parent_path(), stem)) {
       return {{stem, true}};
     }
     const auto oit = opt.tts_asset_files.entries.find(k_piper_onnx);
@@ -759,32 +929,21 @@ std::vector<std::pair<std::string, bool>> piper_list_voices_with_availability(
     voices_dir = g2p_opt.g2p_root / data_subdir / "piper-voices";
   }
   std::map<std::string, bool> by_id;
-  const auto onnx_present = [&](const std::string& stem) {
-    return std::filesystem::is_regular_file(voices_dir / (stem + ".onnx"));
+  const auto present = [&](const std::string& stem) {
+    return piper_voice_model_present(voices_dir, stem);
   };
   const std::vector<std::string>& bundled =
       piper_bundled_voice_stems_for_data_subdir(data_subdir);
   if (!bundled.empty()) {
     for (const std::string& stem : bundled) {
-      by_id[stem] = onnx_present(stem);
+      by_id[stem] = present(stem);
     }
   } else {
-    const std::filesystem::path p(default_onnx);
-    const std::string def_stem = p.stem().string();
-    by_id[def_stem] = onnx_present(def_stem);
+    const std::string def_stem = piper_voice_stem(default_onnx);
+    by_id[def_stem] = present(def_stem);
   }
-  if (std::filesystem::is_directory(voices_dir)) {
-    for (const auto& ent : std::filesystem::directory_iterator(voices_dir)) {
-      if (!ent.is_regular_file()) {
-        continue;
-      }
-      const std::filesystem::path& fp = ent.path();
-      if (fp.extension() != ".onnx") {
-        continue;
-      }
-      const std::string stem = fp.stem().string();
-      by_id[stem] = onnx_present(stem);
-    }
+  for (const std::string& stem : piper_voice_stems_on_disk(voices_dir)) {
+    by_id[stem] = true;
   }
   std::vector<std::pair<std::string, bool>> out;
   out.reserve(by_id.size());
@@ -796,9 +955,9 @@ std::vector<std::pair<std::string, bool>> piper_list_voices_with_availability(
 
 bool piper_default_model_bundle_relative_paths(
     std::string_view lang_cli, const MoonshineG2POptions& opt,
-    std::string* onnx_relpath_out, std::string* onnx_json_relpath_out,
-    std::string_view onnx_model_stem) {
-  if (onnx_relpath_out == nullptr || onnx_json_relpath_out == nullptr) {
+    std::vector<std::string>* model_relpaths_out,
+    std::string* onnx_json_relpath_out, std::string_view onnx_model_stem) {
+  if (model_relpaths_out == nullptr || onnx_json_relpath_out == nullptr) {
     return false;
   }
   try {
@@ -807,21 +966,17 @@ bool piper_default_model_bundle_relative_paths(
     std::string default_onnx;
     resolve_piper_lang(std::string(lang_cli), opt, g2p_dialect, data_subdir,
                        default_onnx);
-    std::string chosen = default_onnx;
     const std::string stem_req =
         trim_ascii_ws_copy(std::string(onnx_model_stem));
-    if (!stem_req.empty()) {
-      chosen = stem_req;
-      if (chosen.size() < 5 ||
-          chosen.compare(chosen.size() - 5, 5, ".onnx") != 0) {
-        chosen += ".onnx";
-      }
+    const std::string stem = piper_voice_stem(
+        stem_req.empty() ? std::string(default_onnx) : stem_req);
+    const std::string dir = data_subdir + "/piper-voices/";
+    model_relpaths_out->clear();
+    for (const std::string& name : piper_voice_model_filenames(stem)) {
+      model_relpaths_out->push_back(dir + name);
     }
-    *onnx_relpath_out = data_subdir + "/piper-voices/" + chosen;
-    std::filesystem::path p(chosen);
-    p.replace_extension(".onnx.json");
-    *onnx_json_relpath_out =
-        data_subdir + "/piper-voices/" + p.filename().string();
+    // The config keeps its ``.onnx.json`` name whatever form the model ships in.
+    *onnx_json_relpath_out = dir + stem + ".onnx.json";
     return true;
   } catch (const std::exception&) {
     return false;

@@ -1,0 +1,974 @@
+/*
+ * Shared styles for the Moonshine web examples.
+ *
+ * Plain CSS with no build step and no CDN dependency: the demo pages are served
+ * as static files by serve.mjs, and the cross-origin isolation headers the
+ * threaded WASM build needs make external stylesheets awkward.
+ *
+ * Everything is prefixed `ms-` so a page can drop this in without colliding
+ * with markup copied out of it.
+ */
+
+:root {
+  --ms-bg: #0f1115;
+  --ms-surface: #161a22;
+  --ms-surface-2: #1b2130;
+  --ms-line: rgba(255, 255, 255, 0.08);
+  --ms-line-strong: rgba(255, 255, 255, 0.16);
+  --ms-text: #e7e9ee;
+  --ms-muted: #9aa3b2;
+  --ms-faint: #6b7382;
+  --ms-accent-a: #6ea8fe;
+  --ms-accent-b: #a370f7;
+  --ms-good: #3ddc97;
+  --ms-warn: #ffcc66;
+  --ms-bad: #ff7b72;
+
+  /* Height of one slot in a rotating word reel. Lives here because the line
+     holding a reel has to reserve three of them. */
+  --ms-reel-step: 1.3em;
+
+  --ms-radius: 0.75rem;
+  --ms-radius-lg: 1.25rem;
+  --ms-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+
+  --ms-font: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --ms-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--ms-font);
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--ms-text);
+  background:
+    radial-gradient(1100px 620px at 18% -12%, rgba(110, 168, 254, 0.13), transparent 62%),
+    radial-gradient(900px 560px at 88% -4%, rgba(163, 112, 247, 0.13), transparent 58%),
+    var(--ms-bg);
+  background-attachment: fixed;
+}
+
+:where(a) {
+  color: var(--ms-accent-a);
+  text-decoration: none;
+}
+
+:where(a):hover {
+  text-decoration: underline;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ms-accent-a);
+  outline-offset: 2px;
+  border-radius: 0.35rem;
+}
+
+/* --- Layout ------------------------------------------------------------- */
+
+.ms-shell {
+  width: min(100% - 2rem, 62rem);
+  margin-inline: auto;
+}
+
+.ms-main {
+  padding-bottom: 4rem;
+}
+
+.ms-section {
+  margin-top: 2.5rem;
+}
+
+/* --- Top navigation ----------------------------------------------------- */
+
+.ms-nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  border-bottom: 1px solid var(--ms-line);
+  background: rgba(15, 17, 21, 0.82);
+  backdrop-filter: blur(10px);
+}
+
+.ms-nav__inner {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  min-height: 3.5rem;
+}
+
+.ms-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--ms-text);
+  white-space: nowrap;
+}
+
+.ms-brand:hover {
+  text-decoration: none;
+  color: #fff;
+}
+
+/* The logo's crescent is dark navy, so it needs a light backdrop to read
+   against this theme. A rounded pale chip keeps the artwork untouched. */
+.ms-brand__mark {
+  display: block;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0.15rem;
+  border-radius: 0.5rem;
+  background: #eef1f7;
+  box-sizing: border-box;
+}
+
+.ms-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-inline-start: auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.ms-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.ms-tab {
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--ms-muted);
+  white-space: nowrap;
+}
+
+.ms-tab:hover {
+  color: var(--ms-text);
+  background: rgba(255, 255, 255, 0.05);
+  text-decoration: none;
+}
+
+.ms-tab.is-active {
+  color: var(--ms-text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ms-nav__github {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ms-muted);
+}
+
+.ms-nav__github:hover {
+  color: var(--ms-text);
+}
+
+.ms-nav__github svg {
+  display: block;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* --- Hero --------------------------------------------------------------- */
+
+.ms-hero {
+  padding: 3rem 0 2rem;
+  max-width: 42rem;
+}
+
+.ms-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.9rem;
+  padding: 0.25rem 0.7rem 0.25rem 0.45rem;
+  border: 1px solid var(--ms-line-strong);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--ms-muted);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ms-eyebrow::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--ms-accent-a), var(--ms-accent-b));
+  box-shadow: 0 0 10px rgba(110, 168, 254, 0.8);
+}
+
+.ms-hero h1 {
+  margin: 0 0 0.75rem;
+  font-size: clamp(1.9rem, 1.2rem + 2.6vw, 3rem);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  font-weight: 680;
+}
+
+.ms-hero p {
+  margin: 0;
+  font-size: 1.075rem;
+  color: var(--ms-muted);
+  text-wrap: pretty;
+}
+
+.ms-hero strong {
+  color: var(--ms-text);
+  font-weight: 600;
+}
+
+/* --- Cards -------------------------------------------------------------- */
+
+.ms-card {
+  padding: 1.5rem;
+  border: 1px solid var(--ms-line);
+  border-radius: var(--ms-radius-lg);
+  background: linear-gradient(180deg, rgba(27, 33, 48, 0.7), rgba(22, 26, 34, 0.92));
+  box-shadow: var(--ms-shadow);
+}
+
+@media (min-width: 40rem) {
+  .ms-card {
+    padding: 1.85rem;
+  }
+}
+
+.ms-card__title {
+  margin: 0 0 0.3rem;
+  font-size: 1rem;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+}
+
+.ms-card__hint {
+  margin: 0 0 1.15rem;
+  font-size: 0.9rem;
+  color: var(--ms-muted);
+}
+
+/* --- Buttons ------------------------------------------------------------ */
+
+.ms-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.05rem;
+  border: 1px solid var(--ms-line-strong);
+  border-radius: 0.6rem;
+  font: inherit;
+  font-size: 0.94rem;
+  font-weight: 550;
+  color: var(--ms-text);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, transform 60ms ease;
+}
+
+.ms-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  text-decoration: none;
+}
+
+.ms-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.ms-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ms-btn--primary {
+  border-color: transparent;
+  color: #0d1017;
+  font-weight: 620;
+  background: linear-gradient(135deg, var(--ms-accent-a), var(--ms-accent-b));
+}
+
+.ms-btn--primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  background: linear-gradient(135deg, var(--ms-accent-a), var(--ms-accent-b));
+}
+
+.ms-btn--lg {
+  padding: 0.8rem 1.5rem;
+  font-size: 1.02rem;
+}
+
+.ms-btn--quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ms-muted);
+}
+
+.ms-btn--quiet:hover:not(:disabled) {
+  color: var(--ms-text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ms-btn--danger {
+  border-color: rgba(255, 123, 114, 0.45);
+  background: rgba(255, 123, 114, 0.12);
+  color: #ffc9c5;
+}
+
+.ms-btn--danger:hover:not(:disabled) {
+  background: rgba(255, 123, 114, 0.2);
+}
+
+/* --- Big round record / listen control ---------------------------------- */
+
+.ms-mic {
+  display: grid;
+  place-items: center;
+  width: 5.5rem;
+  height: 5.5rem;
+  padding: 0;
+  border: 1px solid var(--ms-line-strong);
+  border-radius: 50%;
+  color: var(--ms-text);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: background 140ms ease, box-shadow 140ms ease, transform 80ms ease;
+}
+
+.ms-mic svg {
+  width: 2rem;
+  height: 2rem;
+}
+
+.ms-mic:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.ms-mic:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.ms-mic:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ms-mic.is-live {
+  border-color: transparent;
+  color: #0d1017;
+  background: linear-gradient(135deg, var(--ms-accent-a), var(--ms-accent-b));
+  box-shadow: 0 0 0 0 rgba(110, 168, 254, 0.55);
+  animation: ms-halo 2s ease-out infinite;
+}
+
+@keyframes ms-halo {
+  0% {
+    box-shadow: 0 0 0 0 rgba(110, 168, 254, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 1.4rem rgba(110, 168, 254, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(110, 168, 254, 0);
+  }
+}
+
+.ms-mic-row {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.ms-mic-row__text {
+  min-width: 12rem;
+  flex: 1;
+}
+
+.ms-mic-row__label {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* --- Live audio level meter --------------------------------------------- */
+
+.ms-meter {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 2.25rem;
+}
+
+.ms-meter span {
+  display: block;
+  width: 3px;
+  min-height: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--ms-accent-a), var(--ms-accent-b));
+  opacity: 0.35;
+  transition: height 90ms ease-out, opacity 90ms ease-out;
+}
+
+/* --- Form controls ------------------------------------------------------ */
+
+.ms-label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ms-muted);
+  text-transform: uppercase;
+}
+
+.ms-input,
+.ms-select,
+.ms-textarea {
+  display: block;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--ms-line-strong);
+  border-radius: 0.6rem;
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--ms-text);
+  background: rgba(9, 11, 15, 0.6);
+}
+
+.ms-textarea {
+  resize: vertical;
+  min-height: 5.5rem;
+  line-height: 1.6;
+}
+
+.ms-input:focus,
+.ms-select:focus,
+.ms-textarea:focus {
+  outline: none;
+  border-color: rgba(110, 168, 254, 0.7);
+  box-shadow: 0 0 0 3px rgba(110, 168, 254, 0.16);
+}
+
+.ms-select {
+  appearance: none;
+  padding-right: 2rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%239aa3b2'%3E%3Cpath d='M8 11 3.5 6h9z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 0.9rem;
+}
+
+.ms-field + .ms-field {
+  margin-top: 1rem;
+}
+
+.ms-grid-2 {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 34rem) {
+  .ms-grid-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* --- Chips -------------------------------------------------------------- */
+
+.ms-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.ms-chip {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--ms-line-strong);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--ms-muted);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.ms-chip:hover:not(:disabled) {
+  color: var(--ms-text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ms-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ms-chip.is-active {
+  color: var(--ms-text);
+  border-color: rgba(110, 168, 254, 0.6);
+  background: rgba(110, 168, 254, 0.14);
+}
+
+/* --- Status + progress -------------------------------------------------- */
+
+.ms-status {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-height: 1.4em;
+  font-size: 0.9rem;
+  color: var(--ms-muted);
+}
+
+.ms-status[data-tone="error"] {
+  color: var(--ms-bad);
+}
+
+.ms-status[data-tone="ready"] {
+  color: var(--ms-good);
+}
+
+/* The progress bar and its captions only say anything while a model is
+   downloading, but they hold their space either way. Keeping the room
+   reserved is what stops the rest of the card moving when a download starts
+   or finishes; only the ink comes and goes. */
+.ms-loading {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 200ms ease,
+    visibility 0s linear 200ms;
+}
+
+.ms-loading.is-open {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 200ms ease;
+}
+
+.ms-progress {
+  height: 6px;
+  margin: 0.75rem 0 0.5rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ms-progress__bar {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--ms-accent-a), var(--ms-accent-b));
+  transition: width 200ms ease;
+}
+
+/* Used when the assets do not declare their sizes, so there is no honest
+   percentage to show. A travelling sliver beats a bar frozen at zero. */
+.ms-progress.is-indeterminate .ms-progress__bar {
+  width: 35%;
+  transition: none;
+  animation: ms-progress-slide 1.4s ease-in-out infinite;
+}
+
+@keyframes ms-progress-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(286%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ms-progress.is-indeterminate .ms-progress__bar {
+    animation: none;
+    width: 100%;
+    opacity: 0.4;
+  }
+
+  .ms-loading {
+    transition: none;
+  }
+}
+
+/* Percentage and byte counts, which change on every tick. Wrapping is off so
+   a longer reading can never push a second line into the card mid-download. */
+.ms-loading__detail {
+  margin: 0 0 0.2rem;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  min-height: 1.55em;
+  color: var(--ms-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The rotating "why you are waiting" line under the progress bar. */
+.ms-loading-note {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ms-faint);
+  min-height: 1.3em;
+  transition: opacity 240ms ease;
+}
+
+.ms-loading-note.is-fading {
+  opacity: 0;
+}
+
+/* --- Proof strip -------------------------------------------------------- */
+
+.ms-stats {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+  border: 1px solid var(--ms-line);
+  border-radius: var(--ms-radius);
+  background: var(--ms-line);
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (min-width: 48rem) {
+  .ms-stats {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.ms-stat {
+  padding: 1rem 1.1rem;
+  background: rgba(22, 26, 34, 0.9);
+}
+
+.ms-stat__value {
+  display: block;
+  font-size: 1.35rem;
+  font-weight: 640;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, var(--ms-accent-a), var(--ms-accent-b));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.ms-stat__label {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.82rem;
+  color: var(--ms-muted);
+  text-wrap: pretty;
+}
+
+/* --- Disclosure --------------------------------------------------------- */
+
+.ms-disclosure {
+  border: 1px solid var(--ms-line);
+  border-radius: var(--ms-radius);
+  background: rgba(22, 26, 34, 0.55);
+}
+
+.ms-disclosure > summary {
+  padding: 0.7rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 550;
+  color: var(--ms-muted);
+  cursor: pointer;
+  list-style: none;
+}
+
+.ms-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ms-disclosure > summary::before {
+  content: "›";
+  display: inline-block;
+  width: 1rem;
+  font-size: 1.1rem;
+  line-height: 1;
+  transition: transform 140ms ease;
+}
+
+.ms-disclosure[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.ms-disclosure > summary:hover {
+  color: var(--ms-text);
+}
+
+.ms-disclosure__body {
+  padding: 0.25rem 1rem 1.1rem;
+  border-top: 1px solid var(--ms-line);
+  margin-top: -1px;
+  padding-top: 1.1rem;
+}
+
+/* --- Code panel --------------------------------------------------------- */
+
+.ms-code {
+  overflow: hidden;
+  border: 1px solid var(--ms-line);
+  border-radius: var(--ms-radius);
+  background: rgba(9, 11, 15, 0.75);
+}
+
+.ms-code__head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.75rem 0.55rem 1rem;
+  border-bottom: 1px solid var(--ms-line);
+  font-size: 0.82rem;
+  color: var(--ms-muted);
+}
+
+.ms-code__file {
+  font-family: var(--ms-mono);
+}
+
+.ms-code__actions {
+  margin-inline-start: auto;
+  display: flex;
+  gap: 0.35rem;
+}
+
+.ms-code pre {
+  margin: 0;
+  padding: 1rem;
+  overflow-x: auto;
+  font-family: var(--ms-mono);
+  font-size: 0.82rem;
+  line-height: 1.7;
+  tab-size: 2;
+}
+
+.ms-code code {
+  font: inherit;
+}
+
+/* One source line, so the running step can be highlighted in place. */
+.ms-code .ms-line {
+  display: block;
+  margin-inline: -1rem;
+  padding-inline: 1rem;
+  border-inline-start: 2px solid transparent;
+  transition: background 200ms ease, border-color 200ms ease;
+}
+
+.ms-code .ms-line.is-running {
+  border-inline-start-color: var(--ms-accent-a);
+  background: rgba(110, 168, 254, 0.14);
+}
+
+.ms-code .ms-line.is-done {
+  opacity: 0.55;
+}
+
+/* Minimal JS tokens; enough to read, not a full highlighter. */
+.tok-key { color: #c792ea; }
+.tok-str { color: #a5e5a1; }
+.tok-num { color: #ffcc99; }
+.tok-com { color: var(--ms-faint); font-style: italic; }
+.tok-fn { color: #82b1ff; }
+
+.ms-install {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.85rem;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--ms-line);
+  border-radius: 0.6rem;
+  font-family: var(--ms-mono);
+  font-size: 0.85rem;
+  color: var(--ms-muted);
+  background: rgba(9, 11, 15, 0.6);
+}
+
+.ms-install code {
+  color: var(--ms-text);
+  font: inherit;
+}
+
+.ms-install button {
+  margin-inline-start: auto;
+}
+
+/* --- Footer ------------------------------------------------------------- */
+
+.ms-footer {
+  margin-top: 4rem;
+  padding: 2.5rem 0 3rem;
+  border-top: 1px solid var(--ms-line);
+}
+
+.ms-footer__cta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+/* --- Rotating word reel -------------------------------------------------- */
+
+/* Three slots tall, showing the word before and after the current one. The
+   negative margins keep it from stretching the line it sits in: the extra two
+   slots overflow the line box instead of growing it. */
+/* The line holding a reel carries three words, so it needs the leading for
+   them. Without this the words above and below overlap the neighbouring line
+   as soon as the copy wraps. */
+:where(h1, h2, h3, p):has(.ms-reel) {
+  line-height: calc(var(--ms-reel-step) * 3);
+}
+
+.ms-reel {
+  position: relative;
+  display: inline-block;
+  vertical-align: middle;
+  height: calc(var(--ms-reel-step) * 3);
+  line-height: var(--ms-reel-step);
+  overflow: hidden;
+  text-align: center;
+  color: var(--ms-accent-a);
+  /* The neighbours stay legible but fall away, so it reads as one reel rather
+     than three stacked words. */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 40%,
+    #000 60%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 40%,
+    #000 60%,
+    transparent 100%
+  );
+}
+
+.ms-reel__sizer {
+  display: grid;
+  visibility: hidden;
+  height: var(--ms-reel-step);
+}
+
+.ms-reel__sizer > span {
+  grid-area: 1 / 1;
+}
+
+.ms-reel__track {
+  position: absolute;
+  inset: 0;
+  animation-name: var(--ms-reel-name);
+  animation-duration: var(--ms-reel-duration);
+  animation-timing-function: cubic-bezier(0.66, 0, 0.2, 1);
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+
+.ms-reel__sizer > span,
+.ms-reel__track > span {
+  display: block;
+  height: var(--ms-reel-step);
+  line-height: var(--ms-reel-step);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ms-reel__track {
+    animation-name: none;
+  }
+}
+
+.ms-footer__cta h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 620;
+  letter-spacing: -0.02em;
+  flex: 1;
+  min-width: 14rem;
+}
+
+.ms-footer__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  font-size: 0.88rem;
+  color: var(--ms-faint);
+}
+
+.ms-footer__links a {
+  color: var(--ms-muted);
+}
+
+.ms-footer__links a:hover {
+  color: var(--ms-text);
+}
+
+/* --- Utilities ---------------------------------------------------------- */
+
+.ms-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.ms-muted {
+  color: var(--ms-muted);
+}
+
+.ms-small {
+  font-size: 0.87rem;
+}
+
+.ms-stack > * + * {
+  margin-top: 1rem;
+}
+
+.ms-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
