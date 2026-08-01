@@ -469,7 +469,7 @@ class Stream:
         """Update the flags forwarded to implicit ``update_transcription`` calls.
 
         Use this to dynamically toggle e.g.
-        ``MOONSHINE_FLAG_SPELLING_MODE`` mid-stream (DialogFlow flips it on
+        ``MOONSHINE_FLAG_SPELLING_MODE`` mid-stream (AgentFlow flips it on
         only for ``SPELLED`` / ``DIGITS`` prompts so the spelling-CNN
         fusion doesn't perturb free-form recognition).
         """

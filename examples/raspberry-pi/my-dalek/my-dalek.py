@@ -2,7 +2,7 @@ import argparse
 import sys
 import time
 
-from moonshine_voice import DialogFlow
+from moonshine_voice import AgentFlow
 
 parser = argparse.ArgumentParser(
     description="Control a robot from your Raspberry Pi using voice commands"
@@ -32,7 +32,7 @@ def on_turn_right(d):
 def on_exterminate(d):
     print("EXTERMINATE!")
 
-# DialogFlow matches what it hears against these phrases semantically, using an
+# AgentFlow matches what it hears against these phrases semantically, using an
 # embedding model it downloads and loads for us. These are "globals": one-shot
 # commands that stay live at all times, as opposed to the multi-turn
 # conversations you'd register with listen_for.
@@ -48,7 +48,7 @@ commands = {
 # The beeps are the runner's audio cues for matched / unmatched speech; this
 # example reports what it heard in text instead, so silence them.
 dalek = (
-    DialogFlow()
+    AgentFlow()
     .language("en")
     .trigger_threshold(args.threshold)
     .speech(False)

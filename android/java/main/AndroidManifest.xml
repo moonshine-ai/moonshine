@@ -9,7 +9,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- Required only by MicTranscriber and the microphone side of DialogFlow.
+    <!-- Required only by MicTranscriber and the microphone side of AgentFlow.
          Declaring it here means an app that records speech does not have to
          declare or request anything itself; MicrophonePermissionActivity puts
          the system dialog up on demand. Apps that only synthesize speech can

@@ -200,23 +200,23 @@ worker.execute(() -> {
  *
  * Unlike the other two samples these are not lifted verbatim: each is the
  * page's own flow written against that language's API, trimmed the same way the
- * JavaScript listing is trimmed from `examples/python/dialog_flow.py` and
- * `examples/macos/DialogFlow`. That is what lets the page light up the line the
+ * JavaScript listing is trimmed from `examples/python/agent_flow.py` and
+ * `examples/macos/AgentFlow`. That is what lets the page light up the line the
  * conversation is parked on in whichever language is showing.
  *
  * `steps` maps each awaited call to its line, counting from zero. Editing a
  * snippet means renumbering its steps, and a test checks every one of them
  * lands on a line that mentions the call it claims to be.
  */
-export const DIALOG_FLOW = [
+export const AGENT_FLOW = [
   {
     id: 'javascript',
     label: 'JavaScript',
     file: 'wifi-agent.js',
-    path: 'examples/web/dialog-flow/index.html',
+    path: 'examples/web/agent-flow/index.html',
     lines: [402, 421],
     steps: { askSsid: 1, confirmSsid: 3, startOver: 4, confirmApply: 7, done: 8, unchanged: 10 },
-    code: `dialog.listenFor('set up wifi', async (d) => {
+    code: `agent.listenFor('set up wifi', async (d) => {
   const ssid = await d.ask("What's the name of your wifi network?");
 
   if (!(await d.confirm(\`I heard \${ssid}. Is that right?\`))) {
@@ -233,8 +233,8 @@ export const DIALOG_FLOW = [
   {
     id: 'python',
     label: 'Python',
-    file: 'dialog_flow.py',
-    path: 'examples/python/dialog_flow.py',
+    file: 'agent_flow.py',
+    path: 'examples/python/agent_flow.py',
     lines: [30, 51],
     steps: { askSsid: 1, confirmSsid: 3, startOver: 4, confirmApply: 7, done: 8, unchanged: 10 },
     code: `def setup_wifi(d):
@@ -250,13 +250,13 @@ export const DIALOG_FLOW = [
         yield d.say("Okay, nothing changed.")
 
 
-dialog.listen_for("set up wifi", setup_wifi)`,
+agent.listen_for("set up wifi", setup_wifi)`,
   },
   {
     id: 'swift',
     label: 'Swift',
-    file: 'DialogFlowApp.swift',
-    path: 'examples/ios/DialogFlow/DialogFlow/DialogFlowApp.swift',
+    file: 'AgentFlowApp.swift',
+    path: 'examples/ios/AgentFlow/AgentFlow/AgentFlowApp.swift',
     lines: [24, 47],
     steps: { askSsid: 1, confirmSsid: 3, startOver: 4, confirmApply: 8, done: 9, unchanged: 11 },
     code: `func wifiSetup(_ d: Dialog) async throws {
@@ -274,16 +274,16 @@ dialog.listen_for("set up wifi", setup_wifi)`,
     }
 }
 
-dialog.listenFor("set up wifi", wifiSetup)`,
+agent.listenFor("set up wifi", wifiSetup)`,
   },
   {
     id: 'java',
     label: 'Android',
     file: 'MainActivity.java',
-    path: 'examples/android/DialogFlow/app/src/main/java/ai/moonshine/examples/dialogflow/MainActivity.java',
+    path: 'examples/android/AgentFlow/app/src/main/java/ai/moonshine/examples/agentflow/MainActivity.java',
     lines: [41, 62],
     steps: { askSsid: 1, confirmSsid: 2, startOver: 3, confirmApply: 7, done: 8, unchanged: 10 },
-    code: `private void wifiSetup(DialogFlow.Dialog d) {
+    code: `private void wifiSetup(AgentFlow.Dialog d) {
     String ssid = d.ask("What's the name of your wifi network?");
     if (!d.confirm("I heard " + ssid + ". Is that right?")) {
         d.say("No problem, let's start over.");
@@ -297,6 +297,6 @@ dialog.listenFor("set up wifi", wifiSetup)`,
     }
 }
 
-dialog.listenFor("set up wifi", this::wifiSetup);`,
+agent.listenFor("set up wifi", this::wifiSetup);`,
   },
 ];

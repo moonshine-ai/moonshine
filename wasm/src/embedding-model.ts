@@ -1,7 +1,7 @@
 /**
  * Text embeddings: turns text into vectors and scores them against each other.
  *
- * This is internal to the binding. {@link DialogFlow} is the supported way to
+ * This is internal to the binding. {@link AgentFlow} is the supported way to
  * match spoken phrases; it owns a model and compares utterances to phrases
  * itself, so nothing here is exported from the package entry point.
  *
@@ -129,7 +129,7 @@ export interface PhraseGroup {
  * Each phrase is embedded once and cached, the utterance is embedded once per
  * call, and the key of the best-scoring phrase at or above `threshold` wins.
  * Without an {@link EmbeddingModel} it falls back to case-insensitive substring
- * matching, which is what keeps dialogs working before {@link DialogFlow.load}.
+ * matching, which is what keeps dialogs working before {@link AgentFlow.load}.
  */
 export class PhraseMatcher {
   private readonly model?: EmbeddingModel;

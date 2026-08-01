@@ -5,7 +5,7 @@ import java.util.List;
 /**
  * Turns text into embedding vectors and scores them against each other.
  *
- * <p>Internal to the library. {@link DialogFlow} is the supported way to match
+ * <p>Internal to the library. {@link AgentFlow} is the supported way to match
  * spoken phrases; it owns a model and compares utterances to phrases itself.
  */
 class EmbeddingModel {

@@ -17,10 +17,10 @@ The redesign described in `api-comparison.md` has largely landed. Construct,
 configure with chainable setters, `load()`, then `start()` is the real shape of
 the JavaScript, Swift and Java bindings today. `onText`, `onLine`, `onProgress`
 and `onError` exist in all three. `VoiceClone` exists in Swift and Java with
-`onReady`, `fromMicrophone`, `addAudio` and `isReady`. `DialogFlow` was ported
+`onReady`, `fromMicrophone`, `addAudio` and `isReady`. `AgentFlow` was ported
 to both. `IntentRecognizer` is gone and phrase matching is internal.
 
-Python was the exception, and only half of it. `DialogFlow` there was already
+Python was the exception, and only half of it. `AgentFlow` there was already
 fully chainable and matched the target. `MicTranscriber` and `TextToSpeech` did
 not: both loaded inside `__init__`, `MicTranscriber` made the caller resolve a
 model path first, and cloning was a constructor argument with no
@@ -43,10 +43,10 @@ Three components, four languages. Twelve cells, all of them now filled.
 | --- | --- | --- | --- | --- |
 | Microphone speech to text | done | done | done | done, Java |
 | Text to speech with cloning | done | done | done | done, Java |
-| DialogFlow agent | done | done | done | done, Java |
+| AgentFlow agent | done | done | done | done, Java |
 
 The macOS command line examples were the head start on the Swift gaps:
-`examples/macos/DialogFlow` and `examples/macos/TextToSpeech --clone` are the
+`examples/macos/AgentFlow` and `examples/macos/TextToSpeech --clone` are the
 implementations the iOS apps were ported from, and they stay as the
 command-line versions.
 
@@ -186,14 +186,14 @@ the per-voice download step that a real voice id goes through; its model files
 come down with the rest of the language's assets. Getting that wrong shows up
 as a 404 for a voice file that was never published.
 
-### DialogFlow rewiring
+### AgentFlow rewiring
 
-Python's `DialogFlow.load()` built `MicTranscriber(model_path=...)` and
+Python's `AgentFlow.load()` built `MicTranscriber(model_path=...)` and
 `TextToSpeech(language=...)` directly and bridged transcript events through an
 internal `_TranscriptBridge(TranscriptEventListener)`. Both halves are now on
 the new builders, and both report real per-file download progress through
 `on_progress()` instead of the placeholder 0.0 and 1.0 they used to emit either
-side of a blocking call. The public `DialogFlow` API has not changed.
+side of a blocking call. The public `AgentFlow` API has not changed.
 
 ### Model architecture defaults, and a bug in Swift and Java
 
@@ -219,7 +219,7 @@ else. Naming an arch explicitly still fails loudly if it isn't published,
 which is the right behaviour for an explicit request.
 
 Swift and Java hardcode `mediumStreaming` as the field default in both
-`MicTranscriber` and `DialogFlow`, with no fallback, which means
+`MicTranscriber` and `AgentFlow`, with no fallback, which means
 `MicTranscriber().language("es").load()` fails on both. Worth fixing in phase
 2, either by resolving the default per language in each binding or by teaching
 the native catalog to fall back.
@@ -227,11 +227,11 @@ the native catalog to fall back.
 ### models_from means two different things
 
 Swift and Java both document `modelsFrom(directory)` as "loads the model from a
-directory you supply rather than downloading it". Python's `DialogFlow` uses
+directory you supply rather than downloading it". Python's `AgentFlow` uses
 the same name for a cache root: "reads and caches model files under directory
 instead of the default cache". Those are different operations.
 
-The new `MicTranscriber.models_from()` follows Swift and Java. `DialogFlow` was
+The new `MicTranscriber.models_from()` follows Swift and Java. `AgentFlow` was
 left alone for now (it resolves the model itself and hands the resulting
 directory to `MicTranscriber.models_from()`, so behaviour is unchanged), but
 one name meaning two things across bindings is exactly what this project is
@@ -285,7 +285,7 @@ than saving a token.
 
 Decide whether `models_from()` means "the model files are in this directory" or
 "download into this directory", and make all four bindings agree. Swift, Java
-and the new Python `MicTranscriber` mean the first; Python's `DialogFlow` means
+and the new Python `MicTranscriber` mean the first; Python's `AgentFlow` means
 the second. Both operations are useful, so this may need two names rather than
 one winner.
 
@@ -365,13 +365,13 @@ Blocked on phase 1 for Python and phase 2 for Swift.
   speaking, cloning from a file, and cloning from the microphone.
 - **iOS text to speech.** Done: a cloning panel records from the microphone and
   swaps the voice on the loaded synthesizer.
-- **iOS DialogFlow.** Done: new Xcode project, ported from
-  `examples/macos/DialogFlow`.
+- **iOS AgentFlow.** Done: new Xcode project, ported from
+  `examples/macos/AgentFlow`.
 - **Android text to speech.** Done: rewritten from Kotlin to Java, with cloning.
   This leaves the repository with no Kotlin example, which is accepted: the Java
   API is callable from Kotlin unchanged, and one language per platform keeps the
   snippet tabs honest.
-- **Android DialogFlow.** Done: new Gradle project in Java.
+- **Android AgentFlow.** Done: new Gradle project in Java.
 
 ### What the mobile cloning apps had to work out
 
@@ -572,7 +572,7 @@ The redesign's conventions assume a runtime that can open devices and fetch
 things. C++ has neither, and giving it either would mean picking an HTTP client
 and an audio backend for every application that links the library.
 
-- **`MicTranscriber`** and **`DialogFlow`** need a capture device. Absent.
+- **`MicTranscriber`** and **`AgentFlow`** need a capture device. Absent.
 - **`say()`** needs an output device. `synthesize()` returns the samples, which
   is the half that does not need one.
 - **`VoiceClone::fromMicrophone()`**, for the same reason. `addAudio()` is the
@@ -669,5 +669,5 @@ C++.
   standalone minimal functions.
 - Java keeps its `Context` parameters. See the analysis in phase 2.
 - All Android examples are Java, and the repository keeps no Kotlin example.
-- C++ does not get `MicTranscriber`, `DialogFlow`, `say()` or downloading. See
+- C++ does not get `MicTranscriber`, `AgentFlow`, `say()` or downloading. See
   the C++ section for what that rules out and what it does not.

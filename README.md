@@ -44,7 +44,7 @@ Listens to the microphone and prints updates to the transcript as they come in.
 
 <!-- doc-test: parse-only -->
 ```bash
-moonshine-voice dialog
+moonshine-voice agent
 ```
 
 Runs a spoken wifi-setup conversation: it listens for a trigger phrase, asks questions, and confirms the answers. Matching is semantic, so natural language variations are recognized. For more, check out [our "Getting Started" Colab notebook](https://bit.ly/moonshine-colab) and [video](https://www.youtube.com/watch?v=WH-AGvHmtoM).
@@ -187,7 +187,7 @@ Our goal is to build a framework that any developer can pick up and use, even wi
 
 The basic flow is:
 
-- Create a `Transcriber` object if you want the text that's spoken, or a `DialogFlow` if you only need to know that a user has requested an action.
+- Create a `Transcriber` object if you want the text that's spoken, or an `AgentFlow` if you only need to know that a user has requested an action.
 - Attach an `EventListener` that gets called when important things occur, like the end of a phrase or an action being triggered, so your application can respond.
 - Use a `TextToSpeech` object to make it a two-way conversation.
 
@@ -217,9 +217,9 @@ A [**TranscriptEventListener**](python/src/moonshine_voice/transcriber.py#L266) 
 
 A [**TextToSpeech**](python/src/moonshine_voice/tts.py#L20) object synthesizes audio for playback to the user.
 
-A [**DialogFlow**](python/src/moonshine_voice/dialog_flow.py#L547) object manages conversations between the user and an agent. It opens the transcriber, microphone, and speech synthesizer it needs itself, and invokes a callback whenever someone says something close in meaning to a phrase you registered — the basis of voice command recognition.
+An [**AgentFlow**](python/src/moonshine_voice/agent_flow.py#L547) object manages conversations between the user and an agent. It opens the transcriber, microphone, and speech synthesizer it needs itself, and invokes a callback whenever someone says something close in meaning to a phrase you registered — the basis of voice command recognition.
 
-A [**Dialog**](python/src/moonshine_voice/dialog_flow.py#L408) object is created for each conversational exchange, and allows the agent to hold a multi-step discussion with the user.
+A [**Dialog**](python/src/moonshine_voice/agent_flow.py#L408) object is created for each conversational exchange, and allows the agent to hold a multi-step discussion with the user.
 
 ### Getting Started with Transcription
 
@@ -317,7 +317,7 @@ We offer some guarantees about these events:
 
 Many applications need a voice agent that can understand what users are saying and respond appropriately. To make this as straightforward as possible, we let you define different conversational flows. A flow can be as simple as responding to a query, or be a multi-step, branching conversation that takes actions.
 
-To define these flows, you use a [`DialogFlow`](#dialogflow) object, with callbacks that take [`Dialog`](#dialog) arguments. Here's an example of a simple flow, taken from the [github.com/moonshine-ai/pi-help-bot](https://github.com/moonshine-ai/pi-help-bot) sample code:
+To define these flows, you use an [`AgentFlow`](#agentflow) object, with callbacks that take [`Dialog`](#dialog) arguments. Here's an example of a simple flow, taken from the [github.com/moonshine-ai/pi-help-bot](https://github.com/moonshine-ai/pi-help-bot) sample code:
 
 ```python
     def report_ip_address(d: Dialog):
@@ -331,7 +331,7 @@ To define these flows, you use a [`DialogFlow`](#dialogflow) object, with callba
             f"To repeat, that's {speech_ip}."
         ])
 
-    dialog_flow.listen_for("What is my IP address?", report_ip_address)
+    agent_flow.listen_for("What is my IP address?", report_ip_address)
 ```
 
 This registers the `report_ip_address()` function to be called whenever the user says anything similar to "What is my IP address?". The matching is done semantically, so alternative phrasings like "Tell me your IP address" or "Can you tell me the local IP address?" should trigger it too. You can register as many top-level conversation starters as you'd like, the system will listen out and route to the closest in meaning.
@@ -390,7 +390,7 @@ For more complex conversations, like setting up a new wifi network, you can defi
                 "Please check the network name and password and try again."
             )
 
-    dialog_flow.listen_for("Connect to Wi-Fi", connect_to_wifi)
+    agent_flow.listen_for("Connect to Wi-Fi", connect_to_wifi)
 ```
 
 The first thing the function does is ask the user to give them the name of the network they want to join, through the call:
@@ -399,7 +399,7 @@ The first thing the function does is ask the user to give them the name of the n
 input_ssid = yield d.ask("What's the name of your Wi-Fi network?...")
 ```
 
-The Dialog class lets you ask users questions and will return the string containing the what they said in response. The only unusual feature here, compared to regular Python code, is the `yield` keyword. Because it may take some time for the user to respond, we call yield to hand back control to the main script until their response has been received. This is a general pattern for `DialogFlow` and you'll see it wherever we're waiting for the user to say something, to avoid blocking.
+The Dialog class lets you ask users questions and will return the string containing the what they said in response. The only unusual feature here, compared to regular Python code, is the `yield` keyword. Because it may take some time for the user to respond, we call yield to hand back control to the main script until their response has been received. This is a general pattern for `AgentFlow` and you'll see it wherever we're waiting for the user to say something, to avoid blocking.
 
 ```python
         if input_ssid.lower().strip(string.punctuation) == "list":
@@ -442,18 +442,18 @@ The flow also works with other control structures like exception handlers, so yo
 
 #### Agent Setup
 
-Once your flows are written, the only setup left is to register them and go live. `DialogFlow` opens everything it needs itself — the speech recognition model, the microphone, and the speech synthesizer — so there's nothing to wire together:
+Once your flows are written, the only setup left is to register them and go live. `AgentFlow` opens everything it needs itself — the speech recognition model, the microphone, and the speech synthesizer — so there's nothing to wire together:
 
 ```python
-    dialog_flow = (
-        DialogFlow()
+    agent_flow = (
+        AgentFlow()
         .language("en")
         .listen_for("What is my IP address?", report_ip_address)
         .listen_for("Connect to Wi-Fi", connect_to_wifi)
         .always("cancel", lambda d: d.cancel())
     )
 
-    dialog_flow.start_listening()
+    agent_flow.start_listening()
 ```
 
 Every configuration method returns the runner, so a whole voice interface can be built in a single expression, and each one has a working default. `listen_for()` registers the conversation starters, and `always()` registers phrases like "cancel" that stay live even while a flow is running.
@@ -464,12 +464,12 @@ To give this a try for yourself, run this built-in example:
 
 <!-- doc-test: parse-only -->
 ```bash
-python -m moonshine_voice.dialog_flow
+python -m moonshine_voice.agent_flow
 ```
 
 ### Getting Started with Text to Speech
 
-Voice interfaces often need to talk back, and Moonshine's `TextToSpeech` is designed to make that easy, across multiple languages. It's also self-contained, so you can use it independently from the transcription and dialog modules.
+Voice interfaces often need to talk back, and Moonshine's `TextToSpeech` is designed to make that easy, across multiple languages. It's also self-contained, so you can use it independently from the transcription and agent modules.
 
 You configure a synthesizer with chainable setters, call `load()` to fetch and open the voice, and then pass text into `say()` to speak it on the default audio device:
 
@@ -661,7 +661,7 @@ g2p.to_ipa("Hello world")
 The [`examples`](examples/) folder has code samples organized by platform. We use the usual tooling per stack (Android Studio and Gradle, Xcode and Swift on Apple platforms, Visual Studio on Windows). [GitHub Releases](https://github.com/moonshine-ai/moonshine/releases/latest) currently ship the downloadable assets below (example trees are mostly named **`{platform}-{Project}.tar.gz`**; Windows and C++ also include prebuilt native library bundles).
 
 - **[Android](examples/android/)**
-  - [DialogFlow](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-DialogFlow.tar.gz)
+  - [AgentFlow](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-AgentFlow.tar.gz)
   - [TextToSpeech](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-TextToSpeech.tar.gz)
   - [Transcriber](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-Transcriber.tar.gz)
 - **[Portable C++](examples/c++/README.md)**
@@ -669,12 +669,12 @@ The [`examples`](examples/) folder has code samples organized by platform. We us
   - [transcriber.cpp](examples/c++/transcriber.cpp)
   - [text-to-speech.cpp](examples/c++/text-to-speech.cpp)
 - **[iOS](examples/ios/)**
-  - [DialogFlow](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-DialogFlow.tar.gz)
+  - [AgentFlow](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-AgentFlow.tar.gz)
   - [TextToSpeech](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-TextToSpeech.tar.gz)
   - [Transcriber](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-Transcriber.tar.gz)
 - **[MacOS](examples/macos/)**
   - [BasicTranscription](https://github.com/moonshine-ai/moonshine/releases/latest/download/macos-BasicTranscription.tar.gz)
-  - [DialogFlow](https://github.com/moonshine-ai/moonshine/releases/latest/download/macos-DialogFlow.tar.gz)
+  - [AgentFlow](https://github.com/moonshine-ai/moonshine/releases/latest/download/macos-AgentFlow.tar.gz)
   - [MicTranscription](https://github.com/moonshine-ai/moonshine/releases/latest/download/macos-MicTranscription.tar.gz)
   - [TextToSpeech](https://github.com/moonshine-ai/moonshine/releases/latest/download/macos-TextToSpeech.tar.gz)
 - **[Windows](examples/windows/)**
@@ -683,7 +683,7 @@ The [`examples`](examples/) folder has code samples organized by platform. We us
   - [basic_transcription.py](examples/python/basic_transcription.py)
   - [mic_transcription.py](examples/python/mic_transcription.py)
   - [text_to_speech.py](examples/python/text_to_speech.py)
-  - [dialog_flow.py](examples/python/dialog_flow.py)
+  - [agent_flow.py](examples/python/agent_flow.py)
   - [ollama-voice/ollama_voice.py](examples/python/ollama-voice/ollama_voice.py )
 - **[Raspberry Pi](examples/raspberry-pi/)**
   - [my-dalek](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz)
@@ -691,7 +691,7 @@ The [`examples`](examples/) folder has code samples organized by platform. We us
 
 The examples usually include one minimal project that just creates a transcriber and then feeds it data from a WAV file, and another that's pulling audio from a microphone using the platform's default framework for accessing audio devices. Each one is a self-contained project you can copy out of the tree: the Android samples depend on **`ai.moonshine:moonshine-voice:0.1.1`** from Maven Central, and the Apple ones pull **`MoonshineVoice`** from the Swift package.
 
-None of them bundle model weights. Every engine downloads what it needs on first use — the speech model for [`Transcriber`](examples/android/Transcriber/), the voice and G2P assets for [`TextToSpeech`](examples/android/TextToSpeech/), all three plus the embedding model for [`DialogFlow`](examples/android/DialogFlow/) — from `https://download.moonshine.ai/`, reporting progress through the `onProgress` callback the examples wire up to a label. Downloads are cached (under `filesDir` on Android, `Caches/MoonshineModels` on Apple platforms), so later launches run offline. Switching to a different voice triggers the same on-demand download for whatever that voice needs.
+None of them bundle model weights. Every engine downloads what it needs on first use — the speech model for [`Transcriber`](examples/android/Transcriber/), the voice and G2P assets for [`TextToSpeech`](examples/android/TextToSpeech/), all three plus the embedding model for [`AgentFlow`](examples/android/AgentFlow/) — from `https://download.moonshine.ai/`, reporting progress through the `onProgress` callback the examples wire up to a label. Downloads are cached (under `filesDir` on Android, `Caches/MoonshineModels` on Apple platforms), so later launches run offline. Switching to a different voice triggers the same on-demand download for whatever that voice needs.
 
 If you want a fully offline build with no first-run download, fetch the assets ahead of time and point the engine at them with `modelsFrom(path)`; see [`docs/design/api-comparison.md`](docs/design/api-comparison.md) for the tradeoff.
 
@@ -717,7 +717,7 @@ moonshine-voice --help
 | `moonshine-voice mic` | Transcribe live microphone input to the terminal. |
 | `moonshine-voice transcribe` | Transcribe a WAV file (optionally with speaker IDs / word timestamps). |
 | `moonshine-voice tts` | Synthesize speech from text to a WAV file or audio device. |
-| `moonshine-voice dialog` | Run a spoken dialog flow (wifi setup) from the microphone. |
+| `moonshine-voice agent` | Run a spoken agent flow (wifi setup) from the microphone. |
 | `moonshine-voice download` | Download STT, TTS, G2P, or embedding model assets. |
 | `moonshine-voice g2p` | Convert text to phonemes (IPA). |
 
@@ -842,7 +842,7 @@ The last two lines tell you which model architecture is being used, and where th
 
 #### Embedding Models
 
-The download module also helps you obtain the assets needed to match spoken phrases, primarily a sentence embedding model. `DialogFlow` fetches this for you on first use, so you only need this command to warm the cache ahead of time — before shipping a device that will be offline, for example.
+The download module also helps you obtain the assets needed to match spoken phrases, primarily a sentence embedding model. `AgentFlow` fetches this for you on first use, so you only need this command to warm the cache ahead of time — before shipping a device that will be offline, for example.
 
 ```bash
 moonshine-voice download --embedding
@@ -1180,7 +1180,7 @@ This documentation covers the Python API, but the same functions and classes are
   - [MicTranscriber](#mictranscriber)
   - [Stream](#stream)
   - [TranscriptEventListener](#transcripteventlistener)
-  - [DialogFlow](#dialogflow)
+  - [AgentFlow](#agentflow)
   - [Dialog](#dialog)
   - [TextToSpeech](#texttospeech)
   - [GraphemeToPhonemizer](#graphemetophonemizer)
@@ -1351,67 +1351,67 @@ The access point for when you need to feed multiple audio inputs into a single t
 
 A convenience class to derive from to create your own listener code. Override any or all of `on_line_started()`, `on_line_updated()`, `on_line_text_changed()`, `on_line_speakers_changed()`, `on_line_completed()`, and `on_error()`, and they'll be called back when the corresponding event occurs. Every method has a no-op default, so you only need to write the ones you care about.
 
-#### DialogFlow
+#### AgentFlow
 
-A runner that drives generator-based conversational flows, and the entry point for voice interfaces. You register flow functions against trigger phrases, and the runner routes completed transcript lines either to trigger matching (when no flow is active) or to the currently suspended generator (when one is). Matching is semantic, using an embedding model that the runner downloads and loads the first time it needs one. [`load()`](#dialogflow-load) opens the microphone transcriber and speech synthesizer for you, so there's no listener to wire up by hand; pass [`use_mic_transcriber()`](#dialogflow-use-mic-transcriber) if you'd rather it listened to a transcriber you already have. See [Getting Started with a Conversational Agent](#getting-started-with-a-conversational-agent) for usage examples.
+A runner that drives generator-based conversational flows, and the entry point for voice interfaces. You register flow functions against trigger phrases, and the runner routes completed transcript lines either to trigger matching (when no flow is active) or to the currently suspended generator (when one is). Matching is semantic, using an embedding model that the runner downloads and loads the first time it needs one. [`load()`](#agentflow-load) opens the microphone transcriber and speech synthesizer for you, so there's no listener to wire up by hand; pass [`use_mic_transcriber()`](#agentflow-use-mic-transcriber) if you'd rather it listened to a transcriber you already have. See [Getting Started with a Conversational Agent](#getting-started-with-a-conversational-agent) for usage examples.
 
 A flow is an ordinary Python generator function that takes a [`Dialog`](#dialog) as its argument and yields prompt objects back to the runner. The runner carries out each prompt (speaking text, waiting for the user's response) and resumes the generator with the answer via `.send()`. This lets you write multi-step, branching conversations using regular Python control flow, including loops and exception handlers, without any async machinery. Trigger matching, confirmation, and option selection are all done semantically through the embedding model, so alternative phrasings will work without you needing to enumerate them.
 
-- <a id="dialogflow-init"></a>`__init__()`: Constructs an unconfigured runner. Takes no arguments — configure it with the chainable setters below, then call [`load()`](#dialogflow-load).
+- <a id="agentflow-init"></a>`__init__()`: Constructs an unconfigured runner. Takes no arguments — configure it with the chainable setters below, then call [`load()`](#agentflow-load).
 
 Every setter returns the runner, so a whole voice interface can be built in one expression, and every one of them has a working default. Call them before `load()`.
 
-- <a id="dialogflow-language"></a>`language()`: Sets the language used for both recognition and speech. Defaults to `"en"`.
-- <a id="dialogflow-model-arch"></a>`model_arch()`: Picks a specific speech recognition model size instead of the default for the language.
-- <a id="dialogflow-voice"></a>`voice()`: Chooses the synthesis voice used to speak prompts.
-- <a id="dialogflow-speech-options"></a>`speech_options()`: Passes a dictionary of advanced options straight through to the [`TextToSpeech`](#texttospeech) synthesizer.
-- <a id="dialogflow-models-from"></a>`models_from()`: Reads and caches model files under the given directory instead of the default cache location.
-- <a id="dialogflow-microphone"></a>`microphone()`: Whether `load()` should open a microphone. Defaults to `True`. Turn it off to drive the runner from text with [`handle_utterance()`](#dialogflow-handle-utterance).
-- <a id="dialogflow-speech"></a>`speech()`: Whether `load()` should open a speech synthesizer. Defaults to `True`. Turn it off for a silent runner: prompts are still logged and flows still advance, they just aren't spoken.
-- <a id="dialogflow-output-device"></a>`output_device()`: Pins playback to a specific audio output device, for machines where the host default isn't the speaker you want.
-- <a id="dialogflow-trigger-threshold"></a>`trigger_threshold()`: The similarity a phrase must reach to fire, between 0 and 1. Defaults to `0.7`. Raise it when triggers fire on unrelated speech, lower it when they don't fire on genuine attempts.
-- <a id="dialogflow-use-embeddings"></a>`use_embeddings()`: Whether to match phrases by meaning. Defaults to `True`, which downloads a small language model so "set up wifi" also fires on "I need to get online". Turn it off to fall back to case-insensitive substring matching and load no model, which is what offline tests usually want.
-- <a id="dialogflow-beeps"></a>`beeps()`: Whether to play the recognition cue tones. Defaults to `True`, which plays a short "got it" tone when an utterance matches and a distinct "didn't get that" tone when nothing does, so a misrecognition never ends in silence.
-- <a id="dialogflow-spell-feedback"></a>`spell_feedback()`: Whether to echo each character during spelled input. Defaults to `True`, speaking back `"haitch"` for `"h"` and `"deleting <character>"` for an undo, so the user hears that the right letter came off the end.
-- <a id="dialogflow-barge-in"></a>`barge_in()`: Whether the user can interrupt the assistant mid-prompt. Off by default, because an utterance arriving while the assistant is talking is usually the microphone hearing the speakers. Enable it only when you have reliable echo cancellation.
-- <a id="dialogflow-log-io"></a>`log_io()`: Logs the dialogue to stderr as `user: ...` / `assistant: ...` lines. Off by default. This is the user-facing transcript; use `debug()` for the verbose internal trace.
-- <a id="dialogflow-debug"></a>`debug()`: Traces every internal stage transition, with timings, to stderr.
-- <a id="dialogflow-on-progress"></a>`on_progress()`: Reports model download and load progress as `(fraction, name)`.
-- <a id="dialogflow-on-heard"></a>`on_heard()`: Reports every utterance the runner receives from the microphone.
-- <a id="dialogflow-on-said"></a>`on_said()`: Reports every prompt the runner speaks.
-- <a id="dialogflow-on-error"></a>`on_error()`: Reports errors raised by a flow or by the audio pipeline. Without a handler the runner prints them to stderr and carries on; a flow that raises is torn down either way, so one bad turn can't wedge the runner.
-- <a id="dialogflow-speak-with"></a>`speak_with()`: Speaks prompts with your own callable instead of the built-in synthesizer. It must block until playback finishes, since the runner resumes the flow as soon as it returns. Setting this stops `load()` creating a synthesizer.
-- <a id="dialogflow-use-text-to-speech"></a>`use_text_to_speech()`: Speaks with an existing [`TextToSpeech`](#texttospeech) instead of creating one.
-- <a id="dialogflow-use-mic-transcriber"></a>`use_mic_transcriber()`: Listens to an existing [`MicTranscriber`](#mictranscriber), or any object with the same `add_listener` / `start` / `stop` shape — a plain [`Transcriber`](#transcriber) fed from a file works, which is handy for testing a flow against recorded audio.
+- <a id="agentflow-language"></a>`language()`: Sets the language used for both recognition and speech. Defaults to `"en"`.
+- <a id="agentflow-model-arch"></a>`model_arch()`: Picks a specific speech recognition model size instead of the default for the language.
+- <a id="agentflow-voice"></a>`voice()`: Chooses the synthesis voice used to speak prompts.
+- <a id="agentflow-speech-options"></a>`speech_options()`: Passes a dictionary of advanced options straight through to the [`TextToSpeech`](#texttospeech) synthesizer.
+- <a id="agentflow-models-from"></a>`models_from()`: Reads and caches model files under the given directory instead of the default cache location.
+- <a id="agentflow-microphone"></a>`microphone()`: Whether `load()` should open a microphone. Defaults to `True`. Turn it off to drive the runner from text with [`handle_utterance()`](#agentflow-handle-utterance).
+- <a id="agentflow-speech"></a>`speech()`: Whether `load()` should open a speech synthesizer. Defaults to `True`. Turn it off for a silent runner: prompts are still logged and flows still advance, they just aren't spoken.
+- <a id="agentflow-output-device"></a>`output_device()`: Pins playback to a specific audio output device, for machines where the host default isn't the speaker you want.
+- <a id="agentflow-trigger-threshold"></a>`trigger_threshold()`: The similarity a phrase must reach to fire, between 0 and 1. Defaults to `0.7`. Raise it when triggers fire on unrelated speech, lower it when they don't fire on genuine attempts.
+- <a id="agentflow-use-embeddings"></a>`use_embeddings()`: Whether to match phrases by meaning. Defaults to `True`, which downloads a small language model so "set up wifi" also fires on "I need to get online". Turn it off to fall back to case-insensitive substring matching and load no model, which is what offline tests usually want.
+- <a id="agentflow-beeps"></a>`beeps()`: Whether to play the recognition cue tones. Defaults to `True`, which plays a short "got it" tone when an utterance matches and a distinct "didn't get that" tone when nothing does, so a misrecognition never ends in silence.
+- <a id="agentflow-spell-feedback"></a>`spell_feedback()`: Whether to echo each character during spelled input. Defaults to `True`, speaking back `"haitch"` for `"h"` and `"deleting <character>"` for an undo, so the user hears that the right letter came off the end.
+- <a id="agentflow-barge-in"></a>`barge_in()`: Whether the user can interrupt the assistant mid-prompt. Off by default, because an utterance arriving while the assistant is talking is usually the microphone hearing the speakers. Enable it only when you have reliable echo cancellation.
+- <a id="agentflow-log-io"></a>`log_io()`: Logs the dialogue to stderr as `user: ...` / `assistant: ...` lines. Off by default. This is the user-facing transcript; use `debug()` for the verbose internal trace.
+- <a id="agentflow-debug"></a>`debug()`: Traces every internal stage transition, with timings, to stderr.
+- <a id="agentflow-on-progress"></a>`on_progress()`: Reports model download and load progress as `(fraction, name)`.
+- <a id="agentflow-on-heard"></a>`on_heard()`: Reports every utterance the runner receives from the microphone.
+- <a id="agentflow-on-said"></a>`on_said()`: Reports every prompt the runner speaks.
+- <a id="agentflow-on-error"></a>`on_error()`: Reports errors raised by a flow or by the audio pipeline. Without a handler the runner prints them to stderr and carries on; a flow that raises is torn down either way, so one bad turn can't wedge the runner.
+- <a id="agentflow-speak-with"></a>`speak_with()`: Speaks prompts with your own callable instead of the built-in synthesizer. It must block until playback finishes, since the runner resumes the flow as soon as it returns. Setting this stops `load()` creating a synthesizer.
+- <a id="agentflow-use-text-to-speech"></a>`use_text_to_speech()`: Speaks with an existing [`TextToSpeech`](#texttospeech) instead of creating one.
+- <a id="agentflow-use-mic-transcriber"></a>`use_mic_transcriber()`: Listens to an existing [`MicTranscriber`](#mictranscriber), or any object with the same `add_listener` / `start` / `stop` shape — a plain [`Transcriber`](#transcriber) fed from a file works, which is handy for testing a flow against recorded audio.
 
 The runner won't close a synthesizer or transcriber it didn't create.
 
-- <a id="dialogflow-listen-for"></a>`listen_for()`: Starts a flow whenever the user says something like the trigger phrase.
+- <a id="agentflow-listen-for"></a>`listen_for()`: Starts a flow whenever the user says something like the trigger phrase.
   - `trigger_phrase`: A canonical phrase that is embedded once at registration time and compared against utterances via cosine similarity, so alternative phrasings of the same meaning will all start the flow.
   - `flow`: A callable that takes a [`Dialog`](#dialog) and returns a generator yielding prompts. Typically a generator function.
 
-- <a id="dialogflow-unregister-flow"></a>`unregister_flow()`: Removes a flow registered with `listen_for()`. Returns `True` if a flow was removed, `False` otherwise.
+- <a id="agentflow-unregister-flow"></a>`unregister_flow()`: Removes a flow registered with `listen_for()`. Returns `True` if a flow was removed, `False` otherwise.
   - `trigger_phrase`: The trigger phrase used when the flow was registered.
 
-- <a id="dialogflow-always"></a>`always()`: Registers a phrase that stays live even while a flow is running. Useful for commands like "cancel" or "start over" that should interrupt any in-progress conversation.
+- <a id="agentflow-always"></a>`always()`: Registers a phrase that stays live even while a flow is running. Useful for commands like "cancel" or "start over" that should interrupt any in-progress conversation.
   - `trigger_phrase`: The canonical phrase to match, in the same way as `listen_for()`.
   - `handler`: A callable that takes the current [`Dialog`](#dialog) and returns an optional prompt to speak (or `None`). The handler can also call `d.cancel()` or `d.restart()` to abandon or reset the active flow.
 
-- <a id="dialogflow-load"></a>`load()`: Downloads and opens everything the runner needs — the phrase-matching model, a speech synthesizer, and a microphone transcriber — skipping any you've supplied or turned off. Blocking, since the first call may have to download models; report progress with `on_progress()`. Returns the runner.
+- <a id="agentflow-load"></a>`load()`: Downloads and opens everything the runner needs — the phrase-matching model, a speech synthesizer, and a microphone transcriber — skipping any you've supplied or turned off. Blocking, since the first call may have to download models; report progress with `on_progress()`. Returns the runner.
 
-- <a id="dialogflow-start-listening"></a>`start_listening()`: Starts listening on the microphone, calling `load()` first if you haven't. Returns as soon as the microphone is live: transcript lines arrive on the audio thread and drive your flows from there, so the caller is free to sleep, run a UI, or do anything else.
+- <a id="agentflow-start-listening"></a>`start_listening()`: Starts listening on the microphone, calling `load()` first if you haven't. Returns as soon as the microphone is live: transcript lines arrive on the audio thread and drive your flows from there, so the caller is free to sleep, run a UI, or do anything else.
 
-- <a id="dialogflow-stop-listening"></a>`stop_listening()`: Stops listening. Safe to call when already stopped.
+- <a id="agentflow-stop-listening"></a>`stop_listening()`: Stops listening. Safe to call when already stopped.
 
-- <a id="dialogflow-handle-utterance"></a>`handle_utterance()`: Routes an utterance manually, without going through transcript events. Returns `True` if the utterance was consumed by a flow or a global handler, `False` otherwise. Useful for unit tests, or for driving the runner from input sources other than a `Transcriber`.
+- <a id="agentflow-handle-utterance"></a>`handle_utterance()`: Routes an utterance manually, without going through transcript events. Returns `True` if the utterance was consumed by a flow or a global handler, `False` otherwise. Useful for unit tests, or for driving the runner from input sources other than a `Transcriber`.
   - `utterance`: The string to route.
 
-- <a id="dialogflow-cancel"></a>`cancel()`: Abandons the currently running flow, if any. Returns `True` if a flow was canceled.
+- <a id="agentflow-cancel"></a>`cancel()`: Abandons the currently running flow, if any. Returns `True` if a flow was canceled.
 
-- <a id="dialogflow-say"></a>`say()`: Speaks `text` outside any flow. Useful for welcome messages, status announcements, and error notifications that don't need a full flow registration. Blocks until playback finishes, and shares the same playback path as in-flow prompts, so mic muting and self-capture suppression still apply.
+- <a id="agentflow-say"></a>`say()`: Speaks `text` outside any flow. Useful for welcome messages, status announcements, and error notifications that don't need a full flow registration. Blocks until playback finishes, and shares the same playback path as in-flow prompts, so mic muting and self-capture suppression still apply.
   - `text`: The string to speak.
 
-- <a id="dialogflow-close"></a>`close()`: Stops listening and releases everything the runner opened. Only closes what it created itself: a synthesizer or transcriber you passed in stays yours to close. Safe to call more than once, and safe on a runner that never loaded anything.
+- <a id="agentflow-close"></a>`close()`: Stops listening and releases everything the runner opened. Only closes what it created itself: a synthesizer or transcriber you passed in stays yours to close. Safe to call more than once, and safe on a runner that never loaded anything.
 
 - `is_active`: A read-only boolean property that's `True` when a flow is currently in progress.
 - `active_trigger`: A read-only property returning the trigger phrase of the active flow, or `None` if no flow is running.
@@ -1447,7 +1447,7 @@ The context object passed as the first argument to every flow function. Each met
   - `timeout`: Seconds to wait for a response. Defaults to 8 seconds.
   - `max_retries`: Number of reprompts before raising `NoMatchError`. Defaults to 2.
 
-- <a id="dialog-cancel"></a>`cancel()`: Raises `DialogCancelled` into the generator to abandon the active flow entirely. Typically called from a global handler registered with `DialogFlow.always()`.
+- <a id="dialog-cancel"></a>`cancel()`: Raises `DialogCancelled` into the generator to abandon the active flow entirely. Typically called from a global handler registered with `AgentFlow.always()`.
 
 - <a id="dialog-restart"></a>`restart()`: Raises `DialogRestart` into the generator to restart the active flow from the beginning. Typically called from a global handler.
 

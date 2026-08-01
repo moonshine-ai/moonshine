@@ -937,7 +937,7 @@ class TextToSpeech:
     def _log(self, msg: str) -> None:
         """Emit a timestamped trace line to stderr when ``debug=True``.
 
-        Same shape as ``DialogFlow._log`` so traces from the two
+        Same shape as ``AgentFlow._log`` so traces from the two
         components can be read together: each line shows the wall
         time since the previous log line and since the first log
         line of this instance.  Off by default — TTS traces are

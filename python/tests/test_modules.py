@@ -147,9 +147,9 @@ def test_g2p_prints_ipa():
 
 
 def test_embedding_backend_matches_transcribed_command():
-    """The embedding model is internal (DialogFlow owns one), so this drives
+    """The embedding model is internal (AgentFlow owns one), so this drives
     the module directly rather than through a CLI demo. It scores phrases the
-    way DialogFlow does, through calculate_embedding and distance."""
+    way AgentFlow does, through calculate_embedding and distance."""
     moonshine_voice = pytest.importorskip("moonshine_voice")
     from moonshine_voice.embedding_model import EmbeddingModel
 
@@ -208,8 +208,8 @@ def test_download_tts_assets_zipvoice_fetches_model_files():
     assert (root / "zipvoice" / "tokens.txt").exists(), describe(result)
 
 
-def test_dialog_flow_lists_output_devices():
-    result = run_module("dialog_flow", "--list-output-devices")
+def test_agent_flow_lists_output_devices():
+    result = run_module("agent_flow", "--list-output-devices")
     assert result.returncode == 0, describe(result)
 
 

@@ -369,7 +369,7 @@ def test_transcribe_flags_apply_live_once_loaded(mic_module, fake_native):
 
 
 def test_set_transcribe_flags_is_the_same_thing(mic_module, fake_native):
-    """DialogFlow calls this one to flip spelling mode mid-conversation."""
+    """AgentFlow calls this one to flip spelling mode mid-conversation."""
     mic = loaded(mic_module)
     mic.load()
 

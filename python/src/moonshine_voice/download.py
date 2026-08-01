@@ -362,7 +362,7 @@ def get_embedding_model(
     Returns:
         Tuple of (model_path, model_arch).
 
-    DialogFlow downloads this model on demand, so calling this directly is only
+    AgentFlow downloads this model on demand, so calling this directly is only
     needed to warm the cache ahead of time (e.g. before going offline).
 
     Example:

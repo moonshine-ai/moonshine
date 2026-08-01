@@ -206,7 +206,7 @@ def test_models_from_can_be_a_cache_root_instead(tts_module, fake_native, tmp_pa
 
 
 def test_a_voice_named_through_options_is_still_a_voice(tts_module, fake_native):
-    """DialogFlow passes its voice down as an option rather than a setter."""
+    """AgentFlow passes its voice down as an option rather than a setter."""
     tts_module.TextToSpeech().options({"voice": "kokoro_af_heart"}).load()
 
     assert fake_native.downloads[0]["voice"] == "kokoro_af_heart"

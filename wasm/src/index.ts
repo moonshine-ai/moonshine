@@ -2,7 +2,7 @@
  * @moonshine-ai/moonshine-wasm — WebAssembly binding for Moonshine Voice.
  * Mirrors the object model of the Python, Swift, and Android bindings.
  *
- * The three entry points are {@link DialogFlow} for voice interfaces,
+ * The three entry points are {@link AgentFlow} for voice interfaces,
  * {@link MicTranscriber} for live transcription, and {@link TextToSpeech} for
  * speech synthesis and voice cloning. Each is constructed with `new`,
  * configured with chainable setters, and prepared with a single `await load()`.
@@ -90,7 +90,7 @@ export {
 } from './grapheme-to-phonemizer.js';
 
 export {
-  DialogFlow,
+  AgentFlow,
   Dialog,
   DialogCancelled,
   DialogRestart,
@@ -100,4 +100,4 @@ export {
   type ConfirmOptions,
   type FlowFn,
   type GlobalHandler,
-} from './dialog-flow.js';
+} from './agent-flow.js';

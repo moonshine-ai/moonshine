@@ -3,7 +3,7 @@
 
 Writes ``python/src/moonshine_voice/assets/cached_embeddings.tsv``, which
 is loaded at runtime by :class:`moonshine_voice.CachedEmbeddings` so that
-``DialogFlow``'s default yes/no ``Confirm`` matcher (and any other
+``AgentFlow``'s default yes/no ``Confirm`` matcher (and any other
 library-level embedding consumer) does not need to embed its string
 constants at process startup.
 
@@ -14,7 +14,7 @@ Usage
     python scripts/build-cached-embeddings.py --output /tmp/cached.tsv
 
 Run this whenever the library-level phrase sets change (e.g.
-``_DEFAULT_YES_PHRASES`` / ``_DEFAULT_NO_PHRASES`` in ``dialog_flow.py``)
+``_DEFAULT_YES_PHRASES`` / ``_DEFAULT_NO_PHRASES`` in ``agent_flow.py``)
 or when you want to ship embeddings for a different quantization.
 """
 
@@ -47,7 +47,7 @@ from moonshine_voice.cached_embeddings import (  # noqa: E402
     default_cached_embeddings_path,
     write_cached_embeddings_tsv,
 )
-from moonshine_voice.dialog_flow import (  # noqa: E402
+from moonshine_voice.agent_flow import (  # noqa: E402
     _DEFAULT_NO_PHRASES,
     _DEFAULT_YES_PHRASES,
 )
@@ -89,7 +89,7 @@ def _collect_library_phrases() -> List[Tuple[str, str]]:
     _add("alpha_stop", _STOP_WORDS)
 
     # Spoken-form phrases used by :class:`AlphanumericListener`'s TTS
-    # repeat-back and :func:`moonshine_voice.dialog_flow.spell_out`.
+    # repeat-back and :func:`moonshine_voice.agent_flow.spell_out`.
     # ``_SPELL_OUT_LETTERS`` values are the bare phonetic form ("ay",
     # "bee"); the ``capital <form>`` variants are what gets spoken for
     # upper-case characters, so both are embedded.

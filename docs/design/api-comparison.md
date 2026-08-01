@@ -24,12 +24,12 @@ setters. `load()` is the single slow, failure-prone call, and it is the only one
 the caller has to think about scheduling.
 
 ```javascript
-const dialog = new DialogFlow().language('es');
-await dialog.load();
+const agent = new AgentFlow().language('es');
+await agent.load();
 ```
 
 This replaces static factories that take an options object and return a bundle
-of objects (`DialogFlow.load({...})` in JavaScript, `MicTranscriber.load(...)`
+of objects (`AgentFlow.load({...})` in JavaScript, `MicTranscriber.load(...)`
 in Swift, `CatalogLoader.load(context, specs, builder, callback)` on Android).
 
 ### 2. Nothing is required
@@ -43,7 +43,7 @@ two are internal.
 
 ### 3. Flow bodies are procedural
 
-A dialog flow reads top to bottom in every language. JavaScript uses `async` /
+An agent flow reads top to bottom in every language. JavaScript uses `async` /
 `await` (replacing the generator-and-`yield` protocol), Swift uses
 `async throws`, and Java uses ordinary blocking calls that the app runs on its
 own executor.
@@ -72,7 +72,7 @@ The same concepts now have the same names everywhere.
 
 - `MicTranscriber` in all four bindings. JavaScript's
   `MicrophoneTranscriber` is renamed.
-- `DialogFlow` in all four bindings. It did not exist in Swift or Java.
+- `AgentFlow` in all four bindings. It did not exist in Swift or Java.
 - `TextToSpeech.cloneFrom(...)` in all four bindings.
 - `TextToSpeech.say(...)` speaks out loud and `synthesize(...)` returns the
   samples, in all four bindings. JavaScript's `say` used to be the one that
@@ -87,7 +87,7 @@ The same concepts now have the same names everywhere.
 
 ### JavaScript, before
 
-From `examples/web/dialog-flow/index.html`. The flow is a generator whose
+From `examples/web/agent-flow/index.html`. The flow is a generator whose
 `yield`ed prompts are resumed with the user's answers. The application owns the
 `AudioContext`, the text-to-speech instance, and the function that connects the
 two, and it unpacks three objects from the returned bundle.
@@ -109,7 +109,7 @@ function* wifiSetup(d) {
 let tts = null;
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
-const bundle = await DialogFlow.load({
+const bundle = await AgentFlow.load({
   language: 'en',
   modelArch: ModelArch.MediumStreaming,
   microphone: true,
@@ -130,7 +130,7 @@ const bundle = await DialogFlow.load({
   },
 });
 
-const runner = bundle.dialog;
+const runner = bundle.agent;
 tts = bundle.tts;
 const mic = bundle.mic ?? null;
 if (mic) {
@@ -141,9 +141,9 @@ if (mic) {
 ### JavaScript, after
 
 ```javascript
-const dialog = new DialogFlow();
+const agent = new AgentFlow();
 
-dialog.listenFor('set up wifi', async (d) => {
+agent.listenFor('set up wifi', async (d) => {
   const ssid = await d.ask("What's the name of your wifi network?");
   if (!(await d.confirm(`I heard ${ssid}. Is that right?`))) {
     await d.say("No problem, let's start over.");
@@ -156,19 +156,19 @@ dialog.listenFor('set up wifi', async (d) => {
   }
 });
 
-await dialog.load();
-await dialog.startListening();
+await agent.load();
+await agent.startListening();
 ```
 
 `cancel` and `start over` are built in, so applications no longer register them.
 Speaking is internal, so there is no `speakFn` and no application-visible
 text-to-speech handle. Applications that want a conversation log attach
-`dialog.onHeard(...)` and `dialog.onSaid(...)`; applications that want a
-progress bar attach `dialog.onProgress(...)`.
+`agent.onHeard(...)` and `agent.onSaid(...)`; applications that want a
+progress bar attach `agent.onProgress(...)`.
 
 ### Swift, before
 
-There is no `DialogFlow` in Swift. An application has to download two models,
+There is no `AgentFlow` in Swift. An application has to download two models,
 build three engines, write a listener class to hop transcript events onto the
 main actor, match intents itself, and implement its own turn-taking. This is the
 shape of it, following the `examples/ios/IntentRecognizer` sample that this
@@ -238,9 +238,9 @@ final class TranscriptBridge: TranscriptEventListener {
 ### Swift, after
 
 ```swift
-let dialog = DialogFlow()
+let agent = AgentFlow()
 
-dialog.listenFor("set up wifi") { d in
+agent.listenFor("set up wifi") { d in
     let ssid = try await d.ask("What's the name of your wifi network?")
     guard try await d.confirm("I heard \(ssid). Is that right?") else {
         try await d.say("No problem, let's start over.")
@@ -253,13 +253,13 @@ dialog.listenFor("set up wifi") { d in
     }
 }
 
-try await dialog.load()
-try dialog.startListening()
+try await agent.load()
+try agent.startListening()
 ```
 
 ### Android, before
 
-There is no `DialogFlow` in Java either. The closest existing code was the
+There is no `AgentFlow` in Java either. The closest existing code was the
 `examples/android/IntentRecognizer` sample that this redesign removed, which
 nests a `CatalogLoader.Builder` inside a `LoadCallback` inside
 `CatalogLoader.load`, builds each engine by hand out of a
@@ -306,9 +306,9 @@ CatalogLoader.load(
 ### Android, after
 
 ```java
-DialogFlow dialog = new DialogFlow(this);
+AgentFlow agent = new AgentFlow(this);
 
-dialog.listenFor("set up wifi", d -> {
+agent.listenFor("set up wifi", d -> {
     String ssid = d.ask("What's the name of your wifi network?");
     if (!d.confirm("I heard " + ssid + ". Is that right?")) {
         d.say("No problem, let's start over.");
@@ -322,16 +322,16 @@ dialog.listenFor("set up wifi", d -> {
 });
 
 executor.execute(() -> {
-    dialog.load();
-    dialog.startListening();
+    agent.load();
+    agent.startListening();
 });
 ```
 
 The flow body blocks, which is what makes it readable; it runs on a worker
-thread owned by the dialog, never on the main thread. The application only has
+thread owned by the agent, never on the main thread. The application only has
 to decide where `load()` runs, which is the "procedural code wrapped in an
 asynchronous block" the principles ask for. In Kotlin the wrapper is
-`lifecycleScope.launch(Dispatchers.IO) { dialog.load(); dialog.startListening() }`.
+`lifecycleScope.launch(Dispatchers.IO) { agent.load(); agent.startListening() }`.
 
 ## Task 2: transcribing live speech
 
@@ -675,9 +675,9 @@ model internally and hand its handle to the synthesiser rather than making the
 application transcribe the reference clip. The `TextToSpeech` load path pulls
 that model down alongside the voice assets when cloning is requested.
 
-**`DialogFlow` is ported from Python and JavaScript to Swift and Java.** The
+**`AgentFlow` is ported from Python and JavaScript to Swift and Java.** The
 routing, retry, re-prompt, and cancellation logic in
-`python/src/moonshine_voice/dialog_flow.py` and `wasm/src/dialog-flow.ts` is the
+`python/src/moonshine_voice/agent_flow.py` and `wasm/src/agent-flow.ts` is the
 reference. Only the suspension mechanism differs per language: a promise in
 JavaScript, a continuation in Swift, and a blocking queue in Java.
 
@@ -692,13 +692,13 @@ JavaScript.
 `IntentRecognizer` is the exception: it becomes internal in all four bindings,
 renamed `EmbeddingModel` and trimmed to embedding a sentence and scoring two
 embeddings against each other. It was only ever a way to reach the embedding
-model, and `DialogFlow` now owns one on the application's behalf, loading it on
+model, and `AgentFlow` now owns one on the application's behalf, loading it on
 first use and comparing utterances to phrases itself. Keeping it public would
 have meant two ways to do trigger matching, one of which requires the caller to
 assemble the pieces. The intent-recognition sample apps go with it, and the
-Raspberry Pi `my-dalek` demo is ported to `DialogFlow` globals.
+Raspberry Pi `my-dalek` demo is ported to `AgentFlow` globals.
 
-Python's `DialogFlow` moves to the same construct-configure-load pattern, so all
+Python's `AgentFlow` moves to the same construct-configure-load pattern, so all
 four bindings read the same. It predates this work, and used to be constructed
 with a dozen keyword arguments and handed a `TextToSpeech` and a
 `MicTranscriber` the application had built itself; it now opens all three models

@@ -269,7 +269,7 @@ _STOP_WORDS = frozenset({
 # lookup time rather than duplicated in the table.
 #
 # Both :func:`spoken_form` (used by :class:`AlphanumericListener`'s TTS
-# repeat-back) and :func:`moonshine_voice.dialog_flow.spell_out` consume
+# repeat-back) and :func:`moonshine_voice.agent_flow.spell_out` consume
 # these, so there's exactly one place the forms are defined.
 # ---------------------------------------------------------------------------
 
@@ -514,7 +514,7 @@ class AlphanumericMatcher:
 
     Exposes the "does this utterance match?" half of the alphanumeric
     vocabulary as a pure function, without any of the listener or
-    buffer-management machinery.  This is useful for dialog flows that
+    buffer-management machinery.  This is useful for agent flows that
     want to reuse the same vocabulary for ``ask(mode=SPELLED)`` or
     ``ask(mode=DIGITS)`` prompts without pulling in the whole event
     listener.
@@ -558,7 +558,7 @@ class AlphanumericMatcher:
             self._lookup = lookup
         else:
             # Share the module-level precomputed table – read-only in
-            # practice, and lets every matcher (plus the DialogFlow
+            # practice, and lets every matcher (plus the AgentFlow
             # cache) use the same dict without rebuilding it.
             self._lookup = _DEFAULT_LOOKUP
         self._accept_letters = accept_letters

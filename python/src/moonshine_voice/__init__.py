@@ -77,14 +77,14 @@ _mic_transcriber_imported = False
 _alphanumeric_listener_imported = False
 _tts_imported = False
 _g2p_imported = False
-_dialog_flow_imported = False
+_agent_flow_imported = False
 
 
 def __getattr__(name):
     """Lazy import for the transcriber, mic_transcriber, and TTS modules."""
     global _transcriber_imported, _mic_transcriber_imported
     global _alphanumeric_listener_imported, _tts_imported, _g2p_imported
-    global _dialog_flow_imported
+    global _agent_flow_imported
 
     # Lazy import transcriber module
     if name in (
@@ -198,9 +198,9 @@ def __getattr__(name):
         globals()["default_cached_embeddings_path"] = default_cached_embeddings_path
         return globals()[name]
 
-    # Lazy import dialog_flow module
+    # Lazy import agent_flow module
     if name in (
-        "DialogFlow",
+        "AgentFlow",
         "Dialog",
         "Prompt",
         "Say",
@@ -220,9 +220,9 @@ def __getattr__(name):
         "PhraseMatcher",
         "EmbeddingBackend",
     ):
-        if not _dialog_flow_imported:
-            from moonshine_voice.dialog_flow import (
-                DialogFlow,
+        if not _agent_flow_imported:
+            from moonshine_voice.agent_flow import (
+                AgentFlow,
                 Dialog,
                 Prompt,
                 Say,
@@ -243,7 +243,7 @@ def __getattr__(name):
                 EmbeddingBackend,
             )
 
-            globals()["DialogFlow"] = DialogFlow
+            globals()["AgentFlow"] = AgentFlow
             globals()["Dialog"] = Dialog
             globals()["Prompt"] = Prompt
             globals()["Say"] = Say
@@ -262,7 +262,7 @@ def __getattr__(name):
             globals()["spell_out"] = spell_out
             globals()["PhraseMatcher"] = PhraseMatcher
             globals()["EmbeddingBackend"] = EmbeddingBackend
-            _dialog_flow_imported = True
+            _agent_flow_imported = True
         return globals()[name]
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
@@ -343,7 +343,7 @@ __all__ = [
     "letters_only_matcher",
     "digits_only_matcher",
     # Dialog flow
-    "DialogFlow",
+    "AgentFlow",
     "Dialog",
     "Prompt",
     "Say",

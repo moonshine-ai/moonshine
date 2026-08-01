@@ -118,8 +118,8 @@ test('TTS example synthesizes audio and offers a WAV file', { skip }, async () =
   }
 });
 
-test('Dialog-flow example runs a whole conversation from typed input', { skip }, async () => {
-  const page = await openPage('/dialog-flow/?local=1&assets=local&nomic=1');
+test('Agent-flow example runs a whole conversation from typed input', { skip }, async () => {
+  const page = await openPage('/agent-flow/?local=1&assets=local&nomic=1');
 
   /** Reads the assistant's side of the on-page log. */
   const assistantLines = () =>
@@ -241,14 +241,14 @@ const TAB_PAGES = [
   },
   {
     name: 'Voice agent',
-    url: '/dialog-flow/?local=1&assets=local&nomic=1',
+    url: '/agent-flow/?local=1&assets=local&nomic=1',
     labels: ['JavaScript', 'Python', 'Swift', 'Android'],
-    files: ['wifi-agent.js', 'dialog_flow.py', 'DialogFlowApp.swift', 'MainActivity.java'],
+    files: ['wifi-agent.js', 'agent_flow.py', 'AgentFlowApp.swift', 'MainActivity.java'],
     expect: [
-      /dialog\.listenFor\(/,
+      /agent\.listenFor\(/,
       /def setup_wifi\(d\):/,
       /func wifiSetup\(/,
-      /private void wifiSetup\(DialogFlow\.Dialog d\)/,
+      /private void wifiSetup\(AgentFlow\.Dialog d\)/,
     ],
     installs: [
       'npm i @moonshine-ai/moonshine-wasm',
@@ -302,7 +302,7 @@ for (const page_ of TAB_PAGES) {
 }
 
 test('Voice agent highlight follows the reader between languages', { skip }, async () => {
-  const page = await openPage('/dialog-flow/?local=1&assets=local&nomic=1');
+  const page = await openPage('/agent-flow/?local=1&assets=local&nomic=1');
   try {
     await page.waitForSelector('.ms-code__tabs .ms-lang-tab');
 

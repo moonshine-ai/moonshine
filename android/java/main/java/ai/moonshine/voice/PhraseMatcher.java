@@ -14,7 +14,7 @@ import java.util.Map;
  * <p>Each phrase is embedded once and cached, the utterance is embedded once per
  * call, and the key of the best-scoring phrase at or above the threshold wins.
  * Without an {@link EmbeddingModel} it falls back to case-insensitive substring
- * matching, which is what keeps dialogs working before {@link DialogFlow#load}.
+ * matching, which is what keeps dialogs working before {@link AgentFlow#load}.
  */
 final class PhraseMatcher {
   /** A key and the phrases that select it. */

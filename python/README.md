@@ -19,7 +19,7 @@ moonshine-voice mic
 
 Installing the package adds a `moonshine-voice` command (with a shorter
 `moonshine` alias) that groups the built-in tools as subcommands: `mic`,
-`transcribe`, `tts`, `dialog`, `download`, and `g2p`. Run
+`transcribe`, `tts`, `agent`, `download`, and `g2p`. Run
 `moonshine-voice --help`, or `moonshine-voice <command> --help` for a specific
 tool. Each subcommand is equivalent to `python -m moonshine_voice.<module>`, so
 either invocation style works.
@@ -156,13 +156,13 @@ stream.close()
 
 ## Voice Commands
 
-Voice commands go through `DialogFlow`. Register the phrases you want to listen
+Voice commands go through `AgentFlow`. Register the phrases you want to listen
 for and it handles the rest: it downloads the speech recognition, speech
 synthesis and phrase-matching models, opens the microphone, matches what the
 user said semantically rather than by exact wording, and runs your handler.
 
 ```python
-from moonshine_voice import DialogFlow
+from moonshine_voice import AgentFlow
 
 def lights_on(d):
     print("\n💡 LIGHTS ON!")
@@ -171,7 +171,7 @@ def lights_off(d):
     print("\n🌑 LIGHTS OFF!")
 
 runner = (
-    DialogFlow()
+    AgentFlow()
     .always("turn on the lights", lights_on)
     .always("turn off the lights", lights_off)
 )
@@ -200,7 +200,7 @@ turn the microphone off with `microphone(False)` and feed it `handle_utterance()
 
 For multi-turn conversations — asking a question, confirming an answer,
 spelling out a password — register a flow with `listen_for()` instead of a
-global. See `examples/python/dialog_flow.py`, or run `moonshine-voice dialog`.
+global. See `examples/python/agent_flow.py`, or run `moonshine-voice agent`.
 
 ## Speaking
 

@@ -196,7 +196,7 @@ public class MicTranscriber extends Transcriber {
 
     /**
      * Drops incoming audio while muted, without tearing down the microphone.
-     * {@link DialogFlow} uses this so the assistant does not transcribe itself.
+     * {@link AgentFlow} uses this so the assistant does not transcribe itself.
      */
     public void mute(boolean muted) {
         this.muted = muted;

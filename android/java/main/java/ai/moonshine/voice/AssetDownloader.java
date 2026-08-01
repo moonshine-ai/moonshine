@@ -28,7 +28,7 @@ import org.json.JSONObject;
  * unchanged. File lists come from the native dependency catalog (via
  * {@link Transcriber#getSttDependencies}, {@link TextToSpeech#getTtsDependencies},
  * {@link TextToSpeech#getG2pDependencies}, and the embedding-model equivalent that
- * {@link DialogFlow} uses), downloads are written atomically (through a {@code .part} file),
+ * {@link AgentFlow} uses), downloads are written atomically (through a {@code .part} file),
  * resume across interruptions with HTTP Range, and report progress through an optional listener.
  *
  * <p>{@link #ensureModelPresent} performs blocking network I/O; call it off the main thread (or use

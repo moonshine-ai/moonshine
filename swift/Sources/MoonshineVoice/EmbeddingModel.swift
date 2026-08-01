@@ -2,7 +2,7 @@ import Foundation
 
 /// Turns text into embedding vectors and scores them against each other.
 ///
-/// Internal to the binding. ``DialogFlow`` is the supported way to match spoken
+/// Internal to the binding. ``AgentFlow`` is the supported way to match spoken
 /// phrases; it owns a model and compares utterances to phrases itself.
 final class EmbeddingModel: @unchecked Sendable {
     private let api = MoonshineAPI.shared
@@ -49,7 +49,7 @@ final class EmbeddingModel: @unchecked Sendable {
 /// Each phrase is embedded once and cached, the utterance is embedded once per
 /// call, and the key of the best-scoring phrase at or above `threshold` wins.
 /// Without an ``EmbeddingModel`` it falls back to case-insensitive substring
-/// matching, which is what keeps dialogs working before ``DialogFlow/load()``.
+/// matching, which is what keeps dialogs working before ``AgentFlow/load()``.
 final class PhraseMatcher: @unchecked Sendable {
     private let model: EmbeddingModel?
     private let lock = Mutex()

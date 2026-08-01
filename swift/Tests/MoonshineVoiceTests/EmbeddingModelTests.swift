@@ -59,7 +59,7 @@ final class EmbeddingModelTests: XCTestCase {
     }
 
     /// Without a model the matcher falls back to substring matching, which is
-    /// what keeps dialogs working before `DialogFlow.load()`.
+    /// what keeps dialogs working before `AgentFlow.load()`.
     func testPhraseMatcher_withoutModel_fallsBackToSubstrings() {
         let matcher = PhraseMatcher(model: nil)
         let groups = [(key: "yes", phrases: ["yes", "sure"]), (key: "no", phrases: ["no", "nope"])]

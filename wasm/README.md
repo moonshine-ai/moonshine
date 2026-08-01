@@ -6,7 +6,7 @@ browser via WebAssembly. No audio ever leaves the device.
 
 The API mirrors the Python, Swift, and Android bindings: a thin embind bridge
 over the Moonshine C ABI, wrapped in an idiomatic TypeScript layer. The three
-entry points are `DialogFlow` for voice interfaces, `MicTranscriber` for live
+entry points are `AgentFlow` for voice interfaces, `MicTranscriber` for live
 transcription, and `TextToSpeech` for synthesis and voice cloning. Each is
 constructed with `new`, configured with chainable setters, and prepared with a
 single `await load()`.
@@ -82,29 +82,29 @@ await tts.say('Now I sound like the recording.');
 
 ## Dialog flows
 
-`DialogFlow` is the whole voice interface: it downloads the speech, embedding,
+`AgentFlow` is the whole voice interface: it downloads the speech, embedding,
 and voice models, opens the microphone, matches trigger phrases, and runs the
 flow.
 Flow bodies are ordinary `async` functions.
 
 ```ts
-import { DialogFlow } from '@moonshine-ai/moonshine-wasm';
+import { AgentFlow } from '@moonshine-ai/moonshine-wasm';
 
-const dialog = new DialogFlow();
+const agent = new AgentFlow();
 
-dialog.listenFor('set up wifi', async (d) => {
+agent.listenFor('set up wifi', async (d) => {
   const ssid = await d.ask("What's your wifi network?");
   if (await d.confirm(`Connect to ${ssid}?`)) {
     await d.say(`Connecting to ${ssid}.`);
   }
 });
 
-await dialog.load();
-await dialog.startListening();
+await agent.load();
+await agent.startListening();
 ```
 
 "cancel" and "start over" work at any point without being registered. Attach
-`dialog.onHeard(...)` and `dialog.onSaid(...)` to log the conversation.
+`agent.onHeard(...)` and `agent.onSaid(...)` to log the conversation.
 
 ## Models are downloaded at runtime
 
@@ -174,7 +174,7 @@ set these headers, build the SIMD-only fallback (see below) and load it with
 
 ## Examples
 
-See [`examples/web/`](../examples/web): `stt/`, `tts/`, and `dialog-flow/`, with
+See [`examples/web/`](../examples/web): `stt/`, `tts/`, and `agent-flow/`, with
 an index at `/` linking them together. Each page shows the Moonshine calls that
 drive it in a panel below the demo. They share a stylesheet and some chrome from
 `examples/web/assets/`, and have no build step or external dependencies.
@@ -212,7 +212,7 @@ const mic = devices.find((d) => d.kind === 'audioinput' && d.label.includes('USB
 const audio = { deviceId: { exact: mic.deviceId } };
 
 new MicTranscriber().audioConstraints(audio);
-new DialogFlow().audioConstraints(audio);
+new AgentFlow().audioConstraints(audio);
 voiceClone.fromMicrophone({ audioConstraints: audio });
 ```
 

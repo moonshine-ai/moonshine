@@ -1,4 +1,4 @@
-// Text-embedding tests. EmbeddingModel is internal — DialogFlow is the public
+// Text-embedding tests. EmbeddingModel is internal — AgentFlow is the public
 // way to match phrases — so these import the module directly rather than
 // through the package entry point. The dependency-manifest check and the
 // invalid-buffer error mirror Swift's EmbeddingModelTests / Android's

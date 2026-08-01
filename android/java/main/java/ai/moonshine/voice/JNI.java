@@ -84,7 +84,7 @@ public class JNI {
     public static native Transcript moonshineTranscribeStream(int transcriber_handle,
             int stream_handle, int flags);
 
-    // Text embeddings back DialogFlow's phrase matching and are not part of the
+    // Text embeddings back AgentFlow's phrase matching and are not part of the
     // library's public surface, so these stay package-private.
 
     static native int moonshineCreateEmbeddingModel(String model_path,

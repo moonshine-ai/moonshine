@@ -14,7 +14,7 @@
 //   node examples/web/serve.mjs [port]
 //
 // then open http://localhost:8080/ for the index, or go straight to one of
-// /stt/, /tts/, /dialog-flow/.
+// /stt/, /tts/, /agent-flow/.
 //
 // By default the examples import the published binding from the jsDelivr CDN.
 // To test the locally-built binding served from /wasm/dist/index.js instead,
@@ -130,7 +130,7 @@ server.listen(PORT, () => {
   console.log('  http://localhost:%d/', PORT);
   console.log('  http://localhost:%d/stt/', PORT);
   console.log('  http://localhost:%d/tts/', PORT);
-  console.log('  http://localhost:%d/dialog-flow/', PORT);
+  console.log('  http://localhost:%d/agent-flow/', PORT);
   console.log('(cross-origin isolation headers enabled for threads/SIMD)');
   console.log('(append ?local=1 to load the locally-built /wasm/dist binding)');
   console.log('(append &assets=local to load models from the repo, offline)');

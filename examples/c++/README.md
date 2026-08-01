@@ -78,7 +78,7 @@ The C++ binding is header-only and opens no devices and no sockets, which is
 what makes it portable to anywhere the library builds. So it has `Transcriber`,
 `TextToSpeech`, `GraphemeToPhonemizer`, `EmbeddingModel` and `VoiceClone`, but
 none of the pieces that need a runtime: there is no `MicTranscriber` or
-`DialogFlow` (they need a capture device), no `say()` (it needs an output
+`AgentFlow` (they need a capture device), no `say()` (it needs an output
 device; `synthesize()` hands you the samples to play yourself), and no
 downloading, so nothing takes a `load()` or reports progress. Feed it paths or
 buffers instead.

@@ -45,7 +45,7 @@ struct TextEmbedderOptions {
 /**
  * TextEmbedder owns a loaded embedding model and turns text into vectors that
  * callers can compare themselves. Phrase matching lives in the language
- * bindings' DialogFlow implementations, which embed their candidate phrases
+ * bindings' AgentFlow implementations, which embed their candidate phrases
  * once and score utterances against them with calculate_similarity().
  */
 class TextEmbedder {

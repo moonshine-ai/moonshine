@@ -76,7 +76,7 @@ commands = {
     "exterminate": on_exterminate,
 }
 
-dalek = DialogFlow()
+dalek = AgentFlow()
 for phrase, handler in commands.items():
     dalek.always(phrase, handler)
 
@@ -84,7 +84,7 @@ dalek.load()
 dalek.start_listening()
 ```
 
-`DialogFlow` is the entry point for voice interfaces. Here we only register
+`AgentFlow` is the entry point for voice interfaces. Here we only register
 "globals" (single-shot commands that are live at all times), but the same
 runner also handles multi-turn conversations through `listen_for`, where it can
 ask a question, wait for the answer, and confirm it. Either way, `load()`

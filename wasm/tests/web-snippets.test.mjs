@@ -15,14 +15,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SNIPPETS = path.join(REPO_ROOT, 'examples', 'web', 'assets', 'snippets.js');
-const { MIC_TRANSCRIPTION, TEXT_TO_SPEECH, DIALOG_FLOW, INSTALL, withInstall } = await import(
+const { MIC_TRANSCRIPTION, TEXT_TO_SPEECH, AGENT_FLOW, INSTALL, withInstall } = await import(
   pathToFileURL(SNIPPETS).href
 );
 
 const ALL = [
   ['MIC_TRANSCRIPTION', MIC_TRANSCRIPTION],
   ['TEXT_TO_SPEECH', TEXT_TO_SPEECH],
-  ['DIALOG_FLOW', DIALOG_FLOW],
+  ['AGENT_FLOW', AGENT_FLOW],
 ];
 
 test('every snippet carries what a tab needs to render', async (t) => {
@@ -112,7 +112,7 @@ const STEP_EXPECTATIONS = {
 };
 
 test('every voice agent step points at the line it claims', async (t) => {
-  for (const snippet of DIALOG_FLOW) {
+  for (const snippet of AGENT_FLOW) {
     await t.test(snippet.id, () => {
       const lines = snippet.code.split('\n');
       assert.deepEqual(

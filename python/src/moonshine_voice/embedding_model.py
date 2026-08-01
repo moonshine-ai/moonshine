@@ -1,6 +1,6 @@
 """Embedding model access via the native embedding C API.
 
-Internal to the binding: :class:`~moonshine_voice.dialog_flow.DialogFlow` is
+Internal to the binding: :class:`~moonshine_voice.agent_flow.AgentFlow` is
 the supported way to match spoken phrases, and it owns an embedding model on
 the application's behalf.  Nothing here is exported from ``moonshine_voice``.
 """
@@ -17,8 +17,8 @@ from moonshine_voice.download import EmbeddingModelArch
 class EmbeddingModel:
     """Loads an embedding model and scores text against it.
 
-    Satisfies the :class:`~moonshine_voice.dialog_flow.EmbeddingBackend`
-    protocol, which is how ``DialogFlow`` matches utterances to phrases:
+    Satisfies the :class:`~moonshine_voice.agent_flow.EmbeddingBackend`
+    protocol, which is how ``AgentFlow`` matches utterances to phrases:
 
         >>> model = EmbeddingModel("path/to/embedding-model")
         >>> a = model.calculate_embedding("turn on the lights")

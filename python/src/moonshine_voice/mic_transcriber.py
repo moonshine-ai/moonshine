@@ -499,7 +499,7 @@ class MicTranscriber:
     def set_transcribe_flags(self, flags: int) -> None:
         """Non-chainable alias for :meth:`transcribe_flags`.
 
-        Lets DialogFlow flip ``MOONSHINE_FLAG_SPELLING_MODE`` on only while a
+        Lets AgentFlow flip ``MOONSHINE_FLAG_SPELLING_MODE`` on only while a
         ``SPELLED`` / ``DIGITS`` prompt is in progress.
         """
         self.transcribe_flags(flags)

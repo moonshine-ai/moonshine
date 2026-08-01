@@ -45,7 +45,7 @@ from typing import Dict, Iterable, List, Optional, Protocol, Sequence, Tuple
 class _EmbeddingBackend(Protocol):
     """Narrow form of :class:`moonshine_voice.EmbeddingBackend`.
 
-    Redefined here so this module doesn't import ``dialog_flow`` (which
+    Redefined here so this module doesn't import ``agent_flow`` (which
     would create a cycle).
     """
 
