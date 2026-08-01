@@ -229,8 +229,8 @@
         <section>
           <h2 class="ms-card__title">The flow, running live</h2>
           <p class="ms-card__hint">
-            This is the whole agent. The highlighted line is the one waiting on you
-            right now.
+            This is the whole agent, in any of three languages. The highlighted
+            line is the one waiting on you right now.
           </p>
           <div id="code"></div>
         </section>
@@ -274,6 +274,7 @@
         audioConstraints,
         openMicrophone,
       } from '/assets/moonshine-ui.js';
+      import { DIALOG_FLOW, withInstall } from '/assets/snippets.js';
 
       const { params, useLocalAssets, moduleUrl } = pageConfig();
       const noMic = params.get('nomic') === '1';
@@ -307,35 +308,32 @@
       ]);
 
       // --- The code panel, and the line each step corresponds to -------------
-      // The snippet below is the flow this page actually runs. STEP_LINES maps
-      // each await in `wifiSetup` onto its line in that listing so the panel can
-      // show which one the conversation is parked on.
-      const FLOW_SOURCE = `dialog.listenFor('set up wifi', async (d) => {
-  const ssid = await d.ask("What's the name of your wifi network?");
-
-  if (!(await d.confirm(\`I heard \${ssid}. Is that right?\`))) {
-    return d.say("No problem, let's start over.");
-  }
-
-  if (await d.confirm('Apply these changes?')) {
-    await d.say(\`Done. Connecting to \${ssid}.\`);
-  } else {
-    await d.say('Okay, nothing changed.');
-  }
-});`;
-
-      const STEP_LINES = {
-        askSsid: 1,
-        confirmSsid: 3,
-        startOver: 4,
-        confirmApply: 7,
-        done: 8,
-        unchanged: 10,
+      // Each snippet is this page's flow in one language, and carries its own
+      // `steps` map from the awaits in `wifiSetup` to line numbers, because the
+      // same flow lands on different lines in each. `currentStep` is remembered
+      // so that switching language mid-conversation moves the highlight to the
+      // equivalent line rather than dropping it.
+      let stepLines = DIALOG_FLOW[0].steps;
+      let currentStep = null;
+      // Assigned below, but onTab fires while codePanel is still building.
+      let codeEl;
+      const applyStep = () => {
+        if (!codeEl) return;
+        markCodeStep(codeEl, currentStep === null ? null : stepLines[currentStep]);
       };
 
-      const codeEl = codePanel({ file: 'wifi-agent.js', code: FLOW_SOURCE });
+      codeEl = codePanel({
+        tabs: withInstall(DIALOG_FLOW),
+        onTab: (pane) => {
+          stepLines = pane.steps;
+          applyStep();
+        },
+      });
       document.getElementById('code').append(codeEl);
-      const step = (name) => markCodeStep(codeEl, name === null ? null : STEP_LINES[name]);
+      const step = (name) => {
+        currentStep = name;
+        applyStep();
+      };
 
       const loading = new LoadingUi({
         status: els.status,

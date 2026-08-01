@@ -248,8 +248,11 @@ Hello from Moonshine. I am running right inside your browser, and nothing I say 
       <section class="ms-section" id="proof"></section>
 
       <section class="ms-section">
-        <h2 class="ms-card__title">The code behind this page</h2>
-        <p class="ms-card__hint">Speaking is two calls. Cloning is one more.</p>
+        <h2 class="ms-card__title">Speech synthesis, in your language</h2>
+        <p class="ms-card__hint">
+          Speaking is two calls and cloning is one more, whichever one you pick.
+          The JavaScript tab is the code running on this page.
+        </p>
         <div id="code"></div>
       </section>
     </main>
@@ -269,6 +272,7 @@ Hello from Moonshine. I am running right inside your browser, and nothing I say 
         pageConfig,
         audioConstraints,
       } from '/assets/moonshine-ui.js';
+      import { TEXT_TO_SPEECH, withInstall } from '/assets/snippets.js';
 
       const { params, useLocalAssets, moduleUrl } = pageConfig();
       const { TextToSpeech, loadMoonshineModule } = await import(moduleUrl);
@@ -336,18 +340,7 @@ Hello from Moonshine. I am running right inside your browser, and nothing I say 
       ]);
 
       document.getElementById('code').append(
-        codePanel({
-          file: 'speak.js',
-          code: `import { TextToSpeech } from '@moonshine-ai/moonshine-wasm';
-
-const tts = new TextToSpeech().language('en_us').voice('kokoro_af_heart');
-await tts.load();
-await tts.say('Hello from Moonshine.');
-
-// Cloning: hand it a few seconds of speech and keep going.
-await tts.cloneFrom(recording);
-await tts.say('Now I sound like you.');`,
-        }),
+        codePanel({ tabs: withInstall(TEXT_TO_SPEECH) }),
       );
 
       const loading = new LoadingUi({

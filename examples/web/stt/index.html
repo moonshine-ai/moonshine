@@ -164,8 +164,11 @@
       <section class="ms-section" id="proof"></section>
 
       <section class="ms-section">
-        <h2 class="ms-card__title">The code behind this page</h2>
-        <p class="ms-card__hint">Live transcription is three calls and two callbacks.</p>
+        <h2 class="ms-card__title">Live transcription, in your language</h2>
+        <p class="ms-card__hint">
+          Three calls and two callbacks, whichever one you pick. The JavaScript
+          tab is the code running on this page.
+        </p>
         <div id="code"></div>
       </section>
     </main>
@@ -188,6 +191,7 @@
         audioConstraints,
         openMicrophone,
       } from '/assets/moonshine-ui.js';
+      import { MIC_TRANSCRIPTION, withInstall } from '/assets/snippets.js';
 
       const { useLocalAssets, moduleUrl } = pageConfig();
       const { MicTranscriber, Transcriber, ModelArch } = await import(moduleUrl);
@@ -234,18 +238,7 @@
       ]);
 
       document.getElementById('code').append(
-        codePanel({
-          file: 'live-transcription.js',
-          code: `import { MicTranscriber, ModelArch } from '@moonshine-ai/moonshine-wasm';
-
-const mic = new MicTranscriber()
-  .modelArch(ModelArch.MediumStreaming)
-  .onText((text) => showInProgress(text))
-  .onLine((line) => appendLine(line.text, line.lastTranscriptionLatencyMs));
-
-await mic.load();   // downloads the model once, then it is cached
-await mic.start();  // opens the microphone and starts transcribing`,
-        }),
+        codePanel({ tabs: withInstall(MIC_TRANSCRIPTION) }),
       );
 
       const loading = new LoadingUi({

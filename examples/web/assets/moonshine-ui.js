@@ -18,6 +18,9 @@ const GITHUB_URL = 'https://github.com/moonshine-ai/moonshine';
 const SITE_URL = 'https://moonshine.ai';
 const DISCORD_URL = 'https://discord.gg/27qp9zSRXF';
 const NPM_PACKAGE = '@moonshine-ai/moonshine-wasm';
+// Snippet captions link here. Main rather than a tag, so a link keeps working
+// as the examples move around between releases.
+const SOURCE_BASE = `${GITHUB_URL}/blob/main`;
 
 const DEMOS = [
   { id: 'stt', href: '/stt/', label: 'Speech to Text' },
@@ -621,84 +624,230 @@ export class MicMeter {
 
 // --- Code panel -----------------------------------------------------------
 
-const KEYWORDS =
-  /\b(await|async|const|let|new|return|if|else|function|for|of|import|from|export|true|false|null|undefined)\b/g;
+/**
+ * Per-language keyword lists and comment markers. Only the languages the
+ * snippet tabs use, and only enough of each to make a short sample readable.
+ */
+const LANGUAGES = {
+  javascript: {
+    keywords:
+      /\b(await|async|const|let|var|new|return|if|else|function|for|of|in|import|from|export|class|try|catch|throw|true|false|null|undefined)\b/g,
+    comment: /(\/\/.*)$/,
+  },
+  python: {
+    keywords:
+      /\b(def|class|return|if|elif|else|for|in|while|with|as|import|from|lambda|try|except|finally|raise|yield|pass|not|and|or|is|async|await|None|True|False|self)\b/g,
+    comment: /(#.*)$/,
+  },
+  swift: {
+    keywords:
+      /\b(let|var|func|return|if|else|guard|for|in|while|repeat|try|await|async|throws|throw|struct|class|enum|protocol|extension|import|weak|self|public|private|internal|static|nil|true|false)\b/g,
+    comment: /(\/\/.*)$/,
+    // Also matches a trailing closure, so `.onText { … }` reads as the call it
+    // is rather than as a property.
+    call: /\.(\w+)(?=\s*[({])/g,
+  },
+  java: {
+    keywords:
+      /\b(new|return|if|else|for|while|do|class|interface|extends|implements|public|private|protected|static|final|void|try|catch|finally|throw|throws|import|package|this|int|long|float|double|boolean|char|String|var|null|true|false)\b/g,
+    comment: /(\/\/.*)$/,
+  },
+  kotlin: {
+    keywords:
+      /\b(val|var|fun|return|if|else|when|for|while|do|class|object|interface|data|suspend|override|private|internal|public|import|package|this|try|catch|finally|throw|is|in|as|null|true|false)\b/g,
+    comment: /(\/\/.*)$/,
+    // Kotlin takes trailing closures too, so `worker.execute { … }` is a call.
+    call: /\.(\w+)(?=\s*[({])/g,
+  },
+};
+
+/** A string literal in any of the four languages above. */
+const STRING_LITERAL = /(['"`])(?:\\.|(?!\1)[^\\])*\1/g;
+/** Matches the placeholders parked in a private-use block by `stashStrings`. */
+const STASHED_STRING = /\uE000([\uE100-\uE1ff])/g;
 
 /** Just enough highlighting to make a short snippet readable. */
-function highlight(line) {
+function highlight(line, language = 'javascript') {
+  const spec = LANGUAGES[language] ?? LANGUAGES.javascript;
+
   const escaped = line
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-  const comment = escaped.match(/(\/\/.*)$/);
-  const code = comment ? escaped.slice(0, comment.index) : escaped;
-
-  // Strings first, stashed behind placeholders so later passes can't reach
-  // inside them and colour a keyword that is really just prose. The
-  // placeholders live in a private-use block and contain no digits or word
-  // characters, so the number and keyword passes below step over them.
+  // Strings come out first, stashed behind placeholders so no later pass can
+  // reach inside one: not the keyword pass, which would otherwise colour prose,
+  // and not the comment scan, for which the `//` in a URL is not a comment. The
+  // placeholders contain no digits or word characters, so the number and
+  // keyword passes step over them.
   const strings = [];
-  let out = code.replace(/(['"`])(?:\\.|(?!\1)[^\\])*\1/g, (match) => {
+  const stashed = escaped.replace(STRING_LITERAL, (match) => {
     strings.push(match);
     return `\uE000${String.fromCharCode(0xe100 + strings.length - 1)}`;
   });
+  const restore = (text, wrap) =>
+    text.replace(STASHED_STRING, (_, mark) => {
+      const literal = strings[mark.charCodeAt(0) - 0xe100];
+      return wrap ? `<span class="tok-str">${literal}</span>` : literal;
+    });
 
-  out = out
-    .replace(KEYWORDS, '<span class="tok-key">$1</span>')
+  const comment = stashed.match(spec.comment);
+  const code = comment ? stashed.slice(0, comment.index) : stashed;
+
+  const painted = code
+    .replace(spec.keywords, '<span class="tok-key">$1</span>')
     .replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="tok-num">$1</span>')
-    .replace(/\.(\w+)(?=\()/g, '.<span class="tok-fn">$1</span>');
+    .replace(spec.call ?? /\.(\w+)(?=\()/g, '.<span class="tok-fn">$1</span>');
 
-  out = out.replace(
-    /\uE000([\uE100-\uE1ff])/g,
-    (_, mark) => `<span class="tok-str">${strings[mark.charCodeAt(0) - 0xe100]}</span>`,
-  );
+  // A string inside a comment is restored unwrapped, so the whole comment stays
+  // one colour rather than growing a green island.
+  return comment
+    ? `${restore(painted, true)}<span class="tok-com">${restore(comment[1], false)}</span>`
+    : restore(painted, true);
+}
 
-  return comment ? `${out}<span class="tok-com">${comment[1]}</span>` : out;
+/** Renders one snippet as `<span class="ms-line">` blocks. */
+function codeLines(code, language) {
+  // Joined with nothing: each line is its own block element, so a newline
+  // between them would double-space the listing inside <pre>.
+  return code
+    .replace(/\n+$/, '')
+    .split('\n')
+    .map(
+      (line, i) =>
+        `<span class="ms-line" data-line="${i}">${highlight(line, language) || '&nbsp;'}</span>`,
+    )
+    .join('');
 }
 
 /**
  * Builds a code panel. Every line is wrapped in its own element so a page can
  * highlight the step it is currently executing.
  *
+ * Pass `code` for a single snippet, or `tabs` for the same thing in several
+ * languages. Tabbed panels stack every snippet in one grid cell and hide the
+ * inactive ones, so the panel is always as tall as the longest and switching
+ * language moves nothing on the page.
+ *
  * @param {object} options
- * @param {string} options.code  The snippet to display.
+ * @param {string} [options.code]  The snippet to display.
+ * @param {string} [options.language]  Language of `code`, for highlighting.
  * @param {string} [options.file]  Caption shown in the header.
- * @param {boolean} [options.install]  Append the `npm i` line.
+ * @param {boolean|string} [options.install]  The install line, or true for npm,
+ *   or false for none. Ignored when `tabs` is given; see `tabs[].install`.
+ * @param {Array<object>} [options.tabs]  One entry per language, each with
+ *   `id`, `label`, `code`, and optionally `file`, `install` and `installHint`.
+ * @param {string} [options.path]  Repository-relative path of the file this
+ *   came from. Turns the caption into a link to it on GitHub. Per-tab as
+ *   `tabs[].path`.
+ * @param {string} [options.active]  Id of the tab to open on. Defaults to the
+ *   first.
+ * @param {(pane: object, index: number) => void} [options.onTab]  Called when
+ *   the reader switches language, and once on creation.
  */
-export function codePanel({ code, file = 'index.html', install = true }) {
-  const lines = code.replace(/\n+$/, '').split('\n');
-  // Joined with nothing: each line is its own block element, so a newline
-  // between them would double-space the listing inside <pre>.
-  const body = lines
-    .map((line, i) => `<span class="ms-line" data-line="${i}">${highlight(line) || '&nbsp;'}</span>`)
-    .join('');
+export function codePanel({
+  code,
+  language = 'javascript',
+  file = 'index.html',
+  install = true,
+  path,
+  tabs,
+  active,
+  onTab,
+}) {
+  const panes = tabs ?? [{ id: language, label: language, file, path, code, install }];
+  const initial = Math.max(
+    panes.findIndex((pane) => pane.id === active),
+    0,
+  );
+  const installLine = (pane) =>
+    pane.install === true ? `npm i ${NPM_PACKAGE}` : pane.install || '';
+  const hasInstall = panes.some((pane) => installLine(pane));
 
   const wrap = document.createElement('div');
   wrap.innerHTML = `
     <div class="ms-code">
-      <div class="ms-code__head">
-        <span class="ms-code__file">${file}</span>
+      <div class="ms-code__head${tabs ? ' ms-code__head--tabbed' : ''}">
+        ${
+          tabs
+            ? `<span class="ms-code__tabs" role="tablist">${panes
+                .map(
+                  (pane, i) =>
+                    `<button type="button" class="ms-lang-tab${i === initial ? ' is-active' : ''}"
+                       role="tab" aria-selected="${i === initial}" data-tab="${i}">${pane.label}</button>`,
+                )
+                .join('')}</span>`
+            : ''
+        }
+        <a class="ms-code__file" data-file target="_blank" rel="noopener"></a>
         <span class="ms-code__actions">
           <button type="button" class="ms-btn ms-btn--quiet ms-small" data-copy>Copy</button>
         </span>
       </div>
-      <pre><code>${body}</code></pre>
+      <div class="ms-code__panes">
+        ${panes
+          .map(
+            (pane, i) =>
+              `<pre class="ms-code__pane${i === initial ? ' is-active' : ''}" data-pane="${i}"
+                 role="tabpanel"><code>${codeLines(pane.code, pane.id)}</code></pre>`,
+          )
+          .join('')}
+      </div>
     </div>
     ${
-      install
+      hasInstall
         ? `<div class="ms-install">
-             <code>npm i ${NPM_PACKAGE}</code>
+             <code data-install></code>
+             <span class="ms-install__hint" data-install-hint></span>
              <button type="button" class="ms-btn ms-btn--quiet ms-small" data-copy-install>Copy</button>
            </div>`
         : ''
     }`;
 
+  let current = initial;
+  const fileEl = wrap.querySelector('[data-file]');
+  const installEl = wrap.querySelector('[data-install]');
+  const hintEl = wrap.querySelector('[data-install-hint]');
+
+  const show = (index) => {
+    current = index;
+    for (const [i, pane] of wrap.querySelectorAll('[data-pane]').entries()) {
+      pane.classList.toggle('is-active', i === index);
+    }
+    for (const [i, tab] of wrap.querySelectorAll('[data-tab]').entries()) {
+      tab.classList.toggle('is-active', i === index);
+      tab.setAttribute('aria-selected', String(i === index));
+    }
+    if (fileEl) {
+      const { file: name, path: source } = panes[index];
+      fileEl.textContent = name ?? '';
+      // Without a path there is nothing to point at, so it stays a plain
+      // caption rather than becoming a link that goes nowhere.
+      if (source) {
+        fileEl.href = `${SOURCE_BASE}/${source}`;
+        fileEl.title = source;
+      } else {
+        fileEl.removeAttribute('href');
+        fileEl.removeAttribute('title');
+      }
+    }
+    if (installEl) installEl.textContent = installLine(panes[index]);
+    if (hintEl) hintEl.textContent = panes[index].installHint ?? '';
+    onTab?.(panes[index], index);
+  };
+  show(initial);
+
+  for (const tab of wrap.querySelectorAll('[data-tab]')) {
+    tab.addEventListener('click', () => show(Number(tab.dataset.tab)));
+  }
+
   const copyButton = wrap.querySelector('[data-copy]');
-  copyButton?.addEventListener('click', () => copyToClipboard(code, copyButton));
+  copyButton?.addEventListener('click', () =>
+    copyToClipboard(panes[current].code, copyButton),
+  );
   const installButton = wrap.querySelector('[data-copy-install]');
   installButton?.addEventListener('click', () =>
-    copyToClipboard(`npm i ${NPM_PACKAGE}`, installButton),
+    copyToClipboard(installLine(panes[current]), installButton),
   );
 
   return wrap;
@@ -722,10 +871,17 @@ async function copyToClipboard(text, button) {
  * before it as done. Pass `null` to clear.
  */
 export function markCodeStep(root, lineIndex) {
-  const lines = root.querySelectorAll('.ms-line');
+  // Every pane is cleared, but only the open one is marked. Clearing just the
+  // open one would leave the language the reader switched away from lit up on
+  // whatever line it had reached, waiting to reappear on the way back.
+  for (const line of root.querySelectorAll('.ms-line')) {
+    line.classList.remove('is-running', 'is-done');
+  }
+  if (lineIndex == null) return;
+  const lines = root.querySelectorAll('.ms-code__pane.is-active .ms-line');
   lines.forEach((line, i) => {
-    line.classList.toggle('is-running', lineIndex !== null && i === lineIndex);
-    line.classList.toggle('is-done', lineIndex !== null && i < lineIndex);
+    line.classList.toggle('is-running', i === lineIndex);
+    line.classList.toggle('is-done', i < lineIndex);
   });
 }
 

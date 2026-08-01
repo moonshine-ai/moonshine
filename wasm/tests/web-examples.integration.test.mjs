@@ -164,6 +164,169 @@ test('Dialog-flow example runs a whole conversation from typed input', { skip },
   }
 });
 
+/** Clicks through every language tab, reporting what the panel shows on each. */
+async function walkLanguageTabs(page) {
+  await page.waitForSelector('.ms-code__tabs .ms-lang-tab');
+  const count = await page.$$eval('.ms-code__tabs .ms-lang-tab', (els) => els.length);
+  const seen = [];
+  for (let i = 0; i < count; i++) {
+    await page.click(`.ms-code__tabs .ms-lang-tab:nth-child(${i + 1})`);
+    seen.push(
+      await page.evaluate(() => {
+        const visible = [...document.querySelectorAll('.ms-code__pane')].filter(
+          (pane) => getComputedStyle(pane).visibility === 'visible',
+        );
+        const fileEl = document.querySelector('[data-file]');
+        return {
+          label: document.querySelector('.ms-lang-tab.is-active').textContent.trim(),
+          visible: visible.length,
+          code: visible[0]?.textContent ?? '',
+          file: fileEl.textContent,
+          href: fileEl.getAttribute('href'),
+          install: document.querySelector('[data-install]')?.textContent ?? '',
+          // Rounded because a fractional line-height leaves sub-pixel noise.
+          height: Math.round(
+            document.querySelector('.ms-code__panes').getBoundingClientRect().height,
+          ),
+        };
+      }),
+    );
+  }
+  return seen;
+}
+
+// One case per demo page. `expect` is matched against the snippet each tab
+// shows, which is what catches a page wiring up the wrong snippet set.
+const TAB_PAGES = [
+  {
+    name: 'STT',
+    url: '/stt/?local=1&assets=local',
+    labels: ['JavaScript', 'Python', 'Swift', 'Android'],
+    files: [
+      'live-transcription.js',
+      'mic_transcription.py',
+      'TranscriberApp.swift',
+      'MainActivity.java',
+    ],
+    expect: [
+      /import \{ MicTranscriber/,
+      /from moonshine_voice import MicTranscriber/,
+      /try await mic\.load\(\)/,
+      /new MicTranscriber\(this\)/,
+    ],
+    installs: [
+      'npm i @moonshine-ai/moonshine-wasm',
+      'pip install moonshine-voice',
+      'https://github.com/moonshine-ai/moonshine-swift/',
+      'ai.moonshine:moonshine-voice:0.1.1',
+    ],
+  },
+  {
+    name: 'TTS',
+    url: '/tts/?local=1&assets=local&voice=kokoro_af_heart',
+    labels: ['JavaScript', 'Python', 'Swift', 'Android'],
+    files: ['speak.js', 'text_to_speech.py', 'TextToSpeechApp.swift', 'MainActivity.kt'],
+    expect: [
+      /import \{ TextToSpeech/,
+      /from moonshine_voice import TextToSpeech/,
+      /try await tts\.say\(/,
+      /val tts = TextToSpeech\(this\)/,
+    ],
+    installs: [
+      'npm i @moonshine-ai/moonshine-wasm',
+      'pip install moonshine-voice',
+      'https://github.com/moonshine-ai/moonshine-swift/',
+      'ai.moonshine:moonshine-voice:0.1.1',
+    ],
+  },
+  {
+    // No Android tab: there is no Android DialogFlow example to take one from.
+    name: 'Voice agent',
+    url: '/dialog-flow/?local=1&assets=local&nomic=1',
+    labels: ['JavaScript', 'Python', 'Swift'],
+    files: ['wifi-agent.js', 'dialog_flow.py', 'main.swift'],
+    expect: [/dialog\.listenFor\(/, /def setup_wifi\(d\):/, /func wifiSetup\(/],
+    installs: [
+      'npm i @moonshine-ai/moonshine-wasm',
+      'pip install moonshine-voice',
+      'https://github.com/moonshine-ai/moonshine-swift/',
+    ],
+  },
+];
+
+for (const page_ of TAB_PAGES) {
+  test(`${page_.name} example shows one snippet per language, without resizing`, { skip }, async () => {
+    const page = await openPage(page_.url);
+    try {
+      const seen = await walkLanguageTabs(page);
+      assert.deepEqual(
+        seen.map((pane) => pane.label),
+        page_.labels,
+      );
+
+      for (const [i, pane] of seen.entries()) {
+        assert.equal(pane.visible, 1, `${pane.label} should show exactly one snippet`);
+        // Each tab shows its own language, not copies of the JavaScript one.
+        assert.match(pane.code, page_.expect[i], `${page_.name} ${pane.label} snippet`);
+        // The caption links to the file it names, on the main branch.
+        assert.ok(
+          pane.href?.startsWith('https://github.com/moonshine-ai/moonshine/blob/main/examples/'),
+          `${pane.label} caption should link to its source, got ${pane.href}`,
+        );
+      }
+
+      assert.deepEqual(
+        seen.map((pane) => pane.file),
+        page_.files,
+      );
+      assert.deepEqual(
+        seen.map((pane) => pane.install),
+        page_.installs,
+      );
+
+      // The panel reserves room for the longest snippet, so choosing a language
+      // never shifts the rest of the page under the reader.
+      const heights = new Set(seen.map((pane) => pane.height));
+      assert.equal(heights.size, 1, `panel height changed between tabs: ${[...heights]}`);
+    } finally {
+      await page.close();
+    }
+  });
+}
+
+test('Voice agent highlight follows the reader between languages', { skip }, async () => {
+  const page = await openPage('/dialog-flow/?local=1&assets=local&nomic=1');
+  try {
+    await page.waitForSelector('.ms-code__tabs .ms-lang-tab');
+
+    // Park the flow on a step without running a conversation, which needs
+    // models and a lot of time. The page's own step() is not reachable from
+    // here, so drive markCodeStep the way it does.
+    const highlighted = async (tabIndex, lineNumber) => {
+      await page.click(`.ms-code__tabs .ms-lang-tab:nth-child(${tabIndex + 1})`);
+      return page.evaluate(async (line) => {
+        const ui = await import('/assets/moonshine-ui.js');
+        ui.markCodeStep(document.getElementById('code'), line);
+        const marked = document.querySelectorAll('.ms-line.is-running');
+        return { count: marked.length, text: marked[0]?.textContent ?? '' };
+      }, lineNumber);
+    };
+
+    // "confirmApply" is line 7 in JavaScript and Python but line 8 in Swift,
+    // which is the reason each snippet carries its own step map.
+    const js = await highlighted(0, 7);
+    assert.equal(js.count, 1, 'exactly one line should be lit, in the open tab only');
+    assert.match(js.text, /Apply these changes\?/);
+
+    const swift = await highlighted(2, 8);
+    assert.equal(swift.count, 1);
+    assert.match(swift.text, /Apply these changes\?/);
+    assert.match(swift.text, /try await/, 'expected the Swift line, not the JavaScript one');
+  } finally {
+    await page.close();
+  }
+});
+
 // Chrome maintains its own "default" capture device, and when it disagrees with
 // the operating system's it returns a live track of digital silence rather than
 // an error. The only reliable workaround is naming a device explicitly, so the

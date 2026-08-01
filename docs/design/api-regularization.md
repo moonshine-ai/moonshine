@@ -428,28 +428,88 @@ directory rather than two named files, and the microphone smoke test now checks
 the module reached the capture device rather than merely avoiding an argparse
 error.
 
-## Phase 5: language tabs on the web pages
+## Phase 5: language tabs on the web pages (built, on all three)
 
-The original motivation. Once phase 4 exists, the code panel on each demo page
-gains a tab strip and pulls its content from the generated snippet module.
+The original motivation, and now standing on all three demo pages ahead of phase
+4, to see how it reads before committing to the extraction machinery. The tabs
+are real; only their source is provisional.
 
-Investigation of the layout risk is already done. The panel is `0.82rem` type at
-`line-height: 1.7`, so a line of code is 22.3px and the current nine-line
-JavaScript sample renders at about 266px. The four microphone snippets land
-within about four lines of each other, so reserving the tallest costs at most
-about 90px of dead space and removes any movement on switching. The tab strip
-itself is one row of chips.
+The layout risk turned out to be smaller than the estimate. Reserving the
+tallest snippet costs about 46px of dead space on the speech to text page, not
+the 90px predicted, because the four microphone samples land within two lines of
+each other rather than four. The reservation needs no measuring: the panes share
+one CSS grid cell and the inactive ones are `visibility: hidden`, so the panel is
+always as tall as the longest and switching language moves nothing below it. A
+test drives every tab on every page and asserts the height does not change.
 
-Two things still need doing in that phase: `highlight()` in
-`examples/web/assets/moonshine-ui.js` only understands JavaScript, matching `//`
-comments and a JavaScript keyword list, so it needs a per-language keyword set
-and comment pattern. And the install line beneath the panel is hardcoded to
-`npm i @moonshine-ai/moonshine-wasm` and needs to swap with the tab, to
-`pip install moonshine-voice`, the Swift Package Manager URL, or the
-`ai.moonshine:moonshine-voice` Gradle coordinate.
+The three things that phase called out are done.
 
-The heading on the speech to text and text to speech pages currently reads "The
-code behind this page", which stops being true once there is a Python tab.
+`highlight()` takes a language and looks up a keyword list, a comment pattern and
+a method-call pattern per language. Swift needs its own call pattern, because
+`.onText { … }` is a call with a trailing closure and the JavaScript pattern only
+recognises one followed by `(`. Fixed while in there: strings are now stashed
+before the comment scan rather than after, so a `//` inside a string is no longer
+mistaken for the start of a comment.
+
+The install line swaps with the tab, and carries an optional hint for the two
+where pasting the line somewhere is not the obvious move: `Xcode ▸ Add Package
+Dependencies…` beside the Swift Package Manager URL, and `build.gradle.kts
+dependencies` beside the Gradle coordinate.
+
+The headings that read "The code behind this page" now read "Live transcription,
+in your language" and "Speech synthesis, in your language", each with a hint
+saying the JavaScript tab is the code running on this page — which keeps the
+claim the old heading was making, and confines it to the tab where it is true.
+
+One collision worth recording: the site navigation already owns `.ms-tab`, so
+the language tabs are `.ms-lang-tab`. On a narrow screen they scroll sideways
+rather than wrapping, so the Copy button is never pushed onto a line of its own,
+and the filename caption is hidden below `40rem` because the active tab already
+says which language it is.
+
+### The caption links to the source
+
+Each snippet carries a repository-relative `path`, and the filename caption is an
+anchor to it on the main branch — a tag would rot as the examples move between
+releases. A snippet without a path stays a plain caption rather than becoming a
+link to nowhere. A test asserts every path resolves to a file that exists, so a
+moved example fails the suite rather than shipping a 404 to a reader.
+
+### The voice agent page, which follows along as it runs
+
+That page highlights the line the conversation is parked on, so its tabs need
+more than a listing swap: the same flow lands on different lines in each
+language, because Swift's `guard` needs a closing brace where JavaScript's `if`
+does not. Each snippet therefore carries its own `steps` map, `codePanel` gained
+an `onTab` callback, and the page remembers which step it is on so switching
+language mid-conversation moves the highlight to the equivalent line rather than
+dropping it.
+
+This is also the one page whose snippets are not lifted verbatim: each is the
+page's own trimmed flow written against that language's real API. A test checks
+every step lands on a line mentioning the call it claims to be, which is the
+part a careless edit would silently break.
+
+Building it caught a real bug in `markCodeStep`, which cleared only the open
+pane. The language a reader switched away from kept its highlight, waiting to
+reappear on the way back. It now clears every pane and marks only the open one.
+
+### What is still provisional
+
+`examples/web/assets/snippets.js` is hand-copied from the real examples and
+nothing checks that the code itself stays in step with them, only that the files
+it names still exist. Phase 4 replaces that file with a generated one; it exports
+the shape the generator should emit, so the pages should not need touching again.
+Until then, an example that changes leaves the web page quietly stale, which is
+the whole problem phase 4 exists to solve.
+
+Two tabs are honest about gaps in the matrix rather than papering over them. The
+Android text to speech tab is Kotlin and stops after `say`, because that is what
+`examples/android/TextToSpeech` is and does; the Swift cloning lines on that page
+come from the macOS example, since the iOS one does not clone. And the voice
+agent page has three tabs, not four, because there is no Android DialogFlow
+example to take a fourth from — the Java binding has the class, the matrix has
+the hole. All three close in phase 3.
 
 ## Sequencing
 
