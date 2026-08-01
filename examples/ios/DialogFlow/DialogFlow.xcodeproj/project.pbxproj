@@ -11,13 +11,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		A10001052F0762A100CE654A /* TextToSpeech.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TextToSpeech.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10001052F0762A100CE654A /* DialogFlow.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DialogFlow.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		A10001062F0762A100CE654A /* TextToSpeech */ = {
+		A10001062F0762A100CE654A /* DialogFlow */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = TextToSpeech;
+			path = DialogFlow;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -37,7 +37,7 @@
 		A10001082F0762A100CE654A = {
 			isa = PBXGroup;
 			children = (
-				A10001062F0762A100CE654A /* TextToSpeech */,
+				A10001062F0762A100CE654A /* DialogFlow */,
 				A10001092F0762A100CE654A /* Products */,
 			);
 			sourceTree = "<group>";
@@ -45,7 +45,7 @@
 		A10001092F0762A100CE654A /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A10001052F0762A100CE654A /* TextToSpeech.app */,
+				A10001052F0762A100CE654A /* DialogFlow.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -53,9 +53,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		A100010A2F0762A100CE654A /* TextToSpeech */ = {
+		A100010A2F0762A100CE654A /* DialogFlow */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A100010B2F0762A200CE654A /* Build configuration list for PBXNativeTarget "TextToSpeech" */;
+			buildConfigurationList = A100010B2F0762A200CE654A /* Build configuration list for PBXNativeTarget "DialogFlow" */;
 			buildPhases = (
 				A100010C2F0762A100CE654A /* Sources */,
 				A10001072F0762A100CE654A /* Frameworks */,
@@ -66,14 +66,14 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				A10001062F0762A100CE654A /* TextToSpeech */,
+				A10001062F0762A100CE654A /* DialogFlow */,
 			);
-			name = TextToSpeech;
+			name = DialogFlow;
 			packageProductDependencies = (
 				A10001022F0762A200CE654C /* MoonshineVoice */,
 			);
-			productName = TextToSpeech;
-			productReference = A10001052F0762A100CE654A /* TextToSpeech.app */;
+			productName = DialogFlow;
+			productReference = A10001052F0762A100CE654A /* DialogFlow.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -91,7 +91,7 @@
 					};
 				};
 			};
-			buildConfigurationList = A100010F2F0762A100CE654A /* Build configuration list for PBXProject "TextToSpeech" */;
+			buildConfigurationList = A100010F2F0762A100CE654A /* Build configuration list for PBXProject "DialogFlow" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -108,7 +108,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				A100010A2F0762A100CE654A /* TextToSpeech */,
+				A100010A2F0762A100CE654A /* DialogFlow */,
 			);
 		};
 /* End PBXProject section */
@@ -264,7 +264,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app records a few seconds of your speech so it can synthesize new speech in your voice.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app listens for spoken answers so you can work through the setup by voice.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -274,7 +274,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.moonshine.TextToSpeech;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.moonshine.DialogFlow;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -293,7 +293,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app records a few seconds of your speech so it can synthesize new speech in your voice.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app listens for spoken answers so you can work through the setup by voice.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -303,7 +303,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.moonshine.TextToSpeech;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.moonshine.DialogFlow;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -314,7 +314,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A100010B2F0762A200CE654A /* Build configuration list for PBXNativeTarget "TextToSpeech" */ = {
+		A100010B2F0762A200CE654A /* Build configuration list for PBXNativeTarget "DialogFlow" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A10001132F0762A200CE654A /* Debug */,
@@ -323,7 +323,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A100010F2F0762A100CE654A /* Build configuration list for PBXProject "TextToSpeech" */ = {
+		A100010F2F0762A100CE654A /* Build configuration list for PBXProject "DialogFlow" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A10001112F0762A200CE654A /* Debug */,

@@ -661,6 +661,7 @@ g2p.to_ipa("Hello world")
 The [`examples`](examples/) folder has code samples organized by platform. We use the usual tooling per stack (Android Studio and Gradle, Xcode and Swift on Apple platforms, Visual Studio on Windows). [GitHub Releases](https://github.com/moonshine-ai/moonshine/releases/latest) currently ship the downloadable assets below (example trees are mostly named **`{platform}-{Project}.tar.gz`**; Windows and C++ also include prebuilt native library bundles).
 
 - **[Android](examples/android/)**
+  - [DialogFlow](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-DialogFlow.tar.gz)
   - [TextToSpeech](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-TextToSpeech.tar.gz)
   - [Transcriber](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-Transcriber.tar.gz)
 - **[Portable C++](examples/c++/README.md)**
@@ -668,6 +669,7 @@ The [`examples`](examples/) folder has code samples organized by platform. We us
   - [transcriber.cpp](examples/c++/transcriber.cpp)
   - [text-to-speech.cpp](examples/c++/text-to-speech.cpp)
 - **[iOS](examples/ios/)**
+  - [DialogFlow](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-DialogFlow.tar.gz)
   - [TextToSpeech](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-TextToSpeech.tar.gz)
   - [Transcriber](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-Transcriber.tar.gz)
 - **[MacOS](examples/macos/)**
@@ -680,6 +682,7 @@ The [`examples`](examples/) folder has code samples organized by platform. We us
 - **[Python](examples/python/)**
   - [basic_transcription.py](examples/python/basic_transcription.py)
   - [mic_transcription.py](examples/python/mic_transcription.py)
+  - [text_to_speech.py](examples/python/text_to_speech.py)
   - [dialog_flow.py](examples/python/dialog_flow.py)
   - [ollama-voice/ollama_voice.py](examples/python/ollama-voice/ollama_voice.py )
 - **[Raspberry Pi](examples/raspberry-pi/)**
@@ -688,7 +691,7 @@ The [`examples`](examples/) folder has code samples organized by platform. We us
 
 The examples usually include one minimal project that just creates a transcriber and then feeds it data from a WAV file, and another that's pulling audio from a microphone using the platform's default framework for accessing audio devices. Each one is a self-contained project you can copy out of the tree: the Android samples depend on **`ai.moonshine:moonshine-voice:0.1.1`** from Maven Central, and the Apple ones pull **`MoonshineVoice`** from the Swift package.
 
-None of them bundle model weights. Every engine downloads what it needs on first use — the speech model for [`Transcriber`](examples/android/Transcriber/), the voice and G2P assets for [`TextToSpeech`](examples/android/TextToSpeech/), the embedding model for `DialogFlow` — from `https://download.moonshine.ai/`, reporting progress through the `onProgress` callback the examples wire up to a label. Downloads are cached (under `filesDir` on Android, `Caches/MoonshineModels` on Apple platforms), so later launches run offline. Switching to a different voice triggers the same on-demand download for whatever that voice needs.
+None of them bundle model weights. Every engine downloads what it needs on first use — the speech model for [`Transcriber`](examples/android/Transcriber/), the voice and G2P assets for [`TextToSpeech`](examples/android/TextToSpeech/), all three plus the embedding model for [`DialogFlow`](examples/android/DialogFlow/) — from `https://download.moonshine.ai/`, reporting progress through the `onProgress` callback the examples wire up to a label. Downloads are cached (under `filesDir` on Android, `Caches/MoonshineModels` on Apple platforms), so later launches run offline. Switching to a different voice triggers the same on-demand download for whatever that voice needs.
 
 If you want a fully offline build with no first-run download, fetch the assets ahead of time and point the engine at them with `modelsFrom(path)`; see [`docs/design/api-comparison.md`](docs/design/api-comparison.md) for the tradeoff.
 

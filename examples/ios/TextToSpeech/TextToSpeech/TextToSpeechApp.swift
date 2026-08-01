@@ -88,9 +88,28 @@ class TTSModel: ObservableObject {
     @Published var downloadStatus: DownloadStatus? = nil
     @Published var errorMessage: String? = nil
 
+    /// Recording or cloning is under way, so the record button is busy.
+    @Published var isCloning: Bool = false
+    /// The synthesizer is speaking in a voice cloned from the microphone.
+    @Published var isCloned: Bool = false
+    /// One line of running commentary for the cloning panel.
+    @Published var cloneStatus: String? = nil
+
     private var tts: MoonshineVoice.TextToSpeech? = nil
+    /// Whether `tts` was built with `cloning()`. Cloning lives on the ZipVoice
+    /// engine, so a synthesizer built for a preset voice cannot clone and has to
+    /// be replaced before recording.
+    private var hasCloningEngine: Bool = false
 
     func initialize() {
+        activatePlayback()
+        Task { await bootstrap() }
+    }
+
+    /// Points the shared audio session back at playback. Worth doing more than
+    /// once: capturing a clone takes the session over for recording and
+    /// deactivates it afterwards, which leaves `say` with nowhere to play.
+    private func activatePlayback() {
         #if os(iOS)
             do {
                 let session = AVAudioSession.sharedInstance()
@@ -100,8 +119,6 @@ class TTSModel: ObservableObject {
                 print("Audio session setup warning: \(error)")
             }
         #endif
-
-        Task { await bootstrap() }
     }
 
     // MARK: - Bootstrap
@@ -133,6 +150,9 @@ class TTSModel: ObservableObject {
 
     func changeVoice(_ voice: TtsVoice?) {
         selectedVoice = voice
+        // Picking a preset is how you get your own voice back off the engine.
+        isCloned = false
+        cloneStatus = nil
         Task { await createSynthesizer(voice: voice?.id) }
     }
 
@@ -155,10 +175,14 @@ class TTSModel: ObservableObject {
     /// Builds a synthesizer for `voice`, downloading whatever it needs. The
     /// engine reports its own progress as a `0..1` fraction, so the app no
     /// longer decides which files to fetch or where to put them.
-    private func createSynthesizer(voice: String?) async {
+    ///
+    /// Pass `cloning: true` for a synthesizer that can take a voice from a
+    /// recording. That one ignores `voice`, because a cloned voice comes from
+    /// the clip rather than from the catalogue.
+    private func createSynthesizer(voice: String?, cloning: Bool = false) async {
         errorMessage = nil
         isReady = false
-        isDownloading = selectedVoice?.needsDownload != false
+        isDownloading = cloning || selectedVoice?.needsDownload != false
 
         let instance = MoonshineVoice.TextToSpeech()
             .language(selectedLanguage.id)
@@ -167,13 +191,22 @@ class TTSModel: ObservableObject {
                     fileName: (file as NSString).lastPathComponent, fraction: fraction)
                 Task { @MainActor in self?.downloadStatus = snapshot }
             }
-        if let voice { instance.voice(voice) }
+        if cloning {
+            // Pulls the cloning engine down during load, so the first
+            // cloneFrom() after a recording does not go back to the network.
+            instance.cloning()
+        } else if let voice {
+            instance.voice(voice)
+        }
 
         do {
             try await instance.load()
             tts?.close()
             tts = instance
-            isReady = true
+            hasCloningEngine = cloning
+            // Loading a cloning engine only fetches its assets; there is no voice
+            // to speak in until a clip has been recorded into it.
+            isReady = !cloning
         } catch {
             instance.close()
             errorMessage = "Failed to create synthesizer: \(error.localizedDescription)"
@@ -182,6 +215,84 @@ class TTSModel: ObservableObject {
         isDownloading = false
         // Refresh voice states once everything is on disk.
         refreshVoices(preferVoice: voice)
+    }
+
+    // MARK: - Voice cloning
+
+    /// Records a few seconds from the microphone and rebuilds the voice from it.
+    ///
+    /// Everything here is the library's: it finds the speech in the recording,
+    /// transcribes the clip to condition the model, and swaps the voice on the
+    /// synthesizer already loaded. The app supplies a button and a status line.
+    func cloneFromMicrophone() {
+        guard !isCloning else { return }
+        isCloning = true
+        errorMessage = nil
+        cloneStatus = "Asking for the microphone…"
+
+        Task {
+            do {
+                // Cloning only exists on ZipVoice, so switch engines behind the
+                // scenes rather than making that the reader's problem.
+                if !hasCloningEngine {
+                    cloneStatus = "Fetching the cloning engine, first time only…"
+                    await createSynthesizer(voice: nil, cloning: true)
+                }
+                guard let tts, hasCloningEngine else {
+                    throw CloneError.engineUnavailable
+                }
+
+                let clone = tts.startCloning()
+                    .onProgress { [weak self] recorded, speech in
+                        Task { @MainActor in
+                            self?.cloneStatus = String(
+                                format: "Listening… %.1fs recorded, %.1fs of speech",
+                                recorded, speech)
+                        }
+                    }
+                    .onReady { [weak self] in
+                        Task { @MainActor in
+                            self?.cloneStatus = "Got enough. You can stop talking."
+                        }
+                    }
+
+                _ = try await clone.fromMicrophone()
+                // Capture leaves the audio session deactivated, and `say` is
+                // about to need it.
+                activatePlayback()
+                cloneStatus = "Trimming and transcribing your clip…"
+
+                try await tts.cloneFrom(clone)
+                isCloned = true
+                isReady = true
+                selectedVoice = nil
+                let seconds = Double(clone.audio?.count ?? 0) / Double(max(clone.sampleRate, 1))
+                cloneStatus = String(
+                    format: "Cloned from %.1fs of your speech. Type something and press Speak.",
+                    seconds)
+            } catch {
+                activatePlayback()
+                cloneStatus = nil
+                errorMessage = "Cloning failed: \(error.localizedDescription)"
+                // A cloning engine with nothing cloned into it cannot speak, so
+                // put a working preset voice back.
+                if hasCloningEngine && !isCloned {
+                    await createSynthesizer(voice: selectedVoice?.id)
+                }
+            }
+            isCloning = false
+        }
+    }
+
+    enum CloneError: LocalizedError {
+        case engineUnavailable
+
+        var errorDescription: String? {
+            switch self {
+            case .engineUnavailable:
+                return "The cloning engine could not be loaded."
+            }
+        }
     }
 
     // MARK: - Voice list

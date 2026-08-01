@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Moonshine Voice Agent</string>
+    <string name="start_listening">Start listening</string>
+    <string name="stop_listening">Stop</string>
+    <string name="loading">Downloading models (first run only)…</string>
+    <string name="hint_type_instead">Type an utterance instead…</string>
+    <string name="send">Send</string>
+    <string name="prompt">Say &#8220;set up wifi&#8221; to begin. &#8220;Cancel&#8221; and &#8220;start over&#8221; work at any point.</string>
+</resources>

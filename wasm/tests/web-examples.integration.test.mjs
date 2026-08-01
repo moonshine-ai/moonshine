@@ -225,12 +225,12 @@ const TAB_PAGES = [
     name: 'TTS',
     url: '/tts/?local=1&assets=local&voice=kokoro_af_heart',
     labels: ['JavaScript', 'Python', 'Swift', 'Android'],
-    files: ['speak.js', 'text_to_speech.py', 'TextToSpeechApp.swift', 'MainActivity.kt'],
+    files: ['speak.js', 'text_to_speech.py', 'TextToSpeechApp.swift', 'MainActivity.java'],
     expect: [
       /import \{ TextToSpeech/,
       /from moonshine_voice import TextToSpeech/,
       /try await tts\.say\(/,
-      /val tts = TextToSpeech\(this\)/,
+      /TextToSpeech tts = new TextToSpeech\(this\)/,
     ],
     installs: [
       'npm i @moonshine-ai/moonshine-wasm',
@@ -240,16 +240,21 @@ const TAB_PAGES = [
     ],
   },
   {
-    // No Android tab: there is no Android DialogFlow example to take one from.
     name: 'Voice agent',
     url: '/dialog-flow/?local=1&assets=local&nomic=1',
-    labels: ['JavaScript', 'Python', 'Swift'],
-    files: ['wifi-agent.js', 'dialog_flow.py', 'main.swift'],
-    expect: [/dialog\.listenFor\(/, /def setup_wifi\(d\):/, /func wifiSetup\(/],
+    labels: ['JavaScript', 'Python', 'Swift', 'Android'],
+    files: ['wifi-agent.js', 'dialog_flow.py', 'DialogFlowApp.swift', 'MainActivity.java'],
+    expect: [
+      /dialog\.listenFor\(/,
+      /def setup_wifi\(d\):/,
+      /func wifiSetup\(/,
+      /private void wifiSetup\(DialogFlow\.Dialog d\)/,
+    ],
     installs: [
       'npm i @moonshine-ai/moonshine-wasm',
       'pip install moonshine-voice',
       'https://github.com/moonshine-ai/moonshine-swift/',
+      'ai.moonshine:moonshine-voice:0.1.1',
     ],
   },
 ];

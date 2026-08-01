@@ -37,17 +37,18 @@ the low-level type alone, and none of the three demo components need it.
 
 ## The example matrix
 
-Three components, four languages. Twelve cells, seven of them currently filled.
+Three components, four languages. Twelve cells, all of them now filled.
 
 | | Web | Python | Swift (iOS) | Android |
 | --- | --- | --- | --- | --- |
 | Microphone speech to text | done | done | done | done, Java |
-| Text to speech with cloning | done | done | no cloning | no cloning, Kotlin |
-| DialogFlow agent | done | done | missing | missing |
+| Text to speech with cloning | done | done | done | done, Java |
+| DialogFlow agent | done | done | done | done, Java |
 
-The macOS command line examples are a useful head start on the Swift gaps:
-`examples/macos/DialogFlow` and `examples/macos/TextToSpeech --clone` are
-working implementations of both.
+The macOS command line examples were the head start on the Swift gaps:
+`examples/macos/DialogFlow` and `examples/macos/TextToSpeech --clone` are the
+implementations the iOS apps were ported from, and they stay as the
+command-line versions.
 
 ## Phase 1: Python catches up (done)
 
@@ -354,7 +355,7 @@ not line up with JavaScript regardless, and the cost is a failure mode in
 applications that manage their own startup. If the asymmetry turns out to grate
 once the language tabs are live, it is an easy additive change to make later.
 
-## Phase 3: fill the example matrix
+## Phase 3: fill the example matrix (done)
 
 Blocked on phase 1 for Python and phase 2 for Swift.
 
@@ -362,14 +363,39 @@ Blocked on phase 1 for Python and phase 2 for Swift.
   is on the new API, and `examples/python/ollama-voice/ollama_voice.py` with it.
 - **Python text to speech.** Done: `examples/python/text_to_speech.py` covers
   speaking, cloning from a file, and cloning from the microphone.
-- **iOS text to speech.** Add cloning to the existing app.
-  `examples/macos/TextToSpeech --clone` is the reference.
-- **iOS DialogFlow.** New Xcode project, porting `examples/macos/DialogFlow`.
-- **Android text to speech.** Rewrite from Kotlin to Java and add cloning. This
-  leaves the repository with no Kotlin example, which is accepted: the Java API
-  is callable from Kotlin unchanged, and one language per platform keeps the
+- **iOS text to speech.** Done: a cloning panel records from the microphone and
+  swaps the voice on the loaded synthesizer.
+- **iOS DialogFlow.** Done: new Xcode project, ported from
+  `examples/macos/DialogFlow`.
+- **Android text to speech.** Done: rewritten from Kotlin to Java, with cloning.
+  This leaves the repository with no Kotlin example, which is accepted: the Java
+  API is callable from Kotlin unchanged, and one language per platform keeps the
   snippet tabs honest.
-- **Android DialogFlow.** New Gradle project in Java.
+- **Android DialogFlow.** Done: new Gradle project in Java.
+
+### What the mobile cloning apps had to work out
+
+Both mobile text-to-speech apps hit the same two things, neither of which the
+command-line references show, because a CLI that clones does nothing else.
+
+**Cloning means a different engine.** It only exists on ZipVoice, so a
+synthesizer built for a catalogue voice cannot clone. Both apps do what the web
+page does and switch engines behind the scenes when the record button is
+pressed, rather than making the visitor pick an engine first. That download is
+also why cloning is a second button and not something every reader pays for at
+launch. Picking a preset voice afterwards switches back, which is the only way
+back to a catalogue voice.
+
+The two platforms differ in what that leaves behind. Java's `load()` on a
+cloning synthesizer fetches assets without building a handle, so between the
+engine swap and a successful `cloneFrom` there is a synthesizer that cannot
+speak; the Android app holds `engineReady` false across that window and rebuilds
+the preset voice if the recording fails. Swift has no equivalent gap.
+
+**iOS has to put the audio session back.** The library takes the shared session
+over for recording and deactivates it when it is done, so an app that set
+`.playback` at launch finds `say` playing into nothing after its first
+recording. `TTSModel.activatePlayback()` is called again after capture.
 
 Each Android example is a standalone Gradle project with its own wrapper,
 settings file and version catalog. There is no shared parent build, so a new
@@ -515,13 +541,11 @@ the shape the generator should emit, so the pages should not need touching again
 Until then, an example that changes leaves the web page quietly stale, which is
 the whole problem phase 4 exists to solve.
 
-Two tabs are honest about gaps in the matrix rather than papering over them. The
-Android text to speech tab is Kotlin and stops after `say`, because that is what
-`examples/android/TextToSpeech` is and does; the Swift cloning lines on that page
-come from the macOS example, since the iOS one does not clone. And the voice
-agent page has three tabs, not four, because there is no Android DialogFlow
-example to take a fourth from — the Java binding has the class, the matrix has
-the hole. All three close in phase 3.
+All three pages now carry four tabs each, and every one links to an example that
+does what the tab shows. Phase 3 closed the three that used to be honest about
+gaps: the Android text to speech tab was Kotlin and stopped after `say`, its
+Swift cloning lines came from the macOS example rather than the iOS one, and the
+voice agent page had no Android tab at all.
 
 ## Sequencing
 

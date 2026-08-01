@@ -6,36 +6,45 @@ struct ContentView: View {
     @State private var inputText: String = ""
     @FocusState private var textFieldFocused: Bool
 
+    /// Stands in for "no catalogue voice selected", which is the state while a
+    /// clone is in use or before the first voice list arrives.
+    private static let placeholderVoice = TtsVoice(
+        id: "", displayName: "", needsDownload: false)
+
     var body: some View {
         NavigationView {
-            VStack(spacing: 20) {
-                languagePicker
-                voicePicker
+            ScrollView {
+                VStack(spacing: 20) {
+                    languagePicker
+                    voicePicker
 
-                Divider()
+                    Divider()
 
-                TextField("Enter text to speak...", text: $inputText, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(3...6)
-                    .padding(.horizontal)
-                    .focused($textFieldFocused)
-                    .submitLabel(.done)
-                    .onSubmit { speakCurrentText() }
-
-                speakButton
-
-                if let error = model.errorMessage {
-                    Text(error)
-                        .foregroundColor(.red)
-                        .font(.caption)
+                    TextField("Enter text to speak...", text: $inputText, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .lineLimit(3...6)
                         .padding(.horizontal)
+                        .focused($textFieldFocused)
+                        .submitLabel(.done)
+                        .onSubmit { speakCurrentText() }
+
+                    speakButton
+
+                    if let error = model.errorMessage {
+                        Text(error)
+                            .foregroundColor(.red)
+                            .font(.caption)
+                            .padding(.horizontal)
+                    }
+
+                    progressSection
+
+                    Divider()
+
+                    cloningSection
                 }
-
-                progressSection
-
-                Spacer()
+                .padding(.vertical)
             }
-            .padding(.top)
             .navigationTitle("Moonshine TTS")
             .navigationBarTitleDisplayMode(.inline)
             .disabled(model.isDownloading || model.isBootstrapping)
@@ -68,12 +77,15 @@ struct ContentView: View {
             Picker(
                 "Voice",
                 selection: Binding(
-                    get: {
-                        model.selectedVoice
-                            ?? TtsVoice(id: "", displayName: "", needsDownload: false)
-                    },
+                    get: { model.selectedVoice ?? Self.placeholderVoice },
                     set: { model.changeVoice($0.id.isEmpty ? nil : $0) })
             ) {
+                // A cloned voice is not in the catalogue, so it needs a row of
+                // its own for the picker to have something to show.
+                if model.selectedVoice == nil {
+                    Text(model.isCloned ? "Your voice" : "")
+                        .tag(Self.placeholderVoice)
+                }
                 ForEach(model.availableVoices) { voice in
                     Text(voice.displayName).tag(voice)
                 }
@@ -106,7 +118,58 @@ struct ContentView: View {
             && !model.isSpeaking
             && !model.isDownloading
             && !model.isBootstrapping
-            && (model.selectedVoice?.needsDownload == false)
+            && !model.isCloning
+            // A cloned voice came from the recording rather than the catalogue,
+            // so there is no selected voice to be waiting on a download.
+            && (model.isCloned || model.selectedVoice?.needsDownload == false)
+    }
+
+    /// Record a few seconds and speak in that voice from then on. The engine it
+    /// needs is a separate download, so this is deliberately a second step
+    /// rather than something every reader pays for on launch.
+    @ViewBuilder
+    private var cloningSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Clone your voice")
+                .font(.headline)
+            Text(
+                "Record about four seconds of speech and the synthesizer will "
+                    + "answer in your voice. The recording never leaves the device."
+            )
+            .font(.caption)
+            .foregroundColor(.secondary)
+
+            Button(action: { model.cloneFromMicrophone() }) {
+                HStack {
+                    Image(systemName: model.isCloning ? "waveform" : "mic.fill")
+                    Text(recordButtonTitle)
+                }
+                .font(.body.weight(.semibold))
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(model.isCloning ? Color.gray : Color.red)
+                .foregroundColor(.white)
+                .cornerRadius(12)
+            }
+            .disabled(model.isCloning || model.isBootstrapping)
+
+            if let status = model.cloneStatus {
+                Text(status)
+                    .font(.caption)
+                    .foregroundColor(model.isCloned ? .green : .secondary)
+            }
+            if model.isCloned {
+                Text("Pick a voice above to go back to a preset one.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.horizontal)
+    }
+
+    private var recordButtonTitle: String {
+        if model.isCloning { return "Listening…" }
+        return model.isCloned ? "Record again" : "Record four seconds"
     }
 
     @ViewBuilder

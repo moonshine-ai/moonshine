@@ -7,6 +7,15 @@
     <string name="voice_label">Voice</string>
     <string name="hint_enter_text">Enter text to speak…</string>
     <string name="initializing">Initializing TTS…</string>
+    <string name="fetching_cloning">Fetching the cloning engine, first time only…</string>
     <string name="downloading_asset">Downloading %1$s</string>
     <string name="voice_suffix_downloadable">(tap to download)</string>
+    <string name="clone_title">Clone your voice</string>
+    <string name="clone_explainer">Record about four seconds of speech and the synthesizer will answer in your voice. The recording never leaves the device.</string>
+    <string name="record">Record four seconds</string>
+    <string name="record_again">Record again</string>
+    <string name="recording">Listening…</string>
+    <string name="clone_asking">Asking for the microphone…</string>
+    <string name="clone_enough">Got enough. You can stop talking.</string>
+    <string name="clone_trimming">Trimming and transcribing your clip…</string>
 </resources>

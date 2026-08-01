@@ -39,8 +39,10 @@ KNOWN_FILES=(
 	./examples/macos/DialogFlow/Package.swift
 	./examples/ios/Transcriber/Transcriber.xcodeproj/project.pbxproj
 	./examples/ios/TextToSpeech/TextToSpeech.xcodeproj/project.pbxproj
+	./examples/ios/DialogFlow/DialogFlow.xcodeproj/project.pbxproj
 	./examples/android/Transcriber/gradle/libs.versions.toml
 	./examples/android/TextToSpeech/gradle/libs.versions.toml
+	./examples/android/DialogFlow/gradle/libs.versions.toml
 	./scripts/build-wasm.sh
 	./scripts/publish-swift.sh
 	./scripts/publish-binary.sh

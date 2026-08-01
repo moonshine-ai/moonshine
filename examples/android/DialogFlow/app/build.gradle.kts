@@ -3,11 +3,11 @@ plugins {
 }
 
 android {
-    namespace = "ai.moonshine.examples.texttospeech"
+    namespace = "ai.moonshine.examples.dialogflow"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "ai.moonshine.examples.texttospeech"
+        applicationId = "ai.moonshine.examples.dialogflow"
         minSdk = 26
         targetSdk = 35
         versionCode = 1

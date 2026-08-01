@@ -25,14 +25,12 @@ export const INSTALL = {
   python: 'pip install moonshine-voice',
   swift: 'https://github.com/moonshine-ai/moonshine-swift/',
   java: 'ai.moonshine:moonshine-voice:0.1.1',
-  kotlin: 'ai.moonshine:moonshine-voice:0.1.1',
 };
 
 /** Says where the install line goes, for the tabs where that is not obvious. */
 export const INSTALL_HINT = {
   swift: 'Xcode ▸ Add Package Dependencies…',
   java: 'build.gradle.kts dependencies',
-  kotlin: 'build.gradle.kts dependencies',
 };
 
 /** Attaches the install line and hint that go with each tab's language. */
@@ -121,11 +119,10 @@ worker.execute(() -> {
 /**
  * Speech synthesis, and cloning a voice from a recording.
  *
- * The Swift cloning calls come from the macOS example rather than the iOS one,
- * which does not clone; `examples/macos/TextToSpeech --clone` is the working
- * implementation the example matrix points at. The Android sample is Kotlin and
- * does not clone at all, so its tab stops after `say`. Both gaps are phase 3
- * work in docs/design/api-regularization.md.
+ * Every tab clones, and each links to an example app that does. The mobile two
+ * record the reference clip from the microphone rather than reading a file, so
+ * their `cloneFrom` sits a few methods away from the `load` the anchor points
+ * at; `startCloning` and `fromMicrophone` are the calls to look for there.
  */
 export const TEXT_TO_SPEECH = [
   {
@@ -165,7 +162,7 @@ tts.say('Now I sound like you.')`,
     label: 'Swift',
     file: 'TextToSpeechApp.swift',
     path: 'examples/ios/TextToSpeech/TextToSpeech/TextToSpeechApp.swift',
-    lines: [163, 174],
+    lines: [187, 204],
     code: `let tts = MoonshineVoice.TextToSpeech()
     .language("en_us")
     .voice("kokoro_af_heart")
@@ -178,19 +175,23 @@ try await tts.cloneFrom(recording)
 try await tts.say("Now I sound like you.")`,
   },
   {
-    id: 'kotlin',
+    id: 'java',
     label: 'Android',
-    file: 'MainActivity.kt',
-    path: 'examples/android/TextToSpeech/app/src/main/java/ai/moonshine/examples/texttospeech/MainActivity.kt',
-    lines: [180, 190],
-    code: `val tts = TextToSpeech(this)
-    .language("en_us")
-    .voice("kokoro_af_heart")
+    file: 'MainActivity.java',
+    path: 'examples/android/TextToSpeech/app/src/main/java/ai/moonshine/examples/texttospeech/MainActivity.java',
+    lines: [281, 299],
+    code: `TextToSpeech tts = new TextToSpeech(this)
+        .language("en_us")
+        .voice("kokoro_af_heart");
 
-worker.execute {
-    tts.load()
-    tts.say("Hello from Moonshine.")
-}`,
+worker.execute(() -> {
+    tts.load();
+    tts.say("Hello from Moonshine.");
+
+    // Cloning: hand it a few seconds of speech and keep going.
+    tts.cloneFrom(recording);
+    tts.say("Now I sound like you.");
+});`,
   },
 ];
 
@@ -206,9 +207,6 @@ worker.execute {
  * `steps` maps each awaited call to its line, counting from zero. Editing a
  * snippet means renumbering its steps, and a test checks every one of them
  * lands on a line that mentions the call it claims to be.
- *
- * There is no Android tab because there is no Android DialogFlow example. The
- * Java binding has the class; the example matrix has the hole.
  */
 export const DIALOG_FLOW = [
   {
@@ -257,9 +255,9 @@ dialog.listen_for("set up wifi", setup_wifi)`,
   {
     id: 'swift',
     label: 'Swift',
-    file: 'main.swift',
-    path: 'examples/macos/DialogFlow/Sources/DialogFlow/main.swift',
-    lines: [10, 33],
+    file: 'DialogFlowApp.swift',
+    path: 'examples/ios/DialogFlow/DialogFlow/DialogFlowApp.swift',
+    lines: [24, 47],
     steps: { askSsid: 1, confirmSsid: 3, startOver: 4, confirmApply: 8, done: 9, unchanged: 11 },
     code: `func wifiSetup(_ d: Dialog) async throws {
     let ssid = try await d.ask("What's the name of your wifi network?")
@@ -277,5 +275,28 @@ dialog.listen_for("set up wifi", setup_wifi)`,
 }
 
 dialog.listenFor("set up wifi", wifiSetup)`,
+  },
+  {
+    id: 'java',
+    label: 'Android',
+    file: 'MainActivity.java',
+    path: 'examples/android/DialogFlow/app/src/main/java/ai/moonshine/examples/dialogflow/MainActivity.java',
+    lines: [41, 62],
+    steps: { askSsid: 1, confirmSsid: 2, startOver: 3, confirmApply: 7, done: 8, unchanged: 10 },
+    code: `private void wifiSetup(DialogFlow.Dialog d) {
+    String ssid = d.ask("What's the name of your wifi network?");
+    if (!d.confirm("I heard " + ssid + ". Is that right?")) {
+        d.say("No problem, let's start over.");
+        d.restart();
+    }
+
+    if (d.confirm("Apply these changes?")) {
+        d.say("Done. Connecting to " + ssid + ".");
+    } else {
+        d.say("Okay, nothing changed.");
+    }
+}
+
+dialog.listenFor("set up wifi", this::wifiSetup);`,
   },
 ];

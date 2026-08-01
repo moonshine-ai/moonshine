@@ -652,13 +652,6 @@ const LANGUAGES = {
       /\b(new|return|if|else|for|while|do|class|interface|extends|implements|public|private|protected|static|final|void|try|catch|finally|throw|throws|import|package|this|int|long|float|double|boolean|char|String|var|null|true|false)\b/g,
     comment: /(\/\/.*)$/,
   },
-  kotlin: {
-    keywords:
-      /\b(val|var|fun|return|if|else|when|for|while|do|class|object|interface|data|suspend|override|private|internal|public|import|package|this|try|catch|finally|throw|is|in|as|null|true|false)\b/g,
-    comment: /(\/\/.*)$/,
-    // Kotlin takes trailing closures too, so `worker.execute { … }` is a call.
-    call: /\.(\w+)(?=\s*[({])/g,
-  },
 };
 
 /** A string literal in any of the four languages above. */
