@@ -268,10 +268,12 @@ for (const page_ of TAB_PAGES) {
         assert.equal(pane.visible, 1, `${pane.label} should show exactly one snippet`);
         // Each tab shows its own language, not copies of the JavaScript one.
         assert.match(pane.code, page_.expect[i], `${page_.name} ${pane.label} snippet`);
-        // The caption links to the file it names, on the main branch.
-        assert.ok(
-          pane.href?.startsWith('https://github.com/moonshine-ai/moonshine/blob/main/examples/'),
-          `${pane.label} caption should link to its source, got ${pane.href}`,
+        // The caption links to the file it names, on the main branch, anchored
+        // at the lines the snippet came from.
+        assert.match(
+          pane.href ?? '',
+          /^https:\/\/github\.com\/moonshine-ai\/moonshine\/blob\/main\/examples\/\S+#L\d+-L\d+$/,
+          `${pane.label} caption should link to its source lines`,
         );
       }
 

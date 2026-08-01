@@ -39,11 +39,51 @@ test('every snippet carries what a tab needs to render', async (t) => {
         assert.ok(snippet.file, `${snippet.id} needs a filename caption`);
         assert.ok(snippet.code.trim(), `${snippet.id} needs code`);
         assert.ok(INSTALL[snippet.id], `${snippet.id} has no install line`);
+        assert.equal(snippet.lines?.length, 2, `${snippet.id} needs a [start, end] range`);
         // A caption links to its source, so a path that no longer exists would
         // ship a 404 to the reader.
         await access(path.join(REPO_ROOT, snippet.path));
       }
     });
+  }
+});
+
+// Names a snippet calls on something, which is what a reader following the link
+// expects to find at the other end. Covers `.onText(`, `.on_text(` and Swift's
+// trailing-closure `.onText {`.
+function calledNames(code) {
+  return new Set([...code.matchAll(/\.(\w+)\s*[({]/g)].map((match) => match[1]));
+}
+
+test('every caption anchor still points at the code it was taken from', async (t) => {
+  const { readFile } = await import('node:fs/promises');
+  for (const [name, snippets] of ALL) {
+    for (const snippet of snippets) {
+      await t.test(`${name} / ${snippet.id}`, async () => {
+        const [start, end] = snippet.lines;
+        assert.ok(start >= 1 && end >= start, `nonsensical range ${start}-${end}`);
+
+        const source = (await readFile(path.join(REPO_ROOT, snippet.path), 'utf8')).split('\n');
+        assert.ok(
+          end <= source.length,
+          `${snippet.path} has ${source.length} lines, anchor runs to ${end}`,
+        );
+
+        // Line numbers drift as examples are edited. Rather than pin the exact
+        // text, which would fail on any reformat, check the linked region still
+        // contains the calls the snippet is showing off. Two is enough to tell
+        // "the code moved a little" from "this now points at something else".
+        const region = source.slice(start - 1, end).join('\n');
+        const wanted = [...calledNames(snippet.code)];
+        const found = wanted.filter((call) => region.includes(call));
+        assert.ok(
+          found.length >= 2,
+          `${snippet.path}#L${start}-L${end} no longer looks like this snippet. ` +
+            `Looked for ${wanted.join(', ')} and found ${found.join(', ') || 'none'}. ` +
+            `Move the range in snippets.js to wherever the code lives now.`,
+        );
+      });
+    }
   }
 });
 

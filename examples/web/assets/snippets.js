@@ -11,6 +11,12 @@
  * Keeping application-specific identifiers (`rewriter.partial`,
  * `transcriptText`) is deliberate: a reader learns more from the real call than
  * from an invented placeholder.
+ *
+ * `lines` is the region of `path` the sample was taken from, and becomes the
+ * `#L12-L34` anchor on the caption link. Line numbers drift as the examples are
+ * edited, which is why a test re-reads each range and fails if the calls the
+ * snippet shows are no longer inside it. Widen or move the range rather than
+ * dropping it; a link to the wrong lines is worse than a link to the file.
  */
 
 /** Install lines, one per language tab. */
@@ -45,6 +51,7 @@ export const MIC_TRANSCRIPTION = [
     label: 'JavaScript',
     file: 'live-transcription.js',
     path: 'examples/web/stt/index.html',
+    lines: [334, 356],
     code: `import { MicTranscriber, ModelArch } from '@moonshine-ai/moonshine-wasm';
 
 const mic = new MicTranscriber()
@@ -60,6 +67,7 @@ await mic.start();  // opens the microphone and starts transcribing`,
     label: 'Python',
     file: 'mic_transcription.py',
     path: 'examples/python/mic_transcription.py',
+    lines: [41, 63],
     code: `from moonshine_voice import MicTranscriber
 
 mic = (MicTranscriber()
@@ -78,6 +86,7 @@ with mic:
     label: 'Swift',
     file: 'TranscriberApp.swift',
     path: 'examples/ios/Transcriber/Transcriber/TranscriberApp.swift',
+    lines: [41, 63],
     code: `let mic = MicTranscriber()
     .onText { [weak self] text in
         Task { @MainActor in self?.liveText = text }
@@ -94,6 +103,7 @@ try mic.start()       // opens the microphone and starts transcribing`,
     label: 'Android',
     file: 'MainActivity.java',
     path: 'examples/android/Transcriber/app/src/main/java/ai/moonshine/androidtranscriber/MainActivity.java',
+    lines: [36, 56],
     code: `mic = new MicTranscriber(this)
         .onText(text -> transcriptText.setText(finishedLines + text))
         .onLine(line -> {
@@ -123,6 +133,7 @@ export const TEXT_TO_SPEECH = [
     label: 'JavaScript',
     file: 'speak.js',
     path: 'examples/web/tts/index.html',
+    lines: [455, 466],
     code: `import { TextToSpeech } from '@moonshine-ai/moonshine-wasm';
 
 const tts = new TextToSpeech().language('en_us').voice('kokoro_af_heart');
@@ -138,6 +149,7 @@ await tts.say('Now I sound like you.');`,
     label: 'Python',
     file: 'text_to_speech.py',
     path: 'examples/python/text_to_speech.py',
+    lines: [64, 82],
     code: `from moonshine_voice import TextToSpeech
 
 tts = TextToSpeech().language('en_us').voice('kokoro_af_heart')
@@ -153,6 +165,7 @@ tts.say('Now I sound like you.')`,
     label: 'Swift',
     file: 'TextToSpeechApp.swift',
     path: 'examples/ios/TextToSpeech/TextToSpeech/TextToSpeechApp.swift',
+    lines: [163, 174],
     code: `let tts = MoonshineVoice.TextToSpeech()
     .language("en_us")
     .voice("kokoro_af_heart")
@@ -169,6 +182,7 @@ try await tts.say("Now I sound like you.")`,
     label: 'Android',
     file: 'MainActivity.kt',
     path: 'examples/android/TextToSpeech/app/src/main/java/ai/moonshine/examples/texttospeech/MainActivity.kt',
+    lines: [180, 190],
     code: `val tts = TextToSpeech(this)
     .language("en_us")
     .voice("kokoro_af_heart")
@@ -202,6 +216,7 @@ export const DIALOG_FLOW = [
     label: 'JavaScript',
     file: 'wifi-agent.js',
     path: 'examples/web/dialog-flow/index.html',
+    lines: [402, 421],
     steps: { askSsid: 1, confirmSsid: 3, startOver: 4, confirmApply: 7, done: 8, unchanged: 10 },
     code: `dialog.listenFor('set up wifi', async (d) => {
   const ssid = await d.ask("What's the name of your wifi network?");
@@ -222,6 +237,7 @@ export const DIALOG_FLOW = [
     label: 'Python',
     file: 'dialog_flow.py',
     path: 'examples/python/dialog_flow.py',
+    lines: [30, 51],
     steps: { askSsid: 1, confirmSsid: 3, startOver: 4, confirmApply: 7, done: 8, unchanged: 10 },
     code: `def setup_wifi(d):
     ssid = yield d.ask("What's the name of your wifi network?")
@@ -243,6 +259,7 @@ dialog.listen_for("set up wifi", setup_wifi)`,
     label: 'Swift',
     file: 'main.swift',
     path: 'examples/macos/DialogFlow/Sources/DialogFlow/main.swift',
+    lines: [10, 33],
     steps: { askSsid: 1, confirmSsid: 3, startOver: 4, confirmApply: 8, done: 9, unchanged: 11 },
     code: `func wifiSetup(_ d: Dialog) async throws {
     let ssid = try await d.ask("What's the name of your wifi network?")

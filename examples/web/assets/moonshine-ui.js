@@ -740,6 +740,9 @@ function codeLines(code, language) {
  * @param {string} [options.path]  Repository-relative path of the file this
  *   came from. Turns the caption into a link to it on GitHub. Per-tab as
  *   `tabs[].path`.
+ * @param {[number, number]} [options.lines]  Inclusive line range within
+ *   `path`, added to the link as a `#L12-L34` anchor. Per-tab as
+ *   `tabs[].lines`.
  * @param {string} [options.active]  Id of the tab to open on. Defaults to the
  *   first.
  * @param {(pane: object, index: number) => void} [options.onTab]  Called when
@@ -751,11 +754,12 @@ export function codePanel({
   file = 'index.html',
   install = true,
   path,
+  lines,
   tabs,
   active,
   onTab,
 }) {
-  const panes = tabs ?? [{ id: language, label: language, file, path, code, install }];
+  const panes = tabs ?? [{ id: language, label: language, file, path, lines, code, install }];
   const initial = Math.max(
     panes.findIndex((pane) => pane.id === active),
     0,
@@ -819,13 +823,14 @@ export function codePanel({
       tab.setAttribute('aria-selected', String(i === index));
     }
     if (fileEl) {
-      const { file: name, path: source } = panes[index];
+      const { file: name, path: source, lines: range } = panes[index];
       fileEl.textContent = name ?? '';
       // Without a path there is nothing to point at, so it stays a plain
       // caption rather than becoming a link that goes nowhere.
       if (source) {
-        fileEl.href = `${SOURCE_BASE}/${source}`;
-        fileEl.title = source;
+        const anchor = range ? `#L${range[0]}-L${range[1]}` : '';
+        fileEl.href = `${SOURCE_BASE}/${source}${anchor}`;
+        fileEl.title = range ? `${source} lines ${range[0]}-${range[1]}` : source;
       } else {
         fileEl.removeAttribute('href');
         fileEl.removeAttribute('title');

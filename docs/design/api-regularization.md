@@ -469,11 +469,23 @@ says which language it is.
 
 ### The caption links to the source
 
-Each snippet carries a repository-relative `path`, and the filename caption is an
-anchor to it on the main branch — a tag would rot as the examples move between
-releases. A snippet without a path stays a plain caption rather than becoming a
-link to nowhere. A test asserts every path resolves to a file that exists, so a
-moved example fails the suite rather than shipping a 404 to a reader.
+Each snippet carries a repository-relative `path` and the `lines` it was taken
+from, and the filename caption links to that region on the main branch as
+`…/MainActivity.java#L36-L56`. Main rather than a tag, since a tag would rot as
+the examples move between releases. A snippet without a path stays a plain
+caption rather than becoming a link to nowhere.
+
+Line numbers drift as the examples are edited, so two tests keep them honest: one
+asserts every path resolves to a file that exists, and one re-reads each anchored
+region and fails if the calls the snippet shows are no longer inside it. The
+second deliberately checks for the calls rather than the exact text, so
+reformatting an example does not fail the suite while moving the code does. The
+failure names what it looked for and where, because the fix is always to move the
+range rather than to think about it.
+
+Both tests read the working tree, which is the right thing to check: the tree is
+what main becomes. Until a branch lands, its links point at the older copies main
+still has, which is the cost of anchoring to a branch rather than a commit.
 
 ### The voice agent page, which follows along as it runs
 
