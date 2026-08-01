@@ -72,4 +72,44 @@ You should now have an executable called `transcriber` in this folder. Run it wi
 ./transcriber
 ```
 
+## What the C++ API does and does not cover
+
+The C++ binding is header-only and opens no devices and no sockets, which is
+what makes it portable to anywhere the library builds. So it has `Transcriber`,
+`TextToSpeech`, `GraphemeToPhonemizer`, `EmbeddingModel` and `VoiceClone`, but
+none of the pieces that need a runtime: there is no `MicTranscriber` or
+`DialogFlow` (they need a capture device), no `say()` (it needs an output
+device; `synthesize()` hands you the samples to play yourself), and no
+downloading, so nothing takes a `load()` or reports progress. Feed it paths or
+buffers instead.
+
+Fetching models is therefore your job, but working out *which* models is not.
+Every manifest the other bindings download from is available as JSON naming the
+files, their URLs, sizes and checksums:
+
+```cpp
+std::string stt = moonshine::Transcriber::getDependencies("en");
+std::string diarization = moonshine::Transcriber::getDiarizationDependencies();
+std::string tts = moonshine::TextToSpeech::getDependencies("en_us");
+std::string g2p = moonshine::GraphemeToPhonemizer::getDependencies("en_us");
+std::string embedding =
+    moonshine::EmbeddingModel::getDependencies("embeddinggemma-300m");
+```
+
+`Transcriber::getCatalog()` and `EmbeddingModel::getCatalog()` list everything
+published, if you would rather browse than ask for one language.
+
+Voice cloning does work here, because the voice-activity detector that finds a
+reference clip is compiled into the library and needs no downloads:
+
+```cpp
+moonshine::TextToSpeech tts("en_us", {{"g2p_root", assetRoot}});
+tts.cloneFrom(recording, sampleRate, "what the speaker said");
+moonshine::TtsSynthesisResult cloned = tts.synthesize("Hello world!");
+```
+
+Pass a `Transcriber` in place of the transcript to have Moonshine work out what
+was said. To capture the clip from a live stream rather than a finished
+recording, use `startCloning()` and feed `addAudio()` until `isReady()`.
+
 By default it transcribes the `two_cities.wav` sample using the Medium Streaming English model that `download-library.sh` placed in the `medium-streaming-en/` folder, so you should see transcription results printed as it goes. You can point it at different models and inputs using `--model-path`, `--model-arch`, and `--wav-path`.

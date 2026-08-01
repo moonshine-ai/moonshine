@@ -83,21 +83,20 @@ int main(int argc, char *argv[]) {
   }
 
   try {
-    std::vector<moonshine_option_t> options = {
-        {"g2p_root", asset_root.c_str()},
+    moonshine::Options options = {
+        {"g2p_root", asset_root},
     };
     if (!voice.empty()) {
-      options.push_back({"voice", voice.c_str()});
+      options.push_back({"voice", voice});
     }
 
     std::cout << "Creating TTS synthesizer for language '" << language << "'"
               << std::endl;
     moonshine::TextToSpeech tts(language, options);
 
-    moonshine::GraphemeToPhonemizer g2p(language,
-                                        {
-                                            {"g2p_root", asset_root.c_str()},
-                                        });
+    moonshine::GraphemeToPhonemizer g2p(language, {
+                                                      {"g2p_root", asset_root},
+                                                  });
     std::string ipa = g2p.toIpa(text);
     std::cout << "IPA: " << ipa << " (" << ipa.size() << " characters)"
               << std::endl;

@@ -2,7 +2,9 @@
 
 This document plans the work needed to make the JavaScript, Python, Swift and
 Java APIs read the same way, and to back the code samples on the web demo pages
-with example programs that are actually compiled and run.
+with example programs that are actually compiled and run. C++ is covered
+separately in [the C++ section](#the-c-binding) at the end, because a different
+set of rules applies to it.
 
 It follows [api-principles.md](api-principles.md), which sets the goals, and
 [api-comparison.md](api-comparison.md), which specifies the target API shape.
@@ -460,6 +462,107 @@ The one ordering trap: if the Java `Context` question is ever reopened and
 answered yes, it has to land before the two new Java examples are written, not
 after, so the snippets do not have to be revised twice.
 
+## The C++ binding
+
+`core/moonshine-cpp.h` is header-only and sits directly on the C API, with no
+runtime of its own. That rules out a chunk of the target shape rather than
+merely postponing it, so the goal here is narrower than for the other four: not
+"read the same way", but "wherever C++ *can* do something the others do, do it
+under the same name and in the same shape".
+
+### What C++ cannot have, and why that is not a gap
+
+The redesign's conventions assume a runtime that can open devices and fetch
+things. C++ has neither, and giving it either would mean picking an HTTP client
+and an audio backend for every application that links the library.
+
+- **`MicTranscriber`** and **`DialogFlow`** need a capture device. Absent.
+- **`say()`** needs an output device. `synthesize()` returns the samples, which
+  is the half that does not need one.
+- **`VoiceClone::fromMicrophone()`**, for the same reason. `addAudio()` is the
+  half that does not.
+- **Downloading**, so `load()`, `.modelsFrom()` and `onProgress` have nothing to
+  do. Construction takes a path or a buffer, and cannot be deferred.
+
+Convention 1 ("construct, configure, load") therefore does not apply: with no
+download step there is no slow call to separate out, and a constructor that
+cannot fail would just move the failure somewhere less obvious. Convention 4
+(named `onText` / `onLine` callbacks) does not apply either, but for a different
+reason: those live on `MicTranscriber`, and the redesign deliberately left the
+low-level `Transcriber` alone in every language. C++'s `Transcriber` already
+matches Swift's and Python's method for method, so adding named callbacks there
+would have made it the odd one out rather than the consistent one.
+
+### What was wrong, and is now fixed
+
+Four things, all of which C++ could have had all along.
+
+**Manifests were half-exposed.** `TextToSpeech::getDependencies` and
+`GraphemeToPhonemizer::getDependencies` existed, but the speech-to-text,
+embedding and diarization equivalents did not, nor either catalog. Computing a
+manifest is not downloading — it returns JSON naming the files, URLs, sizes and
+checksums — and it is exactly what a binding with no HTTP client needs most,
+since it is the only way to learn what to fetch. This got worse when the
+diarization models became a download, which left `identify_speakers` reachable
+from C++ with no in-API way to find the two models it now requires. Added:
+`Transcriber::getDependencies`, `Transcriber::getDiarizationDependencies`,
+`Transcriber::getCatalog`, `EmbeddingModel::getDependencies` and
+`EmbeddingModel::getCatalog`.
+
+**In-memory loading was half-exposed.** `Transcriber` and `EmbeddingModel` had
+`loadFromMemory`; `TextToSpeech` and `GraphemeToPhonemizer` did not, although
+the C API has `_from_memory` for both. Added, with the same keyed-map signature
+the other two use.
+
+**Options had two types, one of them a trap.** `Transcriber` took owning
+`(name, value)` string pairs; `TextToSpeech` and `GraphemeToPhonemizer` took
+`std::vector<moonshine_option_t>`, the raw C struct of borrowed `const char *`.
+That made `options.push_back({"voice", someString.c_str()})` compile and then
+read freed memory if the string was a temporary — and the shipped C++ example
+was one refactor away from it. Everything now takes `moonshine::Options`, and
+brace-initialised call sites are unchanged because `{"voice", "x"}` builds a
+pair just as happily as it built the struct.
+
+**There was no voice cloning.** `cloneFrom` and `startCloning` are in all four
+other bindings and were in none of C++, even though the machinery is entirely
+platform-neutral: `moonshine_extract_speech_clip` runs the voice-activity
+detector that is compiled into the library, so finding a reference clip needs no
+models and no network. Added `extractSpeechClip()`, a `VoiceClone` that
+accumulates audio and reports `isReady()`, and `TextToSpeech::cloneFrom` /
+`startCloning` / `isCloned`.
+
+Two details of that worth recording. `VoiceClone` holds a `shared_ptr` to its
+state, so copies observe one capture; it is a reference type in Swift and Java
+and behaving differently in C++ would surprise anyone porting between them. And
+`TextToSpeech` now remembers the language, options and asset buffers it was
+built from, because `cloneFrom` rebuilds the synthesizer in place and has to
+replay them — the C API borrows the reference-clip bytes rather than copying, so
+the object owns them for the new handle's lifetime.
+
+Where the other bindings download a small speech-to-text model to transcribe the
+reference clip, C++ takes either the transcript or a `Transcriber` the caller
+already has. That is the "offline is possible, just longer" trade from
+convention 5, applied to the one binding that is always offline.
+
+### Naming, which was mostly already right
+
+Worth stating because it was checked rather than assumed. `transcribeWithoutStreaming`,
+`toIpa`, `synthesize`, `synthesizeFromPhonemes` and `EmbeddingModel` all already
+matched the majority spelling; where C++ differs from one other binding, that
+binding is the outlier (JavaScript alone says `transcribe` and
+`textToPhonemes`). The only rename in this pass was a stale doc comment
+referring to `GraphemeToPhonemizer::textToPhonemes`, which has never existed in
+C++.
+
+### Still open
+
+- `Transcriber::loadFromMemory` takes `updateInterval` positionally between the
+  architecture and the options, which no other overload does.
+- `moonshine::Error` is a very general name for the transcript error event, in a
+  namespace that also throws `MoonshineException`.
+- The header still advertises itself as C++11 in its opening comment. Nothing
+  disproves it, but nothing checks it either, and the library builds at C++20.
+
 ## Settled questions
 
 - Python's `add_listener()` and `TranscriptEventListener` are kept and not
@@ -470,3 +573,5 @@ after, so the snippets do not have to be revised twice.
   standalone minimal functions.
 - Java keeps its `Context` parameters. See the analysis in phase 2.
 - All Android examples are Java, and the repository keeps no Kotlin example.
+- C++ does not get `MicTranscriber`, `DialogFlow`, `say()` or downloading. See
+  the C++ section for what that rules out and what it does not.

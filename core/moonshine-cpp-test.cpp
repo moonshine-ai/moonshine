@@ -410,4 +410,150 @@ TEST_CASE("moonshine-cpp-test") {
     REQUIRE(model.distance(phrase, utterance) >
             model.distance(phrase, unrelated));
   }
+  SUBCASE("manifests name the files a caller has to download") {
+    // The C++ library downloads nothing, so these manifests are the only way a
+    // caller learns what to fetch. They are pure catalog lookups, so unlike
+    // most of this file they need no model files present.
+    const std::string stt = moonshine::Transcriber::getDependencies("en");
+    CHECK(stt.find("\"groups\"") != std::string::npos);
+    CHECK(stt.find("tokenizer.bin") != std::string::npos);
+
+    const std::string diarization =
+        moonshine::Transcriber::getDiarizationDependencies();
+    CHECK(diarization.find("segmentation.ort") != std::string::npos);
+    CHECK(diarization.find("embedding.ort") != std::string::npos);
+
+    CHECK(moonshine::Transcriber::getCatalog().find("\"languages\"") !=
+          std::string::npos);
+    CHECK(moonshine::EmbeddingModel::getCatalog().find("\"models\"") !=
+          std::string::npos);
+    CHECK(moonshine::EmbeddingModel::getDependencies("embeddinggemma-300m")
+              .find("\"groups\"") != std::string::npos);
+
+    // An unknown language is an error rather than a silent empty manifest.
+    REQUIRE_THROWS_AS(
+        (void)moonshine::Transcriber::getDependencies("not-a-language"),
+        moonshine::MoonshineException);
+  }
+  SUBCASE("speech clip extraction finds speech and rejects silence") {
+    // The voice-activity detector is compiled in, so this needs no models.
+    const std::string wav_path = "beckett.wav";
+    if (!file_exists(wav_path)) {
+      MESSAGE("skip: beckett.wav not in test-assets");
+      return;
+    }
+    float *wav_data = nullptr;
+    size_t sample_count = 0;
+    int32_t sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &sample_count,
+                          &sample_rate));
+    const std::vector<float> audio(wav_data, wav_data + sample_count);
+    free(wav_data);
+
+    const moonshine::SpeechClip clip =
+        moonshine::extractSpeechClip(audio, sample_rate);
+    REQUIRE(clip.isComplete);
+    CHECK(clip.speechDuration > 1.0f);
+    CHECK(clip.audio.size() ==
+          static_cast<size_t>(4 * moonshine::VoiceClone::CLIP_SAMPLE_RATE));
+
+    const std::vector<float> silence(sample_rate * 5, 0.0f);
+    CHECK_FALSE(moonshine::extractSpeechClip(silence, sample_rate).isComplete);
+  }
+  SUBCASE("VoiceClone becomes ready as audio arrives") {
+    const std::string wav_path = "beckett.wav";
+    if (!file_exists(wav_path)) {
+      MESSAGE("skip: beckett.wav not in test-assets");
+      return;
+    }
+    float *wav_data = nullptr;
+    size_t sample_count = 0;
+    int32_t sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &sample_count,
+                          &sample_rate));
+    const std::vector<float> audio(wav_data, wav_data + sample_count);
+    free(wav_data);
+
+    moonshine::VoiceClone clone;
+    int ready_calls = 0;
+    clone.onReady([&ready_calls] { ready_calls++; });
+    CHECK_FALSE(clone.isReady());
+
+    // Feed it the way an audio callback would, a chunk at a time.
+    const size_t chunk = static_cast<size_t>(sample_rate) / 10;
+    for (size_t i = 0; i < audio.size() && !clone.isReady(); i += chunk) {
+      const size_t end = std::min(i + chunk, audio.size());
+      clone.addAudio(std::vector<float>(audio.begin() + i, audio.begin() + end),
+                     sample_rate);
+    }
+
+    REQUIRE(clone.isReady());
+    CHECK(ready_calls == 1);
+    CHECK(clone.audio().size() ==
+          static_cast<size_t>(4 * moonshine::VoiceClone::CLIP_SAMPLE_RATE));
+    CHECK(clone.speechSeconds() > 0.0f);
+
+    // A handler attached after the fact still fires, and reset undoes it all.
+    int late_calls = 0;
+    clone.onReady([&late_calls] { late_calls++; });
+    CHECK(late_calls == 1);
+    clone.reset();
+    CHECK_FALSE(clone.isReady());
+    CHECK(clone.audio().empty());
+  }
+  SUBCASE("cloneFrom rebuilds the synthesizer with a captured voice") {
+    const std::string g2p_root = "../core/moonshine-tts/data/";
+    const std::string wav_path = "beckett.wav";
+    if (!file_exists(g2p_root + "zipvoice/vocoder.ort")) {
+      MESSAGE("skip: zipvoice assets not in moonshine-tts/data");
+      return;
+    }
+    if (!file_exists(wav_path)) {
+      MESSAGE("skip: beckett.wav not in test-assets");
+      return;
+    }
+    float *wav_data = nullptr;
+    size_t sample_count = 0;
+    int32_t sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &sample_count,
+                          &sample_rate));
+    const std::vector<float> audio(wav_data, wav_data + sample_count);
+    free(wav_data);
+
+    moonshine::TextToSpeech tts("en_us", {{"g2p_root", g2p_root}});
+    CHECK_FALSE(tts.isCloned());
+
+    // The transcript is supplied here so the test needs no speech-to-text
+    // model; the Transcriber overload covers the other route.
+    tts.cloneFrom(audio, sample_rate, "Ever tried. Ever failed. No matter.");
+    CHECK(tts.isCloned());
+
+    const moonshine::TtsSynthesisResult result =
+        tts.synthesize("Cloning a custom voice.");
+    CHECK(result.sampleRateHz > 0);
+    CHECK(result.samples.size() > static_cast<size_t>(result.sampleRateHz) / 4);
+  }
+  SUBCASE("cloning from silence explains itself") {
+    const std::string g2p_root = "../core/moonshine-tts/data/";
+    if (!file_exists(g2p_root + "zipvoice/vocoder.ort")) {
+      MESSAGE("skip: zipvoice assets not in moonshine-tts/data");
+      return;
+    }
+    moonshine::TextToSpeech tts("en_us", {{"g2p_root", g2p_root}});
+    const std::vector<float> silence(16000 * 5, 0.0f);
+    REQUIRE_THROWS_AS(tts.cloneFrom(silence, 16000, "nothing was said"),
+                      moonshine::MoonshineException);
+    // The failed clone left the original synthesizer usable.
+    CHECK_FALSE(tts.isCloned());
+  }
+  SUBCASE("VoiceClone copies share one capture") {
+    // VoiceClone is a handle onto shared state, matching the reference-typed
+    // VoiceClone in the Swift and Java bindings.
+    moonshine::VoiceClone clone;
+    moonshine::VoiceClone alias = clone;
+    const std::vector<float> silence(16000, 0.0f);
+    alias.addAudio(silence, 16000);
+    CHECK(clone.recordedSeconds() == doctest::Approx(1.0f));
+    CHECK_FALSE(clone.isReady());
+  }
 }

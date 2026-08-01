@@ -45,6 +45,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -61,6 +62,21 @@ class TranscriptEventListener;
 class TextToSpeech;
 class GraphemeToPhonemizer;
 class EmbeddingModel;
+class VoiceClone;
+
+/* ------------------------------ OPTIONS -------------------------------- */
+
+/// Configuration options, as ``(name, value)`` pairs. Every class here takes
+/// this type, and the strings are owned, so a temporary is safe to pass:
+///
+/// ```cpp
+/// moonshine::TextToSpeech tts("en_us", {{"g2p_root", assetRoot()}});
+/// ```
+///
+/// The C API's ``moonshine_option_t`` holds borrowed ``const char *``, which
+/// made it easy to build an option list out of strings that had already been
+/// destroyed. Converting happens at the call boundary instead.
+using Options = std::vector<std::pair<std::string, std::string>>;
 
 /* ------------------------------ ENUMS -------------------------------- */
 
@@ -537,10 +553,9 @@ class Transcriber {
   /// ``options`` is forwarded as additional ``moonshine_option_t``
   /// entries to the C API.
   /// @throws MoonshineException if the transcriber cannot be loaded
-  Transcriber(
-      const std::string &modelPath, ModelArch modelArch, double updateInterval,
-      const std::string &spellingModelPath,
-      const std::vector<std::pair<std::string, std::string>> &options = {});
+  Transcriber(const std::string &modelPath, ModelArch modelArch,
+              double updateInterval, const std::string &spellingModelPath,
+              const Options &options = {});
 
   /// Initialize a transcriber from in-memory model buffers. Buffers
   /// are not copied and must outlive the transcriber.
@@ -553,8 +568,7 @@ class Transcriber {
       const uint8_t *tokenizerData, size_t tokenizerDataSize,
       ModelArch modelArch, double updateInterval = 0.5,
       const uint8_t *spellingModelData = nullptr,
-      size_t spellingModelDataSize = 0,
-      const std::vector<std::pair<std::string, std::string>> &options = {});
+      size_t spellingModelDataSize = 0, const Options &options = {});
 
   /// Initialize a transcriber from in-memory model buffers keyed by their
   /// canonical filename (matching the download manifest, e.g.
@@ -572,7 +586,7 @@ class Transcriber {
       const std::map<std::string, std::pair<const uint8_t *, size_t>>
           &modelFiles,
       ModelArch modelArch, double updateInterval = 0.5,
-      const std::vector<std::pair<std::string, std::string>> &options = {});
+      const Options &options = {});
 
   /// Destructor - automatically closes the transcriber
   ~Transcriber();
@@ -657,6 +671,35 @@ class Transcriber {
   /// Remove all event listeners from the default stream
   void removeAllListeners();
 
+  /* ---------------------------- MODEL MANIFESTS --------------------------
+   */
+
+  /// Get the download manifest for a language's speech-to-text model, as a
+  /// JSON object listing the files, their URLs, sizes and checksums.
+  ///
+  /// The C++ library does no downloading, so this is how a caller finds out
+  /// what to fetch with its own HTTP client and where to put it. Pass
+  /// ``model_arch`` in ``options`` to ask for something other than the
+  /// language's recommended model.
+  /// @throws MoonshineException on failure
+  static std::string getDependencies(const std::string &language,
+                                     const Options &options = {});
+
+  /// Get the download manifest for the two speaker diarization models, which
+  /// the ``identify_speakers`` option needs. Point a transcriber at them with
+  /// the ``diarization_model_dir`` option once they are on disk, or hand them
+  /// to ``loadFromMemory`` as ``segmentation.ort`` and ``embedding.ort``.
+  ///
+  /// There is one set and it has no variants, so this takes no arguments. See
+  /// docs/diarization-models.md.
+  /// @throws MoonshineException on failure
+  static std::string getDiarizationDependencies();
+
+  /// Get the full speech-to-text catalog as JSON: every language, its English
+  /// name, and the model architectures published for it.
+  /// @throws MoonshineException on failure
+  static std::string getCatalog();
+
   /// Get the transcriber handle (for internal use)
   int32_t getHandle() const { return handle_; }
 
@@ -678,6 +721,132 @@ class Transcriber {
   void checkError(int32_t error) const;
 
   friend class Stream;
+};
+
+/* ----------------------------- SPEECH CLIPS -------------------------------
+ */
+
+/// A short window of mostly-speech audio pulled out of a longer recording, for
+/// use as the reference clip in zero-shot voice cloning.
+struct SpeechClip {
+  /// 16 kHz mono PCM. Empty unless ``isComplete``.
+  std::vector<float> audio;
+  /// Where the window starts in the input recording, in seconds.
+  float startTime;
+  /// How much of the window is speech, in seconds. Worth showing while the
+  /// caller is still recording.
+  float speechDuration;
+  /// Whether a window with enough speech in it was found.
+  bool isComplete;
+
+  SpeechClip() : startTime(0.0f), speechDuration(0.0f), isComplete(false) {}
+};
+
+/// Finds the best short window of speech in a recording.
+///
+/// Safe to call repeatedly on a growing buffer, which is how ``VoiceClone`` is
+/// built. Runs the voice-activity detector compiled into the library, so it
+/// needs no model files and no network.
+///
+/// Recognised options: ``clip_duration_seconds`` (default 4),
+/// ``minimum_speech_seconds`` (default 2), ``vad_threshold`` (default 0.5).
+/// @throws MoonshineException if the search fails
+SpeechClip extractSpeechClip(const std::vector<float> &audioData,
+                             int32_t sampleRate, const Options &options = {});
+
+/// Captures the short reference clip that zero-shot voice cloning needs.
+///
+/// ```cpp
+/// moonshine::VoiceClone clone = tts.startCloning();
+/// clone.onReady([] { std::cout << "Got it, you can stop talking.\n"; });
+/// while (!clone.isReady()) {
+///   clone.addAudio(readFromYourMicrophone(), 48000);
+/// }
+/// tts.cloneFrom(clone, "what the speaker said");
+/// ```
+///
+/// This is a handle onto shared state, like the reference-typed ``VoiceClone``
+/// in the other bindings, so copies observe the same capture.
+///
+/// The other bindings also offer ``fromMicrophone()``, which is absent here
+/// because the C++ library does not open capture devices; feed ``addAudio``
+/// from whatever audio pipeline the application already has.
+class VoiceClone {
+ public:
+  /// Sample rate of the clip handed back by ``audio()``.
+  static const int32_t CLIP_SAMPLE_RATE = 16000;
+
+  /// @param clipDurationSeconds Length of the window to look for.
+  /// @param minimumSpeechSeconds How much of it has to be speech.
+  explicit VoiceClone(float clipDurationSeconds = 4.0f,
+                      float minimumSpeechSeconds = 2.0f);
+
+  /// Feeds captured audio in. The search for a usable window runs a few times
+  /// a second rather than on every chunk, so this is cheap to call from an
+  /// audio callback. A change of sample rate starts the recording over, since
+  /// mixing rates would make the clip come out at the wrong speed.
+  void addAudio(const std::vector<float> &pcm, int32_t sampleRate);
+
+  /// Whether ``audio()`` holds a usable reference clip.
+  bool isReady() const;
+
+  /// The captured clip (16 kHz mono), empty until ``isReady()``.
+  std::vector<float> audio() const;
+
+  int32_t sampleRate() const { return CLIP_SAMPLE_RATE; }
+
+  /// Speech found in the best window so far, in seconds.
+  float speechSeconds() const;
+
+  /// How much audio has been fed in, in seconds.
+  float recordedSeconds() const;
+
+  /// Fires once, as soon as enough speech has been captured. Called
+  /// immediately if that has already happened.
+  VoiceClone &onReady(std::function<void()> handler);
+
+  /// Reports ``(recordedSeconds, speechSeconds)`` after each search.
+  VoiceClone &onProgress(std::function<void(float, float)> handler);
+
+  /// Gives up waiting and accepts the best window so far, however quiet. This
+  /// is what the other bindings do when ``fromMicrophone()`` times out.
+  /// @return Whether a clip could be salvaged.
+  bool finish();
+
+  /// Throws away everything captured so far.
+  void reset();
+
+ private:
+  struct State {
+    float clipDurationSeconds;
+    float minimumSpeechSeconds;
+    mutable std::mutex mutex;
+    std::vector<float> recording;
+    int32_t recordingSampleRate;
+    size_t samplesSinceSearch;
+    std::vector<float> clip;
+    bool complete;
+    float speech;
+    std::vector<std::function<void()>> readyHandlers;
+    std::vector<std::function<void(float, float)>> progressHandlers;
+
+    State(float clipDuration, float minimumSpeech)
+        : clipDurationSeconds(clipDuration),
+          minimumSpeechSeconds(minimumSpeech),
+          recordingSampleRate(CLIP_SAMPLE_RATE),
+          samplesSinceSearch(0),
+          complete(false),
+          speech(0.0f) {}
+  };
+
+  /// How much new audio to accumulate between searches.
+  static const int32_t SEARCH_INTERVAL_MS = 250;
+
+  void search(bool acceptAnything);
+
+  std::shared_ptr<State> state_;
+
+  friend class TextToSpeech;
 };
 
 /* --------------------------- TTS DATA STRUCTURES ---------------------------
@@ -708,25 +877,39 @@ struct TtsSynthesisResult {
 /// #include <iostream>
 ///
 /// int main() {
-///     std::vector<moonshine_option_t> options = {
+///     moonshine::TextToSpeech tts("en_us", {
 ///         {"g2p_root", "/path/to/assets"},
 ///         {"voice", "kokoro_af_heart"},
-///     };
-///     moonshine::TextToSpeech tts("en_us", options);
+///     });
 ///     auto result = tts.synthesize("Hello world!");
 ///     std::cout << "Got " << result.samples.size() << " samples at "
 ///               << result.sampleRateHz << " Hz" << std::endl;
 ///     return 0;
 /// }
 /// ```
+///
+/// ``say()``, which speaks out loud, is deliberately absent: the C++ library
+/// does not open audio devices. Play ``synthesize()``'s samples yourself.
 class TextToSpeech {
  public:
   /// Create a TTS synthesizer from files on disk
   /// @param language Language tag (e.g., "en_us", "de", "fr")
   /// @param options Configuration options (voice, g2p_root, speed, etc.)
   /// @throws MoonshineException if creation fails
-  TextToSpeech(const std::string &language,
-               const std::vector<moonshine_option_t> &options = {});
+  TextToSpeech(const std::string &language, const Options &options = {});
+
+  /// Create a TTS synthesizer from in-memory assets keyed by their canonical
+  /// filename (``kokoro/model.ort``, ``kokoro/config.json``, ``piper/onnx``,
+  /// ``zipvoice/text_encoder.ort`` and so on; see
+  /// ``moonshine_create_tts_synthesizer_from_memory``). Keys with no buffer
+  /// are resolved as paths under ``g2p_root`` instead, so a caller can supply
+  /// only the assets it already has in memory. The buffers are not copied and
+  /// must outlive the synthesizer.
+  /// @throws MoonshineException if creation fails
+  static TextToSpeech loadFromMemory(
+      const std::map<std::string, std::pair<const uint8_t *, size_t>>
+          &modelFiles,
+      const std::string &language, const Options &options = {});
 
   /// Destructor - automatically frees resources
   ~TextToSpeech();
@@ -746,20 +929,58 @@ class TextToSpeech {
   /// @param options Per-call options (e.g., speed), or empty to use defaults
   /// @return TtsSynthesisResult containing PCM samples and sample rate
   /// @throws MoonshineException if synthesis fails
-  TtsSynthesisResult synthesize(
-      const std::string &text,
-      const std::vector<moonshine_option_t> &options = {});
+  TtsSynthesisResult synthesize(const std::string &text,
+                                const Options &options = {});
 
   /// Synthesize speech from IPA phonemes, skipping grapheme-to-phoneme
   /// conversion.
   /// @param phonemes IPA phoneme string (as produced by
-  ///        GraphemeToPhonemizer::textToPhonemes / moonshine_text_to_phonemes)
+  ///        GraphemeToPhonemizer::toIpa / moonshine_text_to_phonemes)
   /// @param options Per-call options (e.g., speed), or empty to use defaults
   /// @return TtsSynthesisResult containing PCM samples and sample rate
   /// @throws MoonshineException if synthesis fails
-  TtsSynthesisResult synthesizeFromPhonemes(
-      const std::string &phonemes,
-      const std::vector<moonshine_option_t> &options = {});
+  TtsSynthesisResult synthesizeFromPhonemes(const std::string &phonemes,
+                                            const Options &options = {});
+
+  /* ---------------------------- VOICE CLONING ---------------------------- */
+
+  /// Whether this synthesizer is currently speaking in a cloned voice.
+  bool isCloned() const { return !cloneBytes_.empty(); }
+
+  /// Clone the voice in ``samples`` and use it for subsequent synthesis,
+  /// rebuilding the synthesizer in place.
+  ///
+  /// The recording is trimmed to the best few seconds of speech first, so it
+  /// can be longer than the clip the vocoder needs. ``transcript`` is what the
+  /// speaker said in that clip; pass the overload taking a ``Transcriber`` to
+  /// have Moonshine work it out instead.
+  ///
+  /// This needs the ZipVoice assets, which the ``zipvoice/*`` keys or
+  /// ``g2p_root`` have to resolve to; cloning is English only for now.
+  /// @throws MoonshineException if no speech is found or the rebuild fails
+  void cloneFrom(const std::vector<float> &samples, int32_t sampleRate,
+                 const std::string &transcript);
+
+  /// Clone the voice in ``samples``, transcribing the reference clip with
+  /// ``transcriber`` rather than making the caller supply the words. The
+  /// transcriber only has to outlive the call.
+  /// @throws MoonshineException if no speech is found or the rebuild fails
+  void cloneFrom(const std::vector<float> &samples, int32_t sampleRate,
+                 Transcriber &transcriber);
+
+  /// Clone the voice captured by a ``VoiceClone``.
+  /// @throws MoonshineException if the clone has not captured enough speech
+  void cloneFrom(const VoiceClone &clone, const std::string &transcript);
+
+  /// Clone the voice captured by a ``VoiceClone``, transcribing its clip with
+  /// ``transcriber``.
+  /// @throws MoonshineException if the clone has not captured enough speech
+  void cloneFrom(const VoiceClone &clone, Transcriber &transcriber);
+
+  /// Start capturing a reference voice for cloning. Feed the result with
+  /// ``VoiceClone::addAudio`` and hand it back to ``cloneFrom``.
+  VoiceClone startCloning(float clipDurationSeconds = 4.0f,
+                          float minimumSpeechSeconds = 2.0f) const;
 
   /// Free the synthesizer resources
   void close();
@@ -775,22 +996,48 @@ class TextToSpeech {
   /// @param options Configuration options (g2p_root for accurate availability)
   /// @return JSON string mapping language tags to voice arrays
   /// @throws MoonshineException on failure
-  static std::string getVoices(
-      const std::string &languages,
-      const std::vector<moonshine_option_t> &options = {});
+  static std::string getVoices(const std::string &languages,
+                               const Options &options = {});
 
   /// Get TTS asset dependency keys for one or more languages
   /// @param languages Comma-separated language tags (empty for all)
   /// @param options Configuration options (voice, g2p_root, etc.)
   /// @return JSON array string of asset keys
   /// @throws MoonshineException on failure
-  static std::string getDependencies(
-      const std::string &languages,
-      const std::vector<moonshine_option_t> &options = {});
+  static std::string getDependencies(const std::string &languages,
+                                     const Options &options = {});
 
  private:
+  /// Adopts an already-created C handle, remembering what built it so that
+  /// ``cloneFrom`` can rebuild the synthesizer with the same assets.
+  TextToSpeech(int32_t handle, const std::string &language,
+               const Options &options,
+               const std::map<std::string, std::pair<const uint8_t *, size_t>>
+                   &modelFiles)
+      : handle_(handle),
+        language_(language),
+        options_(options),
+        modelFiles_(modelFiles) {}
+
+  /// Replaces the live synthesizer with one speaking the voice in
+  /// ``cloneBytes_``. Shared by every ``cloneFrom`` overload.
+  void rebuildForClone(int32_t sampleRate, const std::string &transcript,
+                       const Transcriber *transcriber);
+
+  /// Trims a recording to the window ZipVoice wants, and reports usefully when
+  /// there is no speech in it.
+  static std::vector<float> clipForCloning(const std::vector<float> &samples,
+                                           int32_t sampleRate);
+
   int32_t handle_;
   std::string language_;
+  /// What this synthesizer was built with, replayed on a clone rebuild.
+  Options options_;
+  std::map<std::string, std::pair<const uint8_t *, size_t>> modelFiles_;
+  /// The reference clip, as the little-endian float32 bytes the C API reads.
+  /// Owned here because the native layer borrows the pointer rather than
+  /// copying, so it has to outlive the synthesizer built from it.
+  std::vector<uint8_t> cloneBytes_;
 
   void checkError(int32_t error) const;
 };
@@ -808,10 +1055,9 @@ class TextToSpeech {
 /// #include <iostream>
 ///
 /// int main() {
-///     std::vector<moonshine_option_t> options = {
+///     moonshine::GraphemeToPhonemizer g2p("en_us", {
 ///         {"g2p_root", "/path/to/assets"},
-///     };
-///     moonshine::GraphemeToPhonemizer g2p("en_us", options);
+///     });
 ///     std::string ipa = g2p.toIpa("Hello world!");
 ///     std::cout << "IPA: " << ipa << std::endl;
 ///     return 0;
@@ -824,7 +1070,18 @@ class GraphemeToPhonemizer {
   /// @param options Configuration options (g2p_root, etc.)
   /// @throws MoonshineException if creation fails
   GraphemeToPhonemizer(const std::string &language,
-                       const std::vector<moonshine_option_t> &options = {});
+                       const Options &options = {});
+
+  /// Create a grapheme-to-phonemizer from in-memory assets keyed by their
+  /// canonical filename (see
+  /// ``moonshine_create_grapheme_to_phonemizer_from_memory``). Keys with no
+  /// buffer are resolved as paths under ``g2p_root`` instead. The buffers are
+  /// not copied and must outlive the phonemizer.
+  /// @throws MoonshineException if creation fails
+  static GraphemeToPhonemizer loadFromMemory(
+      const std::map<std::string, std::pair<const uint8_t *, size_t>>
+          &modelFiles,
+      const std::string &language, const Options &options = {});
 
   /// Destructor - automatically frees resources
   ~GraphemeToPhonemizer();
@@ -844,8 +1101,7 @@ class GraphemeToPhonemizer {
   /// @param options Per-call options, or empty to use defaults
   /// @return IPA phoneme string
   /// @throws MoonshineException if conversion fails
-  std::string toIpa(const std::string &text,
-                    const std::vector<moonshine_option_t> &options = {});
+  std::string toIpa(const std::string &text, const Options &options = {});
 
   /// Free the phonemizer resources
   void close();
@@ -861,11 +1117,14 @@ class GraphemeToPhonemizer {
   /// @param options Configuration options
   /// @return Comma-separated list of asset keys
   /// @throws MoonshineException on failure
-  static std::string getDependencies(
-      const std::string &languages,
-      const std::vector<moonshine_option_t> &options = {});
+  static std::string getDependencies(const std::string &languages,
+                                     const Options &options = {});
 
  private:
+  /// Adopts an already-created C handle (used by ``loadFromMemory``).
+  GraphemeToPhonemizer(int32_t handle, const std::string &language)
+      : handle_(handle), language_(language) {}
+
   int32_t handle_;
   std::string language_;
 
@@ -917,6 +1176,17 @@ class EmbeddingModel {
                  const std::vector<float> &embedding_b);
 
   void close();
+
+  /// Get the download manifest for an embedding model as JSON, in the same
+  /// shape as ``Transcriber::getDependencies``. Pass ``model_variant`` in
+  /// ``options`` to choose a quantization other than the default.
+  /// @throws MoonshineException on failure
+  static std::string getDependencies(const std::string &modelName,
+                                     const Options &options = {});
+
+  /// Get the full text embedding model catalog as JSON.
+  /// @throws MoonshineException on failure
+  static std::string getCatalog();
 
   int32_t getHandle() const { return handle_; }
 
@@ -1188,9 +1458,8 @@ struct OptionsBuffer {
   std::vector<moonshine_option_t> options;
 };
 
-inline OptionsBuffer buildOptions(
-    const std::string &spellingModelPath,
-    const std::vector<std::pair<std::string, std::string>> &extras) {
+inline OptionsBuffer buildOptions(const std::string &spellingModelPath,
+                                  const Options &extras) {
   OptionsBuffer buf;
   size_t total = extras.size() + (spellingModelPath.empty() ? 0 : 1);
   buf.names.reserve(total);
@@ -1213,6 +1482,55 @@ inline OptionsBuffer buildOptions(
   return buf;
 }
 
+/// Throws on a failed C API call, otherwise copies the returned string and
+/// frees it. The manifest and catalog entry points all hand back a ``malloc``
+/// buffer the caller owns, so they all need this.
+inline std::string adoptString(int32_t error, char *buffer) {
+  if (error < 0) {
+    if (buffer != nullptr) {
+      std::free(buffer);
+    }
+    const char *errorStr = moonshine_error_to_string(error);
+    throw MoonshineException(errorStr ? std::string(errorStr)
+                                      : "Unknown error");
+  }
+  if (buffer == nullptr) {
+    return std::string();
+  }
+  std::string result(buffer);
+  std::free(buffer);
+  return result;
+}
+
+/// Flattens a keyed asset map into the parallel arrays the C API's
+/// ``*_from_memory`` entry points take. The returned vectors borrow from
+/// ``modelFiles``, which therefore has to outlive them.
+struct MemoryFiles {
+  std::vector<const char *> names;
+  std::vector<const uint8_t *> datas;
+  std::vector<uint64_t> sizes;
+
+  const char **namesData() { return names.empty() ? nullptr : names.data(); }
+  const uint8_t **datasData() { return datas.empty() ? nullptr : datas.data(); }
+  uint64_t *sizesData() { return sizes.empty() ? nullptr : sizes.data(); }
+  uint64_t count() const { return static_cast<uint64_t>(names.size()); }
+};
+
+inline MemoryFiles flattenFiles(
+    const std::map<std::string, std::pair<const uint8_t *, size_t>>
+        &modelFiles) {
+  MemoryFiles out;
+  out.names.reserve(modelFiles.size());
+  out.datas.reserve(modelFiles.size());
+  out.sizes.reserve(modelFiles.size());
+  for (const auto &kv : modelFiles) {
+    out.names.push_back(kv.first.c_str());
+    out.datas.push_back(kv.second.first);
+    out.sizes.push_back(static_cast<uint64_t>(kv.second.second));
+  }
+  return out;
+}
+
 }  // namespace detail
 
 inline Transcriber::Transcriber(const std::string &modelPath,
@@ -1227,10 +1545,10 @@ inline Transcriber::Transcriber(const std::string &modelPath,
   checkError(handle_);
 }
 
-inline Transcriber::Transcriber(
-    const std::string &modelPath, ModelArch modelArch, double updateInterval,
-    const std::string &spellingModelPath,
-    const std::vector<std::pair<std::string, std::string>> &options)
+inline Transcriber::Transcriber(const std::string &modelPath,
+                                ModelArch modelArch, double updateInterval,
+                                const std::string &spellingModelPath,
+                                const Options &options)
     : handle_(-1),
       modelPath_(modelPath),
       modelArch_(modelArch),
@@ -1248,8 +1566,7 @@ inline Transcriber Transcriber::loadFromMemory(
     const uint8_t *decoderData, size_t decoderDataSize,
     const uint8_t *tokenizerData, size_t tokenizerDataSize, ModelArch modelArch,
     double updateInterval, const uint8_t *spellingModelData,
-    size_t spellingModelDataSize,
-    const std::vector<std::pair<std::string, std::string>> &options) {
+    size_t spellingModelDataSize, const Options &options) {
   // Map the classic (encoder, decoder, tokenizer[, spelling]) buffers onto
   // their canonical filenames and defer to the general keyed loader so every
   // in-memory path funnels through
@@ -1267,26 +1584,14 @@ inline Transcriber Transcriber::loadFromMemory(
 
 inline Transcriber Transcriber::loadFromMemory(
     const std::map<std::string, std::pair<const uint8_t *, size_t>> &modelFiles,
-    ModelArch modelArch, double updateInterval,
-    const std::vector<std::pair<std::string, std::string>> &options) {
-  std::vector<const char *> names;
-  std::vector<const uint8_t *> datas;
-  std::vector<uint64_t> sizes;
-  names.reserve(modelFiles.size());
-  datas.reserve(modelFiles.size());
-  sizes.reserve(modelFiles.size());
-  for (const auto &kv : modelFiles) {
-    // kv.first is owned by the (const-ref) map and stays valid for this call.
-    names.push_back(kv.first.c_str());
-    datas.push_back(kv.second.first);
-    sizes.push_back(static_cast<uint64_t>(kv.second.second));
-  }
+    ModelArch modelArch, double updateInterval, const Options &options) {
+  // The flattened arrays borrow from modelFiles, which is a const reference
+  // and so outlives this call.
+  detail::MemoryFiles files = detail::flattenFiles(modelFiles);
   detail::OptionsBuffer buf = detail::buildOptions("", options);
   int32_t handle = moonshine_load_transcriber_from_memory_files(
-      names.empty() ? nullptr : names.data(),
-      datas.empty() ? nullptr : datas.data(),
-      sizes.empty() ? nullptr : sizes.data(),
-      static_cast<uint64_t>(names.size()), static_cast<uint32_t>(modelArch),
+      files.namesData(), files.datasData(), files.sizesData(), files.count(),
+      static_cast<uint32_t>(modelArch),
       buf.options.empty() ? nullptr : buf.options.data(),
       static_cast<uint64_t>(buf.options.size()), MOONSHINE_HEADER_VERSION);
   if (handle < 0) {
@@ -1296,6 +1601,28 @@ inline Transcriber Transcriber::loadFromMemory(
         (msg ? msg : "unknown error"));
   }
   return Transcriber(handle, modelArch, updateInterval);
+}
+
+inline std::string Transcriber::getDependencies(const std::string &language,
+                                                const Options &options) {
+  detail::OptionsBuffer buf = detail::buildOptions("", options);
+  char *out_json = nullptr;
+  int32_t err = moonshine_get_stt_dependencies(
+      language.c_str(), buf.options.empty() ? nullptr : buf.options.data(),
+      static_cast<uint64_t>(buf.options.size()), &out_json);
+  return detail::adoptString(err, out_json);
+}
+
+inline std::string Transcriber::getDiarizationDependencies() {
+  char *out_json = nullptr;
+  int32_t err = moonshine_get_diarization_dependencies(&out_json);
+  return detail::adoptString(err, out_json);
+}
+
+inline std::string Transcriber::getCatalog() {
+  char *out_json = nullptr;
+  int32_t err = moonshine_get_stt_catalog(&out_json);
+  return detail::adoptString(err, out_json);
 }
 
 inline Transcriber::~Transcriber() { close(); }
@@ -1432,20 +1759,230 @@ inline void Stream::checkError(int32_t error) const {
   }
 }
 
+// Speech clip implementation
+inline SpeechClip extractSpeechClip(const std::vector<float> &audioData,
+                                    int32_t sampleRate,
+                                    const Options &options) {
+  detail::OptionsBuffer buf = detail::buildOptions("", options);
+  moonshine_speech_clip_t clip_c;
+  std::memset(&clip_c, 0, sizeof(clip_c));
+  int32_t err = moonshine_extract_speech_clip(
+      audioData.empty() ? nullptr : audioData.data(),
+      static_cast<uint64_t>(audioData.size()), sampleRate,
+      buf.options.empty() ? nullptr : buf.options.data(),
+      static_cast<uint64_t>(buf.options.size()), &clip_c);
+  if (err < 0) {
+    const char *errorStr = moonshine_error_to_string(err);
+    throw MoonshineException(errorStr ? std::string(errorStr)
+                                      : "Unknown error");
+  }
+  SpeechClip clip;
+  clip.startTime = clip_c.start_time;
+  clip.speechDuration = clip_c.speech_duration;
+  clip.isComplete = clip_c.is_complete != 0;
+  if (clip_c.audio_data != nullptr && clip_c.audio_length > 0) {
+    clip.audio.assign(clip_c.audio_data,
+                      clip_c.audio_data + clip_c.audio_length);
+    moonshine_free_buffer(clip_c.audio_data);
+  }
+  return clip;
+}
+
+// VoiceClone implementation
+inline VoiceClone::VoiceClone(float clipDurationSeconds,
+                              float minimumSpeechSeconds)
+    : state_(new State(clipDurationSeconds, minimumSpeechSeconds)) {}
+
+inline void VoiceClone::addAudio(const std::vector<float> &pcm,
+                                 int32_t sampleRate) {
+  bool due = false;
+  {
+    std::lock_guard<std::mutex> lock(state_->mutex);
+    if (state_->complete || pcm.empty() || sampleRate <= 0) {
+      return;
+    }
+    if (sampleRate != state_->recordingSampleRate) {
+      // Mixed rates in one buffer would make the clip come out at the wrong
+      // speed, so a change starts the recording over.
+      state_->recording.clear();
+      state_->recordingSampleRate = sampleRate;
+      state_->samplesSinceSearch = 0;
+    }
+    state_->recording.insert(state_->recording.end(), pcm.begin(), pcm.end());
+    state_->samplesSinceSearch += pcm.size();
+    const size_t interval = static_cast<size_t>(
+        (static_cast<int64_t>(sampleRate) * SEARCH_INTERVAL_MS) / 1000);
+    if (state_->samplesSinceSearch >= interval) {
+      state_->samplesSinceSearch = 0;
+      due = true;
+    }
+  }
+  if (due) {
+    search(false);
+  }
+}
+
+inline void VoiceClone::search(bool acceptAnything) {
+  std::vector<float> samples;
+  int32_t rate = CLIP_SAMPLE_RATE;
+  float minimumSpeech = 0.0f;
+  float clipDuration = 0.0f;
+  {
+    std::lock_guard<std::mutex> lock(state_->mutex);
+    if (state_->complete) {
+      return;
+    }
+    samples = state_->recording;
+    rate = state_->recordingSampleRate;
+    minimumSpeech = acceptAnything ? 0.0f : state_->minimumSpeechSeconds;
+    clipDuration = state_->clipDurationSeconds;
+  }
+  if (samples.empty()) {
+    return;
+  }
+
+  SpeechClip found;
+  try {
+    found = extractSpeechClip(
+        samples, rate,
+        {{"clip_duration_seconds", std::to_string(clipDuration)},
+         {"minimum_speech_seconds", std::to_string(minimumSpeech)}});
+  } catch (const MoonshineException &) {
+    // A failed search on a partial recording is not fatal; more audio may
+    // still arrive. Callers see this as isReady() staying false.
+    return;
+  }
+
+  std::vector<std::function<void()>> ready;
+  std::vector<std::function<void(float, float)>> progress;
+  const float recorded =
+      static_cast<float>(samples.size()) / static_cast<float>(rate);
+  float speechSoFar = 0.0f;
+  {
+    std::lock_guard<std::mutex> lock(state_->mutex);
+    state_->speech = found.speechDuration;
+    speechSoFar = found.speechDuration;
+    progress = state_->progressHandlers;
+    if (!found.audio.empty()) {
+      state_->clip = found.audio;
+      state_->complete = true;
+      ready.swap(state_->readyHandlers);
+    }
+  }
+
+  // Handlers run outside the lock so that one calling back into this object
+  // cannot deadlock.
+  for (auto &handler : progress) {
+    handler(recorded, speechSoFar);
+  }
+  for (auto &handler : ready) {
+    handler();
+  }
+}
+
+inline bool VoiceClone::isReady() const {
+  std::lock_guard<std::mutex> lock(state_->mutex);
+  return state_->complete;
+}
+
+inline std::vector<float> VoiceClone::audio() const {
+  std::lock_guard<std::mutex> lock(state_->mutex);
+  return state_->clip;
+}
+
+inline float VoiceClone::speechSeconds() const {
+  std::lock_guard<std::mutex> lock(state_->mutex);
+  return state_->speech;
+}
+
+inline float VoiceClone::recordedSeconds() const {
+  std::lock_guard<std::mutex> lock(state_->mutex);
+  if (state_->recordingSampleRate <= 0) {
+    return 0.0f;
+  }
+  return static_cast<float>(state_->recording.size()) /
+         static_cast<float>(state_->recordingSampleRate);
+}
+
+inline VoiceClone &VoiceClone::onReady(std::function<void()> handler) {
+  if (!handler) {
+    return *this;
+  }
+  bool fireNow = false;
+  {
+    std::lock_guard<std::mutex> lock(state_->mutex);
+    if (state_->complete) {
+      fireNow = true;
+    } else {
+      state_->readyHandlers.push_back(handler);
+    }
+  }
+  if (fireNow) {
+    handler();
+  }
+  return *this;
+}
+
+inline VoiceClone &VoiceClone::onProgress(
+    std::function<void(float, float)> handler) {
+  if (handler) {
+    std::lock_guard<std::mutex> lock(state_->mutex);
+    state_->progressHandlers.push_back(handler);
+  }
+  return *this;
+}
+
+inline bool VoiceClone::finish() {
+  search(true);
+  return isReady();
+}
+
+inline void VoiceClone::reset() {
+  std::lock_guard<std::mutex> lock(state_->mutex);
+  state_->recording.clear();
+  state_->samplesSinceSearch = 0;
+  state_->clip.clear();
+  state_->complete = false;
+  state_->speech = 0.0f;
+}
+
 // TextToSpeech implementation
-inline TextToSpeech::TextToSpeech(
-    const std::string &language, const std::vector<moonshine_option_t> &options)
-    : handle_(-1), language_(language) {
+inline TextToSpeech::TextToSpeech(const std::string &language,
+                                  const Options &options)
+    : handle_(-1), language_(language), options_(options) {
+  detail::OptionsBuffer buf = detail::buildOptions("", options);
   handle_ = moonshine_create_tts_synthesizer_from_files(
-      language.c_str(), nullptr, 0, options.empty() ? nullptr : options.data(),
-      options.size(), MOONSHINE_HEADER_VERSION);
+      language.c_str(), nullptr, 0,
+      buf.options.empty() ? nullptr : buf.options.data(),
+      static_cast<uint64_t>(buf.options.size()), MOONSHINE_HEADER_VERSION);
   checkError(handle_);
+}
+
+inline TextToSpeech TextToSpeech::loadFromMemory(
+    const std::map<std::string, std::pair<const uint8_t *, size_t>> &modelFiles,
+    const std::string &language, const Options &options) {
+  detail::MemoryFiles files = detail::flattenFiles(modelFiles);
+  detail::OptionsBuffer buf = detail::buildOptions("", options);
+  int32_t handle = moonshine_create_tts_synthesizer_from_memory(
+      language.c_str(), files.namesData(), files.count(), files.datasData(),
+      files.sizesData(), buf.options.empty() ? nullptr : buf.options.data(),
+      static_cast<uint64_t>(buf.options.size()), MOONSHINE_HEADER_VERSION);
+  if (handle < 0) {
+    const char *errorStr = moonshine_error_to_string(handle);
+    throw MoonshineException(errorStr ? std::string(errorStr)
+                                      : "Unknown error");
+  }
+  return TextToSpeech(handle, language, options, modelFiles);
 }
 
 inline TextToSpeech::~TextToSpeech() { close(); }
 
 inline TextToSpeech::TextToSpeech(TextToSpeech &&other)
-    : handle_(other.handle_), language_(std::move(other.language_)) {
+    : handle_(other.handle_),
+      language_(std::move(other.language_)),
+      options_(std::move(other.options_)),
+      modelFiles_(std::move(other.modelFiles_)),
+      cloneBytes_(std::move(other.cloneBytes_)) {
   other.handle_ = -1;
 }
 
@@ -1454,22 +1991,27 @@ inline TextToSpeech &TextToSpeech::operator=(TextToSpeech &&other) {
     close();
     handle_ = other.handle_;
     language_ = std::move(other.language_);
+    options_ = std::move(other.options_);
+    modelFiles_ = std::move(other.modelFiles_);
+    cloneBytes_ = std::move(other.cloneBytes_);
     other.handle_ = -1;
   }
   return *this;
 }
 
-inline TtsSynthesisResult TextToSpeech::synthesize(
-    const std::string &text, const std::vector<moonshine_option_t> &options) {
+inline TtsSynthesisResult TextToSpeech::synthesize(const std::string &text,
+                                                   const Options &options) {
   if (handle_ < 0) {
     throw MoonshineException("TextToSpeech is not initialized");
   }
+  detail::OptionsBuffer buf = detail::buildOptions("", options);
   float *out_audio = nullptr;
   uint64_t out_size = 0;
   int32_t out_sample_rate = 0;
   checkError(moonshine_text_to_speech(
-      handle_, text.c_str(), options.empty() ? nullptr : options.data(),
-      options.size(), &out_audio, &out_size, &out_sample_rate));
+      handle_, text.c_str(), buf.options.empty() ? nullptr : buf.options.data(),
+      static_cast<uint64_t>(buf.options.size()), &out_audio, &out_size,
+      &out_sample_rate));
   TtsSynthesisResult result;
   if (out_audio && out_size > 0) {
     result.samples.assign(out_audio, out_audio + out_size);
@@ -1480,17 +2022,19 @@ inline TtsSynthesisResult TextToSpeech::synthesize(
 }
 
 inline TtsSynthesisResult TextToSpeech::synthesizeFromPhonemes(
-    const std::string &phonemes,
-    const std::vector<moonshine_option_t> &options) {
+    const std::string &phonemes, const Options &options) {
   if (handle_ < 0) {
     throw MoonshineException("TextToSpeech is not initialized");
   }
+  detail::OptionsBuffer buf = detail::buildOptions("", options);
   float *out_audio = nullptr;
   uint64_t out_size = 0;
   int32_t out_sample_rate = 0;
   checkError(moonshine_phonemes_to_speech(
-      handle_, phonemes.c_str(), options.empty() ? nullptr : options.data(),
-      options.size(), &out_audio, &out_size, &out_sample_rate));
+      handle_, phonemes.c_str(),
+      buf.options.empty() ? nullptr : buf.options.data(),
+      static_cast<uint64_t>(buf.options.size()), &out_audio, &out_size,
+      &out_sample_rate));
   TtsSynthesisResult result;
   if (out_audio && out_size > 0) {
     result.samples.assign(out_audio, out_audio + out_size);
@@ -1500,6 +2044,110 @@ inline TtsSynthesisResult TextToSpeech::synthesizeFromPhonemes(
   return result;
 }
 
+inline std::vector<float> TextToSpeech::clipForCloning(
+    const std::vector<float> &samples, int32_t sampleRate) {
+  SpeechClip clip = extractSpeechClip(samples, sampleRate);
+  if (!clip.isComplete || clip.audio.empty()) {
+    throw MoonshineException(
+        "No usable speech found in the reference recording (" +
+        std::to_string(clip.speechDuration) +
+        "s of speech detected). Supply a longer or clearer clip.");
+  }
+  return clip.audio;
+}
+
+inline void TextToSpeech::rebuildForClone(int32_t sampleRate,
+                                          const std::string &transcript,
+                                          const Transcriber *transcriber) {
+  // Replay whatever built this synthesizer, swapping the voice for ZipVoice
+  // and adding the reference clip. The C API borrows the clip bytes rather
+  // than copying them, so cloneBytes_ has to stay put for the new handle's
+  // lifetime; it is only replaced once the rebuild has succeeded.
+  Options options = options_;
+  options.push_back({"voice", "zipvoice"});
+  options.push_back({"zipvoice_clone_sample_rate", std::to_string(sampleRate)});
+  if (!transcript.empty()) {
+    options.push_back({"zipvoice_clone_transcript", transcript});
+  } else if (transcriber != nullptr) {
+    options.push_back({"zipvoice_asr_transcriber_handle",
+                       std::to_string(transcriber->getHandle())});
+  } else {
+    throw MoonshineException(
+        "Cloning needs either the words spoken in the reference clip or a "
+        "Transcriber to work them out.");
+  }
+
+  std::map<std::string, std::pair<const uint8_t *, size_t>> files = modelFiles_;
+  files["zipvoice/clone_audio"] = {cloneBytes_.data(), cloneBytes_.size()};
+
+  detail::MemoryFiles flat = detail::flattenFiles(files);
+  detail::OptionsBuffer buf = detail::buildOptions("", options);
+  int32_t handle = moonshine_create_tts_synthesizer_from_memory(
+      language_.c_str(), flat.namesData(), flat.count(), flat.datasData(),
+      flat.sizesData(), buf.options.empty() ? nullptr : buf.options.data(),
+      static_cast<uint64_t>(buf.options.size()), MOONSHINE_HEADER_VERSION);
+  if (handle < 0) {
+    cloneBytes_.clear();
+    const char *errorStr = moonshine_error_to_string(handle);
+    throw MoonshineException(std::string("Failed to build a cloned voice: ") +
+                             (errorStr ? errorStr : "unknown error"));
+  }
+  if (handle_ >= 0) {
+    moonshine_free_tts_synthesizer(handle_);
+  }
+  handle_ = handle;
+}
+
+inline void TextToSpeech::cloneFrom(const std::vector<float> &samples,
+                                    int32_t sampleRate,
+                                    const std::string &transcript) {
+  const std::vector<float> clip = clipForCloning(samples, sampleRate);
+  const uint8_t *bytes = reinterpret_cast<const uint8_t *>(clip.data());
+  cloneBytes_.assign(bytes, bytes + clip.size() * sizeof(float));
+  // extractSpeechClip always resamples to 16 kHz, whatever went in.
+  rebuildForClone(VoiceClone::CLIP_SAMPLE_RATE, transcript, nullptr);
+}
+
+inline void TextToSpeech::cloneFrom(const std::vector<float> &samples,
+                                    int32_t sampleRate,
+                                    Transcriber &transcriber) {
+  const std::vector<float> clip = clipForCloning(samples, sampleRate);
+  const uint8_t *bytes = reinterpret_cast<const uint8_t *>(clip.data());
+  cloneBytes_.assign(bytes, bytes + clip.size() * sizeof(float));
+  rebuildForClone(VoiceClone::CLIP_SAMPLE_RATE, "", &transcriber);
+}
+
+inline void TextToSpeech::cloneFrom(const VoiceClone &clone,
+                                    const std::string &transcript) {
+  const std::vector<float> clip = clone.audio();
+  if (clip.empty()) {
+    throw MoonshineException(
+        "That VoiceClone has not captured enough speech yet; wait for "
+        "isReady(), or call finish() to take the best window so far.");
+  }
+  const uint8_t *bytes = reinterpret_cast<const uint8_t *>(clip.data());
+  cloneBytes_.assign(bytes, bytes + clip.size() * sizeof(float));
+  rebuildForClone(clone.sampleRate(), transcript, nullptr);
+}
+
+inline void TextToSpeech::cloneFrom(const VoiceClone &clone,
+                                    Transcriber &transcriber) {
+  const std::vector<float> clip = clone.audio();
+  if (clip.empty()) {
+    throw MoonshineException(
+        "That VoiceClone has not captured enough speech yet; wait for "
+        "isReady(), or call finish() to take the best window so far.");
+  }
+  const uint8_t *bytes = reinterpret_cast<const uint8_t *>(clip.data());
+  cloneBytes_.assign(bytes, bytes + clip.size() * sizeof(float));
+  rebuildForClone(clone.sampleRate(), "", &transcriber);
+}
+
+inline VoiceClone TextToSpeech::startCloning(float clipDurationSeconds,
+                                             float minimumSpeechSeconds) const {
+  return VoiceClone(clipDurationSeconds, minimumSpeechSeconds);
+}
+
 inline void TextToSpeech::close() {
   if (handle_ >= 0) {
     moonshine_free_tts_synthesizer(handle_);
@@ -1507,44 +2155,24 @@ inline void TextToSpeech::close() {
   }
 }
 
-inline std::string TextToSpeech::getVoices(
-    const std::string &languages,
-    const std::vector<moonshine_option_t> &options) {
+inline std::string TextToSpeech::getVoices(const std::string &languages,
+                                           const Options &options) {
+  detail::OptionsBuffer buf = detail::buildOptions("", options);
   char *out_json = nullptr;
   int32_t err = moonshine_get_tts_voices(
-      languages.c_str(), options.empty() ? nullptr : options.data(),
-      options.size(), &out_json);
-  if (err < 0) {
-    const char *errorStr = moonshine_error_to_string(err);
-    throw MoonshineException(errorStr ? std::string(errorStr)
-                                      : "Unknown error");
-  }
-  std::string result;
-  if (out_json) {
-    result = std::string(out_json);
-    std::free(out_json);
-  }
-  return result;
+      languages.c_str(), buf.options.empty() ? nullptr : buf.options.data(),
+      static_cast<uint64_t>(buf.options.size()), &out_json);
+  return detail::adoptString(err, out_json);
 }
 
-inline std::string TextToSpeech::getDependencies(
-    const std::string &languages,
-    const std::vector<moonshine_option_t> &options) {
+inline std::string TextToSpeech::getDependencies(const std::string &languages,
+                                                 const Options &options) {
+  detail::OptionsBuffer buf = detail::buildOptions("", options);
   char *out_json = nullptr;
   int32_t err = moonshine_get_tts_dependencies(
-      languages.c_str(), options.empty() ? nullptr : options.data(),
-      options.size(), &out_json);
-  if (err < 0) {
-    const char *errorStr = moonshine_error_to_string(err);
-    throw MoonshineException(errorStr ? std::string(errorStr)
-                                      : "Unknown error");
-  }
-  std::string result;
-  if (out_json) {
-    result = std::string(out_json);
-    std::free(out_json);
-  }
-  return result;
+      languages.c_str(), buf.options.empty() ? nullptr : buf.options.data(),
+      static_cast<uint64_t>(buf.options.size()), &out_json);
+  return detail::adoptString(err, out_json);
 }
 
 inline void TextToSpeech::checkError(int32_t error) const {
@@ -1556,13 +2184,32 @@ inline void TextToSpeech::checkError(int32_t error) const {
 }
 
 // GraphemeToPhonemizer implementation
-inline GraphemeToPhonemizer::GraphemeToPhonemizer(
-    const std::string &language, const std::vector<moonshine_option_t> &options)
+inline GraphemeToPhonemizer::GraphemeToPhonemizer(const std::string &language,
+                                                  const Options &options)
     : handle_(-1), language_(language) {
+  detail::OptionsBuffer buf = detail::buildOptions("", options);
   handle_ = moonshine_create_grapheme_to_phonemizer_from_files(
-      language.c_str(), nullptr, 0, options.empty() ? nullptr : options.data(),
-      options.size(), MOONSHINE_HEADER_VERSION);
+      language.c_str(), nullptr, 0,
+      buf.options.empty() ? nullptr : buf.options.data(),
+      static_cast<uint64_t>(buf.options.size()), MOONSHINE_HEADER_VERSION);
   checkError(handle_);
+}
+
+inline GraphemeToPhonemizer GraphemeToPhonemizer::loadFromMemory(
+    const std::map<std::string, std::pair<const uint8_t *, size_t>> &modelFiles,
+    const std::string &language, const Options &options) {
+  detail::MemoryFiles files = detail::flattenFiles(modelFiles);
+  detail::OptionsBuffer buf = detail::buildOptions("", options);
+  int32_t handle = moonshine_create_grapheme_to_phonemizer_from_memory(
+      language.c_str(), files.namesData(), files.count(), files.datasData(),
+      files.sizesData(), buf.options.empty() ? nullptr : buf.options.data(),
+      static_cast<uint64_t>(buf.options.size()), MOONSHINE_HEADER_VERSION);
+  if (handle < 0) {
+    const char *errorStr = moonshine_error_to_string(handle);
+    throw MoonshineException(errorStr ? std::string(errorStr)
+                                      : "Unknown error");
+  }
+  return GraphemeToPhonemizer(handle, language);
 }
 
 inline GraphemeToPhonemizer::~GraphemeToPhonemizer() { close(); }
@@ -1583,16 +2230,17 @@ inline GraphemeToPhonemizer &GraphemeToPhonemizer::operator=(
   return *this;
 }
 
-inline std::string GraphemeToPhonemizer::toIpa(
-    const std::string &text, const std::vector<moonshine_option_t> &options) {
+inline std::string GraphemeToPhonemizer::toIpa(const std::string &text,
+                                               const Options &options) {
   if (handle_ < 0) {
     throw MoonshineException("GraphemeToPhonemizer is not initialized");
   }
+  detail::OptionsBuffer buf = detail::buildOptions("", options);
   const char *out_phonemes = nullptr;
   uint64_t out_count = 0;
   checkError(moonshine_text_to_phonemes(
-      handle_, text.c_str(), options.empty() ? nullptr : options.data(),
-      options.size(), &out_phonemes, &out_count));
+      handle_, text.c_str(), buf.options.empty() ? nullptr : buf.options.data(),
+      static_cast<uint64_t>(buf.options.size()), &out_phonemes, &out_count));
   if (out_phonemes && out_count > 0) {
     return std::string(out_phonemes, out_count);
   }
@@ -1607,23 +2255,13 @@ inline void GraphemeToPhonemizer::close() {
 }
 
 inline std::string GraphemeToPhonemizer::getDependencies(
-    const std::string &languages,
-    const std::vector<moonshine_option_t> &options) {
+    const std::string &languages, const Options &options) {
+  detail::OptionsBuffer buf = detail::buildOptions("", options);
   char *out_deps = nullptr;
   int32_t err = moonshine_get_g2p_dependencies(
-      languages.c_str(), options.empty() ? nullptr : options.data(),
-      options.size(), &out_deps);
-  if (err < 0) {
-    const char *errorStr = moonshine_error_to_string(err);
-    throw MoonshineException(errorStr ? std::string(errorStr)
-                                      : "Unknown error");
-  }
-  std::string result;
-  if (out_deps) {
-    result = std::string(out_deps);
-    std::free(out_deps);
-  }
-  return result;
+      languages.c_str(), buf.options.empty() ? nullptr : buf.options.data(),
+      static_cast<uint64_t>(buf.options.size()), &out_deps);
+  return detail::adoptString(err, out_deps);
 }
 
 inline void GraphemeToPhonemizer::checkError(int32_t error) const {
@@ -1646,31 +2284,34 @@ inline EmbeddingModel::EmbeddingModel(const std::string &model_path,
 inline EmbeddingModel EmbeddingModel::loadFromMemory(
     const std::map<std::string, std::pair<const uint8_t *, size_t>> &modelFiles,
     EmbeddingModelArch arch, const std::string &model_variant) {
-  std::vector<const char *> names;
-  std::vector<const uint8_t *> datas;
-  std::vector<uint64_t> sizes;
-  names.reserve(modelFiles.size());
-  datas.reserve(modelFiles.size());
-  sizes.reserve(modelFiles.size());
-  for (const auto &kv : modelFiles) {
-    names.push_back(kv.first.c_str());
-    datas.push_back(kv.second.first);
-    sizes.push_back(static_cast<uint64_t>(kv.second.second));
-  }
+  detail::MemoryFiles files = detail::flattenFiles(modelFiles);
   int32_t handle = moonshine_create_embedding_model_from_memory(
       static_cast<uint32_t>(arch),
       model_variant.empty() ? nullptr : model_variant.c_str(),
-      names.empty() ? nullptr : names.data(),
-      static_cast<uint64_t>(names.size()),
-      datas.empty() ? nullptr : datas.data(),
-      sizes.empty() ? nullptr : sizes.data(), nullptr, 0,
-      MOONSHINE_HEADER_VERSION);
+      files.namesData(), files.count(), files.datasData(), files.sizesData(),
+      nullptr, 0, MOONSHINE_HEADER_VERSION);
   if (handle < 0) {
     const char *errorStr = moonshine_error_to_string(handle);
     throw MoonshineException(errorStr ? std::string(errorStr)
                                       : "Unknown error");
   }
   return EmbeddingModel(handle);
+}
+
+inline std::string EmbeddingModel::getDependencies(const std::string &modelName,
+                                                   const Options &options) {
+  detail::OptionsBuffer buf = detail::buildOptions("", options);
+  char *out_json = nullptr;
+  int32_t err = moonshine_get_embedding_dependencies(
+      modelName.c_str(), buf.options.empty() ? nullptr : buf.options.data(),
+      static_cast<uint64_t>(buf.options.size()), &out_json);
+  return detail::adoptString(err, out_json);
+}
+
+inline std::string EmbeddingModel::getCatalog() {
+  char *out_json = nullptr;
+  int32_t err = moonshine_get_embedding_catalog(&out_json);
+  return detail::adoptString(err, out_json);
 }
 
 inline EmbeddingModel::~EmbeddingModel() { close(); }
