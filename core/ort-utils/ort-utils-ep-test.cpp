@@ -60,19 +60,31 @@ TEST_CASE("ort_append_execution_providers") {
     CHECK(status == nullptr);
   }
 
+  // A compiling provider either appends or is absent from this library, and
+  // both are expected: macOS has CoreML, iOS and Android ship without either
+  // (docs/execution-providers.md). What must hold in the absent case is that
+  // the caller is told where to look rather than handed ORT's "not supported
+  // in this build".
+  auto check_optional_provider = [&](const char *name) {
+    OrtStatus *status = ort_append_execution_providers(api, opts, {name},
+                                                       nullptr);
+    if (status == nullptr) {
+      return;
+    }
+    const std::string message = api->GetErrorMessage(status);
+    CHECK(message.find("docs/execution-providers.md") != std::string::npos);
+    api->ReleaseStatus(status);
+  };
+
 #if defined(__APPLE__)
-  SUBCASE("coreml provider appends successfully") {
-    OrtStatus *status =
-        ort_append_execution_providers(api, opts, {"coreml"}, nullptr);
-    CHECK(status == nullptr);
+  SUBCASE("coreml provider appends or explains its absence") {
+    check_optional_provider("coreml");
   }
 #endif
 
 #if defined(__ANDROID__)
-  SUBCASE("nnapi provider appends successfully") {
-    OrtStatus *status =
-        ort_append_execution_providers(api, opts, {"nnapi"}, nullptr);
-    CHECK(status == nullptr);
+  SUBCASE("nnapi provider appends or explains its absence") {
+    check_optional_provider("nnapi");
   }
 #endif
 
@@ -114,12 +126,17 @@ TEST_CASE("ort session with execution providers") {
     api->ReleaseSessionOptions(opts);
   }
 
-#if defined(__APPLE__)
-  SUBCASE("coreml session creation") {
+  // Same reasoning as above: run the session only where the provider exists.
+  auto check_optional_provider_session = [&](const char *name) {
     OrtSessionOptions *opts = nullptr;
     REQUIRE(api->CreateSessionOptions(&opts) == nullptr);
-    REQUIRE(ort_append_execution_providers(api, opts, {"coreml", "cpu"},
-                                           nullptr) == nullptr);
+    OrtStatus *appended =
+        ort_append_execution_providers(api, opts, {name, "cpu"}, nullptr);
+    if (appended != nullptr) {
+      api->ReleaseStatus(appended);
+      api->ReleaseSessionOptions(opts);
+      return;
+    }
     OrtSession *session = nullptr;
     OrtStatus *status =
         api->CreateSession(env, model_path.c_str(), opts, &session);
@@ -131,27 +148,16 @@ TEST_CASE("ort session with execution providers") {
       api->ReleaseStatus(status);
     }
     api->ReleaseSessionOptions(opts);
+  };
+
+#if defined(__APPLE__)
+  SUBCASE("coreml session creation") {
+    check_optional_provider_session("coreml");
   }
 #endif
 
 #if defined(__ANDROID__)
-  SUBCASE("nnapi session creation") {
-    OrtSessionOptions *opts = nullptr;
-    REQUIRE(api->CreateSessionOptions(&opts) == nullptr);
-    REQUIRE(ort_append_execution_providers(api, opts, {"nnapi", "cpu"},
-                                           nullptr) == nullptr);
-    OrtSession *session = nullptr;
-    OrtStatus *status =
-        api->CreateSession(env, model_path.c_str(), opts, &session);
-    CHECK(status == nullptr);
-    if (session != nullptr) {
-      api->ReleaseSession(session);
-    }
-    if (status != nullptr) {
-      api->ReleaseStatus(status);
-    }
-    api->ReleaseSessionOptions(opts);
-  }
+  SUBCASE("nnapi session creation") { check_optional_provider_session("nnapi"); }
 #endif
 
   api->ReleaseEnv(env);

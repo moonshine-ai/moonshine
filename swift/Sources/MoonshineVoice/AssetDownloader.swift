@@ -19,6 +19,9 @@ public enum ModelSpec: Sendable, Hashable {
     case embedding(modelName: String = "embeddinggemma-300m", variant: String? = nil)
     /// Grapheme-to-phoneme assets for a language (lexicons / ONNX bundles).
     case g2p(language: String)
+    /// Speaker diarization models, needed by the `identify_speakers` transcriber option. There
+    /// is one set and it has no variants. About 8.2 MB.
+    case diarization
 }
 
 /// Progress for a single file within an ``AssetDownloader`` run.
@@ -160,6 +163,9 @@ public final class AssetDownloader: @unchecked Sendable {
             }
             let json = try api.getEmbeddingDependencies(modelName: modelName, options: options)
             return try filesFromGroupManifest(json)
+
+        case .diarization:
+            return try filesFromGroupManifest(api.getDiarizationDependencies())
 
         case .tts(let language, let voice):
             var options: [TranscriberOption] = [

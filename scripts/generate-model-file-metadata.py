@@ -22,6 +22,7 @@ Requires network access to https://download.moonshine.ai.
 
 import json
 import os
+import subprocess
 import sys
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -34,6 +35,7 @@ OUTPUT_PATH = REPO_ROOT / "core" / "moonshine-model-file-metadata.generated.cpp"
 sys.path.insert(0, str(PYTHON_SRC))
 
 from moonshine_voice.moonshine_api import (  # noqa: E402
+    moonshine_get_diarization_dependencies_string,
     moonshine_get_embedding_catalog_string,
     moonshine_get_embedding_dependencies_string,
     moonshine_get_stt_catalog_string,
@@ -42,7 +44,7 @@ from moonshine_voice.moonshine_api import (  # noqa: E402
 
 
 def enumerate_urls() -> "set[str]":
-    """Every downloadable file URL across the whole catalog (STT + embedding)."""
+    """Every downloadable file URL across the catalog (STT, embedding, diarization)."""
     urls: set[str] = set()
 
     stt_catalog = json.loads(moonshine_get_stt_catalog_string())
@@ -79,6 +81,11 @@ def enumerate_urls() -> "set[str]":
             for group in manifest.get("groups", []):
                 for file_info in group.get("files", []):
                     urls.add(file_info["url"])
+
+    diarization = json.loads(moonshine_get_diarization_dependencies_string())
+    for group in diarization.get("groups", []):
+        for file_info in group.get("files", []):
+            urls.add(file_info["url"])
 
     return urls
 
@@ -203,6 +210,16 @@ def main() -> int:
         return 1
 
     OUTPUT_PATH.write_text(render(entries))
+    # Without this the file re-wraps every long URL differently from the
+    # committed copy, and adding one model shows up as a whole-file rewrite.
+    try:
+        subprocess.run(["clang-format", "-i", str(OUTPUT_PATH)], check=True)
+    except (OSError, subprocess.CalledProcessError) as err:
+        print(
+            f"Wrote the registry but could not clang-format it ({err}); "
+            "format it before committing.",
+            file=sys.stderr,
+        )
     print(f"Wrote {len(entries)} entries to {OUTPUT_PATH}", file=sys.stderr)
     return 0
 

@@ -159,6 +159,18 @@ class TranscriberOptionC(ctypes.Structure):
 MoonshineOptionC = TranscriberOptionC
 
 
+class SpeechClipC(ctypes.Structure):
+    """C structure for moonshine_speech_clip_t."""
+
+    _fields_ = [
+        ("audio_data", ctypes.POINTER(ctypes.c_float)),
+        ("audio_length", ctypes.c_uint64),
+        ("start_time", ctypes.c_float),
+        ("speech_duration", ctypes.c_float),
+        ("is_complete", ctypes.c_int32),
+    ]
+
+
 class ModelArch(IntEnum):
     """Model architecture types."""
 
@@ -446,6 +458,26 @@ def moonshine_get_embedding_dependencies_string(
         moonshine_free(addr)
 
 
+def moonshine_get_diarization_dependencies_string() -> str:
+    """Call ``moonshine_get_diarization_dependencies`` and return the JSON manifest (UTF-8)."""
+    lib = _MoonshineLib().lib
+    out_p = ctypes.c_void_p()
+    err = lib.moonshine_get_diarization_dependencies(ctypes.byref(out_p))
+    if err != MOONSHINE_ERROR_NONE:
+        raise MoonshineError(
+            lib.moonshine_error_to_string(err).decode("utf-8")
+            if lib.moonshine_error_to_string(err)
+            else f"moonshine_get_diarization_dependencies failed ({err})"
+        )
+    addr = out_p.value
+    if not addr:
+        return ""
+    try:
+        return ctypes.string_at(addr).decode("utf-8")
+    finally:
+        moonshine_free(addr)
+
+
 def moonshine_get_stt_catalog_string() -> str:
     """Call ``moonshine_get_stt_catalog`` and return the JSON catalog (UTF-8)."""
     lib = _MoonshineLib().lib
@@ -529,6 +561,96 @@ def moonshine_get_tts_voices_string(
             else f"moonshine_get_tts_voices failed ({err})"
         )
     return text if text else "{}"
+
+
+@dataclass
+class SpeechClip:
+    """The best short window of speech found in a recording.
+
+    ``audio`` is 16 kHz mono PCM, and is ``None`` until the recording holds
+    enough speech, which is how incremental capture knows to keep listening.
+    ``speech_duration`` is useful for showing progress while it does.
+    """
+
+    audio: Optional[List[float]]
+    start_time: float
+    speech_duration: float
+
+    @property
+    def is_complete(self) -> bool:
+        return self.audio is not None
+
+
+def _float_array(audio: Any) -> Tuple[Any, int, Any]:
+    """Coerce a sequence of floats to a C float array, its length, and the
+    object that owns the memory.
+
+    The owner has to stay referenced for as long as the pointer is in use:
+    numpy's ``data_as`` borrows from the array rather than copying it.
+    """
+    try:
+        import numpy as np  # type: ignore
+
+        flat = np.ascontiguousarray(audio, dtype=np.float32).ravel()
+        pointer = flat.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        return pointer, int(flat.size), flat
+    except ImportError:
+        buffer = (ctypes.c_float * len(audio))(*audio)
+        return buffer, len(buffer), buffer
+
+
+def moonshine_extract_speech_clip(
+    audio: Any,
+    sample_rate: int,
+    *,
+    clip_duration_seconds: float = 4.0,
+    minimum_speech_seconds: float = 2.0,
+) -> SpeechClip:
+    """Find the best short window of speech in ``audio``, for voice cloning.
+
+    Wraps ``moonshine_extract_speech_clip``, which runs the built-in
+    voice-activity detector. No model files or downloads are involved, so this
+    is cheap enough to call repeatedly while the user is still talking.
+    """
+    lib = _MoonshineLib().lib
+    buffer, length, _owner = _float_array(audio)
+    options = {
+        "clip_duration_seconds": str(clip_duration_seconds),
+        "minimum_speech_seconds": str(minimum_speech_seconds),
+    }
+    opt_arr, opt_n, _keep = moonshine_options_array(options)
+    clip = SpeechClipC()
+    err = lib.moonshine_extract_speech_clip(
+        buffer,
+        ctypes.c_uint64(length),
+        ctypes.c_int32(int(sample_rate)),
+        opt_arr,
+        opt_n,
+        ctypes.byref(clip),
+    )
+    if err != MOONSHINE_ERROR_NONE:
+        message = lib.moonshine_error_to_string(err)
+        raise MoonshineError(
+            message.decode("utf-8")
+            if message
+            else f"moonshine_extract_speech_clip failed ({err})"
+        )
+
+    samples: Optional[List[float]] = None
+    count = int(clip.audio_length)
+    if clip.is_complete and clip.audio_data and count > 0:
+        try:
+            block = ctypes.cast(
+                clip.audio_data, ctypes.POINTER(ctypes.c_float * count)
+            ).contents
+            samples = list(block)
+        finally:
+            moonshine_free(ctypes.cast(clip.audio_data, ctypes.c_void_p).value)
+    return SpeechClip(
+        audio=samples,
+        start_time=float(clip.start_time),
+        speech_duration=float(clip.speech_duration),
+    )
 
 
 def moonshine_text_to_speech_samples(
@@ -879,6 +1001,11 @@ class _MoonshineLib:
             ctypes.POINTER(ctypes.c_void_p),
         ]
 
+        lib.moonshine_get_diarization_dependencies.restype = ctypes.c_int32
+        lib.moonshine_get_diarization_dependencies.argtypes = [
+            ctypes.POINTER(ctypes.c_void_p),
+        ]
+
         lib.moonshine_get_stt_catalog.restype = ctypes.c_int32
         lib.moonshine_get_stt_catalog.argtypes = [
             ctypes.POINTER(ctypes.c_void_p),
@@ -887,6 +1014,16 @@ class _MoonshineLib:
         lib.moonshine_get_embedding_catalog.restype = ctypes.c_int32
         lib.moonshine_get_embedding_catalog.argtypes = [
             ctypes.POINTER(ctypes.c_void_p),
+        ]
+
+        lib.moonshine_extract_speech_clip.restype = ctypes.c_int32
+        lib.moonshine_extract_speech_clip.argtypes = [
+            ctypes.POINTER(ctypes.c_float),
+            ctypes.c_uint64,
+            ctypes.c_int32,
+            ctypes.POINTER(TranscriberOptionC),
+            ctypes.c_uint64,
+            ctypes.POINTER(SpeechClipC),
         ]
 
         lib.moonshine_text_to_speech.restype = ctypes.c_int32

@@ -40,6 +40,10 @@ export interface TranscriberFromBytes {
  * `tokenizer.bin` for streaming; plus optional `decoder_with_attention.ort` /
  * `decoder_kv_with_attention.ort` and `spelling_cnn.ort`). This is the general
  * in-memory loader and works for every architecture.
+ *
+ * The diarization models `segmentation.ort` and `embedding.ort` can be supplied
+ * the same way when using the `identify_speakers` option; leave them out and
+ * they are fetched from the CDN.
  */
 export interface TranscriberFromFiles {
   files: Record<string, Uint8Array> | Map<string, Uint8Array>;
@@ -90,6 +94,38 @@ const ENCODER_FILE = 'encoder_model.ort';
 const DECODER_FILE = 'decoder_model_merged.ort';
 const TOKENIZER_FILE = 'tokenizer.bin';
 const SPELLING_FILE = 'spelling_cnn.ort';
+const DIARIZATION_FILES = ['segmentation.ort', 'embedding.ort'];
+
+function wantsSpeakerIds(options: Record<string, string> | undefined): boolean {
+  const value = options?.identify_speakers?.trim().toLowerCase();
+  return value === 'true' || value === '1';
+}
+
+/**
+ * Adds the speaker diarization models to `files` when the caller asked for
+ * speaker IDs and has not supplied them already. They are an 8.2 MB download
+ * rather than part of the WASM binary, and without them the native transcriber
+ * refuses to construct.
+ */
+async function addDiarizationModels(
+  module: MoonshineModule,
+  files: Map<string, Uint8Array>,
+  options: {
+    options?: Record<string, string>;
+    downloader?: AssetDownloader;
+    onProgress?: (loaded: number, total: number | undefined, file: string) => void;
+  },
+): Promise<Map<string, Uint8Array>> {
+  if (!wantsSpeakerIds(options.options)) return files;
+  if (DIARIZATION_FILES.every((name) => files.has(name))) return files;
+  const downloader =
+    options.downloader ?? new AssetDownloader({ onProgress: options.onProgress });
+  const downloaded = await downloader.downloadManifest(module.diarizationDependencies());
+  for (const [name, bytes] of downloaded) {
+    if (!files.has(name)) files.set(name, bytes);
+  }
+  return files;
+}
 
 function isFromBytes(o: TranscriberLoadOptions): o is TranscriberFromBytes & object {
   return 'encoder' in o && 'decoder' in o && 'tokenizer' in o;
@@ -136,7 +172,7 @@ export class Transcriber {
       if (options.spelling) files.set(SPELLING_FILE, options.spelling);
       return Transcriber.construct(
         module,
-        files,
+        await addDiarizationModels(module, files, options),
         options.modelArch ?? ModelArch.Base,
         options.options,
       );
@@ -145,7 +181,7 @@ export class Transcriber {
     if (isFromFiles(options)) {
       return Transcriber.construct(
         module,
-        toFileMap(options.files),
+        await addDiarizationModels(module, toFileMap(options.files), options),
         options.modelArch ?? ModelArch.Base,
         options.options,
       );
@@ -166,7 +202,12 @@ export class Transcriber {
       options.includeSpelling ?? false,
     );
     const files = await downloader.downloadManifest(manifest);
-    return Transcriber.construct(module, files, arch, options.options);
+    return Transcriber.construct(
+      module,
+      await addDiarizationModels(module, files, options),
+      arch,
+      options.options,
+    );
   }
 
   /**
@@ -194,7 +235,7 @@ export class Transcriber {
     const downloaded = await downloader.downloadNamedFiles(files);
     return Transcriber.construct(
       module,
-      downloaded,
+      await addDiarizationModels(module, downloaded, options),
       options.modelArch ?? ModelArch.Base,
       options.options,
     );

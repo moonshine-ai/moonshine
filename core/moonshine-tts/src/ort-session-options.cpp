@@ -12,6 +12,10 @@ Ort::SessionOptions make_ort_session_options(
   opts.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
   opts.SetIntraOpNumThreads(intra_op_num_threads);
   opts.SetInterOpNumThreads(inter_op_num_threads);
+  // Match STT and the spelling model, which have always been ORT-only. On a
+  // full ORT build this is what makes a stray .onnx fail here rather than
+  // loading fine on desktop and failing later in the browser.
+  opts.AddConfigEntry("session.load_model_format", "ORT");
   if (!provider_names.empty()) {
     OrtExecutionProviderOptions ep_config{};
     if (!coreml_cache_dir.empty()) {

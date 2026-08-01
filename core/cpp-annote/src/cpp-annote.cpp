@@ -25,7 +25,6 @@
 #include "annotation_support.h"
 #include "clustering_vbx.h"
 #include "community1_cpp_annote_embedded.h"
-#include "community1_ort_embedded.h"
 #include "compute_fbank.h"
 #include "cpp-annote-engine.h"
 #include "cpp-annote-streaming.h"
@@ -487,33 +486,44 @@ bool try_regex_int(const std::string &json, const std::string &key_esc,
 
 }  // namespace
 
+// Both models were compiled into the library until version 26.8. They are 8.2
+// MB together and only a fraction of callers diarize, so they are downloaded
+// now; a missing one is a caller error rather than something to fall back from.
+void require_model(const ModelSource &model, const char *which) {
+  if (model.empty()) {
+    throw std::runtime_error(
+        std::string("Speaker diarization needs the ") + which +
+        " model, which is no longer compiled into the library. Download the "
+        "diarization models and pass the directory holding them (see "
+        "docs/diarization-models.md).");
+  }
+}
+
 Ort::Session make_segmentation_session(Ort::Env &env,
                                        Ort::SessionOptions &opts,
-                                       const std::string &path) {
-  if (!path.empty()) {
-    // path::c_str() yields ORTCHAR_T (wchar_t on Windows, char elsewhere), as
-    // required by the Ort::Session constructor.
-    const std::filesystem::path model_path = path;
-    return Ort::Session(env, model_path.c_str(), opts);
+                                       const ModelSource &model) {
+  require_model(model, "segmentation");
+  if (model.data != nullptr && model.size > 0) {
+    return Ort::Session(env, model.data, model.size, opts);
   }
-  return Ort::Session(
-      env, cppannote::embedded_community1::segmentation_ort_data,
-      cppannote::embedded_community1::segmentation_ort_data_size, opts);
+  // path::c_str() yields ORTCHAR_T (wchar_t on Windows, char elsewhere), as
+  // required by the Ort::Session constructor.
+  const std::filesystem::path model_path = model.path;
+  return Ort::Session(env, model_path.c_str(), opts);
 }
 
 std::unique_ptr<Ort::Session> make_embedding_session(
-    Ort::Env &env, Ort::SessionOptions &opts, const std::string &path) {
-  if (!path.empty()) {
-    const std::filesystem::path model_path = path;
-    return std::make_unique<Ort::Session>(env, model_path.c_str(), opts);
+    Ort::Env &env, Ort::SessionOptions &opts, const ModelSource &model) {
+  require_model(model, "speaker embedding");
+  if (model.data != nullptr && model.size > 0) {
+    return std::make_unique<Ort::Session>(env, model.data, model.size, opts);
   }
-  return std::make_unique<Ort::Session>(
-      env, cppannote::embedded_community1::embedding_ort_data,
-      cppannote::embedded_community1::embedding_ort_data_size, opts);
+  const std::filesystem::path model_path = model.path;
+  return std::make_unique<Ort::Session>(env, model_path.c_str(), opts);
 }
 
 void CppAnnoteEngine::init_config_and_models(
-    const std::string &embedding_onnx_path) {
+    const ModelSource &embedding_model) {
   const std::string seg_json(
       cppannote::embedded_community1::segmentation_json,
       cppannote::embedded_community1::segmentation_json_size);
@@ -576,7 +586,7 @@ void CppAnnoteEngine::init_config_and_models(
     embed_inputs_fbank_then_weights_ =
         embedding_ort::embedding_json_inputs_fbank_first(emb_json);
     embed_session_ =
-        make_embedding_session(ort_env_, session_options_, embedding_onnx_path);
+        make_embedding_session(ort_env_, session_options_, embedding_model);
     min_num_samples_ = embedding_ort::discover_min_num_samples_embedding(
         *embed_session_, mem_, alloc_, embed_inputs_fbank_then_weights_,
         embed_sr_, embed_mel_bins_, embed_frame_length_ms_,
@@ -602,28 +612,16 @@ void CppAnnoteEngine::init_config_and_models(
   }
 }
 
-CppAnnoteEngine::CppAnnoteEngine()
-    : ort_env_(ORT_LOGGING_LEVEL_WARNING, "cppannote"),
-      session_options_{},
-      session_(make_segmentation_session(ort_env_, session_options_, "")),
-      mem_(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)),
-      alloc_{},
-      in_name_(session_.GetInputNameAllocated(0, alloc_)),
-      out_name_(session_.GetOutputNameAllocated(0, alloc_)) {
-  init_config_and_models("");
-}
-
-CppAnnoteEngine::CppAnnoteEngine(const std::string &segmentation_onnx_path,
-                                   const std::string &embedding_onnx_path)
+CppAnnoteEngine::CppAnnoteEngine(const ModelSources &models)
     : ort_env_(ORT_LOGGING_LEVEL_WARNING, "cppannote"),
       session_options_{},
       session_(make_segmentation_session(ort_env_, session_options_,
-                                         segmentation_onnx_path)),
+                                         models.segmentation)),
       mem_(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)),
       alloc_{},
       in_name_(session_.GetInputNameAllocated(0, alloc_)),
       out_name_(session_.GetOutputNameAllocated(0, alloc_)) {
-  init_config_and_models(embedding_onnx_path);
+  init_config_and_models(models.embedding);
 }
 
 // ---------------------------------------------------------------------------
@@ -947,9 +945,7 @@ struct CppAnnote::Impl {
   std::map<int32_t, StreamingDiarizationConfig> stream_configs;
   int32_t next_stream_id = 1;
 
-  Impl() : engine() {}
-  Impl(const std::string& seg_path, const std::string& emb_path)
-      : engine(seg_path, emb_path) {}
+  explicit Impl(const ModelSources& models) : engine(models) {}
 
   StreamingDiarizationSession &get_stream(int32_t id) {
     auto it = streams.find(id);
@@ -971,12 +967,13 @@ struct CppAnnote::Impl {
   }
 };
 
-CppAnnote::CppAnnote() : impl_(std::make_unique<Impl>()) {}
+CppAnnote::CppAnnote(const ModelSources& models)
+    : impl_(std::make_unique<Impl>(models)) {}
 
-CppAnnote::CppAnnote(const std::string& segmentation_onnx_path,
-                      const std::string& embedding_onnx_path)
-    : impl_(std::make_unique<Impl>(segmentation_onnx_path,
-                                   embedding_onnx_path)) {}
+CppAnnote::CppAnnote(const std::string& segmentation_model_path,
+                     const std::string& embedding_model_path)
+    : CppAnnote(ModelSources{ModelSource{segmentation_model_path, nullptr, 0},
+                             ModelSource{embedding_model_path, nullptr, 0}}) {}
 
 CppAnnote::~CppAnnote() = default;
 CppAnnote::CppAnnote(CppAnnote &&) noexcept = default;

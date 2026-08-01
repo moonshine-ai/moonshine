@@ -1,8 +1,10 @@
 #ifndef SPEAKER_DIARIZER_H
 #define SPEAKER_DIARIZER_H
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 // One contiguous span of speech attributed to a single speaker on the
@@ -21,6 +23,16 @@ struct SpeakerTurn {
   uint32_t speaker_index = 0;
 };
 
+// One of the diarization models, as either a file on disk or a buffer the
+// caller owns. When `data` and `size` are set the buffer is used and `path` is
+// ignored; the bytes are read by ONNX Runtime for the life of the diarizer, so
+// they must outlive it and are not copied.
+struct SpeakerDiarizerModel {
+  std::string path;
+  const uint8_t *data = nullptr;
+  size_t size = 0;
+};
+
 struct SpeakerDiarizerOptions {
   // Minimum seconds of new audio between re-clustering passes.
   double cluster_cadence = 2.0;
@@ -30,6 +42,12 @@ struct SpeakerDiarizerOptions {
   // Maximum seconds of audio history fed to VBx per refresh. Zero means
   // unlimited (full-history re-clustering). Default 120 for streaming.
   double cluster_window_sec = 120.0;
+  // The community-1 segmentation and speaker-embedding models. Both are
+  // required; the constructor throws if either is missing. They ship as a
+  // download rather than compiled-in data (moonshine-model-catalog.h,
+  // `diarization_model_dependencies`).
+  SpeakerDiarizerModel segmentation_model;
+  SpeakerDiarizerModel embedding_model;
 };
 
 // Speaker diarization built on the cpp-annote port of the pyannote
@@ -41,8 +59,9 @@ struct SpeakerDiarizerOptions {
 // best estimate for the whole stream.
 class SpeakerDiarizer {
  public:
-  explicit SpeakerDiarizer(
-      const SpeakerDiarizerOptions &options = SpeakerDiarizerOptions());
+  // Throws std::runtime_error if either diarization model is missing or fails
+  // to load.
+  explicit SpeakerDiarizer(const SpeakerDiarizerOptions &options);
   ~SpeakerDiarizer();
 
   SpeakerDiarizer(const SpeakerDiarizer &) = delete;

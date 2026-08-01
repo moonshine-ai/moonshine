@@ -434,6 +434,7 @@ TEST_CASE("moonshine-test-v2") {
         {"vad_max_segment_duration", "15.0"},
         {"max_tokens_per_second", "6.5"},
         {"identify_speakers", "true"},
+        {"diarization_model_dir", "diarization"},
         {"diarization_cluster_cadence", "2.0"},
         {"diarization_analyze_cadence", "1.0"},
         {"diarization_cluster_window_sec", "120.0"},
@@ -614,13 +615,18 @@ TEST_CASE("moonshine-test-v2") {
     if (voices_dir.empty()) {
       return;
     }
+    // A single-file voice, not the split pair: this exercises supplying a
+    // whole model as bytes, which the split form does not do. Voices whose
+    // name ends ".model.ort" are one half of a pair and are skipped.
     std::filesystem::path onnx_path;
     for (const auto& ent : std::filesystem::directory_iterator(voices_dir)) {
       if (!ent.is_regular_file()) {
         continue;
       }
       const auto& p = ent.path();
-      if (p.extension() == ".onnx") {
+      const std::string name = p.filename().string();
+      if (p.extension() == ".ort" && name.find(".model.ort") == std::string::npos &&
+          name.find(".weights.ort") == std::string::npos) {
         onnx_path = p;
         break;
       }
@@ -628,8 +634,10 @@ TEST_CASE("moonshine-test-v2") {
     if (onnx_path.empty()) {
       return;
     }
-    std::filesystem::path json_path = onnx_path;
-    json_path.replace_extension(".onnx.json");
+    // Piper keeps the upstream "<voice>.onnx.json" name for the config
+    // whatever form the model itself ships in.
+    std::filesystem::path json_path = voices_dir;
+    json_path /= onnx_path.stem().string() + ".onnx.json";
     std::vector<uint8_t> onnx_data = read_binary_file(onnx_path);
     std::vector<uint8_t> json_data = read_binary_file(json_path);
     if (onnx_data.empty() || json_data.empty()) {
@@ -1125,7 +1133,7 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
   SUBCASE("tts-explicit-piper-onnx-map-keys") {
     const moonshine_option_t opts[] = {
         {"voice", "piper_custom"},
-        {"piper_onnx", "custom/model.onnx"},
+        {"piper_onnx", "custom/model.ort"},
     };
     char* out = nullptr;
     REQUIRE(moonshine_get_tts_dependencies("de", opts, 2, &out) ==
@@ -1698,12 +1706,9 @@ TEST_CASE("moonshine-tts-zipvoice-synthesis") {
   }
   const std::filesystem::path zv = *data_root / "zipvoice";
   const bool have_models =
-      (std::filesystem::is_regular_file(zv / "text_encoder.ort") ||
-       std::filesystem::is_regular_file(zv / "text_encoder.onnx")) &&
-      (std::filesystem::is_regular_file(zv / "fm_decoder.ort") ||
-       std::filesystem::is_regular_file(zv / "fm_decoder.onnx")) &&
-      (std::filesystem::is_regular_file(zv / "vocoder.ort") ||
-       std::filesystem::is_regular_file(zv / "vocoder.onnx")) &&
+      std::filesystem::is_regular_file(zv / "text_encoder.ort") &&
+      std::filesystem::is_regular_file(zv / "fm_decoder.ort") &&
+      std::filesystem::is_regular_file(zv / "vocoder.ort") &&
       std::filesystem::is_regular_file(zv / "tokens.txt");
   if (!have_models) {
     MESSAGE("skip: ZipVoice model bundle not present under data/zipvoice");

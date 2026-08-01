@@ -65,6 +65,17 @@ set -o pipefail
 # `extended custom_ops` keeps the runtime-level optimizers a minimal build can
 # still apply, and keeps custom-op registration available for ZipVoice.
 #
+# Reusing the checkout between builds is safe, and deliberately so. ORT's docs
+# describe --include_ops_by_config as editing source files in place, which
+# would make a rebuild after a config change unsound: kernels excluded by the
+# previous config could stay excluded. That was true of older versions. In
+# 1.23 reduce_ops() writes into <build_dir>/<config>/op_reduction.generated and
+# deletes anything it generated before, so each build starts from the config it
+# was given and the source tree is never touched. Verified by `git status` on
+# the checkout after a reduced build: clean. This is why none of the three
+# build scripts resets the checkout, and why the wasm, iOS and Android builds
+# can share one.
+#
 # Arguments (order-independent):
 #   single-thread - ALSO build a non-threaded SIMD fallback
 #                   (libonnxruntime_webassembly_singlethread.a) for pages that
@@ -78,14 +89,15 @@ set -o pipefail
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR=$(dirname "${SCRIPTS_DIR}")
 
-# Keep this in lockstep with the native ORT version in
-# core/third-party/onnxruntime/find-ort-library-path.cmake (e.g. 1.23.2).
-ORT_VERSION="${ORT_VERSION:-1.23.2}"
+# ORT_VERSION, ORT_SRC and OP_CONFIG come from here, shared with the iOS and
+# Android builds so the three cannot drift apart.
+# shellcheck source=scripts/ort-build-common.sh
+source "${SCRIPTS_DIR}/ort-build-common.sh"
+
 EMSDK_VERSION="${EMSDK_VERSION:-4.0.8}"
-ORT_WASM_BUILD_DIR="${ORT_WASM_BUILD_DIR:-${HOME}/moonshine-ort-wasm}"
+ORT_WASM_BUILD_DIR="${ORT_WASM_BUILD_DIR:-${MOONSHINE_ORT_ROOT}}"
 
 DEST_DIR="${REPO_ROOT_DIR}/core/third-party/onnxruntime/lib/wasm"
-OP_CONFIG="${REPO_ROOT_DIR}/core/third-party/onnxruntime/moonshine-required-operators.config"
 
 BUILD_SINGLE_THREAD=""
 FORCE=""
@@ -128,22 +140,10 @@ fi
 #     test targets entirely (this also makes the build much faster).
 EXTRA_DEFINES=(onnxruntime_USE_KLEIDIAI=OFF onnxruntime_BUILD_UNIT_TESTS=OFF)
 
-if [ ! -f "${OP_CONFIG}" ]; then
-    echo "[build-ort-wasm] ERROR: operator config not found at ${OP_CONFIG}" >&2
-    echo "[build-ort-wasm] Generate it with scripts/generate-ort-op-config.py" >&2
-    exit 1
-fi
+ort_require_op_config
 
 ORT_SRC="${ORT_WASM_BUILD_DIR}/onnxruntime"
-if [ ! -d "${ORT_SRC}/.git" ]; then
-    mkdir -p "${ORT_WASM_BUILD_DIR}"
-    echo "[build-ort-wasm] cloning onnxruntime v${ORT_VERSION} (recursive, for cmake/external/emsdk)..."
-    git clone --recursive --depth 1 --branch "v${ORT_VERSION}" \
-        https://github.com/microsoft/onnxruntime.git "${ORT_SRC}"
-else
-    echo "[build-ort-wasm] reusing existing ORT checkout at ${ORT_SRC}"
-    git -C "${ORT_SRC}" submodule update --init --recursive
-fi
+ort_prepare_checkout
 
 # --disable_ml_ops drops the classical-ML (ai.onnx.ml) kernels, which no
 # Moonshine model uses.

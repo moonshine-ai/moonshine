@@ -147,7 +147,6 @@ if(MOONSHINE_TTS_BUILD_ONNX)
 
   add_library(moonshine_tts_ort STATIC
     src/ort-session-options.cpp
-    src/ort-onnx-external-data.cpp
     src/split-weights.cpp
     src/lang-specific/g2p-transformer-model.cpp
     src/lang-specific/onnx-g2p-models.cpp

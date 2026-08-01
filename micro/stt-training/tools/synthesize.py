@@ -144,7 +144,8 @@ def main() -> int:
         if not voice_jobs:
             continue
         print(f"[{voice}] synthesizing {len(voice_jobs)} clips...")
-        tts = TextToSpeech(args.language, voice=voice)
+        tts = TextToSpeech().language(args.language).voice(voice)
+        tts.load()
         try:
             for _, word, rep, speed in voice_jobs:
                 out_path = out_base / voice / folder_for_word(word) / f"{voice}_nohash_{rep}.wav"

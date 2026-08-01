@@ -344,8 +344,10 @@ MOONSHINE_EXPORT const char *moonshine_transcript_to_string(
    The `options` parameter is used to set any custom options for the
    transcriber. Recognized options include ``log_ort_run`` (bool),
    ``ort_providers`` (comma-separated execution provider names such as
-   ``CoreML,CPU`` on macOS or ``NNAPI,CPU`` on Android; default is CPU-only),
-   and ``coreml_cache_dir`` (directory for CoreML compiled model cache).
+   ``CoreML,CPU`` on macOS; default and recommendation is CPU-only, and the
+   iOS and Android libraries ship with no other choice — see
+   docs/execution-providers.md), and ``coreml_cache_dir`` (directory for the
+   CoreML compiled model cache on macOS).
    Pass ``identify_speakers`` (bool, default false) to enable speaker
    diarization: each line then carries a ``speaker_spans`` array describing
    who spoke when, including UTF-8 character ranges into the line text.
@@ -436,6 +438,10 @@ MOONSHINE_EXPORT int32_t moonshine_load_transcriber_from_memory(
        ``streaming_config.json``, ``tokenizer.bin`` (all required), plus the
        optional ``decoder_kv_with_attention.ort`` when ``word_timestamps`` is
        set.
+     - Either kind also accepts ``spelling_cnn.ort``, and the two diarization
+       models ``segmentation.ort`` and ``embedding.ort``, which are required
+       when the ``identify_speakers`` option is set. Fetch those two with
+       moonshine_get_diarization_dependencies.
    Unrecognized keys are ignored, and missing required keys cause the load to
    fail.
 
@@ -920,8 +926,9 @@ MOONSHINE_EXPORT int32_t moonshine_get_tts_dependencies(
    or ``{"id":"<voice>","state":"missing"}``. Voice ids are prefixed with
    ``kokoro_`` or ``piper_``. Kokoro uses the upstream Kokoro-82M voice id
    catalog plus any extra ``*.kokorovoice`` in the bundle; Piper lists the
-   language default ONNX stem plus any ``*.onnx`` in the resolved voices
-   directory. ``found`` means the asset is on disk or supplied via the in-memory
+   language default voice stem plus every voice in the resolved voices
+   directory, in either shipped form (``<stem>.ort``, or the split
+   ``<stem>.model.ort`` plus ``<stem>.weights.ort`` pair). ``found`` means the asset is on disk or supplied via the in-memory
    file map like ``MoonshineTTS``. Free with ``free``.
 */
 MOONSHINE_EXPORT int32_t moonshine_get_tts_voices(
@@ -997,6 +1004,26 @@ MOONSHINE_EXPORT int32_t moonshine_get_stt_dependencies(
 MOONSHINE_EXPORT int32_t moonshine_get_embedding_dependencies(
     const char *model_name, const struct moonshine_option_t *options,
     uint64_t options_count, char **out_dependencies_json);
+
+/* Returns the download manifest for the speaker diarization models as a JSON
+   object with the same shape as moonshine_get_stt_dependencies. Fetch these
+   whenever you intend to pass ``identify_speakers=true`` to a transcriber, and
+   point the transcriber at them with the ``diarization_model_dir`` option (or
+   supply them as ``segmentation.ort`` / ``embedding.ort`` entries to
+   moonshine_load_transcriber_from_memory_files).
+
+   There is one set of diarization models and it has no variants, so this takes
+   no arguments beyond the output pointer. The manifest is a single group of two
+   files totalling about 8.2 MB.
+
+   These models were compiled into the library before version 26.8; a
+   transcriber built with ``identify_speakers=true`` and no diarization models
+   now fails to load rather than falling back. See docs/diarization-models.md.
+
+   The buffer is allocated with ``malloc``; release it with ``free``. Returns
+   ``MOONSHINE_ERROR_NONE`` on success. */
+MOONSHINE_EXPORT int32_t
+moonshine_get_diarization_dependencies(char **out_dependencies_json);
 
 /* Returns the full speech-to-text model catalog as a JSON object, so bindings
    can build language/model pickers and resolve defaults without their own copy
@@ -1074,9 +1101,11 @@ MOONSHINE_EXPORT int32_t moonshine_phonemes_to_speech(
    bundles use the same pattern under ``ja/...`` and
    ``ar_msa/...``. Korean rule G2P uses ``ko/dict.tsv`` only. Models that ship
    as a split ORT pair need both ``<stem>.model.ort`` and
-   ``<stem>.weights.ort`` present. If an ONNX model uses external data files
-   (e.g. ``model.onnx.data``), those must sit beside the ``.onnx`` on disk so
-   the runtime can open them.
+   ``<stem>.weights.ort`` present.
+
+   Every model is ORT-format. Moonshine cannot load a ``.onnx``: the wasm and
+   mobile runtimes are minimal ONNX Runtime builds with no ONNX parser
+   compiled in. Convert one with ``scripts/convert-models-to-ort.py``.
 */
 MOONSHINE_EXPORT int32_t moonshine_create_grapheme_to_phonemizer_from_files(
     const char *language, const char **filenames, uint64_t filenames_count,
@@ -1095,14 +1124,17 @@ MOONSHINE_EXPORT int32_t moonshine_create_grapheme_to_phonemizer_from_files(
    path relative to ``g2p_root``, like path-only map entries.
 
    Register every file the engine needs: language lexicon ``dict.tsv`` paths,
-   English ``g2p-config.json`` and OOV ONNX keys under ``en_us/oov/``, and
-   for ONNX bundles the ``meta.json``, ``vocab.txt``, ``tokenizer_config.json``,
-   and ``model.onnx`` keys under the bundle directory key. English OOV overrides
-   use ``oov_onnx_override`` for the ``.onnx`` bytes and ``oov_onnx_config`` for
-   the merged JSON config UTF-8 text. Models split across ``model.onnx`` plus
-   external weight files must be supplied as a single self-contained ``.onnx``
-   buffer (or remain on disk via the path fallback) so the runtime does not
-   need a sidecar ``.data`` file.
+   English ``g2p-config.json`` and the OOV model keys under ``en_us/oov/``, and
+   for model bundles the ``meta.json``, ``vocab.txt``,
+   ``tokenizer_config.json``, and ``model.ort`` keys under the bundle directory
+   key (or both halves of a split pair). English OOV overrides use
+   ``oov_onnx_override`` for the model bytes and ``oov_onnx_config`` for the
+   merged JSON config UTF-8 text; those key names predate the move to ORT and
+   are kept for compatibility, but the bytes must be ORT-format.
+
+   Every model buffer must be a self-contained ORT model. Moonshine cannot
+   load a ``.onnx``, and there is no support for a sidecar weights file:
+   convert with ``scripts/convert-models-to-ort.py``.
 */
 MOONSHINE_EXPORT int32_t moonshine_create_grapheme_to_phonemizer_from_memory(
     const char *language, const char **filenames,

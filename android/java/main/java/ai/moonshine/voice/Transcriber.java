@@ -87,6 +87,21 @@ public class Transcriber {
     return json;
   }
 
+  /**
+   * Returns the speaker diarization download manifest, in the same shape as
+   * {@link #getSttDependencies}. Fetch these whenever you set the
+   * {@code identify_speakers} option, and point the transcriber at the
+   * directory holding them with {@code diarization_model_dir}.
+   */
+  public static String getDiarizationDependencies() {
+    JNI.ensureLibraryLoaded();
+    String json = JNI.moonshineGetDiarizationDependencies();
+    if (json == null) {
+      throw new RuntimeException("moonshineGetDiarizationDependencies failed");
+    }
+    return json;
+  }
+
   public void loadFromFiles(String modelRootDir, int modelArch) {
     JNI.ensureLibraryLoaded();
     this.transcriberHandle = JNI.moonshineLoadTranscriberFromFiles(

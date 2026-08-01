@@ -1,11 +1,18 @@
+from moonshine_voice.download import (
+    ProgressCallback,
+    get_diarization_model,
+    get_model_for_language,
+    get_spelling_model_path,
+)
 from moonshine_voice.transcriber import (
+    LineCompleted,
+    LineTextChanged,
+    Error,
     Transcriber,
     TranscriptEvent,
-    TranscriptEventListener,
     TranscriptLine,
     ModelArch,
 )
-from moonshine_voice.utils import get_model_path
 
 import numpy as np
 import queue
@@ -13,40 +20,86 @@ import sounddevice as sd
 import sys
 import threading
 import time
-from typing import Callable, Optional
+from pathlib import Path
+from typing import Any, Callable, Mapping, Optional, Union
+
+
+_OLD_CONSTRUCTOR_HELP = """\
+MicTranscriber() no longer takes constructor arguments. Configure it with
+chainable setters and call load():
+
+    mic = MicTranscriber().on_line(lambda line: print(line.text))
+    mic.load()
+    mic.start()
+
+The old model_path argument is now .models_from(directory), and every other
+argument has a setter of the same name (.model_arch(), .update_interval(),
+.device(), .options(), and so on)."""
+
+
+def _is_true(value: Any) -> bool:
+    """Whether an option value means true, the way the C API reads it.
+
+    Option values reach the library as strings, but callers reasonably pass a
+    Python bool, so accept both.
+    """
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in ("true", "1")
 
 
 class MicTranscriber:
-    """MicTranscriber is a class that transcribes audio from a microphone."""
+    """Transcribes speech from a microphone.
 
-    def __init__(
-        self,
-        model_path: str,
-        model_arch: ModelArch = ModelArch.TINY,
-        update_interval: float = 0.5,
-        device: int = None,
-        samplerate: int = 16000,
-        channels: int = 1,
-        blocksize: int = 1024,
-        options: dict = None,
-        spelling_model_path: str = None,
-        transcribe_flags: int = 0,
-    ):
-        # Pass-through convenience: callers that only want spelling-mode
-        # don't need to construct an ``options`` dict themselves.
-        if spelling_model_path is not None:
-            options = dict(options) if options else {}
-            options.setdefault("spelling_model_path", spelling_model_path)
-        self.transcriber = Transcriber(model_path, model_arch, options=options)
-        self.mic_stream = self.transcriber.create_stream(
-            update_interval, transcribe_flags=transcribe_flags,
-        )
+    Construct one, configure it with chainable setters, call :meth:`load` to
+    fetch and open the model, then :meth:`start` to begin listening::
+
+        mic = (MicTranscriber()
+               .on_text(show_in_progress)
+               .on_line(lambda line: append_line(line.text)))
+        mic.load()
+        mic.start()
+
+    :meth:`load` blocks, since the first call may have to download a model;
+    pass :meth:`on_progress` a handler to drive a progress bar. Use it as a
+    context manager, or call :meth:`close` when you are done.
+
+    :meth:`on_text` and :meth:`on_line` cover almost everything. For line ids,
+    speaker spans, word timings, or the moment a line starts, attach a
+    :class:`TranscriptEventListener` with :meth:`add_listener` instead.
+    """
+
+    def __init__(self, *args, **kwargs):
+        if args or kwargs:
+            raise TypeError(_OLD_CONSTRUCTOR_HELP)
+
+        # Deferred configuration, applied by load().
+        self._language = "en"
+        # None means the catalog's recommended model for the language, which is
+        # medium streaming for English. Naming a specific arch that the language
+        # doesn't publish is an error rather than a silent downgrade.
+        self._model_arch: Optional[ModelArch] = None
+        self._model_directory: Optional[Path] = None
+        self._update_interval = 0.5
+        self._options: dict = {}
+        self._spelling_model_path: Optional[str] = None
+        self._spelling_disabled = False
+        self._transcribe_flags = 0
+        self._progress_fn: Optional[ProgressCallback] = None
+        # Listeners registered before load() has a stream to hang them on.
+        self._pending_listeners: list = []
+        self._owns_transcriber = False
+
+        self.transcriber: Optional[Transcriber] = None
+        self.mic_stream = None
+
         self._should_listen = False
+        self._muted = False
         self._sd_stream = None
-        self._device = device
-        self._samplerate = samplerate
-        self._channels = channels
-        self._blocksize = blocksize
+        self._device: Optional[Union[int, str]] = None
+        self._samplerate = 16000
+        self._channels = 1
+        self._blocksize = 1024
         # Audio captured on the PortAudio callback is handed to a worker
         # thread through this queue. Transcription (which can block for
         # hundreds of milliseconds per update, e.g. on a Raspberry Pi) must
@@ -56,6 +109,199 @@ class MicTranscriber:
         self._worker_thread: Optional[threading.Thread] = None
         # Sentinel pushed onto the queue to tell the worker to drain and exit.
         self._worker_stop = object()
+
+    # ------------------------------------------------------------------
+    # Configuration
+    # ------------------------------------------------------------------
+
+    def language(self, code: str) -> "MicTranscriber":
+        """Set the speech-to-text language (default ``"en"``)."""
+        self._language = code
+        return self
+
+    def model_arch(self, arch: ModelArch) -> "MicTranscriber":
+        """Pick a specific model size.
+
+        By default the catalog's recommended model for the language is used,
+        which is medium streaming for English. Most languages publish only one
+        model, so this is mainly an English-language choice.
+        """
+        self._model_arch = arch
+        return self
+
+    def models_from(self, directory: Union[str, Path]) -> "MicTranscriber":
+        """Load the model from ``directory`` rather than downloading it."""
+        self._model_directory = Path(directory)
+        return self
+
+    def use_transcriber(self, transcriber: Transcriber) -> "MicTranscriber":
+        """Reuse an already-loaded transcriber rather than opening another.
+
+        The transcriber stays yours to close.
+        """
+        self.transcriber = transcriber
+        self._owns_transcriber = False
+        return self
+
+    def update_interval(self, seconds: float) -> "MicTranscriber":
+        """Seconds between automatic streaming updates (default ``0.5``)."""
+        self._update_interval = seconds
+        return self
+
+    def options(self, options: Mapping[str, Any]) -> "MicTranscriber":
+        """Escape hatch for transcriber options the setters don't cover."""
+        self._options.update(options)
+        return self
+
+    def spelling_model(self, path: Union[str, Path, None]) -> "MicTranscriber":
+        """Use a specific alphanumeric spelling model.
+
+        Only worth setting when you keep your own copy: :meth:`load` finds the
+        published one for the language by itself. Pass ``None`` to go without
+        one, which costs accuracy inside spelling mode.
+        """
+        self._spelling_model_path = None if path is None else str(path)
+        self._spelling_disabled = path is None
+        return self
+
+    def transcribe_flags(self, flags: int) -> "MicTranscriber":
+        """Set the flags applied to every streaming update.
+
+        Pass ``MOONSHINE_FLAG_SPELLING_MODE`` to turn on the spelling-CNN
+        fusion path, which is what makes dictated codes and passwords
+        accurate. Takes effect immediately when already loaded.
+        """
+        self._transcribe_flags = int(flags)
+        if self.mic_stream is not None:
+            self.mic_stream.set_transcribe_flags(self._transcribe_flags)
+        return self
+
+    def device(self, device: Union[int, str, None]) -> "MicTranscriber":
+        """Capture from a specific input device, by index or name."""
+        self._device = device
+        return self
+
+    def samplerate(self, hz: int) -> "MicTranscriber":
+        """Ask the capture device for a sample rate (default ``16000``).
+
+        The native library resamples whatever arrives, and :meth:`start` falls
+        back to the device's own rate if it refuses this one, so this rarely
+        needs setting.
+        """
+        self._samplerate = int(hz)
+        return self
+
+    def channels(self, count: int) -> "MicTranscriber":
+        """Number of channels to capture (default ``1``)."""
+        self._channels = int(count)
+        return self
+
+    def blocksize(self, frames: int) -> "MicTranscriber":
+        """Frames per capture callback (default ``1024``)."""
+        self._blocksize = int(frames)
+        return self
+
+    def on_text(self, callback: Callable[[str], None]) -> "MicTranscriber":
+        """Called with the in-progress text of the line currently being spoken."""
+
+        def listener(event: TranscriptEvent) -> None:
+            if isinstance(event, LineTextChanged):
+                callback(event.line.text)
+
+        self.add_listener(listener)
+        return self
+
+    def on_line(self, callback: Callable[[TranscriptLine], None]) -> "MicTranscriber":
+        """Called once per finished line."""
+
+        def listener(event: TranscriptEvent) -> None:
+            if isinstance(event, LineCompleted):
+                callback(event.line)
+
+        self.add_listener(listener)
+        return self
+
+    def on_error(self, callback: Callable[[BaseException], None]) -> "MicTranscriber":
+        """Called when the audio or transcription pipeline raises."""
+
+        def listener(event: TranscriptEvent) -> None:
+            if isinstance(event, Error):
+                callback(event.error)
+
+        self.add_listener(listener)
+        return self
+
+    def on_progress(self, callback: ProgressCallback) -> "MicTranscriber":
+        """Report model download progress as ``(fraction, filename)``.
+
+        Attaching a handler also silences the default terminal progress bars.
+        """
+        self._progress_fn = callback
+        return self
+
+    # ------------------------------------------------------------------
+    # Loading
+    # ------------------------------------------------------------------
+
+    def load(self) -> "MicTranscriber":
+        """Download the model if needed, open it, and return self.
+
+        Blocking. Safe to call twice; the second call does nothing.
+        """
+        if self.mic_stream is not None:
+            return self
+
+        if self.transcriber is None:
+            options = dict(self._options)
+            spelling_path = self._spelling_model_path
+            if self._model_directory is not None:
+                model_path: Union[str, Path] = self._model_directory
+                model_arch = (
+                    self._model_arch
+                    if self._model_arch is not None
+                    else ModelArch.MEDIUM_STREAMING
+                )
+            else:
+                model_path, model_arch = get_model_for_language(
+                    self._language,
+                    self._model_arch,
+                    on_progress=self._progress_fn,
+                )
+                if spelling_path is None and not self._spelling_disabled:
+                    # The spelling model is what makes dictated codes and
+                    # passwords accurate, but it is not published for every
+                    # language and its absence only costs accuracy inside
+                    # spelling mode, so a failure here is not fatal.
+                    try:
+                        spelling_path = get_spelling_model_path(self._language)
+                    except Exception as e:
+                        print(
+                            f"MicTranscriber: no spelling model for "
+                            f"{self._language}: {e}",
+                            file=sys.stderr,
+                        )
+            if spelling_path is not None:
+                options.setdefault("spelling_model_path", spelling_path)
+            # Speaker identification needs its own models, which are a download
+            # rather than compiled-in data. Unlike the spelling model, a failure
+            # here is fatal: the caller asked for speaker IDs and would
+            # otherwise get a transcriber that silently never produces them.
+            if _is_true(options.get("identify_speakers")) and not options.get(
+                "diarization_model_dir"
+            ):
+                options["diarization_model_dir"] = get_diarization_model()
+            self.transcriber = Transcriber(
+                str(model_path), model_arch, options=options or None
+            )
+            self._owns_transcriber = True
+
+        self.mic_stream = self.transcriber.create_stream(
+            self._update_interval, transcribe_flags=self._transcribe_flags
+        )
+        for listener in self._pending_listeners:
+            self.mic_stream.add_listener(listener)
+        self._pending_listeners.clear()
+        return self
 
     def _query_device_default_samplerate(self) -> Optional[int]:
         """Return the input device's native default sample rate, or None on failure.
@@ -93,7 +339,7 @@ class MicTranscriber:
         """
 
         def audio_callback(in_data, frames, time, status):
-            if not self._should_listen:
+            if not self._should_listen or self._muted:
                 return
             if status:
                 print(f"MicTranscriber: {status}")
@@ -199,66 +445,116 @@ class MicTranscriber:
             self._worker_thread.join()
             self._worker_thread = None
 
-    def start(self):
+    # ------------------------------------------------------------------
+    # Running
+    # ------------------------------------------------------------------
+
+    def start(self) -> "MicTranscriber":
+        """Open the microphone and begin transcribing."""
+        if self.mic_stream is None:
+            raise RuntimeError("No model loaded. Call load() before start().")
         self.mic_stream.start()
         self._start_worker()
         if self._sd_stream is None:
             self._start_listening()
         self._should_listen = True
+        return self
 
-    def stop(self):
+    def mute(self, muted: bool = True) -> "MicTranscriber":
+        """Drop incoming audio without closing the microphone.
+
+        Used to stop an assistant transcribing its own synthesized speech.
+        """
+        self._muted = muted
+        return self
+
+    def stop(self) -> None:
         self._should_listen = False
         # Let the worker finish transcribing any queued audio, then join it
         # before flushing the stream so the final transcript is complete.
         self._stop_worker()
-        self.mic_stream.stop()
+        if self.mic_stream is not None:
+            self.mic_stream.stop()
 
-    def close(self):
+    def close(self) -> None:
+        """Release the microphone, the stream, and any transcriber we opened."""
         self._should_listen = False
         self._stop_worker()
-        self.mic_stream.close()
-        self.transcriber.close()
+        if self._sd_stream is not None:
+            self._sd_stream.close()
+            self._sd_stream = None
+        if self.mic_stream is not None:
+            self.mic_stream.close()
+            self.mic_stream = None
+        if self.transcriber is not None and self._owns_transcriber:
+            self.transcriber.close()
+        self.transcriber = None
 
-    @property
-    def transcribe_flags(self) -> int:
-        """Flags currently applied to streamed ``update_transcription`` calls."""
-        return self.mic_stream.transcribe_flags
+    def __enter__(self) -> "MicTranscriber":
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.close()
 
     def set_transcribe_flags(self, flags: int) -> None:
-        """Update the per-update flags on the underlying mic stream.
+        """Non-chainable alias for :meth:`transcribe_flags`.
 
-        Convenience wrapper around :meth:`Stream.set_transcribe_flags`.
-        Lets DialogFlow flip ``MOONSHINE_FLAG_SPELLING_MODE`` on only
-        while a ``SPELLED`` / ``DIGITS`` prompt is in progress.
+        Lets DialogFlow flip ``MOONSHINE_FLAG_SPELLING_MODE`` on only while a
+        ``SPELLED`` / ``DIGITS`` prompt is in progress.
         """
-        self.mic_stream.set_transcribe_flags(flags)
+        self.transcribe_flags(flags)
+
+    # ------------------------------------------------------------------
+    # Full event interface
+    #
+    # on_text / on_line / on_error cover the common cases and are built on
+    # these. Reach for these directly when you need line ids, speaker spans,
+    # word timings, or the moment a line starts.
+    # ------------------------------------------------------------------
 
     def add_listener(self, listener: Callable[[TranscriptEvent], None]) -> None:
-        self.mic_stream.add_listener(listener)
+        """Attach a listener, either a callable or a TranscriptEventListener.
+
+        Listeners attached before :meth:`load` are held and applied when the
+        stream exists, so a builder chain can register them up front.
+        """
+        if self.mic_stream is None:
+            self._pending_listeners.append(listener)
+        else:
+            self.mic_stream.add_listener(listener)
 
     def remove_listener(self, listener: Callable[[TranscriptEvent], None]) -> None:
-        self.mic_stream.remove_listener(listener)
+        if self.mic_stream is None:
+            if listener in self._pending_listeners:
+                self._pending_listeners.remove(listener)
+        else:
+            self.mic_stream.remove_listener(listener)
 
-    def remove_all_listeners(self):
-        self.mic_stream.remove_all_listeners()
+    def remove_all_listeners(self) -> None:
+        self._pending_listeners.clear()
+        if self.mic_stream is not None:
+            self.mic_stream.remove_all_listeners()
 
     def push_listener(self, listener: Callable[[TranscriptEvent], None]) -> None:
         """Push a temporary listener, saving the current listeners on a stack."""
-        self.mic_stream.push_listener(listener)
+        self._require_stream("push_listener").push_listener(listener)
 
     def pop_listener(self) -> None:
         """Restore the listeners that were active before the last push."""
-        self.mic_stream.pop_listener()
+        self._require_stream("pop_listener").pop_listener()
 
     def pop_all_listeners(self) -> None:
         """Unwind the entire listener stack, restoring the original listeners."""
-        self.mic_stream.pop_all_listeners()
+        self._require_stream("pop_all_listeners").pop_all_listeners()
+
+    def _require_stream(self, what: str):
+        if self.mic_stream is None:
+            raise RuntimeError(f"No model loaded. Call load() before {what}().")
+        return self.mic_stream
 
 
 if __name__ == "__main__":
     import argparse
-    import sys
-    from moonshine_voice import get_model_for_language
 
     parser = argparse.ArgumentParser(description="MicTranscriber example")
     parser.add_argument(
@@ -271,67 +567,40 @@ if __name__ == "__main__":
         help="Model architecture to use for transcription",
     )
     args = parser.parse_args()
-    model_path, model_arch = get_model_for_language(
-        wanted_language=args.language, wanted_model_arch=args.model_arch
-    )
 
-    mic_transcriber = MicTranscriber(model_path=model_path, model_arch=model_arch)
-
-    class TerminalListener(TranscriptEventListener):
-        def __init__(self):
-            self.last_line_text_length = 0
-
-        # Assume we're on a terminal, and so we can use a carriage return to
-        # overwrite the last line with the latest text.
-        def update_last_terminal_line(self, line: TranscriptLine):
-            if line.speaker_spans:
-                # Use the speaker with the most speech time within the line.
-                durations = {}
-                for span in line.speaker_spans:
-                    durations[span.speaker_index] = (
-                        durations.get(span.speaker_index, 0.0) + span.duration
-                    )
-                dominant = max(durations, key=durations.get)
-                speaker_prefix = f"Speaker #{dominant}: "
-            else:
-                speaker_prefix = ""
-            new_text = f"{speaker_prefix}{line.text}"
-            print(f"\r{new_text}", end="", flush=True)
-            if len(new_text) < self.last_line_text_length:
-                # If the new text is shorter than the last line, we need to
-                # overwrite the last line with spaces.
-                diff = self.last_line_text_length - len(new_text)
-                print(f"{' ' * diff}", end="", flush=True)
-            # Update the length of the last line text.
-            self.last_line_text_length = len(new_text)
-
-        def on_line_started(self, event):
-            self.last_line_text_length = 0
-
-        def on_line_text_changed(self, event):
-            self.update_last_terminal_line(event.line)
-
-        def on_line_completed(self, event):
-            self.update_last_terminal_line(event.line)
-            print("\n", end="", flush=True)
-
-    # If we're not on an interactive terminal, print each line as it's completed.
-    class FileListener(TranscriptEventListener):
-        def on_line_completed(self, event):
-            print(event.line.text)
+    mic = MicTranscriber().language(args.language)
+    if args.model_arch is not None:
+        mic.model_arch(ModelArch(args.model_arch))
 
     if sys.stdout.isatty():
-        listener = TerminalListener()
+        # Rewrite the current line in place as the text firms up, then leave it
+        # behind and start a new one once the line is final.
+        state = {"width": 0}
+
+        def show_partial(text: str) -> None:
+            padding = max(state["width"] - len(text), 0)
+            print(f"\r{text}{' ' * padding}", end="", flush=True)
+            state["width"] = len(text)
+
+        def show_final(line: TranscriptLine) -> None:
+            show_partial(line.text)
+            state["width"] = 0
+            print()
+
+        mic.on_text(show_partial).on_line(show_final)
     else:
-        listener = FileListener()
+        mic.on_line(lambda line: print(line.text, flush=True))
 
-    mic_transcriber.add_listener(listener)
+    print("Loading the model…", file=sys.stderr)
+    mic.load()
 
-    print(f"Listening to the microphone, press Ctrl+C to stop...", file=sys.stderr)
-    mic_transcriber.start()
-    try:
-        while True:
-            time.sleep(0.1)
-    finally:
-        mic_transcriber.stop()
-        mic_transcriber.close()
+    print("Listening to the microphone, press Ctrl+C to stop...", file=sys.stderr)
+    with mic:
+        mic.start()
+        try:
+            while True:
+                time.sleep(0.1)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            mic.stop()

@@ -73,6 +73,23 @@ std::optional<ModelDependencies> stt_model_dependencies(
 std::optional<ModelDependencies> embedding_model_dependencies(
     const std::string& model_name, const std::string& variant);
 
+// Returns the download manifest for the speaker diarization models, which back
+// the transcriber's `identify_speakers` option. There is only one set, so this
+// takes no arguments and always succeeds.
+//
+// These two files used to be compiled into the library as C arrays. They are
+// 8.2 MB together, which every caller paid for whether or not they diarized, so
+// they became a download like every other model; see
+// docs/diarization-models.md.
+ModelDependencies diarization_model_dependencies();
+
+// Canonical filenames the diarization manifest resolves to, in the order the
+// loader expects them: segmentation first, then embedding. Exposed so that
+// callers assembling an in-memory load (`segmentation.ort` / `embedding.ort`
+// keys on moonshine_load_transcriber_from_memory_files) do not have to
+// hard-code the names.
+std::vector<std::string> diarization_component_files();
+
 // Language codes with at least one registered STT model, in catalog order.
 std::vector<std::string> stt_supported_languages();
 

@@ -15,7 +15,7 @@ import java.util.List;
  */
 public final class ModelSpec {
 
-    public enum Type { STT, TTS, EMBEDDING, G2P }
+    public enum Type { STT, TTS, EMBEDDING, G2P, DIARIZATION }
 
     public final Type type;
     /**
@@ -81,6 +81,14 @@ public final class ModelSpec {
         return new ModelSpec(Type.EMBEDDING, modelName, null, false, false, null, variant);
     }
 
+    /**
+     * Speaker diarization models, needed by the {@code identify_speakers} transcriber option.
+     * There is one set and it has no variants. About 8.2 MB.
+     */
+    public static ModelSpec diarization() {
+        return new ModelSpec(Type.DIARIZATION, null, null, false, false, null, null);
+    }
+
     /** Grapheme-to-phoneme assets for {@code language}. */
     public static ModelSpec g2p(String language) {
         return new ModelSpec(Type.G2P, language, null, false, false, null, null);
@@ -123,6 +131,8 @@ public final class ModelSpec {
                 if (root != null) {
                     options.add(new TranscriberOption("g2p_root", root));
                 }
+                break;
+            case DIARIZATION:
                 break;
         }
         return options;

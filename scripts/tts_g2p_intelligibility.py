@@ -1254,12 +1254,13 @@ def run_language(
 
     moonshine_voice = vp.kokoro if vp.kokoro is not None else vp.piper
     assert moonshine_voice is not None
-    tts_moonshine = TextToSpeech(
-        lang,
-        voice=moonshine_voice,
-        asset_root=asset_root,
-        download=False,
+    tts_moonshine = (
+        TextToSpeech()
+        .language(lang)
+        .voice(moonshine_voice)
+        .models_from(asset_root)
     )
+    tts_moonshine.load()
 
     kokoro_lang = moonshine_tag_to_upstream_kokoro_lang_code(lang)
     upstream_k_pipe: Any = None

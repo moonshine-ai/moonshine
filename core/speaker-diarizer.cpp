@@ -13,6 +13,15 @@
 
 namespace {
 
+cppannote::ModelSource to_model_source(const SpeakerDiarizerModel &model) {
+  return cppannote::ModelSource{model.path, model.data, model.size};
+}
+
+cppannote::ModelSources to_model_sources(const SpeakerDiarizerOptions &opts) {
+  return cppannote::ModelSources{to_model_source(opts.segmentation_model),
+                                 to_model_source(opts.embedding_model)};
+}
+
 // Total seconds of overlap between the spans of two turn lists.
 double turn_overlap_seconds(
     const std::vector<cppannote::StreamingDiarizationTurn> &a, int32_t label_a,
@@ -65,7 +74,7 @@ struct SpeakerDiarizer::Impl {
   std::map<uint64_t, uint32_t> speaker_index_map;
 
   explicit Impl(const SpeakerDiarizerOptions &options_in)
-      : engine(), options(options_in) {
+      : engine(to_model_sources(options_in)), options(options_in) {
     // Same approach as line IDs in the transcriber: start from a random
     // 64-bit value and increment, so IDs are effectively unique.
     std::random_device rd;

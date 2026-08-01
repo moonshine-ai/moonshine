@@ -15,6 +15,7 @@
 // Modalities and their [spec...] arguments:
 //   stt       <language> [<model_arch>]
 //   embedding <model_name> <variant>
+//   diarization  (no spec; there is one set of models)
 //   tts       <language> <voice>
 //   g2p       <language>
 //
@@ -45,10 +46,10 @@ constexpr const char* kTtsCdnBase = "https://download.moonshine.ai/tts/";
 
 void print_usage() {
   std::cerr << "Usage:\n"
-            << "  moonshine-download-smoke manifest <stt|embedding|tts|g2p> "
-               "[spec...]\n"
-            << "  moonshine-download-smoke run <stt|embedding|tts|g2p> <root> "
-               "[spec...]\n";
+            << "  moonshine-download-smoke manifest "
+               "<stt|embedding|diarization|tts|g2p> [spec...]\n"
+            << "  moonshine-download-smoke run "
+               "<stt|embedding|diarization|tts|g2p> <root> [spec...]\n";
 }
 
 std::string url_encode_path(const std::string& key) {
@@ -130,6 +131,17 @@ int manifest_embedding(const std::vector<std::string>& spec) {
       options.size(), &out);
   if (err != MOONSHINE_ERROR_NONE || out == nullptr) {
     return fail("moonshine_get_embedding_dependencies failed");
+  }
+  print_group_manifest(out);
+  moonshine_free_buffer(out);
+  return 0;
+}
+
+int manifest_diarization() {
+  char* out = nullptr;
+  const int32_t err = moonshine_get_diarization_dependencies(&out);
+  if (err != MOONSHINE_ERROR_NONE || out == nullptr) {
+    return fail("moonshine_get_diarization_dependencies failed");
   }
   print_group_manifest(out);
   moonshine_free_buffer(out);
@@ -294,6 +306,27 @@ int run_stt(const std::string& root, const std::vector<std::string>& spec) {
   return 0;
 }
 
+// Loads the diarization models on their own. `skip_transcription` leaves the
+// STT model out, so this exercises the diarization download and nothing else -
+// if the manifest missed a file, the transcriber fails to construct here.
+int run_diarization(const std::string& root) {
+  const moonshine_option_t options[] = {
+      {"skip_transcription", "true"},
+      {"identify_speakers", "true"},
+      {"diarization_model_dir", root.c_str()},
+  };
+  const int32_t handle = moonshine_load_transcriber_from_files(
+      root.c_str(), MOONSHINE_MODEL_ARCH_TINY, options,
+      sizeof(options) / sizeof(options[0]), MOONSHINE_HEADER_VERSION);
+  if (handle < 0) {
+    return fail("failed to load diarization models: " +
+                std::string(moonshine_error_to_string(handle)));
+  }
+  std::cerr << "diarization ok\n";
+  moonshine_free_transcriber(handle);
+  return 0;
+}
+
 int run_embedding(const std::string& root,
                   const std::vector<std::string>& spec) {
   const std::string variant = spec.size() >= 2 ? spec[1] : std::string("q4");
@@ -418,6 +451,9 @@ int main(int argc, char** argv) {
       if (modality == "embedding") {
         return manifest_embedding(spec);
       }
+      if (modality == "diarization") {
+        return manifest_diarization();
+      }
       if (modality == "tts") {
         return manifest_tts(spec);
       }
@@ -441,6 +477,9 @@ int main(int argc, char** argv) {
       }
       if (modality == "embedding") {
         return run_embedding(root, spec);
+      }
+      if (modality == "diarization") {
+        return run_diarization(root);
       }
       if (modality == "tts") {
         return run_tts(root, spec);

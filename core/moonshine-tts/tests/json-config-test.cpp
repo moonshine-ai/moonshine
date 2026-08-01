@@ -11,7 +11,7 @@ using namespace moonshine_tts;
 TEST_CASE("load_oov_tables from onnx-config.json") {
   const auto dir = std::filesystem::temp_directory_path() / "g2p_cfg_test";
   std::filesystem::create_directories(dir);
-  const auto model = dir / "model.onnx";
+  const auto model = dir / "model.ort";
   {
     std::ofstream touch(model);
     touch << "x";

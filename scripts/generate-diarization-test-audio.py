@@ -62,12 +62,8 @@ def _synthesize_utterance(
     text: str,
     asset_root: Path,
 ) -> Tuple[List[float], int]:
-    tts = TextToSpeech(
-        "en_us",
-        voice=voice,
-        asset_root=asset_root,
-        download=False,
-    )
+    tts = TextToSpeech().language("en_us").voice(voice).models_from(asset_root)
+    tts.load()
     try:
         samples, sample_rate = tts.synthesize(text, speed=SYNTHESIS_SPEED)
         return list(samples), int(sample_rate)

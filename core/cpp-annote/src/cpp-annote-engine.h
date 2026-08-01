@@ -57,13 +57,10 @@ struct DiarizationProfile {
 
 class CppAnnoteEngine {
  public:
-  /// Construct from compiled-in ORT model data (community-1 defaults).
-  CppAnnoteEngine();
-
-  /// Construct with optional file-based ONNX models.  Pass an empty string
-  /// to use the compiled-in default for that model.
-  CppAnnoteEngine(const std::string& segmentation_onnx_path,
-                   const std::string& embedding_onnx_path);
+  /// Construct from the community-1 segmentation and embedding models, given
+  /// as files or as caller-owned buffers.  Throws std::runtime_error if either
+  /// is missing.
+  explicit CppAnnoteEngine(const ModelSources& models);
 
   CppAnnoteEngine(const CppAnnoteEngine&) = delete;
   CppAnnoteEngine& operator=(const CppAnnoteEngine&) = delete;
@@ -137,7 +134,7 @@ class CppAnnoteEngine {
   std::unique_ptr<plda_vbx::PldaModel> plda_model_;
   clustering_vbx::VbxClusteringParams vbx_params_{};
 
-  void init_config_and_models(const std::string& embedding_onnx_path);
+  void init_config_and_models(const ModelSource& embedding_model);
 };
 
 }  // namespace cppannote

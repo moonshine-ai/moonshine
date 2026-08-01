@@ -128,7 +128,6 @@ set(CPP_ANNOTE_SRC_FILES
     ${CPP_ANNOTE_DIR}/src/cpp-annote.cpp
     ${CPP_ANNOTE_DIR}/src/cpp-annote-streaming.cpp
     ${CPP_ANNOTE_DIR}/src/community1_cpp_annote_embedded.cpp
-    ${CPP_ANNOTE_DIR}/src/community1_ort_embedded.cpp
     ${CPP_ANNOTE_DIR}/src/compute_fbank.cpp
     ${CPP_ANNOTE_DIR}/src/embedding_ort_infer.cpp
     ${CPP_ANNOTE_DIR}/src/filter_train.cpp
@@ -929,6 +928,51 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
         )
     endif()
 
+endif()
+
+# Proves every shipped model still loads under the linked ONNX Runtime. This is
+# how a minimal build missing an operator gets caught; see the file header for
+# why it also has to run on wasm, iOS and Android, where the runtime is the
+# minimal one. Registered as a ctest because it is fast (it loads and discards,
+# running no inference) and because the failure it catches is silent otherwise.
+if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
+    add_executable(ort-load-sweep-test ort-load-sweep-test.cpp)
+    set_target_properties(ort-load-sweep-test PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(ort-load-sweep-test PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/ort-utils
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
+    )
+    copy_onnxruntime_dll(ort-load-sweep-test)
+    if (IOS OR MOONSHINE_BUILD_SWIFT)
+        set_target_properties(ort-load-sweep-test PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.ort-load-sweep-test"
+            MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        )
+        target_link_libraries(ort-load-sweep-test PRIVATE
+            ort-utils
+            ${ONNXRUNTIME_LIB_PATH}
+            "-framework CoreFoundation"
+            "-framework Foundation"
+        )
+    else()
+        target_link_libraries(ort-load-sweep-test PRIVATE
+            ort-utils
+            ${ONNXRUNTIME_LIB_PATH}
+        )
+    endif()
+    add_test(
+        NAME ort-load-sweep
+        COMMAND ort-load-sweep-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/..
+    )
 endif()
 
 # Style enforcement: banned constructs must not creep back into first-party

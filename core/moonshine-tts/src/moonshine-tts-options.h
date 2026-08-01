@@ -17,31 +17,34 @@ using MoonshineTTSFileInformation = FileInformation;
 
 /// Canonical keys for TTS asset paths (relative to ``g2p_options.g2p_root``
 /// unless paths are absolute). When ``g2p_root`` is empty, ``MoonshineTTS``
-/// uses the process current working directory as the root. Canonical map / CDN
-/// key for the Kokoro graph. It ships as ``.ort`` because the wasm runtime is
-/// built without ONNX-format support; ``resolve_disk_model_file_path`` still
-/// accepts a sibling ``.onnx`` on disk.
+/// uses the process current working directory as the root.
+///
+/// Every model key below names a ``.ort``. Moonshine loads ORT-format models
+/// only: the wasm and mobile runtimes are minimal ONNX Runtime builds with no
+/// ONNX parser compiled in, so a ``.onnx`` cannot be read there at all.
 inline constexpr std::string_view kTtsKokoroModelKey = "kokoro/model.ort";
 inline constexpr std::string_view kTtsKokoroConfigJsonKey =
     "kokoro/config.json";
-/// Optional explicit Piper ONNX model (``*.onnx``).
+/// Optional explicit Piper model, in ORT format.
+///
+/// The key name predates the move to ORT and is kept so existing callers keep
+/// working; the bytes or path it carries must be a ``.ort``.
 inline constexpr std::string_view kTtsPiperOnnxKey = "piper/onnx";
-/// Optional Piper model config (``*.onnx.json``) when it is not beside the ONNX
-/// file.
+/// Optional Piper model config when it is not beside the model file. Piper
+/// names these ``<voice>.onnx.json`` upstream and we keep that name whatever
+/// form the model itself ships in.
 inline constexpr std::string_view kTtsPiperOnnxJsonKey = "piper/onnx.json";
-/// Optional Piper voice directory (``*.onnx``) when ``kTtsPiperOnnxKey`` is
-/// unset.
+/// Optional Piper voice directory when ``kTtsPiperOnnxKey`` is unset. Voices
+/// in it are ``<stem>.ort`` or the split ``<stem>.model.ort`` plus
+/// ``<stem>.weights.ort`` pair.
 inline constexpr std::string_view kTtsPiperVoicesKey = "piper/voices";
 /// Optional directory of ``*.onnx.json`` files parallel to
 /// ``kTtsPiperVoicesKey`` (same basename rules).
 inline constexpr std::string_view kTtsPiperVoicesJsonKey = "piper/voices_json";
 
-/// ZipVoice zero-shot voice-cloning model assets. These ship in ORT format
-/// (``.ort``); the
-/// ``resolve_disk_model_file_path`` helper still accepts a sibling ``.onnx``
-/// when a ``.ort`` is absent. The fm_decoder may be the ``ai.zipvoice``
-/// custom-op (Swoosh/GluGate/…) rewrite, whose ops are compiled into the
-/// library.
+/// ZipVoice zero-shot voice-cloning model assets. The fm_decoder may be the
+/// ``ai.zipvoice`` custom-op (Swoosh/GluGate/…) rewrite, whose ops are
+/// compiled into the library.
 inline constexpr std::string_view kTtsZipVoiceTextEncoderKey =
     "zipvoice/text_encoder.ort";
 inline constexpr std::string_view kTtsZipVoiceFmDecoderKey =

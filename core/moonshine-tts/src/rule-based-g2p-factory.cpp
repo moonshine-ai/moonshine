@@ -20,6 +20,7 @@
 #include "english.h"
 #include "french.h"
 #include "g2p-path.h"
+#include "ort-session-options.h"
 #include "g2p-transformer-model.h"
 #include "german.h"
 #include "hindi.h"
@@ -179,7 +180,7 @@ bool g2p_onnx_bundle_includes_model_file(
     if (o.asset_is_available(model_key)) {
       return true;
     }
-    const auto resolved = resolve_prefer_ort_model(disk_dir, onnx_name);
+    const auto resolved = ort_model_path(disk_dir, onnx_name);
     return std::filesystem::is_regular_file(resolved);
   } catch (...) {
     return false;
@@ -238,10 +239,11 @@ std::optional<RuleBasedG2pInstance> try_english(
   }
 
   std::optional<std::filesystem::path> oov_onnx{
-      resolve_prefer_ort_model(data_root / "oov", "model.onnx")};
+      ort_model_path(data_root / "oov", "model.ort")};
 
   if (const auto oov = options.optional_override_path(kG2pOovOnnxOverrideKey)) {
     oov_onnx = resolve_path_under_root(options.g2p_root, *oov);
+    require_ort_model_path(*oov_onnx, "English OOV model override");
   }
 
   std::optional<EnglishOnnxAuxMemory> oov_mem;

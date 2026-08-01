@@ -8,7 +8,6 @@
 
 #include "g2p-path.h"
 #include "moonshine-g2p-options.h"
-#include "ort-onnx-external-data.h"
 #include "ort-session-options.h"
 
 namespace moonshine_tts {
@@ -86,24 +85,11 @@ bool load_single(const MoonshineG2POptions* opt, std::string_view bundle_key,
       return true;
     }
   }
-  const auto path = resolve_prefer_ort_model(disk_dir, file);
+  const auto path = ort_model_path(disk_dir, file);
   if (!std::filesystem::is_regular_file(path)) {
     return false;
   }
   return read_file(path, out);
-}
-
-Ort::SessionOptions session_options_for(
-    const std::vector<std::string>& ort_providers,
-    const std::string& coreml_cache_dir, const MoonshineG2POptions* opt,
-    std::string_view model_map_key) {
-  Ort::SessionOptions so =
-      make_g2p_ort_session_options(ort_providers, coreml_cache_dir);
-  if (opt != nullptr && !model_map_key.empty()) {
-    ort_add_external_initializer_files_for_onnx_model_buffer(so, opt->files,
-                                                             model_map_key);
-  }
-  return so;
 }
 
 }  // namespace
@@ -135,29 +121,27 @@ G2pTransformerModel load_g2p_transformer_model(
     // produced the float32 tensors, so only the results stay resident.
     loaded.split_weights = run_split_weights_model(
         env, weight_bytes.data(), weight_bytes.size(),
-        session_options_for(ort_providers, coreml_cache_dir, nullptr, {}));
+        make_g2p_ort_session_options(ort_providers, coreml_cache_dir));
     loaded.model_bytes = std::move(graph_bytes);
     loaded.session = std::make_unique<Ort::Session>(
         env, loaded.model_bytes.data(), loaded.model_bytes.size(),
-        session_options_for(ort_providers, coreml_cache_dir, nullptr, {}));
+        make_g2p_ort_session_options(ort_providers, coreml_cache_dir));
     return loaded;
   }
 
   std::vector<std::uint8_t> bytes;
   if (load_single(opt, bundle_key, model_file, model_dir, bytes) &&
       !bytes.empty()) {
-    const std::string model_map_key = g2p_bundle_file_key(bundle_key, model_file);
     loaded.model_bytes = std::move(bytes);
     loaded.session = std::make_unique<Ort::Session>(
         env, loaded.model_bytes.data(), loaded.model_bytes.size(),
-        session_options_for(ort_providers, coreml_cache_dir, opt,
-                            model_map_key));
+        make_g2p_ort_session_options(ort_providers, coreml_cache_dir));
     return loaded;
   }
 
   throw std::runtime_error(std::string(owner) + ": missing " +
                            (model_dir / std::string(model_file)).string() +
-                           " (no split ORT pair, .ort or .onnx found)");
+                           " (no split ORT pair and no .ort found)");
 }
 
 }  // namespace moonshine_tts

@@ -25,7 +25,7 @@ struct Entry {
 };
 
 // Sorted by `url` (ascending) so lookups can binary-search.
-constexpr std::array<Entry, 64> kEntries = {{
+constexpr std::array<Entry, 66> kEntries = {{
     {"https://download.moonshine.ai/model/base-ar/quantized/base-ar/"
      "decoder_model_merged.ort",
      109424552, "u17PkA==", "crc32c"},
@@ -92,6 +92,11 @@ constexpr std::array<Entry, 64> kEntries = {{
     {"https://download.moonshine.ai/model/base-zh/quantized/base-zh/"
      "tokenizer.bin",
      249974, "B7s10Q==", "crc32c"},
+    {"https://download.moonshine.ai/model/diarization-community1/embedding.ort",
+     6975920, "r5LVbQ==", "crc32c"},
+    {"https://download.moonshine.ai/model/diarization-community1/"
+     "segmentation.ort",
+     1594080, "hcqhEA==", "crc32c"},
     {"https://download.moonshine.ai/model/embeddinggemma-300m/model.ort",
      1235247424, "ZKybVA==", "crc32c"},
     {"https://download.moonshine.ai/model/embeddinggemma-300m/model_fp16.ort",

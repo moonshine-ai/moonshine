@@ -21,7 +21,6 @@
 #include "g2p-path.h"
 #include "g2p-transformer-model.h"
 #include "moonshine-g2p-options.h"
-#include "ort-onnx-external-data.h"
 #include "ort-session-options.h"
 #include "utf8-utils.h"
 

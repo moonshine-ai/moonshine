@@ -109,6 +109,8 @@ public final class MoonshineDownloadWorker extends Worker {
                 return ModelSpec.tts(primary, data.getString(KEY_VOICE));
             case EMBEDDING:
                 return ModelSpec.embedding(primary, data.getString(KEY_VARIANT));
+            case DIARIZATION:
+                return ModelSpec.diarization();
             case G2P:
             default:
                 return ModelSpec.g2p(primary);

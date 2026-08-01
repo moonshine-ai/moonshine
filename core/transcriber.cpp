@@ -52,6 +52,48 @@ int32_t vad_window_size_from_duration(float duration, int32_t hop_size) {
 size_t vad_sample_count_from_duration(float duration) {
   return static_cast<size_t>(std::round(duration * INTERNAL_SAMPLE_RATE));
 }
+
+// Prefers whichever of the two carries a model, so an option set directly on
+// the transcriber wins over the same asset arriving in the keyed file map.
+SpeakerDiarizerModel first_present(const SpeakerDiarizerModel &preferred,
+                                   const SpeakerDiarizerModel &fallback) {
+  const bool has_preferred = (preferred.data != nullptr && preferred.size > 0) ||
+                             !preferred.path.empty();
+  return has_preferred ? preferred : fallback;
+}
+
+// Settles where one diarization model comes from. An explicitly supplied
+// buffer or path wins; otherwise it is `filename` under the model directory.
+// Reporting a missing directory here, by name, beats letting ONNX Runtime
+// report that "" could not be opened.
+SpeakerDiarizerModel resolve_diarization_model(
+    const SpeakerDiarizerModel &explicit_model, const std::string &model_dir,
+    const char *filename) {
+  if (explicit_model.data != nullptr && explicit_model.size > 0) {
+    return explicit_model;
+  }
+  if (!explicit_model.path.empty()) {
+    return explicit_model;
+  }
+  if (model_dir.empty()) {
+    throw std::runtime_error(
+        std::string("identify_speakers needs the diarization models, which are "
+                    "downloaded rather than built in. Set the "
+                    "diarization_model_dir option to a directory holding "
+                    "segmentation.ort and embedding.ort, or supply them in "
+                    "memory. Missing: ") +
+        filename + ". See docs/diarization-models.md.");
+  }
+  SpeakerDiarizerModel resolved;
+  resolved.path = (std::filesystem::path(model_dir) / filename).string();
+  if (!std::filesystem::exists(resolved.path)) {
+    throw std::runtime_error("Diarization model not found: " + resolved.path +
+                             ". Download it with the manifest from "
+                             "moonshine_get_diarization_dependencies(); see "
+                             "docs/diarization-models.md.");
+  }
+  return resolved;
+}
 }  // namespace
 
 Transcriber::Transcriber(const TranscriberOptions &options)
@@ -97,6 +139,24 @@ Transcriber::Transcriber(const TranscriberOptions &options)
         this->options.diarization_analyze_cadence;
     diarizer_options.cluster_window_sec =
         this->options.diarization_cluster_window_sec;
+    // The keyed in-memory loader delivers the diarization models as canonical
+    // assets, the same way it delivers the spelling model. The map outlives the
+    // transcriber, so the bytes stay valid for the ORT sessions reading them.
+    auto model_from_files = [this](const char *name) {
+      SpeakerDiarizerModel model;
+      if (this->options.model_files.contains(name)) {
+        this->options.model_files.load(name, &model.data, &model.size);
+      }
+      return model;
+    };
+    diarizer_options.segmentation_model = resolve_diarization_model(
+        first_present(this->options.diarization_segmentation_model,
+                      model_from_files("segmentation.ort")),
+        this->options.diarization_model_dir, "segmentation.ort");
+    diarizer_options.embedding_model = resolve_diarization_model(
+        first_present(this->options.diarization_embedding_model,
+                      model_from_files("embedding.ort")),
+        this->options.diarization_model_dir, "embedding.ort");
     this->speaker_diarizer = new SpeakerDiarizer(diarizer_options);
   }
   // Lazily attach the spelling model when the caller provided one.

@@ -164,6 +164,14 @@ const std::vector<EmbeddingModelEntry>& embedding_catalog() {
   return catalog;
 }
 
+// The pyannote community-1 segmentation and speaker-embedding models, as
+// converted to ORT format. Both are pinned in one directory because the
+// clustering parameters still compiled into the library (the PLDA and x-vector
+// arrays in cpp-annote's community1_cpp_annote_embedded.cpp) were fitted
+// against this exact pair; a new pair means a new directory and a matching
+// library release, not an overwrite.
+constexpr const char* kDiarizationDir = "/diarization-community1";
+
 const SttLanguageEntry* find_stt_language(const std::string& language) {
   const std::string wanted = to_lower(language);
   for (const SttLanguageEntry& entry : stt_catalog()) {
@@ -312,6 +320,18 @@ std::optional<ModelDependencies> embedding_model_dependencies(
   }
   ModelDependencies deps;
   deps.groups.push_back(make_group(model->download_url, files));
+  return deps;
+}
+
+std::vector<std::string> diarization_component_files() {
+  return {"segmentation.ort", "embedding.ort"};
+}
+
+ModelDependencies diarization_model_dependencies() {
+  ModelDependencies deps;
+  deps.groups.push_back(make_group(std::string(kCdnModelBase) +
+                                       kDiarizationDir,
+                                   diarization_component_files()));
   return deps;
 }
 

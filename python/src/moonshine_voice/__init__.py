@@ -25,6 +25,7 @@ from moonshine_voice.moonshine_api import (
 )
 
 from moonshine_voice.download import (
+    ProgressCallback,
     get_model_for_language,
     log_model_info,
     supported_languages,
@@ -38,6 +39,8 @@ from moonshine_voice.download import (
     supported_embedding_models,
     supported_embedding_models_friendly,
     get_embedding_model_variants,
+    # Speaker diarization models
+    get_diarization_model,
     # TTS / G2P asset helpers
     TTS_CDN_BASE_URL,
     tts_asset_cache_path,
@@ -134,11 +137,13 @@ def __getattr__(name):
         return globals()[name]
 
     # Lazy import TTS / G2P
-    if name in ("TextToSpeech", "list_output_devices"):
+    if name in ("TextToSpeech", "VoiceClone", "list_output_devices"):
         if not _tts_imported:
             from moonshine_voice.tts import TextToSpeech, list_output_devices
+            from moonshine_voice.voice_clone import VoiceClone
 
             globals()["TextToSpeech"] = TextToSpeech
+            globals()["VoiceClone"] = VoiceClone
             globals()["list_output_devices"] = list_output_devices
             _tts_imported = True
         return globals()[name]
@@ -290,6 +295,7 @@ __all__ = [
     "get_assets_path",
     "get_model_path",
     "load_wav_file",
+    "ProgressCallback",
     "get_model_for_language",
     "log_model_info",
     "supported_languages",
@@ -303,8 +309,11 @@ __all__ = [
     "supported_embedding_models",
     "supported_embedding_models_friendly",
     "get_embedding_model_variants",
+    # Speaker diarization models
+    "get_diarization_model",
     # TTS / G2P
     "TextToSpeech",
+    "VoiceClone",
     "list_output_devices",
     "GraphemeToPhonemizer",
     "TTS_CDN_BASE_URL",

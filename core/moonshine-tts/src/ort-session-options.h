@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "ort-model-format.h"
 #include "ort-utils.h"
 
 namespace moonshine_tts {

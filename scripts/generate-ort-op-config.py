@@ -8,10 +8,10 @@ taking a hand-maintained list:
 
   * TTS assets are whatever ``core/moonshine-tts/data`` holds, since
     ``scripts/upload-tts-assets-to-gcs.sh`` mirrors that tree to the CDN.
-  * STT, spelling and embedding models come from the native catalog (via the
-    ``moonshine_voice`` bindings), covering every language, architecture and
-    variant it can hand out. Those are fetched and cached under
-    ``--cache-dir``; the download runs to several GB the first time.
+  * STT, spelling, embedding and diarization models come from the native
+    catalog (via the ``moonshine_voice`` bindings), covering every language,
+    architecture and variant it can hand out. Those are fetched and cached
+    under ``--cache-dir``; the download runs to several GB the first time.
 
 Run it after adding a model, changing a model's ops, or converting one to a new
 form, then commit the result. ``scripts/check-ort-op-config.sh`` fails CI when
@@ -47,7 +47,6 @@ def local_tts_models():
 # has to have kernels for them.
 EMBEDDED_SOURCES = [
     REPO / "core" / "silero-vad-model-data.h",
-    REPO / "core" / "cpp-annote" / "src" / "community1_ort_embedded.cpp",
 ]
 
 ARRAY_PATTERN = re.compile(
@@ -90,6 +89,7 @@ def catalog_model_urls():
         get_embedding_model_variants,
     )
     from moonshine_voice.moonshine_api import (  # noqa: E402
+        moonshine_get_diarization_dependencies_string,
         moonshine_get_embedding_dependencies_string,
         moonshine_get_stt_dependencies_string,
     )
@@ -123,6 +123,10 @@ def catalog_model_urls():
             collect(
                 moonshine_get_embedding_dependencies_string(name, {"variant": variant})
             )
+
+    # The diarization models are a download too, as of 26.8; they used to be
+    # picked up from the C array that compiled them into the library.
+    collect(moonshine_get_diarization_dependencies_string())
 
     return sorted(urls)
 

@@ -16,6 +16,13 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest.h>
 
+namespace {
+// The diarization models ship as a download rather than compiled-in data
+// (docs/diarization-models.md), so the tests point at the copies under
+// test-assets, which is where they run from.
+constexpr const char *kDiarizationModelDir = "diarization";
+}  // namespace
+
 TEST_CASE("transcriber-test") {
   if (!std::filesystem::exists("output")) {
     std::filesystem::create_directory("output");
@@ -817,6 +824,8 @@ TEST_CASE("transcriber-test") {
     options.model_path = root_model_path.c_str();
     options.model_arch = MOONSHINE_MODEL_ARCH_TINY;
     options.identify_speakers = true;
+    REQUIRE(std::filesystem::exists(kDiarizationModelDir));
+    options.diarization_model_dir = kDiarizationModelDir;
     Transcriber transcriber(options);
     int32_t stream_id = transcriber.create_stream();
     transcriber.start_stream(stream_id);
@@ -901,6 +910,8 @@ TEST_CASE("transcriber-test") {
     options.model_path = root_model_path.c_str();
     options.model_arch = MOONSHINE_MODEL_ARCH_TINY;
     options.identify_speakers = true;
+    REQUIRE(std::filesystem::exists(kDiarizationModelDir));
+    options.diarization_model_dir = kDiarizationModelDir;
     Transcriber transcriber(options);
     struct transcript_t *transcript = nullptr;
     transcriber.transcribe_without_streaming(wav_data, wav_data_size,
@@ -938,6 +949,8 @@ TEST_CASE("transcriber-test") {
     options.model_path = root_model_path.c_str();
     options.model_arch = MOONSHINE_MODEL_ARCH_TINY;
     options.identify_speakers = true;
+    REQUIRE(std::filesystem::exists(kDiarizationModelDir));
+    options.diarization_model_dir = kDiarizationModelDir;
     Transcriber transcriber(options);
     struct transcript_t *transcript = nullptr;
     transcriber.transcribe_without_streaming(wav_data, wav_data_size,

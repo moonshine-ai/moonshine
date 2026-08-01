@@ -19,9 +19,17 @@ Local modifications relative to upstream:
   moved out of this folder into `core/third-party/`, alongside the other
   vendored libraries.
 
-`src/community1_ort_embedded.cpp` (segmentation + embedding ORT models) and
-`src/community1_cpp_annote_embedded.cpp` (PLDA/config data) are generated
-files tracked with Git LFS.
+- Deleted `src/community1_ort_embedded.cpp`, which compiled the segmentation
+  and embedding ORT models into the library. They are 8.2 MB together and only
+  a fraction of callers diarize, so they are downloaded now
+  (`docs/diarization-models.md`); `CppAnnote` and `CppAnnoteEngine` take a
+  `ModelSources` instead of falling back to compiled-in data, and no longer
+  have a default constructor. The two model-geometry JSON blobs from that file
+  were moved into `src/community1_cpp_annote_embedded.cpp` by hand, so
+  regenerating that file upstream will drop them.
+
+`src/community1_cpp_annote_embedded.cpp` (PLDA/config data) is a generated
+file tracked with Git LFS.
 
 Licenses: cpp-annote is MIT (see LICENSE). The community-1 diarization models
 are released by pyannote.ai under the Creative Commons Attribution 4.0

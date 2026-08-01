@@ -252,13 +252,6 @@ int MoonshineStreamingModel::load(const char *model_dir,
   std::string decoder_kv_path =
       append_path_component(model_dir, "decoder_kv.ort");
 
-  // Check if .ort versions exist (prefer them over .onnx)
-  std::string cross_kv_ort = append_path_component(model_dir, "cross_kv.ort");
-  std::string decoder_kv_ort =
-      append_path_component(model_dir, "decoder_kv.ort");
-  if (std::ifstream(cross_kv_ort).good()) cross_kv_path = cross_kv_ort;
-  if (std::ifstream(decoder_kv_ort).good()) decoder_kv_path = decoder_kv_ort;
-
   // Load cross_kv (required)
   {
     const char *cross_kv_mmap = nullptr;
@@ -343,7 +336,7 @@ int MoonshineStreamingModel::load_from_assets(const char *model_dir,
   std::string adapter_path = append_path_component(model_dir, "adapter.ort");
   std::string cross_kv_path = append_path_component(model_dir, "cross_kv.ort");
   std::string decoder_kv_path =
-      append_path_component(model_dir, "decoder_kv.onnx");
+      append_path_component(model_dir, "decoder_kv.ort");
   std::string config_path =
       append_path_component(model_dir, "streaming_config.json");
 

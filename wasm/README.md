@@ -290,14 +290,18 @@ scripts/build-ort-wasm.sh force
 
 Three kinds of model feed the config, and the third is the one that bites:
 models under `core/moonshine-tts/data`, models the native catalog can download,
-and models compiled into the library as a C array — the Silero VAD in
-`core/silero-vad-model-data.h` and the two cpp-annote diarization models. An
-embedded model is neither a file the tree walk finds nor a URL the catalog
-lists, so it was silently omitted at first, and the resulting build failed at
-runtime on a `Relu` the VAD needed. The generator now finds them by scanning
-those generated sources for the `ORTM` file magic, which means a new embedded
-model is picked up without editing anything, as long as it lives in a source
-listed in `EMBEDDED_SOURCES`.
+and models compiled into the library as a C array — now just the Silero VAD in
+`core/silero-vad-model-data.h`. An embedded model is neither a file the tree
+walk finds nor a URL the catalog lists, so it was silently omitted at first, and
+the resulting build failed at runtime on a `Relu` the VAD needed. The generator
+now finds them by scanning those generated sources for the `ORTM` file magic,
+which means a new embedded model is picked up without editing anything, as long
+as it lives in a source listed in `EMBEDDED_SOURCES`.
+
+The two cpp-annote diarization models used to be in that third category and are
+now in the second, having become a download
+([docs/diarization-models.md](../docs/diarization-models.md)). Their operators
+did not change with the move, only where the generator reads them from.
 
 The `check-ort-op-config` ctest guards this. It runs offline against the
 bundled and embedded models, so it catches a model added to the tree; the
@@ -305,8 +309,19 @@ catalog models are only checked by a full `generate-ort-op-config.py` run,
 which downloads several GB the first time and caches them under
 `~/.cache/moonshine-ort-op-config`. Run that before vendoring a new archive.
 
-Native builds (macOS, iOS, Android, Linux, Windows) use the prebuilt full ORT
-and are unaffected by any of this.
+iOS and Android are built the same way now, by `scripts/build-ort-ios.sh` and
+`scripts/build-ort-android.sh`, against this same config — so regenerating it
+means rebuilding all three, not just the wasm archive. macOS, Linux and Windows
+still use the prebuilt full ORT, but they are held to the ORT-only rule anyway
+(`session.load_model_format=ORT` is set everywhere), so a model that would fail
+in the browser fails on the desktop you develop on. See
+[docs/ort-only-models.md](../docs/ort-only-models.md).
+
+One difference worth knowing on mobile: an app is installed for months, while a
+model can be pushed to the CDN today. A new model needing an operator that the
+shipped app's library lacks fails on that app forever, not until the next page
+load. Adding an operator to the config is therefore a change that needs a
+client release before the model goes out.
 
 ## Versioning
 

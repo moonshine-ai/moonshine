@@ -6,12 +6,35 @@
 #ifndef CPP_ANNOTE_H_
 #define CPP_ANNOTE_H_
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
 
 namespace cppannote {
+
+/// Where one model's bytes come from: a filesystem path, or a buffer the
+/// caller owns. When `data` is non-null and `size` is non-zero the buffer is
+/// used and `path` is ignored. The buffer is not copied — ONNX Runtime reads
+/// out of it for the life of the session — so it must outlive the engine.
+struct ModelSource {
+  std::string path;
+  const uint8_t *data = nullptr;
+  size_t size = 0;
+
+  bool empty() const {
+    return path.empty() && (data == nullptr || size == 0);
+  }
+};
+
+/// The two models the pipeline needs. Both are required: they used to be
+/// compiled into the library, and are now downloaded (see
+/// core/moonshine-model-catalog.h, `diarization_model_dependencies`).
+struct ModelSources {
+  ModelSource segmentation;
+  ModelSource embedding;
+};
 
 struct DiarizationTurn {
   double start = 0.;
@@ -26,19 +49,22 @@ struct DiarizationResults {
   void write_json(std::ostream &os) const;
 };
 
-/// Loads segmentation and embedding ORT models from compiled-in data and
-/// manages streaming diarization sessions.  All heavy implementation details
-/// (ORT sessions, PLDA model, VBx clustering) are hidden behind the pimpl
-/// firewall.
+/// Loads the segmentation and embedding ORT models and manages streaming
+/// diarization sessions.  All heavy implementation details (ORT sessions, PLDA
+/// model, VBx clustering) are hidden behind the pimpl firewall.
+///
+/// The clustering parameters are still compiled in (see
+/// community1_cpp_annote_embedded.h), but the two ORT models are not: supply
+/// them from the community-1 files, whichever way suits the platform.
 class CppAnnote {
  public:
-  /// Construct the diarization engine from compiled-in community-1 model data.
-  CppAnnote();
+  /// Construct from files or from caller-owned buffers.  Throws
+  /// std::runtime_error if either model is missing.
+  explicit CppAnnote(const ModelSources& models);
 
-  /// Construct with optional file-based ONNX models.  Pass an empty string
-  /// to use the compiled-in default for that model.
-  CppAnnote(const std::string& segmentation_onnx_path,
-            const std::string& embedding_onnx_path);
+  /// Convenience overload for the common file-based case.
+  CppAnnote(const std::string& segmentation_model_path,
+            const std::string& embedding_model_path);
 
   ~CppAnnote();
 

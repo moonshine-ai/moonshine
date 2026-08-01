@@ -179,6 +179,9 @@ download_and_run "TTS en_us (Piper lessac)" tts en_us piper_en_US-lessac-medium
 # Embedding: q4 is the smallest published embedding variant.
 download_and_run "Embedding embeddinggemma-300m q4" embedding embeddinggemma-300m q4
 
+# Diarization: one set of models, no variants.
+download_and_run "Diarization community1" diarization
+
 # --- Extended sample (nightly): more languages and embedding variants. --------
 
 if [[ "${RUN_ALL}" -eq 1 ]]; then

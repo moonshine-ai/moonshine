@@ -17,7 +17,6 @@
 
 #include "g2p-path.h"
 #include "moonshine-g2p-options.h"
-#include "ort-onnx-external-data.h"
 #include "ort-session-options.h"
 #include "utf8-utils.h"
 
@@ -48,15 +47,10 @@ std::unique_ptr<Ort::Session> open_session(
 std::unique_ptr<Ort::Session> open_session_memory(
     Ort::Env& env, const void* data, size_t len,
     const std::vector<std::string>& ort_providers,
-    const std::string& coreml_cache_dir, const MoonshineG2POptions* opt,
-    std::string_view model_map_key) {
-  Ort::SessionOptions so =
-      make_g2p_ort_session_options(ort_providers, coreml_cache_dir);
-  if (opt != nullptr && !model_map_key.empty()) {
-    ort_add_external_initializer_files_for_onnx_model_buffer(so, opt->files,
-                                                             model_map_key);
-  }
-  return std::make_unique<Ort::Session>(env, data, len, so);
+    const std::string& coreml_cache_dir) {
+  return std::make_unique<Ort::Session>(
+      env, data, len,
+      make_g2p_ort_session_options(ort_providers, coreml_cache_dir));
 }
 
 std::string slurp_utf8_file(const std::filesystem::path& p) {
@@ -98,7 +92,7 @@ bool bundle_load_binary(const MoonshineG2POptions* opt,
       return true;
     }
   }
-  const auto p = resolve_prefer_ort_model(disk_dir, file);
+  const auto p = ort_model_path(disk_dir, file);
   if (!std::filesystem::is_regular_file(p)) {
     return false;
   }
@@ -770,13 +764,11 @@ JapaneseTokPosOnnx::JapaneseTokPosOnnx(const MoonshineG2POptions* opt,
   if (bundle_load_binary(opt_ptr, onnx_bundle_key, onnx_name, model_dir_,
                          onnx_model_storage_) &&
       !onnx_model_storage_.empty()) {
-    const std::string model_map_key =
-        g2p_bundle_file_key(onnx_bundle_key, onnx_name);
     session_ = open_session_memory(env_, onnx_model_storage_.data(),
                                    onnx_model_storage_.size(), ort_providers,
-                                   coreml_cache_dir, opt_ptr, model_map_key);
+                                   coreml_cache_dir);
   } else {
-    const auto onnx_path = resolve_prefer_ort_model(model_dir_, onnx_name);
+    const auto onnx_path = ort_model_path(model_dir_, onnx_name);
     if (!std::filesystem::is_regular_file(onnx_path)) {
       throw std::runtime_error("JapaneseTokPosOnnx: missing " +
                                onnx_path.string());

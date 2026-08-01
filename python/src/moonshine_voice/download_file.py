@@ -3,7 +3,7 @@ import hashlib
 import os
 import struct
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import requests
 from tqdm import tqdm
@@ -81,6 +81,7 @@ def download_file(
     timeout: int = 30,
     expected_size: Optional[int] = None,
     expected_crc32c: Optional[str] = None,
+    on_bytes: Optional[Callable[[int], None]] = None,
 ) -> Path:
     """
     Download a file with progress bar, resume support, and integrity checking.
@@ -96,6 +97,11 @@ def download_file(
         expected_crc32c: Optional expected base64 CRC32C digest (from the model
             catalog, matching Google Cloud Storage). Verified only when the
             ``google-crc32c`` package is installed.
+        on_bytes: Optional sink called with the number of bytes just added to
+            this file, including any resumed prefix. Callers that need an
+            overall percentage across several files accumulate these deltas
+            themselves; see ``download._ProgressTracker``. Not called at all
+            when the file is already cached, since no bytes move.
 
     Returns:
         Path to the downloaded file
@@ -169,6 +175,8 @@ def download_file(
                 unit_divisor=1024,
                 desc=dest.name,
             )
+        if on_bytes and initial_size > 0:
+            on_bytes(initial_size)
 
         try:
             with open(temp_file, mode) as f:
@@ -177,6 +185,8 @@ def download_file(
                         f.write(chunk)
                         if progress_bar:
                             progress_bar.update(len(chunk))
+                        if on_bytes:
+                            on_bytes(len(chunk))
         finally:
             if progress_bar:
                 progress_bar.close()

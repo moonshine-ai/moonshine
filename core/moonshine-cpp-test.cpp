@@ -394,7 +394,7 @@ TEST_CASE("moonshine-cpp-test") {
   }
   SUBCASE("embedding model scores phrases when model present") {
     const std::string dir = "embeddinggemma-300m-ONNX";
-    if (!file_exists(dir + "/model.onnx")) {
+    if (!file_exists(dir + "/model_q4.ort")) {
       return;
     }
     moonshine::EmbeddingModel model(dir,

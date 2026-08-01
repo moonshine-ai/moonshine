@@ -61,6 +61,9 @@ public final class ModelCache {
             case G2P:
                 builder.append("g2p-").append(spec.primary);
                 break;
+            case DIARIZATION:
+                builder.append("diarization-community1");
+                break;
         }
         return sanitize(builder.toString());
     }

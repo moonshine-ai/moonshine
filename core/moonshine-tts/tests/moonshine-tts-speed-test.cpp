@@ -14,13 +14,11 @@ namespace {
 bool bundled_tts_data_present(const std::filesystem::path& root) {
   namespace fs = std::filesystem;
   const fs::path voices = root / "en_us" / "piper-voices";
-  // Voices ship as a split ORT pair, a single .ort, or the original .onnx.
+  // Voices ship as a split ORT pair or a single .ort.
   const bool have_lessac =
       fs::is_regular_file(voices / "en_US-lessac-medium.model.ort") ||
-      fs::is_regular_file(voices / "en_US-lessac-medium.ort") ||
-      fs::is_regular_file(voices / "en_US-lessac-medium.onnx");
-  return (fs::is_regular_file(root / "kokoro" / "model.ort") ||
-          fs::is_regular_file(root / "kokoro" / "model.onnx")) &&
+      fs::is_regular_file(voices / "en_US-lessac-medium.ort");
+  return fs::is_regular_file(root / "kokoro" / "model.ort") &&
          fs::is_regular_file(root / "kokoro" / "config.json") && have_lessac;
 }
 

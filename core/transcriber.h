@@ -152,6 +152,15 @@ struct TranscriberOptions {
   // of pyannote community-1) alongside transcription. It's off by default
   // because it adds a significant amount of compute to transcribe calls.
   bool identify_speakers = false;
+  // The two models that pipeline needs, which are a download rather than
+  // compiled-in data (moonshine-model-catalog.h). Set
+  // `diarization_model_dir` to the directory holding `segmentation.ort` and
+  // `embedding.ort`, or fill in the two model members directly to load from
+  // named files or from memory. Both are ignored unless `identify_speakers`
+  // is set, and construction fails if it is set and they are absent.
+  std::string diarization_model_dir;
+  SpeakerDiarizerModel diarization_segmentation_model;
+  SpeakerDiarizerModel diarization_embedding_model;
   float transcription_interval = 0.5f;
   float vad_threshold = 0.5f;
   float vad_window_duration = 0.5f;

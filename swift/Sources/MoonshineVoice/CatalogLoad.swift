@@ -40,8 +40,39 @@ extension Transcriber {
             includeWordTimestamps: includeWordTimestamps)
         let directory = try resolveDirectory(for: spec, override: cacheDirectory)
         _ = try await downloader.ensureModelPresent(root: directory, spec: spec, onProgress: onProgress)
-        return try Transcriber(modelPath: directory.path, modelArch: modelArch, options: options)
+        let resolvedOptions = try await withDiarizationModels(
+            options, downloader: downloader, onProgress: onProgress)
+        return try Transcriber(
+            modelPath: directory.path, modelArch: modelArch, options: resolvedOptions)
     }
+}
+
+/// Whether `options` asks for speaker IDs, reading the value the way the C API does.
+private func wantsSpeakerIds(_ options: [TranscriberOption]?) -> Bool {
+    guard let option = options?.last(where: { $0.name == "identify_speakers" }) else {
+        return false
+    }
+    let value = option.value.trimmingCharacters(in: .whitespaces).lowercased()
+    return value == "true" || value == "1"
+}
+
+/// Downloads the diarization models and appends `diarization_model_dir` when the caller asked for
+/// speaker IDs without saying where the models are. They are a download rather than part of the
+/// library, and the transcriber refuses to construct without them.
+@available(iOS 15.0, macOS 12.0, *)
+func withDiarizationModels(
+    _ options: [TranscriberOption]?,
+    downloader: AssetDownloader,
+    onProgress: (@Sendable (DownloadProgress) -> Void)?
+) async throws -> [TranscriberOption]? {
+    guard wantsSpeakerIds(options) else { return options }
+    if options?.contains(where: { $0.name == "diarization_model_dir" }) == true { return options }
+    let spec = ModelSpec.diarization
+    let directory = try ModelCache.directory(for: spec)
+    _ = try await downloader.ensureModelPresent(
+        root: directory, spec: spec, onProgress: onProgress)
+    return (options ?? [])
+        + [TranscriberOption(name: "diarization_model_dir", value: directory.path)]
 }
 
 @available(iOS 15.0, macOS 12.0, *)

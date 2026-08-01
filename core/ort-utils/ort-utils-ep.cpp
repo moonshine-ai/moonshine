@@ -2,7 +2,16 @@
 #include "ort-utils.h"
 
 #if defined(__ANDROID__)
-#include "nnapi_provider_factory.h"
+// Declared here rather than taken from nnapi_provider_factory.h so that it can
+// be marked weak. The Android library we vendor is built without NNAPI (see
+// scripts/build-ort-android.sh for the measurements behind that), which leaves
+// this symbol undefined; ORT only stubs it out on Apple platforms. Weak makes
+// the link succeed and the address null, so a request for NNAPI can be turned
+// into an explanation instead of a build failure — and a library rebuilt with
+// 'with-nnapi' still works with no code change.
+extern "C" __attribute__((weak)) OrtStatus *
+OrtSessionOptionsAppendExecutionProvider_Nnapi(OrtSessionOptions *options,
+                                               uint32_t nnapi_flags);
 #endif
 
 #include <algorithm>
@@ -69,14 +78,29 @@ OrtStatus *append_one_provider(
          config->coreml_cache_dir[0] != '\0')
             ? config->coreml_cache_dir
             : nullptr;
+    OrtStatus *status = nullptr;
     if (cache_dir != nullptr) {
       const char *keys[] = {"ModelCacheDirectory"};
       const char *values[] = {cache_dir};
-      return ort_api->SessionOptionsAppendExecutionProvider(
+      status = ort_api->SessionOptionsAppendExecutionProvider(
           session_options, provider_name, keys, values, 1);
+    } else {
+      status = ort_api->SessionOptionsAppendExecutionProvider(
+          session_options, provider_name, nullptr, nullptr, 0);
     }
-    return ort_api->SessionOptionsAppendExecutionProvider(
-        session_options, provider_name, nullptr, nullptr, 0);
+    if (status != nullptr) {
+      // Most likely the runtime simply has no CoreML in it. The iOS library is
+      // a minimal ORT build, and ORT 1.23's CoreML provider does not compile
+      // in one (it calls Graph::GetModel, which minimal builds omit), so iOS
+      // ships without it. Say that rather than passing on "provider not
+      // found", which reads like a typo in the option.
+      ort_api->ReleaseStatus(status);
+      return make_invalid_argument_status(
+          ort_api,
+          "CoreML execution provider is not in this build; use 'cpu'. See "
+          "docs/execution-providers.md.");
+    }
+    return nullptr;
 #else
     return make_invalid_argument_status(
         ort_api, "CoreML execution provider is not available on this platform");
@@ -85,6 +109,13 @@ OrtStatus *append_one_provider(
 
   if (normalized == "nnapi") {
 #if defined(__ANDROID__)
+    if (OrtSessionOptionsAppendExecutionProvider_Nnapi == nullptr) {
+      return make_invalid_argument_status(
+          ort_api,
+          "NNAPI execution provider is not in this build; use 'cpu'. It ran "
+          "the models we ship in fragments too small to pay for themselves. "
+          "See docs/execution-providers.md.");
+    }
     return OrtSessionOptionsAppendExecutionProvider_Nnapi(session_options, 0);
 #else
     return make_invalid_argument_status(

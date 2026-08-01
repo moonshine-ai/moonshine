@@ -606,6 +606,14 @@ std::string embedding_dependencies(const std::string &model_name,
   return out;
 }
 
+std::string diarization_dependencies() {
+  char *json = nullptr;
+  check(moonshine_get_diarization_dependencies(&json));
+  std::string out = json ? json : "";
+  free(json);
+  return out;
+}
+
 #if defined(MOONSHINE_C_API_MOONSHINE_TTS) && MOONSHINE_C_API_MOONSHINE_TTS
 std::string tts_dependencies(const std::string &languages,
                              const std::string &voice) {
@@ -734,5 +742,6 @@ EMSCRIPTEN_BINDINGS(moonshine) {
   function("version", &version);
   function("sttDependencies", &stt_dependencies);
   function("embeddingDependencies", &embedding_dependencies);
+  function("diarizationDependencies", &diarization_dependencies);
   function("extractSpeechClip", &extract_speech_clip);
 }

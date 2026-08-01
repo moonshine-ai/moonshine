@@ -176,14 +176,9 @@ TEST_CASE(
   const fs::path voices_dir = g_data_root / "kokoro" / "voices";
   REQUIRE(std::filesystem::is_directory(voices_dir));
 
-  auto model_key_it = std::find_if(
+  const auto model_key_it = std::find_if(
       bundle.begin(), bundle.end(),
-      [](const auto& pr) { return pr.first == "kokoro/model.onnx"; });
-  if (model_key_it == bundle.end()) {
-    model_key_it = std::find_if(
-        bundle.begin(), bundle.end(),
-        [](const auto& pr) { return pr.first == "kokoro/model.ort"; });
-  }
+      [](const auto& pr) { return pr.first == "kokoro/model.ort"; });
   REQUIRE(model_key_it != bundle.end());
   REQUIRE_FALSE(model_key_it->second.empty());
 

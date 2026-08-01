@@ -203,7 +203,7 @@ Most developers should be able to treat the library as a black box that tells th
 
 A [**Transcriber**](python/src/moonshine_voice/transcriber.py#L66) takes in audio input and turns any speech into text. This is the first object you'll need to create to use Moonshine, and you'll give it a path to [the models you've downloaded](#downloading-models).
 
-A [**MicTranscriber**](python/src/moonshine_voice/mic_transcriber.py#L10) is a helper class based on the general transcriber that takes care of connecting to a microphone using your platform's built-in support (for example sounddevice in Python) and then feeding the audio in as it's captured.
+A [**MicTranscriber**](python/src/moonshine_voice/mic_transcriber.py#L39) is a helper class based on the general transcriber that takes care of connecting to a microphone using your platform's built-in support (for example sounddevice in Python) and then feeding the audio in as it's captured.
 
 A [**Stream**](python/src/moonshine_voice/transcriber.py#L297) is a handler for audio input. The reason streams exist is because you may want to process multiple audio inputs at once, and a transcriber can support those through multiple streams, without duplicating the model resources. If you only have one input, the transcriber class includes the same methods (start/stop/add_audio) as a stream, and you can use that interface instead and forget about streams.
 
@@ -471,14 +471,22 @@ python -m moonshine_voice.dialog_flow
 
 Voice interfaces often need to talk back, and Moonshine's `TextToSpeech` is designed to make that easy, across multiple languages. It's also self-contained, so you can use it independently from the transcription and dialog modules.
 
-At its simplest, you can just specify the output language to create a speech synthesizer object and then pass text into it to speak it on the default audio device:
+You configure a synthesizer with chainable setters, call `load()` to fetch and open the voice, and then pass text into `say()` to speak it on the default audio device:
 
 ```python
 from moonshine_voice import TextToSpeech
 
-tts = TextToSpeech("fr")
+tts = TextToSpeech().language("fr")
+tts.load()
 tts.say("Bonjour, mon ami")
 tts.wait()  # block until playback finishes
+```
+
+`load()` blocks, since the first call may have to download a voice. Pass `on_progress()` a handler to drive a progress bar:
+
+```python
+tts = TextToSpeech().language("fr").on_progress(lambda fraction, file: print(f"{fraction:.0%}"))
+tts.load()
 ```
 
 `say()` returns immediately and queues the text for background synthesis and playback. Calling `say()` multiple times queues each utterance in order, and the next utterance is pre-synthesized while the current one plays. You can also pass a list of strings, cancel everything with `stop()`, or poll with `is_talking()`:
@@ -494,7 +502,8 @@ If you're on a machine without an audio output, or want to do further processing
 ```python
 from moonshine_voice import TextToSpeech
 
-tts = TextToSpeech("en-us")
+tts = TextToSpeech().language("en-us")
+tts.load()
 audio_data, sample_rate = tts.synthesize("Howdy, partner")
 ```
 
@@ -519,11 +528,11 @@ list_tts_voices("ru")
 {'present': [], 'downloadable': ['piper_ru_RU-denis-medium', 'piper_ru_RU-dmitri-medium', 'piper_ru_RU-irina-medium', 'piper_ru_RU-ruslan-medium']}
 ```
 
-If a voice is marked as `downloadable` that means if you pass it in to the `TextToSpeech` constructor then Moonshine will download it to a cache automatically (as long as the `download` argument is its default true) and will be available on your machine with no internet access required for subsequent calls.
+If a voice is marked as `downloadable` that means if you pass it to `voice()` then Moonshine will download it to a cache automatically, and it will be available on your machine with no internet access required for subsequent calls.
 
 #### Voice Cloning
 
-The integrated [ZipVoice model](https://github.com/k2-fsa/ZipVoice) can imitate someone's voice, given a short audio clip. Pass the clip to the `TextToSpeech` constructor's `clone` argument, either as a path to a `.wav` file or as a `(pcm, sample_rate)` pair of mono float samples. You can also pass `clone_transcript`, the text spoken in the clip; when omitted, Moonshine auto-transcribes the clip with its ASR model before cloning (this takes a few extra seconds on first use):
+The integrated [ZipVoice model](https://github.com/k2-fsa/ZipVoice) can imitate someone's voice, given a short audio clip. Pass the clip to `clone_from()`, either as a path to a `.wav` file or as a `(pcm, sample_rate)` pair of mono float samples. You can also pass `transcript`, the text spoken in the clip; when omitted, Moonshine auto-transcribes the clip with its ASR model before cloning (this takes a few extra seconds on first use):
 
 ```python
 from moonshine_voice import TextToSpeech
@@ -532,16 +541,25 @@ import importlib.resources;
 clone_path = importlib.resources.files("moonshine_voice.assets").joinpath("clone-test.wav")
 clone_transcript = "Ever tried. Ever failed. No matter. Try Again. Fail again. Fail better."
 
-tts = TextToSpeech(
-    "en-us",
-    clone=clone_path,
-    clone_transcript=clone_transcript,
-)
+tts = TextToSpeech().language("en-us").cloning()
+tts.load()
+tts.clone_from(clone_path, transcript=clone_transcript)
 tts.say("Ask not what your country can do for you, but what you can do for your country")
 tts.wait()
 ```
 
-The ZipVoice engine is selected automatically when `clone` is set, so no `voice` argument is needed (passing a voice together with `clone` raises an error). 
+`cloning()` tells `load()` to fetch the ZipVoice engine up front, so the first `clone_from()` is quick. Leave it out and the engine comes down on the first clone instead. Either way the engine is selected by cloning itself, so there's no `voice()` call to make.
+
+To clone from someone speaking into the microphone rather than from a file, `start_cloning()` hands back a `VoiceClone` that listens until it has heard enough usable speech:
+
+```python
+clone = tts.start_cloning()
+clone.on_ready(lambda: print("Got it, you can stop talking."))
+clone.from_microphone()
+tts.clone_from(clone)
+```
+
+Picking the clip out of the recording runs Moonshine's built-in voice-activity detector, which is compiled into the library, so nothing is downloaded for this step. `from_microphone()` blocks until the clip is ready or 20 seconds have passed; `on_progress()` reports how long it has been recording and how much speech it has found so far.
 
 You can also try cloning from the command line. Since you won't always have easy access to a clean transcript of the speech you want to clone from, you can leave it out and have Moonshine automatically generate one, in both the API and command line.
 
@@ -556,7 +574,7 @@ python3 -m moonshine_voice.tts \
 
 #### Voice Samples
 
-To help you choose a voice, here are sample clips of each one saying "Welcome to Moonshine Voice text to speech". Each entry is the voice name you can pass to the `TextToSpeech` constructor; click the ▶ next to it to hear it.
+To help you choose a voice, here are sample clips of each one saying "Welcome to Moonshine Voice text to speech". Each entry is the voice name you can pass to `voice()`; click the ▶ next to it to hear it.
 
 ##### ZipVoice
 
@@ -845,9 +863,9 @@ moonshine-voice download --tts --root /tmp/tts-files/
 ```text
 dict_filtered_heteronyms.tsv: 100%|██████████████████████████████| 2.77M/2.77M [00:00<00:00, 15.5MB/s]
 g2p-config.json: 100%|██████████████████████████████████████████████| 60.0/60.0 [00:00<00:00, 160kB/s]
-model.onnx: 100%|████████████████████████████████████████████████| 20.9M/20.9M [00:00<00:00, 37.7MB/s]
+model.ort: 100%|█████████████████████████████████████████████████| 21.1M/21.1M [00:00<00:00, 37.7MB/s]
 onnx-config.json: 100%|██████████████████████████████████████████| 4.53k/4.53k [00:00<00:00, 11.7MB/s]
-model.onnx: 100%|████████████████████████████████████████████████| 88.1M/88.1M [00:01<00:00, 85.6MB/s]
+model.ort: 100%|█████████████████████████████████████████████████| 88.3M/88.3M [00:01<00:00, 85.6MB/s]
 config.json: 100%|███████████████████████████████████████████████| 2.30k/2.30k [00:00<00:00, 6.88MB/s]
 af_heart.kokorovoice: 100%|████████████████████████████████████████| 510k/510k [00:00<00:00, 3.82MB/s]
 TTS assets root (use as g2p_root): /private/tmp/tts-files
@@ -1236,13 +1254,14 @@ Handles the speech to text pipeline.
     - `save_input_wav_path`: One of the most common causes of poor transcription quality is incorrect conversion or corruption of the audio that's fed into the pipeline. If you set this option to a folder path, the transcriber will save out exactly what it has received as 16KHz mono WAV files, so you can ensure that your input audio is as you expect.
     - `log_api_calls`: Another debugging option, turning this on causes all calls to the C API entry points in the library to write out information on their arguments to stderr or the console each time they're run.
     - `log_ort_run`: Prints information about the ONNXRuntime inference runs and how long they take.
-    - `ort_providers`: A comma-separated, ordered list of the ONNX Runtime execution providers the models should try to use, for example `"CoreML,CPU"` on macOS or `"NNAPI,CPU"` on Android. The names are case-insensitive and accept either the short form (`CPU`, `CoreML`, `NNAPI`) or the full ONNX Runtime name (`CPUExecutionProvider`, `CoreMLExecutionProvider`, `NNAPIExecutionProvider`). Providers are appended in the order given, and ONNX Runtime falls back to later entries for any operations an earlier provider can't handle, so it's good practice to always list `CPU` last as a catch-all. If you leave this unset the library runs CPU-only. Requesting a provider that isn't available on the current platform (such as `CoreML` off Apple hardware, or `NNAPI` off Android) is an error. The alias `ort_provider` is also accepted.
-    - `coreml_cache_dir`: A directory path where the CoreML execution provider caches its compiled models on macOS and iOS. Compiling a model for CoreML is expensive, so pointing this at a persistent, writable folder lets subsequent runs reuse the cached artifacts and start up much faster. This only has an effect when `CoreML` is included in `ort_providers`.
+    - `ort_providers`: A comma-separated, ordered list of the ONNX Runtime execution providers the models should try to use, for example `"CoreML,CPU"` on macOS. The names are case-insensitive and accept either the short form (`CPU`, `CoreML`, `NNAPI`) or the full ONNX Runtime name (`CPUExecutionProvider`, `CoreMLExecutionProvider`, `NNAPIExecutionProvider`). Providers are appended in the order given, and ONNX Runtime falls back to later entries for any operations an earlier provider can't handle, so it's good practice to always list `CPU` last as a catch-all. If you leave this unset the library runs CPU-only, which is what we recommend and what every mobile build supports: the iOS and Android libraries ship without CoreML and NNAPI because neither could run our models in large enough pieces to be worth its size, and asking for one there is an error that says so. [docs/execution-providers.md](docs/execution-providers.md) has the measurements. Requesting a provider that isn't available on the current platform (such as `CoreML` off Apple hardware, or `NNAPI` off Android) is likewise an error. The alias `ort_provider` is also accepted.
+    - `coreml_cache_dir`: A directory path where the CoreML execution provider caches its compiled models on macOS. Compiling a model for CoreML is expensive, so pointing this at a persistent, writable folder lets subsequent runs reuse the cached artifacts and start up much faster. This only has an effect when `CoreML` is included in `ort_providers`, so it does nothing on iOS, whose library has no CoreML in it.
     - `vad_window_duration`: The VAD runs every 30ms, but to get higher-confidence values we average the results over time. This value is the time in seconds to average over. The default is 0.5s, shorter durations will spot speech faster at the cost of lower accuracy, higher values may increase accuracy, but at the cost of missing shorter utterances.
     - `vad_look_behind_sample_count`: Because we're averaging over time, the mean VAD signal will lag behind the initial speech detection. To compensate for that, when speech is detected we pull in some of the audio immediately before the average passed the threshold. This value is the number of samples to prepend, and defaults to 8192 (all at 16KHz).
     - `vad_max_segment_duration`: It can be hard to find gaps in rapid-fire speech, but a lot of applications want their text in chunks that aren't endless. This option sets the longest duration a line can be before it's marked as complete and a new segment is started. The default is 15 seconds, and to increase the chance that a natural break is found, the `vad_threshold` is linearly decreased over time from two thirds of the maximum duration until the maximum is reached.
     - `word_timestamps`: A boolean (default false) that fills in each line's `words` array with per-word timings. This needs the optional attention decoder that sits alongside the main model files (`decoder_kv_with_attention.ort` for streaming architectures, `decoder_with_attention.ort` otherwise), so ask the downloader for it when you fetch the model. Turning on `identify_speakers` enables this automatically, since speaker spans are mapped onto the line text using word timings.
-    - `identify_speakers`: A boolean (default false) that controls whether to run the speaker diarization stage of the pipeline. When enabled, each line carries a `speaker_spans` array describing who spoke when, including UTF-8 character ranges into the line text. Word timestamps are enabled automatically in this mode. This runs a C++ port of the [pyannote community-1 pipeline](https://github.com/moonshine-ai/cpp-annote) inline inside transcription calls, which adds significant compute. Streaming sessions bound VBx re-clustering to a sliding window (see `diarization_cluster_window_sec`); batch/one-shot transcription still uses full-history clustering. For tests, `test-assets/endgame_nagg_nell.wav` is a ~28 second synthetic two-speaker clip (ZipVoice TTS, Beckett's *Endgame* dialogue); regenerate it with `python3 scripts/generate-diarization-test-audio.py`.
+    - `identify_speakers`: A boolean (default false) that controls whether to run the speaker diarization stage of the pipeline. When enabled, each line carries a `speaker_spans` array describing who spoke when, including UTF-8 character ranges into the line text. Word timestamps are enabled automatically in this mode. This runs a C++ port of the [pyannote community-1 pipeline](https://github.com/moonshine-ai/cpp-annote) inline inside transcription calls, which adds significant compute. Streaming sessions bound VBx re-clustering to a sliding window (see `diarization_cluster_window_sec`); batch/one-shot transcription still uses full-history clustering. This needs the two diarization models, which are an 8.2 MB download rather than part of the library; the high-level loaders fetch them for you when this option is set, and everything else takes `diarization_model_dir`. See [The diarization models are a download](docs/diarization-models.md). For tests, `test-assets/endgame_nagg_nell.wav` is a ~28 second synthetic two-speaker clip (ZipVoice TTS, Beckett's *Endgame* dialogue); regenerate it with `python3 scripts/generate-diarization-test-audio.py`.
+    - `diarization_model_dir`: The directory holding `segmentation.ort` and `embedding.ort`, required whenever `identify_speakers` is set and you are constructing a transcriber directly rather than through one of the loaders that downloads for you. Get the directory from `moonshine_voice.get_diarization_model()` in Python, `ModelSpec.diarization` in Swift, or `ModelSpec.diarization()` on Android; in the browser, pass the two files to the in-memory loader instead.
     - `diarization_cluster_cadence`: A float (default 2.0) giving the minimum number of seconds of new audio between diarization re-clustering passes. Raising this reduces compute on long sessions, at the cost of slower refinement of speaker assignments.
     - `diarization_analyze_cadence`: A float (default 0, meaning the model default of 1.0) giving the number of seconds between diarization segmentation/embedding model runs.
     - `diarization_cluster_window_sec`: A float (default 120.0) giving the maximum seconds of recent audio history fed to VBx on each streaming refresh. Older chunks are evicted from the cache and their speaker turns are frozen (no longer revised). Set to `0` for unlimited full-history re-clustering (higher quality on long sessions, but compute and memory grow with session length). Batch/one-shot diarization always uses full history regardless of this setting.
@@ -1277,7 +1296,49 @@ Handles the speech to text pipeline.
 
 #### MicTranscriber
 
-This class supports the [`start()`](#transcriber-start), [`stop()`](#transcriber-stop) and listener functions of [`Transcriber`](#transcriber), but internally creates and attaches to the system's microphone input, so you don't need to call [`add_audio()`](#transcriber-add-audio) yourself. In Python this uses the [`sounddevice` library](https://python-sounddevice.readthedocs.io/), but in other languages the class uses the native audio API under the hood.
+Transcribes speech straight from the system's microphone, so you never call [`add_audio()`](#transcriber-add-audio) yourself. In Python this uses the [`sounddevice` library](https://python-sounddevice.readthedocs.io/), but in other languages the class uses the native audio API under the hood.
+
+Construct one, configure it with chainable setters, call [`load()`](#mictranscriber-load) to fetch and open the model, then [`start()`](#mictranscriber-start) to begin listening.
+
+```python
+mic = (
+    MicTranscriber()
+    .on_text(lambda text: show_in_progress(text))
+    .on_line(lambda line: append_line(line.text))
+)
+mic.load()
+mic.start()
+```
+
+- <a id="mictranscriber-init"></a>`__init__()`: Constructs an unconfigured transcriber. Takes no arguments and cannot fail, so nothing is downloaded or opened until [`load()`](#mictranscriber-load).
+
+Every setter returns the transcriber, so one can be built in a single expression, and every one has a working default. Call them before `load()`.
+
+- <a id="mictranscriber-language"></a>`language()`: Sets the speech-to-text language. Defaults to `"en"`.
+- <a id="mictranscriber-model-arch"></a>`model_arch()`: Picks a specific model size. By default the catalog's recommended model for the language is used, which is medium streaming for English. Most languages publish only one model.
+- <a id="mictranscriber-models-from"></a>`models_from()`: Loads the model from a directory you supply rather than downloading it.
+- <a id="mictranscriber-use-transcriber"></a>`use_transcriber()`: Reuses a [`Transcriber`](#transcriber) you already have instead of opening another. It stays yours to close.
+- <a id="mictranscriber-update-interval"></a>`update_interval()`: Seconds between automatic streaming updates. Defaults to `0.5`.
+- <a id="mictranscriber-options"></a>`options()`: Passes a dictionary of advanced transcriber options straight through, for anything the setters don't cover.
+- <a id="mictranscriber-spelling-model"></a>`spelling_model()`: Uses a specific alphanumeric spelling model. `load()` finds the published one for the language by itself, so this is only for when you keep your own copy. Pass `None` to go without one.
+- <a id="mictranscriber-transcribe-flags"></a>`transcribe_flags()`: Sets the flags applied to every streaming update. Pass `MOONSHINE_FLAG_SPELLING_MODE` to turn on the spelling-CNN fusion that makes dictated codes and passwords accurate. Takes effect immediately when already loaded.
+- <a id="mictranscriber-device"></a>`device()`: Captures from a specific input device, by index or name. Defaults to the system default.
+- <a id="mictranscriber-samplerate"></a>`samplerate()`: Asks the capture device for a sample rate. Defaults to `16000`, and `start()` falls back to the device's own rate if it refuses, so this rarely needs setting.
+- <a id="mictranscriber-channels"></a>`channels()`: Number of channels to capture. Defaults to `1`.
+- <a id="mictranscriber-blocksize"></a>`blocksize()`: Frames per capture callback. Defaults to `1024`.
+
+The callbacks below cover almost everything. For line ids, speaker spans, word timings, or the moment a line starts, attach a [`TranscriptEventListener`](#transcripteventlistener) with [`add_listener()`](#transcriber-add-listener) instead; listeners registered before `load()` are held and applied once the stream exists.
+
+- <a id="mictranscriber-on-text"></a>`on_text()`: Called with the in-progress text of the line currently being spoken, each time it changes.
+- <a id="mictranscriber-on-line"></a>`on_line()`: Called once per finished line, with the [`TranscriptLine`](#transcriptline).
+- <a id="mictranscriber-on-error"></a>`on_error()`: Called when the audio or transcription pipeline raises.
+- <a id="mictranscriber-on-progress"></a>`on_progress()`: Reports model download progress as a `0..1` fraction and the file being fetched. Attaching a handler also silences the default terminal progress bars.
+
+- <a id="mictranscriber-load"></a>`load()`: Downloads the model if needed, opens it, and returns the transcriber. Blocking, since the first call may have to fetch several hundred megabytes; report progress with [`on_progress()`](#mictranscriber-on-progress). Safe to call twice.
+- <a id="mictranscriber-start"></a>`start()`: Opens the microphone and begins transcribing. Raises if you haven't called `load()`.
+- <a id="mictranscriber-mute"></a>`mute()`: Drops incoming audio without closing the microphone, so an assistant doesn't transcribe its own synthesized speech.
+- <a id="mictranscriber-stop"></a>`stop()`: Stops listening and flushes any audio still in flight, so the final line is complete.
+- <a id="mictranscriber-close"></a>`close()`: Releases the microphone, the stream, and the model. Also available as a context manager.
 
 #### Stream
 

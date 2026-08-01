@@ -144,6 +144,13 @@ public class JNI {
     static native String moonshineGetEmbeddingDependencies(String modelName,
             TranscriberOption[] options);
 
+    /**
+     * Returns the speaker diarization download manifest as a JSON object string
+     * (same shape as {@link #moonshineGetSttDependencies}), or {@code null} on
+     * failure. There is one set of models and it takes no options.
+     */
+    static native String moonshineGetDiarizationDependencies();
+
     public static native String moonshineGetTtsVoices(String languages,
             TranscriberOption[] options);
 

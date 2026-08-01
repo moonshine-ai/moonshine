@@ -934,22 +934,37 @@ class DialogFlow:
         """
         if self._wants_speech and self._tts is None and self._speak_fn is None:
             self._report_progress(0.0, "speech synthesis")
-            options = dict(self._tts_options) if self._tts_options else {}
-            if self._voice is not None:
-                options["voice"] = self._voice
-            self._tts = TextToSpeech(
-                language=self._language,
-                debug=self._debug,
-                output_device=self._output_device,
-                options=options or None,
+            self._tts = (
+                TextToSpeech()
+                .language(self._language)
+                .debug(self._debug)
+                .output_device(self._output_device)
             )
+            if self._voice is not None:
+                self._tts.voice(self._voice)
+            if self._tts_options:
+                self._tts.options(self._tts_options)
+            if self._progress_fn is not None:
+                self._tts.on_progress(
+                    lambda fraction, name: self._report_progress(fraction, name)
+                )
+            self._tts.load()
             self._owns_tts = True
             self._report_progress(1.0, "speech synthesis")
 
         if self._wants_microphone and self._mic is None:
             self._report_progress(0.0, "speech recognition")
+            # Resolved here rather than left to MicTranscriber.load() so the
+            # download lands under this runner's cache root.
             model_path, model_arch = get_model_for_language(
-                self._language, self._model_arch, cache_root=self._model_root
+                self._language,
+                self._model_arch,
+                cache_root=self._model_root,
+                on_progress=(
+                    None
+                    if self._progress_fn is None
+                    else lambda fraction, name: self._report_progress(fraction, name)
+                ),
             )
             # The spelling CNN is what makes dictated passwords and codes
             # accurate, but it isn't published for every language, and its
@@ -961,11 +976,13 @@ class DialogFlow:
                 )
             except Exception as e:
                 self._log(f"load: spelling model lookup failed: {e!r}")
-            self._mic = MicTranscriber(
-                model_path=model_path,
-                model_arch=model_arch,
-                spelling_model_path=spelling_model_path,
+            self._mic = (
+                MicTranscriber()
+                .models_from(model_path)
+                .model_arch(model_arch)
+                .spelling_model(spelling_model_path)
             )
+            self._mic.load()
             self._owns_mic = True
             self._attach_bridge(self._mic)
             self._report_progress(1.0, "speech recognition")
@@ -2150,15 +2167,15 @@ def _run_beep_diagnostic(
         "silence, 440 Hz reference tone.",
         file=sys.stderr,
     )
-    tts_kwargs: Dict[str, Any] = {}
-    if tts_options:
-        tts_kwargs["options"] = dict(tts_options)
-    tts = TextToSpeech(
-        language=language,
-        debug=debug,
-        output_device=output_device,
-        **tts_kwargs,
+    tts = (
+        TextToSpeech()
+        .language(language)
+        .debug(debug)
+        .output_device(output_device)
     )
+    if tts_options:
+        tts.options(tts_options)
+    tts.load()
     try:
         print("--- success beep ---", file=sys.stderr)
         tts.play_success()

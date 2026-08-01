@@ -48,6 +48,8 @@ public enum ModelCache {
             return sanitize(parts.joined(separator: "-"))
         case .g2p(let language):
             return sanitize("g2p-\(language)")
+        case .diarization:
+            return "diarization-community1"
         }
     }
 

@@ -344,8 +344,7 @@ bool file_present(const fs::path &p) {
 
 std::optional<EngineSpec> kokoro_spec() {
   const fs::path kokoro = g_data_root / "kokoro";
-  const bool model =
-      file_present(kokoro / "model.onnx") || file_present(kokoro / "model.ort");
+  const bool model = file_present(kokoro / "model.ort");
   const bool voice = file_present(kokoro / "voices" / "af_heart.kokorovoice");
   if (!model || !voice) {
     return std::nullopt;
@@ -360,8 +359,9 @@ std::optional<EngineSpec> piper_spec() {
     return std::nullopt;
   }
   // Prefer a small, low-quality voice to keep the loop fast, else the first
-  // voice we find. A voice ships as a split ORT pair, a single .ort, or the
-  // original .onnx, so key off the config that accompanies all three.
+  // voice we find. A voice ships as a split ORT pair or a single .ort, so key
+  // off the config that accompanies both. It keeps the upstream ".onnx.json"
+  // name whatever form the model itself is in.
   std::string chosen;
   for (const auto &ent : fs::directory_iterator(voices, ec)) {
     if (!ent.is_regular_file()) {
@@ -376,8 +376,7 @@ std::optional<EngineSpec> piper_spec() {
     }
     const std::string stem = name.substr(0, name.size() - kConfigSuffix.size());
     if (!file_present(voices / (stem + ".model.ort")) &&
-        !file_present(voices / (stem + ".ort")) &&
-        !file_present(voices / (stem + ".onnx"))) {
+        !file_present(voices / (stem + ".ort"))) {
       continue;
     }
     if (chosen.empty() || stem.find("-low") != std::string::npos) {
@@ -395,13 +394,10 @@ std::optional<EngineSpec> piper_spec() {
 
 std::optional<EngineSpec> zipvoice_spec() {
   const fs::path zv = g_data_root / "zipvoice";
-  const bool have =
-      (file_present(zv / "text_encoder.ort") ||
-       file_present(zv / "text_encoder.onnx")) &&
-      (file_present(zv / "fm_decoder.ort") ||
-       file_present(zv / "fm_decoder.onnx")) &&
-      (file_present(zv / "vocoder.ort") || file_present(zv / "vocoder.onnx")) &&
-      file_present(zv / "tokens.txt");
+  const bool have = file_present(zv / "text_encoder.ort") &&
+                    file_present(zv / "fm_decoder.ort") &&
+                    file_present(zv / "vocoder.ort") &&
+                    file_present(zv / "tokens.txt");
   if (!have) {
     return std::nullopt;
   }

@@ -101,7 +101,7 @@ TEST_CASE("MoonshineG2POptions parse_options accepts every known option") {
   all.emplace_back("hindi_with_stress", "true");
   all.emplace_back("hindi_expand_cardinal_digits", "true");
   all.emplace_back("english_dict_path", "custom/en.tsv");
-  all.emplace_back("oov_onnx_override", "custom/oov.onnx");
+  all.emplace_back("oov_onnx_override", "custom/oov.ort");
 
   CHECK_NOTHROW(o.parse_options(all));
 
@@ -119,7 +119,7 @@ TEST_CASE("MoonshineG2POptions parse_options accepts every known option") {
   CHECK(*o.optional_override_path(kG2pPortugueseDictOverrideKey) ==
         std::filesystem::path{"custom/pt.tsv"});
   CHECK(*o.optional_override_path(kG2pOovOnnxOverrideKey) ==
-        std::filesystem::path{"custom/oov.onnx"});
+        std::filesystem::path{"custom/oov.ort"});
 }
 
 TEST_CASE(

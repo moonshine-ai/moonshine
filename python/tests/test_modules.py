@@ -21,7 +21,10 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 FULL_RUN_TIMEOUT_SECONDS = 300
-SMOKE_TIMEOUT_SECONDS = 10
+# Long enough for a warm-cache model load to reach the microphone banner, short
+# enough that the two mic modules (which then run until killed) don't dominate
+# the suite.
+SMOKE_TIMEOUT_SECONDS = 20
 
 ARGPARSE_USAGE_ERROR_EXIT_CODE = 2
 
@@ -81,6 +84,12 @@ def test_diarization_finds_two_speakers_on_endgame_clip():
     if not (model_path / "decoder_with_attention.ort").exists():
         pytest.skip("test-assets/tiny-en missing decoder_with_attention.ort")
 
+    # The diarization models are a download, so use the checked-in copies
+    # rather than reaching for the network in a unit test.
+    diarization_path = REPO_ROOT / "test-assets" / "diarization"
+    if not (diarization_path / "segmentation.ort").exists():
+        pytest.skip("test-assets/diarization missing segmentation.ort")
+
     audio, sample_rate = load_wav_file(wav_path)
     duration = len(audio) / float(sample_rate)
     assert 20.0 <= duration <= 35.0
@@ -88,7 +97,10 @@ def test_diarization_finds_two_speakers_on_endgame_clip():
     transcriber = Transcriber(
         str(model_path),
         model_arch=ModelArch.TINY,
-        options={"identify_speakers": "true"},
+        options={
+            "identify_speakers": "true",
+            "diarization_model_dir": str(diarization_path),
+        },
     )
     transcript = transcriber.transcribe_without_streaming(audio, sample_rate)
     assert transcript.lines
@@ -202,18 +214,43 @@ def test_dialog_flow_lists_output_devices():
 
 
 @pytest.mark.parametrize(
-    "module,args",
+    "module,args,banner",
     [
-        ("mic_transcriber", ["--language", "en"]),
-        ("alphanumeric_listener", ["--language", "en"]),
+        ("mic_transcriber", ["--language", "en"], "Listening to the microphone"),
+        (
+            "alphanumeric_listener",
+            ["--language", "en"],
+            "speak letters, digits, or symbols",
+        ),
     ],
 )
-def test_mic_module_arguments_parse(module, args):
-    """Microphone modules can't run headlessly, so just start them and make
-    sure the documented arguments are accepted (argparse failures exit 2)."""
+def test_mic_modules_get_as_far_as_opening_the_microphone(module, args, banner):
+    """Microphone modules can't run headlessly, so start them and check they
+    reach the banner they print just before opening the capture device.
+
+    Getting that far means the arguments parsed and the model loaded, which is
+    everything we can check without hardware. Looking for the banner rather
+    than the exit code means this still catches a crash on a machine with no
+    microphone at all, where the process exits either way.
+    """
     try:
         result = run_module(module, *args, timeout=SMOKE_TIMEOUT_SECONDS)
-    except subprocess.TimeoutExpired:
-        # Still running after the timeout means the arguments parsed.
-        return
-    assert result.returncode != ARGPARSE_USAGE_ERROR_EXIT_CODE, describe(result)
+        output = result.stdout + result.stderr
+        assert result.returncode != ARGPARSE_USAGE_ERROR_EXIT_CODE, describe(result)
+    except subprocess.TimeoutExpired as expired:
+        # Still running, which is the healthy case on a machine with a mic.
+        output = _partial_output(expired)
+
+    assert banner in output, f"{module} never reached the microphone:\n{output}"
+
+
+def _partial_output(expired):
+    """Text captured before a timed-out module was killed."""
+    chunks = []
+    for stream in (expired.stdout, expired.stderr):
+        if stream is None:
+            continue
+        chunks.append(
+            stream if isinstance(stream, str) else stream.decode("utf-8", "replace")
+        )
+    return "".join(chunks)

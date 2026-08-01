@@ -1,53 +1,32 @@
-"""Uses the MicTranscriber class to transcribe audio from a microphone."""
+"""Transcribes speech from a microphone using MicTranscriber."""
 
 import argparse
 import sys
 import time
 
-from moonshine_voice import (
-    MicTranscriber,
-    TranscriptEventListener,
-    get_model_for_language,
-)
+from moonshine_voice import MicTranscriber, ModelArch
 
 
-class TerminalListener(TranscriptEventListener):
+class LineRewriter:
+    """Rewrites the current terminal line in place as the text firms up."""
+
     def __init__(self):
-        self.last_line_text_length = 0
+        self._width = 0
 
-    # Assume we're on a terminal, and so we can use a carriage return to
-    # overwrite the last line with the latest text.
-    def update_last_terminal_line(self, new_text: str):
-        print(f"\r{new_text}", end="", flush=True)
-        if len(new_text) < self.last_line_text_length:
-            # If the new text is shorter than the last line, we need to
-            # overwrite the last line with spaces.
-            diff = self.last_line_text_length - len(new_text)
-            print(f"{' ' * diff}", end="", flush=True)
-        # Update the length of the last line text.
-        self.last_line_text_length = len(new_text)
+    def partial(self, text):
+        # Pad to the previous width so a shorter guess doesn't leave debris.
+        padding = " " * max(self._width - len(text), 0)
+        print(f"\r{text}{padding}", end="", flush=True)
+        self._width = len(text)
 
-    def on_line_started(self, event):
-        self.last_line_text_length = 0
-
-    def on_line_text_changed(self, event):
-        self.update_last_terminal_line(event.line.text)
-
-    def on_line_completed(self, event):
-        self.update_last_terminal_line(event.line.text)
-        print("\n", end="", flush=True)
+    def final(self, line):
+        self.partial(line.text)
+        self._width = 0
+        print()
 
 
-# If we're not on an interactive terminal, print each line as it's completed.
-
-
-class FileListener(TranscriptEventListener):
-    def on_line_completed(self, event):
-        print(event.line.text)
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Basic transcription example")
+def main():
+    parser = argparse.ArgumentParser(description="Microphone transcription example")
     parser.add_argument(
         "--language", type=str, default="en", help="Language to use for transcription"
     )
@@ -55,24 +34,34 @@ if __name__ == "__main__":
         "--model-arch",
         type=int,
         default=None,
-        help="Model architecture to use for transcription",
+        help="Model size to use, instead of the default for the language",
     )
     args = parser.parse_args()
-    model_path, model_arch = get_model_for_language(args.language, args.model_arch)
 
-    mic_transcriber = MicTranscriber(model_path=model_path, model_arch=model_arch)
+    mic = MicTranscriber().language(args.language)
+    if args.model_arch is not None:
+        mic.model_arch(ModelArch(args.model_arch))
 
     if sys.stdout.isatty():
-        listener = TerminalListener()
+        rewriter = LineRewriter()
+        mic.on_text(rewriter.partial).on_line(rewriter.final)
     else:
-        listener = FileListener()
+        # Piped output can't be rewritten, so print each line once it is final.
+        mic.on_line(lambda line: print(line.text, flush=True))
+
+    mic.load()
 
     print("Listening to the microphone, press Ctrl+C to stop...", file=sys.stderr)
-    mic_transcriber.add_listener(listener)
-    mic_transcriber.start()
-    try:
-        while True:
-            time.sleep(0.1)
-    finally:
-        mic_transcriber.stop()
-        mic_transcriber.close()
+    with mic:
+        mic.start()
+        try:
+            while True:
+                time.sleep(0.1)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            mic.stop()
+
+
+if __name__ == "__main__":
+    main()

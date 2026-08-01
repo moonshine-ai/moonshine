@@ -50,6 +50,10 @@ ${REPO_ROOT_DIR}/core/build/moonshine-cpp-test
 ${REPO_ROOT_DIR}/core/build/cosine-distance-test
 ${REPO_ROOT_DIR}/core/build/word-alignment-test
 
+# Sweeps every .ort we ship. Run from the repository root, which is where it
+# looks for the bundled data and the downloaded catalog models.
+(cd "${REPO_ROOT_DIR}" && ${REPO_ROOT_DIR}/core/build/ort-load-sweep-test)
+
 # Run this test in a temporary directory to ensure no file assets are being accessed
 # from default paths when they should be accessed from memory.
 TMP_DIR=$(mktemp -d)

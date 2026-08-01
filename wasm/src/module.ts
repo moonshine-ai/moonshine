@@ -41,6 +41,7 @@ export interface MoonshineModule {
     includeSpelling: boolean,
   ): string;
   embeddingDependencies(modelName: string, variant: string): string;
+  diarizationDependencies(): string;
   ttsDependencies?(languages: string, voice: string): string;
   ttsVoices?(
     languages: string,

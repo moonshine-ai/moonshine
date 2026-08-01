@@ -1,9 +1,12 @@
 #!/bin/bash -ex
 
-# Runs the Python module tests (python/tests/test_modules.py), which drive
-# the __main__ sections of the most significant moonshine_voice modules, and
-# the CLI tests (python/tests/test_cli.py), which exercise the installed
-# moonshine-voice console script, both against a freshly built wheel.
+# Runs the Python tests against a freshly built wheel. That is everything in
+# python/tests except test_docs.py, which scripts/test-docs.sh runs separately
+# because it needs the notebook and the nbmake plugin.
+#
+# Naming the directory rather than individual files means a new test file is
+# picked up without editing this script, which is how test_mic_transcriber_
+# threading.py managed to sit unrun for a while.
 #
 # Usage:
 #   ./scripts/test-python.sh                Build the wheel first, then test.
@@ -38,4 +41,4 @@ pip install --upgrade pip
 pip install "${WHEEL}"
 pip install -r "${PYTHON_DIR}/tests/requirements.txt"
 
-pytest -v "${PYTHON_DIR}/tests/test_modules.py" "${PYTHON_DIR}/tests/test_cli.py"
+pytest -v "${PYTHON_DIR}/tests" --ignore="${PYTHON_DIR}/tests/test_docs.py"

@@ -954,6 +954,29 @@ Java_ai_moonshine_voice_JNI_moonshineGetEmbeddingDependencies(
 }
 
 extern "C" JNIEXPORT jstring JNICALL
+Java_ai_moonshine_voice_JNI_moonshineGetDiarizationDependencies(
+    JNIEnv *env, jobject /* this */) {
+  try {
+    char *out = nullptr;
+    if (moonshine_get_diarization_dependencies(&out) != MOONSHINE_ERROR_NONE) {
+      if (out != nullptr) {
+        std::free(out);
+      }
+      return nullptr;
+    }
+    if (out == nullptr) {
+      return env->NewStringUTF("");
+    }
+    std::string sanitized = utf8::replace_invalid(std::string(out));
+    std::free(out);
+    return env->NewStringUTF(sanitized.c_str());
+  } catch (const std::exception &e) {
+    ALOGE("moonshineGetDiarizationDependencies: %s\n", e.what());
+    return nullptr;
+  }
+}
+
+extern "C" JNIEXPORT jstring JNICALL
 Java_ai_moonshine_voice_JNI_moonshineGetTtsVoices(JNIEnv *env,
                                                   jobject /* this */,
                                                   jstring languages,

@@ -9,9 +9,10 @@ import traceback
 import wave
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 
 from moonshine_voice.download import (
+    ProgressCallback,
     download_tts_assets,
     ensure_tts_voice_downloaded,
     normalize_moonshine_language_tag,
@@ -27,6 +28,7 @@ from moonshine_voice.moonshine_api import (
     moonshine_phonemes_to_speech_samples,
     moonshine_text_to_speech_samples,
 )
+from moonshine_voice.voice_clone import VoiceClone
 
 
 @dataclass
@@ -450,156 +452,341 @@ def _say_resolve_output_index(
     )
 
 
+_OLD_CONSTRUCTOR_HELP = """\
+TextToSpeech() no longer takes constructor arguments. Configure it with
+chainable setters and call load():
+
+    tts = TextToSpeech().language("en_us").voice("kokoro_af_heart")
+    tts.load()
+    tts.say("Hello from Moonshine.")
+
+The old language argument is now .language(), asset_root is
+.models_from(directory), and every other argument has a setter of the same
+name (.voice(), .options(), .output_device(), .volume(), .debug()). Voice
+cloning moved from the clone argument to .clone_from(source, transcript=...),
+which you call after load()."""
+
+
 class TextToSpeech:
+    """Speaks text out loud, on device.
+
+    Construct one, configure it with chainable setters, call :meth:`load` to
+    fetch and open the voice, then :meth:`say`::
+
+        tts = TextToSpeech().language("en_us").voice("kokoro_af_heart")
+        tts.load()
+        tts.say("Hello from Moonshine.")
+        tts.wait()
+
+    :meth:`load` blocks, since the first call may have to download assets; pass
+    :meth:`on_progress` a handler to drive a progress bar. Use it as a context
+    manager, or call :meth:`close` when you are done.
+
+    Assets are resolved with ``moonshine_get_tts_dependencies`` and downloaded
+    from ``https://download.moonshine.ai/tts/`` unless :meth:`models_from`
+    points at a directory that already holds them. The language tag is
+    validated against the native TTS catalog before anything is downloaded
+    (`MoonshineTtsLanguageError` lists supported tags), and a voice is checked
+    against the ones published for that language (`MoonshineTtsVoiceError`
+    lists downloaded ids, then catalog ids available for download). Use
+    `list_tts_languages` and `list_tts_voices` (``present`` /
+    ``downloadable``), or `get_tts_voice_catalog`, to discover the options.
+
+    Prefix a voice id with ``kokoro_``, ``piper_``, or ``zipvoice_`` to pin the
+    vocoder (e.g. ``kokoro_af_heart``, ``zipvoice_american_female``). ZipVoice
+    is a zero-shot voice cloner, so besides its built-in reference voices you
+    can clone one of your own with :meth:`clone_from`.
     """
-    On-device TTS using Moonshine (Kokoro / Piper and language assets under ``g2p_root``).
 
-    Required assets are resolved with ``moonshine_get_tts_dependencies`` and, unless you pass
-    ``download=False`` and ``asset_root``, downloaded from ``https://download.moonshine.ai/tts/``.
+    # Voice id the native layer uses for a caller-supplied reference clip.
+    _CLONE_VOICE = "zipvoice"
 
-    The ``language`` tag is validated against the native TTS catalog before download
-    (`MoonshineTtsLanguageError` lists supported tags).     If ``voice`` is set, it is checked against
-    voices reported as ``found`` for that language under the resolved asset root
-    (`MoonshineTtsVoiceError` lists downloaded ids then catalog ids available for download).
-    With ``download=True``, a voice that is catalogued but not yet on disk is downloaded automatically.
-    Use a ``kokoro_``, ``piper_``, or ``zipvoice_`` prefix on ``voice`` to pin the vocoder (e.g.
-    ``kokoro_af_heart``, ``zipvoice_american_female``). ZipVoice is a zero-shot voice cloner: besides
-    the built-in ``zipvoice_<id>`` reference voices you can clone your own by passing ``clone`` —
-    either a path to a ``.wav`` file or a ``(pcm, sample_rate)`` pair of mono float PCM — along with
-    (recommended) ``clone_transcript``, the text spoken in the reference clip (when omitted, the clip
-    is auto-transcribed with Moonshine ASR before cloning). When ``clone`` is set
-    the ZipVoice engine is used automatically; passing ``voice`` together with ``clone``
-    raises `MoonshineError`.
-    Use `list_tts_languages` and
-    `list_tts_voices` (``present`` / ``downloadable``) or `get_tts_voice_catalog` to discover options.
-    """
+    def __init__(self, *args, **kwargs):
+        if args or kwargs:
+            raise TypeError(_OLD_CONSTRUCTOR_HELP)
 
-    def __init__(
+        # Deferred configuration, applied by load().
+        self._language = "en"
+        self._voice: Optional[str] = None
+        self._extra_options: Dict[str, Union[str, int, float, bool]] = {}
+        self._models_directory: Optional[Path] = None
+        self._download = True
+        self._cloning_wanted = False
+        self._progress_fn: Optional[ProgressCallback] = None
+
+        # Set up by load().
+        self._lib: Any = None
+        self._handle: Optional[int] = None
+        self._asset_root: Optional[Path] = None
+
+        # The reference clip the current voice was cloned from, if any.
+        self._clone_samples: Optional[Any] = None
+        self._clone_sample_rate = 0
+        self._clone_transcript: Optional[str] = None
+        # The native layer does not copy the reference PCM, so the buffer has
+        # to outlive the synthesizer that was built from it.
+        self._clone_pcm_buf: Any = None
+
+        self._init_playback_state(None, None, False)
+
+    # ------------------------------------------------------------ configuration
+
+    def language(self, code: str) -> "TextToSpeech":
+        """Synthesis language, e.g. ``"en"`` or ``"en_us"``. Defaults to ``"en"``."""
+        self._language = code
+        return self
+
+    def voice(self, voice_id: str) -> "TextToSpeech":
+        """Voice id, e.g. ``"kokoro_af_heart"``. Defaults to the engine's own."""
+        self._voice = voice_id
+        return self
+
+    def models_from(
+        self, directory: Union[str, Path], *, download: bool = False
+    ) -> "TextToSpeech":
+        """Load the voice assets from ``directory`` rather than the default cache.
+
+        With ``download=False`` the directory has to be populated already. Pass
+        ``download=True`` to use it as the cache root instead, fetching
+        anything missing into it.
+        """
+        self._models_directory = Path(directory)
+        self._download = bool(download)
+        return self
+
+    def cloning(self, enabled: bool = True) -> "TextToSpeech":
+        """Fetch the cloning engine during :meth:`load` rather than on the
+        first :meth:`clone_from`, so the first clone is quick."""
+        self._cloning_wanted = bool(enabled)
+        return self
+
+    def on_progress(self, handler: ProgressCallback) -> "TextToSpeech":
+        """Asset download progress, as a ``0..1`` fraction plus the file being fetched."""
+        self._progress_fn = handler
+        return self
+
+    def options(
+        self, options: Mapping[str, Union[str, int, float, bool]]
+    ) -> "TextToSpeech":
+        """Escape hatch for options the chainable setters don't cover."""
+        self._extra_options.update(options)
+        return self
+
+    def output_device(self, device: Optional[Union[int, str]]) -> "TextToSpeech":
+        """Playback device for :meth:`say`, as a PortAudio index or a name
+        substring. Defaults to the system default output."""
+        self._output_device = device
+        return self
+
+    def volume(self, volume: Optional[float]) -> "TextToSpeech":
+        """Playback gain applied to everything :meth:`say` plays."""
+        self._volume = volume
+        return self
+
+    def debug(self, enabled: bool = True) -> "TextToSpeech":
+        """Trace synthesis and playback to stderr."""
+        self._debug = bool(enabled)
+        return self
+
+    # ------------------------------------------------------------------ loading
+
+    def load(self) -> "TextToSpeech":
+        """Download the voice assets if needed and prepare the synthesizer.
+
+        Blocking, since the first call may have to fetch a few hundred
+        megabytes; report progress with :meth:`on_progress`. Calling it again
+        is a no-op.
+        """
+        if self._handle is not None:
+            return self
+        if self._cloning_wanted and self._clone_samples is None:
+            # The cloning engine can't exist until there is a voice to clone,
+            # so all load() can usefully do is fetch its assets into the cache
+            # that the first clone_from() reads from.
+            self._asset_root = self._ensure_assets(voice=self._CLONE_VOICE)
+            return self
+        self._build(voice=self._voice)
+        return self
+
+    @property
+    def language_tag(self) -> str:
+        """The language tag this synthesizer was created with."""
+        return self._language
+
+    @property
+    def asset_root(self) -> Path:
+        if self._asset_root is None:
+            raise MoonshineError("Call load() before reading asset_root.")
+        return self._asset_root
+
+    @property
+    def is_cloned(self) -> bool:
+        """True once a voice has been cloned into this synthesizer."""
+        return self._clone_samples is not None
+
+    # ----------------------------------------------------------------- cloning
+
+    def clone_from(
         self,
-        language: str,
+        source: Union[str, Path, "VoiceClone", Tuple[Any, int]],
         *,
-        voice: Optional[str] = None,
-        options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
-        asset_root: Optional[Path] = None,
-        download: bool = True,
-        output_device: Optional[Union[int, str]] = None,
-        volume: Optional[float] = None,
-        debug: bool = False,
-        clone: Optional[Union[str, Path, Tuple[Any, int]]] = None,
-        clone_transcript: Optional[str] = None,
-    ):
-        # ZipVoice zero-shot voice cloning: supply your own reference clip via ``clone`` (a .wav
-        # path or a ``(pcm, sample_rate)`` pair) with, ideally, ``clone_transcript``. When a
-        # reference clip is given the synthesizer is created from memory with the ``zipvoice``
-        # engine. Do not pass ``voice`` — the clone clip defines the voice.
-        self._extra_options = dict(options) if options else {}
-        if clone_transcript is not None and clone is None:
-            raise MoonshineError(
-                "clone_transcript requires the clone argument to be set.")
-        if clone is not None:
-            explicit_voice = voice
-            if explicit_voice is None:
-                opt_voice = self._extra_options.get("voice")
-                if isinstance(opt_voice, str) and opt_voice.strip():
-                    explicit_voice = opt_voice.strip()
-            if explicit_voice is not None:
+        transcript: Optional[str] = None,
+    ) -> "TextToSpeech":
+        """Clone the voice in ``source`` and use it for subsequent synthesis.
+
+        ``source`` may be a path to a ``.wav`` file, a ``(pcm, sample_rate)``
+        pair of mono float PCM, or a :class:`VoiceClone` that has captured
+        enough speech.
+
+        The clip is transcribed for the vocoder, downloading a small
+        speech-to-text model the first time it needs to. Callers who already
+        know what was said can skip that by passing ``transcript``.
+        """
+        if isinstance(source, VoiceClone):
+            audio = source.audio
+            if audio is None:
                 raise MoonshineError(
-                    f"Voice cloning uses the clone reference clip, but voice={explicit_voice!r} "
-                    "was also set. Omit the voice argument when clone is set."
+                    "That VoiceClone has not captured enough speech yet; "
+                    "wait for on_ready."
                 )
-            clone_pcm, clone_sample_rate = _normalize_clone_argument(clone)
-            self._init_zipvoice_from_clone(
-                language,
-                asset_root=asset_root,
-                download=download,
-                clone_pcm=clone_pcm,
-                clone_sample_rate=clone_sample_rate,
-                clone_transcript=clone_transcript,
-            )
-            self._init_playback_state(output_device, volume, debug)
-            return
-        if voice is None:
-            opt_voice = self._extra_options.get("voice")
-            if isinstance(opt_voice, str):
-                ov = opt_voice.strip()
-                if ov:
-                    voice = ov
-        if voice is not None:
-            vs = str(voice).strip()
-            voice = vs if vs else None
-        self._voice = voice
-        # Voice is tracked separately in ``self._voice`` and re-added by
-        # ``_c_options_for_create``; drop it from ``_extra_options`` so the catalog
-        # lookup below (via ``list_tts_voices``) is not biased by a voice we are
-        # still validating, and so downstream dependency resolution in
-        # ``download_tts_assets`` cannot silently request a non-existent voice file.
-        self._extra_options.pop("voice", None)
-        if download:
-            validate_root = tts_asset_cache_path(
-                Path(asset_root) if asset_root is not None else None)
+            pcm, sample_rate = audio, source.sample_rate
         else:
-            if asset_root is None:
-                raise MoonshineError(
-                    "When download=False, asset_root must point to a directory "
-                    "already populated with TTS assets (g2p_root layout)."
-                )
-            validate_root = Path(asset_root).resolve()
-        self._language = validate_tts_language(
-            language,
-            voice=voice,
-            options=self._extra_options,
-            root_path=validate_root,
+            pcm, sample_rate = _normalize_clone_argument(source)
+
+        self._clone_samples = pcm
+        self._clone_sample_rate = int(sample_rate)
+        self._clone_transcript = (
+            str(transcript).strip()
+            if transcript is not None and str(transcript).strip()
+            else None
+        )
+        self._build(voice=self._CLONE_VOICE)
+        return self
+
+    def start_cloning(
+        self,
+        *,
+        clip_duration_seconds: float = 4.0,
+        minimum_speech_seconds: float = 2.0,
+    ) -> VoiceClone:
+        """Start capturing a reference voice for cloning. The returned object
+        reports when it has heard enough."""
+        return VoiceClone(
+            clip_duration_seconds=clip_duration_seconds,
+            minimum_speech_seconds=minimum_speech_seconds,
         )
 
-        if self._voice is not None:
-            validate_tts_voice_known(
+    # --------------------------------------------------------------- internals
+
+    def _ensure_assets(self, *, voice: Optional[str]) -> Path:
+        """Resolve the asset root, validating and downloading as needed."""
+        # A bare "zipvoice" names the cloning engine rather than a catalog
+        # voice, so the per-voice catalog checks below do not apply to it. Its
+        # model files come down with the rest of the language's assets.
+        catalog_voice = voice if voice != self._CLONE_VOICE else None
+        if voice == self._CLONE_VOICE:
+            self._language = normalize_moonshine_language_tag(self._language)
+
+        if self._models_directory is not None and not self._download:
+            root = Path(self._models_directory).resolve()
+            if catalog_voice is not None or voice is None:
+                self._language = validate_tts_language(
+                    self._language,
+                    voice=catalog_voice,
+                    options=self._extra_options,
+                    root_path=root,
+                )
+            if catalog_voice is not None:
+                validate_tts_voice_known(
+                    self._language,
+                    catalog_voice,
+                    options=self._extra_options,
+                    root_path=root,
+                )
+            return root
+
+        cache_root = (
+            Path(self._models_directory) if self._models_directory is not None else None
+        )
+        validate_root = tts_asset_cache_path(cache_root)
+        if catalog_voice is not None or voice is None:
+            self._language = validate_tts_language(
                 self._language,
-                self._voice,
+                voice=catalog_voice,
                 options=self._extra_options,
                 root_path=validate_root,
             )
-
-        if download:
-            self._asset_root = download_tts_assets(
+        if catalog_voice is not None:
+            validate_tts_voice_known(
                 self._language,
-                voice=voice,
+                catalog_voice,
                 options=self._extra_options,
-                cache_root=Path(
-                    asset_root) if asset_root is not None else None,
+                root_path=validate_root,
             )
-        else:
-            self._asset_root = validate_root
-
-        if self._voice is not None:
+        root = download_tts_assets(
+            self._language,
+            voice=voice,
+            options=self._extra_options,
+            cache_root=cache_root,
+            on_progress=self._progress_fn,
+        )
+        if catalog_voice is not None:
             ensure_tts_voice_downloaded(
                 self._language,
-                self._voice,
-                self._asset_root,
+                catalog_voice,
+                root,
                 options=self._extra_options,
-                download_missing=download,
-                show_progress=True,
+                download_missing=True,
+                show_progress=self._progress_fn is None,
+                on_progress=self._progress_fn,
             )
+        return root
 
+    def _build(self, *, voice: Optional[str]) -> None:
+        """Create the native synthesizer, replacing any earlier one."""
+        # A voice named through options() rather than voice() still has to be
+        # kept out of the catalog lookups below, which would otherwise be
+        # biased by a voice we are still validating, and out of dependency
+        # resolution, which would silently request a non-existent voice file.
+        if voice is None:
+            option_voice = self._extra_options.get("voice")
+            if isinstance(option_voice, str) and option_voice.strip():
+                voice = option_voice.strip()
+        self._extra_options.pop("voice", None)
+        if voice is not None:
+            voice = str(voice).strip() or None
+        if self._clone_samples is None:
+            self._voice = voice
+
+        self._asset_root = self._ensure_assets(voice=voice)
         self._lib = _MoonshineLib().lib
-        create_opts = self._c_options_for_create()
+        if self._clone_samples is not None:
+            handle = self._create_from_clone(voice=voice)
+        else:
+            handle = self._create_from_files(voice=voice)
+        if handle < 0:
+            msg = self._lib.moonshine_error_to_string(handle)
+            raise MoonshineError(
+                msg.decode("utf-8")
+                if msg
+                else f"Failed to create TTS synthesizer ({handle})"
+            )
+        previous = self._handle
+        self._handle = handle
+        if previous is not None:
+            self._lib.moonshine_free_tts_synthesizer(previous)
+
+    def _create_from_files(self, *, voice: Optional[str]) -> int:
+        create_opts = self._c_options_for_create(voice)
         opt_arr, opt_n, _keep = moonshine_options_array(create_opts)
-        lang_b = self._language.encode("utf-8")
-        handle = self._lib.moonshine_create_tts_synthesizer_from_files(
-            lang_b,
+        return self._lib.moonshine_create_tts_synthesizer_from_files(
+            self._language.encode("utf-8"),
             None,
             0,
             opt_arr,
             opt_n,
             MOONSHINE_HEADER_VERSION,
         )
-        if handle < 0:
-            msg = self._lib.moonshine_error_to_string(handle)
-            raise MoonshineError(
-                msg.decode(
-                    "utf-8") if msg else f"Failed to create TTS synthesizer ({handle})"
-            )
-        self._handle = handle
-        self._init_playback_state(output_device, volume, debug)
 
     def _init_playback_state(
         self,
@@ -633,77 +820,40 @@ class TextToSpeech:
         # errors in the logs, often a wrong-default-device problem on Raspberry Pi).
         self._announced_resolved_device = False
 
-    def _init_zipvoice_from_clone(
-        self,
-        language: str,
-        *,
-        asset_root: Optional[Path],
-        download: bool,
-        clone_pcm: Any,
-        clone_sample_rate: int,
-        clone_transcript: Optional[str],
-    ) -> None:
-        """Create a ZipVoice synthesizer from an in-memory reference clip (mono float PCM)."""
+    def _create_from_clone(self, *, voice: Optional[str]) -> int:
+        """Create a ZipVoice synthesizer from the in-memory reference clip."""
         import array as _array
-
-        self._extra_options.pop("voice", None)
-        self._language = normalize_moonshine_language_tag(language)
-        # Fetch the ZipVoice model assets (text encoder / fm decoder / vocoder / tokens / config).
-        if download:
-            self._asset_root = download_tts_assets(
-                self._language,
-                voice="zipvoice",
-                options=self._extra_options,
-                cache_root=Path(asset_root) if asset_root is not None else None,
-            )
-        else:
-            if asset_root is None:
-                raise MoonshineError(
-                    "When download=False, asset_root must point to a directory already "
-                    "populated with ZipVoice assets (g2p_root layout)."
-                )
-            self._asset_root = Path(asset_root).resolve()
 
         # Coerce the reference clip to little-endian float32 bytes.
         try:
             import numpy as _np  # type: ignore
-            pcm = _np.asarray(clone_pcm, dtype="<f4").ravel()
+            pcm = _np.asarray(self._clone_samples, dtype="<f4").ravel()
             pcm_bytes = pcm.tobytes()
         except Exception:
-            arr = _array.array("f", [float(x) for x in clone_pcm])
+            arr = _array.array("f", [float(x) for x in self._clone_samples])
             pcm = None
             pcm_bytes = arr.tobytes()
 
-        resolved_transcript = (
-            str(clone_transcript).strip()
-            if clone_transcript is not None and str(clone_transcript).strip()
-            else None
-        )
-        if resolved_transcript is None:
+        if self._clone_transcript is None:
             print(
-                "TextToSpeech: transcribing clone reference clip with Moonshine ASR…",
+                "TextToSpeech: transcribing clone reference clip with Moonshine ASR...",
                 file=sys.stderr,
                 flush=True,
             )
-            resolved_transcript = _autotranscribe_clone_pcm(
-                pcm if pcm is not None else clone_pcm,
-                clone_sample_rate,
+            self._clone_transcript = _autotranscribe_clone_pcm(
+                pcm if pcm is not None else self._clone_samples,
+                self._clone_sample_rate,
                 language=self._language,
             )
             print(
-                f"TextToSpeech: clone transcript: {resolved_transcript!r}",
+                f"TextToSpeech: clone transcript: {self._clone_transcript!r}",
                 file=sys.stderr,
                 flush=True,
             )
 
-        self._lib = _MoonshineLib().lib
-        self._voice = "zipvoice"
-
-        create_opts: Dict[str, Union[str, int, float, bool]] = dict(self._extra_options)
-        create_opts["voice"] = self._voice
-        create_opts["g2p_root"] = str(self._asset_root)
-        create_opts["zipvoice_clone_sample_rate"] = int(clone_sample_rate)
-        create_opts["zipvoice_clone_transcript"] = resolved_transcript
+        create_opts = self._c_options_for_create(voice or self._CLONE_VOICE)
+        create_opts["zipvoice_clone_sample_rate"] = int(self._clone_sample_rate)
+        create_opts["zipvoice_clone_transcript"] = self._clone_transcript
         opt_arr, opt_n, _keep_opts = moonshine_options_array(create_opts)
 
         filenames = (ctypes.c_char_p * 1)(b"zipvoice/clone_audio")
@@ -714,7 +864,7 @@ class TextToSpeech:
         )
         mem_sizes = (ctypes.c_uint64 * 1)(len(pcm_bytes))
 
-        handle = self._lib.moonshine_create_tts_synthesizer_from_memory(
+        return self._lib.moonshine_create_tts_synthesizer_from_memory(
             self._language.encode("utf-8"),
             filenames,
             1,
@@ -724,12 +874,6 @@ class TextToSpeech:
             opt_n,
             MOONSHINE_HEADER_VERSION,
         )
-        if handle < 0:
-            msg = self._lib.moonshine_error_to_string(handle)
-            raise MoonshineError(
-                msg.decode("utf-8") if msg else f"Failed to create ZipVoice synthesizer ({handle})"
-            )
-        self._handle = handle
 
     def _announce_resolved_device(self, sd: Any, resolved: Optional[int]) -> None:
         """Print a one-liner identifying the PortAudio device we opened.
@@ -816,21 +960,25 @@ class TextToSpeech:
                 flush=True,
             )
 
-    def _c_options_for_create(self) -> Dict[str, Union[str, int, float, bool]]:
+    def _c_options_for_create(
+        self, voice: Optional[str]
+    ) -> Dict[str, Union[str, int, float, bool]]:
         merged: Dict[str, Union[str, int, float, bool]] = dict(
             self._extra_options)
         merged["g2p_root"] = str(self._asset_root)
-        if self._voice is not None:
-            merged["voice"] = self._voice
+        if voice is not None:
+            merged["voice"] = voice
         return merged
 
-    @property
-    def language(self) -> str:
-        return self._language
-
-    @property
-    def asset_root(self) -> Path:
-        return self._asset_root
+    def _require_loaded(self, what: str) -> int:
+        if self._handle is None:
+            if self._cloning_wanted:
+                raise MoonshineError(
+                    f"Call clone_from() before {what}: cloning() was set, so "
+                    "there is no voice until a reference clip arrives."
+                )
+            raise MoonshineError(f"Call load() before {what}.")
+        return self._handle
 
     def synthesize(
         self,
@@ -851,7 +999,8 @@ class TextToSpeech:
         if volume is not None:
             options["output_volume"] = str(volume)
 
-        return moonshine_text_to_speech_samples(self._handle, text, options)
+        handle = self._require_loaded("synthesize()")
+        return moonshine_text_to_speech_samples(handle, text, options)
 
     def synthesize_from_phonemes(
         self,
@@ -878,7 +1027,8 @@ class TextToSpeech:
         if volume is not None:
             options["output_volume"] = str(volume)
 
-        return moonshine_phonemes_to_speech_samples(self._handle, phonemes, options)
+        handle = self._require_loaded("synthesize_from_phonemes()")
+        return moonshine_phonemes_to_speech_samples(handle, phonemes, options)
 
     def say(
         self,
@@ -906,6 +1056,7 @@ class TextToSpeech:
         the index is invalid, or no name matches, the error is raised on the calling thread before
         the utterance is enqueued.
         """
+        self._require_loaded("say()")
         _import_say_audio_deps()
 
         if self._output_device is not None:
@@ -1440,6 +1591,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    cache_root = args.asset_root
     if args.asset_root is None:
         args.asset_root = tts_asset_cache_path(None)
 
@@ -1458,13 +1610,24 @@ if __name__ == "__main__":
         sys.exit(2)
 
     try:
-        with TextToSpeech(
-            args.language,
-            voice=args.voice,
-            options=extra,
-            clone=args.clone,
-            clone_transcript=args.clone_transcript,
-        ) as tts:
+        tts = TextToSpeech().language(args.language).options(extra)
+        if cache_root is not None:
+            tts.models_from(cache_root, download=True)
+        if args.voice is not None:
+            tts.voice(args.voice)
+        if args.clone is not None:
+            if args.voice is not None:
+                print(
+                    "--voice and --clone are mutually exclusive: the reference "
+                    "clip defines the voice.",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
+            tts.cloning()
+        with tts:
+            tts.load()
+            if args.clone is not None:
+                tts.clone_from(args.clone, transcript=args.clone_transcript)
             if args.out is not None:
                 samples, sr = tts.synthesize(args.text, options=extra)
                 _write_wav_mono_pcm16(args.out, samples, sr)

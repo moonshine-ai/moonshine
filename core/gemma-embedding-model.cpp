@@ -90,21 +90,29 @@ int GemmaEmbeddingModel::load(const char *model_dir,
     return 1;
   }
 
-  // Prefer the all-in-one ``.ort`` file (weights embedded inline, matching the
-  // speech-to-text models and loadable from a single buffer). Fall back to the
-  // legacy ``.onnx`` + ``.onnx_data`` pair for model directories that were
-  // downloaded before the ``.ort`` migration.
-  std::string ort_path =
-      append_path_component(model_dir, (stem + ".ort").c_str());
-  std::string onnx_path =
-      append_path_component(model_dir, (stem + ".onnx").c_str());
+  // The all-in-one ``.ort`` file: weights embedded inline, matching the
+  // speech-to-text models and loadable from a single buffer. A directory
+  // downloaded before the ``.ort`` migration holds a ``.onnx`` plus a
+  // ``.onnx_data`` sidecar, which no longer loads; say so rather than
+  // reporting a missing file.
   std::string model_path =
-      std::filesystem::exists(ort_path) ? ort_path : onnx_path;
+      append_path_component(model_dir, (stem + ".ort").c_str());
+  if (!std::filesystem::exists(model_path)) {
+    const std::string legacy =
+        append_path_component(model_dir, (stem + ".onnx").c_str());
+    if (std::filesystem::exists(legacy)) {
+      LOGF(
+          "Found %s but Moonshine loads ORT-format models only. Re-download "
+          "this model directory to get %s.\n",
+          legacy.c_str(), (stem + ".ort").c_str());
+      return 1;
+    }
+  }
 
   std::string tokenizer_path =
       append_path_component(model_dir, "tokenizer.bin");
 
-  // Load ONNX model
+  // Load the model
   RETURN_ON_ERROR(ort_session_from_path(
       ort_api_, ort_env_, ort_session_options_, model_path.c_str(), &session_,
       &mmapped_data_, &mmapped_data_size_));

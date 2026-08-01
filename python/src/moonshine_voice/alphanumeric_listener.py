@@ -983,9 +983,9 @@ if __name__ == "__main__":
     import threading
     import time
 
-    from moonshine_voice import get_model_for_language, get_spelling_model_path
+    from moonshine_voice import get_spelling_model_path
     from moonshine_voice.mic_transcriber import MicTranscriber
-    from moonshine_voice.transcriber import MOONSHINE_FLAG_SPELLING_MODE
+    from moonshine_voice.transcriber import MOONSHINE_FLAG_SPELLING_MODE, ModelArch
 
     parser = argparse.ArgumentParser(
         description=(
@@ -1022,10 +1022,6 @@ if __name__ == "__main__":
         help="Log unrecognised utterances to stderr",
     )
     args = parser.parse_args()
-
-    model_path, model_arch = get_model_for_language(
-        wanted_language=args.language, wanted_model_arch=args.model_arch,
-    )
 
     # Resolve the spelling model once up-front so the user gets clear
     # feedback about what was loaded (or why nothing was) before the
@@ -1072,14 +1068,17 @@ if __name__ == "__main__":
             print(flush=True)
             done.set()
 
-    mic = MicTranscriber(
-        model_path=model_path,
-        model_arch=model_arch,
-        spelling_model_path=spelling_model_path,
-        transcribe_flags=transcribe_flags,
+    mic = (
+        MicTranscriber()
+        .language(args.language)
+        .spelling_model(spelling_model_path)
+        .transcribe_flags(transcribe_flags)
     )
+    if args.model_arch is not None:
+        mic.model_arch(ModelArch(args.model_arch))
     listener = AlphanumericListener(on_event, debug=args.debug)
     mic.add_listener(listener)
+    mic.load()
 
     print(
         "Listening — speak letters, digits, or symbols. "

@@ -6,8 +6,8 @@ import time
 import ollama
 from moonshine_voice import (
     MicTranscriber,
+    ModelArch,
     TranscriptEventListener,
-    get_model_for_language,
 )
 
 
@@ -133,15 +133,14 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    model_path, model_arch = get_model_for_language(
-        args.language, args.moonshine_model_arch
-    )
-
-    mic_transcriber = MicTranscriber(model_path=model_path, model_arch=model_arch)
+    mic_transcriber = MicTranscriber().language(args.language)
+    if args.moonshine_model_arch is not None:
+        mic_transcriber.model_arch(ModelArch(args.moonshine_model_arch))
 
     # Attach the Ollama voice response handler as a listener for transcriber events.
     mic_transcriber.add_listener(OllamaVoice(args.ollama_model, args.system_prompt))
 
+    mic_transcriber.load()
     mic_transcriber.start()
 
     print("Listening to the microphone, press Ctrl+C to stop...")

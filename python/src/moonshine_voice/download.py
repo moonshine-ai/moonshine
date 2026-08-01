@@ -6,7 +6,7 @@ import sys
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
-from typing import Dict, List, Optional, Set, TypedDict, Union
+from typing import Callable, Dict, List, Optional, Set, TypedDict, Union
 from urllib.parse import quote
 
 from moonshine_voice.download_file import download_file, download_model, get_cache_dir
@@ -19,6 +19,7 @@ from moonshine_voice.moonshine_api import (
     MOONSHINE_ERROR_INVALID_ARGUMENT,
     MOONSHINE_ERROR_NONE,
     ModelArch,
+    moonshine_get_diarization_dependencies_string,
     moonshine_get_embedding_catalog_string,
     moonshine_get_g2p_dependencies_string,
     moonshine_get_embedding_dependencies_string,
@@ -91,7 +92,94 @@ def _cache_root_dir(cache_root: Optional[Path]) -> Path:
     return Path(cache_root).resolve() if cache_root is not None else get_cache_dir()
 
 
-def _download_manifest_group(group: dict, cache_dir: Path) -> str:
+# Reports how far a download has got, as a fraction from 0 to 1 plus the file
+# currently being fetched. Matches Swift's `(Double, String)` handler and Java's
+# ProgressCallback, so the same handler reads the same way in all four bindings.
+ProgressCallback = Callable[[float, str], None]
+
+# Smallest change in the fraction worth another call into user code. Chunks are
+# 8KB, so a large model would otherwise fire tens of thousands of callbacks.
+_PROGRESS_EPSILON = 0.002
+
+
+class _ProgressTracker:
+    """Turns per-file byte deltas into one monotonic ``0..1`` fraction.
+
+    When the caller knows the total size up front (the STT manifests declare a
+    size per file) the fraction is byte-weighted. When it does not (the TTS and
+    G2P dependency lists are bare asset keys with no sizes) it falls back to
+    counting files, which is coarser but still monotonic and still ends at 1.
+    """
+
+    def __init__(
+        self,
+        callback: ProgressCallback,
+        *,
+        total_bytes: int = 0,
+        total_files: int = 0,
+    ) -> None:
+        self._callback = callback
+        self._total_bytes = max(total_bytes, 0)
+        self._total_files = max(total_files, 1)
+        self._done_bytes = 0
+        self._done_files = 0
+        self._current_bytes = 0
+        self._current_size = 0
+        self._name = ""
+        self._last_reported = -1.0
+
+    @classmethod
+    def for_groups(
+        cls, callback: ProgressCallback, groups: List[dict]
+    ) -> "_ProgressTracker":
+        """Builds a tracker sized for every file across ``groups``."""
+        files = [f for group in groups for f in group.get("files", [])]
+        total = 0
+        for file_info in files:
+            size = file_info.get("size")
+            if isinstance(size, int) and size > 0:
+                total += size
+            else:
+                # One unsized file makes the byte total a lie, so fall back to
+                # counting files rather than reporting a fraction that jumps.
+                total = 0
+                break
+        return cls(callback, total_bytes=total, total_files=len(files))
+
+    def start(self, name: str, size: Optional[int] = None) -> None:
+        self._name = name
+        self._current_bytes = 0
+        self._current_size = size if isinstance(size, int) and size > 0 else 0
+        self._emit(force=True)
+
+    def add_bytes(self, count: int) -> None:
+        self._current_bytes += count
+        if self._current_size:
+            self._current_bytes = min(self._current_bytes, self._current_size)
+        self._emit()
+
+    def finish(self) -> None:
+        self._done_files += 1
+        self._done_bytes += self._current_size or self._current_bytes
+        self._current_bytes = 0
+        self._current_size = 0
+        self._emit(force=True)
+
+    def _emit(self, force: bool = False) -> None:
+        if self._total_bytes > 0:
+            fraction = (self._done_bytes + self._current_bytes) / self._total_bytes
+        else:
+            fraction = self._done_files / self._total_files
+        fraction = min(max(fraction, 0.0), 1.0)
+        if not force and abs(fraction - self._last_reported) < _PROGRESS_EPSILON:
+            return
+        self._last_reported = fraction
+        self._callback(fraction, self._name)
+
+
+def _download_manifest_group(
+    group: dict, cache_dir: Path, tracker: Optional[_ProgressTracker] = None
+) -> str:
     """Downloads every file in one manifest group (each file object carries a
     fully-qualified ``url`` plus optional ``size`` / ``checksum``), verifying
     size and CRC32C, and returns the group's local root directory
@@ -105,12 +193,20 @@ def _download_manifest_group(group: dict, cache_dir: Path) -> str:
         checksum = file_info.get("checksum") or None
         checksum_type = file_info.get("checksum_type") or ""
         dest = os.path.join(root, name)
+        if tracker is not None:
+            tracker.start(name, size)
         download_model(
             url,
             dest,
             expected_size=size if isinstance(size, int) and size >= 0 else None,
             expected_crc32c=checksum if checksum_type == "crc32c" else None,
+            # An application drawing its own progress bar does not also want
+            # tqdm scribbling on stderr underneath it.
+            show_progress=tracker is None,
+            on_bytes=tracker.add_bytes if tracker is not None else None,
         )
+        if tracker is not None:
+            tracker.finish()
     return str(root)
 
 
@@ -182,21 +278,42 @@ def get_components_for_model_info(model_info: dict) -> list[str]:
     return result
 
 
-def download_model_from_info(
-    model_info: dict, *, cache_root: Optional[Path] = None
-) -> tuple[str, ModelArch]:
-    cache_dir = _cache_root_dir(cache_root)
+def _primary_stt_group(model_info: dict) -> dict:
+    """The manifest group holding the model itself, which is always the first.
+
+    Its files carry fully-qualified URLs plus expected size / CRC32C, which
+    ``_download_manifest_group`` verifies.
+    """
     manifest = _stt_dependency_manifest(
         model_info["language"], model_info["model_arch"]
     )
-    # The primary model is the first group; its files carry fully-qualified URLs
-    # plus expected size / CRC32C, which _download_manifest_group verifies.
     groups = manifest.get("groups", [])
     if not groups:
         raise MoonshineError(
             f"Empty download manifest for {model_info['download_url']}"
         )
-    root_model_path = _download_manifest_group(groups[0], cache_dir)
+    return groups[0]
+
+
+def download_model_from_info(
+    model_info: dict,
+    *,
+    cache_root: Optional[Path] = None,
+    on_progress: Optional[ProgressCallback] = None,
+    tracker: Optional[_ProgressTracker] = None,
+) -> tuple[str, ModelArch]:
+    """Downloads the model named by ``model_info`` and returns its root path.
+
+    ``tracker`` is for callers spanning several downloads under one percentage
+    (see :func:`get_model_for_language`); pass ``on_progress`` instead to get a
+    fraction covering just this model.
+    """
+    group = _primary_stt_group(model_info)
+    if tracker is None and on_progress is not None:
+        tracker = _ProgressTracker.for_groups(on_progress, [group])
+    root_model_path = _download_manifest_group(
+        group, _cache_root_dir(cache_root), tracker
+    )
     return root_model_path, model_info["model_arch"]
 
 
@@ -284,6 +401,34 @@ def get_embedding_model(
     return root_model_path, model_info["model_arch"]
 
 
+def get_diarization_model(*, cache_root: Optional[Path] = None) -> str:
+    """
+    Download the speaker diarization models and return the directory holding them.
+
+    Pass that directory to a transcriber as the ``diarization_model_dir`` option
+    whenever you set ``identify_speakers``. MicTranscriber does this for you, so
+    calling it directly is only needed to warm the cache ahead of time (e.g.
+    before going offline).
+
+    These two files were compiled into the library before version 26.8, when
+    they became a download; they are 8.2 MB together and only some callers
+    diarize. See ``docs/diarization-models.md``.
+
+    Returns:
+        Path to the directory containing ``segmentation.ort`` and
+        ``embedding.ort``.
+
+    Example:
+        >>> model_dir = get_diarization_model()
+    """
+    manifest = json.loads(moonshine_get_diarization_dependencies_string())
+    groups = manifest.get("groups", [])
+    if not groups:
+        raise MoonshineError("Empty download manifest for the diarization models")
+    cache_dir = _cache_root_dir(cache_root)
+    return _download_manifest_group(groups[0], cache_dir)
+
+
 # ============================================================================
 # Transcription Model Functions
 # ============================================================================
@@ -303,10 +448,23 @@ def _spelling_group_from_manifest(manifest: dict) -> Optional[dict]:
     return None
 
 
+def _spelling_group_for_language(language: str) -> Optional[dict]:
+    """The spelling-model manifest group for ``language``, or ``None`` when the
+    language has no spelling model (or is not a language we know)."""
+    try:
+        manifest = _stt_dependency_manifest(language, None, include_spelling=True)
+    except Exception:
+        # Unknown language, etc. No spelling model to fetch.
+        return None
+    return _spelling_group_from_manifest(manifest)
+
+
 def download_spelling_model_for_language(
     language: str = "en",
     *,
     cache_root: Optional[Path] = None,
+    on_progress: Optional[ProgressCallback] = None,
+    tracker: Optional[_ProgressTracker] = None,
 ) -> Optional[str]:
     """
     Download the alphanumeric spelling model for ``language`` if one is
@@ -318,15 +476,12 @@ def download_spelling_model_for_language(
     URLs come from the native STT manifest (``include_spelling``), so nothing is
     hardcoded here.
     """
-    try:
-        manifest = _stt_dependency_manifest(language, None, include_spelling=True)
-    except Exception:
-        # Unknown language, etc. — no spelling model to fetch.
-        return None
-    group = _spelling_group_from_manifest(manifest)
+    group = _spelling_group_for_language(language)
     if group is None:
         return None
-    root = _download_manifest_group(group, _cache_root_dir(cache_root))
+    if tracker is None and on_progress is not None:
+        tracker = _ProgressTracker.for_groups(on_progress, [group])
+    root = _download_manifest_group(group, _cache_root_dir(cache_root), tracker)
     for file_info in group.get("files", []):
         name = file_info["name"]
         if name.endswith(".ort"):
@@ -354,20 +509,40 @@ def get_model_for_language(
     wanted_model_arch: ModelArch = None,
     *,
     cache_root: Optional[Path] = None,
+    on_progress: Optional[ProgressCallback] = None,
 ) -> tuple[str, ModelArch]:
+    """Downloads the transcription model for a language and returns
+    ``(model_root_path, model_arch)``.
+
+    ``on_progress`` is called with a ``0..1`` fraction and the file being
+    fetched. The fraction spans the spelling model as well as the transcriber,
+    so it rises once to 1 rather than filling twice. Supplying it also silences
+    the default tqdm bars, on the assumption that you are drawing your own.
+    """
     model_info = find_model_info(wanted_language, wanted_model_arch)
     if wanted_language != "en":
         print(
             "Using a model released under the non-commercial Moonshine Community License. See https://www.moonshine.ai/license for details.",
             file=sys.stderr,
         )
-    result = download_model_from_info(model_info, cache_root=cache_root)
+
+    tracker = None
+    if on_progress is not None:
+        groups = [_primary_stt_group(model_info)]
+        spelling = _spelling_group_for_language(model_info["language"])
+        if spelling is not None:
+            groups.append(spelling)
+        tracker = _ProgressTracker.for_groups(on_progress, groups)
+
+    result = download_model_from_info(
+        model_info, cache_root=cache_root, tracker=tracker
+    )
     # Best-effort: pre-fetch the alphanumeric spelling model alongside
     # the transcriber when one is published for this language. Failures
     # are non-fatal because the spelling path is optional.
     try:
         download_spelling_model_for_language(
-            model_info["language"], cache_root=cache_root
+            model_info["language"], cache_root=cache_root, tracker=tracker
         )
     except Exception as exc:  # pragma: no cover - best-effort prefetch
         print(
@@ -641,12 +816,17 @@ def validate_tts_language(
 
 
 def _normalize_tts_voice_stem(stem: str) -> str:
+    """Strips a file suffix off a voice name, mirroring ``piper_voice_stem``.
+
+    A voice may be named the upstream Piper way (``<stem>.onnx``) or after one
+    of the files we actually ship. Longest suffix first, so ``.ort`` does not
+    swallow the ``.weights`` in ``<stem>.weights.ort``.
+    """
     t = stem.strip()
     low = t.lower()
-    if low.endswith(".onnx"):
-        return t[: -len(".onnx")].strip()
-    if low.endswith(".kokorovoice"):
-        return t[: -len(".kokorovoice")].strip()
+    for suffix in (".weights.ort", ".model.ort", ".kokorovoice", ".onnx", ".ort"):
+        if low.endswith(suffix):
+            return t[: -len(suffix)].strip()
     return t
 
 
@@ -759,6 +939,7 @@ def ensure_tts_voice_downloaded(
     options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
     download_missing: bool = False,
     show_progress: bool = True,
+    on_progress: Optional[ProgressCallback] = None,
 ) -> None:
     """
     Ensure ``voice`` is on disk under ``asset_root``, like `validate_tts_voice_downloaded`.
@@ -785,13 +966,41 @@ def ensure_tts_voice_downloaded(
     opts: Dict[str, Union[str, int, float, bool]] = dict(options) if options else {}
     opts["g2p_root"] = str(root)
     keys = list_tts_dependency_keys(lang_tag, voice=voice, options=opts)
-    for key in keys:
-        if not is_downloadable_tts_asset_key(key):
-            continue
-        url = cdn_url_for_tts_asset_key(key)
-        dest = root / key
-        download_file(url, dest, show_progress=show_progress)
+    _download_asset_keys(
+        keys, root, show_progress=show_progress, on_progress=on_progress
+    )
     validate_tts_voice_downloaded(language, voice, asset_root, options=options)
+
+
+def _download_asset_keys(
+    keys: List[str],
+    root: Path,
+    *,
+    show_progress: bool = True,
+    on_progress: Optional[ProgressCallback] = None,
+) -> None:
+    """Fetches every downloadable key in ``keys`` into ``root``.
+
+    The TTS and G2P dependency lists are bare asset keys with no sizes, so
+    progress here is per file rather than per byte.
+    """
+    wanted = [key for key in keys if is_downloadable_tts_asset_key(key)]
+    tracker = (
+        _ProgressTracker(on_progress, total_files=len(wanted))
+        if on_progress is not None and wanted
+        else None
+    )
+    for key in wanted:
+        if tracker is not None:
+            tracker.start(key)
+        download_file(
+            cdn_url_for_tts_asset_key(key),
+            root / key,
+            show_progress=show_progress and tracker is None,
+            on_bytes=tracker.add_bytes if tracker is not None else None,
+        )
+        if tracker is not None:
+            tracker.finish()
 
 
 def is_downloadable_tts_asset_key(key: str) -> bool:
@@ -856,12 +1065,16 @@ def download_tts_assets(
     options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
     cache_root: Optional[Path] = None,
     show_progress: bool = True,
+    on_progress: Optional[ProgressCallback] = None,
 ) -> Path:
     """
     Download every file required for TTS for the given language (and optional prefixed ``voice``) into the cache.
 
     Files are stored under the same relative paths as canonical asset keys (e.g. ``en_us/dict.tsv``).
     Pass the returned directory as ``g2p_root`` when creating a synthesizer.
+
+    ``on_progress`` is called with a ``0..1`` fraction and the asset being
+    fetched, and silences the default tqdm bars.
     """
     if voice is not None:
         vs = str(voice).strip()
@@ -896,12 +1109,9 @@ def download_tts_assets(
         voice=download_voice,
         options=dep_opts,
     )
-    for key in keys:
-        if not is_downloadable_tts_asset_key(key):
-            continue
-        url = cdn_url_for_tts_asset_key(key)
-        dest = root / key
-        download_file(url, dest, show_progress=show_progress)
+    _download_asset_keys(
+        keys, root, show_progress=show_progress, on_progress=on_progress
+    )
     return root
 
 
@@ -911,17 +1121,15 @@ def download_g2p_assets(
     options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
     cache_root: Optional[Path] = None,
     show_progress: bool = True,
+    on_progress: Optional[ProgressCallback] = None,
 ) -> Path:
     """Download G2P lexicon/model files into the TTS asset cache layout (same CDN tree as TTS)."""
     lang_tag = normalize_moonshine_language_tag(language)
     keys = list_g2p_dependency_keys(lang_tag, options=options)
     root = tts_asset_cache_path(cache_root)
-    for key in keys:
-        if not is_downloadable_tts_asset_key(key):
-            continue
-        url = cdn_url_for_tts_asset_key(key)
-        dest = root / key
-        download_file(url, dest, show_progress=show_progress)
+    _download_asset_keys(
+        keys, root, show_progress=show_progress, on_progress=on_progress
+    )
     return root
 
 
@@ -961,6 +1169,11 @@ if __name__ == "__main__":
         help="Download STT assets (transcription model)",
     )
     parser.add_argument(
+        "--diarization",
+        action="store_true",
+        help="Download the speaker diarization models (needed for identify_speakers)",
+    )
+    parser.add_argument(
         "--voice",
         type=str,
         default=None,
@@ -981,8 +1194,18 @@ if __name__ == "__main__":
 
     dl_root: Optional[Path] = args.root
 
-    if not args.tts and not args.g2p and not args.embedding and not args.stt:
-        print("Please specify at least one of the following: --tts, --g2p, --embedding, --stt", file=sys.stderr)
+    if (
+        not args.tts
+        and not args.g2p
+        and not args.embedding
+        and not args.stt
+        and not args.diarization
+    ):
+        print(
+            "Please specify at least one of the following: --tts, --g2p, --embedding, "
+            "--stt, --diarization",
+            file=sys.stderr,
+        )
         parser.print_help()
         sys.exit(1)
 
@@ -1000,6 +1223,10 @@ if __name__ == "__main__":
         model_path, model_arch = get_embedding_model(cache_root=dl_root)
         print(f"Embedding model path: {model_path}", file=sys.stderr)
         print(model_path)
+    if args.diarization:
+        model_dir = get_diarization_model(cache_root=dl_root)
+        print(f"Diarization model path: {model_dir}", file=sys.stderr)
+        print(model_dir)
     if args.stt:
         get_model_for_language(args.language, args.model_arch, cache_root=dl_root)
         log_model_info(args.language, args.model_arch, cache_root=dl_root)

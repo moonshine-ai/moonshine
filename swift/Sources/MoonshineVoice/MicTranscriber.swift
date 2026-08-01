@@ -256,10 +256,14 @@ public final class MicTranscriber: @unchecked Sendable {
             _ = try await AssetDownloader().ensureModelPresent(
                 root: directory, spec: spec, onProgress: fractionReporter(progressHandler))
         }
+        let options = try await withDiarizationModels(
+            transcriberOptions.isEmpty ? nil : transcriberOptions,
+            downloader: AssetDownloader(),
+            onProgress: fractionReporter(progressHandler))
         transcriber = try Transcriber(
             modelPath: directory.path,
             modelArch: arch,
-            options: transcriberOptions.isEmpty ? nil : transcriberOptions)
+            options: options)
         ownsTranscriber = true
         try prepareStream()
     }

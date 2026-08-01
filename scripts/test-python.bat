@@ -1,11 +1,10 @@
 @echo off
 setlocal enabledelayedexpansion
 
-REM Runs the Python module tests (python\tests\test_modules.py), which drive the
-REM __main__ sections of the most significant moonshine_voice modules, and the
-REM CLI tests (python\tests\test_cli.py), which exercise the installed
-REM moonshine-voice console script -- both against a freshly built wheel. This
-REM is the Windows counterpart to scripts\test-python.sh.
+REM Runs the Python tests against a freshly built wheel. That is everything in
+REM python\tests except test_docs.py, which scripts\test-docs.sh runs separately
+REM because it needs the notebook and the nbmake plugin. This is the Windows
+REM counterpart to scripts\test-python.sh.
 REM
 REM Usage:
 REM   scripts\test-python.bat                Build the wheel first, then test.
@@ -57,7 +56,7 @@ REM Path(sys.executable).parent / name check in the test misses them).
 call ".venv-pytest\Scripts\activate.bat"
 if errorlevel 1 exit /b 1
 
-python -m pytest -v "tests\test_modules.py" "tests\test_cli.py"
+python -m pytest -v "tests" --ignore="tests\test_docs.py"
 if errorlevel 1 exit /b 1
 
 echo All Python tests passed

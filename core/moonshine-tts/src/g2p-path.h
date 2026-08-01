@@ -24,59 +24,25 @@ inline std::filesystem::path resolve_path_under_root(
   return root / path;
 }
 
-/// Prefer ``stem.ort`` when present, else ``stem.onnx`` (``basename`` may end
-/// with ``.ort`` or ``.onnx``). If neither exists, returns ``dir / basename``
-/// (caller may use this in error messages).
-inline std::filesystem::path resolve_prefer_ort_model(
-    const std::filesystem::path& dir, std::string_view basename) {
-  namespace fs = std::filesystem;
-  const std::string b(basename);
-  std::string stem;
-  if (b.size() >= 4 && b.compare(b.size() - 4, 4, ".ort") == 0) {
-    stem = b.substr(0, b.size() - 4);
-  } else if (b.size() >= 5 && b.compare(b.size() - 5, 5, ".onnx") == 0) {
-    stem = b.substr(0, b.size() - 5);
-  } else {
-    return dir / b;
-  }
-  const fs::path ort = dir / (stem + ".ort");
-  const fs::path onnx = dir / (stem + ".onnx");
-  if (fs::is_regular_file(ort)) {
-    return ort;
-  }
-  if (fs::is_regular_file(onnx)) {
-    return onnx;
-  }
-  return dir / b;
+/// True when ``name`` ends in ``.onnx``.
+inline bool is_onnx_model_name(std::string_view name) {
+  return name.size() >= 5 && name.compare(name.size() - 5, 5, ".onnx") == 0;
 }
 
-/// For a path whose basename ends with ``.ort`` or ``.onnx``, set ``path`` to
-/// the existing sibling preferring ``stem.ort`` over ``stem.onnx`` when both
-/// are present.
-inline void resolve_disk_model_file_path(std::filesystem::path& path) {
-  namespace fs = std::filesystem;
-  if (path.empty()) {
-    return;
+/// The ORT model in ``dir`` for a model named ``basename``.
+///
+/// Models ship exclusively in ORT format, but some names reaching here still
+/// say ``.onnx``: the ``onnx_model_file`` field in a bundle's ``meta.json``,
+/// and directory-shorthand options that build a filename themselves. Both are
+/// mapped onto the ``.ort`` we actually ship. A name with any other extension
+/// is returned unchanged, for the caller to fail on.
+inline std::filesystem::path ort_model_path(const std::filesystem::path& dir,
+                                            std::string_view basename) {
+  if (is_onnx_model_name(basename)) {
+    const std::string stem(basename.substr(0, basename.size() - 5));
+    return dir / (stem + ".ort");
   }
-  const std::string fn = path.filename().string();
-  std::string stem;
-  if (fn.size() >= 5 && fn.compare(fn.size() - 5, 5, ".onnx") == 0) {
-    stem = fn.substr(0, fn.size() - 5);
-  } else if (fn.size() >= 4 && fn.compare(fn.size() - 4, 4, ".ort") == 0) {
-    stem = fn.substr(0, fn.size() - 4);
-  } else {
-    return;
-  }
-  const fs::path parent = path.parent_path();
-  const fs::path ort = parent / (stem + ".ort");
-  const fs::path onnx = parent / (stem + ".onnx");
-  if (fs::is_regular_file(ort)) {
-    path = ort;
-    return;
-  }
-  if (fs::is_regular_file(onnx)) {
-    path = onnx;
-  }
+  return dir / std::string(basename);
 }
 
 }  // namespace moonshine_tts

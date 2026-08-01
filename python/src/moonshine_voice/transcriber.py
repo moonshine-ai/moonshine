@@ -651,7 +651,7 @@ class Stream:
 
 if __name__ == "__main__":
     import argparse
-    from moonshine_voice import get_model_for_language
+    from moonshine_voice import get_diarization_model, get_model_for_language
 
     parser = argparse.ArgumentParser(description="Model info example")
     parser.add_argument(
@@ -822,6 +822,7 @@ if __name__ == "__main__":
 
     if args.speaker_ids:
         options["identify_speakers"] = "true"
+        options.setdefault("diarization_model_dir", get_diarization_model())
 
     transcriber = Transcriber(
         model_path=model_path, model_arch=model_arch, options=options

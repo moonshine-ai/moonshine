@@ -116,15 +116,6 @@ void prepare_g2p_file_information_path(FileInformation& fi,
   if (!fi.path.is_absolute()) {
     fi.path = resolve_path_under_root(g2p_root, fi.path);
   }
-  if (fi.memory == nullptr || fi.memory_size == 0) {
-    const std::string fn = fi.path.filename().string();
-    const bool model_ext =
-        (fn.size() >= 5 && fn.compare(fn.size() - 5, 5, ".onnx") == 0) ||
-        (fn.size() >= 4 && fn.compare(fn.size() - 4, 4, ".ort") == 0);
-    if (model_ext) {
-      resolve_disk_model_file_path(fi.path);
-    }
-  }
 }
 
 }  // namespace

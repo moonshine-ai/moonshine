@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Convert ``.onnx`` models to ORT format (``.ort``) beside the originals.
 
-The runtime prefers a ``.ort`` file over a sibling ``.onnx`` (see
-``core/moonshine-tts/src/g2p-path.h``), so writing ``model.ort`` next to
-``model.onnx`` switches the loader over with no code change.
+ORT format is the only format Moonshine loads, on any platform; see
+``docs/ort-only-models.md``. This is how a model gets into it.
 
 An ORT-format model has its graph optimizations baked in at conversion time,
 and ORT will not re-apply them at load time. That makes the optimization level
@@ -29,6 +28,11 @@ for a graph input, which costs about 2.2x on inference for the transformer G2P
 models. ``Conv`` has no such step, so the Piper voices split for free. We pick
 between them by looking at which ops consume the dequantized weights, and any
 model that would lose is left as ``.onnx``.
+
+Full optimization is also what rules out CoreML and NNAPI, since it fuses whole
+regions into ``com.microsoft`` operators that no compiling execution provider
+recognises. That was measured and accepted rather than overlooked; see
+``docs/execution-providers.md``.
 
 Usage:
     python scripts/convert-models-to-ort.py core/moonshine-tts/data

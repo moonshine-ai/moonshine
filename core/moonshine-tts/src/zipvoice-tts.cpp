@@ -20,7 +20,6 @@
 #include "ipa-postprocess.h"
 #include "moonshine-g2p.h"
 #include "moonshine-tts-options.h"
-#include "ort-onnx-external-data.h"
 #include "ort-session-options.h"
 #include "ort-utils-cxx.h"
 #include "utf8-utils.h"
@@ -230,8 +229,7 @@ struct ZipVoiceTTS::Impl {
       const uint8_t* b = nullptr;
       size_t n = 0;
       it->second.load(&b, &n);
-      ort_add_external_initializer_files_for_onnx_model_buffer(opts, tts_files_,
-                                                               key);
+      require_ort_model_bytes(b, n, "ZipVoice model supplied as " + k);
       Ort::Session s(env_, b, n, opts);
       it->second.free();
       return s;
@@ -241,7 +239,7 @@ struct ZipVoiceTTS::Impl {
             ? resolve_path_under_root(g2p_opt_.g2p_root, it->second.path)
             : resolve_path_under_root(g2p_opt_.g2p_root,
                                       std::filesystem::path(k));
-    resolve_disk_model_file_path(p);
+    require_ort_model_path(p, "ZipVoice model file");
     if (!std::filesystem::is_regular_file(p)) {
       throw std::runtime_error("ZipVoiceTTS: missing model file " + p.string());
     }

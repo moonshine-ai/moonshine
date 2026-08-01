@@ -143,6 +143,9 @@ public final class AssetDownloader {
                         spec.primary, spec.toOptions(null));
                 return filesFromGroupManifest(json);
             }
+            case DIARIZATION: {
+                return filesFromGroupManifest(Transcriber.getDiarizationDependencies());
+            }
             case TTS: {
                 String json = TextToSpeech.getTtsDependencies(
                         spec.primary, spec.toOptions(root.getAbsolutePath()));

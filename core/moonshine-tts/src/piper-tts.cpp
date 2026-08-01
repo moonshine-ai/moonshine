@@ -8,7 +8,6 @@
 #include "ipa-postprocess.h"
 #include "moonshine-g2p.h"
 #include "moonshine-tts-options.h"
-#include "ort-onnx-external-data.h"
 #include "ort-session-options.h"
 #include "ort-utils-cxx.h"
 #include "piper-voice-catalog.h"
@@ -197,10 +196,10 @@ std::string piper_voice_stem(std::string_view name) {
 
 /// The file to open for a voice, or an empty path when none is on disk.
 ///
-/// A voice can be present in any of three forms, preferred in this order: a
-/// split ORT pair (fastest to load, see ``load_split_weight_sessions``), a
-/// single ``.ort``, or the original ``.onnx``. Only the split pair needs both
-/// files, so it is checked as a pair.
+/// A voice can be present in either of two forms, preferred in this order: a
+/// split ORT pair (fastest to load, see ``load_split_weight_sessions``) or a
+/// single ``.ort``. Only the split pair needs both files, so it is checked as
+/// a pair.
 std::filesystem::path piper_voice_model_path(
     const std::filesystem::path& voices_dir, const std::string& stem) {
   const std::filesystem::path split_model = voices_dir / (stem + ".model.ort");
@@ -208,11 +207,9 @@ std::filesystem::path piper_voice_model_path(
       std::filesystem::is_regular_file(voices_dir / (stem + ".weights.ort"))) {
     return split_model;
   }
-  for (const std::string_view suffix : {".ort", ".onnx"}) {
-    const std::filesystem::path cand = voices_dir / (stem + std::string(suffix));
-    if (std::filesystem::is_regular_file(cand)) {
-      return cand;
-    }
+  const std::filesystem::path single = voices_dir / (stem + ".ort");
+  if (std::filesystem::is_regular_file(single)) {
+    return single;
   }
   return {};
 }
@@ -581,8 +578,8 @@ struct PiperTTS::Impl {
 
   /// Loads the split-weights form of a voice if it is present on disk.
   ///
-  /// Returns false when the pair is absent, leaving the caller on the .onnx
-  /// path. See split-weights.h for why voices ship this way.
+  /// Returns false when the pair is absent, leaving the caller to open the
+  /// single-file form. See split-weights.h for why voices ship this way.
   bool load_split_weight_sessions(const Ort::SessionOptions& session_opts) {
     if (onnx_path_.empty()) {
       return false;
@@ -604,7 +601,7 @@ struct PiperTTS::Impl {
     return true;
   }
 
-  void reload_session_from_onnx() {
+  void reload_session() {
     static const std::string k_piper_json("piper/onnx.json");
     static const std::string k_piper_onnx("piper/onnx");
     const std::filesystem::path json_disk =
@@ -649,17 +646,19 @@ struct PiperTTS::Impl {
       const uint8_t* ob = nullptr;
       size_t on = 0;
       of.load(&ob, &on);
-      ort_add_external_initializer_files_for_onnx_model_buffer(
-          session_opts, tts_asset_files_, k_piper_onnx);
+      require_ort_model_bytes(ob, on, "Piper voice supplied as " + k_piper_onnx);
       session_ = Ort::Session(env_, ob, on, session_opts);
       of.free();
     } else {
-      // onnx_path_ is only an anchor; the voice may ship as .ort instead.
-      std::filesystem::path model_path =
+      // onnx_path_ is only an anchor for the voice name; the file on disk is
+      // an .ort, in one of the two forms piper_voice_model_path knows.
+      const std::filesystem::path model_path =
           piper_voice_model_path(onnx_path_.parent_path(),
                                  piper_voice_stem(onnx_path_.filename().string()));
       if (model_path.empty()) {
-        model_path = onnx_path_;
+        throw std::runtime_error("PiperTTS: no ORT model for voice " +
+                                 onnx_path_.stem().string() + " in " +
+                                 onnx_path_.parent_path().string());
       }
 #ifdef _WIN32
       const std::wstring wmodel = model_path.wstring();
@@ -714,7 +713,7 @@ struct PiperTTS::Impl {
       onnx_path_ =
           pick_onnx_path(voices_dir_, onnx_basename_request_, default_onnx_);
     }
-    reload_session_from_onnx();
+    reload_session();
     g2p_ = std::make_unique<MoonshineG2P>(g2p_dialect_, g2p_opt_);
   }
 
@@ -736,7 +735,7 @@ struct PiperTTS::Impl {
       onnx_path_ =
           pick_onnx_path(voices_dir_, onnx_basename_request_, default_onnx_);
     }
-    reload_session_from_onnx();
+    reload_session();
     g2p_ = std::make_unique<MoonshineG2P>(g2p_dialect_, g2p_opt_);
   }
 
@@ -746,7 +745,7 @@ struct PiperTTS::Impl {
       onnx_path_ =
           pick_onnx_path(voices_dir_, onnx_basename_request_, default_onnx_);
     }
-    reload_session_from_onnx();
+    reload_session();
   }
 
   std::vector<float> synthesize(std::string_view text) {

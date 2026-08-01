@@ -28,8 +28,13 @@ parser.add_argument("--options", type=str, default=None)
 args = parser.parse_args()
 
 # Speaker identification is opt-in, and transcription itself isn't needed
-# for this evaluation.
-options = {"skip_transcription": True, "identify_speakers": True}
+# for this evaluation. The diarization models are a download rather than part
+# of the library (docs/diarization-models.md), so fetch them first.
+options = {
+    "skip_transcription": True,
+    "identify_speakers": True,
+    "diarization_model_dir": moonshine_voice.get_diarization_model(),
+}
 if args.options is not None:
     for option in args.options.split(","):
         key, value = option.split("=")

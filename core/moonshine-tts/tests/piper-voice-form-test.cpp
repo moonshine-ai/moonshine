@@ -52,7 +52,7 @@ TEST_CASE("catalog voice form matches the shipped files") {
       // Longest first: ".ort" would otherwise swallow the ".weights" in
       // "<stem>.weights.ort" and invent a voice named "<stem>.weights".
       for (const std::string suffix :
-           {".weights.ort", ".model.ort", ".onnx", ".ort"}) {
+           {".weights.ort", ".model.ort", ".ort"}) {
         if (name.size() > suffix.size() &&
             name.compare(name.size() - suffix.size(), suffix.size(), suffix) ==
                 0) {

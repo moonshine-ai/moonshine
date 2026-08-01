@@ -169,13 +169,15 @@ def test_capture_callback_is_not_blocked_by_transcription(monkeypatch):
     monkeypatch.setattr(mic_transcriber, "Transcriber", FakeTranscriber)
     monkeypatch.setattr(mic_transcriber.sd, "InputStream", FakeInputStream)
 
-    transcriber = mic_transcriber.MicTranscriber(
-        model_path="unused",
-        update_interval=UPDATE_INTERVAL_S,
-        samplerate=SAMPLE_RATE,
-        blocksize=BLOCK_SIZE,
+    transcriber = (
+        mic_transcriber.MicTranscriber()
+        .models_from("unused")
+        .update_interval(UPDATE_INTERVAL_S)
+        .samplerate(SAMPLE_RATE)
+        .blocksize(BLOCK_SIZE)
     )
 
+    transcriber.load()
     transcriber.start()
     fake_input = transcriber._sd_stream
     fake_stream = transcriber.mic_stream

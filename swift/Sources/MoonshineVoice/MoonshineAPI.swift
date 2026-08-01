@@ -745,6 +745,19 @@ internal final class MoonshineAPI: @unchecked Sendable {
         }(options)
     }
 
+    /// Get the speaker diarization download manifest as a JSON object string. There is one set of
+    /// models and it takes no options, so this does not go through `stringOutDependencyCall`.
+    func getDiarizationDependencies() throws -> String {
+        var outJson: UnsafeMutablePointer<CChar>? = nil
+        try checkError(moonshine_get_diarization_dependencies(&outJson))
+        guard let jsonPtr = outJson else {
+            return "{}"
+        }
+        let result = String(cString: jsonPtr)
+        free(outJson)
+        return result
+    }
+
     /// Shared plumbing for the `moonshine_get_*_dependencies` family: marshals the primary string
     /// argument and options, invokes `call`, converts errors, and returns the malloc'd string.
     private func stringOutDependencyCall(

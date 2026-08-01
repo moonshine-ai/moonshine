@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include "g2p-path.h"
+#include "ort-model-format.h"
 #include "ort-utils.h"
 #include "string-utils.h"
 
@@ -121,7 +122,7 @@ void MoonshineTTSOptions::parse_options(
       if (!t.empty()) {
         const std::filesystem::path d(t);
         files.set_path(kTtsKokoroModelKey,
-                       resolve_prefer_ort_model(d, "model.ort"));
+                       ort_model_path(d, "model.ort"));
         files.set_path(kTtsKokoroConfigJsonKey, d / "config.json");
       }
     } else if (key == "kokoro_model" || key == "kokoro_model_onnx") {
@@ -138,12 +139,15 @@ void MoonshineTTSOptions::parse_options(
       } else {
         files.set_path(kTtsKokoroConfigJsonKey, std::filesystem::path(t));
       }
-    } else if (key == "piper_onnx" || key == "piper_model_onnx") {
+    } else if (key == "piper_onnx" || key == "piper_model_onnx" ||
+               key == "piper_model") {
       const std::string t = trim(value);
       if (t.empty()) {
         files.erase_key(std::string(kTtsPiperOnnxKey));
       } else {
-        files.set_path(kTtsPiperOnnxKey, std::filesystem::path(t));
+        const std::filesystem::path model(t);
+        require_ort_model_path(model, "Piper model given as " + key);
+        files.set_path(kTtsPiperOnnxKey, model);
       }
     } else if (key == "piper_onnx_json" || key == "piper_model_json" ||
                key == "piper_onnx_config") {

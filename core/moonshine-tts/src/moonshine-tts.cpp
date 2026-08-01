@@ -7,7 +7,6 @@
 #include "g2p-path.h"
 #include "moonshine-asset-catalog.h"
 #include "moonshine-g2p.h"
-#include "ort-onnx-external-data.h"
 #include "ort-session-options.h"
 #include "ort-utils-cxx.h"
 #include "piper-tts.h"
@@ -771,7 +770,6 @@ std::vector<std::string> kokoro_vocoder_dependency_keys_with_options(
   maybe_align_en_profile_for_kokoro_voice(opt.voice, profile, g2p_dialect);
   std::filesystem::path model_path = resolve_path_under_root(
       g2p.g2p_root, tts_map_path(opt.files, kTtsKokoroModelKey));
-  resolve_disk_model_file_path(model_path);
   const std::filesystem::path voices_dir = model_path.parent_path() / "voices";
   // Dependency keys must name the *requested* voice even when the .kokorovoice
   // file is not on disk yet (select_voice_id falls back to the default when
@@ -803,7 +801,6 @@ std::vector<std::pair<std::string, bool>> list_kokoro_voices_with_availability(
   opt_scan.g2p_options = g2p;
   std::filesystem::path model_path = resolve_path_under_root(
       g2p.g2p_root, tts_map_path(opt_scan.files, kTtsKokoroModelKey));
-  resolve_disk_model_file_path(model_path);
   const std::filesystem::path voices_dir = model_path.parent_path() / "voices";
 
   std::map<std::string, bool> by_id;
@@ -935,7 +932,6 @@ bool zipvoice_asset_present(const MoonshineTTSOptions& opt,
           ? resolve_path_under_root(opt.g2p_options.g2p_root, it->second.path)
           : resolve_path_under_root(opt.g2p_options.g2p_root,
                                     std::filesystem::path(k));
-  resolve_disk_model_file_path(p);
   return std::filesystem::is_regular_file(p);
 }
 
@@ -1057,7 +1053,7 @@ struct KokoroTtsEngine {
     const std::filesystem::path& root = g2p_opt_.g2p_root;
     model_path_ = resolve_path_under_root(
         root, tts_map_path(tts_files_, kTtsKokoroModelKey));
-    resolve_disk_model_file_path(model_path_);
+    require_ort_model_path(model_path_, "Kokoro model");
     config_path_ = resolve_path_under_root(
         root, tts_map_path(tts_files_, kTtsKokoroConfigJsonKey));
     voices_dir_ = model_path_.parent_path() / "voices";
@@ -1107,24 +1103,23 @@ struct KokoroTtsEngine {
             vocab_.size());
     TIMER_END_IF(log_profiling_, kokoro_load_config);
 
-    TIMER_START_IF(log_profiling_, kokoro_load_onnx);
-    const uint8_t* onnx_buf = nullptr;
-    size_t onnx_len = 0;
-    model_fi.load(&onnx_buf, &onnx_len);
-    if (onnx_len == 0) {
+    TIMER_START_IF(log_profiling_, kokoro_load_model);
+    const uint8_t* model_buf = nullptr;
+    size_t model_len = 0;
+    model_fi.load(&model_buf, &model_len);
+    if (model_len == 0) {
       model_fi.free();
-      throw std::runtime_error("MoonshineTTS: empty Kokoro ONNX (" +
+      throw std::runtime_error("MoonshineTTS: empty Kokoro model (" +
                                model_path_.string() + ")");
     }
+    require_ort_model_bytes(model_buf, model_len, "Kokoro model");
     Ort::SessionOptions session_opts =
         make_ort_session_options(opt.ort_provider_names, opt.coreml_cache_dir);
-    ort_add_external_initializer_files_for_onnx_model_buffer(
-        session_opts, tts_files_, kTtsKokoroModelKey);
-    session_ = Ort::Session(env_, onnx_buf, onnx_len, session_opts);
+    session_ = Ort::Session(env_, model_buf, model_len, session_opts);
     model_fi.free();
-    LOGF_IF(log_profiling_, "KokoroTtsEngine: ONNX model loaded (%zu bytes)",
-            onnx_len);
-    TIMER_END_IF(log_profiling_, kokoro_load_onnx);
+    LOGF_IF(log_profiling_, "KokoroTtsEngine: model loaded (%zu bytes)",
+            model_len);
+    TIMER_END_IF(log_profiling_, kokoro_load_model);
 
     detect_kokoro_style_input_name();
     detect_speed_input_element_type();

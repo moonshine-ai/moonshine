@@ -145,6 +145,8 @@ void parse_transcriber_options(const OptionVector &options,
     } else if (option_name == "diarization_cluster_window_sec") {
       out_options.diarization_cluster_window_sec =
           float_from_string(option_value);
+    } else if (option_name == "diarization_model_dir") {
+      out_options.diarization_model_dir = option_value;
     } else if (option_name == "return_audio_data") {
       out_options.return_audio_data = bool_from_string(option_value);
     } else if (option_name == "log_output_text") {
@@ -1876,6 +1878,26 @@ int32_t moonshine_get_embedding_dependencies(const char *model_name,
     return MOONSHINE_ERROR_NONE;
   } catch (const std::exception &e) {
     LOGF("moonshine_get_embedding_dependencies failed: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+int32_t moonshine_get_diarization_dependencies(char **out_dependencies_json) {
+  if (out_dependencies_json == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  *out_dependencies_json = nullptr;
+  try {
+    const std::string dumped =
+        json_model_dependencies(moonshine::diarization_model_dependencies());
+    char *buf = malloc_string_copy(dumped);
+    if (buf == nullptr) {
+      return MOONSHINE_ERROR_UNKNOWN;
+    }
+    *out_dependencies_json = buf;
+    return MOONSHINE_ERROR_NONE;
+  } catch (const std::exception &e) {
+    LOGF("moonshine_get_diarization_dependencies failed: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
 }

@@ -29,24 +29,38 @@ either invocation style works.
 ```python
 """Transcribes live audio from the default microphone"""
 import time
-from moonshine_voice import (
-    MicTranscriber,
-    TranscriptEventListener,
-    get_model_for_language,
+from moonshine_voice import MicTranscriber
+
+# MicTranscriber handles connecting to the microphone, capturing the audio
+# data, detecting voice activity, breaking the speech up into segments,
+# transcribing it, and calling you back as the results firm up over time.
+mic = (
+    MicTranscriber()
+    .on_text(lambda text: print(f"\r{text}", end="", flush=True))
+    .on_line(lambda line: print(f"\r{line.text}"))
 )
 
-# This will download the model files and cache them.
-model_path, model_arch = get_model_for_language("en")
+# Downloads the model files and caches them, so the first call is the slow one.
+mic.load()
+mic.start()
+print("Listening to the microphone, press Ctrl+C to stop...")
 
-# MicTranscriber handles connecting to the microphone, capturing
-# the audio data, detecting voice activity, breaking the speech
-# up into segments, transcribing the speech, and sending events
-# as the results are updated over time.
-mic_transcriber = MicTranscriber(
-    model_path=model_path, model_arch=model_arch)
+while True:
+    time.sleep(0.1)
+```
 
-# We use an event-driven interface to respond in real time
-# as speech is detected.
+`on_text` gives you the line as it is being spoken, rewritten as the model
+changes its mind, and `on_line` gives you each line once it is final.
+Configuration is chainable and everything has a working default:
+`language()`, `model_arch()`, `device()`, `update_interval()`, and
+`on_progress()` for a download bar.
+
+When you need more than the text, such as line ids, speaker spans, or word
+timings, attach a listener object instead. Both styles can be used together.
+
+```python
+from moonshine_voice import MicTranscriber, TranscriptEventListener
+
 class TestListener(TranscriptEventListener):
     def on_line_started(self, event):
         print(f"Line started: {event.line.text}")
@@ -57,13 +71,10 @@ class TestListener(TranscriptEventListener):
     def on_line_completed(self, event):
         print(f"Line completed: {event.line.text}")
 
-listener = TestListener()
-mic_transcriber.add_listener(listener)
-mic_transcriber.start()
-print("Listening to the microphone, press Ctrl+C to stop...")
-
-while True:
-    time.sleep(0.1)
+mic = MicTranscriber()
+mic.add_listener(TestListener())
+mic.load()
+mic.start()
 ```
 
 ## Other Sources
@@ -190,6 +201,48 @@ turn the microphone off with `microphone(False)` and feed it `handle_utterance()
 For multi-turn conversations — asking a question, confirming an answer,
 spelling out a password — register a flow with `listen_for()` instead of a
 global. See `examples/python/dialog_flow.py`, or run `moonshine-voice dialog`.
+
+## Speaking
+
+`TextToSpeech` follows the same shape: configure it, `load()` it, then use it.
+
+```python
+from moonshine_voice import TextToSpeech
+
+tts = TextToSpeech().language("en_us").voice("kokoro_af_heart")
+tts.load()
+tts.say("Hello from Moonshine.")
+tts.wait()
+```
+
+`say()` returns immediately and queues the utterance, pre-synthesizing the next
+one while the current one plays, so consecutive calls run together without a
+gap. `wait()` blocks until the queue drains, `stop()` cancels it, and
+`is_talking()` polls. If you would rather have the samples than hear them, use
+`synthesize()`. The chainable setters are `language()`, `voice()`,
+`output_device()`, `volume()`, `models_from()`, and `on_progress()` for a
+download bar.
+
+To speak in someone else's voice, `clone_from()` takes a few seconds of them
+talking, either as a `.wav` file or as a `(pcm, sample_rate)` pair.
+
+```python
+tts = TextToSpeech().language("en_us").cloning()
+tts.load()
+tts.clone_from("some-speech.wav")
+tts.say("Now I sound like you.")
+```
+
+`cloning()` fetches the cloning engine during `load()` so the first clone is
+quick. To capture the reference clip from the microphone instead, `start_cloning()`
+hands back a `VoiceClone` that listens until it has heard enough usable speech.
+
+```python
+clone = tts.start_cloning()
+clone.on_ready(lambda: print("Got it, you can stop talking."))
+clone.from_microphone()
+tts.clone_from(clone)
+```
 
 ## Multiple Languages
 
