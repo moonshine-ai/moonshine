@@ -1377,7 +1377,7 @@ Every setter returns the runner, so a whole voice interface can be built in one 
 - <a id="agentflow-log-io"></a>`log_io()`: Logs the dialogue to stderr as `user: ...` / `assistant: ...` lines. Off by default. This is the user-facing transcript; use `debug()` for the verbose internal trace.
 - <a id="agentflow-debug"></a>`debug()`: Traces every internal stage transition, with timings, to stderr.
 - <a id="agentflow-on-progress"></a>`on_progress()`: Reports model download and load progress as `(fraction, name)`.
-- <a id="agentflow-on-heard"></a>`on_heard()`: Reports every utterance the runner receives from the microphone.
+- <a id="agentflow-on-heard"></a>`on_heard()`: Reports every utterance the runner receives from the microphone, including trigger phrases and answers to prompts. Use [`otherwise()`](#agentflow-otherwise) instead for just the lines that didn't match anything.
 - <a id="agentflow-on-said"></a>`on_said()`: Reports every prompt the runner speaks.
 - <a id="agentflow-on-error"></a>`on_error()`: Reports errors raised by a flow or by the audio pipeline. Without a handler the runner prints them to stderr and carries on; a flow that raises is torn down either way, so one bad turn can't wedge the runner.
 - <a id="agentflow-speak-with"></a>`speak_with()`: Speaks prompts with your own callable instead of the built-in synthesizer. It must block until playback finishes, since the runner resumes the flow as soon as it returns. Setting this stops `load()` creating a synthesizer.
@@ -1396,6 +1396,9 @@ The runner won't close a synthesizer or transcriber it didn't create.
 - <a id="agentflow-always"></a>`always()`: Registers a phrase that stays live even while a flow is running. Useful for commands like "cancel" or "start over" that should interrupt any in-progress conversation.
   - `trigger_phrase`: The canonical phrase to match, in the same way as `listen_for()`.
   - `handler`: A callable that takes the current [`Dialog`](#dialog) and returns an optional prompt to speak (or `None`). The handler can also call `d.cancel()` or `d.restart()` to abandon or reset the active flow.
+
+- <a id="agentflow-otherwise"></a>`otherwise()`: Handles speech that matched no trigger and no waiting prompt. This is what a dictation interface hangs its text off: `on_heard()` reports every line including commands and answers, while this one reports only the lines nothing else claimed, so "delete the last sentence" starts your flow instead of being typed into the document. Registering a handler also silences the "didn't get that" cue, since unmatched speech is no longer a dead end. Nothing arrives here while a flow is running, because a flow's prompts take every line until it finishes.
+  - `handler`: A callable that takes the utterance as a string.
 
 - <a id="agentflow-load"></a>`load()`: Downloads and opens everything the runner needs — the phrase-matching model, a speech synthesizer, and a microphone transcriber — skipping any you've supplied or turned off. Blocking, since the first call may have to download models; report progress with `on_progress()`. Returns the runner.
 

@@ -175,6 +175,42 @@ test('an utterance matching no trigger is ignored when idle', async () => {
   assert.deepEqual(spoken, []);
 });
 
+test('otherwise sees only the lines nothing else claimed', async () => {
+  const { agent, spoken } = makeFlow();
+  const leftovers = [];
+  agent.listenFor('start setup', async (d) => {
+    await d.ask('Name?');
+  });
+  agent.otherwise((text) => void leftovers.push(text));
+
+  await agent.handleUtterance('the weather is nice today');
+  assert.deepEqual(leftovers, ['the weather is nice today']);
+
+  // A trigger phrase belongs to the flow it starts, and the answer that
+  // follows belongs to the prompt waiting for it.
+  await agent.handleUtterance('start setup');
+  await agent.handleUtterance('Alice');
+  assert.deepEqual(leftovers, ['the weather is nice today']);
+  assert.ok(spoken.includes('Name?'));
+});
+
+test('otherwise handlers see utterances in the order they were spoken', async () => {
+  const { agent } = makeFlow();
+  const leftovers = [];
+  agent.otherwise(async (text) => {
+    // A slow line must not let the one behind it overtake, or a dictation
+    // buffer would end up scrambled.
+    await new Promise((resolve) => setTimeout(resolve, text === 'first' ? 20 : 0));
+    leftovers.push(text);
+  });
+
+  await Promise.all([
+    agent.handleUtterance('first'),
+    agent.handleUtterance('second'),
+  ]);
+  assert.deepEqual(leftovers, ['first', 'second']);
+});
+
 test('say() speaks outside of any flow', async () => {
   const { agent, spoken } = makeFlow();
   await agent.say('Welcome!');

@@ -602,6 +602,7 @@ class AgentFlow:
         self._heard_fn: Optional[Callable[[str], None]] = None
         self._said_fn: Optional[Callable[[str], None]] = None
         self._error_fn: Optional[Callable[[BaseException], None]] = None
+        self._otherwise_fn: Optional[Callable[[str], None]] = None
 
         self._speak_fn: Optional[Callable[[str], None]] = None
         self._mute_fn: Optional[Callable[[bool], None]] = None
@@ -1125,6 +1126,21 @@ class AgentFlow:
         self._invalidate_trigger_matcher()
         return self
 
+    def otherwise(self, handler: Callable[[str], None]) -> AgentFlow:
+        """Handle speech that matched no trigger and no waiting prompt.
+
+        This is what a dictation interface hangs its text off:
+        :meth:`on_heard` reports every line including commands and answers,
+        while ``handler`` receives only the lines nothing else claimed.
+        Registering one also silences the "didn't get that" cue, since
+        unmatched speech is no longer a dead end.
+
+        Nothing arrives here while a flow is running, because a flow's
+        prompts take every line until it finishes.
+        """
+        self._otherwise_fn = handler
+        return self
+
     def _invalidate_trigger_matcher(self) -> None:
         self._trigger_matcher = None
 
@@ -1304,10 +1320,22 @@ class AgentFlow:
             self._start_flow(trigger_phrase)
             return True
 
-        # Nothing in AgentFlow's domain matched, so play the "didn't get
-        # that" cue: the line wasn't a flow trigger, a global, or an
-        # answer to the active prompt, and silence here is a bad
-        # experience.
+        # Nothing in AgentFlow's domain matched.  A catch-all handler is a
+        # global that takes every leftover line rather than one phrase, so
+        # the utterance is still consumed.
+        if self._otherwise_fn is not None:
+            self._log("handle_utterance: unmatched, calling otherwise")
+            try:
+                self._otherwise_fn(utterance)
+            except Exception as e:
+                self._report_error(
+                    MoonshineError(f"otherwise handler raised {e!r}")
+                )
+            return True
+
+        # No one wanted it, so play the "didn't get that" cue: the line
+        # wasn't a flow trigger, a global, or an answer to the active
+        # prompt, and silence here is a bad experience.
         self._log("handle_utterance: no handler matched")
         self._play_error_beep()
         return False

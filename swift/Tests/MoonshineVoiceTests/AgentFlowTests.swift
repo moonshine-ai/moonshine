@@ -189,6 +189,44 @@ final class AgentFlowTests: XCTestCase {
         XCTAssertFalse(agent.isActive)
     }
 
+    func testOtherwiseSeesOnlyUnclaimedLines() async throws {
+        let spoken = Transcript()
+        let leftovers = Transcript()
+        let agent = makeAgent(spoken)
+        agent.otherwise { leftovers.append($0) }
+        agent.listenFor("start setup") { d in
+            _ = try await d.ask("Name?")
+        }
+
+        await agent.handleUtterance("the weather is nice today")
+        XCTAssertEqual(leftovers.all, ["the weather is nice today"])
+
+        // A trigger phrase belongs to the flow it starts, and the answer that
+        // follows belongs to the prompt waiting for it.
+        await agent.handleUtterance("start setup")
+        await agent.handleUtterance("Alice")
+
+        XCTAssertEqual(leftovers.all, ["the weather is nice today"])
+        XCTAssertTrue(spoken.all.contains("Name?"))
+    }
+
+    func testHandleUtteranceWaitsForASlowOtherwiseHandler() async throws {
+        let spoken = Transcript()
+        let leftovers = Transcript()
+        let agent = makeAgent(spoken)
+        agent.otherwise { text in
+            // Handlers are awaited, so a line that takes its time still
+            // finishes before the next one is dispatched. Without that, a
+            // dictation buffer would end up scrambled.
+            try? await Task.sleep(nanoseconds: 20_000_000)
+            leftovers.append(text)
+        }
+
+        await agent.handleUtterance("a slow line")
+
+        XCTAssertEqual(leftovers.all, ["a slow line"])
+    }
+
     func testSpellOutSeparatesCharacters() {
         XCTAssertEqual(spellOut("wifi"), "w i f i")
     }

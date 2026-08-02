@@ -227,6 +227,8 @@ public final class AgentFlow {
     private final CopyOnWriteArrayList<Consumer<String>> saidHandlers = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<Consumer<Throwable>> errorHandlers =
             new CopyOnWriteArrayList<>();
+    private final CopyOnWriteArrayList<Consumer<String>> unmatchedHandlers =
+            new CopyOnWriteArrayList<>();
 
     @Nullable private TextToSpeech tts;
     @Nullable private EmbeddingModel embedding;
@@ -348,6 +350,20 @@ public final class AgentFlow {
             globalOrder.add(phrase);
         }
         globals.put(phrase, handler);
+        return this;
+    }
+
+    /**
+     * Registers a handler, called on the main thread, for speech that matched no global, no
+     * waiting prompt and no trigger. This is what a dictation interface hangs its text off:
+     * {@link #onHeard} reports every line including commands and answers, while this one reports
+     * only the lines nothing else claimed.
+     *
+     * <p>Nothing arrives here while a flow is running, because a flow's prompts take every line
+     * until it finishes.
+     */
+    public AgentFlow otherwise(Consumer<String> handler) {
+        unmatchedHandlers.add(handler);
         return this;
     }
 
@@ -483,7 +499,13 @@ public final class AgentFlow {
             Flow flow = flows.get(trigger);
             if (flow != null) {
                 runFlow(trigger, flow);
+                return;
             }
+        }
+        // Nothing in the agent's domain wanted this line, so hand it to whoever asked for the
+        // leftovers.
+        for (Consumer<String> handler : unmatchedHandlers) {
+            MAIN.post(() -> handler.accept(utterance));
         }
     }
 

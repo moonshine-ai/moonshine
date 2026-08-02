@@ -180,6 +180,7 @@ export class Dialog {
 
 export type FlowFn = (dialog: Dialog) => void | Promise<void>;
 export type GlobalHandler = (dialog: Dialog) => void | Promise<void>;
+export type UnmatchedHandler = (text: string) => void | Promise<void>;
 
 interface PendingAnswer {
   resolve(text: string): void;
@@ -205,6 +206,7 @@ export class AgentFlow {
   private heardCallbacks: Array<(text: string) => void> = [];
   private saidCallbacks: Array<(text: string) => void> = [];
   private errorCallbacks: Array<(error: Error) => void> = [];
+  private unmatchedCallbacks: UnmatchedHandler[] = [];
 
   private mod?: MoonshineModule;
   private sharedDownloader?: AssetDownloader;
@@ -332,6 +334,20 @@ export class AgentFlow {
    */
   always(phrase: string, handler: GlobalHandler): this {
     this.globals.set(phrase, handler);
+    return this;
+  }
+
+  /**
+   * Registers a handler for speech that matched no global, no waiting prompt
+   * and no trigger. This is what a dictation interface hangs its text off:
+   * `onHeard` reports every line including commands and answers, while this
+   * one reports only the lines nothing else claimed.
+   *
+   * Nothing arrives here while a flow is running, because a flow's prompts
+   * take every line until it finishes.
+   */
+  otherwise(handler: UnmatchedHandler): this {
+    this.unmatchedCallbacks.push(handler);
     return this;
   }
 
@@ -582,7 +598,12 @@ export class AgentFlow {
       const settled = this.settledSignal();
       void this.runFlow(trigger);
       await settled;
+      return;
     }
+    // Nothing in the agent's domain wanted this line, so hand it to whoever
+    // asked for the leftovers. Awaited, so that a handler doing async work
+    // still sees utterances in the order they were spoken.
+    for (const handler of this.unmatchedCallbacks) await handler(utterance);
   }
 
   private matchTrigger(utterance: string): string | undefined {

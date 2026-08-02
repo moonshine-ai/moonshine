@@ -65,6 +65,18 @@ public class AgentFlowTest {
         }
     }
 
+    /** Waits for a main-thread callback to have delivered {@code count} items. */
+    private static void awaitCount(List<String> items, int count) {
+        long deadline = System.currentTimeMillis() + 2000;
+        while (items.size() < count) {
+            if (System.currentTimeMillis() > deadline) {
+                throw new AssertionError(
+                        "Timed out waiting for " + count + " item(s); have " + items);
+            }
+            sleep();
+        }
+    }
+
     @Test
     public void testRunsAFlowToCompletion() {
         AgentFlow agent = newAgent();
@@ -146,6 +158,28 @@ public class AgentFlowTest {
         assertEquals("bluetooth", picked.get());
         assertEquals("expected one prompt plus one re-prompt", 2, spoken.size());
         assertTrue(spoken.get(1).contains("Which one?"));
+        agent.close();
+    }
+
+    @Test
+    public void testOtherwiseSeesOnlyUnclaimedLines() {
+        AgentFlow agent = newAgent();
+        List<String> leftovers = new CopyOnWriteArrayList<>();
+        agent.otherwise(leftovers::add);
+        agent.listenFor("start setup", d -> d.ask("Name?"));
+
+        agent.handleUtterance("the weather is nice today");
+        awaitCount(leftovers, 1);
+        assertEquals(Arrays.asList("the weather is nice today"), new ArrayList<>(leftovers));
+
+        // A trigger phrase belongs to the flow it starts, and the answer that
+        // follows belongs to the prompt waiting for it.
+        agent.handleUtterance("start setup");
+        answer(agent, 1, "Alice");
+        assertTrue(agent.waitUntilIdle(3000));
+
+        assertEquals(1, leftovers.size());
+        assertTrue(spoken.contains("Name?"));
         agent.close();
     }
 

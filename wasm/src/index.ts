@@ -100,4 +100,5 @@ export {
   type ConfirmOptions,
   type FlowFn,
   type GlobalHandler,
+  type UnmatchedHandler,
 } from './agent-flow.js';

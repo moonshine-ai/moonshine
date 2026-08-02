@@ -146,6 +146,10 @@ public final class Dialog: @unchecked Sendable {
 @available(iOS 15.0, macOS 12.0, *)
 public typealias FlowFunction = @Sendable (Dialog) async throws -> Void
 
+/// Receives speech that no flow, global or prompt claimed.
+@available(iOS 15.0, macOS 12.0, *)
+public typealias UnmatchedHandler = @Sendable (String) async -> Void
+
 @available(iOS 15.0, macOS 12.0, *)
 public final class AgentFlow: @unchecked Sendable {
     private static let defaultTriggerThreshold: Float = 0.7
@@ -169,6 +173,7 @@ public final class AgentFlow: @unchecked Sendable {
     private var heardHandlers: [@Sendable (String) -> Void] = []
     private var saidHandlers: [@Sendable (String) -> Void] = []
     private var errorHandlers: [@Sendable (Error) -> Void] = []
+    private var unmatchedHandlers: [UnmatchedHandler] = []
 
     private var tts: TextToSpeech?
     private var embedding: EmbeddingModel?
@@ -296,6 +301,19 @@ public final class AgentFlow: @unchecked Sendable {
     public func always(_ phrase: String, _ handler: @escaping FlowFunction) -> Self {
         if globals[phrase] == nil { globalOrder.append(phrase) }
         globals[phrase] = handler
+        return self
+    }
+
+    /// Registers a handler for speech that matched no global, no waiting
+    /// prompt and no trigger. This is what a dictation interface hangs its
+    /// text off: ``onHeard(_:)`` reports every line including commands and
+    /// answers, while this one reports only the lines nothing else claimed.
+    ///
+    /// Nothing arrives here while a flow is running, because a flow's prompts
+    /// take every line until it finishes.
+    @discardableResult
+    public func otherwise(_ handler: @escaping UnmatchedHandler) -> Self {
+        unmatchedHandlers.append(handler)
         return self
     }
 
@@ -576,7 +594,12 @@ public final class AgentFlow: @unchecked Sendable {
             let settled = registerSettle()
             Task { await runFlow(trigger, flow: flow) }
             await settled.wait()
+            return
         }
+        // Nothing in the agent's domain wanted this line, so hand it to
+        // whoever asked for the leftovers. Awaited, so that a handler doing
+        // async work still sees utterances in the order they were spoken.
+        for handler in unmatchedHandlers { await handler(utterance) }
     }
 
     private func matchTrigger(_ utterance: String) -> String? {
