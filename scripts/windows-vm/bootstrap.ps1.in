@@ -1,0 +1,62 @@
+# Runs once, from the answer file, during the guest's first (and only)
+# interactive logon. Its whole job is to make the VM reachable over SSH so the
+# rest of the toolchain can be installed remotely, where failures are visible.
+#
+# Keep this short and dependency-free: anything that needs the network or a
+# package manager belongs in provision-toolchain.ps1, which runs over SSH once
+# this has succeeded.
+
+$ErrorActionPreference = 'Stop'
+Start-Transcript -Path 'C:\bootstrap.log' -Append
+
+try {
+    Write-Host '== Installing OpenSSH Server =='
+    # Ships inbox on Windows 11, so this resolves without network access.
+    Add-WindowsCapability -Online -Name 'OpenSSH.Server~~~~0.0.1.0'
+
+    Write-Host '== Starting sshd =='
+    Set-Service -Name sshd -StartupType Automatic
+    Start-Service -Name sshd
+
+    Write-Host '== Authorizing the build host key =='
+    # Members of Administrators are authorized from this one file, not from
+    # their own profile, and sshd refuses it unless SYSTEM and Administrators
+    # are its only ACL entries.
+    $keyFile = Join-Path $env:ProgramData 'ssh\administrators_authorized_keys'
+    Set-Content -Path $keyFile -Value '@@SSH_PUBKEY@@' -Encoding ascii
+    icacls $keyFile /inheritance:r /grant 'Administrators:F' /grant 'SYSTEM:F'
+
+    Write-Host '== Opening the firewall for SSH =='
+    if (-not (Get-NetFirewallRule -Name 'sshd' -ErrorAction SilentlyContinue)) {
+        New-NetFirewallRule -Name 'sshd' -DisplayName 'OpenSSH Server (sshd)' `
+            -Enabled True -Direction Inbound -Protocol TCP -Action Allow `
+            -LocalPort 22 | Out-Null
+    }
+
+    Write-Host '== PowerShell as the SSH login shell =='
+    # build-all-platforms.sh sends the remote command as PowerShell, with
+    # backtick line continuations and $LASTEXITCODE, so cmd.exe would mangle it.
+    New-ItemProperty -Path 'HKLM:\SOFTWARE\OpenSSH' -Name DefaultShell `
+        -Value 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' `
+        -PropertyType String -Force | Out-Null
+
+    Write-Host '== Keeping the box awake and stable for long builds =='
+    powercfg /setactive SCHEME_MIN
+    powercfg /change standby-timeout-ac 0
+    powercfg /change hibernate-timeout-ac 0
+    powercfg /change monitor-timeout-ac 0
+    powercfg /hibernate off
+    # A reboot in the middle of a multi-hour build looks exactly like a network
+    # failure from the client side, so never let Windows Update pick the moment.
+    $auPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU'
+    New-Item -Path $auPath -Force | Out-Null
+    New-ItemProperty -Path $auPath -Name 'NoAutoRebootWithLoggedOnUsers' `
+        -Value 1 -PropertyType DWord -Force | Out-Null
+
+    Write-Host '== Bootstrap complete =='
+} catch {
+    Write-Host "BOOTSTRAP FAILED: $_"
+    $_ | Format-List -Force
+} finally {
+    Stop-Transcript
+}
