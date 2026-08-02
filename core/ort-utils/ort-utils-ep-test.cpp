@@ -65,6 +65,11 @@ TEST_CASE("ort_append_execution_providers") {
   // (docs/execution-providers.md). What must hold in the absent case is that
   // the caller is told where to look rather than handed ORT's "not supported
   // in this build".
+  //
+  // Guarded by the same condition as its only callers below: on a platform
+  // that is neither, the lambda is dead and GCC's -Wunused-but-set-variable
+  // fails the build under -Werror.
+#if defined(__APPLE__) || defined(__ANDROID__)
   auto check_optional_provider = [&](const char *name) {
     OrtStatus *status = ort_append_execution_providers(api, opts, {name},
                                                        nullptr);
@@ -75,6 +80,7 @@ TEST_CASE("ort_append_execution_providers") {
     CHECK(message.find("docs/execution-providers.md") != std::string::npos);
     api->ReleaseStatus(status);
   };
+#endif
 
 #if defined(__APPLE__)
   SUBCASE("coreml provider appends or explains its absence") {
@@ -126,7 +132,9 @@ TEST_CASE("ort session with execution providers") {
     api->ReleaseSessionOptions(opts);
   }
 
-  // Same reasoning as above: run the session only where the provider exists.
+  // Same reasoning as above, including the guard: run the session only where
+  // the provider exists.
+#if defined(__APPLE__) || defined(__ANDROID__)
   auto check_optional_provider_session = [&](const char *name) {
     OrtSessionOptions *opts = nullptr;
     REQUIRE(api->CreateSessionOptions(&opts) == nullptr);
@@ -149,6 +157,7 @@ TEST_CASE("ort session with execution providers") {
     }
     api->ReleaseSessionOptions(opts);
   };
+#endif
 
 #if defined(__APPLE__)
   SUBCASE("coreml session creation") {
