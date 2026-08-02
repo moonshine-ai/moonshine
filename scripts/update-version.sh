@@ -31,6 +31,8 @@ KNOWN_FILES=(
 	./build.gradle.kts
 	./wasm/package.json
 	./wasm/package-lock.json
+	./wasm/tests/web-examples.integration.test.mjs
+	./examples/web/assets/snippets.js
 	./examples/macos/BasicTranscription/BasicTranscription.xcodeproj/project.pbxproj
 	./examples/macos/BasicTranscription/Package.swift
 	./examples/macos/MicTranscription/MicTranscription.xcodeproj/project.pbxproj
