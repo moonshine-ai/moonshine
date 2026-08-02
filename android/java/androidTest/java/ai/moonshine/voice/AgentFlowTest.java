@@ -142,6 +142,42 @@ public class AgentFlowTest {
     }
 
     @Test
+    public void testBuiltInGlobalsDoNotClaimSpeechOutsideAFlow() {
+        AgentFlow agent = newAgent();
+        List<String> leftovers = new CopyOnWriteArrayList<>();
+        agent.otherwise(leftovers::add);
+        agent.listenFor("set up wifi", d -> d.ask("Name?"));
+
+        // Nothing is active, so there is no flow for either phrase to act on and they are just
+        // words. Claiming them here would lose a line of dictation.
+        agent.handleUtterance("cancel");
+        agent.handleUtterance("start over");
+        agent.handleUtterance("cancel my subscription tomorrow");
+        awaitCount(leftovers, 3);
+
+        assertEquals(
+                Arrays.asList("cancel", "start over", "cancel my subscription tomorrow"),
+                new ArrayList<>(leftovers));
+        agent.close();
+    }
+
+    @Test
+    public void testRegisteringABuiltInPhraseWithAlwaysMakesItLive() {
+        AgentFlow agent = newAgent();
+        List<String> leftovers = new CopyOnWriteArrayList<>();
+        List<String> cancels = new CopyOnWriteArrayList<>();
+        agent.otherwise(leftovers::add);
+        agent.always("cancel", d -> cancels.add("cancel"));
+
+        agent.handleUtterance("cancel");
+        awaitCount(cancels, 1);
+
+        assertEquals(Arrays.asList("cancel"), new ArrayList<>(cancels));
+        assertTrue(leftovers.isEmpty());
+        agent.close();
+    }
+
+    @Test
     public void testRepromptsWhenTheAnswerMakesNoSense() {
         AgentFlow agent = newAgent();
         AtomicReference<String> picked = new AtomicReference<>();
@@ -180,6 +216,32 @@ public class AgentFlowTest {
 
         assertEquals(1, leftovers.size());
         assertTrue(spoken.contains("Name?"));
+        agent.close();
+    }
+
+    @Test
+    public void testSilencedRunnerStillAdvancesFlows() {
+        // No speakWith here: speech(false) is the whole configuration, and the prompts have to
+        // keep flowing without a synthesizer behind them.
+        AgentFlow agent = new AgentFlow(context).microphone(false).speech(false);
+        List<String> said = new CopyOnWriteArrayList<>();
+        agent.onSaid(said::add);
+        agent.listenFor("begin", d -> {
+            String name = d.ask("Name?");
+            d.say("Hello, " + name + ".");
+        });
+
+        agent.handleUtterance("begin");
+        awaitCount(said, 1);
+        long deadline = System.currentTimeMillis() + 2000;
+        while (!agent.isAwaitingAnswer() && System.currentTimeMillis() < deadline) {
+            sleep();
+        }
+        agent.handleUtterance("Alice");
+        assertTrue(agent.waitUntilIdle(3000));
+        awaitCount(said, 2);
+
+        assertEquals(Arrays.asList("Name?", "Hello, Alice."), new ArrayList<>(said));
         agent.close();
     }
 

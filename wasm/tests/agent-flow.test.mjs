@@ -137,6 +137,51 @@ test('the built-in start over global restarts the active flow', async () => {
   assert.equal(spoken.filter((s) => s === 'Name?').length, 2);
 });
 
+test('the built-in globals do not claim speech when no flow is running', async () => {
+  const { agent } = makeFlow();
+  const leftovers = [];
+  agent.otherwise((text) => void leftovers.push(text));
+
+  // Nothing is active, so there is no flow for either phrase to act on and
+  // they are just words. Claiming them here would lose a line of dictation.
+  await agent.handleUtterance('cancel');
+  await agent.handleUtterance('start over');
+
+  assert.deepEqual(leftovers, ['cancel', 'start over']);
+});
+
+test('a sentence that merely contains a built-in phrase still reaches otherwise', async () => {
+  const { agent } = makeFlow();
+  const leftovers = [];
+  agent.otherwise((text) => void leftovers.push(text));
+  agent.listenFor('start setup', async (d) => {
+    await d.ask('Name?');
+  });
+
+  await agent.handleUtterance('cancel my subscription tomorrow');
+  assert.deepEqual(leftovers, ['cancel my subscription tomorrow']);
+
+  // Inside a flow the same phrase is a command again, and the flow is torn
+  // down rather than the line being dictated.
+  await agent.handleUtterance('start setup');
+  await agent.handleUtterance('cancel my subscription tomorrow');
+  assert.equal(agent.isActive, false);
+  assert.deepEqual(leftovers, ['cancel my subscription tomorrow']);
+});
+
+test('registering a built-in phrase with always makes it live outside a flow', async () => {
+  const { agent } = makeFlow();
+  const leftovers = [];
+  const cancels = [];
+  agent.otherwise((text) => void leftovers.push(text));
+  agent.always('cancel', () => void cancels.push('cancel'));
+
+  await agent.handleUtterance('cancel');
+
+  assert.deepEqual(cancels, ['cancel'], 'an explicitly registered global is always live');
+  assert.deepEqual(leftovers, []);
+});
+
 test('a custom global runs without disturbing the flow', async () => {
   const { agent, spoken } = makeFlow();
   agent.listenFor('begin', async (d) => {
@@ -238,6 +283,7 @@ test('configuration setters chain and return the agent', () => {
   assert.equal(agent.language('es'), agent);
   assert.equal(agent.voice('kokoro_af_heart'), agent);
   assert.equal(agent.microphone(false), agent);
+  assert.equal(agent.speech(false), agent);
   assert.equal(agent.triggerThreshold(0.5), agent);
   assert.equal(
     agent.listenFor('x', async () => {}),
@@ -247,6 +293,25 @@ test('configuration setters chain and return the agent', () => {
     agent.always('y', async () => {}),
     agent,
   );
+});
+
+test('a silenced runner still advances flows and reports prompts', async () => {
+  const said = [];
+  // No speakWith here: speech(false) is the whole configuration, and the
+  // prompts have to keep flowing without a synthesizer behind them.
+  const agent = new AgentFlow().speech(false).onSaid((text) => void said.push(text));
+  let finished = false;
+  agent.listenFor('begin', async (d) => {
+    const name = await d.ask('Name?');
+    await d.say(`Hello, ${name}.`);
+    finished = true;
+  });
+
+  await agent.handleUtterance('begin');
+  await agent.handleUtterance('Alice');
+
+  assert.deepEqual(said, ['Name?', 'Hello, Alice.']);
+  assert.equal(finished, true);
 });
 
 test('Dialog exposes the trigger phrase and scratch state', () => {

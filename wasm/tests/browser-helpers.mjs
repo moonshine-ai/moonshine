@@ -105,12 +105,18 @@ export async function startExampleServer() {
   };
 }
 
-/** Launches a headless browser suited to the cross-origin-isolated examples. */
-export async function launchBrowser(puppeteer, executablePath) {
+/**
+ * Launches a headless browser suited to the cross-origin-isolated examples.
+ *
+ * `extraArgs` is for a test that needs something the others must not have, such
+ * as `--use-file-for-fake-audio-capture` to speak a wav file into the microphone.
+ */
+export async function launchBrowser(puppeteer, executablePath, extraArgs = []) {
   return puppeteer.launch({
     executablePath,
     headless: true,
     args: [
+      ...extraArgs,
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',

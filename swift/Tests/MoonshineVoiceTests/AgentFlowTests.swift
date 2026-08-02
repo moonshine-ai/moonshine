@@ -111,6 +111,58 @@ final class AgentFlowTests: XCTestCase {
             spoken.all, ["Which network?", "Which network?", "Using home network."])
     }
 
+    func testBuiltInGlobalsDoNotClaimSpeechOutsideAFlow() async throws {
+        let spoken = Transcript()
+        let agent = makeAgent(spoken)
+        let leftovers = Transcript()
+        agent.otherwise { text in leftovers.append(text) }
+        agent.listenFor("set up wifi") { d in
+            _ = try await d.ask("Which network?")
+        }
+
+        // Nothing is active, so there is no flow for either phrase to act on
+        // and they are just words. Claiming them here would lose a line of
+        // dictation.
+        await agent.handleUtterance("cancel")
+        await agent.handleUtterance("start over")
+        await agent.handleUtterance("cancel my subscription tomorrow")
+
+        XCTAssertEqual(
+            leftovers.all, ["cancel", "start over", "cancel my subscription tomorrow"])
+    }
+
+    func testRegisteringABuiltInPhraseWithAlwaysMakesItLive() async throws {
+        let spoken = Transcript()
+        let agent = makeAgent(spoken)
+        let leftovers = Transcript()
+        let cancels = Transcript()
+        agent.otherwise { text in leftovers.append(text) }
+        agent.always("cancel") { _ in cancels.append("cancel") }
+
+        await agent.handleUtterance("cancel")
+
+        XCTAssertEqual(cancels.all, ["cancel"])
+        XCTAssertTrue(leftovers.all.isEmpty)
+    }
+
+    func testSilencedRunnerStillAdvancesFlows() async throws {
+        let said = Transcript()
+        // No speakWith here: speech(false) is the whole configuration, and the
+        // prompts have to keep flowing without a synthesizer behind them.
+        let agent = AgentFlow().microphone(false).speech(false)
+        agent.onSaid { text in said.append(text) }
+        agent.listenFor("begin") { d in
+            let name = try await d.ask("Name?")
+            try await d.say("Hello, \(name).")
+        }
+
+        await agent.handleUtterance("begin")
+        await agent.handleUtterance("Alice")
+
+        XCTAssertEqual(said.all, ["Name?", "Hello, Alice."])
+        XCTAssertFalse(agent.isActive)
+    }
+
     func testRepromptsThenGivesUp() async throws {
         let spoken = Transcript()
         let agent = makeAgent(spoken)

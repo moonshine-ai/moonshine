@@ -160,7 +160,8 @@ await agent.load();
 await agent.startListening();
 ```
 
-`cancel` and `start over` are built in, so applications no longer register them.
+`cancel` and `start over` are built into a running flow, so applications no
+longer register them.
 Speaking is internal, so there is no `speakFn` and no application-visible
 text-to-speech handle. Applications that want a conversation log attach
 `agent.onHeard(...)` and `agent.onSaid(...)`; applications that want a

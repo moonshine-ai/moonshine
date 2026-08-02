@@ -1,7 +1,7 @@
 /**
  * Shared chrome and helpers for the Moonshine web examples.
  *
- * The three demo pages each show off a different part of the library, but they
+ * The demo pages each show off a different part of the library, but they
  * all need the same surrounding furniture: navigation between the demos, a
  * download-progress presenter that makes the one-time model fetch feel
  * intentional, a code panel that shows the calls the page actually made, and a
@@ -22,10 +22,12 @@ const NPM_PACKAGE = '@moonshine-ai/moonshine-wasm';
 // as the examples move around between releases.
 const SOURCE_BASE = `${GITHUB_URL}/blob/main`;
 
+// Walkthroughs of the mechanics first, then the apps built out of them.
 const DEMOS = [
   { id: 'stt', href: '/stt/', label: 'Speech to Text' },
   { id: 'tts', href: '/tts/', label: 'Text to Speech' },
   { id: 'agent', href: '/agent-flow/', label: 'Voice Agent' },
+  { id: 'dictation', href: '/dictation/', label: 'Dictation App' },
 ];
 
 // --- Page configuration ---------------------------------------------------
@@ -85,7 +87,7 @@ const GITHUB_SVG = `
  * Injects the shared top navigation and footer.
  *
  * @param {object} options
- * @param {'stt'|'tts'|'agent'|'home'} options.active  Which tab to mark.
+ * @param {'stt'|'tts'|'agent'|'dictation'|'home'} options.active  Which tab to mark.
  * @param {string} [options.ctaTitle]  Headline above the footer buttons.
  */
 export function mountChrome({ active, ctaTitle } = {}) {

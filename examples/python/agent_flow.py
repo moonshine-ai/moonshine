@@ -104,8 +104,6 @@ def run_live(args: argparse.Namespace) -> None:
         .listen_for("configure wifi", setup_wifi)
         .listen_for("onboard me", full_onboarding)
         .listen_for("set the timezone", set_timezone)
-        .always("cancel", lambda d: d.cancel())
-        .always("start over", lambda d: d.restart())
     )
     if getattr(args, "output_device", None) is not None:
         runner.output_device(args.output_device)
@@ -161,8 +159,6 @@ def _build_text_runner(*, debug: bool = False) -> AgentFlow:
         .listen_for("configure wifi", setup_wifi)
         .listen_for("onboard me", full_onboarding)
         .listen_for("set the timezone", set_timezone)
-        .always("cancel", lambda d: d.cancel())
-        .always("start over", lambda d: d.restart())
         .load()
     )
 

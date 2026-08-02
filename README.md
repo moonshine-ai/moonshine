@@ -450,13 +450,12 @@ Once your flows are written, the only setup left is to register them and go live
         .language("en")
         .listen_for("What is my IP address?", report_ip_address)
         .listen_for("Connect to Wi-Fi", connect_to_wifi)
-        .always("cancel", lambda d: d.cancel())
     )
 
     agent_flow.start_listening()
 ```
 
-Every configuration method returns the runner, so a whole voice interface can be built in a single expression, and each one has a working default. `listen_for()` registers the conversation starters, and `always()` registers phrases like "cancel" that stay live even while a flow is running.
+Every configuration method returns the runner, so a whole voice interface can be built in a single expression, and each one has a working default. `listen_for()` registers the conversation starters. "Cancel" and "start over" need no registration: they work at any point inside a flow, and outside one they're treated as ordinary speech so a dictation interface doesn't lose them. Use `always()` to register a phrase of your own that stays live at every moment, whether or not a flow is running.
 
 `start_listening()` opens and downloads whatever is missing on first use (the embedding model used for matching, the speech to text model for your language, and a synthesizer), then returns as soon as the microphone is live. Speech arrives on the audio thread and drives your flows from there, so your own code is free to sleep, run a UI, or do anything else. If you want the loading to happen at a moment of your choosing rather than on the first `start_listening()` call, call `load()` yourself beforehand and pass `on_progress()` a callback to report download progress. Call `close()` when you're finished to release everything the runner opened.
 
@@ -688,6 +687,11 @@ The [`examples`](examples/) folder has code samples organized by platform. We us
 - **[Raspberry Pi](examples/raspberry-pi/)**
   - [my-dalek](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz)
   - [Pi Help Bot](https://github.com/moonshine-ai/pi-help-bot/archive/refs/heads/main.zip)
+- **[Web](examples/web/)** (single pages, no build step; serve them with `node examples/web/serve.mjs`)
+  - [stt](examples/web/stt/index.html)
+  - [tts](examples/web/tts/index.html)
+  - [agent-flow](examples/web/agent-flow/index.html)
+  - [dictation](examples/web/dictation/index.html)
 
 The examples usually include one minimal project that just creates a transcriber and then feeds it data from a WAV file, and another that's pulling audio from a microphone using the platform's default framework for accessing audio devices. Each one is a self-contained project you can copy out of the tree: the Android samples depend on **`ai.moonshine:moonshine-voice:0.1.1`** from Maven Central, and the Apple ones pull **`MoonshineVoice`** from the Swift package.
 
@@ -1395,7 +1399,7 @@ The runner won't close a synthesizer or transcriber it didn't create.
 - <a id="agentflow-unregister-flow"></a>`unregister_flow()`: Removes a flow registered with `listen_for()`. Returns `True` if a flow was removed, `False` otherwise.
   - `trigger_phrase`: The trigger phrase used when the flow was registered.
 
-- <a id="agentflow-always"></a>`always()`: Registers a phrase that stays live even while a flow is running. Useful for commands like "cancel" or "start over" that should interrupt any in-progress conversation.
+- <a id="agentflow-always"></a>`always()`: Registers a phrase that stays live at every moment, whether or not a flow is running. "Cancel" and "start over" are built in and need no registration, but they apply only to a flow in progress, so an interface that dictates whatever it hears keeps those words when nothing is active. Registering either here opts it into being live all the time.
   - `trigger_phrase`: The canonical phrase to match, in the same way as `listen_for()`.
   - `handler`: A callable that takes the current [`Dialog`](#dialog) and returns an optional prompt to speak (or `None`). The handler can also call `d.cancel()` or `d.restart()` to abandon or reset the active flow.
 

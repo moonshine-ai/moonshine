@@ -55,34 +55,36 @@ function calledNames(code) {
   return new Set([...code.matchAll(/\.(\w+)\s*[({]/g)].map((match) => match[1]));
 }
 
-test('every caption anchor still points at the code it was taken from', async (t) => {
+async function assertAnchorMatches(snippet) {
   const { readFile } = await import('node:fs/promises');
+  const [start, end] = snippet.lines;
+  assert.ok(start >= 1 && end >= start, `nonsensical range ${start}-${end}`);
+
+  const source = (await readFile(path.join(REPO_ROOT, snippet.path), 'utf8')).split('\n');
+  assert.ok(
+    end <= source.length,
+    `${snippet.path} has ${source.length} lines, anchor runs to ${end}`,
+  );
+
+  // Line numbers drift as examples are edited. Rather than pin the exact text,
+  // which would fail on any reformat, check the linked region still contains
+  // the calls the snippet is showing off. Two is enough to tell "the code moved
+  // a little" from "this now points at something else".
+  const region = source.slice(start - 1, end).join('\n');
+  const wanted = [...calledNames(snippet.code)];
+  const found = wanted.filter((call) => region.includes(call));
+  assert.ok(
+    found.length >= 2,
+    `${snippet.path}#L${start}-L${end} no longer looks like this snippet. ` +
+      `Looked for ${wanted.join(', ')} and found ${found.join(', ') || 'none'}. ` +
+      `Move the range in snippets.js to wherever the code lives now.`,
+  );
+}
+
+test('every caption anchor still points at the code it was taken from', async (t) => {
   for (const [name, snippets] of ALL) {
     for (const snippet of snippets) {
-      await t.test(`${name} / ${snippet.id}`, async () => {
-        const [start, end] = snippet.lines;
-        assert.ok(start >= 1 && end >= start, `nonsensical range ${start}-${end}`);
-
-        const source = (await readFile(path.join(REPO_ROOT, snippet.path), 'utf8')).split('\n');
-        assert.ok(
-          end <= source.length,
-          `${snippet.path} has ${source.length} lines, anchor runs to ${end}`,
-        );
-
-        // Line numbers drift as examples are edited. Rather than pin the exact
-        // text, which would fail on any reformat, check the linked region still
-        // contains the calls the snippet is showing off. Two is enough to tell
-        // "the code moved a little" from "this now points at something else".
-        const region = source.slice(start - 1, end).join('\n');
-        const wanted = [...calledNames(snippet.code)];
-        const found = wanted.filter((call) => region.includes(call));
-        assert.ok(
-          found.length >= 2,
-          `${snippet.path}#L${start}-L${end} no longer looks like this snippet. ` +
-            `Looked for ${wanted.join(', ')} and found ${found.join(', ') || 'none'}. ` +
-            `Move the range in snippets.js to wherever the code lives now.`,
-        );
-      });
+      await t.test(`${name} / ${snippet.id}`, () => assertAnchorMatches(snippet));
     }
   }
 });

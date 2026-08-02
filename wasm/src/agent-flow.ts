@@ -17,8 +17,10 @@
  *
  * `load()` downloads and wires everything a voice interface needs: a streaming
  * speech-to-text model, an embedding model for matching trigger phrases, a
- * text-to-speech voice, and a microphone. A flow is an ordinary async function,
- * so it reads top to bottom and `try` / `finally` work the way you expect.
+ * text-to-speech voice, and a microphone. `speech(false)` and
+ * `microphone(false)` each drop one of those when an application does not need
+ * it. A flow is an ordinary async function, so it reads top to bottom and
+ * `try` / `finally` work the way you expect.
  *
  * Scope note vs. the Python runner: this port implements free-form asks plus
  * confirm/choose matching. The alphanumeric dictation subsystem and the
@@ -193,11 +195,19 @@ type Interpretation<T> = { ok: true; value: T } | { ok: false };
 export class AgentFlow {
   private readonly flows = new Map<string, FlowFn>();
   private readonly globals = new Map<string, GlobalHandler>();
+  /**
+   * Globals that only mean anything while a flow is running. The built-in
+   * "cancel" and "start over" are in here: matching them when nothing is
+   * active would consume the line, do nothing with it, and leave a dictation
+   * interface silently missing a sentence.
+   */
+  private readonly flowScopedGlobals = new Set<string>();
 
   private languageCode = 'en';
   private arch: ModelArch = ModelArch.MediumStreaming;
   private voiceId?: string;
   private wantsMicrophone = true;
+  private wantsSpeech = true;
   private threshold = DEFAULT_TRIGGER_THRESHOLD;
   private assetBase?: string;
   private context?: AudioContext;
@@ -235,8 +245,16 @@ export class AgentFlow {
   constructor() {
     // "cancel" and "start over" are what people actually say to a voice
     // interface, so they work without every application registering them.
-    this.globals.set('cancel', (d) => d.cancel());
-    this.globals.set('start over', (d) => d.restart());
+    // Both only apply to a flow in progress, so they stay out of the way of
+    // whatever else the microphone is being used for. Registering either with
+    // always() makes it live all the time, as any other global is.
+    this.addFlowScopedGlobal('cancel', (d) => d.cancel());
+    this.addFlowScopedGlobal('start over', (d) => d.restart());
+  }
+
+  private addFlowScopedGlobal(phrase: string, handler: GlobalHandler): void {
+    this.globals.set(phrase, handler);
+    this.flowScopedGlobals.add(phrase);
   }
 
   // --- Configuration ---
@@ -268,6 +286,16 @@ export class AgentFlow {
   /** Set to false to drive the agent from text instead of a microphone. */
   microphone(enabled: boolean): this {
     this.wantsMicrophone = enabled;
+    return this;
+  }
+
+  /**
+   * Whether {@link load} should open a synthesizer. Defaults to true. Turn it
+   * off for a silent runner: prompts still reach {@link onSaid} and flows still
+   * advance, they just aren't spoken, and no voice is downloaded.
+   */
+  speech(enabled = true): this {
+    this.wantsSpeech = enabled;
     return this;
   }
 
@@ -334,6 +362,9 @@ export class AgentFlow {
    */
   always(phrase: string, handler: GlobalHandler): this {
     this.globals.set(phrase, handler);
+    // Asking for a global by name means wanting it live, even if it is one of
+    // the built-ins that is otherwise limited to a running flow.
+    this.flowScopedGlobals.delete(phrase);
     return this;
   }
 
@@ -389,7 +420,9 @@ export class AgentFlow {
       });
     }
 
-    if (!this.tts) {
+    // A runner that has been silenced, or that speaks through a callback of
+    // its own, has no use for a voice and should not spend a download on one.
+    if (this.wantsSpeech && !this.tts && !this.speakOverride) {
       const tts = new TextToSpeech().language(this.languageCode).useModule(this.mod);
       if (this.voiceId) tts.voice(this.voiceId);
       if (this.assetBase) tts.modelsFrom(this.assetBase);
@@ -607,10 +640,22 @@ export class AgentFlow {
   }
 
   private matchTrigger(utterance: string): string | undefined {
-    const phrases = [...this.globals.keys(), ...this.flows.keys()];
+    const phrases = [...this.liveGlobals(), ...this.flows.keys()];
     if (phrases.length === 0) return undefined;
 
     return this.matcher.matchPhrases(utterance, phrases, this.threshold);
+  }
+
+  /**
+   * The globals worth matching right now. Flow-scoped ones are offered only
+   * while a flow is running, so with nothing active their phrases reach
+   * `otherwise()` like any other speech.
+   */
+  private liveGlobals(): string[] {
+    const phrases = [...this.globals.keys()];
+    if (this.flowScopedGlobals.size === 0) return phrases;
+    if (this.activeDialog !== undefined || this.pending !== undefined) return phrases;
+    return phrases.filter((phrase) => !this.flowScopedGlobals.has(phrase));
   }
 
   /**

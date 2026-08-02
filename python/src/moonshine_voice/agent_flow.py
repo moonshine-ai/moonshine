@@ -32,10 +32,14 @@ Register the flow against a trigger phrase and let the runner do the rest:
         AgentFlow()
         .language("en")
         .listen_for("set up wifi", setup_wifi)
-        .always("cancel", lambda d: d.cancel())
     )
     agent.load()
     agent.start_listening()
+
+"cancel" and "start over" need no registration: they work at any point
+inside a flow, and outside one they are treated as ordinary speech so a
+dictation interface doesn't lose them.  :meth:`AgentFlow.always` adds a
+phrase of your own that stays live at every moment.
 
 :meth:`AgentFlow.load` downloads and opens the speech recognition,
 speech synthesis and phrase-matching models, and
@@ -69,6 +73,7 @@ from typing import (
     Optional,
     Protocol,
     Sequence,
+    Set,
     Tuple,
     Union,
 )
@@ -647,12 +652,20 @@ class AgentFlow:
 
         self._flows: Dict[str, FlowFn] = {}
         self._globals: Dict[str, GlobalHandler] = {}
+        # Globals that only mean anything while a flow is running.  The
+        # built-in "cancel" and "start over" are in here: matching them
+        # when nothing is active would consume the line, do nothing with
+        # it, and leave a dictation interface silently missing a
+        # sentence.
+        self._flow_scoped_globals: Set[str] = set()
 
         self._active: Optional[_ActiveFlow] = None
         self._lock = threading.RLock()
 
         self._matcher_cache: Dict[Any, Optional[PhraseMatcher]] = {}
-        self._trigger_matcher: Optional[PhraseMatcher] = None
+        # Keyed by the phrases it covers, because that set changes with
+        # the flow-scoped globals coming and going.
+        self._trigger_matchers: Dict[Tuple[str, ...], Optional[PhraseMatcher]] = {}
 
         # Cached alphanumeric matchers.  These are stateless (only the
         # per-prompt ``_AlphaSession`` holds buffer state), so one
@@ -660,6 +673,15 @@ class AgentFlow:
         # time a ``SPELLED`` / ``DIGITS`` prompt is entered.
         self._spelled_matcher: Optional[AlphanumericMatcher] = None
         self._digits_matcher: Optional[AlphanumericMatcher] = None
+
+        # "cancel" and "start over" are what people actually say to a
+        # voice interface, so they work without every application
+        # registering them.  Both only apply to a flow in progress, so
+        # they stay out of the way of whatever else the microphone is
+        # being used for.  Registering either with :meth:`always` makes
+        # it live all the time, as any other global is.
+        self._add_flow_scoped_global("cancel", lambda d: d.cancel())
+        self._add_flow_scoped_global("start over", lambda d: d.restart())
 
     def _default_phrase_matcher(
         self,
@@ -1114,17 +1136,29 @@ class AgentFlow:
         return removed
 
     def always(self, trigger_phrase: str, handler: GlobalHandler) -> AgentFlow:
-        """Register a phrase that stays live even while a flow is running.
+        """Register a phrase that stays live at every moment.
 
         ``handler`` receives the current :class:`Dialog` (a fresh one when
         no flow is active) and may return a :class:`Prompt` to speak, or
         *None*.  It may also raise :class:`DialogCancelled` or
         :class:`DialogRestart` to influence the active flow, which is how
-        "cancel" and "start over" are usually wired up.
+        the built-in "cancel" and "start over" are wired up.  Those two
+        are limited to a running flow; registering either here opts it
+        into being live all the time.
         """
         self._globals[trigger_phrase] = handler
+        # Asking for a global by name means wanting it live, even if it
+        # is one of the built-ins that is otherwise limited to a running
+        # flow.
+        self._flow_scoped_globals.discard(trigger_phrase)
         self._invalidate_trigger_matcher()
         return self
+
+    def _add_flow_scoped_global(
+        self, trigger_phrase: str, handler: GlobalHandler
+    ) -> None:
+        self.always(trigger_phrase, handler)
+        self._flow_scoped_globals.add(trigger_phrase)
 
     def otherwise(self, handler: Callable[[str], None]) -> AgentFlow:
         """Handle speech that matched no trigger and no waiting prompt.
@@ -1142,7 +1176,7 @@ class AgentFlow:
         return self
 
     def _invalidate_trigger_matcher(self) -> None:
-        self._trigger_matcher = None
+        self._trigger_matchers.clear()
 
     # -- inspection ---------------------------------------------------------
 
@@ -1380,27 +1414,48 @@ class AgentFlow:
             return "flow", phrase
         return None, None
 
+    def _live_globals(self) -> List[str]:
+        """The globals worth matching right now.
+
+        Flow-scoped ones are offered only while a flow is running, so
+        with nothing active their phrases reach :meth:`otherwise` like
+        any other speech.
+        """
+        phrases = list(self._globals.keys())
+        if not self._flow_scoped_globals:
+            return phrases
+        with self._lock:
+            in_flow = self._active is not None
+        if in_flow:
+            return phrases
+        return [p for p in phrases if p not in self._flow_scoped_globals]
+
     def _get_trigger_matcher(self) -> Optional[PhraseMatcher]:
-        if self._trigger_matcher is not None:
-            return self._trigger_matcher
         if self._phrase_matcher_factory is None:
             return None
         phrases_by_key: Dict[str, List[str]] = {}
-        for p in self._globals.keys():
+        for p in self._live_globals():
             phrases_by_key[p] = [p]
         for p in self._flows.keys():
             if p not in phrases_by_key:
                 phrases_by_key[p] = [p]
         if not phrases_by_key:
             return None
+        # One matcher per candidate set, so entering and leaving a flow
+        # swaps between two cached matchers rather than embedding the
+        # phrases again on every utterance.
+        cache_key = tuple(phrases_by_key.keys())
+        if cache_key in self._trigger_matchers:
+            return self._trigger_matchers[cache_key]
         try:
-            self._trigger_matcher = self._phrase_matcher_factory(
+            matcher = self._phrase_matcher_factory(
                 phrases_by_key, self._trigger_threshold
             )
         except Exception as e:
             print(f"AgentFlow: trigger matcher creation failed: {e}", file=sys.stderr)
-            self._trigger_matcher = None
-        return self._trigger_matcher
+            matcher = None
+        self._trigger_matchers[cache_key] = matcher
+        return matcher
 
     # -- flow lifecycle -----------------------------------------------------
 
@@ -2468,8 +2523,6 @@ if __name__ == "__main__":
             )
         )
         .listen_for("set up wifi", wifi_setup)
-        .always("cancel", lambda d: d.cancel())
-        .always("start over", lambda d: d.restart())
     )
     if output_device is not None:
         runner.output_device(output_device)

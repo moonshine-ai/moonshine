@@ -6,7 +6,7 @@
     <title>Moonshine Voice | on-device speech demos</title>
     <meta
       name="description"
-      content="Speech to text, text to speech, and voice agents running entirely in your browser via WebAssembly. No API key, no account, no audio leaves your device."
+      content="Speech to text, text to speech, dictation, and voice agents running entirely in your browser via WebAssembly. No API key, no account, no audio leaves your device."
     />
     <meta property="og:title" content="Moonshine Voice | on-device speech demos" />
     <meta
@@ -24,9 +24,17 @@
         margin-top: 2rem;
       }
 
-      @media (min-width: 52rem) {
+      /* Two up, then four up: three columns would orphan the fourth card on a
+         row of its own. */
+      @media (min-width: 40rem) {
         .demo-grid {
-          grid-template-columns: repeat(3, 1fr);
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+
+      @media (min-width: 68rem) {
+        .demo-grid {
+          grid-template-columns: repeat(4, 1fr);
         }
       }
 
@@ -96,7 +104,7 @@
         <span class="ms-eyebrow">Everything here runs in this tab</span>
         <h1>Voice interfaces that never leave the device.</h1>
         <p>
-          Three live demos of <strong>Moonshine Voice</strong> compiled to WebAssembly.
+          Four live demos of <strong>Moonshine Voice</strong> compiled to WebAssembly.
           The models download once, then run on your own CPU: no API key, no account,
           and not a single byte of audio sent to a server.
         </p>
@@ -146,6 +154,22 @@
             wording. Say it however you like.
           </p>
           <span class="demo-card__go">Start talking →</span>
+        </a>
+
+        <a class="demo-card" href="/dictation/">
+          <span class="demo-card__icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 7h7M3 12h5M3 17h3" />
+              <path d="M17.5 3.5A2.5 2.5 0 0 0 15 6v3.5a2.5 2.5 0 0 0 5 0V6a2.5 2.5 0 0 0-2.5-2.5Z" />
+              <path d="M13 10a4.5 4.5 0 0 0 9 0M17.5 14.5V17" />
+            </svg>
+          </span>
+          <h2>Dictation App</h2>
+          <p>
+            A finished app rather than a demo: talk, and it types onto the page.
+            Edit by hand, then take it away as Markdown or Word.
+          </p>
+          <span class="demo-card__go">Start dictating →</span>
         </a>
       </div>
 

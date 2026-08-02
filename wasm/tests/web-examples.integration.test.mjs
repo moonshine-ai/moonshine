@@ -15,6 +15,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { mkdtemp, readdir, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import {
   REPO_ROOT,
   tryLoadPuppeteer,
@@ -163,6 +165,273 @@ test('Agent-flow example runs a whole conversation from typed input', { skip }, 
     await page.close();
   }
 });
+
+test('Dictation app types speech, obeys commands, and exports', { skip }, async () => {
+  const page = await openPage('/dictation/?local=1&assets=local&nomic=1');
+  const downloads = await captureDownloads(page);
+  const document_ = () => page.$eval('#doc', (el) => el.innerText);
+
+  /**
+   * Sends a phrase the way the page's own text box does, and waits for the
+   * document to settle. Every phrase below changes it: dictation inserts,
+   * commands edit, and a command that was mistaken for dictation would show up
+   * as its own words on the page.
+   */
+  async function say(text) {
+    const before = await document_();
+    await page.type('#utterance', text);
+    await page.click('#send');
+    await page.waitForFunction(
+      (previous) => document.getElementById('doc').innerText !== previous,
+      { timeout: 120000 },
+      before,
+    );
+    return document_();
+  }
+
+  try {
+    // nomic=1 builds the runner without a microphone, so the only model it
+    // needs is the one that tells a command from dictation.
+    await page.waitForFunction(() => document.body.dataset.state === 'ready', {
+      timeout: 120000,
+    });
+
+    // An empty document says how to use the app, since the page says nothing
+    // else anywhere.
+    const placeholder = await page.$eval('#doc', (el) => el.dataset.placeholder);
+    assert.match(placeholder, /new line/);
+    assert.match(placeholder, /microphone/i);
+
+    const dictated = await say('The quick brown fox jumped over the lazy dog.');
+    assert.match(dictated, /The quick brown fox jumped over the lazy dog\./);
+
+    const broken = await say('new line');
+    assert.doesNotMatch(broken, /new line/i, 'the command should not be typed');
+    // Trailing whitespace, because a contenteditable keeps a spare break at the
+    // end of itself to hold the last line open.
+    assert.match(broken, /dog\.\n\s*$/, 'expected a line break at the end');
+
+    const second = await say('Then it did it again.');
+    assert.match(second, /dog\.\nThen it did it again\./);
+
+    // The three deletes, each taking exactly what it names off the end: the
+    // full stop, then the word in front of it, then the whole sentence.
+    assert.match(await say('delete character'), /^Then it did it again$/m);
+    // A space at the end of a line comes back as a non-breaking one, which is
+    // how a contenteditable keeps it from collapsing.
+    assert.match(await say('delete word'), /^Then it did it\s*$/m);
+    const emptied = await say('delete sentence');
+    assert.match(emptied, /dog\.\n\s*$/, 'expected the second line back to nothing');
+
+    // "scratch that" walks the dictation edits back one at a time.
+    assert.match(await say('scratch that'), /Then it did it\s*$/m);
+
+    // A sentence is still the last sentence after a line break, so a "new line"
+    // in between takes the words with it rather than shielding them.
+    await say('new line');
+    const acrossBreak = await say('delete sentence');
+    assert.doesNotMatch(acrossBreak, /Then it did it/, 'expected the sentence, not just the break');
+    assert.match(acrossBreak, /dog\.\s*$/);
+
+    // Phrases that mean what the commands mean but were dictated as prose. The
+    // last three sit closest to the threshold the page picked, so they are what
+    // fails if someone lowers it.
+    for (const line of [
+      'Please delete my account and all of my data.',
+      'We should start with a new line of business.',
+      'A sentence like that would never survive an editor.',
+      'Delete it.',
+      'Delete that.',
+      'We deleted the character we did not need.',
+    ]) {
+      const typed = await say(line);
+      assert.ok(typed.includes(line), `"${line}" should have been typed, got: ${typed}`);
+    }
+
+    // Bold applies to a selection, the way the button does it.
+    await page.evaluate(() => {
+      const doc = document.getElementById('doc');
+      const range = document.createRange();
+      range.setStart(doc.firstChild, 4);
+      range.setEnd(doc.firstChild, 15);
+      const selection = getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    await page.click('[data-mark="bold"]');
+    const bolded = await page.$eval('#doc', (el) => el.innerHTML);
+    assert.match(bolded, /<b>quick brown<\/b>/);
+
+    // Markdown carries the marks and the line breaks; Word is a real docx, and
+    // a stored zip keeps its text where a reader (or a test) can find it.
+    await page.click('#markdown');
+    const markdown = await downloads.text(/\.md$/);
+    assert.match(markdown, /\*\*quick brown\*\*/);
+    assert.match(markdown, /The \*\*quick brown\*\* fox jumped over the lazy dog\./);
+
+    await page.click('#word');
+    const docx = await downloads.bytes(/\.docx$/);
+    assert.equal(docx.subarray(0, 4).toString('latin1'), 'PK\u0003\u0004', 'not a zip');
+    const inside = docx.toString('utf8');
+    assert.match(inside, /word\/document\.xml/);
+    assert.match(inside, /<w:b\/>/, 'the bold run lost its formatting');
+    assert.match(inside, /quick brown/);
+
+    // Dictation lands at the caret, and bolding a phrase above left it in the
+    // middle of the document, so put it back at the end the way clicking there
+    // would.
+    await page.evaluate(() => {
+      const range = document.createRange();
+      range.selectNodeContents(document.getElementById('doc'));
+      range.collapse(false);
+      const selection = getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+
+    // A document that outgrows the sheet keeps up with itself, rather than
+    // carrying on out of sight below the fold.
+    for (let i = 0; i < 10; i++) {
+      await say(`Line ${i} of a document long enough to fill the sheet, and then some more.`);
+    }
+    const scroll = await page.$eval('#doc', (el) => ({
+      overflowing: el.scrollHeight > el.clientHeight,
+      fromBottom: el.scrollHeight - el.scrollTop - el.clientHeight,
+    }));
+    assert.ok(scroll.overflowing, 'the document should have outgrown the paper by now');
+    assert.ok(
+      scroll.fromBottom <= 40,
+      `expected the paper to follow the words down, ${scroll.fromBottom}px short of the end`,
+    );
+
+    // Nothing above needed a voice, and `speech(false)` means none was fetched:
+    // the page runs with assets=local, where the only thing under the base URL
+    // it hands the runner is the embedding model, so a voice download would
+    // have 404ed and failed the load this test waited on.
+  } finally {
+    await page.close();
+  }
+});
+
+test('Dictation app types what it hears out of a microphone', { skip }, async () => {
+  // Its own browser, because this one has a wav file wired to the microphone in
+  // place of a synthetic tone, and the other pages would start transcribing it.
+  const speaking = await launchBrowser(puppeteer, chromePath, [
+    `--use-file-for-fake-audio-capture=${TWO_CITIES_WAV}%noloop`,
+  ]);
+  try {
+    const page = await speaking.newPage();
+    page.on('pageerror', (err) => console.log(`[page:/dictation/] ERROR ${err.message}`));
+    await page.goto(`${server.origin}/dictation/?local=1&assets=local`, { waitUntil: 'load' });
+    await page.waitForFunction(() => document.body.dataset.state === 'ready', {
+      timeout: 120000,
+    });
+
+    // Watch for the in-progress phrase, which only exists between the first
+    // word of a phrase and the end of it.
+    await page.evaluate(() => {
+      window.__sawProvisional = false;
+      const doc = document.getElementById('doc');
+      new MutationObserver(() => {
+        if (doc.querySelector('.prov')) window.__sawProvisional = true;
+      }).observe(doc, { childList: true, subtree: true, characterData: true });
+    });
+
+    await page.click('#record');
+    await page.waitForFunction(() => document.body.dataset.state === 'listening', {
+      timeout: 120000,
+    });
+    await page.waitForFunction(
+      () => /\w+\s+\w+/.test(document.getElementById('doc').innerText),
+      { timeout: 120000 },
+      // A phrase has to end before it is committed, so this waits out a pause
+      // in the reading as well as the transcription itself.
+    );
+
+    assert.ok(
+      await page.evaluate(() => window.__sawProvisional),
+      'expected the words to show up as they were spoken, before the phrase ended',
+    );
+    // The provisional phrase is a preview, so it leaves nothing of its own
+    // behind once the words are committed.
+    await page.click('#record');
+    await page.waitForFunction(() => document.body.dataset.state === 'ready', { timeout: 30000 });
+    assert.equal(await page.$eval('#doc', (el) => el.querySelectorAll('.prov').length), 0);
+    console.log(`[dictation] heard: ${await page.$eval('#doc', (el) => el.innerText)}`);
+  } finally {
+    await speaking.close();
+  }
+});
+
+test('Dictation app pauses and carries on by voice', { skip }, async () => {
+  const page = await openPage('/dictation/?local=1&assets=local');
+  const state = () => page.evaluate(() => document.body.dataset.state);
+  const waitForState = (want) =>
+    page.waitForFunction((s) => document.body.dataset.state === s, { timeout: 120000 }, want);
+
+  /** Hands the runner a phrase without going through the microphone. */
+  const say = (text) =>
+    page.evaluate(async (t) => {
+      document.getElementById('utterance').value = t;
+      document.getElementById('send').click();
+    }, text);
+
+  try {
+    await waitForState('ready');
+    await page.click('#record');
+    await waitForState('listening');
+
+    // Pausing keeps the session open, because a runner that stopped listening
+    // could not hear itself be started again.
+    await say('stop dictation');
+    await waitForState('paused');
+
+    await say('start dictation');
+    await waitForState('listening');
+
+    // Whatever the synthetic microphone was making, nothing was typed while the
+    // app was paused.
+    await page.click('#record');
+    await waitForState('ready');
+    assert.equal(await state(), 'ready');
+  } finally {
+    await page.close();
+  }
+});
+
+/**
+ * Points the page's downloads at a temporary directory and hands back readers
+ * for whatever lands there. Real downloads rather than a hook in the page, so
+ * the test sees exactly the bytes a reader would end up with.
+ */
+async function captureDownloads(page) {
+  const directory = await mkdtemp(path.join(tmpdir(), 'moonshine-downloads-'));
+  const client = await page.createCDPSession();
+  await client.send('Browser.setDownloadBehavior', {
+    behavior: 'allow',
+    downloadPath: directory,
+    eventsEnabled: true,
+  });
+
+  /** Waits for a finished file matching `pattern`; Chrome writes .crdownload first. */
+  async function file(pattern, timeoutMs = 15000) {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const names = await readdir(directory);
+      const match = names.find((name) => pattern.test(name) && !name.endsWith('.crdownload'));
+      if (match) return path.join(directory, match);
+      if (Date.now() > deadline) {
+        throw new Error(`no download matching ${pattern} in ${timeoutMs}ms, saw: ${names}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
+  return {
+    bytes: async (pattern) => readFile(await file(pattern)),
+    text: async (pattern) => readFile(await file(pattern), 'utf8'),
+  };
+}
 
 /** Clicks through every language tab, reporting what the panel shows on each. */
 async function walkLanguageTabs(page) {

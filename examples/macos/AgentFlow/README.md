@@ -31,7 +31,7 @@ swift run AgentFlow --text
 ```
 
 Say (or type) **"set up wifi"** to start the flow. Two commands work at any
-point without being registered, because `AgentFlow` provides them:
+point in it without being registered, because `AgentFlow` provides them:
 
 - **"cancel"** abandons the flow
 - **"start over"** runs it again from the top

@@ -14,39 +14,36 @@
 # clustering parameters still compiled into the library were fitted against this
 # exact pair of models. A new pair means a new directory in
 # core/moonshine-model-catalog.cpp and a matching library release, not an
-# in-place overwrite. That also means this script should never need a CDN
-# invalidation: it writes objects that did not exist before. Set
+# in-place overwrite. That also means this script should never need a cache
+# purge: it writes objects that did not exist before. Set
 # MOONSHINE_INVALIDATE_CDN if you are overwriting anyway and know why.
 #
 # After running this, regenerate the integrity metadata, which reads sizes and
 # checksums back off the CDN, and commit the result:
 #   python3 scripts/generate-model-file-metadata.py
 #
-# Prerequisites: Google Cloud SDK (gcloud) and credentials with
-# storage.objects.create/list on the bucket.
+# Prerequisites: rclone, and the Cloudflare R2 credentials described in
+# cdn-publish-common.sh. The old Google Cloud Storage bucket behind this
+# hostname has been deleted, so gcloud is no longer involved.
 #
 # Environment:
-#   MOONSHINE_MODEL_GCS_BUCKET  Bucket name (default: download.moonshine.ai)
+#   MOONSHINE_R2_BUCKET         Bucket name (default: download-moonshine-ai)
 #   MOONSHINE_MODEL_CACHE_CONTROL  Cache-Control for uploaded objects
 #                               (default: "public, max-age=2592000"; 30 days).
-#   MOONSHINE_INVALIDATE_CDN    When non-empty, invalidate
-#                               /model/diarization-community1/* after upload.
-#   MOONSHINE_DOWNLOAD_URL_MAP  URL map to invalidate (default: download-lb).
+#   MOONSHINE_INVALIDATE_CDN    When non-empty, purge the uploaded URLs from the
+#                               Cloudflare edge cache after upload.
 #
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="${ROOT}/test-assets/diarization"
-BUCKET="${MOONSHINE_MODEL_GCS_BUCKET:-download.moonshine.ai}"
 REMOTE_DIR="model/diarization-community1"
-DEST="gs://${BUCKET}/${REMOTE_DIR}"
 CACHE_CONTROL="${MOONSHINE_MODEL_CACHE_CONTROL:-public, max-age=2592000}"
-URL_MAP="${MOONSHINE_DOWNLOAD_URL_MAP:-download-lb}"
 
-if ! command -v gcloud >/dev/null 2>&1; then
-  echo "gcloud not found. Install Google Cloud SDK: https://cloud.google.com/sdk" >&2
-  exit 1
-fi
+source "${ROOT}/scripts/cdn-publish-common.sh"
+cdn_setup_r2
+
+DEST="r2:${CDN_R2_BUCKET}/${REMOTE_DIR}"
 
 # The file list comes from the library rather than a glob, so that this script
 # and the manifest clients download cannot drift apart.
@@ -69,15 +66,21 @@ for file in "${FILES[@]}"; do
 done
 
 echo "Upload ${SRC} -> ${DEST} (Cache-Control: ${CACHE_CONTROL})" >&2
+# --header-upload is how the caching header reaches R2; rclone drops metadata
+# that is not asked for explicitly, and an object uploaded without it is served
+# with no Cache-Control at all.
 for file in "${FILES[@]}"; do
-  gcloud storage cp "${SRC}/${file}" "${DEST}/${file}" \
-    --cache-control="${CACHE_CONTROL}"
+  rclone copyto "${SRC}/${file}" "${DEST}/${file}" \
+    --header-upload "Cache-Control: ${CACHE_CONTROL}"
 done
 
 if [[ -n "${MOONSHINE_INVALIDATE_CDN:-}" ]]; then
-  echo "Invalidating Cloud CDN cache for /${REMOTE_DIR}/* on url-map ${URL_MAP}..." >&2
-  gcloud compute url-maps invalidate-cdn-cache "${URL_MAP}" \
-    --path "/${REMOTE_DIR}/*" --async
+  echo "Purging the Cloudflare cache for the uploaded objects..." >&2
+  urls=()
+  for file in "${FILES[@]}"; do
+    urls+=("https://${CDN_HOST}/${REMOTE_DIR}/${file}")
+  done
+  cdn_purge_urls "${urls[@]}"
 fi
 
 echo "Done. Now run: python3 scripts/generate-model-file-metadata.py" >&2

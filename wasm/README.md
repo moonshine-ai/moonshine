@@ -103,8 +103,14 @@ await agent.load();
 await agent.startListening();
 ```
 
-"cancel" and "start over" work at any point without being registered. Attach
-`agent.onHeard(...)` and `agent.onSaid(...)` to log the conversation.
+"cancel" and "start over" work anywhere inside a flow without being registered.
+Outside one they are just words, so an interface that dictates whatever it hears
+keeps them; `agent.always('cancel', ...)` makes a phrase live at every moment.
+Attach `agent.onHeard(...)` and `agent.onSaid(...)` to log the conversation.
+
+`speech(false)` runs the flow without a voice, which also skips the synthesizer
+download. Prompts still reach `onSaid(...)`, so a screen can show what the agent
+would have said.
 
 ## Models are downloaded at runtime
 
@@ -174,10 +180,13 @@ set these headers, build the SIMD-only fallback (see below) and load it with
 
 ## Examples
 
-See [`examples/web/`](../examples/web): `stt/`, `tts/`, and `agent-flow/`, with
-an index at `/` linking them together. Each page shows the Moonshine calls that
-drive it in a panel below the demo. They share a stylesheet and some chrome from
-`examples/web/assets/`, and have no build step or external dependencies.
+See [`examples/web/`](../examples/web): `stt/`, `tts/`, `agent-flow/`, and
+`dictation/`, with
+an index at `/` linking them together. `stt/`, `tts/` and `agent-flow/` show the
+Moonshine calls that drive them in a panel below the demo; `dictation/` is a
+finished app rather than a walkthrough, so it shows nothing but the app. They
+share a stylesheet and some chrome from `examples/web/assets/`, and have no build
+step or external dependencies.
 
 The demos import the published binding from the jsDelivr CDN by default. To
 test a locally-built binding instead, append `?local=1` to the URL (this loads

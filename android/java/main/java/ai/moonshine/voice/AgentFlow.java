@@ -10,9 +10,11 @@ import androidx.annotation.Nullable;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -41,9 +43,10 @@ import java.util.function.Consumer;
  *
  * <p>{@link #load()} downloads and wires everything a voice interface needs: a
  * streaming speech-to-text model, an embedding model for matching trigger phrases,
- * a text-to-speech voice, and a microphone. A flow is ordinary blocking code
- * running on its own thread, so it reads top to bottom and {@code try} /
- * {@code finally} work the way you expect.
+ * a text-to-speech voice, and a microphone. {@link #speech(boolean)} and
+ * {@link #microphone(boolean)} each drop one of those when an application does not
+ * need it. A flow is ordinary blocking code running on its own thread, so it reads
+ * top to bottom and {@code try} / {@code finally} work the way you expect.
  */
 public final class AgentFlow {
 
@@ -214,11 +217,18 @@ public final class AgentFlow {
     private final Map<String, Flow> flows = new LinkedHashMap<>();
     private final List<String> globalOrder = new ArrayList<>();
     private final Map<String, Flow> globals = new LinkedHashMap<>();
+    /**
+     * Globals that only mean anything while a flow is running. The built-in
+     * "cancel" and "start over" are in here: matching them when nothing is active would consume
+     * the line, do nothing with it, and leave a dictation interface silently missing a sentence.
+     */
+    private final Set<String> flowScopedGlobals = new HashSet<>();
 
     private String languageCode = "en";
     private int arch = JNI.MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING;
     @Nullable private String voiceId;
     private boolean wantsMicrophone = true;
+    private boolean wantsSpeech = true;
     private float threshold = DEFAULT_TRIGGER_THRESHOLD;
     @Nullable private File modelDirectory;
     @Nullable private ProgressCallback progressCallback;
@@ -260,8 +270,16 @@ public final class AgentFlow {
         this.appContext = context.getApplicationContext();
         // "cancel" and "start over" are what people actually say to a voice
         // interface, so they work without every application registering them.
-        always("cancel", Dialog::cancel);
-        always("start over", Dialog::restart);
+        // Both only apply to a flow in progress, so they stay out of the way of
+        // whatever else the microphone is being used for. Registering either with
+        // always() makes it live all the time, as any other global is.
+        addFlowScopedGlobal("cancel", Dialog::cancel);
+        addFlowScopedGlobal("start over", Dialog::restart);
+    }
+
+    private void addFlowScopedGlobal(String phrase, Flow handler) {
+        always(phrase, handler);
+        flowScopedGlobals.add(phrase);
     }
 
     // -- Configuration -------------------------------------------------------
@@ -293,6 +311,16 @@ public final class AgentFlow {
     /** Set false to drive the agent from text instead of a microphone. */
     public AgentFlow microphone(boolean enabled) {
         this.wantsMicrophone = enabled;
+        return this;
+    }
+
+    /**
+     * Whether {@link #load} should open a synthesizer. Defaults to true. Set false for a silent
+     * runner: prompts still reach {@link #onSaid} and flows still advance, they just aren't spoken,
+     * and no voice is downloaded.
+     */
+    public AgentFlow speech(boolean enabled) {
+        this.wantsSpeech = enabled;
         return this;
     }
 
@@ -342,14 +370,19 @@ public final class AgentFlow {
     }
 
     /**
-     * Registers a handler that runs whenever {@code phrase} is heard, even in the
-     * middle of a flow. This is how {@code cancel} and {@code start over} work.
+     * Registers a handler that runs whenever {@code phrase} is heard, even in the middle of a flow
+     * and even with no flow running. The built-in {@code cancel} and {@code start over} work the
+     * same way but only while a flow is in progress; registering either here opts it into being
+     * live all the time.
      */
     public AgentFlow always(String phrase, Flow handler) {
         if (!globals.containsKey(phrase)) {
             globalOrder.add(phrase);
         }
         globals.put(phrase, handler);
+        // Asking for a global by name means wanting it live, even if it is one of the built-ins
+        // that is otherwise limited to a running flow.
+        flowScopedGlobals.remove(phrase);
         return this;
     }
 
@@ -386,7 +419,9 @@ public final class AgentFlow {
      * background thread.
      */
     public void load() {
-        if (tts == null) {
+        // A runner that has been silenced, or that speaks through a callback of its own, has no
+        // use for a voice and should not spend a download on one.
+        if (wantsSpeech && tts == null && speakOverride == null) {
             TextToSpeech synthesizer = new TextToSpeech(appContext).language(languageCode);
             if (voiceId != null) {
                 synthesizer.voice(voiceId);
@@ -747,12 +782,25 @@ public final class AgentFlow {
 
     @Nullable
     private String matchTrigger(String utterance) {
-        List<String> phrases = new ArrayList<>(globalOrder);
+        List<String> phrases = liveGlobals();
         phrases.addAll(flowOrder);
         if (phrases.isEmpty()) {
             return null;
         }
         return matcher.match(utterance, phrases.toArray(new String[0]), threshold);
+    }
+
+    /**
+     * The globals worth matching right now. Flow-scoped ones are offered only while a flow is
+     * running, so with nothing active their phrases reach {@link #otherwise} like any other speech.
+     */
+    private List<String> liveGlobals() {
+        List<String> phrases = new ArrayList<>(globalOrder);
+        if (flowScopedGlobals.isEmpty() || active || awaitingAnswer) {
+            return phrases;
+        }
+        phrases.removeAll(flowScopedGlobals);
+        return phrases;
     }
 
     /**

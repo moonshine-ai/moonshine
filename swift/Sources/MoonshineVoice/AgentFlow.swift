@@ -18,9 +18,10 @@ import Foundation
 ///
 /// ``load()`` downloads and wires everything a voice interface needs: a
 /// streaming speech-to-text model, an embedding model for matching trigger
-/// phrases, a text-to-speech voice, and a microphone. A flow is an ordinary
-/// async function, so it reads top to bottom and `try` / `defer` work the way
-/// you expect.
+/// phrases, a text-to-speech voice, and a microphone. ``speech(_:)`` and
+/// ``microphone(_:)`` each drop one of those when an application does not need
+/// it. A flow is an ordinary async function, so it reads top to bottom and
+/// `try` / `defer` work the way you expect.
 
 /// Thrown into a flow when the user (or a global handler) cancels it.
 public struct DialogCancelled: Error {
@@ -161,11 +162,17 @@ public final class AgentFlow: @unchecked Sendable {
     private var flows: [String: FlowFunction] = [:]
     private var globalOrder: [String] = []
     private var globals: [String: FlowFunction] = [:]
+    /// Globals that only mean anything while a flow is running. The built-in
+    /// "cancel" and "start over" are in here: matching them when nothing is
+    /// active would consume the line, do nothing with it, and leave a dictation
+    /// interface silently missing a sentence.
+    private var flowScopedGlobals: Set<String> = []
 
     private var languageCode = "en"
     private var arch: ModelArch = .mediumStreaming
     private var voiceId: String?
     private var wantsMicrophone = true
+    private var wantsSpeech = true
     private var threshold = AgentFlow.defaultTriggerThreshold
     private var modelDirectory: URL?
     private var progressHandler: (@Sendable (Double, String) -> Void)?
@@ -200,8 +207,17 @@ public final class AgentFlow: @unchecked Sendable {
     public init() {
         // "cancel" and "start over" are what people actually say to a voice
         // interface, so they work without every application registering them.
-        always("cancel") { dialog in try dialog.cancel() }
-        always("start over") { dialog in try dialog.restart() }
+        // Both only apply to a flow in progress, so they stay out of the way of
+        // whatever else the microphone is being used for. Registering either
+        // with `always(_:_:)` makes it live all the time, as any other global
+        // is.
+        addFlowScopedGlobal("cancel") { dialog in try dialog.cancel() }
+        addFlowScopedGlobal("start over") { dialog in try dialog.restart() }
+    }
+
+    private func addFlowScopedGlobal(_ phrase: String, _ handler: @escaping FlowFunction) {
+        always(phrase, handler)
+        flowScopedGlobals.insert(phrase)
     }
 
     deinit {
@@ -242,6 +258,15 @@ public final class AgentFlow: @unchecked Sendable {
     @discardableResult
     public func microphone(_ enabled: Bool) -> Self {
         wantsMicrophone = enabled
+        return self
+    }
+
+    /// Whether ``load()`` should open a synthesizer. Defaults to true. Turn it
+    /// off for a silent runner: prompts still reach ``onSaid(_:)`` and flows
+    /// still advance, they just aren't spoken, and no voice is downloaded.
+    @discardableResult
+    public func speech(_ enabled: Bool = true) -> Self {
+        wantsSpeech = enabled
         return self
     }
 
@@ -296,11 +321,16 @@ public final class AgentFlow: @unchecked Sendable {
     }
 
     /// Registers a handler that runs whenever `phrase` is heard, even in the
-    /// middle of a flow. This is how `cancel` and `start over` are implemented.
+    /// middle of a flow and even with no flow running. The built-in `cancel`
+    /// and `start over` work the same way but only while a flow is in progress;
+    /// registering either here opts it into being live all the time.
     @discardableResult
     public func always(_ phrase: String, _ handler: @escaping FlowFunction) -> Self {
         if globals[phrase] == nil { globalOrder.append(phrase) }
         globals[phrase] = handler
+        // Asking for a global by name means wanting it live, even if it is one
+        // of the built-ins that is otherwise limited to a running flow.
+        flowScopedGlobals.remove(phrase)
         return self
     }
 
@@ -335,7 +365,10 @@ public final class AgentFlow: @unchecked Sendable {
 
     /// Downloads and wires every model the agent needs.
     public func load() async throws {
-        if tts == nil {
+        // A runner that has been silenced, or that speaks through a callback of
+        // its own, has no use for a voice and should not spend a download on
+        // one.
+        if wantsSpeech, tts == nil, speakOverride == nil {
             let synthesizer = TextToSpeech().language(languageCode)
             if let voiceId { synthesizer.voice(voiceId) }
             if let modelDirectory { synthesizer.modelsFrom(modelDirectory) }
@@ -603,9 +636,18 @@ public final class AgentFlow: @unchecked Sendable {
     }
 
     private func matchTrigger(_ utterance: String) -> String? {
-        let phrases = globalOrder + flowOrder
+        let phrases = liveGlobals() + flowOrder
         guard !phrases.isEmpty else { return nil }
         return matcher.match(utterance, phrases: phrases, threshold: threshold)
+    }
+
+    /// The globals worth matching right now. Flow-scoped ones are offered only
+    /// while a flow is running, so with nothing active their phrases reach
+    /// ``otherwise(_:)`` like any other speech.
+    private func liveGlobals() -> [String] {
+        if flowScopedGlobals.isEmpty { return globalOrder }
+        if isActive || hasPending { return globalOrder }
+        return globalOrder.filter { !flowScopedGlobals.contains($0) }
     }
 
     /// The key of the group whose phrases best match `utterance`, used by

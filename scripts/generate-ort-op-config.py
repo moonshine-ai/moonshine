@@ -7,7 +7,7 @@ model a client can actually load, so this script enumerates them rather than
 taking a hand-maintained list:
 
   * TTS assets are whatever ``core/moonshine-tts/data`` holds, since
-    ``scripts/upload-tts-assets-to-gcs.sh`` mirrors that tree to the CDN.
+    ``scripts/upload-tts-assets.sh`` mirrors that tree to the CDN.
   * STT, spelling, embedding and diarization models come from the native
     catalog (via the ``moonshine_voice`` bindings), covering every language,
     architecture and variant it can hand out. Those are fetched and cached
