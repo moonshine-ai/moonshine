@@ -963,8 +963,17 @@ void Transcriber::update_transcript_from_segments(
       // Ensure the output text is valid UTF-8.
       line.text = sanitize_text(out_text);
 
-      // Compute word timestamps (single-pass or alignment model)
-      if (this->options.word_timestamps) {
+      // Alignment is a second pass over the segment and costs about a quarter
+      // of a streaming update, while an unfinished segment is re-transcribed
+      // from scratch every time round, so aligning one before it ends is work
+      // that gets thrown away and redone a fraction of a second later. Waiting
+      // for the end loses nothing: the detector always closes a segment with
+      // both is_complete and just_updated set, including when the stream stops
+      // mid-speech, so every line still gets aligned exactly once, against its
+      // final text. Only the non-streaming models pay this, which is why the
+      // streaming branch above aligns unconditionally -- there the timings fall
+      // out of attention the transcription pass already computed.
+      if (this->options.word_timestamps && segment.is_complete) {
         float seg_duration =
             segment.audio_data.size() / (float)INTERNAL_SAMPLE_RATE;
         std::vector<TranscriberWord> words;
@@ -1088,17 +1097,53 @@ bool Transcriber::apply_speaker_turns_to_lines(
   // have_speakers_changed notifications.
   constexpr float kTimeTolerance = 0.1f;
 
+  // Both lists run the whole length of a session: lines are only ever appended,
+  // and the diarizer keeps every turn it has frozen. Comparing all of one
+  // against all of the other would therefore cost more with every minute that
+  // passed, on every call, to re-derive spans that outside the clustering
+  // window cannot have changed. Only the turns that overlap a line can
+  // contribute to it, so the work is bounded to those instead.
+  //
+  // `reach[i]` is the latest end time among the first i + 1 turns. It rises
+  // monotonically whatever order the turns are in, so a search for the first
+  // entry past a line's start finds the first turn that could reach it: every
+  // turn before that one ended too early to touch this line, or any later one.
+  std::vector<float> reach;
+  reach.reserve(turns.size());
+  float furthest = 0.0f;
+  bool sorted_by_start = true;
+  for (size_t i = 0; i < turns.size(); i++) {
+    if (i > 0 && turns[i].start_time < turns[i - 1].start_time) {
+      sorted_by_start = false;
+    }
+    furthest = std::max(furthest, turns[i].start_time + turns[i].duration);
+    reach.push_back(furthest);
+  }
+
   std::lock_guard<std::mutex> lock(output->mutex);
   bool any_changed = false;
+  std::vector<SpeakerTurn> spans;
   for (const uint64_t &line_id : output->ordered_internal_line_ids) {
     TranscriberLine &line = output->internal_lines_map.at(line_id);
     const float line_start = line.start_time;
     const float line_end = line.start_time + line.duration;
 
-    // Clip each diarization turn to the line's time range. Turns are already
-    // sorted by start time.
-    std::vector<SpeakerTurn> spans;
-    for (const SpeakerTurn &turn : turns) {
+    // Clip each diarization turn that reaches the line to its time range.
+    spans.clear();
+    const size_t first = (size_t)(std::upper_bound(reach.begin(), reach.end(),
+                                                   line_start) -
+                                  reach.begin());
+    for (size_t i = first; i < turns.size(); i++) {
+      const SpeakerTurn &turn = turns[i];
+      // Sorted by start time, a turn beginning at or after the line ends means
+      // every turn after it does too. Unsorted, there is nothing to conclude
+      // and the rest still have to be looked at.
+      if (turn.start_time >= line_end) {
+        if (sorted_by_start) {
+          break;
+        }
+        continue;
+      }
       const float span_start = std::max(turn.start_time, line_start);
       const float span_end =
           std::min(turn.start_time + turn.duration, line_end);
@@ -1125,7 +1170,9 @@ bool Transcriber::apply_speaker_turns_to_lines(
       }
     }
     if (changed) {
-      line.speaker_spans = std::move(spans);
+      // Assigned rather than moved from, so that the scratch buffer keeps its
+      // capacity for the rest of the lines.
+      line.speaker_spans.assign(spans.begin(), spans.end());
       line.have_speakers_changed = true;
       any_changed = true;
     }

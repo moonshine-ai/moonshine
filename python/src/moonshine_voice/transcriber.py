@@ -5,6 +5,7 @@ from abc import ABC
 from dataclasses import dataclass
 import os
 import sys
+import time
 from typing import Callable, List, Optional
 from pathlib import Path
 
@@ -428,6 +429,14 @@ class TranscriptEventListener(ABC):
         pass
 
 
+# The most the update interval will stretch to under load, as a multiple of
+# itself. A pass that takes longer than the audio it covers widens the gate (see
+# ``add_audio``), and one freak pass -- a garbage collection, a machine that went
+# to sleep mid-call -- must not leave a live transcript silent for a minute
+# afterwards.
+_MAX_UPDATE_INTERVAL_FACTOR = 10
+
+
 # Streaming functionality
 class Stream:
     """Stream for real-time transcription."""
@@ -455,6 +464,9 @@ class Stream:
         self._update_interval = update_interval
         self._stream_time = 0.0
         self._last_update_time = 0.0
+        # Wall-clock seconds the last pass took, which is what the next one has
+        # to earn in audio before it is made.
+        self._last_pass = 0.0
         self._transcribe_flags = int(transcribe_flags)
         handle = self._lib.moonshine_create_stream(transcriber._handle, flags)
         check_error(handle)
@@ -496,7 +508,20 @@ class Stream:
             self._emit_error(e)
 
     def add_audio(self, audio_data: List[float], sample_rate: int = 16000):
-        """Add audio data to the stream."""
+        """Add audio data to the stream.
+
+        The update interval is a floor rather than a cadence: a pass has to
+        cover at least as much audio as the last one took to make. Most of what
+        a pass costs is not the audio in it -- measured on the tiny model with
+        speakers, 102ms of a pass goes on getting started and 269ms on each
+        second of audio it looks at -- so asking twice a second pays that
+        overhead twice a second, and a machine that cannot quite afford it does
+        not fall behind by a fixed amount, it falls behind further every pass.
+        Making a pass earn its keep turns that into batch behaviour: passes grow
+        until each covers its own cost, and the transcript stays within a pass
+        or two of the speaker. Where there is headroom to spare the floor
+        governs and nothing changes.
+        """
         audio_array = (ctypes.c_float * len(audio_data))(*audio_data)
         error = self._lib.moonshine_transcribe_add_audio_to_stream(
             self._transcriber._handle,
@@ -508,16 +533,24 @@ class Stream:
         )
         check_error(error)
         self._stream_time += len(audio_data) / sample_rate
-        if self._stream_time - self._last_update_time >= self._update_interval:
+        needed = min(
+            max(self._update_interval, self._last_pass),
+            self._update_interval * _MAX_UPDATE_INTERVAL_FACTOR,
+        )
+        if self._stream_time - self._last_update_time >= needed:
             self.update_transcription(self._transcribe_flags)
             self._last_update_time = self._stream_time
 
     def update_transcription(self, flags: int = 0) -> Transcript:
         """Update the transcription from the stream."""
         out_transcript = ctypes.POINTER(TranscriptC)()
+        started = time.monotonic()
         error = self._lib.moonshine_transcribe_stream(
             self._transcriber._handle, self._handle, flags, ctypes.byref(out_transcript)
         )
+        # What the engine cost, not what the listeners go on to do with it:
+        # showing the words is the caller's own budget to keep.
+        self._last_pass = time.monotonic() - started
         check_error(error)
         transcript = self._transcriber._parse_transcript(out_transcript)
         self._notify_from_transcript(transcript)

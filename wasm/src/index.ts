@@ -69,7 +69,7 @@ export {
   type TranscriberFromCatalog,
   type TranscriberFromUrlsOptions,
 } from './transcriber.js';
-export { Stream } from './stream.js';
+export { Stream, DEFAULT_UPDATE_INTERVAL } from './stream.js';
 export { MicTranscriber, type ProgressCallback } from './mic-transcriber.js';
 
 // Only usable if the module was built with TTS support.

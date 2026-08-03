@@ -162,6 +162,162 @@ public class TranscriberTest {
         allTextBuilder.append(line.text).append("\n");
     }
 
+    /**
+     * Live audio arrives in capture buffers of a few tens of milliseconds, but a
+     * transcription pass is expensive and grows more so as a session runs, so
+     * addAudio must coalesce them rather than transcribe once per buffer.
+     */
+    @Test
+    public void testAddAudioTranscribesPerIntervalNotPerChunk() {
+        Transcriber transcriber = new Transcriber();
+        final int sampleRate = 16000;
+        final int streamHandle = 0;
+
+        // A capture buffer's worth at a time, the way MicCaptureProcessor reads.
+        final int chunkSamples = 256;
+        final int chunks = 1000;
+        int passes = 0;
+        for (int i = 0; i < chunks; i++) {
+            if (transcriber.isUpdateDue(streamHandle, chunkSamples, sampleRate)) {
+                passes += 1;
+            }
+        }
+
+        double seconds = (double) (chunks * chunkSamples) / sampleRate;
+        int expected = (int) (seconds / Transcriber.DEFAULT_UPDATE_INTERVAL);
+        assertTrue("expected about " + expected + " passes over " + seconds
+                        + "s of audio, got " + passes,
+                Math.abs(passes - expected) <= 1);
+        assertTrue("gate should be well below one pass per chunk", passes < chunks / 10);
+    }
+
+    /**
+     * The interval is a floor rather than a cadence: a pass has to cover at
+     * least as much audio as the last one took to make. Most of what a pass
+     * costs is not the audio in it -- measured on the tiny model with speakers,
+     * 102ms of a pass goes on getting started and 269ms on each second of audio
+     * it looks at -- so asking twice a second pays that overhead twice a second,
+     * and a machine that cannot quite afford it does not fall behind by a fixed
+     * amount, it falls behind further every pass. Making a pass earn its keep
+     * turns that into batch behaviour instead.
+     *
+     * <p>What a pass cost is said here rather than taken, so that none of this
+     * depends on how long anything really takes.
+     */
+    @Test
+    public void testAPassMustCoverAsMuchAudioAsTheLastOneCost() {
+        Transcriber transcriber = new Transcriber();
+        final int sampleRate = 16000;
+        final int streamHandle = 3;
+        // An eighth of a second, which is exact in binary and so cannot leave a
+        // sum of chunks a hair under the amount being waited for.
+        final int eighthOfASecond = sampleRate / 8;
+
+        // Two seconds a pass, which is four intervals' worth of audio.
+        transcriber.lastPassSeconds.put(streamHandle, 2.0);
+
+        int passes = 0;
+        for (int i = 0; i < 32; i++) {
+            if (transcriber.isUpdateDue(streamHandle, eighthOfASecond, sampleRate)) {
+                passes += 1;
+            }
+        }
+        // Four seconds of audio is two passes at two seconds each, where the
+        // floor alone would have asked for eight.
+        assertTrue("four seconds at two seconds a pass should be two passes, got "
+                        + passes,
+                passes == 2);
+
+        // With time to spare, nothing changes.
+        transcriber.lastPassSeconds.put(streamHandle, 0.05);
+        passes = 0;
+        for (int i = 0; i < 32; i++) {
+            if (transcriber.isUpdateDue(streamHandle, eighthOfASecond, sampleRate)) {
+                passes += 1;
+            }
+        }
+        assertTrue("four seconds should be about eight passes at the floor, got "
+                        + passes,
+                Math.abs(passes - 8) <= 1);
+    }
+
+    /**
+     * One freak pass -- a collection, a phone that went to sleep mid-call --
+     * must not leave a live transcript silent for a minute afterwards.
+     */
+    @Test
+    public void testTheWaitAfterASlowPassIsCapped() {
+        Transcriber transcriber = new Transcriber();
+        final int sampleRate = 16000;
+        final int streamHandle = 4;
+        final int second = sampleRate;
+
+        transcriber.lastPassSeconds.put(streamHandle, 60.0);
+
+        int passes = 0;
+        for (int i = 0; i < 6; i++) {
+            if (transcriber.isUpdateDue(streamHandle, second, sampleRate)) {
+                passes += 1;
+            }
+        }
+        // Ten intervals is five seconds, so six seconds of audio is one pass,
+        // not the none a minute-long wait would have allowed.
+        assertTrue("a capped wait should still let a pass through, got " + passes,
+                passes == 1);
+    }
+
+    /** The gate counts audio, so chunk size cannot change how often it fires. */
+    @Test
+    public void testUpdateIntervalIsMeasuredInAudioNotCalls() {
+        Transcriber transcriber = new Transcriber();
+        final int sampleRate = 16000;
+        final int seconds = 10;
+
+        int smallChunkPasses = 0;
+        for (int i = 0; i < seconds * sampleRate / 128; i++) {
+            if (transcriber.isUpdateDue(0, 128, sampleRate)) {
+                smallChunkPasses += 1;
+            }
+        }
+
+        int largeChunkPasses = 0;
+        for (int i = 0; i < seconds * sampleRate / 2048; i++) {
+            if (transcriber.isUpdateDue(1, 2048, sampleRate)) {
+                largeChunkPasses += 1;
+            }
+        }
+
+        // 1250 calls and 78 calls carry the same ten seconds, so they owe the
+        // same handful of passes, give or take where the last remainder lands.
+        assertTrue("chunk size changed the pass count: " + smallChunkPasses
+                        + " vs " + largeChunkPasses,
+                Math.abs(smallChunkPasses - largeChunkPasses) <= 1);
+    }
+
+    /** Two streams running at once must not spend each other's audio. */
+    @Test
+    public void testUpdateIntervalIsTrackedPerStream() {
+        Transcriber transcriber = new Transcriber();
+        final int sampleRate = 16000;
+        final int quarterSecond = sampleRate / 4;
+
+        assertTrue(!transcriber.isUpdateDue(7, quarterSecond, sampleRate));
+        assertTrue(!transcriber.isUpdateDue(8, quarterSecond, sampleRate));
+        // Only stream 7 has half a second in it now, so only it is due.
+        assertTrue(transcriber.isUpdateDue(7, quarterSecond, sampleRate));
+        assertTrue(!transcriber.isUpdateDue(8, 1, sampleRate));
+    }
+
+    /** Setting the interval to zero restores a pass for every call. */
+    @Test
+    public void testZeroUpdateIntervalTranscribesEveryCall() {
+        Transcriber transcriber = new Transcriber();
+        transcriber.setUpdateInterval(0.0);
+        for (int i = 0; i < 10; i++) {
+            assertTrue(transcriber.isUpdateDue(0, 128, 16000));
+        }
+    }
+
     @Test
     public void testMoonshineTranscriberWithoutStreaming() {
         Context testContext = InstrumentationRegistry.getInstrumentation().getContext();

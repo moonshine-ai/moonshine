@@ -24,8 +24,8 @@
         margin-top: 2rem;
       }
 
-      /* Two up, then four up: three columns would orphan the fourth card on a
-         row of its own. */
+      /* Two up, then three up: with five cards, four columns would leave the
+         last one alone on a row of its own. */
       @media (min-width: 40rem) {
         .demo-grid {
           grid-template-columns: repeat(2, 1fr);
@@ -34,7 +34,7 @@
 
       @media (min-width: 68rem) {
         .demo-grid {
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: repeat(3, 1fr);
         }
       }
 
@@ -104,7 +104,7 @@
         <span class="ms-eyebrow">Everything here runs in this tab</span>
         <h1>Voice interfaces that never leave the device.</h1>
         <p>
-          Four live demos of <strong>Moonshine Voice</strong> compiled to WebAssembly.
+          Five live demos of <strong>Moonshine Voice</strong> compiled to WebAssembly.
           The models download once, then run on your own CPU: no API key, no account,
           and not a single byte of audio sent to a server.
         </p>
@@ -170,6 +170,21 @@
             Edit by hand, then take it away as Markdown or Word.
           </p>
           <span class="demo-card__go">Start dictating →</span>
+        </a>
+
+        <a class="demo-card" href="/meeting-notes/">
+          <span class="demo-card__icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="2.5" y="4" width="19" height="13" rx="2" />
+              <path d="M8 20.5h8M12 17.5v3M7 8.5h6M7 12h4" />
+            </svg>
+          </span>
+          <h2>Meeting Notes App</h2>
+          <p>
+            Share a meeting and get a transcript that knows who spoke, keeps your
+            edits attached to the audio, and plays any sentence back.
+          </p>
+          <span class="demo-card__go">Take notes →</span>
         </a>
       </div>
 

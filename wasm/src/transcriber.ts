@@ -270,11 +270,19 @@ export class Transcriber {
     );
   }
 
-  /** Creates a new streaming session. */
-  createStream(options: { flags?: TranscribeFlags } = {}): Stream {
+  /**
+   * Creates a new streaming session.
+   *
+   * `updateInterval` is the seconds of new audio the stream collects before
+   * {@link Stream.transcribe} will make another pass over the engine; see there
+   * for why asking more often than that costs more than it returns.
+   */
+  createStream(
+    options: { flags?: TranscribeFlags; updateInterval?: number } = {},
+  ): Stream {
     const flags = options.flags ?? TranscribeFlags.None;
     const rawStream = wrapErrors(() => new this.module.Stream(this.raw, flags));
-    return new Stream(rawStream);
+    return new Stream(rawStream, options.updateInterval);
   }
 
   // --- Convenience: a built-in default stream, matching Python's Transcriber. ---

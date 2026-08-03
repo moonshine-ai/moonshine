@@ -5,9 +5,11 @@ import numpy as np
 from pyannote.core import Segment, Annotation
 from pyannote.metrics.diarization import DiarizationErrorRate
 
-from datasets import load_dataset
+from datasets import Audio, load_dataset
 
 import argparse
+import io
+import soundfile
 
 # Starting point for v1 of speaker identification (embedding model +
 # online clusterer, per-line speaker IDs):
@@ -40,7 +42,54 @@ if args.options is not None:
         key, value = option.split("=")
         options[key] = value
 
+
+def describe_error_rate(components):
+    """The three parts of DER, plus their sum, as percentages of reference speech.
+
+    Confusion alone answers "when we heard someone, did we credit the right
+    speaker", which is what this script tracked historically. It says nothing
+    about speech we dropped or invented, so a setting that simply finds less
+    speech can improve confusion while making the diarization worse. Reporting
+    all three keeps that trade visible.
+    """
+    total = components["total"]
+    if not total:
+        return "no reference speech"
+    missed = components.get("missed detection", 0.0)
+    false_alarm = components.get("false alarm", 0.0)
+    confusion = components.get("confusion", 0.0)
+    error_rate = (missed + false_alarm + confusion) / total
+    return (
+        f"DER {error_rate:.2%} "
+        f"(confusion {confusion / total:.2%}, "
+        f"missed {missed / total:.2%}, "
+        f"false alarm {false_alarm / total:.2%})"
+    )
+
+
+def read_sample_audio(sample):
+    """Mono float32 audio and its sample rate, decoded with soundfile.
+
+    The dataset library's own audio decoder wants torchcodec, and so all of
+    torch, to do this. Reading the bytes here keeps the evaluation dependencies
+    to what scoring actually needs.
+    """
+    audio = sample["audio"]
+    if audio.get("bytes"):
+        samples, sample_rate = soundfile.read(
+            io.BytesIO(audio["bytes"]), dtype="float32", always_2d=True
+        )
+    else:
+        samples, sample_rate = soundfile.read(
+            audio["path"], dtype="float32", always_2d=True
+        )
+    # Telephone recordings sometimes keep each side on its own channel, and
+    # diarizing one mixed stream is what the library is given in practice.
+    return samples.mean(axis=1).astype(np.float32), sample_rate
+
+
 ds = load_dataset("diarizers-community/callhome", "eng")
+data = ds["data"].cast_column("audio", Audio(decode=False))
 
 model_path, model_arch = moonshine_voice.get_model_for_language("en", args.model_arch)
 
@@ -52,9 +101,8 @@ for sample_index in range(args.start_index, args.start_index + args.sample_count
     transcriber = moonshine_voice.Transcriber(
         model_path=model_path, model_arch=model_arch, options=options
     )
-    sample = ds["data"][sample_index]
-    audio = sample["audio"]["array"].astype(np.float32)
-    sample_rate = 16000
+    sample = data[sample_index]
+    audio, sample_rate = read_sample_audio(sample)
     transcriber.start()
     transcriber.add_audio(audio, sample_rate)
     transcript = transcriber.stop()
@@ -86,6 +134,7 @@ for sample_index in range(args.start_index, args.start_index + args.sample_count
     confusion = sample_metrics["confusion"]
     total = sample_metrics["total"]
     print(f"Speaker confusion: {confusion / total:.2%}")
+    print(f"  {describe_error_rate(sample_metrics)}")
     print(f"Reference unique speakers: {ref_unique_speakers}")
     print(f"Hypothesis unique speakers: {hyp_unique_speakers}")
     print(f"Reference line count: {len(reference)}")
@@ -95,3 +144,16 @@ confusion = metric["confusion"]
 total = metric["total"]
 
 print(f"Average speaker confusion: {confusion / total:.2%}")
+# The accumulated metric indexes components but is not a dict, so copy the
+# pieces out before summarising them.
+print(
+    "Overall "
+    + describe_error_rate(
+        {
+            name: metric[name]
+            for name in ("total", "missed detection", "false alarm", "confusion")
+        }
+    )
+)
+if args.options is not None:
+    print(f"Options: {args.options}")

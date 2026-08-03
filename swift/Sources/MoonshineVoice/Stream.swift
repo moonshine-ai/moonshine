@@ -1,5 +1,14 @@
 import Foundation
 
+/// The most the update interval will stretch to under load, as a multiple of
+/// itself.
+///
+/// A pass that takes longer than the audio it covers widens the gate (see
+/// ``Stream/addAudio(_:sampleRate:)``), and one freak pass -- a machine that went
+/// to sleep mid-call -- must not leave a live transcript silent for a minute
+/// afterwards.
+private let maxUpdateIntervalFactor: Double = 10
+
 /// A stream for real-time transcription with event-based updates.
 public class Stream {
     private let transcriber: Transcriber
@@ -11,6 +20,8 @@ public class Stream {
     private var listeners: [ListenerWrapper] = []
     private var streamTime: TimeInterval = 0.0
     private var lastUpdateTime: TimeInterval = 0.0
+    /// Wall-clock seconds the last pass took, which is what the next one must earn.
+    private var lastPass: TimeInterval = 0.0
     private var isActive_: Bool = false
 
     internal init(
@@ -61,6 +72,18 @@ public class Stream {
     }
 
     /// Add audio data to the stream.
+    ///
+    /// The update interval is a floor rather than a cadence: a pass has to cover
+    /// at least as much audio as the last one took to make. Most of what a pass
+    /// costs is not the audio in it -- measured on the tiny model with speakers,
+    /// 102ms of a pass goes on getting started and 269ms on each second of audio
+    /// it looks at -- so asking twice a second pays that overhead twice a second,
+    /// and a machine that cannot quite afford it does not fall behind by a fixed
+    /// amount, it falls behind further every pass. Making a pass earn its keep
+    /// turns that into batch behaviour: passes grow until each covers its own
+    /// cost, and the transcript stays within a pass or two of the speaker. Where
+    /// there is headroom to spare the floor governs and nothing changes.
+    ///
     /// - Parameters:
     ///   - audioData: Array of PCM audio samples (float, -1.0 to 1.0)
     ///   - sampleRate: Sample rate in Hz (default: 16000)
@@ -78,8 +101,13 @@ public class Stream {
         
         streamTime += Double(audioData.count) / Double(sampleRate)
         
-        // Auto-update if enough time has passed
-        if streamTime - lastUpdateTime >= updateInterval {
+        // Auto-update once there is enough new audio to be worth a pass, and to
+        // pay for the last one.
+        let needed = min(
+            max(updateInterval, lastPass),
+            updateInterval * maxUpdateIntervalFactor
+        )
+        if streamTime - lastUpdateTime >= needed {
             try updateTranscription(flags: transcribeFlags)
             lastUpdateTime = streamTime
         }
@@ -90,11 +118,15 @@ public class Stream {
     /// - Returns: The current transcript
     @discardableResult
     public func updateTranscription(flags: UInt32 = 0) throws -> Transcript {
+        let started = DispatchTime.now().uptimeNanoseconds
         let transcript = try api.transcribeStream(
             transcriberHandle: transcriber.handle,
             streamHandle: handle,
             flags: flags
         )
+        // What the engine cost, not what the listeners go on to do with it:
+        // showing the words is the caller's own budget to keep.
+        lastPass = Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000_000
         notifyFromTranscript(transcript)
         return transcript
     }

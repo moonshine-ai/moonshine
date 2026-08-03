@@ -68,6 +68,17 @@ print(zones[0]["id"])
 # Purges specific URLs from the Cloudflare edge cache. Cloudflare accepts at most
 # 30 files per request, and purge-by-prefix needs an Enterprise plan, so callers
 # pass the exact URLs they overwrote rather than a wildcard.
+#
+# This clears less than it looks like it does. The buckets now carry a CORS
+# policy, so R2 answers any request that has an Origin header with
+# `Vary: Origin`, and Cloudflare then stores one cache entry per origin. A purge
+# by URL carries no Origin of its own and so only evicts the entry for requests
+# that had none, which is the one native clients and curl use. Every browser
+# origin keeps its own copy, for the full 30 days these objects are cached.
+#
+# So this is the right call after replacing bytes that only native clients
+# fetch, and the wrong one if a browser might hold a stale copy. Use
+# cdn_purge_everything for that.
 cdn_purge_urls() {
   (( $# )) || return 0
   if [[ -z "${CLOUDFLARE_API_TOKEN:-}" ]]; then
@@ -121,4 +132,44 @@ sys.exit(1)
     fi
   done
   _cdn_flush_batch || return 1
+}
+
+# Drops the whole zone from the Cloudflare edge cache.
+#
+# Blunt, and deliberately so: it is the only purge that reaches every per-origin
+# variant of an object, for the reason described above cdn_purge_urls. Naming
+# the origins instead is not an option, because there is no way to enumerate the
+# sites that have already fetched a file. The cost is a period of cache misses
+# across the zone, which the origin absorbs.
+cdn_purge_everything() {
+  if [[ -z "${CLOUDFLARE_API_TOKEN:-}" ]]; then
+    echo "CLOUDFLARE_API_TOKEN is not set, so the cache cannot be purged." >&2
+    return 1
+  fi
+  local zone response
+  zone=$(cdn_zone_id) || return 1
+
+  if ! response=$(curl -sS -X POST \
+    -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+    -H "Content-Type: application/json" \
+    --data '{"purge_everything":true}' \
+    "https://api.cloudflare.com/client/v4/zones/${zone}/purge_cache"); then
+    echo "Cache purge request failed to reach Cloudflare." >&2
+    return 1
+  fi
+  if ! python3 -c '
+import json, sys
+body = json.load(sys.stdin)
+if body.get("success"):
+    sys.exit(0)
+for error in body.get("errors") or [{}]:
+    message = error.get("message") or json.dumps(body)
+    sys.stderr.write("  Cloudflare refused the purge: " + str(message) + "\n")
+sys.stderr.write("  The API token needs the Zone / Cache Purge permission,\n")
+sys.stderr.write("  which is a zone policy: an account-scoped policy cannot hold it.\n")
+sys.exit(1)
+' <<<"${response}"; then
+    return 1
+  fi
+  echo "  purged the whole ${CDN_ZONE_NAME} zone" >&2
 }

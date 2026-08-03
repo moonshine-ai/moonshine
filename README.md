@@ -283,6 +283,8 @@ In a real application you'd be calling `add_audio()` from an audio handler that'
 
 The transcriber analyses the speech at a default interval of every 500ms of input. You can change this with the `update_interval` argument to the transcriber constructor. For streaming models most of the work is done as the audio is being added, and it's automatically done at the end of a phrase, so changing this won't usually affect the workload or latency massively.
 
+The interval is a floor rather than a fixed cadence. A pass has to cover at least as much audio as the last one took to make, up to ten intervals' worth, so a machine that cannot keep up transcribes in larger batches instead of falling further behind with every pass. Where there is processing time to spare this makes no difference and the interval governs as before.
+
 The key takeaway is that you usually don't need to worry about the transcript data structure itself, the event system tells you when something important happens. You can manually trigger a transcript update by calling `update_transcription()` which returns a transcript object with all of the information about the current session if you do need to examine the state.
 
 By calling `start()` and `stop()` on a transcriber (or stream) we're beginning and ending a session. Each session has one transcript document associated with it, and it is started fresh on every `start()` call, so you should make copies of any data you need from the transcript object before that.
@@ -692,6 +694,7 @@ The [`examples`](examples/) folder has code samples organized by platform. We us
   - [tts](examples/web/tts/index.html)
   - [agent-flow](examples/web/agent-flow/index.html)
   - [dictation](examples/web/dictation/index.html)
+  - [meeting-notes](examples/web/meeting-notes/index.html)
 
 The examples usually include one minimal project that just creates a transcriber and then feeds it data from a WAV file, and another that's pulling audio from a microphone using the platform's default framework for accessing audio devices. Each one is a self-contained project you can copy out of the tree: the Android samples depend on **`ai.moonshine:moonshine-voice:0.1.1`** from Maven Central, and the Apple ones pull **`MoonshineVoice`** from the Swift package.
 

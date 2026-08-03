@@ -42,6 +42,33 @@ public class Transcriber {
    */
   private int transcribeFlags = 0;
 
+  /**
+   * Seconds of audio that must arrive before {@link #addAudioToStream} runs
+   * another transcription pass. Matches the C++, Python and Swift bindings.
+   */
+  public static final double DEFAULT_UPDATE_INTERVAL = 0.5;
+
+  private volatile double updateInterval = DEFAULT_UPDATE_INTERVAL;
+
+  /**
+   * The most the update interval will stretch to under load, as a multiple of
+   * itself. A pass that takes longer than the audio it covers widens the gate
+   * (see {@link #isUpdateDue}), and one freak pass -- a collection, a phone that
+   * went to sleep mid-call -- must not leave a live transcript silent for a
+   * minute afterwards.
+   */
+  private static final double MAX_UPDATE_INTERVAL_FACTOR = 10.0;
+
+  /** Audio handed to each stream since that stream's last transcription pass. */
+  private final Map<Integer, Double> pendingSeconds = new ConcurrentHashMap<>();
+
+  /**
+   * Wall-clock seconds each stream's last pass took, which is what its next one
+   * has to earn in audio before it is made. Package-private so that a test can
+   * say what a pass cost instead of having to take that long over one.
+   */
+  final Map<Integer, Double> lastPassSeconds = new ConcurrentHashMap<>();
+
   private final Map<Long, TranscriptLine> completedLines = new ConcurrentHashMap<>();
   private final Lock completedLinesLock = new ReentrantLock();
 
@@ -61,6 +88,21 @@ public class Transcriber {
   public void setTranscribeFlags(int flags) { this.transcribeFlags = flags; }
 
   public int getTranscribeFlags() { return this.transcribeFlags; }
+
+  /**
+   * Sets how much audio must accumulate before {@link #addAudioToStream} runs
+   * another transcription pass. Zero or less transcribes on every call, which
+   * is rarely what you want on live audio: capture buffers are a few tens of
+   * milliseconds, the native engine only produces new text every
+   * {@code transcription_interval}, and with {@code identify_speakers} on each
+   * pass re-clips every speaker turn against every line, so the cost per pass
+   * climbs with the length of the session until it overruns real time.
+   */
+  public void setUpdateInterval(double seconds) {
+    this.updateInterval = seconds;
+  }
+
+  public double getUpdateInterval() { return this.updateInterval; }
 
   /**
    * Returns the speech-to-text model download manifest as a JSON object string
@@ -216,6 +258,8 @@ public class Transcriber {
       JNI.moonshineFreeTranscriber(this.transcriberHandle);
       this.transcriberHandle = -1;
     }
+    this.pendingSeconds.clear();
+    this.lastPassSeconds.clear();
   }
 
   /** True once one of the {@code load*} methods has succeeded. */
@@ -244,10 +288,16 @@ public class Transcriber {
 
   public void freeStream(int streamHandle) {
     JNI.moonshineFreeStream(this.transcriberHandle, streamHandle);
+    this.pendingSeconds.remove(streamHandle);
+    this.lastPassSeconds.remove(streamHandle);
   }
 
   public void startStream(int streamHandle) {
     JNI.moonshineStartStream(this.transcriberHandle, streamHandle);
+    // A restarted stream should not inherit audio counted towards the previous
+    // session's next update, nor the cost of a pass made in it.
+    this.pendingSeconds.put(streamHandle, 0.0);
+    this.lastPassSeconds.put(streamHandle, 0.0);
   }
 
   public void stopStream(int streamHandle) {
@@ -259,6 +309,7 @@ public class Transcriber {
     Transcript transcript = JNI.moonshineTranscribeStream(
         this.transcriberHandle, streamHandle,
         JNI.MOONSHINE_FLAG_FORCE_UPDATE | this.transcribeFlags);
+    this.pendingSeconds.put(streamHandle, 0.0);
     this.notifyFromTranscript(transcript, streamHandle);
   }
 
@@ -285,13 +336,59 @@ public class Transcriber {
                                int sampleRate) {
     JNI.moonshineAddAudioToStream(this.transcriberHandle, streamHandle,
                                   audioData, sampleRate, this.transcribeFlags);
+    // The audio is safely in the stream either way; whether to look for new
+    // text yet is a separate question, and asking too often is expensive.
+    // Anything held back here is picked up by the next pass, or flushed by
+    // stopStream's forced update.
+    if (!this.isUpdateDue(streamHandle, audioData.length, sampleRate)) {
+      return;
+    }
+    long started = System.nanoTime();
     Transcript transcript = JNI.moonshineTranscribeStream(
         this.transcriberHandle, streamHandle, this.transcribeFlags);
+    // What the engine cost, not what the listeners go on to do with it: showing
+    // the words is the caller's own budget to keep.
+    this.lastPassSeconds.put(streamHandle,
+                             (System.nanoTime() - started) / 1e9);
     if (transcript == null) {
       throw new RuntimeException("Failed to transcribe stream: " +
                                  streamHandle);
     }
     this.notifyFromTranscript(transcript, streamHandle);
+  }
+
+  /**
+   * Adds the audio just given to a stream to that stream's running total and
+   * reports whether enough has arrived to be worth a transcription pass.
+   * Returns true and starts the count again when it has.
+   *
+   * <p>The update interval is a floor rather than a cadence: a pass has to cover
+   * at least as much audio as the last one took to make. Most of what a pass
+   * costs is not the audio in it -- measured on the tiny model with speakers,
+   * 102ms of a pass goes on getting started and 269ms on each second of audio it
+   * looks at -- so asking twice a second pays that overhead twice a second, and
+   * a machine that cannot quite afford it does not fall behind by a fixed
+   * amount, it falls behind further every pass. Making a pass earn its keep
+   * turns that into batch behaviour: passes grow until each covers its own cost,
+   * and the transcript stays within a pass or two of the speaker. Where there is
+   * headroom to spare the floor governs and nothing changes.
+   */
+  boolean isUpdateDue(int streamHandle, int sampleCount, int sampleRate) {
+    if (this.updateInterval <= 0.0 || sampleRate <= 0 || sampleCount <= 0) {
+      return true;
+    }
+    double seconds = (double)sampleCount / (double)sampleRate;
+    double pending =
+        this.pendingSeconds.merge(streamHandle, seconds, Double::sum);
+    double lastPass = this.lastPassSeconds.getOrDefault(streamHandle, 0.0);
+    double needed =
+        Math.min(Math.max(this.updateInterval, lastPass),
+                 this.updateInterval * MAX_UPDATE_INTERVAL_FACTOR);
+    if (pending < needed) {
+      return false;
+    }
+    this.pendingSeconds.put(streamHandle, 0.0);
+    return true;
   }
 
   private void notifyFromTranscript(Transcript transcript, int streamHandle) {

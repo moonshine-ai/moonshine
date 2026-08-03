@@ -1,5 +1,6 @@
 #include "transcriber.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -796,6 +797,136 @@ TEST_CASE("transcriber-test") {
     }
     free(wav_data);
   }
+  SUBCASE("test-speaker-span-clipping") {
+    auto add_line = [](TranscriptStreamOutput &output, uint64_t id, float start,
+                       float duration) {
+      TranscriberLine line;
+      line.id = id;
+      line.start_time = start;
+      line.duration = duration;
+      output.internal_lines_map[id] = line;
+      output.ordered_internal_line_ids.push_back(id);
+    };
+    auto make_turn = [](float start, float duration, uint64_t speaker) {
+      SpeakerTurn out;
+      out.start_time = start;
+      out.duration = duration;
+      out.speaker_id = speaker;
+      out.speaker_index = (uint32_t)(speaker);
+      return out;
+    };
+    auto spans_of = [](const TranscriptStreamOutput &output, uint64_t id) {
+      return output.internal_lines_map.at(id).speaker_spans;
+    };
+
+    TranscriptStreamOutput output;
+    add_line(output, 1, 0.0f, 10.0f);
+    add_line(output, 2, 10.0f, 10.0f);
+    // One turn per line plus one straddling the boundary, so that both the
+    // turns that touch a line's edges exactly and the one that crosses it are
+    // covered.
+    const std::vector<SpeakerTurn> turns = {
+        make_turn(0.0f, 10.0f, 7), make_turn(5.0f, 10.0f, 8),
+        make_turn(10.0f, 10.0f, 9)};
+
+    REQUIRE(Transcriber::apply_speaker_turns_to_lines(turns, &output));
+
+    // A turn starting exactly where the line ends contributes nothing to it.
+    const std::vector<SpeakerTurn> first = spans_of(output, 1);
+    REQUIRE(first.size() == 2);
+    REQUIRE(first[0].speaker_id == 7);
+    REQUIRE(first[0].start_time == doctest::Approx(0.0f));
+    REQUIRE(first[0].duration == doctest::Approx(10.0f));
+    REQUIRE(first[1].speaker_id == 8);
+    REQUIRE(first[1].start_time == doctest::Approx(5.0f));
+    REQUIRE(first[1].duration == doctest::Approx(5.0f));
+
+    // Nor does one ending exactly where the line starts.
+    const std::vector<SpeakerTurn> second = spans_of(output, 2);
+    REQUIRE(second.size() == 2);
+    REQUIRE(second[0].speaker_id == 8);
+    REQUIRE(second[0].start_time == doctest::Approx(10.0f));
+    REQUIRE(second[0].duration == doctest::Approx(5.0f));
+    REQUIRE(second[1].speaker_id == 9);
+    REQUIRE(second[1].start_time == doctest::Approx(10.0f));
+    REQUIRE(second[1].duration == doctest::Approx(10.0f));
+
+    // Nothing has moved, so nothing is reported as having changed.
+    REQUIRE(!Transcriber::apply_speaker_turns_to_lines(turns, &output));
+
+    // Turns arriving out of order have to produce the same spans: their being
+    // sorted is only ever an opportunity to do less work.
+    TranscriptStreamOutput shuffled;
+    add_line(shuffled, 1, 0.0f, 10.0f);
+    add_line(shuffled, 2, 10.0f, 10.0f);
+    const std::vector<SpeakerTurn> out_of_order = {turns[2], turns[0],
+                                                   turns[1]};
+    REQUIRE(Transcriber::apply_speaker_turns_to_lines(out_of_order, &shuffled));
+    for (const uint64_t id : {(uint64_t)(1), (uint64_t)(2)}) {
+      auto by_speaker = [](const SpeakerTurn &a, const SpeakerTurn &b) {
+        return a.speaker_id < b.speaker_id;
+      };
+      std::vector<SpeakerTurn> got = spans_of(shuffled, id);
+      std::vector<SpeakerTurn> want = spans_of(output, id);
+      std::sort(got.begin(), got.end(), by_speaker);
+      std::sort(want.begin(), want.end(), by_speaker);
+      REQUIRE(got.size() == want.size());
+      for (size_t i = 0; i < got.size(); i++) {
+        REQUIRE(got[i].speaker_id == want[i].speaker_id);
+        REQUIRE(got[i].start_time == doctest::Approx(want[i].start_time));
+        REQUIRE(got[i].duration == doctest::Approx(want[i].duration));
+      }
+    }
+  }
+  SUBCASE("test-speaker-span-clipping-at-scale") {
+    // Lines and turns both accumulate for the whole of a session, and this runs
+    // over them on every streaming transcription call, so the answer has to
+    // hold at the size an hours-long meeting reaches and not just at the size a
+    // hand-written case does. Each line here abuts the next exactly, which is
+    // the arrangement that decides whether the neighbouring turns are correctly
+    // treated as out of reach: a turn ending where a line starts, or starting
+    // where it ends, belongs to the neighbour and not to this line.
+    constexpr size_t kLines = 20000;
+    TranscriptStreamOutput output;
+    std::vector<SpeakerTurn> turns;
+    turns.reserve(kLines);
+    for (size_t i = 0; i < kLines; i++) {
+      const float start = (float)(i)*4.0f;
+      TranscriberLine line;
+      line.id = (uint64_t)(i + 1);
+      line.start_time = start;
+      line.duration = 4.0f;
+      output.internal_lines_map[line.id] = line;
+      output.ordered_internal_line_ids.push_back(line.id);
+
+      SpeakerTurn turn;
+      turn.start_time = start;
+      turn.duration = 4.0f;
+      turn.speaker_id = (uint64_t)(i % 3);
+      turn.speaker_index = (uint32_t)(i % 3);
+      turns.push_back(turn);
+    }
+
+    REQUIRE(Transcriber::apply_speaker_turns_to_lines(turns, &output));
+
+    // Counted rather than asserted line by line, so that a failure reports how
+    // much of the transcript was wrong instead of stopping at the first.
+    size_t exact = 0;
+    for (size_t i = 0; i < kLines; i++) {
+      const std::vector<SpeakerTurn> &spans =
+          output.internal_lines_map.at((uint64_t)(i + 1)).speaker_spans;
+      if (spans.size() == 1 && spans[0].speaker_id == (uint64_t)(i % 3) &&
+          std::abs(spans[0].start_time - (float)(i)*4.0f) < 0.001f &&
+          std::abs(spans[0].duration - 4.0f) < 0.001f) {
+        exact += 1;
+      }
+    }
+    REQUIRE(exact == kLines);
+
+    // A second pass over the same turns has nothing to report, which is the
+    // common case in a session and the one that has to stay cheap.
+    REQUIRE(!Transcriber::apply_speaker_turns_to_lines(turns, &output));
+  }
   SUBCASE("test-identify-speakers") {
     std::string first_pete_wav_path = "two_cities.wav";
     std::string other_speaker_wav_path = "two_cities_librivox_48k.wav";
@@ -984,6 +1115,80 @@ TEST_CASE("transcriber-test") {
     REQUIRE(speaker_ids.size() >= 2);
     REQUIRE(total_span_duration >= wav_duration * 0.35f);
     REQUIRE(total_span_duration <= wav_duration * 1.25f);
+    free(wav_data);
+  }
+  SUBCASE("test-word-timestamps-wait-for-line-end") {
+    // Aligning words is a second pass over the segment, and an unfinished
+    // segment gets re-transcribed on every streaming update, so a line is only
+    // aligned once its speaker has stopped. This pins both halves of that:
+    // nothing is aligned early, and nothing is left unaligned at the end.
+    std::string wav_path = "beckett.wav";
+    REQUIRE(std::filesystem::exists(wav_path));
+    float *wav_data = nullptr;
+    size_t wav_data_size = 0;
+    int32_t wav_sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
+                          &wav_sample_rate));
+    REQUIRE(wav_data != nullptr);
+    REQUIRE(wav_data_size > 0);
+    REQUIRE(std::filesystem::exists("tiny-en"));
+
+    TranscriberOptions options;
+    options.model_source = TranscriberOptions::ModelSource::FILES;
+    options.model_path = "tiny-en";
+    options.model_arch = MOONSHINE_MODEL_ARCH_TINY;
+    options.word_timestamps = true;
+    Transcriber transcriber(options);
+    const int32_t stream_id = transcriber.create_stream();
+    REQUIRE(stream_id >= 0);
+    transcriber.start_stream(stream_id);
+
+    // Half a second at a time, so most updates land mid-utterance.
+    const size_t chunk = (size_t)(wav_sample_rate / 2);
+    size_t unfinished_seen = 0;
+    struct transcript_t *transcript = nullptr;
+    for (size_t offset = 0; offset < wav_data_size; offset += chunk) {
+      const size_t count = std::min(chunk, wav_data_size - offset);
+      transcriber.add_audio_to_stream(stream_id, wav_data + offset, count,
+                                      wav_sample_rate);
+      transcriber.transcribe_stream(stream_id, 0, &transcript);
+      REQUIRE(transcript != nullptr);
+      for (size_t i = 0; i < transcript->line_count; i++) {
+        const struct transcript_line_t &line = transcript->lines[i];
+        if (line.is_complete != 0) {
+          continue;
+        }
+        unfinished_seen += 1;
+        REQUIRE(line.word_count == 0);
+        REQUIRE(line.words == nullptr);
+      }
+    }
+    // Without this the loop above could pass by never seeing a partial line.
+    REQUIRE(unfinished_seen > 0);
+
+    transcriber.stop_stream(stream_id);
+    transcriber.transcribe_stream(stream_id, 0, &transcript);
+    REQUIRE(transcript != nullptr);
+    REQUIRE(transcript->line_count > 0);
+    size_t aligned_lines = 0;
+    for (size_t i = 0; i < transcript->line_count; i++) {
+      const struct transcript_line_t &line = transcript->lines[i];
+      REQUIRE(line.is_complete != 0);
+      if (line.text == nullptr || strlen(line.text) == 0) {
+        continue;
+      }
+      // Every line that ended up with text carries the words for it, and each
+      // word sits inside the line it belongs to.
+      REQUIRE(line.word_count > 0);
+      aligned_lines += 1;
+      for (uint64_t w = 0; w < line.word_count; w++) {
+        const struct transcript_word_t &word = line.words[w];
+        REQUIRE(word.end >= word.start);
+        REQUIRE(word.start >= line.start_time - 0.5f);
+        REQUIRE(word.end <= line.start_time + line.duration + 0.5f);
+      }
+    }
+    REQUIRE(aligned_lines > 0);
     free(wav_data);
   }
 }

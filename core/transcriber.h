@@ -250,18 +250,21 @@ class Transcriber {
 
   static std::string *sanitize_text(const char *text);
 
+  // Clips the given diarization turns to each line's time range and stores
+  // the resulting spans on the lines, marking have_speakers_changed on any
+  // line whose spans differ from the previous set. Can update completed
+  // lines. Returns true if any line changed. Public so that the tests can
+  // check its results and its cost directly: it runs on every streaming
+  // transcription call against every line of the session, so how it scales
+  // decides whether a long meeting keeps up.
+  static bool apply_speaker_turns_to_lines(
+      const std::vector<SpeakerTurn> &turns, TranscriptStreamOutput *output);
+
  private:
   void update_transcript_from_segments(
       const std::vector<VoiceActivitySegment> &segments,
       TranscriberStream *stream, uint32_t flags,
       struct transcript_t **out_transcript);
-
-  // Clips the given diarization turns to each line's time range and stores
-  // the resulting spans on the lines, marking have_speakers_changed on any
-  // line whose spans differ from the previous set. Can update completed
-  // lines. Returns true if any line changed.
-  static bool apply_speaker_turns_to_lines(
-      const std::vector<SpeakerTurn> &turns, TranscriptStreamOutput *output);
 
   // Apply the alphanumeric-spelling fusion to a single line's text in
   // place. Returns true iff the fuser produced a CHARACTER result (in

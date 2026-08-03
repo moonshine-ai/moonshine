@@ -28,6 +28,7 @@ const DEMOS = [
   { id: 'tts', href: '/tts/', label: 'Text to Speech' },
   { id: 'agent', href: '/agent-flow/', label: 'Voice Agent' },
   { id: 'dictation', href: '/dictation/', label: 'Dictation App' },
+  { id: 'meeting-notes', href: '/meeting-notes/', label: 'Meeting Notes App' },
 ];
 
 // --- Page configuration ---------------------------------------------------
@@ -87,7 +88,7 @@ const GITHUB_SVG = `
  * Injects the shared top navigation and footer.
  *
  * @param {object} options
- * @param {'stt'|'tts'|'agent'|'dictation'|'home'} options.active  Which tab to mark.
+ * @param {'stt'|'tts'|'agent'|'dictation'|'meeting-notes'|'home'} options.active  Which tab to mark.
  * @param {string} [options.ctaTitle]  Headline above the footer buttons.
  */
 export function mountChrome({ active, ctaTitle } = {}) {

@@ -1,0 +1,2199 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Meeting Notes App | Moonshine Voice</title>
+    <meta
+      name="description"
+      content="Transcribe a meeting in your browser. Your microphone and the meeting's own audio are transcribed separately, and nothing is uploaded."
+    />
+    <meta property="og:title" content="Meeting Notes App | Moonshine Voice" />
+    <meta
+      property="og:description"
+      content="Transcribe a meeting in your browser, with speech recognition running on your own device."
+    />
+    <link rel="icon" href="/assets/favicon.png" type="image/png" />
+    <link rel="stylesheet" href="/assets/moonshine.css" />
+    <style>
+      /* The ruled sheet from the dictation app, and for the same reason: a
+         transcript is a document you will edit, so it should look like paper
+         rather than like a log. Everything below is derived from one ruled
+         line, so the words sit on the rules instead of near them. */
+      .app {
+        --line: 2rem;
+        --rule-offset: calc(var(--line) * 0.52);
+      }
+
+      .app__head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.5rem 1rem;
+        flex-wrap: wrap;
+        margin: 2rem 0 1.25rem;
+      }
+
+      .app__head h1 {
+        margin: 0;
+        font-size: clamp(1.6rem, 4vw, 2.1rem);
+        letter-spacing: -0.02em;
+      }
+
+      .app__head p {
+        margin: 0;
+        font-size: 0.9rem;
+        color: var(--ms-faint);
+      }
+
+      /* --- The bar above the paper ---------------------------------------- */
+
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 1rem 1.5rem;
+        flex-wrap: wrap;
+        margin-bottom: 1.1rem;
+      }
+
+      .tools {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem 1.5rem;
+        flex-wrap: wrap;
+        margin-inline-start: auto;
+      }
+
+      .group {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+      }
+
+      .tool {
+        display: grid;
+        place-items: center;
+        min-width: 2.75rem;
+        height: 2.75rem;
+        padding: 0 0.75rem;
+        border: 1px solid var(--ms-line);
+        border-radius: 0.6rem;
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--ms-muted);
+        font: inherit;
+        font-size: 0.9rem;
+        cursor: pointer;
+        transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+      }
+
+      .tool:hover:not(:disabled) {
+        color: var(--ms-text);
+        border-color: var(--ms-line-strong);
+        background: rgba(255, 255, 255, 0.07);
+      }
+
+      .tool:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+
+      .tool.is-on {
+        color: #0d1017;
+        border-color: transparent;
+        background: var(--ms-accent-a);
+      }
+
+      .tool--mark {
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 1.05rem;
+      }
+
+      .tool--b {
+        font-weight: 700;
+      }
+
+      .tool--i {
+        font-style: italic;
+      }
+
+      .tool--u {
+        text-decoration: underline;
+      }
+
+      .tool--s {
+        text-decoration: line-through;
+      }
+
+      /* --- The record button ---------------------------------------------- */
+
+      .rec {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 5rem;
+        height: 5rem;
+        padding: 0;
+        border: 1px solid rgba(110, 168, 254, 0.45);
+        border-radius: 50%;
+        background: rgba(110, 168, 254, 0.1);
+        color: var(--ms-text);
+        cursor: pointer;
+        transition: background 140ms ease, border-color 140ms ease, transform 80ms ease;
+      }
+
+      .rec:hover:not(:disabled) {
+        border-color: rgba(110, 168, 254, 0.7);
+        background: rgba(110, 168, 254, 0.18);
+      }
+
+      .rec:active:not(:disabled) {
+        transform: scale(0.97);
+      }
+
+      .rec:disabled {
+        cursor: default;
+      }
+
+      .rec__icon {
+        width: 1.9rem;
+        height: 1.9rem;
+      }
+
+      .rec__icon--stop {
+        display: none;
+      }
+
+      body[data-state="capturing"] .rec {
+        border-color: transparent;
+        color: #0d1017;
+        background: linear-gradient(135deg, var(--ms-accent-a), var(--ms-accent-b));
+        animation: rec-pulse 2s ease-out infinite;
+      }
+
+      body[data-state="capturing"] .rec__icon--screen {
+        display: none;
+      }
+
+      body[data-state="capturing"] .rec__icon--stop {
+        display: block;
+      }
+
+      @keyframes rec-pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(110, 168, 254, 0.45);
+        }
+        70%,
+        100% {
+          box-shadow: 0 0 0 15px rgba(110, 168, 254, 0);
+        }
+      }
+
+      /* The download ring: an arc around the button that fills as the models
+         arrive, in place of a progress bar and a line of text saying so. */
+      .rec__ring {
+        position: absolute;
+        inset: -0.45rem;
+        transform: rotate(-90deg);
+        opacity: 0;
+        transition: opacity 200ms ease;
+        pointer-events: none;
+      }
+
+      body[data-state="loading"] .rec__ring {
+        opacity: 1;
+      }
+
+      .rec__ring circle {
+        fill: none;
+        stroke-width: 4;
+        stroke-linecap: round;
+      }
+
+      .rec__ring .track {
+        stroke: rgba(255, 255, 255, 0.09);
+      }
+
+      .rec__ring .arc {
+        stroke: var(--ms-accent-a);
+        stroke-dasharray: var(--circumference);
+        stroke-dashoffset: var(--circumference);
+        transition: stroke-dashoffset 220ms ease;
+      }
+
+      .rec__ring.is-indeterminate {
+        animation: ring-spin 1.1s linear infinite;
+      }
+
+      .rec__ring.is-indeterminate .arc {
+        stroke-dashoffset: calc(var(--circumference) * 0.8);
+        transition: none;
+      }
+
+      @keyframes ring-spin {
+        from {
+          transform: rotate(-90deg);
+        }
+        to {
+          transform: rotate(270deg);
+        }
+      }
+
+      /* --- The paper ------------------------------------------------------- */
+
+      .paper {
+        min-height: calc(var(--line) * 12);
+        max-height: max(calc(var(--line) * 12), 52vh);
+        overflow-y: auto;
+        padding: calc(var(--line) * 0.75) 1.75rem var(--line) 4rem;
+        border-radius: 0.4rem;
+        color: #1b1d21;
+        font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+        font-size: 1.0625rem;
+        line-height: var(--line);
+        overflow-wrap: break-word;
+        box-shadow:
+          0 24px 50px rgba(0, 0, 0, 0.45),
+          0 1px 0 rgba(255, 255, 255, 0.4) inset;
+        background-image:
+          repeating-linear-gradient(
+            to bottom,
+            transparent 0,
+            transparent calc(var(--line) - 1px),
+            rgba(64, 106, 168, 0.25) calc(var(--line) - 1px),
+            rgba(64, 106, 168, 0.25) var(--line)
+          ),
+          linear-gradient(
+            to right,
+            transparent 2.6rem,
+            rgba(196, 78, 78, 0.32) 2.6rem,
+            rgba(196, 78, 78, 0.32) calc(2.6rem + 1px),
+            transparent calc(2.6rem + 1px)
+          ),
+          linear-gradient(#fdfbe8, #fdfbe8);
+        background-position: 0 var(--rule-offset), 0 0, 0 0;
+        background-attachment: local, scroll, scroll;
+      }
+
+      .paper:focus {
+        outline: none;
+        box-shadow:
+          0 24px 50px rgba(0, 0, 0, 0.45),
+          0 1px 0 rgba(255, 255, 255, 0.4) inset,
+          0 0 0 2px rgba(110, 168, 254, 0.5);
+      }
+
+      .paper ::selection {
+        background: rgba(110, 168, 254, 0.35);
+      }
+
+      .paper.is-empty::before {
+        content: attr(data-placeholder);
+        color: rgba(27, 29, 33, 0.45);
+        font-family: var(--ms-font);
+        font-size: 0.95rem;
+        pointer-events: none;
+      }
+
+      .paper.has-error::before {
+        color: #a5251b;
+        font-weight: 600;
+      }
+
+      /* Words still being spoken: not part of the document until the phrase
+         ends, so they look provisional and are never exported. */
+      .prov {
+        color: rgba(27, 29, 33, 0.45);
+        background: rgba(64, 106, 168, 0.1);
+        border-radius: 0.2rem;
+      }
+
+      /* Who is talking. A label rather than a column, because the transcript
+         has to stay editable prose that exports as prose. */
+      .who {
+        color: #4a5568;
+        font-family: var(--ms-font);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        /* A block as wide as its own text, so the hover tint hugs the name
+           rather than ruling a bar across the page. Still a div, which is what
+           the exporter reads to decide where a paragraph starts.
+
+           A heading has to stand exactly one ruled line tall, and nothing here
+           may add space that is not a whole number of rules: a meeting brings a
+           heading every few sentences, so anything left over is not a quirk of
+           the first one, it walks every line below it further off the ruling.
+           That rules out inline-block, which was seated by its baseline against
+           a strut set for the much larger body text and so took 34px of a 32px
+           rule even with no margin at all. A block is measured by its own
+           line-height, which is the ruling. */
+        display: block;
+        width: fit-content;
+        padding: 0 0.25rem;
+        margin-left: -0.25rem;
+        border-radius: 0.2rem;
+        cursor: text;
+      }
+
+      /* The names are editable, and editing one renames that speaker
+         everywhere, so they have to look like more than a caption. */
+      .who:hover {
+        background: rgba(64, 106, 168, 0.12);
+        color: #26374f;
+      }
+
+      .who[data-src="you"] {
+        color: #2f6f4f;
+      }
+
+      /* The line whose audio is playing right now. */
+      .ln.is-playing {
+        background: rgba(250, 204, 21, 0.45);
+        border-radius: 0.2rem;
+      }
+
+      /* --- Playback -------------------------------------------------------- */
+
+      .deck {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        margin-top: 1rem;
+      }
+
+      .deck__time {
+        min-width: 8.5rem;
+        color: var(--ms-muted);
+        font-family: var(--ms-mono);
+        font-size: 0.82rem;
+      }
+
+      .deck__hint {
+        color: var(--ms-faint);
+        font-size: 0.82rem;
+      }
+
+      .play {
+        display: grid;
+        place-items: center;
+        width: 2.75rem;
+        height: 2.75rem;
+        padding: 0;
+        border: 1px solid var(--ms-line);
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--ms-muted);
+        cursor: pointer;
+      }
+
+      .play:hover:not(:disabled) {
+        color: var(--ms-text);
+        border-color: var(--ms-line-strong);
+      }
+
+      .play:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+
+      .play svg {
+        width: 1.1rem;
+        height: 1.1rem;
+      }
+
+      .play__pause {
+        display: none;
+      }
+
+      body[data-playing="1"] .play__play {
+        display: none;
+      }
+
+      body[data-playing="1"] .play__pause {
+        display: block;
+      }
+
+      /* --- Status ---------------------------------------------------------- */
+
+      .lamps {
+        display: flex;
+        gap: 1.25rem;
+        flex-wrap: wrap;
+        margin-top: 1rem;
+        font-size: 0.82rem;
+      }
+
+      .lamp {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        color: var(--ms-faint);
+      }
+
+      .lamp::before {
+        content: "";
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 50%;
+        background: var(--ms-line-strong);
+      }
+
+      .lamp.is-live::before {
+        background: var(--ms-good);
+        box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.18);
+      }
+
+      .lamp.is-live {
+        color: var(--ms-muted);
+      }
+
+      @media (max-width: 34rem) {
+        .paper {
+          padding-left: 1.25rem;
+          padding-right: 1rem;
+          background-image:
+            repeating-linear-gradient(
+              to bottom,
+              transparent 0,
+              transparent calc(var(--line) - 1px),
+              rgba(64, 106, 168, 0.25) calc(var(--line) - 1px),
+              rgba(64, 106, 168, 0.25) var(--line)
+            ),
+            linear-gradient(#fdfbe8, #fdfbe8);
+          background-position: 0 var(--rule-offset), 0 0;
+          background-attachment: local, scroll;
+        }
+
+        .tools {
+          margin-inline-start: 0;
+        }
+      }
+    </style>
+  </head>
+  <body data-state="loading" data-playing="0">
+    <main class="ms-shell ms-main app">
+      <header class="app__head">
+        <h1>Meeting Notes App</h1>
+        <p>Runs on your device. Nothing is uploaded.</p>
+      </header>
+
+      <div class="bar">
+        <button id="record" class="rec" type="button" aria-label="Start capturing" disabled>
+          <svg class="rec__ring" viewBox="0 0 100 100" aria-hidden="true">
+            <circle class="track" cx="50" cy="50" r="47" />
+            <circle class="arc" cx="50" cy="50" r="47" />
+          </svg>
+          <svg class="rec__icon rec__icon--screen" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+               stroke-linejoin="round" aria-hidden="true">
+            <rect x="2.5" y="4" width="19" height="13" rx="2" />
+            <path d="M8 20.5h8M12 17.5v3" />
+          </svg>
+          <svg class="rec__icon rec__icon--stop" viewBox="0 0 24 24" fill="currentColor"
+               aria-hidden="true">
+            <rect x="7" y="7" width="10" height="10" rx="2.5" />
+          </svg>
+        </button>
+
+        <div class="tools">
+          <div class="group" role="group" aria-label="Formatting">
+            <button class="tool tool--mark tool--b" type="button" data-mark="bold"
+                    title="Bold" aria-label="Bold">B</button>
+            <button class="tool tool--mark tool--i" type="button" data-mark="italic"
+                    title="Italic" aria-label="Italic">I</button>
+            <button class="tool tool--mark tool--u" type="button" data-mark="underline"
+                    title="Underline" aria-label="Underline">U</button>
+            <button class="tool tool--mark tool--s" type="button" data-mark="strikeThrough"
+                    title="Strike-through" aria-label="Strike-through">S</button>
+          </div>
+
+          <div class="group">
+            <button id="copy" class="tool" type="button">Copy</button>
+            <button id="markdown" class="tool" type="button">Markdown</button>
+            <button id="word" class="tool" type="button">Word</button>
+            <button id="srt" class="tool" type="button" disabled>SRT</button>
+            <button id="wav" class="tool" type="button" disabled>Audio</button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        id="doc"
+        class="paper is-empty"
+        contenteditable="true"
+        role="textbox"
+        aria-multiline="true"
+        aria-label="Meeting transcript"
+        spellcheck="true"
+        data-placeholder="Press the screen button and choose the window or tab your meeting is in, with “Share audio” ticked. Your microphone and the meeting's audio are transcribed separately. You can edit and type here at any time."
+      ></div>
+
+      <div class="deck">
+        <button id="play" class="play" type="button" aria-label="Play" disabled>
+          <svg class="play__play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M8 5.5v13l11-6.5-11-6.5Z" />
+          </svg>
+          <svg class="play__pause" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="M9.5 5.5v13M14.5 5.5v13" />
+          </svg>
+        </button>
+        <span id="clock" class="deck__time">0:00 / 0:00</span>
+        <span id="playHint" class="deck__hint">
+          Click where you want to start, or select some text to hear just that.
+          Rename a speaker and every line of theirs follows.
+        </span>
+      </div>
+
+      <div class="lamps">
+        <span id="lampMic" class="lamp">Microphone</span>
+        <span id="lampSys" class="lamp">Meeting audio</span>
+        <span id="lampRec" class="lamp">Recording</span>
+      </div>
+
+      <details class="ms-disclosure ms-section" id="moreOptions">
+        <summary>Settings, browser support, and taking notes without a meeting</summary>
+        <div class="ms-disclosure__body ms-stack">
+          <div>
+            <span class="ms-label">What gets captured</span>
+            <div class="ms-stack" style="gap: 0.4rem; margin-top: 0.5rem">
+              <label class="ms-row" style="gap: 0.5rem">
+                <input id="optAudio" type="checkbox" checked />
+                <span class="ms-small">Keep the audio, so you can play it back and check a word</span>
+              </label>
+              <label class="ms-row" style="gap: 0.5rem">
+                <input id="optSpeakers" type="checkbox" checked />
+                <span class="ms-small">Tell the meeting's speakers apart</span>
+              </label>
+              <label class="ms-row" style="gap: 0.5rem">
+                <input id="optEcho" type="checkbox" checked />
+                <span class="ms-small">
+                  Drop anything your microphone picked up off the speakers
+                </span>
+              </label>
+            </div>
+          </div>
+          <div>
+            <span class="ms-label">Microphone</span>
+            <div class="ms-row">
+              <select id="device" class="ms-input" style="max-width: 22rem"></select>
+            </div>
+            <p class="ms-muted ms-small" style="margin: 0.6rem 0 0">
+              Browsers keep their own default input, which can disagree with the one
+              your operating system is using, and when it does it returns silence
+              rather than an error. Naming the device here fixes that, and the choice
+              is remembered.
+            </p>
+          </div>
+          <div>
+            <span class="ms-label">Which browsers can do this</span>
+            <p class="ms-muted ms-small" style="margin: 0.4rem 0 0">
+              Capturing a meeting's audio needs Chrome or Edge. Firefox and Safari
+              implement screen sharing but not the audio that goes with it, so there
+              is nothing for this page to transcribe there. On macOS, sharing a
+              native app's audio needs Chrome 141 or later on macOS 14.2 or later;
+              before that only a browser tab's audio could be captured, so you would
+              join the meeting in a tab rather than the desktop app.
+            </p>
+          </div>
+          <div class="ms-field">
+            <label class="ms-label" for="utterance">Add a line without speaking it</label>
+            <div class="ms-row">
+              <input
+                id="utterance"
+                class="ms-input"
+                style="flex: 1; min-width: 12rem; width: auto"
+                type="text"
+                placeholder="e.g. we agreed to ship on Friday"
+              />
+              <button id="send" class="ms-btn" type="button">Send</button>
+            </div>
+            <p class="ms-muted ms-small" style="margin: 0.6rem 0 0">
+              Takes the same path a transcribed line takes, so it lands in the
+              document with the same formatting and export behaviour.
+            </p>
+          </div>
+        </div>
+      </details>
+
+    </main>
+
+    <script type="module">
+      import {
+        mountChrome,
+        rotatingWords,
+        PLATFORMS,
+        describeError,
+        purgeModelCacheIfRequested,
+        pageConfig,
+        mountDevicePicker,
+        audioConstraints,
+        formatBytes,
+      } from '/assets/moonshine-ui.js';
+      import { readDocument, toPlainText, toMarkdown, toDocx } from '/assets/rich-text.js';
+
+      const { params, useLocalAssets, moduleUrl } = pageConfig();
+      // A headless browser can be handed a fake microphone but not a fake
+      // screen share, so the integration test has two ways in: `nocapture`
+      // drives the document through the typed-line path, and `fakescreen` puts
+      // the microphone where the meeting's audio would be, which exercises the
+      // whole two-stream pipeline — capture, resampling, both transcribers, the
+      // recording and playback — without a share to grant.
+      const noCapture = params.get('nocapture') === '1';
+      const fakeScreen = params.get('fakescreen') === '1';
+      const { Transcriber, ModelArch } = await import(moduleUrl);
+
+      mountChrome({
+        active: 'meeting-notes',
+        ctaTitle: 'Put meeting notes in your ' + rotatingWords(PLATFORMS) + ' app',
+      });
+
+      const els = {
+        record: document.getElementById('record'),
+        ring: document.querySelector('.rec__ring'),
+        arc: document.querySelector('.rec__ring .arc'),
+        doc: document.getElementById('doc'),
+        copy: document.getElementById('copy'),
+        markdown: document.getElementById('markdown'),
+        word: document.getElementById('word'),
+        srt: document.getElementById('srt'),
+        wav: document.getElementById('wav'),
+        play: document.getElementById('play'),
+        clock: document.getElementById('clock'),
+        playHint: document.getElementById('playHint'),
+        utterance: document.getElementById('utterance'),
+        send: document.getElementById('send'),
+        device: document.getElementById('device'),
+        moreOptions: document.getElementById('moreOptions'),
+        optAudio: document.getElementById('optAudio'),
+        optSpeakers: document.getElementById('optSpeakers'),
+        optEcho: document.getElementById('optEcho'),
+        lampMic: document.getElementById('lampMic'),
+        lampSys: document.getElementById('lampSys'),
+        lampRec: document.getElementById('lampRec'),
+      };
+
+      const INSTRUCTIONS = els.doc.dataset.placeholder;
+      const LINE = parseFloat(getComputedStyle(els.doc).lineHeight) || 32;
+
+      /** Everything downstream of capture runs at the rate the model wants. */
+      const RATE = 16000;
+
+      // --- State --------------------------------------------------------------
+      // One attribute drives every visual state: loading, ready, capturing.
+
+      let error = null;
+
+      const state = () => document.body.dataset.state;
+
+      function setState(next) {
+        document.body.dataset.state = next;
+        render();
+      }
+
+      const isEmpty = () => els.doc.textContent.replace(/\s+/g, '') === '';
+
+      function render() {
+        const current = state();
+        els.record.disabled = current === 'loading' || (noCapture && current === 'ready');
+        els.record.setAttribute(
+          'aria-label',
+          current === 'capturing' ? 'Stop capturing' : 'Start capturing',
+        );
+        els.doc.dataset.placeholder = error ? describeError(error) : INSTRUCTIONS;
+        els.doc.classList.toggle('has-error', error !== null);
+        els.doc.classList.toggle('is-empty', isEmpty());
+        els.record.title = !isEmpty() && error ? describeError(error) : '';
+
+        const haveAudio = recording.length > 0;
+        els.play.disabled = !haveAudio;
+        els.wav.disabled = !haveAudio;
+        els.srt.disabled = lines.size === 0;
+      }
+
+      function fail(err) {
+        error = err;
+        render();
+      }
+
+      function clearError() {
+        if (!error) return;
+        error = null;
+        render();
+      }
+
+      // --- The recording ------------------------------------------------------
+      // One mixed track at the model's own sample rate, which is also the clock
+      // everything else is measured against. A line that Moonshine says began
+      // 12.5 s into its stream begins at sample 200000 here, with no wall-clock
+      // arithmetic in between and so no drift over a long meeting.
+      //
+      // Mono 16 kHz as 16-bit is 32 kB per second, or about 115 MB for an hour.
+      // That is the price of being able to play a sentence back, so it is a
+      // setting rather than a given, and the figure is on screen while it grows.
+
+      const recording = {
+        samples: new Int16Array(RATE * 60),
+        length: 0,
+        /** Recording length when the current capture session began. */
+        sessionStart: 0,
+
+        ensure(needed) {
+          if (needed <= this.samples.length) return;
+          let capacity = this.samples.length;
+          while (capacity < needed) capacity *= 2;
+          const grown = new Int16Array(capacity);
+          grown.set(this.samples.subarray(0, this.length));
+          this.samples = grown;
+        },
+
+        /**
+         * Adds a source's samples on top of whatever is already at that offset.
+         * The two sources are written independently, so this is a mix rather
+         * than an append: the microphone and the meeting are usually both
+         * making noise at the same moment.
+         */
+        mixAt(offset, chunk) {
+          this.ensure(offset + chunk.length);
+          for (let i = 0; i < chunk.length; i++) {
+            const at = offset + i;
+            const sum = this.samples[at] + Math.round(chunk[i] * 32767);
+            this.samples[at] = sum > 32767 ? 32767 : sum < -32768 ? -32768 : sum;
+          }
+          if (offset + chunk.length > this.length) this.length = offset + chunk.length;
+        },
+
+        reset() {
+          this.samples = new Int16Array(RATE * 60);
+          this.length = 0;
+          this.sessionStart = 0;
+        },
+      };
+
+      const seconds = (sampleIndex) => sampleIndex / RATE;
+
+      function clockText(at, total) {
+        const mmss = (t) => {
+          const whole = Math.max(0, Math.floor(t));
+          return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+        };
+        return `${mmss(at)} / ${mmss(total)}`;
+      }
+
+      // --- The transcript -----------------------------------------------------
+      // Every line Moonshine finishes becomes one span carrying its id, and the
+      // id is what ties the words on the page to a stretch of the recording.
+      // Editing is left to the browser: type inside a span and the span keeps
+      // its id, which is exactly the behaviour we want, because the edited words
+      // still belong to the audio they were transcribed from. Text that ends up
+      // outside any span (typed at a boundary, or pasted) is adopted by its
+      // neighbour on the next pass, so nothing is ever orphaned.
+
+      /** id -> { startTime, endTime, source, speaker, text } in recording seconds. */
+      const lines = new Map();
+
+      let nextLocalId = 1;
+
+      /** The last speaker labelled on the page, so a label is only printed on change. */
+      let lastLabelled = null;
+
+      /** The block the current speaker's lines are being appended to. */
+      let currentTurn = null;
+
+      /**
+       * Who diarization last put on the meeting stream.
+       *
+       * It runs a beat behind the recognizer, so a line quite often finishes
+       * before anybody has been attributed to it. Such a line used to arrive
+       * with no speaker at all and open a turn headed "Meeting", which is not a
+       * name, belongs to nobody, and is replaced a second or two later when the
+       * attribution turns up. Carrying on with whoever was talking is a better
+       * guess, and no more of a guess: the page corrects the label the moment
+       * diarization says otherwise, as it does for every other revision.
+       *
+       * The first speaker is where this starts, for the first line of a meeting,
+       * which has nobody to carry on from. Speaker numbers count from the first
+       * voice to appear, so the opening words belong to speaker one by
+       * construction.
+       */
+      let lastMeetingSpeaker = 0;
+
+      const speakerKey = (source, speaker) => `${source}:${speaker ?? ''}`;
+
+      function defaultName(source, speaker) {
+        if (source === 'you') return 'You';
+        return speaker === null || speaker === undefined
+          ? 'Meeting'
+          : `Speaker ${speaker + 1}`;
+      }
+
+      /**
+       * What the reader has decided each speaker is called.
+       *
+       * Diarization can only ever offer "Speaker 2", and the person reading
+       * knows it was Jane. The name is kept here rather than being left to live
+       * in whichever heading was edited, so that one rename reaches every turn
+       * that speaker has already had and every turn they have yet to take.
+       */
+      const speakerNames = new Map();
+
+      const speakerName = (key, source, speaker) =>
+        speakerNames.get(key) || defaultName(source, speaker);
+
+      /** Every heading on the page belonging to one speaker. */
+      const headingsFor = (key) =>
+        els.doc.querySelectorAll(`.who[data-who="${CSS.escape(key)}"]`);
+
+      /** The block of a given kind a point in the document is inside, if any. */
+      function blockAt(node, selector) {
+        if (!node || !els.doc.contains(node)) return null;
+        const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+        return el?.closest?.(selector) ?? null;
+      }
+
+      /** The heading a point in the document is inside, if it is inside one. */
+      function headingAt(node) {
+        return blockAt(node, '.who');
+      }
+
+      /** The heading the caret is inside, if it is inside one. */
+      function editedHeading() {
+        return headingAt(getSelection()?.anchorNode);
+      }
+
+      /**
+       * Copies a renamed heading out to that speaker's other headings.
+       *
+       * The edited one is skipped: rewriting the text of the element being
+       * typed into would take the caret with it. An empty name is not copied
+       * anywhere, because it is either a heading being deleted, which is the
+       * reader's business and nobody else's, or the moment between selecting a
+       * name and typing the one that replaces it.
+       */
+      function renameSpeaker(heading) {
+        const key = heading.dataset.who;
+        if (!key) return;
+        const name = heading.textContent.replace(/\s+/g, ' ').trim();
+        if (!name) return;
+        speakerNames.set(key, name);
+        for (const other of headingsFor(key)) {
+          if (other !== heading && other.textContent !== name) other.textContent = name;
+        }
+      }
+
+      /**
+       * Appends a finished line to the end of the document.
+       *
+       * Always at the end, never at the caret: a meeting arrives in the order it
+       * happens, and the reader may well be editing something further up while
+       * it does. Their selection is left exactly where it was.
+       */
+      function appendLine({ id, text, source, speaker, startTime, endTime }) {
+        const words = text.trim();
+        if (!words) return;
+
+        if (source === 'meeting') {
+          if (speaker === null || speaker === undefined) speaker = lastMeetingSpeaker;
+          else lastMeetingSpeaker = speaker;
+        }
+
+        lines.set(id, { startTime, endTime, source, speaker, text: words });
+
+        // A turn is one speaker's uninterrupted run of lines. Blocks rather
+        // than inline runs, so that each turn exports as its own paragraph with
+        // the label on the line above rather than jammed against the first
+        // word: the exporter starts a paragraph at a block, and both the label
+        // and the turn are blocks.
+        const key = speakerKey(source, speaker);
+        if (key !== lastLabelled || !currentTurn) {
+          els.doc.append(newHeading(source, speaker));
+          currentTurn = document.createElement('div');
+          currentTurn.className = 'turn';
+          els.doc.append(currentTurn);
+          lastLabelled = key;
+        }
+
+        const span = document.createElement('span');
+        span.className = 'ln';
+        span.dataset.line = id;
+        span.dataset.src = source;
+        span.textContent = `${words} `;
+        currentTurn.append(span);
+
+        render();
+        keepWritingInView();
+      }
+
+      function newHeading(source, speaker) {
+        const key = speakerKey(source, speaker);
+        const who = document.createElement('div');
+        who.className = 'who';
+        who.dataset.src = source;
+        who.dataset.who = key;
+        who.textContent = speakerName(key, source, speaker);
+        return who;
+      }
+
+      /** Set while a revised set of speakers is waiting to be laid out. */
+      let regroupPending = false;
+
+      /** Set when a heading could not be relabelled because it was being typed into. */
+      let regroupDeferred = false;
+
+      /** How many times the page has been re-cut, which the test watches. */
+      let regroups = 0;
+
+      /**
+       * Moves a line to a different speaker after it is already on the page.
+       *
+       * Diarization keeps revising who spoke as it hears more of a voice, and
+       * the library says so for lines it has already called complete, so this
+       * arrives after the words have been written down and possibly edited.
+       * Ignoring it would leave the page insisting on an answer the recognizer
+       * has since thought better of.
+       *
+       * Those revisions do not trickle in one at a time. Re-clustering runs
+       * every couple of seconds over a sliding two-minute window and can move
+       * every line in it at once, all reported within a single transcription
+       * pass, so the page is re-cut after the last of them rather than after
+       * each.
+       */
+      function reassignSpeaker(id, speaker) {
+        const line = lines.get(id);
+        // No answer is not an answer: a line whose spans have gone away has not
+        // been reattributed to nobody, and taking it that way would undo the
+        // standing guess about who is talking and put a "Meeting" heading back.
+        if (speaker === null || speaker === undefined) return;
+        if (!line || line.speaker === speaker) return;
+        lines.set(id, { ...line, speaker });
+        if (regroupPending) return;
+        regroupPending = true;
+        // A microtask, not a frame: a note taker is very often the tab nobody
+        // is looking at, and requestAnimationFrame does not run in one.
+        queueMicrotask(() => {
+          regroupPending = false;
+          regroupTurns();
+        });
+      }
+
+      /**
+       * Re-cuts the document into turns to match who the lines now belong to.
+       *
+       * A reassignment can leave a turn holding two people's words, so the runs
+       * have to be found again from scratch. What is already right is then left
+       * alone: this runs for as long as the meeting does, over a page someone is
+       * reading and editing at the time, and rebuilding it wholesale every few
+       * seconds would take their caret, their selection and their half-typed
+       * name with it. Lines that do move are moved rather than rewritten, which
+       * is what carries the reader's edits and formatting across with them.
+       */
+      function regroupTurns() {
+        regroups += 1;
+        const runs = [];
+        for (const span of els.doc.querySelectorAll('.ln')) {
+          const line = lines.get(span.dataset.line);
+          if (!line) continue;
+          const key = speakerKey(line.source, line.speaker);
+          const last = runs[runs.length - 1];
+          if (last && last.key === key) last.spans.push(span);
+          else runs.push({ key, source: line.source, speaker: line.speaker, spans: [span] });
+        }
+        if (!runs.length) return;
+
+        const headings = [...els.doc.querySelectorAll(':scope > .who')];
+        const turns = [...els.doc.querySelectorAll(':scope > .turn')];
+        // A phrase still being spoken sits loose in the document rather than in
+        // a turn, and belongs after the words that have settled, so any block
+        // this adds goes in front of whatever is left.
+        const tail = turns.length ? turns[turns.length - 1].nextSibling : els.doc.firstChild;
+        const beingRenamed = editedHeading();
+        const placed = [];
+
+        runs.forEach((run, i) => {
+          let who = headings[i];
+          let turn = turns[i];
+          if (!turn) {
+            turn = document.createElement('div');
+            turn.className = 'turn';
+            els.doc.insertBefore(turn, tail);
+          }
+          if (!who) {
+            who = newHeading(run.source, run.speaker);
+            els.doc.insertBefore(who, turn);
+          } else if (who.dataset.who !== run.key) {
+            // Relabelling the heading someone is typing into would throw away
+            // the name they are part-way through, so that one waits until the
+            // caret has left it.
+            if (who === beingRenamed) regroupDeferred = true;
+            else {
+              who.dataset.who = run.key;
+              who.dataset.src = run.source;
+              who.textContent = speakerName(run.key, run.source, run.speaker);
+            }
+          }
+          if (!holdsExactly(turn, run.spans)) turn.replaceChildren(...run.spans);
+          placed.push(turn);
+        });
+
+        for (let i = runs.length; i < turns.length; i++) {
+          headings[i]?.remove();
+          turns[i].remove();
+        }
+
+        // Only pick the block being appended to up mid-session: between
+        // sessions these are deliberately null, so that a later session starts
+        // a turn of its own.
+        if (currentTurn) {
+          currentTurn = placed[placed.length - 1];
+          lastLabelled = runs[runs.length - 1].key;
+        }
+
+        // A re-cut changes the height of the page, sometimes hugely: a window
+        // of revisions that puts two dozen turns back where there had been one
+        // adds a heading and a turn apiece. Without this the page keeps the
+        // scroll position it had and simply sits there, a screenful or more
+        // behind the meeting, until the next line happens to land.
+        keepWritingInView();
+      }
+
+      /** Whether a turn already holds exactly these line spans, in this order. */
+      function holdsExactly(turn, spans) {
+        const have = turn.querySelectorAll('.ln');
+        return have.length === spans.length && spans.every((span, i) => have[i] === span);
+      }
+
+      /** The in-flight phrase for one source, shown until the line finishes. */
+      const provisional = new Map();
+
+      function showProvisional(source, text) {
+        let span = provisional.get(source);
+        if (!text) return discardProvisional(source);
+        if (!span) {
+          span = document.createElement('span');
+          span.className = 'prov';
+          span.contentEditable = 'false';
+          provisional.set(source, span);
+        }
+        span.textContent = ` ${text}`;
+        // Always last, so the two sources do not fight over a fixed position.
+        els.doc.append(span);
+        render();
+        keepWritingInView();
+      }
+
+      function discardProvisional(source) {
+        provisional.get(source)?.remove();
+        provisional.delete(source);
+        render();
+      }
+
+      /**
+       * Gives any text that has drifted outside a line span back to the line it
+       * sits next to.
+       *
+       * This is the whole of the edit bookkeeping. Typing inside a span is
+       * already safe, because the browser keeps the span; what needs catching is
+       * text typed at the very edge of one, or pasted in, which arrives as a
+       * bare text node. Such text is attached to the span before it, or the one
+       * after if it is at the top of the document, and is thereby associated
+       * with the nearest sentence's audio. Where there is no span at all — an
+       * empty document someone typed into — it is simply left alone.
+       */
+      function adoptOrphans() {
+        const spans = [...els.doc.querySelectorAll('.ln')];
+        if (!spans.length) return;
+
+        const walker = document.createTreeWalker(els.doc, NodeFilter.SHOW_TEXT);
+        const orphans = [];
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (!node.data.trim()) continue;
+          // Speaker labels are ours, not the reader's, and are not editable.
+          if (node.parentElement?.closest('.ln, .who, .prov')) continue;
+          orphans.push(node);
+        }
+
+        for (const node of orphans) {
+          // The span before it in reading order, or the first one after if the
+          // text was typed above everything.
+          let host = null;
+          for (const span of spans) {
+            const where = node.compareDocumentPosition(span);
+            if (where & Node.DOCUMENT_POSITION_PRECEDING) host = span;
+            else break;
+          }
+          if (host) host.append(node);
+          else spans[0].prepend(node);
+        }
+      }
+
+      els.doc.addEventListener('input', () => {
+        const heading = editedHeading();
+        if (heading) renameSpeaker(heading);
+        adoptOrphans();
+        render();
+      });
+
+      /**
+       * Keeps an edit from running between a name and the words around it.
+       *
+       * A heading is a block, and deleting across the join between two blocks
+       * merges them: the name swallows the line below it, that line's span is
+       * replaced by whatever the browser felt like leaving behind, and with the
+       * span goes the id tying those words to their audio. The transcript is
+       * then a turn short, and since the page is re-cut into turns by pairing
+       * headings with the turn that follows them, everything after the damage
+       * pairs up one out and the labels start moving around on their own.
+       *
+       * Every way in is the same shape -- an edit reaching from inside a
+       * heading to outside it, or the other way about -- so one rule covers
+       * forward-delete at the end of a name, backspace at the start of the line
+       * under it, backspace at the start of a name, and typing over a selection
+       * that began in one and ended in the other. `beforeinput` is where this
+       * belongs rather than `keydown`: it sees the range an edit is about to
+       * work on, whichever key, menu, or gesture asked for it.
+       */
+      els.doc.addEventListener('beforeinput', (event) => {
+        const selection = getSelection();
+        const targets = event.getTargetRanges?.() ?? [];
+        const ranges = targets.length
+          ? targets
+          : selection?.rangeCount
+            ? [selection.getRangeAt(0)]
+            : [];
+        for (const range of ranges) {
+          if (headingAt(range.startContainer) !== headingAt(range.endContainer)) {
+            event.preventDefault();
+            return;
+          }
+        }
+      });
+
+      /**
+       * Keeps a double or triple click inside the block it landed in.
+       *
+       * A reader clicking twice or three times is pointing at one thing: this
+       * name, or this sentence. The browser answers both by reaching past the
+       * block they pointed at -- a triple-click on a name runs on to the start of
+       * the words below it, and one on the words runs on to the start of the next
+       * name -- and an edit across that join is exactly what the guard above has
+       * to refuse. The reader is then left with something selected that they
+       * cannot type over, which is worse than either. Holding the selection to
+       * one block makes the gesture mean what it looks like it means.
+       *
+       * A name is a special case, having nothing to select but the whole of
+       * itself: a double-click on "Speaker 10" would otherwise take one word of
+       * it, and replacing the label is the only reason to be in there at all.
+       *
+       * A click rather than dblclick, because there is no event for the third
+       * one; every press past the first arrives here with its number.
+       */
+      els.doc.addEventListener('click', (event) => {
+        if (event.detail < 2) return;
+        const selection = getSelection();
+        if (!selection?.rangeCount) return;
+
+        const range = document.createRange();
+        const heading = headingAt(event.target);
+        if (heading) {
+          range.selectNodeContents(heading);
+        } else {
+          const taken = selection.getRangeAt(0);
+          const turn = blockAt(taken.startContainer, '.turn');
+          if (!turn || turn.contains(taken.endContainer)) return;
+          range.setStart(taken.startContainer, taken.startOffset);
+          range.setEnd(turn, turn.childNodes.length);
+        }
+
+        selection.removeAllRanges();
+        selection.addRange(range);
+      });
+
+      // Enter inside a heading would split it in two, the second of them
+      // nameless and belonging to nobody. A name is one line, so the key has
+      // nothing useful to do there. This is the other half of the guard above:
+      // that one stops a heading merging with its neighbours, this one stops it
+      // dividing.
+      els.doc.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && editedHeading()) event.preventDefault();
+      });
+
+      // Rich paste would bring its own spans and ids in with it. Treating a
+      // paste as typing keeps the mapping honest: the words become part of
+      // whichever line they were dropped into.
+      els.doc.addEventListener('paste', (event) => {
+        event.preventDefault();
+        const text = event.clipboardData?.getData('text/plain') ?? '';
+        if (text) document.execCommand('insertText', false, text);
+      });
+
+      // Lines arrive at the end of the document wherever the reader happens to
+      // be, so following them down the page is only welcome while the reader is
+      // down there too. Scrolling up during a meeting -- to re-read a point, or
+      // to put a name to a speaker -- would otherwise be undone by the next line
+      // to come in, several times a minute. Scrolling back to the end is how the
+      // reader asks to be carried along again.
+      let following = true;
+
+      // How close to the end still counts as being at it. The scroll that
+      // follows the words comes to rest exactly at the end as the sheet is
+      // styled today, so this slack is not needed to keep following switched on;
+      // it is here so that a reader flicking back down lands near enough, and so
+      // that a change to the sheet's padding cannot quietly turn following off
+      // altogether by leaving a gap behind.
+      const AT_END = LINE * 1.5;
+
+      /** Where the sheet was last seen, to tell a reader's scroll from a reflow. */
+      let lastTop = 0;
+
+      const distanceFromEnd = () =>
+        els.doc.scrollHeight - els.doc.clientHeight - els.doc.scrollTop;
+
+      // Being far from the end is not on its own the reader having left it. The
+      // page grows and shrinks under them all session -- a re-cut can add a
+      // thousand pixels of headings at once, and an unfinished phrase wraps and
+      // unwraps as the recognizer changes its mind -- and reading the distance
+      // at one of those moments would drop the lock for good, when nobody had
+      // touched anything. So the lock is only given up on the page actually
+      // travelling upwards, which is a thing only a reader does; falling behind
+      // is answered by catching up, below.
+      els.doc.addEventListener(
+        'scroll',
+        () => {
+          const top = els.doc.scrollTop;
+          if (distanceFromEnd() <= AT_END) following = true;
+          else if (top < lastTop) following = false;
+          lastTop = top;
+        },
+        { passive: true },
+      );
+
+      // The sheet is a share of the window's height, so its own resizing moves
+      // the end of the document as surely as new words do.
+      new ResizeObserver(() => keepWritingInView()).observe(els.doc);
+
+      /**
+       * Follows the words down the page, while the reader is still at the end of
+       * it. A reader who has scrolled away, or who is editing higher up, is left
+       * where they are.
+       *
+       * Straight to the end, rather than the smallest scroll that would bring
+       * the last block into view. A turn is one speaker's whole run of lines and
+       * can easily grow taller than the sheet, and the smallest scroll that
+       * brings a block that tall "into view" is the one that shows the *top* of
+       * it -- throwing the reader backwards over their own transcript to look at
+       * words they read minutes ago, every time another line lands. The end of
+       * the document is the only thing being followed here, so ask for it.
+       */
+      function keepWritingInView() {
+        if (!following) return;
+        els.doc.scrollTop = els.doc.scrollHeight;
+        // Where the page has been left, noted now rather than waited for. A
+        // scroll event does not follow every scroll: the browser sends one per
+        // frame at most, so a reader scrolling up in the same frame as a line
+        // landing produces a single event, and its position has to be compared
+        // against where the line put the page, not against whatever the last
+        // event happened to say.
+        lastTop = els.doc.scrollTop;
+      }
+
+      function scrollIntoPaper(rect) {
+        const paper = els.doc.getBoundingClientRect();
+        if (rect.bottom > paper.bottom - LINE) {
+          els.doc.scrollTop += rect.bottom - paper.bottom + LINE;
+        } else if (rect.top < paper.top) {
+          els.doc.scrollTop -= paper.top - rect.top + LINE;
+        }
+      }
+
+      // --- Echo, without an echo canceller -------------------------------------
+      // With headphones on, the two streams never hear each other. Without them,
+      // the microphone hears the meeting coming out of the speakers and
+      // transcribes it a second time, so every remote sentence lands twice.
+      //
+      // `echoCancellation: true` does not fix this. Chrome's canceller only
+      // subtracts audio it is playing through a WebRTC peer connection, which a
+      // native meeting app's output is not, so it never sees the signal it would
+      // need to cancel. It is still asked for below, because it costs nothing
+      // and Safari and Firefox do better, but it cannot be relied on.
+      //
+      // What does work is noticing the duplicate after the fact: the same speech
+      // reaching both streams produces two lines covering the same moment. When a
+      // microphone line overlaps a meeting line, the microphone one is the echo,
+      // and is dropped. Microphone lines are therefore held briefly before being
+      // written to the page, so that a duplicate is caught before the reader sees
+      // it rather than deleted from under them.
+
+      const ECHO_OVERLAP = 0.3;
+      const ECHO_GRACE_MS = 1200;
+
+      const heldMicLines = [];
+
+      function overlapsMeeting(candidate) {
+        for (const line of lines.values()) {
+          if (line.source !== 'meeting') continue;
+          const start = Math.max(candidate.startTime, line.startTime);
+          const end = Math.min(candidate.endTime, line.endTime);
+          const shared = Math.max(0, end - start);
+          const span = candidate.endTime - candidate.startTime;
+          if (span > 0 && shared / span > ECHO_OVERLAP) return true;
+        }
+        return false;
+      }
+
+      function holdMicLine(line) {
+        if (!els.optEcho.checked) return appendLine(line);
+        heldMicLines.push(line);
+        setTimeout(() => {
+          const at = heldMicLines.indexOf(line);
+          if (at === -1) return;
+          heldMicLines.splice(at, 1);
+          if (!overlapsMeeting(line)) appendLine(line);
+        }, ECHO_GRACE_MS);
+      }
+
+      // --- Capture -------------------------------------------------------------
+
+      let audioContext = null;
+      let displayStream = null;
+      let micStream = null;
+      let transcribers = [];
+      const cursors = new Map();
+
+      /**
+       * A linear resampler that keeps its place between calls.
+       *
+       * Capture arrives 128 frames at a time, and 128 does not divide evenly by
+       * the 48 kHz to 16 kHz ratio, so a resampler that started fresh on each
+       * chunk would drop a fraction of a sample every time. Over an hour that is
+       * a drift of seconds, which is exactly the sort of error that makes a
+       * highlight sit on the wrong sentence.
+       */
+      function makeResampler(inputRate) {
+        const ratio = inputRate / RATE;
+        let position = 0;
+        let pending = new Float32Array(0);
+        return (chunk) => {
+          const buffer = new Float32Array(pending.length + chunk.length);
+          buffer.set(pending);
+          buffer.set(chunk, pending.length);
+          const out = [];
+          while (position + 1 < buffer.length) {
+            const index = Math.floor(position);
+            const fraction = position - index;
+            out.push(buffer[index] + (buffer[index + 1] - buffer[index]) * fraction);
+            position += ratio;
+          }
+          const consumed = Math.floor(position);
+          pending = buffer.slice(consumed);
+          position -= consumed;
+          return Float32Array.from(out);
+        };
+      }
+
+      const CAPTURE_WORKLET = `
+class MoonshineCapture extends AudioWorkletProcessor {
+  process(inputs) {
+    const input = inputs[0];
+    if (input && input.length && input[0]) {
+      const frames = input[0].length;
+      const mixed = new Float32Array(frames);
+      for (const channel of input) {
+        for (let i = 0; i < frames; i++) mixed[i] += channel[i];
+      }
+      for (let i = 0; i < frames; i++) mixed[i] /= input.length;
+      this.port.postMessage(mixed);
+    }
+    return true;
+  }
+}
+registerProcessor('moonshine-capture', MoonshineCapture);
+`;
+
+      /**
+       * Wires one MediaStream into one Moonshine stream and into the recording.
+       *
+       * Both sources share this AudioContext, and each one's Moonshine stream is
+       * started at the same moment as the recording, which is what lets a line's
+       * `startTime` be read straight off as an offset into the recording.
+       */
+      async function tap({ source, mediaStream, transcriber, onLine }) {
+        const node = audioContext.createMediaStreamSource(mediaStream);
+        const worklet = new AudioWorkletNode(audioContext, 'moonshine-capture');
+        const resample = makeResampler(audioContext.sampleRate);
+        const stream = transcriber.createStream();
+        const base = recording.sessionStart;
+        cursors.set(source, base);
+
+        stream.addListener({
+          onLineTextChanged: (event) => showProvisional(source, event.line.text),
+          onLineCompleted: (event) => {
+            discardProvisional(source);
+            onLine(event.line);
+          },
+          // Fires for lines that are still being spoken and for lines that
+          // finished minutes ago. The first sort are not on the page yet and
+          // will pick up the latest answer when they land; the second sort are,
+          // and are why this listener exists.
+          onLineSpeakersChanged: (event) =>
+            reassignSpeaker(lineId(source, event.line), speakerOf(source, event.line)),
+          onError: (event) => fail(event.error),
+        });
+        stream.start();
+
+        worklet.port.onmessage = (event) => {
+          const chunk = resample(event.data);
+          if (!chunk.length) return;
+          stream.addAudio(chunk, RATE);
+          stream.transcribe();
+          if (els.optAudio.checked) {
+            const at = cursors.get(source);
+            recording.mixAt(at, chunk);
+            cursors.set(source, at + chunk.length);
+          }
+        };
+
+        node.connect(worklet);
+        // Keeps the graph pulling without putting the meeting back through the
+        // speakers, which would be an echo we created ourselves.
+        worklet.connect(audioContext.destination);
+        return { node, worklet, stream, base };
+      }
+
+      /**
+       * What the document calls a Moonshine line. Line ids are unique within a
+       * stream, so the source has to be part of it to keep the two streams from
+       * colliding.
+       */
+      const lineId = (source, line) => `${source}-${line.id}`;
+
+      /**
+       * Who the recognizer currently thinks said a line, or null for nobody in
+       * particular. The microphone is one known person, so its speaker ids are
+       * noise; and a line can be split between speakers, of which this takes the
+       * first, because a turn is a block and cannot be two people at once.
+       */
+      function speakerOf(source, line) {
+        if (source !== 'meeting') return null;
+        const spans = line.speakerSpans ?? [];
+        return spans.length ? spans[0].speakerIndex : null;
+      }
+
+      /** Turns a finished Moonshine line into the shape the document wants. */
+      function toLine(line, source, base) {
+        const offset = seconds(base);
+        return {
+          id: lineId(source, line),
+          text: line.text,
+          source,
+          speaker: speakerOf(source, line),
+          startTime: offset + line.startTime,
+          endTime: offset + line.startTime + line.duration,
+        };
+      }
+
+      async function startCapture() {
+        // Starting a session is asking to watch it come in, however the last one
+        // happened to be left.
+        following = true;
+        els.ring.classList.add('is-indeterminate');
+        setState('loading');
+        try {
+          const [micModel, meetingModel] = await ready;
+
+          displayStream = fakeScreen
+            ? await navigator.mediaDevices.getUserMedia({ audio: true })
+            : await navigator.mediaDevices.getDisplayMedia({
+                // Nothing here wants the picture, but there is no audio-only
+                // screen capture, so asking for video is the price of being
+                // offered the audio. The track is never drawn; it is kept
+                // running because stopping it would end the share, and it is
+                // how the page hears that the reader has ended it themselves.
+                video: true,
+                // Chrome only offers the "share audio" tick when the page asks
+                // for audio, and only alongside whole screens when system audio
+                // is included.
+                audio: {
+                  echoCancellation: false,
+                  noiseSuppression: false,
+                  autoGainControl: false,
+                },
+                systemAudio: 'include',
+                surfaceSwitching: 'include',
+                // Sharing this very page back into itself is never the intent.
+                selfBrowserSurface: 'exclude',
+              });
+
+          if (!displayStream.getAudioTracks().length) {
+            stopTracks(displayStream);
+            displayStream = null;
+            throw new Error(
+              'That share has no audio. Pick the window or tab again and tick ' +
+                '“Share audio” (called “Share tab audio” for a tab), or there is ' +
+                'nothing of the meeting to transcribe.',
+            );
+          }
+
+          micStream = await navigator.mediaDevices
+            .getUserMedia({ audio: await audioConstraints() })
+            .catch(() => null);
+
+          // A share ends when the user presses Chrome's own "Stop sharing".
+          displayStream.getVideoTracks()[0]?.addEventListener('ended', () => {
+            void stopCapture();
+          });
+
+          audioContext = new AudioContext();
+          if (audioContext.state === 'suspended') await audioContext.resume();
+          const workletUrl = URL.createObjectURL(
+            new Blob([CAPTURE_WORKLET], { type: 'application/javascript' }),
+          );
+          try {
+            await audioContext.audioWorklet.addModule(workletUrl);
+          } finally {
+            URL.revokeObjectURL(workletUrl);
+          }
+
+          // Everything that follows is measured from here.
+          recording.sessionStart = recording.length;
+
+          transcribers = [];
+          transcribers.push(
+            await tap({
+              source: 'meeting',
+              mediaStream: new MediaStream(displayStream.getAudioTracks()),
+              transcriber: meetingModel,
+              onLine: (line) => appendLine(toLine(line, 'meeting', recording.sessionStart)),
+            }),
+          );
+          els.lampSys.classList.add('is-live');
+
+          if (micStream) {
+            transcribers.push(
+              await tap({
+                source: 'you',
+                mediaStream: micStream,
+                transcriber: micModel,
+                onLine: (line) => holdMicLine(toLine(line, 'you', recording.sessionStart)),
+              }),
+            );
+            els.lampMic.classList.add('is-live');
+          }
+
+          els.lampRec.classList.toggle('is-live', els.optAudio.checked);
+          clearError();
+          setState('capturing');
+          void devicePicker.refresh();
+        } catch (err) {
+          await stopCapture();
+          setState('ready');
+          fail(err);
+        }
+      }
+
+      async function stopCapture() {
+        for (const source of provisional.keys()) discardProvisional(source);
+
+        for (const tapped of transcribers) {
+          tapped.worklet.port.onmessage = null;
+          tapped.worklet.disconnect();
+          tapped.node.disconnect();
+          // Stopping flushes whatever was still being spoken, so this arrives
+          // as one more completed line and lands on the page like the rest.
+          tapped.stream.stop();
+          tapped.stream.close();
+        }
+        transcribers = [];
+        cursors.clear();
+
+        // Only now, once that last line is in: a later session opens a fresh
+        // turn, so its first line is labelled even if the same person carries
+        // on talking.
+        lastLabelled = null;
+        currentTurn = null;
+
+        stopTracks(displayStream);
+        stopTracks(micStream);
+        displayStream = null;
+        micStream = null;
+
+        await audioContext?.close().catch(() => {});
+        audioContext = null;
+
+        for (const lamp of [els.lampMic, els.lampSys, els.lampRec]) {
+          lamp.classList.remove('is-live');
+        }
+        if (state() === 'capturing') setState('ready');
+        render();
+        // There is a recording to scrub now, so the clock has something to say
+        // about where playing it would start.
+        updateClock();
+      }
+
+      function stopTracks(stream) {
+        stream?.getTracks().forEach((track) => track.stop());
+      }
+
+      // --- Playback -------------------------------------------------------------
+      // Where play begins is a question the reader has usually already answered
+      // by pointing at something. Selecting text asks for that text; putting the
+      // caret in a sentence asks to hear the meeting from there, whether or not
+      // anything is selected; leaving the caret at the end of the document asks
+      // for the whole thing, since there is nothing after it to play. Only when
+      // the caret has not been touched since playback stopped does the
+      // remembered position win, which is what makes pause and play behave the
+      // way pause and play should. The clock says which of these is about to
+      // happen before anything is pressed.
+
+      const player = new Audio();
+      let builtLength = -1;
+      let playRange = null;
+      let pausedAt = null;
+      let highlighted = [];
+
+      /**
+       * Whether the caret has been placed since playback last stopped.
+       *
+       * Without this, "start where I am pointing" and "carry on from where you
+       * stopped" are the same request: both are a paused player with a caret
+       * somewhere in the document.
+       */
+      let caretMoved = false;
+
+      /** The line ids the selection covers, in document order. */
+      function selectedLineIds() {
+        const spans = [...els.doc.querySelectorAll('.ln')];
+        if (!spans.length) return [];
+        const everything = () => spans.map((span) => span.dataset.line);
+
+        const selection = getSelection();
+        if (!selection?.rangeCount) return everything();
+        const range = selection.getRangeAt(0);
+        if (!els.doc.contains(range.commonAncestorContainer)) return everything();
+
+        if (range.collapsed) {
+          // A caret rather than a selection means "from here on", except at the
+          // very end of the document, where it can only mean "all of it".
+          if (caretAtEnd(range, spans)) return everything();
+          const after = spans.filter(
+            (span) =>
+              range.compareBoundaryPoints(Range.END_TO_START, spanRange(span)) <= 0,
+          );
+          return after.length ? after.map((span) => span.dataset.line) : everything();
+        }
+        return spans
+          .filter((span) => range.intersectsNode(span))
+          .map((span) => span.dataset.line);
+      }
+
+      /**
+       * Whether the caret is at or past the end of the last line.
+       *
+       * Worth asking explicitly rather than leaving it to the filter above,
+       * which counts a line the caret sits at the end of as still ahead of it.
+       * That is the right answer everywhere except here, where it would play
+       * the last sentence on its own when the reader asked for the meeting.
+       */
+      function caretAtEnd(caret, spans) {
+        const last = spanRange(spans[spans.length - 1]);
+        return caret.compareBoundaryPoints(Range.END_TO_START, last) >= 0;
+      }
+
+      function spanRange(span) {
+        const range = document.createRange();
+        range.selectNodeContents(span);
+        return range;
+      }
+
+      /** The stretch of recording a set of lines covers. */
+      function rangeFor(ids) {
+        let start = Infinity;
+        let end = 0;
+        for (const id of ids) {
+          const line = lines.get(id);
+          if (!line) continue;
+          start = Math.min(start, line.startTime);
+          end = Math.max(end, line.endTime);
+        }
+        if (!Number.isFinite(start)) return { start: 0, end: seconds(recording.length) };
+        // A typed line has no duration of its own; give it the moment it was
+        // added, so selecting one still plays what was being said at the time.
+        if (end <= start) end = Math.min(start + 8, seconds(recording.length));
+        return { start, end };
+      }
+
+      /** Rebuilds the playable file, but only when more has been recorded. */
+      function refreshPlayer() {
+        if (builtLength === recording.length) return;
+        if (player.src) URL.revokeObjectURL(player.src);
+        player.src = URL.createObjectURL(wavBlob());
+        builtLength = recording.length;
+      }
+
+      function wavBlob() {
+        const samples = recording.samples.subarray(0, recording.length);
+        const header = new DataView(new ArrayBuffer(44));
+        const ascii = (at, text) => {
+          for (let i = 0; i < text.length; i++) header.setUint8(at + i, text.charCodeAt(i));
+        };
+        ascii(0, 'RIFF');
+        header.setUint32(4, 36 + samples.length * 2, true);
+        ascii(8, 'WAVE');
+        ascii(12, 'fmt ');
+        header.setUint32(16, 16, true);
+        header.setUint16(20, 1, true); // PCM
+        header.setUint16(22, 1, true); // mono
+        header.setUint32(24, RATE, true);
+        header.setUint32(28, RATE * 2, true);
+        header.setUint16(32, 2, true);
+        header.setUint16(34, 16, true);
+        ascii(36, 'data');
+        header.setUint32(40, samples.length * 2, true);
+        return new Blob([header, samples], { type: 'audio/wav' });
+      }
+
+      /**
+       * Where pressing play would begin, given what is selected and what has
+       * happened since playback stopped.
+       */
+      function plannedStart(range) {
+        const resumable =
+          !caretMoved &&
+          pausedAt !== null &&
+          pausedAt >= range.start &&
+          pausedAt < range.end;
+        return resumable ? pausedAt : range.start;
+      }
+
+      function startPlayback() {
+        if (!recording.length) return;
+        refreshPlayer();
+
+        playRange = rangeFor(selectedLineIds());
+        player.currentTime = plannedStart(playRange);
+        // Answered: from here on it is a pause to carry on from, not a caret to
+        // start at, until the reader points somewhere else.
+        caretMoved = false;
+        player.play().catch((err) => {
+          // Pausing before playback has got going rejects the promise it
+          // returned. That is someone pressing the button twice, not a fault.
+          if (err.name !== 'AbortError') fail(err);
+        });
+        document.body.dataset.playing = '1';
+        followPlayhead();
+      }
+
+      function pausePlayback() {
+        player.pause();
+        pausedAt = player.currentTime;
+        caretMoved = false;
+        document.body.dataset.playing = '0';
+        clearHighlight();
+        updateClock();
+      }
+
+      /**
+       * The highlight, at the frame rate rather than at the four-times-a-second
+       * `timeupdate` fires at, because a sentence boundary you can see arriving
+       * late reads as a bug.
+       */
+      function followPlayhead() {
+        if (player.paused) return;
+        const at = player.currentTime;
+        if (playRange && at >= playRange.end) {
+          pausePlayback();
+          pausedAt = null;
+          updateClock();
+          return;
+        }
+        highlight(at);
+        updateClock();
+        requestAnimationFrame(followPlayhead);
+      }
+
+      function highlight(at) {
+        const live = [];
+        for (const [id, line] of lines) {
+          if (at >= line.startTime && at <= line.endTime) live.push(id);
+        }
+        if (live.join(',') === highlighted.join(',')) return;
+        clearHighlight();
+        highlighted = live;
+        for (const id of live) {
+          for (const span of els.doc.querySelectorAll(`.ln[data-line="${CSS.escape(id)}"]`)) {
+            span.classList.add('is-playing');
+            const rects = span.getClientRects();
+            if (rects.length) scrollIntoPaper(rects[0]);
+          }
+        }
+      }
+
+      function clearHighlight() {
+        for (const span of els.doc.querySelectorAll('.ln.is-playing')) {
+          span.classList.remove('is-playing');
+        }
+        highlighted = [];
+      }
+
+      /**
+       * The playhead while it is moving, and where play would begin while it is
+       * not, so that moving the caret answers "and where would that start?"
+       * without anything having to be pressed.
+       */
+      function updateClock() {
+        const at = player.paused
+          ? plannedStart(rangeFor(selectedLineIds()))
+          : player.currentTime;
+        els.clock.textContent = clockText(at, seconds(recording.length));
+      }
+
+      els.play.addEventListener('click', () => {
+        if (player.paused) startPlayback();
+        else pausePlayback();
+      });
+
+      player.addEventListener('ended', () => {
+        document.body.dataset.playing = '0';
+        pausedAt = null;
+        clearHighlight();
+        updateClock();
+      });
+
+      // Moving the caret is a request, so it is noted and the clock answers it.
+      // Selection changes that land outside the document are ignored: reaching
+      // for the play button is not the reader changing their mind about where
+      // to start, and treating it as one would make resuming impossible.
+      document.addEventListener('selectionchange', () => {
+        // A heading left alone mid-rename is relabelled once the caret is out
+        // of it, which is the next time the selection moves at all — including
+        // the move away from the document that this listener otherwise ignores.
+        if (regroupDeferred) {
+          regroupDeferred = false;
+          regroupTurns();
+        }
+
+        const selection = getSelection();
+        const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+        if (!range || !els.doc.contains(range.commonAncestorContainer)) return;
+
+        caretMoved = true;
+        refreshMarkButtons();
+        if (player.paused) updateClock();
+      });
+
+      // --- Formatting -----------------------------------------------------------
+
+      for (const button of document.querySelectorAll('[data-mark]')) {
+        // Keep the selection: a button that took focus would collapse it, and
+        // there would be nothing left to embolden.
+        button.addEventListener('mousedown', (event) => event.preventDefault());
+        button.addEventListener('click', () => {
+          els.doc.focus({ preventScroll: true });
+          document.execCommand(button.dataset.mark);
+          refreshMarkButtons();
+        });
+      }
+
+      function refreshMarkButtons() {
+        for (const button of document.querySelectorAll('[data-mark]')) {
+          let on = false;
+          try {
+            on = document.queryCommandState(button.dataset.mark);
+          } catch {
+            // Not every engine answers for every command, and an unlit button is
+            // better than a broken one.
+          }
+          button.classList.toggle('is-on', on);
+        }
+      }
+
+      els.doc.addEventListener('keydown', (event) => {
+        if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'x') {
+          event.preventDefault();
+          document.execCommand('strikeThrough');
+          refreshMarkButtons();
+        }
+      });
+
+      // --- Taking the notes with you ---------------------------------------------
+
+      const paragraphs = () =>
+        readDocument(els.doc, { skip: (el) => el.classList.contains('prov') });
+
+      function save(blob, name) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = name;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+      }
+
+      function filename(extension) {
+        const [date] = new Date().toISOString().split('T');
+        return `meeting-notes-${date}.${extension}`;
+      }
+
+      els.copy.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(toPlainText(paragraphs()));
+          const original = els.copy.textContent;
+          els.copy.textContent = 'Copied';
+          setTimeout(() => (els.copy.textContent = original), 1400);
+        } catch {
+          const all = document.createRange();
+          all.selectNodeContents(els.doc);
+          const selection = getSelection();
+          selection.removeAllRanges();
+          selection.addRange(all);
+        }
+      });
+
+      els.markdown.addEventListener('click', () => {
+        save(
+          new Blob([toMarkdown(paragraphs())], { type: 'text/markdown;charset=utf-8' }),
+          filename('md'),
+        );
+      });
+
+      els.word.addEventListener('click', () => save(toDocx(paragraphs()), filename('docx')));
+
+      els.wav.addEventListener('click', () => save(wavBlob(), filename('wav')));
+
+      /**
+       * Captions, from the line timings the transcript already carries. The text
+       * comes off the page rather than out of the line record, so an edit makes
+       * it into the captions too.
+       */
+      els.srt.addEventListener('click', () => {
+        const stamp = (t) => {
+          const ms = Math.max(0, Math.round(t * 1000));
+          const pad = (n, width = 2) => String(n).padStart(width, '0');
+          return (
+            `${pad(Math.floor(ms / 3600000))}:${pad(Math.floor(ms / 60000) % 60)}:` +
+            `${pad(Math.floor(ms / 1000) % 60)},${pad(ms % 1000, 3)}`
+          );
+        };
+        const ordered = [...lines.entries()].sort((a, b) => a[1].startTime - b[1].startTime);
+        let index = 1;
+        let previousEnd = 0;
+        const out = [];
+        for (const [id, line] of ordered) {
+          const span = els.doc.querySelector(`.ln[data-line="${CSS.escape(id)}"]`);
+          const text = (span?.textContent ?? line.text).trim();
+          if (!text) continue;
+          const start = Math.max(line.startTime, previousEnd);
+          const end = Math.max(line.endTime, start + 0.8);
+          previousEnd = end;
+          out.push(`${index++}\n${stamp(start)} --> ${stamp(end)}\n${text}\n`);
+        }
+        save(new Blob([out.join('\n')], { type: 'text/plain;charset=utf-8' }), filename('srt'));
+      });
+
+      // --- Typed lines -------------------------------------------------------------
+
+      function sendUtterance() {
+        const text = els.utterance.value.trim();
+        if (!text) return;
+        els.utterance.value = '';
+        const at = seconds(recording.length);
+        appendLine({
+          id: `typed-${nextLocalId++}`,
+          text,
+          source: 'you',
+          speaker: null,
+          startTime: at,
+          endTime: at,
+        });
+      }
+
+      els.send.addEventListener('click', sendUtterance);
+      els.utterance.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') sendUtterance();
+      });
+
+      // --- The models ---------------------------------------------------------------
+
+      const RING_CIRCUMFERENCE = 2 * Math.PI * 47;
+
+      function onProgress(fraction, _file, bytes) {
+        const known = bytes?.total > 0;
+        els.ring.classList.toggle('is-indeterminate', !known);
+        if (known) els.arc.style.strokeDashoffset = String(RING_CIRCUMFERENCE * (1 - fraction));
+      }
+
+      function localStreamingUrls({ speakers }) {
+        const base = '/test-assets/tiny-streaming-en';
+        const names = [
+          'frontend.ort',
+          'encoder.ort',
+          'adapter.ort',
+          'cross_kv.ort',
+          'decoder_kv.ort',
+          'streaming_config.json',
+          'tokenizer.bin',
+        ];
+        const urls = Object.fromEntries(names.map((name) => [name, `${base}/${name}`]));
+        // Supplying these skips the download the diarization option would
+        // otherwise trigger, which is the only way to get speaker ids offline.
+        if (speakers) {
+          urls['segmentation.ort'] = '/test-assets/diarization/segmentation.ort';
+          urls['embedding.ort'] = '/test-assets/diarization/embedding.ort';
+        }
+        return urls;
+      }
+
+      /**
+       * Two transcribers, because the microphone and the meeting are two
+       * different problems. The meeting has an unknown number of people in it
+       * and is worth the diarization models; the microphone has exactly one
+       * person in front of it, so asking who is talking would be spending 8.2 MB
+       * to be told what we already know.
+       */
+      function loadTranscriber({ speakers }) {
+        // Looking at the audio every two seconds instead of every one is the
+        // difference between keeping up with a meeting in a browser and falling
+        // behind it. The segmentation and embedding models are over half the
+        // work a pass does, and this halves how often they run, for about a
+        // third off the whole pass. Scored against CallHome it costs four tenths
+        // of a point of diarization error, against a fifteen-point spread
+        // between one recording and the next, so what it really costs is a
+        // slightly coarser idea of exactly when one person stopped and the next
+        // started.
+        const options = speakers
+          ? { identify_speakers: 'true', diarization_analyze_cadence: '2.0' }
+          : undefined;
+        const progress = (loaded, total, file) =>
+          onProgress(total ? loaded / total : 0, file, { loaded, total });
+        if (useLocalAssets) {
+          return Transcriber.loadFromUrls(localStreamingUrls({ speakers }), {
+            modelArch: ModelArch.TinyStreaming,
+            onProgress: progress,
+            options,
+          });
+        }
+        return Transcriber.load({
+          language: 'en',
+          modelArch: ModelArch.MediumStreaming,
+          onProgress: progress,
+          options,
+        });
+      }
+
+      /**
+       * Loads a transcriber, giving up on speaker ids rather than on
+       * transcription if the diarization models cannot be fetched.
+       *
+       * They are an extra 8.2 MB fetched separately from the speech models, so
+       * they are a separate chance to fail. Knowing who spoke is worth having
+       * but it is not worth a transcript, so the fallback is quiet and the page
+       * says so once.
+       */
+      async function buildTranscriber({ speakers }) {
+        try {
+          return await loadTranscriber({ speakers });
+        } catch (err) {
+          if (!speakers) throw err;
+          speakersUnavailable = true;
+          return loadTranscriber({ speakers: false });
+        }
+      }
+
+      let speakersUnavailable = false;
+
+      let ready = null;
+
+      function warmStart() {
+        ready = (async () => {
+          try {
+            const models = await Promise.all([
+              buildTranscriber({ speakers: false }),
+              buildTranscriber({ speakers: els.optSpeakers.checked }),
+            ]);
+            setState('ready');
+            if (speakersUnavailable) {
+              els.optSpeakers.checked = false;
+              els.optSpeakers.disabled = true;
+              els.optSpeakers.nextElementSibling.textContent =
+                'Telling speakers apart is unavailable: the diarization models ' +
+                'could not be downloaded.';
+            }
+            return models;
+          } catch (err) {
+            setState('ready');
+            fail(err);
+            return [];
+          }
+        })();
+        return ready;
+      }
+
+      // --- Wiring -------------------------------------------------------------------
+
+      const devicePicker = mountDevicePicker(els.device, {
+        onChange: async () => {
+          if (state() !== 'capturing') return;
+          await stopCapture();
+          await startCapture();
+        },
+      });
+
+      els.record.addEventListener('click', () => {
+        if (state() === 'capturing') return void stopCapture();
+        void startCapture();
+      });
+
+      els.optAudio.addEventListener('change', () => {
+        els.lampRec.classList.toggle(
+          'is-live',
+          els.optAudio.checked && state() === 'capturing',
+        );
+      });
+
+      // Recording size is worth watching, since it is the one thing on this page
+      // that grows without bound.
+      setInterval(() => {
+        if (!recording.length) return;
+        els.lampRec.textContent = `Recording · ${formatBytes(recording.length * 2)}`;
+      }, 2000);
+
+      if (!navigator.mediaDevices?.getDisplayMedia) {
+        fail(new Error('This browser cannot capture a screen, so there is no meeting audio to transcribe. Chrome or Edge can.'));
+      }
+
+      els.arc.style.setProperty('--circumference', String(RING_CIRCUMFERENCE));
+      els.ring.classList.add('is-indeterminate');
+      if (noCapture) els.moreOptions.open = true;
+      await purgeModelCacheIfRequested();
+      await warmStart();
+
+      /**
+       * A way in from the console, for the integration test and for tuning.
+       *
+       * The test cannot grant a screen share, so it drives the document through
+       * the typed-line path and reads the result here. `appendLine` is the same
+       * door a transcribed line comes through, and is the only way to get a
+       * meeting with more than one person in it without a meeting;
+       * `reassignSpeaker` is the same for diarization changing its mind.
+       */
+      window.__meetingNotes = {
+        lines,
+        text: () => toPlainText(paragraphs()),
+        recordedSeconds: () => seconds(recording.length),
+        playhead: () => player.currentTime,
+        plannedStart: () => plannedStart(rangeFor(selectedLineIds())),
+        speakerNames,
+        appendLine,
+        reassignSpeaker,
+        regroups: () => regroups,
+        following: () => following,
+        // The in-flight phrase, which grows and shrinks as the recognizer
+        // changes its mind and is the hardest thing for the page to sit still
+        // under.
+        showProvisional,
+        discardProvisional,
+      };
+    </script>
+  </body>
+</html>
