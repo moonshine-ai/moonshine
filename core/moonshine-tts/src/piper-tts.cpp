@@ -595,8 +595,13 @@ struct PiperTTS::Impl {
 
     std::vector<SplitWeight> weights =
         run_split_weights_model(env_, weights_path, session_opts);
+#ifdef _WIN32
+    const std::wstring wmodel = model_path.wstring();
+    session_ = Ort::Session(env_, wmodel.c_str(), session_opts);
+#else
     const std::string model_u8 = model_path.string();
     session_ = Ort::Session(env_, model_u8.c_str(), session_opts);
+#endif
     split_weights_ = std::move(weights);
     return true;
   }

@@ -56,6 +56,7 @@ seconds) beside the binary and the library:
 #include <onnxruntime_c_api.h>
 
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <set>
@@ -251,7 +252,11 @@ TEST_CASE("a .onnx is refused rather than parsed") {
   const fs::path scratch =
       fs::temp_directory_path() / "moonshine-load-sweep-not-a-model.onnx";
   {
-    FILE *f = std::fopen(scratch.c_str(), "wb");
+#ifdef _WIN32
+    FILE *f = _wfopen(scratch.wstring().c_str(), L"wb");
+#else
+    FILE *f = std::fopen(scratch.string().c_str(), "wb");
+#endif
     REQUIRE(f != nullptr);
     std::fputs("not a model", f);
     std::fclose(f);
