@@ -26,7 +26,11 @@ def get_assets_path() -> Path:
 
 def get_model_path(model_name: str = "tiny-en") -> Path:
     """
-    Get the path to a specific model directory in the assets folder.
+    Get the path to a specific model directory under package assets.
+
+    Bundled ``.ort`` weights are no longer shipped in the package; prefer
+    ``download_model`` / the CDN cache for real loads. WAV and other small
+    fixtures may still live under ``assets/``.
 
     Args:
         model_name: Name of the model directory (default: "tiny-en")
@@ -37,7 +41,6 @@ def get_model_path(model_name: str = "tiny-en") -> Path:
     Example:
         >>> from moonshine_voice.utils import get_model_path
         >>> model_path = get_model_path("tiny-en")
-        >>> transcriber = Transcriber(str(model_path))
     """
     assets_path = get_assets_path()
     model_path = assets_path / model_name

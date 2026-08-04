@@ -4,6 +4,11 @@
 #   https://download.moonshine.ai/tts/<canonical-key>
 # match object names <bucket>/tts/<canonical-key>.
 #
+# Binaries under core/moonshine-tts/data are not stored in git; populate them first
+# with scripts/fetch-voice-assets.sh (or your own staging tree). The Hugging Face
+# mirror moonshine-ai/moonshine-voice-assets is the archival source of record;
+# this script publishes from the local tree to the CDN clients actually hit.
+#
 # download.moonshine.ai is served from a Cloudflare R2 bucket, fronted by the Cloudflare
 # cache. The Google Cloud Storage bucket and Cloud CDN load balancer that used to serve this
 # hostname have been deleted, so uploading to GCS would reach nobody. We stamp a long
@@ -36,8 +41,13 @@ SRC="${ROOT}/core/moonshine-tts/data"
 EXTRA="${MOONSHINE_RCLONE_EXTRA:-}"
 CACHE_CONTROL="${MOONSHINE_TTS_CACHE_CONTROL:-public, max-age=2592000}"
 
-if [[ ! -d "${SRC}" ]]; then
-  echo "Source directory not found: ${SRC}" >&2
+if [[ ! -f "${SRC}/kokoro/model.ort" ]]; then
+  echo "TTS binaries missing under ${SRC}; fetching via scripts/fetch-voice-assets.sh..." >&2
+  "${ROOT}/scripts/fetch-voice-assets.sh" tts
+fi
+if [[ ! -d "${SRC}" || ! -f "${SRC}/kokoro/model.ort" ]]; then
+  echo "Source directory not ready: ${SRC}" >&2
+  echo "Run: scripts/fetch-voice-assets.sh tts" >&2
   exit 1
 fi
 

@@ -1,3 +1,100 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:b6018b1f6e56f7229f1759d49e86109aa4eaea368e94e26241da3b45952cbb94
-size 20180
+sˈɛndʒ nˈoʊ vælkˈaɪɹaɪɑː θɹˈi ˌʌnɹɪkˈɔɹdɪd kɹˈɑnɪkəlz dʒˌæpənˈiz  lˈɪt
+vælkˈaɪɹaɪɑː ˈʌv ðə bˈætəlfˌild θɹˈi kˈɑmənli ɹəfˈɝd tə ˈæz vælkˈaɪɹaɪɑː kɹˈɑnɪkəlz ˈaɪaɪaɪ ˈaʊtsˈaɪd dʒəpˈæn ɪz ə tˈæktɪkəl ɹˈoʊl plˈeɪɪŋ vˈɪdioʊ ɡˈeɪm dɪvˈɛləpt bˈaɪ sˈeɪɡə ˈænd mˈidiə
+vˈɪʒən fɚ ðə plˈeɪstˌeɪʃən pˈɔɹtəbəl
+ɹilˈist ɪn dʒˈænjuˌɛɹi tˈuˌθˈaʊzəndˌɪlˈɛvən ɪn dʒəpˈæn ɪt ɪz ðə θˈɝd ɡˈeɪm ɪn ðə vælkˈaɪɹaɪɑː sˈɪɹiz
+ɛmplˈɔɪɪŋ ðə sˈeɪm fjˈuʒən ˈʌv tˈæktɪkəl ˈænd ɹˈil tˈaɪm ɡˈeɪmplˌeɪ ˈæz ɪts pɹˈɛdəsˌɛsɚz ðə stˈɔɹi ɹˈʌnz pˈɛɹəlˌɛl tə ðə fˈɝst ɡˈeɪm ˈænd fˈɑloʊz ðə nˈeɪmləs ə pˈinəl mˈɪlətˌɛɹi jˈunɪt sˈɝvɪŋ ðə nˈeɪʃən ˈʌv ɡˈæljə djˈʊɹɪŋ ðə sˈɛkənd ˈjuːɹɒpæn wˈɔɹ hˈu pɚfˈɔɹm sˈikɹət blˈæk ˌɑpɚˈeɪʃənz ˈænd ˈɑɹ pˈɪtɪd əɡˈeɪnst ðə ˌɪmpˈɪɹiəl jˈunɪt kælæmætˈaɪ ɹˈeɪvən
+ðə ɡˈeɪm bɪɡˈæn dɪvˈɛləpmənt ɪn tˈuˌθˈaʊzəndˌtˈɛn kˈæɹiɪŋ ˈoʊvɚ ə lˈɑɹdʒ pˈɔɹʃən ˈʌv ðə wˈɝk dˈʌn ˈɔn vælkˈaɪɹaɪɑː kɹˈɑnɪkəlz ˈaɪaɪ
+wˈaɪl ɪt ɹitˈeɪnd ðə stˈændɚd fˈitʃɚz ˈʌv ðə sˈɪɹiz ɪt ˈɔlsoʊ ˌʌndɚwˈɛnt mˈʌltəpəl ədʒˈʌstmənts sˈʌtʃ ˈæz mˈeɪkɪŋ ðə ɡˈeɪm mˈɔɹ fɔɹɡˈɪvɪŋ fɚ sˈɪɹiz nˈukˌʌmɚz
+kˈɛɹɪktɚ dɪzˈaɪnɚ ɹˈeɪtɑː hɒndʒˈaʊ ˈænd kəmpˈoʊzɚ hɪtˈoʊʃi sækɪmɒtˈoʊ bˈoʊθ ɹitˈɝnd fɹˈʌm pɹˈiviəs ˈɛntɹiz əlˈɔŋ wɪð vælkˈaɪɹaɪɑː kɹˈɑnɪkəlz ˈaɪaɪ daɪɹˈɛktɚ təkˈɛʃi oʊzˈɑwə
+ə lˈɑɹdʒ tˈim ˈʌv ɹˈaɪtɚz hˈændəld ðə skɹˈɪpt
+ðə ɡˈeɪm ˈɛs ˈoʊpənɪŋ θˈim wəz sˈʌŋ bˈaɪ mˈeɪ ˈɛn
+ɪt mˈɛt wɪð pˈɑzətɪv sˈeɪlz ɪn dʒəpˈæn ˈænd wəz pɹˈeɪzd bˈaɪ bˈoʊθ dʒˌæpənˈiz ˈænd wˈɛstɚn kɹˈɪtɪks
+ˈæftɚ ɹilˈis ɪt ɹisˈivd dˈoʊnloʊdæbl kˈɑntɛnt əlˈɔŋ wɪð ən ɪkspˈændəd ədˈɪʃən ɪn noʊvˈɛmbɚ ˈʌv ðˈæt jˈɪɹ
+ɪt wəz ˈɔlsoʊ ədˈæptɪd ɪntə mˈæŋɡə ˈænd ən ɚˈɪdʒənəl vˈɪdioʊ ˌænəmˈeɪʃən sˈɪɹiz
+dˈu tə lˈoʊ sˈeɪlz ˈʌv vælkˈaɪɹaɪɑː kɹˈɑnɪkəlz ˈaɪaɪ vælkˈaɪɹaɪɑː kɹˈɑnɪkəlz ˈaɪaɪaɪ wəz nˈɑt lˈoʊkəlˌaɪzd bˈʌt ə fˈæn tɹænslˈeɪʃən kəmpˈætəbəl wɪð ðə ɡˈeɪm ˈɛs ɪkspˈændəd ədˈɪʃən wəz ɹilˈist ɪn tˈuˌθˈaʊzəndˌfɔɹˈtin
+mˈidiə
+vˈɪʒən wˈʊd ɹitˈɝn tə ðə fɹˈæntʃˌaɪz wɪð ðə dɪvˈɛləpmənt ˈʌv vælkˈaɪɹaɪɑː ˈæʒɚ ɹˌɛvəlˈuʃən fɚ ðə plˈeɪstˌeɪʃən fˈɔɹ
+ˈæz wɪð pɹˈiviəs vælkˈaɪɪɹɑː kɹˈɑnɪkəlz ɡˈeɪmz vælkˈaɪɹaɪɑː kɹˈɑnɪkəlz ˈaɪaɪaɪ ɪz ə tˈæktɪkəl ɹˈoʊl plˈeɪɪŋ ɡˈeɪm wˈɛɹ plˈeɪɚz tˈeɪk kəntɹˈoʊl ˈʌv ə mˈɪlətˌɛɹi jˈunɪt ˈænd tˈeɪk pˈɑɹt ɪn mˈɪʃənz əɡˈeɪnst ˈɛnəmi fˈɔɹsɪz
+stˈɔɹiz ˈɑɹ tˈoʊld θɹˈu kˈɑmɪk bˈʊk lˈaɪk pˈænəlz wɪð ˈænəmˌeɪtɪd kˈɛɹɪktɚ pˈɔɹtɹəts wɪð kˈæɹəktɚz spˈikɪŋ pˈɑɹʃəli θɹˈu vˈɔɪst spˈitʃ bˈʌbəlz ˈænd pˈɑɹʃəli θɹˈu ʌnvˈɔɪsɛd tˈɛkst
+ðə plˈeɪɚ pɹoʊɡɹˈɛsəz θɹˈu ə sˈɪɹiz ˈʌv lˈɪniɚ mˈɪʃənz ɡɹˈædʒuəli ənlˈɑkt ˈæz mˈæps ðˈæt kˈæn bi fɹˈili skˈænd θɹˈu ˈænd ɹiplˈeɪd ˈæz ðˈeɪ ˈɑɹ ənlˈɑkt
+ðə ɹˈaʊt tə ˈitʃ stˈɔɹi loʊkˈeɪʃən ˈɔn ðə mˈæp vˈɛɹiz dɪpˈɛndɪŋ ˈɔn ən ˌɪndəvˈɪdʒəwəl plˈeɪɚ ˈɛs əpɹˈoʊtʃ wˈɛn wˈʌn ˈɑpʃən ɪz səlˈɛktɪd ðə ˈʌðɚ ɪz sˈild ˈɔf tə ðə plˈeɪɚ
+ˈaʊtsˈaɪd mˈɪʃənz ðə plˈeɪɚ kˈæɹəktɚz ɹˈɛst ɪn ə kˈæmp wˈɛɹ jˈunɪts kˈæn bi kˈʌstəmˌaɪzd ˈænd kˈɛɹɪktɚ ɡɹˈoʊθ əkˈɝz
+əlˈɔŋsˈaɪd ðə mˈeɪn stˈɔɹi mˈɪʃənz ˈɑɹ kˈɛɹɪktɚ spəsˈɪfɪk sˈʌb mˈɪʃənz ɹilˈeɪtɪŋ tə dˈɪfɹənt skwˈɑd mˈɛmbɚz
+ˈæftɚ ðə ɡˈeɪm ˈɛs kəmplˈiʃən ədˈɪʃnəl ˈɛpɪsˌoʊdz ˈɑɹ ənlˈɑkt sˈʌm ˈʌv ðˈɛm hˈævɪŋ ə hˈaɪɚ dˈɪfɪkˌʌlti ðən ðˈoʊz fˈaʊnd ɪn ðə ɹˈɛst ˈʌv ðə ɡˈeɪm
+ðˈɛɹ ˈɑɹ ˈɔlsoʊ lˈʌv sˌɪmjəlˈeɪʃən ˈɛləmənts ɹilˈeɪtɪd tə ðə ɡˈeɪm ˈɛs tˈu mˈeɪn hˈɛɹˌoʊənz ˌɔlðˈoʊ ðˈeɪ tˈeɪk ə vˈɛɹi mˈaɪnɚ ɹˈoʊl
+ðə ɡˈeɪm ˈɛs bˈætəl sˈɪstəm ðə blˈɪts sˈɪstəm ɪz kˈæɹid ˈoʊvɚ daɪɹˈɛkli fɹˈʌm vælkˈaɪɪɹɑː kɹˈɑnɪkəlz
+djˈʊɹɪŋ mˈɪʃənz plˈeɪɚz səlˈɛkt ˈitʃ jˈunɪt jˈuzɪŋ ə tˈɑp dˈaʊn pɚspˈɛktɪv ˈʌv ðə bˈætəlfˌild mˈæp wˈʌns ə kˈɛɹɪktɚ ɪz səlˈɛktɪd ðə plˈeɪɚ mˈuvz ðə kˈɛɹɪktɚ ɚˈaʊn ðə bˈætəlfˌild ɪn θˈɝd pˈɝsən
+ə kˈɛɹɪktɚ kˈæn ˈoʊnli ˈækt wˈʌns pˈɝ tˈɝn bˈʌt kˈæɹəktɚz kˈæn bi ɡɹˈæntəd mˈʌltəpəl tˈɝnz ˈæt ðə ɪkspˈɛns ˈʌv ˈʌðɚ kˈæɹəktɚz tˈɝnz
+ˈitʃ kˈɛɹɪktɚ həz ə fˈild ˈænd dˈɪstəns ˈʌv mˈuvmənt lˈɪmətəd bˈaɪ ðˈɛɹ ˈækʃən ɡˈeɪdʒ
+ˈʌp tə nˈaɪn kˈæɹəktɚz kˈæn bi əsˈaɪnd tə ə sˈɪŋɡəl mˈɪʃən
+djˈʊɹɪŋ ɡˈeɪmplˌeɪ kˈæɹəktɚz wˈɪl kˈɔl ˈaʊt ɪf sˈʌmθɪŋ hˈæpənz tə ðˈɛm sˈʌtʃ ˈæz ðˈɛɹ hˈɛlθ pˈɔɪnts ˈeɪtʃpˈi ɡˈɛtɪŋ lˈoʊ ˈɔɹ bˈiɪŋ nˈɑkt ˈaʊt bˈaɪ ˈɛnəmi ətˈæks
+ˈitʃ kˈɛɹɪktɚ həz spəsˈɪfɪk pətˈɛnʃəlz skˈɪlz junˈik tə ˈitʃ kˈɛɹɪktɚ
+ðˈeɪ ˈɑɹ dɪvˈaɪdɪd ɪntə pˈɝsɪnəl pətˈɛnʃəl wˈɪtʃ ˈɑɹ ˌɪnˈeɪt skˈɪlz ðˈæt ɹimˈeɪn ənˈɔltɚd ənlˈɛs ˈʌðɚwˌaɪz dɪktˈeɪtɪd bˈaɪ ðə stˈɔɹi ˈænd kˈæn ˈiðɚ hˈɛlp ˈɔɹ ˌɪmpˈid ə kˈɛɹɪktɚ ˈænd bˈætəl pətˈɛnʃəlz wˈɪtʃ ˈɑɹ ɡɹˈoʊn θɹuˈaʊt ðə ɡˈeɪm ˈænd ˈɔlwiz ɡɹˈænt bˈunz tə ə kˈɛɹɪktɚ
+tə lˈɝn bˈætəl pətˈɛnʃəlz ˈitʃ kˈɛɹɪktɚ həz ə junˈik mˈæstɚz tˈeɪbəl ə ɡɹˈɪd bˈeɪst skˈɪl tˈeɪbəl ðˈæt kˈæn bi jˈuzd tə əkwˈaɪɚ ˈænd lˈɪŋk dˈɪfɹənt skˈɪlz
+kˈæɹəktɚz ˈɔlsoʊ hˈæv spˈɛʃəl əbˈɪlətˌiz ðˈæt ɡɹˈænt ðˈɛm tˈɛmpɚˌɛɹi bˈusts ˈɔn ðə bˈætəlfˌild kˈɝt kˈæn ˈæktəvˌeɪt daɪɹˈɛkt kəmˈænd ˈænd mˈuv ɚˈaʊn ðə bˈætəlfˌild wɪðˈaʊt dɪplˈitɪŋ hɪz ˈækʃən pˈɔɪnt ɡˈeɪdʒ ðə kˈɛɹɪktɚ ɹˈeɪlɑː kˈæn ʃˈɪft ɪntə hɚ vælkˈaɪɹaɪɑː fˈɔɹm ˈænd bɪkˈʌm ˌɪnvˈɪnsəbəl wˈaɪl ɪmkˈɑː kˈæn tˈɑɹɡət mˈʌltəpəl ˈɛnəmi jˈunɪts wɪð hɚ hˈɛvi wˈɛpən
+tɹˈups ˈɑɹ dɪvˈaɪdɪd ɪntə fˈaɪv klˈæsəz skˈaʊts ʃɒktɹˈuːpɛɹs ˈɛndʒənˈɪɹz lˈænsɚz ˈænd ˈɑɹmɚd sˈoʊldʒɚ
+tɹˈupɚz kˈæn swˈɪtʃ klˈæsəz bˈaɪ tʃˈeɪndʒɪŋ ðˈɛɹ əsˈaɪnd wˈɛpən
+tʃˈeɪndʒɪŋ klˈæs dˈʌz nˈɑt ɡɹˈeɪtli əfˈɛkt ðə stˈæts ɡˈeɪnd wˈaɪl ɪn ə pɹˈiviəs klˈæs
+wɪð vˈɪktɚi ɪn bˈætəl ɪkspˈɪɹiəns pˈɔɪnts ˈɑɹ əwˈɔɹdɪd tə ðə skwˈɑd wˈɪtʃ ˈɑɹ dɪstɹˈɪbjətəd ɪntə fˈaɪv dˈɪfɹənt ətɹˈɪbjˌuts ʃˈɛɹd bˈaɪ ðə ɪntˈaɪɚ skwˈɑd ə fˈitʃɚ dˈɪfɚɪŋ fɹˈʌm ˈɝli ɡˈeɪmz mˈɛθəd ˈʌv dɪstɹˈɪbjutɪŋ tə dˈɪfɹənt jˈunɪt tˈaɪps
+ðə ɡˈeɪm tˈeɪks plˈeɪs djˈʊɹɪŋ ðə sˈɛkənd ˈjuːɹɒpæn wˈɔɹ
+ɡælˈaɪæn ˈɑɹmi skwˈɑd fˈɔɹˌhˈʌndɹɪdˌtwˈɛntiˌtˈu ˈɔlsoʊ nˈoʊn ˈæz ðə nˈeɪmləs ˈɑɹ ə pˈinəl mˈɪlətˌɛɹi jˈunɪt kəmpˈoʊzd ˈʌv kɹˈɪmənəlz fˈɔɹən dˈɛzɚtɚz ˈænd mˈɪlətˌɛɹi əfˈɛndɚz hˈuz ɹˈil nˈeɪmz ˈɑɹ iɹˈeɪst fɹˈʌm ðə ɹˈɛkɚdz ˈænd ðɛɹˈɔn əfˈɪʃəli ɹəfˈɝd tə bˈaɪ nˈʌmbɚz
+ˈɔɹdɚd bˈaɪ ðə ɡælˈaɪæn mˈɪlətˌɛɹi tə pɚfˈɔɹm ðə mˈoʊst dˈeɪndʒɚəs mˈɪʃənz ðˈæt ðə ɹˈeɪɡjəlɚ ˈɑɹmi ˈænd məlˈɪʃə wˈɪl nˈɑt dˈu ðˈeɪ ˈɑɹ nˌɛvɚðəlˈɛs ˈʌp tə ðə tˈæsk ɪɡzˈɛmpləfˌaɪd bˈaɪ ðˈɛɹ mˈɑtoʊ æltæhˈɑː æbɪlˈaɪɑː mˈinɪŋ ˈɔlwiz ɹˈɛdi
+ðə θɹˈi mˈeɪn kˈæɹəktɚz ˈɑɹ nˈoʊ
+sˈɛvən kˈɝt ˈɝvɪŋ ən ˈɑɹmi ˈɔfəsɚ fˈɔlsli əkjˈuzd ˈʌv tɹˈizən hˈu wˈɪʃɪz tə ɹɪdˈim hɪmsˈɛlf ˈeɪs nˈoʊ
+wˈʌn ɪmkˈɑː ə fˈimˌeɪl dˈɑɹksɛn hˈɛvi wˈɛpənz spˈɛʃələst hˈu sˈiks ɹivˈɛndʒ əɡˈeɪnst ðə vælkˈaɪɹaɪɑː hˈu dɪstɹˈɔɪd hɚ hˈoʊm ˈænd nˈoʊ
+θɝˈtin ɹˈiːlɑː mˈɑɹsɛlɪs ə sˈimɪŋli dʒˈɪnksɛd jˈʌŋ wˈʊmən hˈu ɪz ənnˈoʊɪŋli ə dɪsˈɛndənt ˈʌv ðə vælkˈaɪɹaɪɑː
+təɡˈɛðɚ wɪð ðˈɛɹ fˈɛloʊ skwˈɑd mˈɛmbɚz ðˈiz θɹˈi ˈɑɹ tˈæskt tə fˈaɪt əɡˈeɪnst ə mɪstˈɪɹiəs ˌɪmpˈɪɹiəl jˈunɪt nˈoʊn ˈæz kəlˈæməti ɹˈeɪvən kənsˈɪstɪŋ ˈʌv mˈoʊstli dˈɑɹksɛn sˈoʊldʒɚz
+ˈæz ðə nˈeɪmləs əfˈɪʃəli dˈu nˈɑt ɪɡzˈɪst ðə ˈʌpɚ ˈɛʃəlˌɑnz ˈʌv ðə ɡælˈaɪæn ˈɑɹmi ˈɛksplˌɔɪt ðə kˈɑnsɛpt ˈʌv plˈɔzəbəl dɪnˌaɪəbˈɪlɪti ɪn ˈɔɹdɚ tə sˈɛnd ðˈɛm ˈɔn mˈɪʃənz ðˈæt wˈʊd ˈʌðɚwˌaɪz mˈeɪk ɡˈæljə lˈuz fˈeɪs ɪn ðə wˈɔɹ
+wˈaɪl ˈæt tˈaɪmz ðɪs wˈɝks tə ðˈɛɹ ædvˈæntɪdʒ sˈʌtʃ ˈæz ə səksˈɛsfəl ˌɪnkˈɝʒən ɪntə ˌɪmpˈɪɹiəl tˈɛɹɪtˌɔɹi ˈʌðɚ ˈɔɹdɚz kˈɔz sˈɝtən mˈɛmbɚz ˈʌv ðə ˈnd ɡɹˈeɪt dɪstɹˈɛs
+wˈʌn sˈʌtʃ mˈɛmbɚ ɡʌsˈʊɹɡ bɪkˈʌmz sˈoʊ ɛnɹˈeɪdʒd ðˈæt hˈi əbˈændənz hɪz pˈoʊst ˈænd dˈifɛkts ɪntə ðə ɹˈæŋks ˈʌv kəlˈæməti ɹˈeɪvən ətˈætʃt tə ðə aɪdˈil ˈʌv dˈɑɹksɛn ˌɪndɪpˈɛndəns pɹəpˈoʊzd bˈaɪ ðˈɛɹ lˈidɚ dæhˈɔː
+ˈæt ðə sˈeɪm tˈaɪm ˈɛləmənts wɪðˈɪn ɡælˈaɪæn ˈɑɹmi kəmˈænd mˈuv tə iɹˈeɪs ðə nˈeɪmləs ɪn ˈɔɹdɚ tə pɹətˈɛkt ðˈɛɹ ˈoʊn ˈɪntɚəsts
+hˈaʊndɪd bˈaɪ bˈoʊθ ˈælaɪz ˈænd ˈɛnəmiz ˈænd kəmbˈaɪnd wɪð ðə pɹˈɛzəns ˈʌv ə tɹˈeɪtɚ wɪðˈɪn ðˈɛɹ ɹˈæŋks ðə ˈnd dˈɛspɚətli mˈuv tə kˈip ðɛmsˈɛlvz əlˈaɪv wˈaɪl ˈæt ðə sˈeɪm tˈaɪm fˈaɪt tə hˈɛlp ðə ɡælˈaɪæn wˈɔɹ ˈɛfɚt
+ðɪs kəntˈɪnjuz əntˈɪl ðə nˈeɪmləs ˈɛs kəmˈændɪŋ ˈɔfəsɚ ɹˈæmzi kɹˈoʊ hˈu hˈæd bɪn kˈɛpt ˈʌndɚ hˈaʊs ɚˈɛst ɪz ɛskˈɔɹtɪd tə ðə kˈæpətəl sˈɪti ˈʌv ɹændɡɹˈɪz ɪn ˈɔɹdɚ tə pɹˈɛzənt ˈɛvədəns ɪɡzˈɑnɚˌeɪtɪŋ ðə wˈɪɹi sˈoʊldʒɚz ˈænd ɪkspˈoʊz ðə ɹˈil tɹˈeɪtɚ ðə ɡælˈaɪæn dʒˈɛnɚəl ðˈæt hˈæd əkjˈuzd kˈɝt ˈʌv tɹˈizən
+pˈɑɹtli dˈu tə ðˈiz ivˈɛnts ˈænd pˈɑɹtli dˈu tə ðə mˈeɪdʒɚ lˈɔsəz ɪn mˈænpˌaʊɚ ɡˈæljə sˈʌfɚz təwˈɔɹdz ðə ˈɛnd ˈʌv ðə wˈɔɹ wɪð ðə ˈɛmpaɪɚ ðə nˈeɪmləs ˈɑɹ ˈɔfɚd ə fˈɔɹməl pəzˈɪʃən ˈæz ə skwˈɑd ɪn ðə ɡælˈaɪæn ˈɑɹmi ɹˈæðɚ ðən sˈɝv ˈæz ən ənˈɑnəməs ʃˈædˌoʊ fˈɔɹs
+ðɪs ɪz ʃˈɔɹt lˈɪvd hˌaʊˈɛvɚ ˈæz fˈɑloʊɪŋ mˌæksɪmˈɪliən ˈɛs dɪfˈit dæhˈɔː ˈænd kəlˈæməti ɹˈeɪvən mˈuv tə ˈæktəvˌeɪt ən ˈeɪntʃənt vælkˈaɪɹaɪæn sˈupɚ wˈɛpən wɪðˈɪn ðə ˈɛmpaɪɚ kˈɛpt sˈikɹət bˈaɪ ðˈɛɹ bˈɛnəfˌæktɚ
+wɪðˈaʊt ðə səpˈɔɹt ˈʌv mˌæksɪmˈɪliən ˈɔɹ ðə tʃˈæns tə pɹˈuv ðɛmsˈɛlvz ɪn ðə wˈɔɹ wɪð ɡˈæljə ɪt ɪz dæhˈɔː ˈɛs lˈæst tɹˈʌmp kˈɑɹd ɪn kɹiˈeɪtɪŋ ə nˈu dˈɑɹksɛn nˈeɪʃən
+ˈæz ən ˈɑɹmd ɡælˈaɪæn fˈɔɹs ˌɪnvˈeɪdɪŋ ðə ˈɛmpaɪɚ dʒˈʌst fˈɑloʊɪŋ ðə tˈu nˈeɪʃənz sˈis fˈaɪɚ wˈʊd sˈɝtənli ɹˈɛk ðˈɛɹ nˈufˈaʊnd pˈis kˈɝt dˌɪsˈaɪdz tə wˈʌns əɡˈeɪn mˈeɪk hɪz skwˈɑd ðə nˈeɪmləs ˈæskɪŋ kɹˈoʊ tə lˈɪst hɪmsˈɛlf ˈænd ˈɔl ˈʌndɚ hɪz kəmˈænd ˈæz kˈɪld ɪn ˈækʃən
+nˈaʊ ˈoʊɪŋ əlˈidʒəns tə nˈʌn ˈʌðɚ ðən ðɛmsˈɛlvz ðə ˈnd kənfɹˈʌnts dæhˈɔː ˈænd dɪstɹˈɔɪz ðə vælkˈaɪɹaɪæn wˈɛpən
+ˈitʃ mˈɛmbɚ ðˈɛn ɡˈoʊz ðˈɛɹ sˈɛpɹət wˈeɪz ɪn ˈɔɹdɚ tə bɪɡˈɪn ðˈɛɹ lˈaɪvz ənjˈu
+kˈɑnsɛpt wˈɝk fɚ vælkˈaɪɹaɪɑː kɹˈɑnɪkəlz ˈaɪaɪaɪ bɪɡˈæn ˈæftɚ dɪvˈɛləpmənt fˈɪnɪʃt ˈɔn vælkˈaɪɹaɪɑː kɹˈɑnɪkəlz ˈaɪaɪ ɪn ˈɝli tˈuˌθˈaʊzəndˌtˈɛn wɪð fˈʊl dɪvˈɛləpmənt bɪɡˈɪnɪŋ ʃˈɔɹtli ˈæftɚ ðɪs
+ðə daɪɹˈɛktɚ ˈʌv vælkˈaɪɹaɪɑː kɹˈɑnɪkəlz ˈaɪaɪ təkˈɛʃi oʊzˈɑwə ɹitˈɝnd tə ðˈæt ɹˈoʊl fɚ vælkˈaɪɹaɪɑː kɹˈɑnɪkəlz ˈaɪaɪaɪ
+dɪvˈɛləpmənt wˈɝk tˈʊk əpɹˈɑksəmətli wˈʌn jˈɪɹ
+ˈæftɚ ðə ɹilˈis ˈʌv vælkˈaɪɹaɪɑː kɹˈɑnɪkəlz ˈaɪaɪ ðə stˈæf tˈʊk ə lˈʊk ˈæt bˈoʊθ ðə pˈɑpjəlɚ ɹispˈɑns fɚ ðə ɡˈeɪm ˈænd wˈʌt ðˈeɪ wˈɔntɪd tə dˈu nˈɛkst fɚ ðə sˈɪɹiz
+lˈaɪk ɪts pɹˈɛdəsˌɛsɚ vælkˈaɪɹaɪɑː kɹˈɑnɪkəlz ˈaɪaɪaɪ wəz dɪvˈɛləpt fɚ plˈeɪstˌeɪʃən pˈɔɹtəbəl ðɪs wəz dˈu tə ðə tˈim wˈɑntɪŋ tə ɹəfˈaɪn ðə məkˈænɪks kɹiˈeɪtəd fɚ vælkˈaɪɹaɪɑː kɹˈɑnɪkəlz ˈaɪaɪ ˈænd ðˈeɪ hˈæd nˈɑt kˈʌm ˈʌp wɪð ðə ɹˌɛvəlˈuʃənˌɛɹi aɪdˈiə ðˈæt wˈʊd wˈɔɹənt ə nˈu ˈɛntɹi fɚ ðə plˈeɪstˌeɪʃən θɹˈi
+ɪn ədˈɪʃən tə sˈeɪɡə stˈæf fɹˈʌm ðə pɹˈiviəs ɡˈeɪmz dɪvˈɛləpmənt wˈɝk wəz ˈɔlsoʊ hˈændəld bˈaɪ mˈidiə
+vˈɪʒən
+ðə ɚˈɪdʒənəl sɪnˈɛɹioʊ wəz ɹˈɪtən kæzʌkˈaɪ ˈaɪæmænoʊb wˈaɪl ðə skɹˈɪpt wəz ɹˈɪtən bˈaɪ hˌɪɹoʊjˈuki fudʒˈii koʊˈitʃi mædʒɪmˈɑː kɪʃɪkˈoʊ mˈaɪaɪædʒaɪ sˈeɪki næɡækɔːˈɑː ˈænd tækeɪʌkˈaɪ ʃaʊdʒˈaɪ
+ɪts stˈɔɹi wəz dˈɑɹkɚ ˈænd mˈɔɹ sˈɑmbɚ ðən ðˈæt ˈʌv ɪts pɹˈɛdəsˌɛsɚ
+ðə mədʒˈɔɹəti ˈʌv mətˈɪɹiəl kɹiˈeɪtəd fɚ pɹˈiviəs ɡˈeɪmz sˈʌtʃ ˈæz ðə blˈɪts sˈɪstəm ˈænd ðə dɪzˈaɪn ˈʌv mˈæps wəz kˈæɹid ˈoʊvɚ
+əlˈɔŋsˈaɪd ðɪs ˌɪmpɹˈuvmənts wˈɝ mˈeɪd tə ðə ɡˈeɪm ˈɛs ɡɹˈæfɪks ˈænd sˈʌm ˈɛləmənts wˈɝ ɪkspˈændəd sˈʌtʃ ˈæz mˈæp lˈeɪˌaʊts mˈɪʃən stɹˈʌktʃɚ ˈænd ðə nˈʌmbɚ ˈʌv plˈeɪæbl jˈunɪts pˈɝ mˈɪʃən
+ə pˈɑɹt ˈʌv ðɪs əpɡɹˈeɪd ˌɪnvˈɑlvd kɹiˈeɪtɪŋ junˈik pˈɑlɪɡˌɑn mˈɑdəlz fɚ ˈitʃ kˈɛɹɪktɚ ˈɛs bˈɑdi
+ɪn ˈɔɹdɚ tə ətʃˈiv ðɪs ðə koʊˈɑpɚˌeɪtɪv ˈɛləmənts ɪnkˈɔɹpɚˌeɪtɪd ɪntə ðə sˈɛkənd ɡˈeɪm wˈɝ ɹimˈuvd ˈæz ðˈeɪ tˈʊk ˈʌp ə lˈɑɹdʒ pˈɔɹʃən ˈʌv mˈɛmɚi spˈeɪs nˈidəd fɚ ðə ˌɪmpɹˈuvmənts
+ðˈeɪ ˈɔlsoʊ ədʒˈʌstɪd ðə dˈɪfɪkˌʌlti sˈɛtɪŋz ˈænd ˈiz ˈʌv plˈeɪ sˈoʊ ðˈeɪ kˈʊd əpˈil tə nˈu plˈeɪɚz wˈaɪl ɹitˈeɪnɪŋ ðə isˈɛnʃəl kəmpˈoʊnənts ˈʌv ðə sˈɪɹiz ɡˈeɪmplˌeɪ
+ðə nˈuɚ sˈɪstəmz wˈɝ dˌɪsˈaɪdɪd əpˈɑn ˈɝli ɪn dɪvˈɛləpmənt
+ðə kˈɛɹɪktɚ dɪzˈaɪnz wˈɝ dˈʌn bˈaɪ ɹˈeɪtɑː hɒndʒˈaʊ hˈu hˈæd wˈɝkt ˈɔn ðə pɹˈiviəs vælkˈaɪɹaɪɑː kɹˈɑnɪkəlz ɡˈeɪmz
+wˈɛn kɹiˈeɪtɪŋ ðə nˈeɪmləs skwˈɑd hɒndʒˈaʊ wəz fˈeɪst wɪð ðə sˈeɪm pɹˈɑbləm hˈi hˈæd hˈæd djˈʊɹɪŋ ðə fˈɝst ɡˈeɪm ðə mˈɪlətˌɛɹi jˈunəfˌɔɹmz isˈɛnʃəli dɪstɹˈɔɪd kˈɛɹɪktɚ ˌɪndˌɪvɪdʒuˈælɪti dɪspˈaɪt hˈɪm nˈidɪŋ tə kɹiˈeɪt junˈik kˈæɹəktɚz ðə plˈeɪɚ kˈʊd aɪdˈɛntəfˌaɪ wˈaɪl meɪntˈeɪnɪŋ ə sˈɛns ˈʌv ɹˌiˈælətˌi wɪðˈɪn ðə vælkˈaɪɹaɪɑː kɹˈɑnɪkəlz wˈɝld
+ðə mˈeɪn kˈʌlɚ ˈʌv ðə nˈeɪmləs wəz blˈæk
+ˈæz wɪð ðə pɹˈiviəs vælkˈaɪɹaɪɑː ɡˈeɪmz vælkˈaɪɹaɪɑː kɹˈɑnɪkəlz ˈaɪaɪaɪ jˈuzd ðə kˈænvəs ɡɹˈæfɪks ˈɛndʒən
+ðə ˌænɪmˈeɪ ˈoʊpənɪŋ wəz pɹədˈust bˈaɪ pɹədˈʌkʃən ˈaɪ
+dʒˈi
+ðə mjˈuzɪk wəz kəmpˈoʊzd bˈaɪ hɪtˈoʊʃi sækɪmɒtˈoʊ hˈu hˈæd ˈɔlsoʊ wˈɝkt ˈɔn ðə pɹˈiviəs vælkˈaɪɹaɪɑː kɹˈɑnɪkəlz ɡˈeɪmz
+wˈɛn hˈi ɚˈɪdʒnəli hˈɝd əbˈaʊt ðə pɹˈɑdʒɛkt hˈi θˈɔt ɪt wˈʊd bi ə lˈaɪt tˈoʊn sˈɪməlɚ tə ˈʌðɚ vælkˈaɪɹaɪɑː kɹˈɑnɪkəlz ɡˈeɪmz bˈʌt fˈaʊnd ðə θˈimz mˈʌtʃ dˈɑɹkɚ ðən ɪkspˈɛktəd
+ən ˈɝli θˈim hˈi dɪzˈaɪnd ɚˈaʊn hɪz ɚˈɪdʒənəl vˈɪʒən ˈʌv ðə pɹˈɑdʒɛkt wəz ɹidʒˈɛktɪd
+hˈi ɹidˈɪd ðə mˈeɪn θˈim əbˈaʊt sˈɛvən tˈaɪmz θɹˈu ðə mjˈuzɪk pɹədˈʌkʃən dˈu tə ðɪs nˈid tə ɹiəsˈɛs ðə ɡˈeɪm
+ðə mˈeɪn θˈim wəz ˌɪnˈɪʃəli ɹəkˈɔɹdɪd jˈuzɪŋ ˈɔɹkəstɹə ðˈɛn sækɪmɒtˈoʊ ɹimˈuvd ˈɛləmənts sˈʌtʃ ˈæz ðə ɡɪtˈɑɹ ˈænd bˈeɪs ðˈɛn ədʒˈʌstɪd ðə θˈim jˈuzɪŋ ə sˈɪnθəsˌaɪzɚ bɪfˈɔɹ ɹidˈuɪŋ sˈɛɡmənts sˈʌtʃ ˈæz ðə ɡɪtˈɑɹ pˈis ˈɔn ðˈɛɹ ˈoʊn bɪfˈɔɹ ˌɪnkˈɔɹpɚˌeɪtɪŋ ðˈɛm ɪntə ðə θˈim
+ðə ɹidʒˈɛktɪd mˈeɪn θˈim wəz jˈuzd ˈæz ə hˈoʊpfəl tˈun ðˈæt plˈeɪd djˈʊɹɪŋ ðə ɡˈeɪm ˈɛs ˈɛndɪŋ
+ðə bˈætəl θˈimz wˈɝ dɪzˈaɪnd ɚˈaʊn ðə kˈɑnsɛpt ˈʌv ə mˈɑdɚn bˈætəl dɪvˈɔɹst fɹˈʌm ə fˈæntəsi sɪnˈɛɹioʊ bˈaɪ jˈuzɪŋ mˈɑdɚn mjˈuzɪkəl ˈɪnstɹəmənts kənstɹˈʌktəd tə kɹiˈeɪt ə sˈɛns ˈʌv ætɒnælɪtˈaɪ
+wˈaɪl sækɪmɒtˈoʊ wəz mˈoʊst jˈuzd tə wˈɝkɪŋ wɪð sˈɪnθɪsˌaɪzd mjˈuzɪk hˈi fˈɛlt ðˈæt hˈi nˈidəd tə ˌɪnkˈɔɹpɚˌeɪt lˈaɪv ˈɪnstɹəmənts sˈʌtʃ ˈæz ˈɔɹkəstɹə ˈænd ɡɪtˈɑɹ
+ðə ɡɪtˈɑɹ wəz plˈeɪd bˈaɪ mɪtsʌhɪɹˈoʊ ɒhtˈɑː hˈu ˈɔlsoʊ ɚˈeɪndʒd sˈɛvɹəl ˈʌv ðə lˈeɪtɚ tɹˈæks
+ðə ɡˈeɪm ˈɛs ˈoʊpənɪŋ θˈim sˈɔŋ ɪf jˈu wˈɪʃ fɚ
+
+
+ mɒʃɪmˈoʊ kɪmˈaɪ ɡˈɑ nɛɡɔːnˈoʊ nˈɑɹə wəz sˈʌŋ bˈaɪ dʒˌæpənˈiz sˈɪŋɚ mˈeɪ ˈɛn
+ɪts θˈim wəz ðə ɹˈizən sˈoʊldʒɚz fˈɔt ɪn pɚtˈɪkjəlɚ ðˈɛɹ wˈɪʃ tə pɹətˈɛkt wˈʌt wəz pɹˈɛʃəs tə ðˈɛm ɹˈæðɚ ðən ə sˈɛns ˈʌv ɹispˌɑnsəbˈɪləti ˈɔɹ djˈuti
+ɪts lˈɪɹɪks wˈɝ ɹˈɪtən bˈaɪ sˈeɪkoʊ fʌdʒɪbeɪæʃˈaɪ hˈu hˈæd wˈɝkt ˈɔn mˈeɪ ˈɛn ˈɔn pɹˈiviəs sˈɪŋɡəlz
+ɪn sɛptˈɛmbɚ tˈuˌθˈaʊzəndˌtˈɛn ə tˈizɚ wˈɛbsˌaɪt wəz ɹivˈild bˈaɪ sˈeɪɡə hˈɪntɪŋ ˈæt ə nˈu vælkˈaɪɹaɪɑː kɹˈɑnɪkəlz ɡˈeɪm
+ɪn ɪts sɛptˈɛmbɚ ˈɪʃu fæmɪtsˈuː lˈɪstəd ðˈæt sˈɛndʒ nˈoʊ vælkˈaɪɹaɪɑː θɹˈi wˈʊd bi ɚˈaɪvɪŋ ˈɔn ðə plˈeɪstˌeɪʃən pˈɔɹtəbəl
+ɪts fˈɝst pˈʌblɪk əpˈɪɹəns wəz ˈæt ðə tˈuˌθˈaʊzəndˌtˈɛn tˈoʊkiˌoʊ ɡˈeɪm ʃˈoʊ ˈtɡs wˈɛɹ ə dˈɛmoʊ wəz mˈeɪd əvˈeɪləbəl fɚ dʒˈɝnələsts ˈænd ətˈɛndˈiz
+djˈʊɹɪŋ ðə pəblˈɪsəti stˈɔɹi dɪtˈeɪlz wˈɝ kˈɛpt skˈænt sˈoʊ ˈæz nˈɑt tə spˈɔɪl tˈu mˈʌtʃ fɚ pətˈɛnʃəl plˈeɪɚz əlˈɔŋ wɪð sˈʌm ˈʌv ɪts kˈɑntɛnt stˈɪl bˈiɪŋ ɪn flˈʌks ˈæt ðə tˈaɪm ˈʌv ɪts ɹivˈil
+tə pɹəmˈoʊt ðə ɡˈeɪm ˈænd dɪtˈeɪl ðə stˈɔɹi lˈidɪŋ ɪntə ðə ɡˈeɪm ˈɛs ivˈɛnts ən ˌɛpəsˈɑdɪk flˈæʃ vˈɪʒəwəl nˈɑvəl ɹˈɪtən bˈaɪ fudʒˈii bɪɡˈæn ɹilˈis ɪn dʒˈænjuˌɛɹi tˈuˌθˈaʊzəndˌɪlˈɛvən
+ðə ɡˈeɪm wəz ɹilˈist dʒˈænjuˌɛɹi twˈɛntiˌsˈɛvən tˈuˌθˈaʊzəndˌɪlˈɛvən

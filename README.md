@@ -777,7 +777,20 @@ moonshine-voice transcribe --options='log_api_calls=true'
 If you want to debug into the library internals, or add instrumentation to help understand its operation, or add improvements or customizations, all of the source is available for you to build it for yourself.
 
 > [!TIP]
-> Because the project includes large files like models, this repository uses git lfs. If you clone the repo and don't have lfs already set up, you'll see compile errors like `moonshine/core/speaker-embedding-model-data.cpp:1:1: error: 'version' does not name a type`. This is because LFS files are replaced by small text files that point to the actual location of the stored data, and if your git isn't aware of LFS it will happily leave them that way. The fix is to make sure you have git-lfs installed through your favorite OS package manager, and then run `git lfs install` before trying a new clone.
+> Large model and TTS binaries are **not** stored in git. Before running
+> [`scripts/test-core.sh`](scripts/test-core.sh) or offline TTS work, fetch them
+> from the CDN (or the [Hugging Face mirror](https://huggingface.co/moonshine-ai/moonshine-voice-assets)):
+>
+> ```bash
+> scripts/fetch-voice-assets.sh all
+> ```
+>
+> A few compile-time embeds and ONNX Runtime prebuilts still use Git LFS. If you
+> clone without LFS set up, you may see errors like
+> `'version' does not name a type` when compiling embedded sources such as
+> `community1_cpp_annote_embedded.cpp` (LFS pointers left as text). Install
+> git-lfs and run `git lfs install` before cloning, or `git lfs pull` in an
+> existing clone.
 
 #### Cmake
 
@@ -1172,7 +1185,7 @@ Re-quantized models are published to a new dated directory on our CDN (currently
 
 We have `safetensors` versions of the models linked from our organization on HF, [huggingface.co/UsefulSensors/models](https://huggingface.co/UsefulSensors/models). The organization name is from an earlier incarnation of the company, when we were focused on supplying complete voice interface solutions integrated onto a low-cost chip with a built-in microphone. These are all floating-point checkpoints exported from our training pipeline
 
-Separately, every asset this library can download is mirrored in a single repository at [huggingface.co/moonshine-ai/moonshine-voice-assets](https://huggingface.co/moonshine-ai/moonshine-voice-assets), under our current organization name. It holds exactly the files the download manifests reference (currently 438 files, 7.3GB) — the `.ort` speech to text and embedding models, the TTS voices, and the grapheme to phoneme data — laid out in the same folder hierarchy as the CDN, so a path in that repo is the path under `download.moonshine.ai`. The list is enumerated from the compiled model catalog rather than by listing the bucket, because the bucket also holds unconverted `.onnx` sources, older copies of models that manifests no longer point at, and platform artifacts like the Raspberry Pi disk image. If you need to know which files a given release actually uses, that repo is the authoritative answer, and its `FILES.tsv` records the size and checksum of each one. Note that the library still downloads from the CDN at runtime; the mirror is there for archival and verification, not for serving.
+Separately, every asset this library can download is mirrored in a single repository at [huggingface.co/moonshine-ai/moonshine-voice-assets](https://huggingface.co/moonshine-ai/moonshine-voice-assets), under our current organization name. It holds exactly the files the download manifests reference (currently 438 files, 7.3GB) — the `.ort` speech to text and embedding models, the TTS voices, and the grapheme to phoneme data — laid out in the same folder hierarchy as the CDN, so a path in that repo is the path under `download.moonshine.ai`. The list is enumerated from the compiled model catalog rather than by listing the bucket, because the bucket also holds unconverted `.onnx` sources, older copies of models that manifests no longer point at, and platform artifacts like the Raspberry Pi disk image. If you need to know which files a given release actually uses, that repo is the authoritative answer, and its `FILES.tsv` records the size and checksum of each one. Note that the library still downloads from the CDN at runtime; the mirror is there for archival and verification, not for serving. For local tests and offline TTS work, populate the gitignored trees with [`scripts/fetch-voice-assets.sh`](scripts/fetch-voice-assets.sh). Reclaiming GitHub LFS storage after removing historical binaries is documented in [`docs/lfs-purge.md`](docs/lfs-purge.md).
 
 ## API Reference
 

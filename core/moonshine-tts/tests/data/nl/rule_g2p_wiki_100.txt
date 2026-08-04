@@ -1,3 +1,100 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:fd50dc962c90fffa9abc5396f2a78fdfbc099d7a71bdcd47b302bfe22675d71c
-size 22189
+bərtɦˈɔlt kˈɔnrɑt ɦərmˈɑnn ˈɑlbɛrt spˈɪːr (mˈɑnnɦɛim, ˈneː.ɣən.tiːn ˈmaːrt ˈneː.ɣən.tiːn.hɔn.dərt ˈvɛif – lˈɔndɛn, ˈeːn sɛp.ˈtɛm.bər ˈneː.ɣən.tiːn.hɔn.dərt ˈeːnəntɑxtɪx) ˈʋɑs ˈeːn ˈdœyts ɑr.xi.ˈtɛkt ˈɛn stˈeːdənbʌʊkˈɵndɪɣə.
+ˈtɛi.dəns ˈdə ˈnaː.tsiː.heːr.sxɑ.ˈpɛi ˈoː.vər dˈʌytslɑnt (ˈneː.ɣən.tiːn.hɔn.dərt ˈdriː.jɛn.dɛr.təx ˈtɔt ˈneː.ɣən.tiːn.hɔn.dərt vˈɛifənveːrtɪx) ˈʋɑs ˈhɛi vɑn.ˈɑf ˈneː.ɣən.tiːn.hɔn.dərt ˈzeː.vən.ɛn.dɛr.təx ˈrɛiks.ɑr.xi.ˈtɛkt ˈɛn vɑn.ˈɑf ˈneː.ɣən.tiːn.hɔn.dərt tʋˈeːənveːrtɪx ˈrɛiks.miː.nɪs.tər ˈvɑn bə.ˈʋaː.pə.nɪŋ ˈɛn myː.ˈniː.tsiː.
+ˈdoːr ˈzɛin ˈvriːnt.sxɑp ˈmɛt ˈɑdɔlf ɦˈɪtlɛr ˈɛn ˈzɛin miː.ˈnɪs.tər.sxɑp ɣˈɔlt ˈhɛi ˈɑls ˈeːn ˈvɑn ˈdə mˈɑxtɪɣstə ˈmɑ.nə ˈvɑn ˈət ˈdɛr.də ˈrɛik.
+ˈnaː ˈdə ˈoːr.lɔx ʋˈɛrt spˈɪːr ˈɪn nˈøːrənbɛrx vəroːrdˈeːlt ˈtɔt ˈtʋɪn.təx ˈjaːr ɣə.ˈvɑ.ŋə.nɪ.strɑf.
+ˈvoːr ˈneː.ɣən.tiːn.hɔn.dərt ˈdriː.jɛn.dɛr.təx ˈət ɣə.ˈzɪn ʋaːr.ˈɪn spˈɪːr ʋˈɛrt ɣə.ˈboː.rə, ˈʋɑs ˈʋɑt ˈzə ˈɪn ˈət ˈdœyts ˈnuː.mə ɣrˈɔsbyrɣərlɪx; ˈɪn ˈneː.dər.lɑnt.sə tərmˈɛn ɣəɣˈudə bʉr.ɣə.ˈrɛi ˈɔf buːr.ʒʋɑ.ˈziː.
+ˈzɛin ˈvaː.dər ˈɛn ˈɣroːt.faː.dər ˈʋaː.rə ˈbɛi.də ɑr.xiˈtɛktən.
+ˈɔm fˈɪnɑnsɪələ rˈədənɛn stˈʏdeːrdə spˈɪːr aːn.ˈvɑŋ.kə.lək ˈɪn kˈɑrlsrʏɦə.
+ˈvɑn ˈdə ˈlɛn.tə ˈvɑn ˈneː.ɣən.tiːn.hɔn.dərt ˈviːr.ɛn.tʋɪn.təx ˈtɔt ˈdə ˈzoː.mər ˈvɑn ˈneː.ɣən.tiːn.hɔn.dərt ˈvɛif.ɛn.tʋɪn.təx zˈəttə ˈhɛi ˈzɛin ˈstyː.diː vər.ˈvɔl.ɣəns ˈvoːrt ˈaːn ˈdə təxnˈɪsxə hoː.ɣə.ˈsxoːl ˈvɑn mˈynxɛn.
+ˈɪn ˈdə ˈhɛrfst ˈvɑn ˈneː.ɣən.tiːn.hɔn.dərt ˈvɛif.ɛn.tʋɪn.təx vərɦʌysdˈə ˈhɛi ˈnaːr bərlˈɛin ˈɛn prˈɔbeːrdə ˈhɛi vər.ˈɣeːfs ˈaːn ˈdə təxnˈɪsxə hoː.ɣə.ˈsxoːl ˈɪn bərlˈɛinxɑrlɔttənbʏrx ˈɪn ˈət seː.miː.ˈnaː.riː ˈvɑn ˈhɑns pˈulzɪx tˈuɣəlɑtɛn ˈtə ˈʋɔr.də.
+ˈɪn ˈneː.ɣən.tiːn.hɔn.dərt ˈzɛz.ɛn.tʋɪn.təx ɔntvˈɪŋ ɦˈɛinrɪx təsˈənɔʋ, ˈeːn ɑr.xi.ˈtɛkt ˈvɑn ˈdə bəɦˈʌudəndə ˈsxoːl ˈmɛt ˈeːn ˈzeːr bə.ˈsxɛi.də ˈɛn ˈniːt mˈəɣɑlɔmɑnə ˈstɛil, ˈeːn ˈleːr.stuːl.
+spˈɪːr ʋˈɛrt ˈɪn ˈdɑt ˈjaːr ˈeːn ˈvɑn ˈzɛin stˈʏdəntɛn.
+ˈnaː ˈzɛin diː.ˈploː.maː ˈtə ˈhɛ.bə bəɦˈaːlt ˈɪn ˈneː.ɣən.tiːn.hɔn.dərt ˈzeː.vən.ɛn.tʋɪn.təx blˈeːf spˈɪːr ˈnɔx ˈmeːr.də.rə jˈɑrɛn, ˈɑls təsˈənɔʋs ɑ.siː.ˈstɛnt, ˈaːn ˈdə hoː.ɣə.ˈsxoːl vər.ˈbɔn.də.
+ɑr.xi.ˈtɛkt ˈɪn ˈdiːnst ˈvɑn ɦˈɪtlɛr
+spˈɪːr ˈʋɑs ˈniːt biː.ˈzɔn.dər ɣə.ɪn.tə.rɛ.ˈseːrt ˈɪn poː.liː.ˈtiːk.
+ˈhɛi ʋˈɛrt ˈɛx.tər ˈreːts ˈɪn jaː.nyː.ˈʋaː.riː ˈneː.ɣən.tiːn.hɔn.dərt ˈeːn.ɛn.dɛr.təx ˈlɪt ˈvɑn ˈdə nsdˈɑp naː.ˈdɑt ˈhɛi ˈɪn deː.ˈsɛm.bər ˈneː.ɣən.tiːn.hɔn.dərt ˈdɛr.təx ˈeːn ˈtuː.spraːk ˈvɑn ˈɑdɔlf ɦˈɪtlɛr ɦˈɑt bˈɛiɣəʋoːnt ˈɪn ˈdə bərlˈɛinsə ɦˈɑsənɦɛidə.
+ˈdeː.zə ˈtuː.spraːk ɦˈɑt ˈeːn dˈipə ˈɪn.drʉk ɣə.ˈmaːkt ˈɔp spˈɪːr.
+ˈzɛlf ˈsxreːf ˈhɛi ˈdɑt ˈhɛi ˈeːn ˈmaːnt ɦˈɑt ɣətʋˈɛifɛlt, ˈmaːr ˈdɑt ˈhɛi œyt.ˈɛin.də.lək ˈtɔx bə.ˈsloː.tə ɦˈɑt ˈɔm ˈlɪt ˈtə ˈʋɔr.də, ɔm.ˈdɑt ɦˈɪtlɛr heː.lə.ˈmaːl ˈniːt steː.reː.joː.ˈtiːp ˈʋɑs ˈɔvərɣəkɔmɛn ˈɪn ˈdə ˈtuː.spraːk.
+ˈət ˈʋɑs ˈeːn ˈzeːr rˈʏstɪɣə ˈtuː.spraːk ʋaːr.ˈɪn ˈət ˈʋoːrt 'ˈjoːt' ˈniːt ˈeːn ˈkeːr ˈʋɑs ɣə.ˈvɑ.lə.
+ˈɪn ˈneː.ɣən.tiːn.hɔn.dərt ˈtʋeː.jɛn.dɛr.təx vərlˈit spˈɪːr bərlˈɛin ˈɛn ɣˈɪŋ tə.ˈrʉx ˈnaːr mˈɑnnɦɛim.
+ˈhɛi vˈəstɪɣdə ˈzɪx ˈdaːr ˈɑls ɑr.xi.ˈtɛkt, ˈmaːr ˈhɛi krˈeːx ˈɣeːn ɔpdrɑxtˈɛn.
+ˈɪn ˈneː.ɣən.tiːn.hɔn.dərt ˈviːr.ɛn.dɛr.təx ʋˈɛrt ˈhɛm ɣə.ˈvraːxt ˈdə mˈɛivirɪŋɛn ˈvɑn ˈdə pɑr.ˈtɛi ˈvɔrm ˈtə ˈɣeː.və.
+spˈeːrs ˈɔrɪɣɪnələ iː.ˈdeː ˈʋɑs ˈɔm ˈrɔnt ˈət ˈvɛlt ˈɪn nˈøːrənbɛrx ˈʋaːr ˈdə pˈɑrɑdɛs ʋˈərdɛn ɑfɣənˈɔmɛn ˈeːn ˈreːks zˈuklɪxtɛn ˈrɛxt ɔm.ˈhoːx ˈtə ˈlaː.tə ˈsxɛi.nə.
+ˈhiːr.doːr ɔntstˈɔnt ˈeːn ˈmoːj lˈɪxtspɛl ˈʋɑt ˈeːn ˈkuː.pəl ˈvɑn ˈlɪxt ˈboː.və ˈət pˈɑrɑdəvɛlt vəroːrzˈaːktə.
+ɦˈɪtlɛr ˈʋɑs ˈhiːr.oː.vər ˈzeːr ɛn.tuː.ˈʒɑst ˈɛn ˈzoː ʋˈɛrt spˈɪːr ɦˈɪtlɛrs ɦˈʌysɑrxɪtɛkt.
+ˈtuːn ɦˈɪtlɛrs tˈunmɑlɪɣə ɦˈɔfɑrxɪtɛkt, ˈdə ˈœyt mˈynxɛn ɑfkɔmstˈɪɣə pˈʌul lˈʏdʋɪx ˈtroːst, ˈɪn ˈneː.ɣən.tiːn.hɔn.dərt ˈviːr.ɛn.dɛr.təx ˈɔvərleːt, nˈɑm spˈɪːr dˈiːns ˈtaː.kə ˈoː.vər, ʋaːr.ˈmeː ˈhɛi ˈzɛin fˈɔrmələ lˈɛidɪŋɣəvəndə rˈʏdɔlf ɦˈɛs ˈfɛi.tə.lək ˈsnɛl ˈɔvərsxɑdʏʋdə ˈɪn ˈmɑxt ˈɛn ˈoːk ˈɪn ˈaːn.ziːn ˈbɛi ɦˈɪtlɛr.
+spˈɪːr ɔntʋˈiːrp tˈɑlrɛikə ɣəbˈʌuʋɛn ˈɪn klˈɑsikə ˈstɛil, ˈdiː ˈɑls ˈduːl ɦˈɑddɛn ˈdə ˈprɑxt ˈɛn ˈdə ˈmɑxt ˈvɑn ˈət ˈdɛr.də ˈrɛik ˈtə ˈtoː.nə ˈɛn ˈtə ɔn.dər.ˈstreː.pə.
+ˈɪn ˈət dˈøːtsxə ˈɑrbɛitsfrɔnt (dˈɑf) lˈɛiddə ˈhɛi ˈdə ˈɑv.deː.lɪŋ sxˈønɦɛit ˈdɛr ˈɑrbɛit.
+ˈvɛr.dər ʋˈɛrt ˈhɛi ˈdə ˈʃɛf ˈvɑn ˈdə ˈɔn.dər.ɑv.deː.lɪŋ ˈvɑn ˈdə rˈɛiksprɔpɑɣɑndɑlɛidɪŋ ˈɛn vər.ɑnt.ˈʋoːr.də.lək ˈvoːr ˈdə stˈədənbʌuʋ ˈɪn ˈdə ˈstɑf ˈvɑn rˈʏdɔlf ɦˈɛs.
+ˈvoːr ˈdə ˈʋeː.rəl.tɛn.toːn.stɛ.lɪŋ ˈvɑn ˈneː.ɣən.tiːn.hɔn.dərt ˈzeː.vən.ɛn.dɛr.təx ˈɪn paː.ˈrɛis ɔntʋˈiːrp ˈhɛi ˈət dˈʌytsə pɑ.vɪl.ˈjuːn.
+ˈət ˈhoːvd.bə.stɑn.deːl bəstˈɔnt ˈœyt ˈeːn ˈənɔrmə ˈtoː.rə ˈɪn klˈɑsɪsɪstɪsxə ˈstɛil ˈmɛt ˈeːn ˈɣroː.tə dˈʌytsə ˈaː.də.laːr ɛr.ˈɔp.
+spˈɪːr krˈeːx ˈɛr ˈdə ɣrˈɑnt prˈɪks ˈmɛt ˈeːn ˈɣɑu.də meː.ˈdɑ.jə ˈvoːr.
+ˈdə bəlˈɑŋrɛikstə ɣəbˈʌuʋɛn ˈɛn ˈdə ˈaːn.lɛx ˈvɑn ˈʏrbɑnə rˈʌymtɛs ˈvoːr ˈət ˈdɛr.də ˈrɛik ɔntʋˈiːrp spˈɪːr ˈɛx.tər ˈɪn bərlˈɛin ˈɛn nˈyrnbɛrx.
+bərlˈɛin ˈɑls ˈrɛiks.hoːft.stɑt ˈɛn bə.ˈstyːr.sɛn.trʉm lˈɑx ˈvoːr ˈdə ˈhɑnt.
+ˈɪn nˈyrnbɛrx ʋˈərdɛn ˈvoːr ˈdə ˈmɑxts.oː.vər.naː.mə ˈɑl diː.ˈvɛr.sə zˈɔɣənaːmdə pˈɑrtɛidɑɣɛn ɣə.ˈhɑu.də, prˈɔpɑɣɑndɪstɪsxə mˈɑsɑbɛieːŋkɔmstɛn ɣə.ɔr.ɣaː.niː.ˈzeːrt ˈdoːr ˈdə nsdˈɑp, ˈɔm ˈət nɑtɪɔnaːlsɔsɪɑlɪsmˈə ˈtə eː.taː.ˈleː.rə ˈaːn ˈdə dˈʌytsə kˈizɛrs.
+ˈdeː.zə bɛiˈərsə ˈstɑt lˈɑx ˈniːt ˈvɛr ˈvɑn mˈynxɛn, ˈdə ˈbaː.kər.mɑt ˈvɑn ˈdə nˈɑzɪpɑrtɛi, ˈɛn ˈʋɑs daːr.ˈbɛi ˈɣuːt bə.ˈrɛiɡ.baːr ˈviː.jaː ˈeːn ˈœyt.xə.brɛit vərkeːrsnˈətʋɛrk ˈɛn bəzˈɑt ˈɑls tˈurɪstɪsxə ˈtrɛk.plɛis.tər vɔl.ˈduːn.də ɦˈɔtɛls ˈɔm ˈveːl ˈvɔlk ˈɔn.dər.dɑk ˈtə ˈbiː.də.
+nˈyrnbɛrx ˈkoː.zə ˈdə ˈnaː.tsiː'ˈs ˈoːk ˈmeːr sɪm.ˈboː.liːs ˈɑls zˈɛində ˈeːn bəlˈɑŋrɛikə vrˈuɣərə ˈrɛik.stɑt ˈvɑn ˈət ˈhɛi.lə.ɣə ˈroːm.sə ˈrɛik, ˈdə ˈplɛk ˈʋaːr ˈmɛn ˈdɛs.tɛits ˈdə rˈɪtʏələ sˈimbɔlɛn ˈvɑn ˈdə kˈɛizərlɛikə ˈmɑxt bəʋˈaːrdə zoː.ˈʋɑls ˈdə ˈrɛiks.ɑ.pəl, ˈdə ˈsɛp.tər ˈɛn ˈdə ˈkroːn.
+ˈdə ˈnaː.tsiː'ˈs ˈzɛ.tə ˈmɛt ˈdə ˈkøː.zə ˈvɑn nˈyrnbɛrx ˈeːn ˈeːʏʋənʌudə traː.ˈdiː.tsiː ˈvɑn jˈaːrmɑrktɛn, ˈmɑx.tə.ɣə kˈɛizɛrs ˈɛn kˈɑstəlɛn ˈvoːrt ˈdoːr ˈdaːr ˈdə nˈɑzɪpɑrtɛidɑɣɛn ˈtə ˈlaː.tə ˈplaːts.fɪn.də.
+ˈnaː ˈdə vərkizˈɪŋsɔvərʋɪnnɪŋ ˈɪn ˈneː.ɣən.tiːn.hɔn.dərt ˈdriː.jɛn.dɛr.təx ɣˈɪŋ ˈət tɛ.ˈrɛin ˈvɑn ˈdə pˈɑrtɛidɑɣɛn ˈɣrɔn.dəx ˈɔp ˈdə ˈsxɔp ˈɛn ʋˈɛrt ˈɪn ˈɔb.drɑxt ˈvɑn ɦˈɪtlɛr ˈflɪŋk ˈœyt.xə.brɛit.
+bərlˈɛin
+ˈɪn ˈneː.ɣən.tiːn.hɔn.dərt ˈzeː.vən.ɛn.dɛr.təx ʋˈɛrt ˈhɛi bənˈumt ˈtɔt rə.ˈɣeː.rɪŋs.kɔ.mɪ.saː.rəs ˈvoːr ˈdə ˈbɑuʋ ˈɪn ˈdə ˈstɑf ˈvɑn ˈdə fˈyɦrɛr ˈɛn ɪn.spɛk.tøːr.ɣeː.nə.ˈraːl ˈvoːr ˈdə ˈbɑuʋ.nɛi.vər.hɛit ˈɪn bərlˈɛin.
+ˈzɛin ɔnt.ˈʋɛr.pə ˈʋaː.rə ˈnaːr ˈdə ˈsmaːk ˈvɑn ɦˈɪtlɛr ˈdiː ɦˈiːlt ˈvɑn ɣəbˈʌuʋɛn ˈɪn ˈeːn nˈəɔklɑsɪsɪstɪsxə ˈstɛil ˈmɛt ˈeːn mˈɪnɪmɑlɪstɪsxə ˈœyt.straː.lɪŋ ˈmaːr ˈdɑn vərɣrˈoːt ˈtɔt bˈʌytənspɔrɪɣə ɑfmətˈɪŋɛn.
+ˈvoːr ˈdə spˈaːrzɑmə ˈaːŋ.kleː.dɪŋ ˈʋɪl.də ɦˈɪtlɛr ˈət ˈliːfst ˈdə klˈɑsikə ˈɑrɪsxə beːldˈɛn ɣə.ˈbrœy.kə ˈvɑn ˈdə ˈhɑnt ˈvɑn ˈdə ˈdoːr ɦˈɪtlɛr bəʋˈɔndərdə ˈɑrnɔ ˈbreː.kər.
+voːr.ˈɑl ˈvoːr bərlˈɛin ɦˈɑt ɦˈɪtlɛr ɣrˈoːtsə ˈplɛ.nə.
+ˈdeː.zə ˈstɑt zˈʌu ˈnaː ˈdə ˈəndsiːx ɦərdˈoːpt ˈʋɔr.də ˈɪn ɣərmˈɑnɪɑ (ˈoː.və.rə.ɣəns ˈɪs spˈɪːr ˈdə ˈənɪɣə ˈbrɔn ˈdiː ˈdɪt bəʋˈeːrdə).
+ˈmɛt tˈɑllɔzə stˈɑtɪɣə bˈʌuʋʋərkɛn ˈɛn brˈədə bˈʌuləvɑrds ˈʋɪl.də ɦˈɪtlɛr ˈaːn ˈzɛin ˈhoːft.stɑt ˈeːn ˈənɔrmə ɡrɑn.ˈdøːr ˈɣeː.və.
+ɦˈɪtlɛrs ˈɛn spˈeːrs mˈəɣɑlɔmɑnə ˈmɔ.toː ˈʋɑs: 'ˈhuː ɣrˈɔtɛr ˈhuː ˈbeː.tər'.
+spˈɪːr ˈɔrdɔnneːrdə stˈɑbɪlɪtɛitstəstɛn ˈɪn ˈdə mˈurɑsɪɣə ˈɣrɔnt ˈvɑn bərlˈɛin ˈɔm ˈnaː ˈtə ˈɣaːn ˈɔf ˈdeː.zə ˈət ˈənɔrmə ɣə.ˈʋɪxt ˈvɑn ˈdə ɣəplˈɑndə ɣəbˈʌuʋɛn kˈɔn ˈdraː.ɣə.
+daːr.ˈtuː bˈʌuʋdə ˈdə ˈfɪr.maː dˈikkərɦɔff & ʋˈɪdmɑnn ˈɑx ˈɪn ˈneː.ɣən.tiːn.hɔn.dərt ˈeːnənveːrtɪx ˈteː.ɣə ˈdə ˈprɛis ˈvɑn ˈviːr.hɔn.dərt ˈnʉl ˈnʉl ˈnʉl rˈɛixsmɑrk ˈaːn ˈdə ˈrɑnt ˈvɑn bərlˈɛin ˈət sxʋˈərbəlɑstʏŋskørpɛr.
+ˈət bətrˈɔf ˈeːn bə.ˈtɔ.nə ˈtʋaːlf ˈdriː.hɔn.dərt ˈzɛs.təx ˈtɔn ʋˈəɣəndə siː.ˈlɪn.dər ˈmɛt ˈeːn ˈdiː.jaː.meː.tər ˈvɑn ˈeːn.ɛn.tʋɪn.təx ˈəm.
+ˈdə ˈnɔx ɪn.ˈtɑkt zˈɛində koː.ˈlɔs vəroːrzˈaːktə ˈvɔl.ɣəns spˈeːrs mˈətɪŋɛn ˈeːn vər.ˈzɑ.kɪŋ ˈvɑn ˈneː.ɣən.tiːn kmˈ.
+ˈdə bərlˈɛinsə ˈɔn.dər.ɣrɔnt ˈʋɑs bɛi.ɣə.ˈvɔlx ɣə.ˈsxɪkt ˈvoːr ˈət ˈbɑu.ʋə ˈvɑn dˈərɣəlɛikə ɣrˈoːtsxɑlɪɣə bˈʌuʋʋərkɛn.
+ˈteː.vəns ʋˈɛrt ˈeːn bə.ˈɣɪn ɣə.ˈmaːkt ˈmɛt ˈət ˈaːn.lɛ.ɣə ˈvɑn ˈdə ˈʋɛits ɔpɣəzˈəttə bˈʌuləvɑrds.
+ˈɪn ˈneː.ɣən.tiːn.hɔn.dərt ˈɑxt.ɛn.dɛr.təx ˈɛn ˈneː.ɣən.tiːn.hɔn.dərt ˈneː.ɣən.ɛn.dɛr.təx ʋˈɛrt ˈɪn rə.ˈkɒːr.tɛit ˈdə ˈbɑuʋ ˈvɑn ˈdə nˈʌuʋə ˈrɛiks.kɑn.sə.laː.rɛi ˈaːn ˈdə ʋˈɪlɦəlmstrɑsə ˈɛn ˈdə vˈɔstrɑə vɔl.ˈtoːjt.
+spˈɪːr tˈoːndə ˈzɪx ˈhiːr ˈɑl ˈɑls ˈeːn ɣˈudə bˈʌuʋɔrɣɑnɪsɑtɔr.
+ˈət ˈbɑu.ʋɛrk ˈmɛt ɣˈɪɣɑntɪsxə ɑfmətˈɪŋɛn (ˈət ɣə.ˈheːl ˈmɑt ˈtʋeː.hɔn.dərt ˈhaː) ˈʋɑs ˈvoːr ɦˈɪtlɛr ˈeːn rˈəprəsəntɑtivə ˈplaːts ˈɔm ˈdə bˈʌytənlɑndsə ɣˈɑstɛn ˈɛn dˈɪplɔmɑtɛn ˈtə ɔnt.ˈfɑ.ŋə.
+ˈzɛi mˈustɛn ˈɔp ˈdeː.zə ˈʋɛi.zə ˈɔn.dər ˈdə ˈɪn.drʉk ˈraː.kə ˈvɑn ˈdə ˈɣroːts.hɛit ˈvɑn ˈət dˈʌytsə ˈrɛik.
+ˈət mˈərkʋaːrdɪɣstə ˈɔn.dər.deːl ˈvɑn ˈət ɣə.ˈheːl bətrˈɔf ˈeːn lˈɑŋə ˈrɛx.tə ɣɑ.lə.ˈrɛi ˈvɑn ˈhɔn.dərt zˈəsənveːrtɪx ˈəm ˈlɛŋ.tə, ˈtʋeː ˈmaːl ˈzoː ˈlɑŋ ˈɑls ˈdə ˈspiː.ɣəl.zaːl ˈɪn vərsaɪ̯llˈɛs ˈvɑn drˈiənzəvəntɪx ˈmeː.tər, ˈmɛt ˈeːn spˈiɣəlɣlɑddə ˈvluːr ˈdiː lˈɛiddə ˈnaːr ˈdə pˈərsoːnlɛikə ɔntvɑŋstrˈʌymtɛn ˈvɑn ɦˈɪtlɛr; ˈdeː.zə "ˈstraːt" ʋˈɛrt "ˈdɛr lˈɑŋə mˈɑrsx ˈdɛr dˈɪplɔmɑtɛn" ɣə.ˈnuːmt.
+sˈɔmmɪɣɛn mˈaːktɛn ˈdə ˈɔp.mɛr.kɪŋ ˈdɑt ˈdə ɣlˈɑddə ˈvluːr ˈɛi.ɣə.lək ˈʋɛl ɣə.ˈvaːr.lək ˈʋɑs ˈɔm ˈɔp ˈtə ˈloː.pə.
+ɦˈɪtlɛr ʋˈɪmpəldə ˈdeː.zə bə.ˈzʋaː.rə ˈʋɛx ˈmɛt ˈdə ʋˈoːrdɛn: “dˈɪplɔmɑtɛn ˈzɛin ˈʋɛl ɣə.ˈʋɛnt ˈɔm ˈzɪx ˈɔp ˈɣlɑt ˈɛis ˈtə bə.ˈɣeː.və”.
+ˈdoːr ˈət ˈœyd.breː.kə ˈvɑn ˈdə ˈoːr.lɔx mˈustɛn vərdərˈə ˈplɛ.nə ˈɛx.tər ɔpɣəsxˈɔrt ˈʋɔr.də.
+ɣə.ˈreːt kʋˈɑmɛn ˈʋɛl ˈət ˈvliːx.fɛlt təmpˈəlɦɔf ˈdɑt ˈnɔx ˈsteːts ˈeːn ˈvɑn ˈdə ɣrˈoːtstə lˈʏxtɦɑvəŋəbʌuʋɛn ˈtɛr ˈʋeː.rəlt ˈheːft.
+ˈoːk ˈət ˈnɔx ˈsteːts ɣəbrˈʌyktə oː.ˈlɪm.piːs ˈstaː.diː.jɔn ˈvɑn ˈneː.ɣən.tiːn.hɔn.dərt ˈzɛs.ɛn.dɛr.təx ˈʋɑs ˈeːn ˈɔn.dər.deːl ˈvɑn ˈdə ˈhɛr.bɑuʋ ˈvɑn bərlˈɛin.
+ɦˈɪtlɛrs nˈʌuʋə kɑn.sə.laː.ˈrɛi ʋˈɛrt ˈtɛi.dəns ˈdə ˈɛint.strɛit ˈɪn ˈneː.ɣən.tiːn.hɔn.dərt vˈɛifənveːrtɪx ˈzʋaːr bə.ˈsxaː.dəxt ˈɛn ˈkɔrt ˈnaː ˈdə ˈoːr.lɔx ˈɑf.xə.broː.kə.
+nˈyrnbɛrx
+ˈɪn ˈdeː.zə vrˈuɣərə ˈrɛik.stɑt, ˈɪn ˈət ˈneː.dər.lɑnts ʋˈɔrdt ˈdə ˈstɑt ˈmeːst.ɑl nˈøːrənbɛrx ɣə.ˈnuːmt, ɔntʋˈiːrp spˈɪːr vɑn.ˈɑf ˈneː.ɣən.tiːn.hɔn.dərt ˈviːr.ɛn.dɛr.təx ˈeːn ˈaːn.tɑl ɣəbˈʌuʋɛn ˈɔp ˈət rˈɛixspɑrtɛitɑɣsɣəlndə (ˈdə tərrˈɛinɛn ˈvɑn ˈdə rˈɛikspɑrtɛidɑɣɛn) vərtrəkkˈəndə ˈvɑn ˈət mˈɑstərplɑn ˈvɑn ˈɑrxɪtɛktʏrbɑnɪst pˈʌul lˈʏdʋɪx ˈtroːst.
+ˈtroːst krˈeːx ˈvɑn ˈdə pɑr.ˈtɛi ˈɔb.drɑxt ˈɔm ˈeːn reː.kreː.ˈjaː.tsiː.ɣə.biːt ˈaːn ˈdə stˈɑdsrɑnt ˈɔm ˈtə ˈvɔr.mə ˈtɔt ˈeːn ɣəsxˈɪktə loː.ˈkaː.tsiː ˈvoːr ˈeːn ˈmɑ.saː-eː.və.nə.ˈmɛnt ˈət zˈɔɣənumdə rˈɛixtspɑrtɛiɣəlndə, ˈeːn ɣə.ˈbiːt ˈvɑn ˈɛlf kmˈ.
+ˈmɛn vərplaːtstˈə daːr.ˈtuː ˈdə ˈdiː.rə.tœyn ˈɛn ˈdə ˈvyːr.toː.rə ˈbrɑk ˈmɛn ˈɑf.
+ˈmɛn voːrzˈɑx ˈɪn ˈeːn ɣrˈu strˈɑə ˈvɑn ˈeːn,ˈvɛif kmˈ ˈlɛŋ.tə ˈɛn ˈvɛif.təx ˈəm ˈbreːt ˈdiː viː.zyː.ˈʋeːl aːnslˈoːt ˈɔp ˈdə mˈɪddəleːʏʋsə kˈɛizərlɛikə ˈbʉrxt ˈvɑn nˈyrnbɛrx.
+ɣəvˈɑŋənɛn ˈvɑn ˈət kɔn.sɛn.ˈtraː.tsiː.kɑmp flˈɔsənbyrx ˈɛn mˈʌutɦʌusɛn kˈɑptɛn ˈət ɣraː.ˈniːt ˈvoːr ˈdə ˈzɛs ˈnʉl ˈnʉl ˈnʉl təɣˈɛls ʋaːr.ˈoː.vər ˈdə sˈɔldɑtɛn zˈʌudɛn mɑr.ˈʃeː.rə.
+ˈlɑŋs ˈdeː.zə lˈɑŋə strˈaːtɑs plˈɑndə ˈmɛn ˈdə lˈʌytpɔldɑrənɑ, ˈət zˈəppəlɪnvɛlt, ˈət dˈøːtsxɛs ˈstaː.diː.jɔn, ˈeːn ɦˈɪtlərjʏɣəndstɑdɪɔn, ˈeːn mˈɑrsvɛlt ˈɛn ˈtʋeː trˈɛinstɑtɪɔns.
+ˈslɛxts ˈət zˈəppəlɪnvɛlt ˈmɛt ˈdiː.toː triː.ˈbyː.nə ˈnaːr ˈeːn ɔnt.ˈʋɛrp ˈvɑn spˈɪːr ʋˈɛrt ˈɑf.xə.ʋɛrkt.
+ˈdə ˈkɔs.tə ˈvɑn ˈdə ˈoːr.lɔxs.ɪn.dʉs.triː bə.ˈlɛ.tə ˈdə vərdərˈə ˈœyd.bɑuʋ ˈvɑn ˈɑl ˈdeː.zə mˈəɣɑlɔmɑnə ˈplɛ.nə.
+ˈvoːr ˈdə triː.ˈbyː.nə ˈmɛt ˈeːn ˈlɛŋ.tə ˈvɑn ˈdriː.hɔn.dərt ˈzɛs.təx ˈəm ˈstɔnt ˈət ˈɑntikə klˈɛinsxɑlɪɣərə pˈərɣɑmɔnɑltaːr moː.ˈdɛl.
+ˈdriː.hɔn.dərt ˈtʋɪn.təx ˈnʉl ˈnʉl ˈnʉl tˈusxʌuʋɛrs kˈɔndɛn ˈdə pˈɑrɑdɛs ˈɔp ˈət zˈəppəlɪnfɛlt ˈvɔl.ɣə.
+ˈbɛi ˈnɑxt sxˈənɛn ˈtʋeː.hɔn.dərt ˈvɛif.təx ˈɣroː.tə spˈɔts ˈdə ˈlʉxt ˈɪn ˈɑls ˈeːn ˈvɑn ˈvɛr ˈtə zˈinə lˈɪxtkɑtɦədraːl.
+ˈnyː ˈɪs ˈdə ˈplɛk ɦərsxɑpˈɛn ˈtɔt ˈeːn ryː.ˈʋiː.nə ˈɛn ˈɔp ˈɛi.ɣə ˈriː.ziː.koː ˈtə bə.ˈtreː.də.
+ˈviː.jaː ɣˈoːɣlə ˈəɑrtɦ ˈkɑn ˈmɛn ˈɪn.zuː.mə ˈɔp ˈət zˈəppəlɪnvɛlt ˈɛn krˈɛiɣt ˈmɛn ˈeːn ˈbeːlt ˈvɑn ˈdə ɦˈʌydɪɣə vər.ˈvɑ.lə ˈtuː.stɑnt.
+ˈɔp ˈdeː.zə ˈplɛk fˈɪlmdə lˈənɪ rˈifənstɑɦl ɦˈɪtlɛrs proː.paː.ˈɣɑn.daː.fɪlm trˈɪʏmpɦ ˈdɛs ˈʋɪ.ləns ˈoː.vər ˈdə ɑl.ˈdaːr ɣə.ˈhɑu.də rˈɛikspɑrtɛidɑx ˈvɑn ˈvɛif sɛp.ˈtɛm.bər ˈneː.ɣən.tiːn.hɔn.dərt ˈviːr.ɛn.dɛr.təx.
+nˈøːrənbɛrx ˈɪs ˈoːk bə.ˈkɛnt ˈvɑn ˈdə rˈɑsənʋəttɛn ˈvɑn nˈøːrənbɛrx ˈɛn ˈət ɔnt.ˈneː.mə ˈvɑn bˈʏrɣərrəxtɛn ˈvɑn jˈɔdɛn.
+ˈɪn ˈdeː.zə ˈstɑt vˈɔndɛn ˈoːk ˈdə nˈɑoːrlɔɣsə prˈɔsəsɛn ˈvɑn nˈøːrənbɛrx ˈplaːts.
+ˈdoːr mɪs.ˈlɛi.dɪŋ ˈvɑn ˈət triː.byː.ˈnaːl ʋˈɪst spˈɪːr ˈaːn ˈdə ˈdoːt.strɑf ˈtə ɔnt.ˈkoː.mə.
+spˈɪːr ˈɑls ɔr.ɣaː.niː.ˈsaː.tɔr ˈɛn miː.ˈnɪs.tər ˈvɑn bə.ˈʋaː.pə.nɪŋ vɑn.ˈɑf ˈneː.ɣən.tiːn.hɔn.dərt tʋˈeːənveːrtɪx
+ˈtuːn ɦˈɪtlɛr ˈlaː.tər ˈmeːr ˈɛn ˈmeːr ˈdoːr ˈdə ˈoːr.lɔx ʋˈɛrt ɔpɣəslˈɔkt, vərmɪndˈərdə ˈzɛin ˈaːn.dɑxt ˈvoːr spˈɪːr ˈmaːr ˈhɛi vərlˈoːr spˈɪːr ɔm.ˈʋɪ.lə ˈvɑn ˈzɛin ɣˈudə mˈɑnɑɣərskʋɑlɪtɛitɛn ˈniːt ˈɛxt ˈœyt ˈət ˈoːx.
+ˈɔp ˈɑxt feː.bryː.ˈʋaː.riː ˈneː.ɣən.tiːn.hɔn.dərt tʋˈeːənveːrtɪx ʋˈɛrt spˈɪːr, ˈɔn.dɑŋks (ˈɔf mɪ.ˈsxiːn ˈʋɛl ˈdɑŋk.sɛi) ˈzɛin ˈvrɛi ɣərˈɪŋə pˈɔlɪtikə ˈɑspɪrɑtis, ˈdoːr ɦˈɪtlɛr bənˈumt ˈɑls ˈɔp.fɔl.ɣər ˈvɑn ˈdə ˈbɛi ˈeːn ˈvliːx.tœyx.ɔŋ.ɣə.lʉk ˈɔmɣəkɔmɛn ˈrɛiks.miː.nɪs.tər ˈvoːr bə.ˈʋaː.pə.nɪŋ ˈɛn myː.ˈniː.tsiː, frˈɪts tˈɔdt.
+spˈɪːr ɣəbrˈʌyktə ˈɑl ˈzɛin ɔr.ɣaː.niː.ˈzaː.tsiː.taː.lɛnt, rˈəɔrɣɑnɪseːrdə ˈdə prˈɔdʏkti ˈvɑn ʋˈɑpɛns ˈɛn myː.ˈniː.tsiː.
+ˈət ˈəndspiːl
+ɦˈɪtlɛrs lˈaːtstə bə.ˈveː.lə ˈaːn spˈɪːr ˈɪn ˈdə lˈaːtstə ˈʋeː.kə ˈvɑn ˈdə ˈoːr.lɔx ʋˈɛiɣərdə ˈhɛi ɦˈɪtlɛrs bˈɪzɑrrə bə.ˈveː.lə ˈnɔx lˈɑŋɛr ˈœyt ˈtə ˈvuː.rə.
+ɦˈɪtlɛr ʋˈɪst ˈdɑt ˈdə ˈoːr.lɔx vər.ˈloː.rə ˈʋɑs ˈɛn ˈʋɪl.də ˈət dˈʌytsə ˈvɔlk, ˈdɑt ˈɪn ˈzɛin ˈoː.ɣə ˈɪn ˈzɛin ˈmɪ.siː ɣəfˈaːlt ɦˈɑt, ˈmɛt ˈhɛm ˈmeː ˈdə ˈɑf.xrɔnt ˈɪn ˈsløː.rə ˈɪn ˈeːn ˈsoːrt ɣˈøttərdmmərʏŋ ˈmɛt ˈət ˈneː.roː-bə.ˈvɛl.
+ˈdɪt mˈust bərˈɛikt ˈʋɔr.də ˈdoːr ˈət vər.ˈniː.tə.ɣə ˈvɑn ˈdə ˈnɔx ˈɔvərɣəbləvɛn, vˈɪtɑlə ˈdeː.lə ˈvɑn dˈʌytslɑnt ˈɛn ˈdə bəzˈəttə ɣə.ˈbiː.də: ˈdə tɑk.ˈtiːk ˈvɑn ˈdə vərsxrʌidˈə ˈaːr.də.
+spˈɪːr dˈɑxt ˈɑl ˈaːn ˈət oː.vər.ˈleː.və ˈvɑn ˈdə bə.ˈvɔl.kɪŋ ˈɛn ˈdə ʋeː.dər.ˈɔ.bɑuʋ ˈvɑn dˈʌytslɑnt ˈnaː ˈdə ˈoːr.lɔx ˈɛn ɣˈɑf ɦˈɪtlɛrs bə.ˈveː.lə ˈniːt ˈmeːr ˈdoːr ˈaːn ˈdə ˈɑv.deː.lɪŋ ˈdiː ˈvoːr ˈdə ˈœyt.fuː.rɪŋ mˈust ˈzɔr.ɣə.
+ˈeːn ˈeːr.dər ˈvoːr.beːlt ˈʋɑs ɦˈɪtlɛrs bə.ˈvɛl ˈɪn ˈneː.ɣən.tiːn.hɔn.dərt vˈirənveːrtɪx ˈɔm paː.ˈrɛis ˈtə vər.ˈniː.tə.ɣə ˈtuːn ˈdə ɣəˈɑlliərdɛn ˈdə ˈstɑt nˈɑdərdɛn.
+doːr.ˈdɑt ˈdə dˈʌytsə kɔ.mɑn.ˈdɑnt ˈvɑn paː.ˈrɛis (lœy.tə.ˈnɑnt.xeː.nə.ˈraːl dˈitrɪx vˈɔn xˈɔltɪts) ˈhiːr ˈniːt ˈaːn mˈeːʋərktə ˈɛn ˈoːk ˈdoːr ˈdə ˈzeːr snˈəllə ɔm.ˈsɪ.ŋə.lɪŋ ˈɛn vər.ˈoː.və.rɪŋ ˈvɑn paː.ˈrɛis ʋˈɛrt ˈdɪt vərɦɪndˈɛrt.
+ɑ.rəs.ˈtaː.tsiː
+ˈɔp ˈviːr.ɛn.tʋɪn.təx ɑ.ˈprɪl ˈneː.ɣən.tiːn.hɔn.dərt vˈɛifənveːrtɪx vlˈoːx spˈɪːr, ˈdiː bərlˈɛin ˈɑl ˈʋɑs ɔntvlˈʏxt, speː.ˈʃaːl tə.ˈrʉx ˈɔm ˈɪn ˈdə ˈbʉŋ.kər ˈɔn.dər ˈdə ˈrɛiks.kɑn.sə.laː.rɛi ˈɑf.sxɛit ˈvɑn ˈzɛin fˈyɦrɛr ˈtə ˈkʉ.nə ˈneː.mə.
+ɦˈɪtlɛr plˈeːɣdə œyt.ˈɛin.də.lək ˈɔp ˈdɛr.təx ɑ.ˈprɪl ˈzɛlf.moːrt, ˈsaː.mə ˈmɛt ˈeː.vaː brˈʌun ˈdiː ˈeː.və tə.ˈvoː.rə ˈmɛt ˈhɛm ɣə.ˈtrɑuʋt ˈʋɑs, ˈɛn lˈit ˈzɛin ɪnstɔrtˈəndə "ˈdɛr.də ˈrɛik" ˈɪn tˈɔtɑlə ˈxaː.ɔs ˈɑx.tər.
+ˈɔp ˈdriː.jɛn.tʋɪn.təx ˈmɛi ˈneː.ɣən.tiːn.hɔn.dərt vˈɛifənveːrtɪx ʋˈɛrt spˈɪːr ˈsaː.mə ˈmɛt kˈɑrl dˈønɪts (ˈdoːr ɦˈɪtlɛr ˈpɛr tɛs.taː.ˈmɛnt ˈaːŋ.ɣə.ʋeː.zə ˈɑls ˈzɛin ˈɔp.fɔl.ɣər) ɣəɑrrəstˈeːrt ˈɪn flˈənsbʏrx, ˈvɑn ʋaːr.ˈœyt vərsxɪllˈəndə nˈɑzɪlɛidɛrs, ˈdiː ˈniːt ˈɪn bərlˈɛin ˈʋaː.rə ɣəblˈəvɛn, tə.vər.ˈɣeːfs vrˈədəsɔndərɦɑndəlɪŋɛn ˈmɛt ˈdə ɣəˈɑlliərdɛn trˈɑxttɛn ˈtə ˈvuː.rə.
+proː.ˈsɛs ˈvɑn nˈøːrənbɛrx ˈɛn ɣə.ˈvɑ.ŋə.sxɑp ˈɔp ˈeːn ɔk.ˈtoː.bər ˈneː.ɣən.tiːn.hɔn.dərt zˈəsənveːrtɪx ʋˈɛrt spˈɪːr ˈɔp ˈət proː.ˈsɛs ˈvɑn nˈøːrənbɛrx vəroːrdˈeːlt ˈtɔt ˈtʋɪn.təx ˈjaːr ɣə.ˈvɑ.ŋə.nɪ.strɑf, voːr.ˈɑl vɑn.ˈʋeː.ɣə ˈət ˈfɛit ˈdɑt ˈɔn.dər ˈzɛin ˈlɛi.dɪŋ ˈeːn məl.ˈjuːn ˈvɑn ˈdə ˈɪn toː.ˈtaːl ˈzɛs məl.ˈjuːn dʋˈɑŋɑrbɛidɛrs ˈœyt ˈdə bəzˈəttə ɣə.ˈbiː.də ˈtɛi.dəns ˈdə ˈoːrlɔɣʃɑrɛn ˈɪn ˈdə ʋˈɑpənɪndʏstri ˈtə ˈʋɛrk ˈʋaː.rə ɣə.ˈstɛlt.
+ˈvɑn ˈɑ.lə vər.ˈoːr.deːl.də nˈɑzɪkɔpstʏkkɛn ˈʋɑs ˈhɛi ˈdə ˈənɪɣə ˈdiː ˈzɪx "vər.ɑnt.ˈʋoːr.də.lək" vərklaːrdˈə ˈvoːr ˈdə mɪz.ˈdrɛi.və ˈvɑn ˈdə nˈɑzɪstaːt.
+ˈdɛs.ɔn.dɑŋks plˈɛittə ˈhɛi ˈniːt ˈsxʉl.dəx ˈmɛt ˈɑls ɑr.ɣyː.ˈmɛnt ˈdɑt ˈhɛi ˈnoːjt pər.ˈsoːn.lək ɔpdrɑxtˈɛn ˈɔndərtəkɛnt ɦˈɑt ˈɔm ɣəvˈɑŋənɛn ˈtə deː.pɔr.ˈteː.rə.
+spˈɪːr ˈsxoːf ˈzɛin vˈɔllədɪɣə ˈsxʉlt ˈɑf ˈɔp ˈdə miː.ˈnɪs.tər ˈvɑn ˈɑr.bɛit, frˈɪts sˈʌukkɛl ˈdiː ˈʋɛl ʋˈɛrt ɔpɣəɦˈɑŋɛn.

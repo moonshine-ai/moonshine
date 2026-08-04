@@ -1,3 +1,100 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:024bd7259bd7ff159774f48ed5aa62bad1dcc1a3e541d104b3788effe0711583
-size 18234
+sˈenx nˈo balkˈiria tɾˈes : unrekoɾdˈed tʃɾonˈikles ( xapanˈese : , lˈit .
+balkˈiria ˈof tˈe battlefˈield tɾˈes ) , kommonlˈi referˈed tˈo ˈas balkˈiria tʃɾonˈikles iˈii outsˈiðe xˈapan , ˈis ˈa taktikˈal rˈole @-@ plaʝˈinɡ bidˈeo ɡˈame deβelopˈed bˈi sˈeɣa ˈand mˈeðia.
+bˈision fˈoɾ tˈe plaistˈation poɾtˈable .
+releasˈed ˈin xanuarˈi dˈos mˈil ˈonse ˈin xˈapan , ˈit ˈis tˈe tˈiɾd ɡˈame ˈin tˈe balkˈiria sˈeries .
+emploʝˈinɡ tˈe sˈame fˈusion ˈof taktikˈal ˈand rˈeal @-@ tˈime ɡameplaˈi ˈas ˈits pɾeðesˈessoɾs , tˈe storˈi rˈuns parallˈel tˈo tˈe fˈiɾst ɡˈame ˈand fˈollows tˈe " namˈeless " , ˈa penˈal militarˈi unˈit seɾbˈinɡ tˈe nˈation ˈof ɡˈallia durˈinɡ tˈe sekˈond eurˈopan wˈaɾ wˈo peɾfˈoɾm sekɾˈet blˈakk operˈations ˈand ˈare pittˈed aɡˈainst tˈe imperˈial unˈit " kalamatˈi rˈaβen " .
+tˈe ɡˈame bˈeɣan deβelopmˈent ˈin dˈos mˈil dˈies , karʝˈinɡ obˈeɾ ˈa lˈaɾxe pˈoɾtion ˈof tˈe wˈoɾk dˈone ˈon balkˈiria tʃɾonˈikles ˈii .
+wˈile ˈit retainˈed tˈe standˈaɾd featˈures ˈof tˈe sˈeries , ˈit ˈalso undeɾwˈent multˈiple adxˈustments , sˈutʃ ˈas makˈinɡ tˈe ɡˈame mˈore foɾxibˈinɡ fˈoɾ sˈeries newkˈomeɾs .
+tʃaraktˈeɾ desiɡnˈeɾ rˈaita ˈonxou ˈand komposˈeɾ itˈosi sakimˈoto bˈot retuɾnˈed fɾˈom pɾebˈious ˈentɾies , alˈonɡ wˈit balkˈiria tʃɾonˈikles ˈii direktˈoɾ takˈesi osˈawa .
+ˈa lˈaɾxe tˈeam ˈof wɾˈiteɾs andlˈed tˈe skɾˈipt .
+tˈe ɡˈame 'ˈs openˈinɡ tˈeme wˈas sˈunɡ bˈi maˈi 'ˈn .
+ˈit mˈet wˈit positˈiβe sˈales ˈin xˈapan , ˈand wˈas pɾaisˈed bˈi bˈot xapanˈese ˈand wˈesteɾn kɾˈitiks .
+aftˈeɾ relˈease , ˈit reseibˈed downloadˈable kontˈent , alˈonɡ wˈit ˈan ekspandˈed edˈition ˈin noβembˈeɾ ˈof tˈat ʝˈeaɾ .
+ˈit wˈas ˈalso aðaptˈed ˈinto mˈanɡa ˈand ˈan orixinˈal bidˈeo animˈation sˈeries .
+dˈue tˈo lˈow sˈales ˈof balkˈiria tʃɾonˈikles ˈii , balkˈiria tʃɾonˈikles iˈii wˈas nˈot lokalisˈed , bˈut ˈa fˈan tɾanslˈation kompatˈible wˈit tˈe ɡˈame 'ˈs ekspandˈed edˈition wˈas releasˈed ˈin dˈos mˈil katˈoɾse .
+mˈeðia.
+bˈision wˈould rˈetuɾn tˈo tˈe fɾantʃˈise wˈit tˈe deβelopmˈent ˈof balkˈiria : asˈure reβolˈution fˈoɾ tˈe plaistˈation kˈuatɾo .
+ˈas wˈit pɾebˈious balkʝˈira tʃɾonˈikles ɡˈames , balkˈiria tʃɾonˈikles iˈii ˈis ˈa taktikˈal rˈole @-@ plaʝˈinɡ ɡˈame wˈere plˈaʝeɾs tˈake kontɾˈol ˈof ˈa militarˈi unˈit ˈand tˈake pˈaɾt ˈin mˈissions aɡˈainst enemˈi fˈoɾses .
+stˈories ˈare tˈold tɾˈouɡ komˈik boˈok @-@ lˈike pˈanels wˈit animatˈed tʃaraktˈeɾ pˈoɾtɾaits , wˈit tʃarˈakteɾs speakˈinɡ paɾtiallˈi tɾˈouɡ boisˈed speˈetʃ bˈubbles ˈand paɾtiallˈi tɾˈouɡ unboisˈed tˈekst .
+tˈe plaʝˈeɾ pɾoɡɾˈesses tɾˈouɡ ˈa sˈeries ˈof linˈeaɾ mˈissions , ɡɾaðuallˈi unlokkˈed ˈas mˈaps tˈat kˈan bˈe fɾeelˈi skannˈed tɾˈouɡ ˈand replaʝˈed ˈas teˈi ˈare unlokkˈed .
+tˈe rˈoute tˈo ˈeatʃ storˈi lokˈation ˈon tˈe mˈap bˈaries dependˈinɡ ˈon ˈan indiβidˈual plaʝˈeɾ 'ˈs appɾoˈatʃ : wˈen ˈone ˈoption ˈis selektˈed , tˈe otˈeɾ ˈis sealˈed ˈoff tˈo tˈe plaʝˈeɾ .
+outsˈiðe mˈissions , tˈe plaʝˈeɾ tʃarˈakteɾs rˈest ˈin ˈa kˈamp , wˈere ˈunits kˈan bˈe kustomisˈed ˈand tʃaraktˈeɾ ɡɾˈowt ˈokkuɾs .
+alonɡsˈiðe tˈe mˈain storˈi mˈissions ˈare tʃaraktˈeɾ @-@ spesifˈik sˈub mˈissions relatˈinɡ tˈo differˈent sˈuad mˈembeɾs .
+aftˈeɾ tˈe ɡˈame 'ˈs komplˈetion , additionˈal episˈoðes ˈare unlokkˈed , sˈome ˈof tˈem abˈinɡ ˈa iɡˈeɾ diffikultˈi tˈan tˈose fˈound ˈin tˈe rˈest ˈof tˈe ɡˈame .
+tˈere ˈare ˈalso lˈoβe simulˈation elˈements relatˈed tˈo tˈe ɡˈame 'ˈs twˈo mˈain erˈoines , altˈouɡ teˈi tˈake ˈa berˈi minˈoɾ rˈole .
+tˈe ɡˈame 'ˈs bˈattle sistˈem , tˈe blˈits sistˈem , ˈis karˈied obˈeɾ direktlˈi fɾˈom balkʝˈira tʃɾonˈikles .
+durˈinɡ mˈissions , plˈaʝeɾs selˈekt ˈeatʃ unˈit usˈinɡ ˈa tˈop @-@ dˈown peɾspektˈiβe ˈof tˈe battlefˈield mˈap : ˈonse ˈa tʃaraktˈeɾ ˈis selektˈed , tˈe plaʝˈeɾ mˈoβes tˈe tʃaraktˈeɾ arˈound tˈe battlefˈield ˈin tˈiɾd @-@ pˈeɾson .
+ˈa tʃaraktˈeɾ kˈan onlˈi ˈakt ˈonse pˈeɾ @-@ tˈuɾn , bˈut tʃarˈakteɾs kˈan bˈe ɡɾantˈed multˈiple tˈuɾns ˈat tˈe ekspˈense ˈof otˈeɾ tʃarˈakteɾs ' tˈuɾns .
+ˈeatʃ tʃaraktˈeɾ ˈas ˈa fˈield ˈand distˈanse ˈof moβemˈent limitˈed bˈi tˈeiɾ ˈaktion ɡˈauxe .
+ˈup tˈo nˈine tʃarˈakteɾs kˈan bˈe assiɡnˈed tˈo ˈa sˈinɡle mˈission .
+durˈinɡ ɡameplaˈi , tʃarˈakteɾs wˈiʝ kˈaʝ ˈout ˈif sometˈinɡ ˈappens tˈo tˈem , sˈutʃ ˈas tˈeiɾ ˈealt pˈoints ( ˈp ) xettˈinɡ lˈow ˈoɾ bˈeinɡ knokkˈed ˈout bˈi enemˈi ˈattakks .
+ˈeatʃ tʃaraktˈeɾ ˈas spesifˈik " potˈentials " , skˈiʝs unˈike tˈo ˈeatʃ tʃaraktˈeɾ .
+teˈi ˈare diβidˈed ˈinto " peɾsonˈal potentˈial " , wˈitʃ ˈare innˈate skˈiʝs tˈat rˈemain unalterˈed ˈunless oteɾwˈise diktatˈed bˈi tˈe storˈi ˈand kˈan eitˈeɾ ˈelp ˈoɾ impˈeðe ˈa tʃaraktˈeɾ , ˈand " bˈattle potˈentials " , wˈitʃ ˈare ɡɾˈown tɾouɡˈout tˈe ɡˈame ˈand ˈalwais ɡɾˈant bˈoons tˈo ˈa tʃaraktˈeɾ .
+tˈo lˈeaɾn bˈattle potˈentials , ˈeatʃ tʃaraktˈeɾ ˈas ˈa unˈike " mˈasteɾs tˈable " , ˈa ɡɾˈid @-@ basˈed skˈiʝ tˈable tˈat kˈan bˈe usˈed tˈo akkˈire ˈand lˈink differˈent skˈiʝs .
+tʃarˈakteɾs ˈalso ˈaβe spesˈial aβilˈities tˈat ɡɾˈant tˈem temporarˈi bˈoosts ˈon tˈe battlefˈield : kˈuɾt kˈan aktibˈate " dirˈekt kommˈand " ˈand mˈoβe arˈound tˈe battlefˈield witˈout depletˈinɡ ˈis ˈaktion pˈoint ɡˈauxe , tˈe tʃaraktˈeɾ rˈeila kˈan sˈift ˈinto ˈeɾ " balkˈiria fˈoɾm " ˈand bekˈome inbinsˈible , wˈile ˈimka kˈan taɾxˈet multˈiple enemˈi ˈunits wˈit ˈeɾ eabˈi wˈeapon .
+tɾˈoops ˈare diβidˈed ˈinto fˈiβe klˈasses : skˈouts , sokktɾoˈopeɾs , enxinˈeeɾs , lˈanseɾs ˈand aɾmorˈed soldˈieɾ .
+tɾoˈopeɾs kˈan swˈittʃ klˈasses bˈi tʃanxˈinɡ tˈeiɾ assiɡnˈed wˈeapon .
+tʃanxˈinɡ klˈass dˈoes nˈot ɡɾeatlˈi affˈekt tˈe stˈats ɡainˈed wˈile ˈin ˈa pɾebˈious klˈass .
+wˈit biktorˈi ˈin bˈattle , eksperˈiense pˈoints ˈare awaɾdˈed tˈo tˈe sˈuad , wˈitʃ ˈare distɾiβutˈed ˈinto fˈiβe differˈent attɾibˈutes sarˈed bˈi tˈe entˈire sˈuad , ˈa featˈure differˈinɡ fɾˈom eaɾlˈi ɡˈames ' metˈod ˈof distɾiβutˈinɡ tˈo differˈent unˈit tˈipes .
+tˈe ɡˈame tˈakes plˈase durˈinɡ tˈe sekˈond eurˈopan wˈaɾ .
+ɡˈallian aɾmˈi sˈuad kuatɾosˈientos beintidˈos , ˈalso knˈown ˈas " tˈe namˈeless " , ˈare ˈa penˈal militarˈi unˈit komposˈed ˈof kɾimˈinals , fˈoreiɡn desˈeɾteɾs , ˈand militarˈi offˈendeɾs wˈose rˈeal nˈames ˈare erasˈed fɾˈom tˈe rˈekoɾds ˈand terˈeon offisiallˈi referˈed tˈo bˈi nˈumbeɾs .
+oɾderˈed bˈi tˈe ɡˈallian militarˈi tˈo peɾfˈoɾm tˈe mˈost danxˈerous mˈissions tˈat tˈe reɣulˈaɾ aɾmˈi ˈand milˈitia wˈiʝ nˈot dˈo , teˈi ˈare neβeɾtˈeless ˈup tˈo tˈe tˈask , eksemplifˈied bˈi tˈeiɾ mˈotto , altˈaa abˈilia , meanˈinɡ " ˈalwais readˈi .
+" tˈe tɾˈee mˈain tʃarˈakteɾs ˈare nˈo.
+sˈiete kˈuɾt iɾbˈinɡ , ˈan aɾmˈi offisˈeɾ falselˈi akkusˈed ˈof tɾˈeason wˈo wˈises tˈo reðeˈem imsˈelf ; ˈase nˈo.
+ˈuno ˈimka , ˈa femˈale dˈaɾksen eabˈi wˈeapons spesialˈist wˈo sˈeeks rebˈenxe aɡˈainst tˈe balkˈiria wˈo destɾoʝˈed ˈeɾ ˈome ; ˈand nˈo.
+tɾˈese rˈiela maɾsˈellis , ˈa seeminɡlˈi xinksˈed ʝˈounɡ wˈoman wˈo ˈis unknowinɡlˈi ˈa dessendˈant ˈof tˈe balkˈiria .
+toxetˈeɾ wˈit tˈeiɾ fellˈow sˈuad mˈembeɾs , tˈese tɾˈee ˈare taskˈed tˈo fˈiɡt aɡˈainst ˈa misterˈious imperˈial unˈit knˈown ˈas kalamitˈi rˈaβen , konsistˈinɡ ˈof mostlˈi dˈaɾksen sˈoldieɾs .
+ˈas tˈe namˈeless offisiallˈi dˈo nˈot eksˈist , tˈe uppˈeɾ etʃˈelons ˈof tˈe ɡˈallian aɾmˈi eksplˈoit tˈe konsˈept ˈof plausˈible deniaβilitˈi ˈin oɾdˈeɾ tˈo sˈend tˈem ˈon mˈissions tˈat wˈould oteɾwˈise mˈake ɡˈallia lˈose fˈase ˈin tˈe wˈaɾ .
+wˈile ˈat tˈimes tˈis wˈoɾks tˈo tˈeiɾ adbantˈaxe , sˈutʃ ˈas ˈa suksessfˈul inkˈuɾsion ˈinto imperˈial teritorˈi , otˈeɾ ˈoɾdeɾs kˈause sˈeɾtain mˈembeɾs ˈof tˈe ˈnd ɡɾˈeat dˈistɾess .
+ˈone sˈutʃ membˈeɾ , ɡusˈuɾɡ , bekˈomes sˈo enraxˈed tˈat ˈe abˈandons ˈis pˈost ˈand dˈefekts ˈinto tˈe rˈanks ˈof kalamitˈi rˈaβen , attatʃˈed tˈo tˈe idˈeal ˈof dˈaɾksen independˈense pɾoposˈed bˈi tˈeiɾ leadˈeɾ , dˈaau .
+ˈat tˈe sˈame tˈime , elˈements wˈitin ɡˈallian aɾmˈi kommˈand mˈoβe tˈo erˈase tˈe namˈeless ˈin oɾdˈeɾ tˈo pɾotˈekt tˈeiɾ ˈown intˈerests .
+oundˈed bˈi bˈot ˈallies ˈand enˈemies , ˈand kombinˈed wˈit tˈe pɾesˈense ˈof ˈa tɾaitˈoɾ wˈitin tˈeiɾ rˈanks , tˈe ˈnd desperatelˈi mˈoβe tˈo keˈep temsˈelbes alˈiβe wˈile ˈat tˈe sˈame tˈime fˈiɡt tˈo ˈelp tˈe ɡˈallian wˈaɾ effˈoɾt .
+tˈis kontˈinues untˈil tˈe namˈeless 'ˈs kommandˈinɡ offisˈeɾ , ramseˈi kɾˈowe , wˈo ˈad bˈeen kˈept undˈeɾ ˈouse arˈest , ˈis eskoɾtˈed tˈo tˈe kapitˈal sitˈi ˈof randɡɾˈis ˈin oɾdˈeɾ tˈo pɾesˈent eβidˈense eksoneratˈinɡ tˈe wearˈi sˈoldieɾs ˈand ekspˈose tˈe rˈeal tɾaitˈoɾ , tˈe ɡˈallian xenerˈal tˈat ˈad akkusˈed kˈuɾt ˈof tɾˈeason .
+paɾtlˈi dˈue tˈo tˈese ˈeβents , ˈand paɾtlˈi dˈue tˈo tˈe maxˈoɾ lˈosses ˈin manpowˈeɾ ɡˈallia sˈuffeɾs tˈowaɾds tˈe ˈend ˈof tˈe wˈaɾ wˈit tˈe empˈire , tˈe namˈeless ˈare offerˈed ˈa foɾmˈal posˈition ˈas ˈa sˈuad ˈin tˈe ɡˈallian aɾmˈi ratˈeɾ tˈan sˈeɾbe ˈas ˈan anonˈimous sadˈow fˈoɾse .
+tˈis ˈis sˈoɾt @-@ libˈed , owebˈeɾ , ˈas followˈinɡ maksimˈilian 'ˈs defˈeat , dˈaau ˈand kalamitˈi rˈaβen mˈoβe tˈo aktibˈate ˈan ansˈient balkˈirian supˈeɾ wˈeapon wˈitin tˈe empˈire , kˈept sekɾˈet bˈi tˈeiɾ benefaktˈoɾ .
+witˈout tˈe suppˈoɾt ˈof maksimˈilian ˈoɾ tˈe tʃˈanse tˈo pɾˈoβe temsˈelbes ˈin tˈe wˈaɾ wˈit ɡˈallia , ˈit ˈis dˈaau 'ˈs lˈast tɾˈump kˈaɾd ˈin kɾeatˈinɡ ˈa nˈew dˈaɾksen nˈation .
+ˈas ˈan aɾmˈed ɡˈallian fˈoɾse inbadˈinɡ tˈe empˈire xˈust followˈinɡ tˈe twˈo nˈations ' sˈease @-@ fˈire wˈould seɾtainlˈi wɾˈekk tˈeiɾ newfˈound pˈease , kˈuɾt desˈiðes tˈo ˈonse ˈaɣain mˈake ˈis sˈuad tˈe namˈeless , askˈinɡ kɾˈowe tˈo lˈist imsˈelf ˈand ˈaʝ undˈeɾ ˈis kommˈand ˈas killˈed @-@ ˈin @-@ ˈaktion .
+nˈow owˈinɡ allexˈianse tˈo nˈone otˈeɾ tˈan temsˈelbes , tˈe ˈnd kˈonfɾonts dˈaau ˈand dˈestɾois tˈe balkˈirian wˈeapon .
+ˈeatʃ membˈeɾ tˈen ɡˈoes tˈeiɾ separˈate wˈais ˈin oɾdˈeɾ tˈo bˈexin tˈeiɾ lˈiβes anˈew .
+konsˈept wˈoɾk fˈoɾ balkˈiria tʃɾonˈikles iˈii bˈeɣan aftˈeɾ deβelopmˈent finisˈed ˈon balkˈiria tʃɾonˈikles ˈii ˈin eaɾlˈi dˈos mˈil dˈies , wˈit fˈuʝ deβelopmˈent bexinnˈinɡ soɾtlˈi aftˈeɾ tˈis .
+tˈe direktˈoɾ ˈof balkˈiria tʃɾonˈikles ˈii , takˈesi osˈawa , retuɾnˈed tˈo tˈat rˈole fˈoɾ balkˈiria tʃɾonˈikles iˈii .
+deβelopmˈent wˈoɾk toˈok appɾoksimatelˈi ˈone ʝˈeaɾ .
+aftˈeɾ tˈe relˈease ˈof balkˈiria tʃɾonˈikles ˈii , tˈe stˈaff toˈok ˈa loˈok ˈat bˈot tˈe populˈaɾ respˈonse fˈoɾ tˈe ɡˈame ˈand wˈat teˈi wantˈed tˈo dˈo nˈekst fˈoɾ tˈe sˈeries .
+lˈike ˈits pɾeðesessˈoɾ , balkˈiria tʃɾonˈikles iˈii wˈas deβelopˈed fˈoɾ plaistˈation poɾtˈable : tˈis wˈas dˈue tˈo tˈe tˈeam wantˈinɡ tˈo refˈine tˈe metʃˈaniks kɾeatˈed fˈoɾ balkˈiria tʃɾonˈikles ˈii , ˈand teˈi ˈad nˈot kˈome ˈup wˈit tˈe " reβolutionarˈi " ˈiðea tˈat wˈould warˈant ˈa nˈew entɾˈi fˈoɾ tˈe plaistˈation tɾˈes .
+ˈin addˈition tˈo sˈeɣa stˈaff fɾˈom tˈe pɾebˈious ɡˈames , deβelopmˈent wˈoɾk wˈas ˈalso andlˈed bˈi mˈeðia.
+bˈision.
+tˈe orixinˈal ssenˈario wˈas wɾˈitten kasˈuki ʝamanˈoβe , wˈile tˈe skɾˈipt wˈas wɾˈitten bˈi iroʝˈuki fuxˈii , kˈoitʃi maxˈima , kisˈiko miʝˈaxi , sˈeiki naɣakˈawa ˈand takaʝˈuki sˈouxi .
+ˈits storˈi wˈas daɾkˈeɾ ˈand mˈore sombˈeɾ tˈan tˈat ˈof ˈits pɾeðesessˈoɾ .
+tˈe maxoritˈi ˈof materˈial kɾeatˈed fˈoɾ pɾebˈious ɡˈames , sˈutʃ ˈas tˈe blˈits sistˈem ˈand tˈe dˈesiɡn ˈof mˈaps , wˈas karˈied obˈeɾ .
+alonɡsˈiðe tˈis , impɾobˈements wˈere mˈaðe tˈo tˈe ɡˈame 'ˈs ɡɾˈapiks ˈand sˈome elˈements wˈere ekspandˈed , sˈutʃ ˈas mˈap lˈaʝouts , mˈission stɾuktˈure , ˈand tˈe numbˈeɾ ˈof plaʝˈable ˈunits pˈeɾ mˈission .
+ˈa pˈaɾt ˈof tˈis upɡɾˈaðe inbolbˈed kɾeatˈinɡ unˈike polˈiɣon mˈoðels fˈoɾ ˈeatʃ tʃaraktˈeɾ 'ˈs bodˈi .
+ˈin oɾdˈeɾ tˈo atʃˈieβe tˈis , tˈe kooperatˈiβe elˈements inkoɾporatˈed ˈinto tˈe sekˈond ɡˈame wˈere remobˈed , ˈas teˈi toˈok ˈup ˈa lˈaɾxe pˈoɾtion ˈof memorˈi spˈase needˈed fˈoɾ tˈe impɾobˈements .
+teˈi ˈalso adxustˈed tˈe diffikultˈi sˈettinɡs ˈand ˈease ˈof plaˈi sˈo teˈi kˈould appˈeal tˈo nˈew plˈaʝeɾs wˈile retainˈinɡ tˈe essentˈial kompˈonents ˈof tˈe sˈeries ' ɡameplaˈi .
+tˈe newˈeɾ sˈistems wˈere desidˈed ˈupon eaɾlˈi ˈin deβelopmˈent .
+tˈe tʃaraktˈeɾ dˈesiɡns wˈere dˈone bˈi rˈaita ˈonxou , wˈo ˈad woɾkˈed ˈon tˈe pɾebˈious balkˈiria tʃɾonˈikles ɡˈames .
+wˈen kɾeatˈinɡ tˈe namˈeless sˈuad , ˈonxou wˈas fasˈed wˈit tˈe sˈame pɾoblˈem ˈe ˈad ˈad durˈinɡ tˈe fˈiɾst ɡˈame : tˈe militarˈi unˈifoɾms essentiallˈi destɾoʝˈed tʃaraktˈeɾ indiβiðualitˈi , despˈite ˈim needˈinɡ tˈo kɾˈeate unˈike tʃarˈakteɾs tˈe plaʝˈeɾ kˈould iðentifˈi wˈile maintainˈinɡ ˈa sˈense ˈof realitˈi wˈitin tˈe balkˈiria tʃɾonˈikles wˈoɾld .
+tˈe mˈain kolˈoɾ ˈof tˈe namˈeless wˈas blˈakk .
+ˈas wˈit tˈe pɾebˈious balkˈiria ɡˈames , balkˈiria tʃɾonˈikles iˈii usˈed tˈe kˈanbas ɡɾˈapiks enxˈine .
+tˈe anˈime openˈinɡ wˈas pɾoðusˈed bˈi pɾodˈuktion ˈi.
+ˈɡ.
+tˈe musˈik wˈas komposˈed bˈi itˈosi sakimˈoto , wˈo ˈad ˈalso woɾkˈed ˈon tˈe pɾebˈious balkˈiria tʃɾonˈikles ɡˈames .
+wˈen ˈe orixinallˈi ˈeaɾd abˈout tˈe pɾoxˈekt , ˈe tˈouɡt ˈit wˈould bˈe ˈa lˈiɡt tˈone similˈaɾ tˈo otˈeɾ balkˈiria tʃɾonˈikles ɡˈames , bˈut fˈound tˈe tˈemes mˈutʃ daɾkˈeɾ tˈan ekspektˈed .
+ˈan eaɾlˈi tˈeme ˈe desiɡnˈed arˈound ˈis orixinˈal bˈision ˈof tˈe pɾoxˈekt wˈas rexektˈed .
+ˈe redˈid tˈe mˈain tˈeme abˈout sˈeβen tˈimes tɾˈouɡ tˈe musˈik pɾodˈuktion dˈue tˈo tˈis neˈed tˈo rˈeassess tˈe ɡˈame .
+tˈe mˈain tˈeme wˈas initiallˈi rekoɾdˈed usˈinɡ oɾtʃˈestɾa , tˈen sakimˈoto remobˈed elˈements sˈutʃ ˈas tˈe ɡitˈaɾ ˈand bˈass , tˈen adxustˈed tˈe tˈeme usˈinɡ ˈa sintesisˈeɾ befˈore redˈoinɡ sˈeɡments sˈutʃ ˈas tˈe ɡitˈaɾ pˈiese ˈon tˈeiɾ ˈown befˈore inkoɾporatˈinɡ tˈem ˈinto tˈe tˈeme .
+tˈe rexektˈed mˈain tˈeme wˈas usˈed ˈas ˈa opefˈul tˈune tˈat plaʝˈed durˈinɡ tˈe ɡˈame 'ˈs endˈinɡ .
+tˈe bˈattle tˈemes wˈere desiɡnˈed arˈound tˈe konsˈept ˈof ˈa " mˈoðeɾn bˈattle " diβoɾsˈed fɾˈom ˈa fantasˈi ssenˈario bˈi usˈinɡ mˈoðeɾn musikˈal instɾˈuments , konstɾuktˈed tˈo kɾˈeate ˈa sˈense ˈof atonalitˈi .
+wˈile sakimˈoto wˈas mˈost usˈed tˈo woɾkˈinɡ wˈit sintesisˈed musˈik , ˈe fˈelt tˈat ˈe needˈed tˈo inkoɾporˈate lˈiβe instɾˈuments sˈutʃ ˈas oɾtʃˈestɾa ˈand ɡitˈaɾ .
+tˈe ɡitˈaɾ wˈas plaʝˈed bˈi mitsuˈiro ˈota , wˈo ˈalso aranxˈed seβerˈal ˈof tˈe latˈeɾ tɾˈakks .
+tˈe ɡˈame 'ˈs openˈinɡ tˈeme sˈonɡ , " ˈif ʝˈou wˈis fˈoɾ .
+.
+.
+" ( , mosˈimo kˈimi ɡˈa neɡˈauno nˈara ) , wˈas sˈunɡ bˈi xapanˈese sinxˈeɾ maˈi 'ˈn .
+ˈits tˈeme wˈas tˈe rˈeason sˈoldieɾs fˈouɡt , ˈin paɾtikulˈaɾ tˈeiɾ wˈis tˈo pɾotˈekt wˈat wˈas pɾesˈious tˈo tˈem ratˈeɾ tˈan ˈa sˈense ˈof responsiβilitˈi ˈoɾ dutˈi .
+ˈits lˈiriks wˈere wɾˈitten bˈi sˈeiko fuxiβaʝˈasi , wˈo ˈad woɾkˈed ˈon maˈi 'ˈn ˈon pɾebˈious sˈinɡles .
+ˈin septembˈeɾ dˈos mˈil dˈies , ˈa teasˈeɾ websˈite wˈas reβealˈed bˈi sˈeɣa , intˈinɡ ˈat ˈa nˈew balkˈiria tʃɾonˈikles ɡˈame .
+ˈin ˈits septembˈeɾ ˈissue , famˈitsu listˈed tˈat sˈenx nˈo balkˈiria tɾˈes wˈould bˈe aribˈinɡ ˈon tˈe plaistˈation poɾtˈable .
+ˈits fˈiɾst publˈik appearˈanse wˈas ˈat tˈe dˈos mˈil dˈies tˈokʝo ɡˈame sˈow ( ˈtɡs ) , wˈere ˈa dˈemo wˈas mˈaðe aβailˈable fˈoɾ xouɾnˈalists ˈand attendˈees .
+durˈinɡ tˈe publisitˈi , storˈi dˈetails wˈere kˈept skˈant sˈo ˈas nˈot tˈo spˈoil tˈoo mˈutʃ fˈoɾ potentˈial plˈaʝeɾs , alˈonɡ wˈit sˈome ˈof ˈits kontˈent stˈiʝ bˈeinɡ ˈin flˈuks ˈat tˈe tˈime ˈof ˈits rebˈeal .
+tˈo pɾomˈote tˈe ɡˈame ˈand detˈail tˈe storˈi leadˈinɡ ˈinto tˈe ɡˈame 'ˈs ˈeβents , ˈan episodˈik flˈas bisˈual nobˈel wɾˈitten bˈi fuxˈii bˈeɣan relˈease ˈin xanuarˈi dˈos mˈil ˈonse .
+tˈe ɡˈame wˈas releasˈed xanuarˈi beintisˈiete , dˈos mˈil ˈonse .

@@ -1,3 +1,100 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:e24e7bfce333bc9966a1829178df74e0be0e8771bafc62eebed5e23a33d17956
-size 19560
+aːlmaːʔi maːddat ʃaffaːfat ʕadijmat allawni waːlaraaːʔaħaa wahuwa aːlmukawani aːlʔasaːsiju lildʒadaːwil waaːlbuħajraːt waaːlbiħaːr waaːlmuħijtˤaːt wakaðlika lilsawaːʔil fij dʒamijʕi aːlkaːʔinaːt aːlaħaja wahuwa ʔakθara aːlmarkabaːti aːlkijmijaːʔijat ntiʃaːr ʕalaaː satˤħi aːlaʔaradˤa
+jataʔallaf dʒuzajʔ aːlmaːʔi min ðarrat ʔuksidʒijn markazijat tartabitˤ bihaː ðarrataː hajdruwdʒijn ʕalaaː tˤarafajhaː biraːbitˤaa tasaaːhamaja biħajθu takuwn sˤijɣath aːlkijmijaːʔijat
+ʕinda aðˤðˤuruwfi aːlqijaːsijat min adˤdˤaɣtˤi wadaradʒaa aːlħaraːrat jakuwn aːlmaːʔi saaːʔalaaː ʔammaː aːlħaːlat asˤsˤulbat fatataʃakkal ʕinda nuqtˤat attadʒamada watudʕaaː baaːladʒilajda ʔammaː aːlħaːlat aːlɣaːzijat fatataʃakkal ʕinda nuqtˤat aːlaɣalajaːna watusammaaː buxaːrin aːlamaaːʔa
+ʔin aːlmaːʔi huwa ʔasaːsi uːdʒuwdi aːlħajaːt ʕalaaː kawkabi aːlaʔaradˤa wahuwa juɣatˤtˤij min satˤaħaha watumaθθil mijaːhi aːlbiħaːri waaːlmuħijtˤaːt ʔakbara nisbat lilmaːʔi ʕalaaː aːlaʔaradˤa ħajθu tabluɣ ħiwaːlij
+
+watatawazzaʕ annisabi aːlbaːqijat baiːna aːlmijaːhi aːldʒawfijat wabaiːna dʒalijd aːlmanaːtˤiqi aːlqutˤbijaa
+lakalajhama maʕa uːdʒuwdi nisbat sˤaɣijrat ʕalaaː ʃaklin buxaːrin maːʔi muʕallaq fij aːlhawaːʔi ʕalaaː hajʔat saħaːb ɣajawm waʔaħjaːn ʔuxraaː ʕalaaː hajʔat dˤabaːb ʔaw nadaaː biaːlʔidˤaːfat ʔilaaː azzaxxaːt aːlmutˤrijaa ʔaw aθθaladʒajt
+tabluɣ nisbat aːlmaːʔi aːlʕaðb ħiwaːlij
+faqatˤ min aːlmaːʔi aːlmawdʒuwdi ʕalaaː aːlaʔaradˤa waʔaɣlib hðihi aːlkammijat ħawaːlaj mawdʒuwdat fij aːlkutali aːldʒalijdijaa fij aːlmanaːtˤiqi aːlaqatˤabaja fij ħijni tatawaːdʒad
+min aːlmaːʔi aːlʕaðb fij aːlʔanhaːr waaːlbuħajraːt wafij aːlɣilaːfi aːladʒawj
+ʔammaː fij atˤtˤabajʕaa fatataɣajar ħaːlat aːlmaːʔi baiːna aːlħaːlaːti aθθalaːθat lilmaːddat ʕalaaː satˤħi aːlʔardˤi bistimraːrin min xilaːla maː jaʕrif bismi addawrat aːlmaːʔijat ʔawa dawrat aːlamaaːʔa waaːllatij tatadˤamman ħuduwθi tabaxxara wanataħa nataħa tabaxaraj θumma takθijfi fahutˤuwl θumma dʒarajaːn litasˤil ʔilaaː aːlmasˤabb fij aːlmusatˤtˤaħaːt aːlamaaːʔaja
+ʃaklin aːlħusˤuwli ʕalaaː masˤdarun naqij min mijaːhi aʃʃurbi ʔamr muhimm lanuʃuwʔ aːlħadˤaːraːti ʕabra attaaːrajxi
+wafij aːlʕuquwdi aːlaʔaxajraa sudʒdʒilat ħaːlaːti ʃaħħa fij aːlmijaːhi aːlʕaðbaa fij manaːtˤiqi ʕadijdat min aːlaʕaaːlama walaqad quddirat ʔiħsˤaːʔaːtu aːlʔumami aːlmuttaħidat ʔanna ħiwaːlij miljaːri ʃaxsˤin ʕalaaː satˤħi aːlʔardˤi laː jazaːluwna jaftaqiruwna aːlwasaːʔili aːlmutaːħat liluːsˤuwli ʔilaaː masˤdarun ʔaːminin limijaːhi aʃʃaraba waʔanna ħiwaːlij
+miljaːri jaftaqiruwna ʔilaaː wasijlat mulaːʔimat min ʔadʒli tatˤhijrin aːlamajaːhi
+aːlxwaːsˤ aːlfijzjaːʔijaa waaːlkijmijaːʔijat
+jumkin ʔijraːd aːlxwaːsˤ aːlkijmijaːʔijat waaːlfijzjaːʔijaa aːlʔasaːsijat lilmaːʔi ʕalaaː ʃaklin anniqaːtˤi attaaːlaja aːlmaːʔi saːʔil ʕinda ðˤuruwfin adˤdˤaɣtˤi waaːlħaraːrat aːlqijaːsijat aːlmuħijtˤat waðlika ʕinda
+kallafna sa wadˤaɣtˤun baːskaːl baaːra
+basaaːj
+dʒaw wahuwa ʕadijmu aːlamaðaaːqa kamaː ʔannahu ʕadijmu allawni ʕindamaː jakuwn bikammijaːtin sˤaɣajrat ʔillaː ʔannahu jaʔxuð lawnaː ʔazraq ʕinda zdijaːdi ʕumqi atˤtˤabaqaaːta watilka xaaːsˤaja fij ʔasˤli wadʒawhara aːlamaaːʔa wajaʕuwd sababuhaː ʔilaaː mtisˤaːsˤi ntiqaːʔaja fij aːlmadʒaːli aːlʔaħmari min atˤtˤajf aːlmarʔiiː watabaʕθara lildˤawʔ aːlaʔabajdˤa ʔammaː buxaːrin aːlmaːʔi fahuwa ʔasaːs ɣaːzi ʕadijmu allawna
+tatakawan binjat aːlmaːʔi aːldʒuzajʔijaa naðˤarijaː biħajθu taqaʕ ðarrat aːlʔuksidʒijn fij markazi binjat dʒazaiːʔaja rubaːʕijat assutˤuwħa taqaʕ fijhaː ðarrataː aːlhijdruwdʒijn biaːlʔidˤaːfat ʔilaaː azzawdʒajni aːlʔiliktruwnijajni aːlamawdʒawdajni ʕalaaː ðarrat aːlaʔakasadʒajna ʕalaaː zawaːjaː aʃʃakli rubaːʕijin assatˤawiħa
+walkin aʃʃaːʔiʕu ʔanna aːlbunjat aːldʒuzajʔijaa lilmaːʔi manaħanaja waɣajri xatˤajt ʔið tabluɣ zaːwijat arraːbitˤat miqdaːrin
+
+tilka aːlqijmat min zaːwijat arraːbitˤat ʔasˤɣari min aːlqijmat anniðˤaːmijat larubaːʕij assutˤuwħa
+wajaʕuwd ðlika ʔilaaː tudaːfiʕ azzawdʒajni aːlʔiliktruwnijajni lijaʃɣalaː ʔabʕada masaːfat mumkinat ʕan biʕadˤdˤihimaː ħasaba naðˤarijat fajsabara
+jabluɣ tˤuwli arraːbitˤat fij dʒuzajʔ aːlmaːʔi
+bajkauːmaturi
+bimaː ʔanna kahurasalabajt ðarrat aːlʔuksidʒijn ħasaba miqjaːsi baːwlnɣ
+ʔaʕlaaː min ðarrat aːlhijdruwdʒijn
+taħmil ðarrat aːlʔuksidʒijn ʃaħnat saaːlabaa dʒazaʔaja fij ħijni taħmil ðarrat aːlhijdruwdʒijn ʃaħnat mawdʒabaa dʒazaʔaja biaːltaːlij jakuwn aːlmaːʔi dʒuzajʔaː qutˤbijaː ðaː ʕazmi θunaːʔijin qutˤba jabluɣ miqdaːruhu
+dajbaaːj
+jastatˤijʕ aːlmaːʔi ʕalaaː ʔasaːsi ðlika ʔanna juʃakkil rawaːbitˤu hajdarawdʒajnaja baiːna dʒazaiːʔajt
+tuʔaddij hðihi aːlʕawaːmilu ʔilaaː uːdʒuwdi quwat taraːbatˤa baiːna dʒazaiːʔaja qawja mimmaː jufassir ðˤuhuwri xaaːsˤaja attawatturi assatˤħij aːlkabijrat lalamaaːʔa biaːlʔidˤaːfat ʔilaaː aːlxaːsˤsˤijaa aʃʃaʕaraja
+tufassir xaaːsˤaja attawatturi assatˤħij lilmaːʔi ðˤaːhirat ʔimkaːnijat uːquwfi aːlħaʃaraːt xafijfat aːlwazni ʕalaaː satˤħi aːlamaaːʔa biaːlʔidˤaːfat ʔilaaː ʔimkaːnijat tuʃakkil aːlaqatˤariaːta fij ħijni ʔanna aːlxaːsˤsˤijaa aʃʃaʕaraja waaːllatij tuʃijr ʔilaaː majli aːlmaːʔi ʔilaaː asˤsˤuʕuwdu ʔilaaː ʔaʕlaaː ʔunbuwbin ʃiʕrijun rafijʕu biʃaklin muʕaːkis liquwat aːladʒaaːðabaja xaaːsˤaja muhimmat wħajwja ʕinda annabaːtaːt aːlawʕaaːʔaja miθla aːlaʔaʃadʒaaːra
+jaʕud aːlmaːʔi min aːlmðjbaːt aːlqutˤbijaa aːladʒajdaa waʕaːdat maː juʃaːr ʔilajhi ʕalaaː ʔannahu maðajba ʕaaːma
+taʕrif aːlmawaːddi aːlkijmijaːʔijat aːlqaːbilat lilnħilaːl aːlaðiwbaaːna fij aːlmaːʔi biʔannahaː mawaːddi muħibbat lilmaːʔi hajdarawfajulajt miθla aːlʔamlaːħ waaːlsukkarijaːt waaːlʔaħmaːdˤ waaːlqilwijaːt wabiʕadˤdˤi aːlɣaːzaːt miθla aːlʔuksidʒijn waθunaːʔij ʔuksijd aːlakarabawna
+baaːlamaqaaːbala taʕrif aːlmawaːddi aːlkijmijaːʔijat attij takuwn ɣajri qaːbilat lilmtizaːdʒ maʕa aːlmaːʔi maθala adduhnijaːt aːlazajwta waaːlʃuħuwm wɣajrahaaː biʔannahaː kaaːrahaa lilmaːʔi hajdarawfawbajt
+min dʒihat ʔuxraaː jamtazidʒ aːlmaːʔi maʕa aːlʕadijda min assawaːʔil kaːlkħwlaːt aːlaʔajaθaaːnawla maθalaaː bakaaːfaa annisabi muʃkil mazijdʒ lahu sˤifaːtin maʕajnaa minhaː kawnuhu θaːbitun aːlɣalajaːn mazajdʒa ʔazajwatarawbaju
+walkin biaːlmuqaːbili laː jamtazidʒ aːlmaːʔi maʕa ʔaɣlib azzujuwti aːlaʕadˤawjt ʔið tuʃakkil aːlʔaxijrat tˤabaqat ðaːti kaθaːfat ʔaqalla tatˤfuw ʕalaaː satˤħi aːlamaaːʔa
+taʕtamid qijmat nuqtˤat ɣalajaːn aːlmaːʔi kamaaː huwa aːlħaːli fij kaːffat assawaːʔala ʕalaaː qijmat adˤdˤaɣtˤi aːldʒawiiː aːlamaħajtˤa
+ʕalaaː sabijli aːlamaθaaːla faʔinna aːlmaːʔi annaqij jɣilaj ʕinda mustawaaː satˤħi aːlbaħri ʕinda addaradʒat sa fij ħijni ʔannahu jɣilaj ʕinda addaradʒat sa ʕinda qimmat dʒabali ʔajfarasata m fawqa satˤħi aːlabaħara
+ʕinda ʔaðabaa aːlmawaːddi aːlqaːbilat lilnħilaːl fij aːlmaːʔi tartafiʕ nuqtˤat ɣalajaːn aːlmaːʔi watanxafidˤ nuqtˤat tadʒamadaha
+tabluɣ qijmat assaʕaa aːlħaraːrijat annawʕijat lilmaːʔi
+dʒawlakaɣakalafuna wahija qijmat murtafaʕat nisbij biaːlmuqaːranat maʕa baːqij aːlmarkabaːti aːlakajmajaːʔaja kamaː ʔanna ħaraːrat attabaxxur ladajhi murtafaʕat kajlawdʒawlukaɣa ʔajdˤa
+jaʕuwd rtifaːʕi hðihi aːlqijami ʔilaaː arrawaːbitˤa aːlhajdruwdʒijnijaa baiːna dʒuzajʔaːt aːlamaaːʔa
+tusaːhim tilka aːlqijami aːlmurtafaʕat fij dʒaʕala munaːxin aːlʔardˤi muʕtadilaː waðlika bimtisˤaːsˤ attabaːjunaːt waaːltaʔardʒuħaːt aːlkabijrat fij daradʒat aːlaħaraaːraa
+lilmaːʔi kaθaːfat miqdaːruhaː kaɣama taʕaaːdala ɣamala ʕinda addaradʒat sa ʔammaː aːldʒalijdi fakaθaːfath tabluɣ kaɣama
+takuwn lakaθaːfaa aːlmaːʔi qijmat ʔaʕaðˤamajt ʕinda addaradʒat
+sa wabuʕda ðlika tamijl lalatanaaːqisˤa waðlika ʕalaaː aːlʕaksi min ʔaɣlib aːlmawaːddi annaqijat aːlaʔaxaraaː waaːllatij tazdaːd kaθaːfathaː ʕindamaː tanxafidˤ daradʒat ħararatahaaː
+jaʕuwd attanaːqusˤ fij qijmat aːlkaθaːfat ʔilaaː aːlbunjat aːlmaftuwħat ɣajri aːlamatarasˤaa lildʒalijd waaːllaðij jabdaʔ biaːltaʃakkul tadrijdʒij fij aːlmaːʔi ðij daradʒat aːlħaraːrat aːlmunxafidˤaa dawna
+sa ʔið laː tuwdʒad tˤaːqat ħaraːrijat kaːfijat litaʔmijni tawadʒdʒuhaːti aːlħarakat aːlʕaʃwaːʔijat laladʒaziiːʔaaːti mimmaː juʔaddij ʔilaaː aːsˤtˤfaːfhaː ʕalaaː aːlmustawaaː aːldʒuzajʔij walkin bibunjaa maftuwħat manataðˤamaa mimmaː juʔaddij ʔilaaː zdijaːdi aːlħadʒmi aːlʕaːmmi lalasiaːʔala waliðlika faʔinnahu baiːna daradʒataja aːlħaraːrat
+sa wa sa jazdaːd aːlħadʒmi maʕa tanaːqasˤa daradʒat aːlaħaraaːraa
+jatamaddad aːlmaːʔi lijaʃɣal ħadʒm ʔakbara binisbat min ħadʒmi aːladʒalajda biaːltaːlij satakuwn kaθaːfat aːldʒalijdi ʔaqalla min kaθaːfat aːlamaaːʔa liðlika jatˤfuw aːldʒalijdi ʕalaaː satˤħi aːlmaːʔi assaaːʔala kamaː huwa aːlħaːli fij aːldʒibaːli aːladʒalajdaja
+lilmaːʔi annaqij mawsˤalaja kahrabaːʔijat dˤaʕajfat walkinnahaː tazdaːd ʕinda ʔaðabaa kammijat qalijlat min maːddat ʔajawnajt miθla klwrjd asˤsˤawdajwma
+ʕinda tatˤbijqi tˤaːqat kaːfijat ʕalaaː aːlmaːʔi tafuwq kammijat aːlħaraːrat aːlqijaːsijat liltakwijn waaːllatij tabluɣ
+kajlawdʒawlamawla
+majɣadʒawlakaɣa jaħduθ ʕindaʔiðin nfisˤaːli ladʒuzajʔ aːlmaːʔi ʔilaaː mukawinaːth min aːlhijdruwdʒijn waːlaʔakasadʒajna wahðaː maː jaħduθ ʕinda tatˤbijqi dʒuhdin murtafiʕun min attajaːri aːlkahrabaːʔiiː biʃuruwtˤin muʕajanat lilħusˤuwli ʕalaaː ðˤaːhirat attaħlijli aːlkahrabaːʔiiː lalamaaːʔi
+ʔin atˤtˤaːqat allaːzimat lifasˤli aːlmaːʔi ʔilaaː aːlhijdruwdʒijn waaːlʔuksidʒijn ʕabra attaħlijli aːlkahrabaːʔiiː ʔaw wasijlat ʔuxraaː tafuwq atˤtˤaːqat aːlamasataħasˤalaa min tafaːʕuli ttiħaːdi aːlʕunsˤurajni aːlamaðakawrajna
+jumkin ʔanna jatimm attaħlijli aːlkahrabaːʔiiː lilmaːʔi ʕalaaː mustawaaː taʕlijmijin ʕabra dʒihaːzi hwfmaːn litaħlijli aːlamaaːʔa
+jusˤannif aːlmaːʔi kijmijaːʔijaː ʕalaaː ʔannahu ʔuksijd lalahaiːdarawdʒajni wahuwa jataʃakkal ʕindamaː jaħtariq aːlhijdruwdʒijn ʔaw ʔaj markabin ħaːw ʕalajhi baaːlaʔakasadʒajna wahuwa mazijdʒin aːnafadʒaaːraj
+tastatˤijʕ aːlʕanaːsˤiri aːlkijmijaːʔijat aːlʔakθara kahurasalabajt min aːlhijdruwdʒijn miθla alljθjwm waaːlsˤuwdijuwm waːlkaːlsjwm waːlbwtaːsjwm waːlsjzjwm ʔanna tazijħ aːlhijdruwdʒijn min aːlmaːʔi muʃkilat biðlika aːlhjdrwksjdaːt aːlamawaːfaqaa
+juwsˤaf aːlmaːʔi biʔannahu ʕasara ʕindamaː takuwn nisbat aːlʔamlaːħ aːlmaʕdinijat fij aːlmaːʔi ʕaaːlajt waxaːsˤsˤat ʔamlaːħ aːlkaːlsjwm waːlmɣnsjwm biaːlʔidˤaːfat ʔilaaː biʕadˤdˤi aːlʔamlaːħ aːlmunħallaa min aːlbjkrbwnaːt waːlakabaraiːtati
+baaːlamaqaaːbala juwsˤaf aːlmaːʔi ɣajri aːlʕasir ʔannahu maaːʔa jsara wajaxtalif taʕrijfh ħasaba addawlaa fahuwa aððij tarkijzuhu min aːlʔamlaːħ ʔaxfidˤ min maɣala fij aːlmamlakat aːlamataħadaa waʔuxaffidˤ min maɣala fij aːlwilaːjaːti aːlmuttaħidat aːlaʔamarajkaja
+lihðihi aːlxaːsˤsˤijaa ʔahammijat fij asˤsˤinaːʕat biʃaklin xaːsˤsˤin waxaːsˤsˤat fij aːlmaraːdʒil ʕinda attabixajra kamaː ʔanna lahaː taʔθijri ʕalaaː asˤsˤaħaa liðlika taxdˤaʕ ʕaːdat ʔilaaː ʕamalijat ʔizaːlat lalaʕisara
+jumkin ʔidʒraːʔi tafaːʕuli kaʃafa ʕan aːlmaːʔi biʔasaːlijbi laaːʕudˤawjat taqalajdajt ʔið ʔanna aːlmaːʔi jaluwna muliħħin kibrijtaːt annaħħaːs aθθunaːʔiiː allaːmaːʔj ʔabjadˤi allawni ʔilaaː allawni aːlaʔazaraqa kamaː jataħawal lawni aːlwaraqi aːlmuʃabbaʕ bimuliħħ klwrjd aːlkwbaːlt aθθunaːʔiiː allaːmaːʔj min aːlʔazraq ʔilaaː aːlʔaħmari ʕinda attltimaːsin maʕa aːlamaaːʔa
+ʔammaː tħljljlaː fatuħaddad kammijat aːlmaːʔi bistixdaːmi tˤarijqat kaaːralafajʃara
+attaʕaːduli aːlaħamadˤaj aːlmaːʔi saːʔil mutaʕaːdil kajmajaːʔaja ʔið ʔanna daradʒat aːlħumuwdˤaa ʔaw aːlqaːʕidijaa fijhi hija wahðaː jaʕnij ʔannahu laː jumkin ʕtibaːri aːlmaːʔi maːddat ħamadˤaja ʔaw qaaːʕadaja liʔannahu maːddat mataʕadalaa kajmajaːʔaiː
+ħasaba tawazzaʕa naðˤaːʔir aːlhijdruwdʒijn watarkijbihaː fajumkin ladʒuzajʔ aːlmaːʔi ʔanna jakuwn biaːlʔidˤaːfat ʔilaaː aʃʃakli aʃʃaːʔiʕu aːlaxafajfa ʕalaaː ʃaklin maːʔi θaqijl ʕindamaː jakuwn naðˤijra aːlhijdruwdʒijn addjwtjrjwm makaːnin aːlʔawali fij dʒuzajʔ aːlmaːʔi kamaː jumkin ʔanna jakuwn ʕalaaː aʃʃakli maːʔi faːʔiq aθθiql ʕindamaː juħill attrjtjwm makaːnin aːlhijdruwdʒijn fij dʒuzajʔ aːlmaːʔi
+aːlmaːʔi fij aːlkawni
+bistiθnaːʔi aːlmaːʔi aːlmawdʒuwdi ʕalaaː satˤħi aːlaʔaradˤa faʔinna muʕðˤama aːlmaːʔi aːlmawdʒuwdi fij aːlkawni huwa nitaːdʒ θaːnawijin lawilaːdaa annadʒawmi waaːllatij jataraːfaq ħuduwθhaː binuʃuwʔ rijaːħi tandafiʕ xaːridʒaː baqawa ħaːmilat maʕahaː aːlɣaːzi waːlaɣabaaːra
+ʕindamaː jasˤtˤadim ðlika addafq min aːlmawaːddi biaːlɣaːzi aːlmuħijtˤi biaːldʒurmi aːlmawluwdu juʔaddij ðlika ʔilaaː nuʃuwʔi ʔamwaːdʒ sˤadamaa maː jaʕmal ʕalaaː tasxajna aːlaɣaaːzi
+jataʃakkal aːlmaːʔi aːlmulaːħaðˤi fij aːlkawni bitilka atˤtˤarijqat wabiʃaklin sarijʕin fij ðlika aːlɣaːzi aːlmutakaːθif assaaːxana
+ðˤuhri fij sanat taqrijri ʕan ktiʃaːfi saħaaːbaa haːʔilat min buxaːrin aːlmaːʔi fij aːlkawni wabikammijaːt tafuwq aːlkammijat aːlmawdʒuwdat ʕalaaː aːlʔardˤi b trijlijuwni marat fij muħijtˤi nadʒm zaːʔifin jabʕud ħiwaːlij miljaːri sanat dˤawʔaja ʕan aːlaʔaradˤa
+waqad aːsatanatadʒa min ðlika ʔanna aːlmaːʔi mawdʒuwdun fij aːlkawni munðu bidaːjat naʃaʔatahi
+juwdʒad aːlmaːʔi fij aːlkawni ʕalaaː aːlʕumuwmi biħaːlaːth aθθalaːθat asˤsˤalabaa waːlasaaːʔalaa waːlaɣaaːzaja biaːlʔidˤaːfat laʔimkaːnijaa aːfataraaːdˤaja liuːdʒuwdihi ʕalaaː ʃaklin judʕaaː maaːʔa faːʔiq attaʔajna ħajθu jatabalwar aːlʔuksidʒijn watabaqqaaː ʔujuwnaːt aːlhijdruwdʒijn ʕaːʔimat biʃaklin ħurrun daːxila aʃʃabakat aːlballuwrijaa lalaʔikasadʒajni
+juwdʒad hðaː aʃʃakli ftiraːdˤij taħta dˤaɣtˤi wadaradʒaa ħaraːrat kabijrajni kamaː huwa aːlħaːli fij aːlbunjat addaːxilijat likawkabaja ʔuwraːnuws wnabutawna
+jaʕud uːdʒuwdi aːlmaːʔi biħaːlaːth aθθalaːθat fij nafsi aːlwaqti ʔaħadu ʔasbaːbi uːdʒuwdi aːlħajaːt ʕalaaː satˤħi kawkabi aːlaʔaradˤa
+wajardʒiʕ ðlika lamawqiʕ aːlʔardˤi fij annitˤaːqi asˤsˤaːliħu lilħajaːt fij anniðˤaːmi aʃʃamasaj biħajθu law ʔannahaː kaːnat ʔaqrabi ʔilaaː aʃʃamsi ʔaw ʔabʕada minhaː binisbat min aːlmasaːfat aːlħaːlijat ʔaj ħiwaːlij malaːiːjni kama faʔinna aðˤðˤuruwfi attij tasmaħ biuːdʒuwdi aːlʔaʃkaːl aθθalaːθat lan takuwn matawfarat mimmaː sajuʔaθθir ʕalaaː uːdʒuwdi aːlaħajaːa
+ʕalaaː ʃaklin buxaːrin maːʔi juwdʒad aːlmaːʔi biħaːlath aːlɣaːzijat ʕalaaː hajʔat buxaːrin maaːʔa waqad ʕaθara fij aːlkawni ʕalaaː hðaː aʃʃakli min aːlmaːʔi fij aːlɣilaːfi aːldʒawiiː lilʕadijd min aːlaʔadʒaraaːma fij madʒaraa darbi attabaaːnaa waðlika fij kulli mana
+aːlɣilaːfi aːldʒawiiː lilʃamsi waðlika bikammijaːtin nazaraa qaːbilat lalaqajaːsi
+aːlɣilaːfi aːldʒawiiː laʕutˤaːrid binisbat
+walkin tuwdʒad kammijaːtin ʔakbara fij aːlɣilaːfi aːlaxaaːradʒaj
+aːlɣilaːfi aːldʒawiiː lilzahraa binisbat
+
+aːlɣilaːfi aːldʒawiiː lilʔardˤ binisbat taqaːrubin
+biaːlnisbat likaːmili tˤabaqaːti aːlɣilaːfi aːladʒawj ʔillaː ʔannahaː tataraːwaħ baiːna biaːlqurbi min assatˤaħa biaːlʔidˤaːfat ʔilaaː uːdʒuwdi kammijaːtin nazaraa fij aːlɣilaːfi aːldʒawiiː lalaqamiri
+aːlɣilaːfi aːldʒawiiː lilmirrijx binisbat
+
+aːlɣilaːfi aːldʒawiiː lilmuʃtarij waðlika faqatˤ fij aːlmawaːddi aːlamatatˤaaːjraa binisbat
+wakaðlika fij qamarh ʔawrawbaaː
+aːlɣilaːfi aːldʒawiiː lazaħala waðlika faqatˤ fij aːlmawaːddi aːlamatatˤuaːjrrat wakaðlika fij ʔaqmaːrh tjtaːn wadujuwnu wʔanasajlaaːdawasa
+aːlɣilaːfi aːldʒawiiː laʔuwraːnuws bikammijaːtin nazaraa duwni baaːra
+aːlɣilaːfi aːldʒawiiː lanibtuwn waðlika fij atˤtˤabaqaːti aːlaʕamajqaa
+juwdʒad buxaːrin aːlmaːʔi ʔajdˤ fij aːlʕadijda min aːlaʔadʒaraaːma aːlfalakijaa aːlʔuxraaː daːxila aːlmadʒmuwʕat aʃʃamsijat kamaː fij aːlɣilaːfi aːldʒawiiː lilkawkab aːlqazam sajrajasa biaːlʔidˤaːfat ʔilaaː aːlaʔadʒaraaːma xaːridʒa aːlmadʒmuwʕat aʃʃamsijat bimaː fij ðlika aːlɣilaːfi aːldʒawiiː likulli min w wa wa wa wwaːsaba wa wa
+juwdʒad buxaːrin aːlmaːʔi ʔajdˤ fij aːlɣilaːfi aːldʒawiiː lilnudʒuwm waðlika biʃaklin laː jaqtasˤir ʕalaaː annudʒuwmi aːlbaːridat faqatˤa ʔið ʔannahu ktaʃafa ħattaaː fij annudʒuwmi adˤdˤaxmat aːlʕimlaːqat miθla munkabb aːldʒawzaːʔ wanadʒm arraːqisˤu fij kawkabat aːlmultahiba waqalbin aːlʕaqrab waaːlsammaːk arraaːmaħa
+kamaː ktaʃafa buxaːrin aːlmaːʔi ʔajdˤ fij aːlʔaqraːsˤ annadʒmijaa addawaːraa bimaː fij ðlika ʔakθara min nisˤfi nudʒuwmi tij aθθawr miθla wa wa wa wa
+ʕalaaː ʃaklin maːʔi saːʔil
+juwdʒad aːlmaːʔi assaːʔil fij aːlkawni biʃaklin raʔijsijin ʕalaaː kawkabi aːlʔardˤi ħajθu juɣatˤtˤij ʔakθara min min masaaːħataha biaːlʔidˤaːfat ʔilaaː ðlika tuwdʒad kammijaːtin kabijrat min aːlmaːʔi daːxila aːlʔardˤi waðlika fij atˤtˤabaqaːti aːlʕamijqat taħta aːlqiʃraa aːlaʔaradˤajt
+kamaː ʔanna hunaːka dalaːʔili ʕalaaː uːdʒuwdihi ʕalaaː satˤħi aːlmirrijxi ʔajdˤ walkin bikammijaːtin qalajlat
+hunaːka ʔabħaːθin tuʃijr ʔilaaː ʔanna aːlmaːʔi assaːʔil qad juwdʒad bikammijaːtin muʕtabarat fij qamara ʔanasajlaaːdawasa aððij jaduwr fij falaki zaħala ħajθu tuwdʒad tˤabaqat samaːkathaː ħiwaːlij kam fij ʕumqi kam taħta satˤħi aːlqutˤbu aːldʒanuwbiiː liðlika aːlaqamari kamaː juwdʒad fij tˤabaqat taħta satˤħi qamara tajtaaːna wamin aːlmuħtamali ʔanna jakuwn mmzwdʒaː maʕa aːlaʔamawnajaː
+ʔammaː qamara aːlmuʃtarij ʔuwruwbbaː falisatˤħh mijzaːti tuʃijr ʔilaaː ʔimkaːnijat uːdʒuwdi mijaːhi muħijtˤi saːʔilat taħta satˤaħaja kamaː jumkin lilmaːʔi assaːʔil ʔanna juwdʒad ʕalaaː qamara aːlmuʃtarij ɣaːnjmjd fij tˤabaqat maħsˤuwrat baiːna aːldʒalijdi murtafiʕun adˤdˤaɣtˤi waːlasˤixari

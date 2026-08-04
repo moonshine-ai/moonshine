@@ -1,6 +1,17 @@
 # C++ runtime data (per-language bundles)
 
-This tree mirrors assets the C++ `moonshine-tts` (speak) and `moonshine-tts-g2p` (G2P-only) CLIs expect under a single **`--model-root`** (see each `README.md` for paths). When this project is embedded as the `moonshine-tts` submodule, canonical Python assets usually live under the **parent** repo’s `data/` and `models/`; this directory is the curated copy shipped for self-contained C++ builds.
+This tree mirrors assets the C++ `moonshine-tts` (speak) and `moonshine-tts-g2p` (G2P-only) CLIs expect under a single **`--model-root`** (see each `README.md` for paths).
+
+**Binaries are not checked into git.** Populate this directory from the CDN (or the archival Hugging Face mirror) before offline builds/tests:
+
+```bash
+# from the repository root
+scripts/fetch-voice-assets.sh tts
+```
+
+Runtime SDKs download the same files on demand from `https://download.moonshine.ai/tts/`. Maintainers publish updates with `scripts/upload-tts-assets.sh` after editing a local copy of this tree.
+
+When this project is embedded as the `moonshine-tts` submodule, canonical Python assets usually live under the **parent** repo’s `data/` and `models/`; this directory is the curated copy for self-contained C++ builds.
 
 | Folder | Role |
 |--------|------|

@@ -41,6 +41,8 @@ android {
         }
         getByName("androidTest") {
             java.srcDirs("android/java/androidTest")
+            // Fixtures live in the repo test-assets/ tree (ORT models are fetched
+            // via scripts/fetch-voice-assets.sh, not Git LFS).
             assets.srcDirs("test-assets")
         }
     }

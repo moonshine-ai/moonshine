@@ -98,6 +98,14 @@ echo "   compiler    : ${CXX}"
 echo "   fuzz budget : ${FUZZ_SECONDS}s per target"
 echo "=============================================================="
 
+# Model/TTS binaries are gitignored; bootstrap from CDN/HF on the box so tests
+# and the TTS memory regression see the same bytes clients download.
+if [[ ! -f "${REPO_ROOT_DIR}/test-assets/tiny-en/encoder_model.ort" ]] || \
+   [[ ! -f "${REPO_ROOT_DIR}/core/moonshine-tts/data/kokoro/model.ort" ]]; then
+  echo "=== Fetching voice assets (scripts/fetch-voice-assets.sh) ==="
+  "${SCRIPTS_DIR}/fetch-voice-assets.sh" all
+fi
+
 # ---------------------------------------------------------------------------
 # Preflight: clang with libFuzzer, cmake. Collect every missing tool first so a
 # fresh box gets one actionable install hint rather than failing one at a time.
@@ -249,16 +257,16 @@ else
 fi
 
 # Repeated-use TTS memory-growth regression (Kokoro / Piper / ZipVoice). Needs
-# the bundled TTS data, which reliability.sh syncs to the box. Skips cleanly if
-# the data or the binary is absent (e.g. running this script directly without a
-# full sync). Individual engines self-skip when their assets are missing.
+# TTS data under core/moonshine-tts/data (fetched by scripts/fetch-voice-assets.sh).
+# Skips cleanly if the data or the binary is absent. Individual engines self-skip
+# when their assets are missing.
 TTS_DATA_DIR="${REPO_ROOT_DIR}/core/moonshine-tts/data"
 if [[ "${MOONSHINE_TTS_MEMORY_TEST_DISABLE:-0}" == "1" ]]; then
   echo "  skip tts-repeated-memory (MOONSHINE_TTS_MEMORY_TEST_DISABLE=1)"
 elif [[ ! -x "${BUILD_DIR}/tts-repeated-memory-test" ]]; then
   echo "  skip tts-repeated-memory (missing binary)"
 elif [[ ! -d "${TTS_DATA_DIR}/en_us" ]]; then
-  echo "  skip tts-repeated-memory (TTS data missing at ${TTS_DATA_DIR#"${REPO_ROOT_DIR}"/}; check reliability.sh sync)"
+  echo "  skip tts-repeated-memory (TTS data missing at ${TTS_DATA_DIR#"${REPO_ROOT_DIR}"/}; run scripts/fetch-voice-assets.sh tts)"
 else
   echo "  run  tts-repeated-memory (timeout ${TTS_MEMORY_TEST_TIMEOUT}s)"
   tts_memory_rc=0

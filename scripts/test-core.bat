@@ -10,6 +10,17 @@ for %%I in ("!SCRIPTS_DIR!") do set "REPO_ROOT_DIR=%%~dpI"
 set "REPO_ROOT_DIR=!REPO_ROOT_DIR:~0,-1!"
 set "BUILD_DIR=!REPO_ROOT_DIR!\core\build"
 
+if not exist "!REPO_ROOT_DIR!\test-assets\tiny-en\encoder_model.ort" (
+    echo Fetching voice assets from CDN/HF...
+    bash "!SCRIPTS_DIR!\fetch-voice-assets.sh" test-assets
+    if errorlevel 1 exit /b 1
+)
+if not exist "!REPO_ROOT_DIR!\core\moonshine-tts\data\kokoro\model.ort" (
+    echo Fetching TTS assets from CDN/HF...
+    bash "!SCRIPTS_DIR!\fetch-voice-assets.sh" tts
+    if errorlevel 1 exit /b 1
+)
+
 if exist "!BUILD_DIR!" (
     rmdir /s /q "!BUILD_DIR!"
 )

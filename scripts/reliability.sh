@@ -69,10 +69,9 @@ trap 'rm -f "${IGNORE_LIST}"' EXIT
   | sed 's#^#/#' >"${IGNORE_LIST}"
 
 # Mirror our source onto the box. It is a plain rsync target (not a git
-# checkout), so we must ship everything the build, tests, and fuzzers need: that
-# includes test-assets/ (~190MB of models/fixtures the tests and fuzz seeds
-# load), the ~2.4GB TTS data (core/moonshine-tts/data, required by the
-# repeated-use TTS memory test), and the Linux onnxruntime libs. We still skip
+# checkout), so we must ship everything the build, tests, and fuzzers need.
+# Large model/TTS binaries are gitignored and fetched on the remote via
+# scripts/fetch-voice-assets.sh (see reliability-remote.sh). We still skip
 # .git and the non-Linux onnxruntime prebuilt libraries (~950MB) that this
 # Linux-x86 run never links against.
 #

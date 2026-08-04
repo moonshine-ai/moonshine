@@ -1,3 +1,100 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:ff85f08fff27a0140499f111317a05559606d8c3075bb8d091bdd0eb7830adb9
-size 23678
+ˈbʰuː.goː.l ŋə.ˈgreː.ziː ʃəbd̪ d̪oː ʃəb.d̪õː seː mɪl.kəɾ bə.nɑː ɦɛː bʰuː ˈgoː.l jə.ɦɑ̃ː bʰuː ʃəbd̪ kɑː ˈtaː.tpə.rj pɾɪt̪ʰ.ʋiː ɔːɾ ˈgoː.l ʃəbd̪ kɑː ˈtaː.tpə.rj ʊ.sə.ˈkeː ˈgoː.l ɑː.kɑːɾ seː ɦɛː jəɦ eːk ʋɪɡ.jɑːn ɦɛː dʒɪ.sə.ˈkeː d̪ʋɑː.ɾɑː pɾɪt̪ʰ.ʋiː kiː ˈsə.tə.ɦ keː ˈsʋə.rʊ.p ɔːɾ ʊ.sə.ˈkeː ˈpraː.kə.tɪ.k ʋɪ.ˈbʰaː.goː̃ d͡ʒɛː.seː pə.ɦɑːɽ mə.ˈɦaː.dʋiː.p d̪eːʃ ˈnə.gə.r nə.d̪iː sə.mʊd̪.ɾᵊ ˈdʒʰiː.l dʒə.lə.snə.dʰɪ.ˈjaː̃ ʋən ˈaː.dɪ kɑː ɡjɑːn ɦoː.t̪ɑː ɦɛː
+ˈpraː.kə.tɪ.k ʋɪ.ˈdʒɲaː.noː̃ keː nɪ.ʂkə.ˈrʂoː̃ keː biːt͡ʃ ˈkaː.rjə.kaː.rə.ɳ səm.bənd̪ʱ st̪ʰɑː.pɪt̪ kəɾ.t̪eː ɦʊ.eː pə.ˈtʰʋiː.tə.l kiː ʋɪ.bʰɪ.nnə.ˈtaː.oː̃ kɑː ˈmaː.nə.ʋiː.j də.ʂʈɪ.ˈkoː.ɳ seː əd̪ʱ.jə.jən ɦiː ˈbʰuː.goː.l kɑː ˈsaː.r ˈtə.tʋ ɦɛː pɾɪt̪ʰ.ʋiː kiː ˈsə.tə.ɦ pəɾ d͡ʒoː st̪ʰɑːn ʋɪ.ʃeːʂ ɦɛ̃ː ʊn.kiː sə.mə.ˈtaː.oː̃ tə.ˈtʰaː ʋɪ.ʂə.mə.ˈtaː.oː̃ kɑː kɑː.ɾəɳ ɔːɾ ʊn.kɑː spə.ˈʂʈiː.kə.rə.ɳ ˈbʰuː.goː.l kɑː nɪ.d͡ʒiː kʂeːt̪.ɾᵊ ɦɛː
+ˈsə.rʋə.prə.tʰə.m ˈpraː.tʃiː.n ˈjuː.naː.niː ʋɪ.ˈdʋaː.n ɪ.ˈrɛː.ʈoː.stʰə.nɪ.z neː ˈbʰuː.goː.l koː dʰə.ˈraː.tə.l keː eːk ʋɪ.ʃɪ.ʂʈə.ʋɪ.ˈdʒɲaː.n keː ɾuːp mẽː ˈmaː.njə.taː d̪iː dʒɪ.ˈoː.graː.pʰɪ.jaː ʃəbd̪ kɑː pəɦ.lɑː ɾɪ.kɔɾɖ kɪ.jɑː ɡə.jɑː ʊp.joːɡ ˈgriː.k ʋɪ.ˈdʋaː.n ɪ.ˈrɛː.ʈoː.stʰə.nɪ.z d̪oː sɔː ˈtʃʰɪ.ɦə.ttə.r sɔː ˈtʃɔː.raː.nə.ʋeː ˈiː.saː puːɾʋ kiː eːk ˈpʊ.stə.k keː ˈʃiː.rʂə.k keː ɾuːp mẽː t̪ʰɑː ɪ.sə.ˈkeː bɑːd̪ ɦɪ.ˈroː.ɖoː.ʈə.s tə.ˈtʰaː ˈroː.mə.n ʋɪ.ˈdʋaː.n ˈsʈrɛː.boː tə.ˈtʰaː ˈklaː.ɖɪ.jə.s ʈə.lə.ˈmiː neː ˈbʰuː.goː.l koː ˈsʊ.nɪ.ʃtʃɪ.t ˈsʋə.rʊ.p pɾə.d̪ɑːn kɪ.jɑː
+ˈɦaː.lŋaː.kɪ ˈbʰuː.goː.l pɾɪt̪ʰ.ʋiː seː ˈʋɪ.ʃɪ.ʂʈ ɾuːp seː dʒʊ.ˈɽaː ɦɛː pʰɪɾ bʱiː ɡɾəɦ ʋɪɡ.jɑːn keː kʂeːt̪.ɾᵊ mẽː ən.jə kʰə.ˈgoː.liː.j pɳɪ.ˈɖoː̃ keː lɪ.eː kə.iː ə.ʋə.ˈdʰaː.rə.ɳaː.oː̃ koː ə.d̪ʱɪk ˈʋjaː.pə.k ɾuːp seː ˈlaː.guː kɪ.jɑː d͡ʒɑː sək.t̪ɑː ɦɛː ɛː.siː ɦiː eːk ə.ʋə.ˈdʰaː.rə.ɳaː ˈʋaː.lɖoː ˈʈə.bə.lə.r d̪ʋɑː.ɾɑː prə.ˈstaː.ʋɪ.t ˈbʰuː.goː.l kɑː pəɦ.lɑː nɪ.jəm ɦɛː
+ˈbʰuː.goː.l koː ʋɪʃ.ʋə ə.nʊ.ˈʃaː.sə.n ɔːɾ mɑː.nəʋ ɔːɾ ˈbʰɔː.tɪ.k ʋɪɡ.jɑːn keː biːt͡ʃ kɑː pʊl kə.ɦɑː ɡə.jɑː ɦɛː
+ˈbʰuː.goː.l pɾɪt̪ʰ.ʋiː ʊ.sə.ˈkiː ʋɪ.ˈʃeː.ʂə.taː.oː̃ ɔːɾ ʊs pəɾ ɦoː.neː ʋɑː.liː gʰə.ʈə.ˈnaː.oː̃ kɑː eːk ˈʋjə.ʋə.stʰɪ.t əd̪ʱ.jə.jən ɦɛː
+ˈbʰuː.goː.l keː kʂeːt̪.ɾᵊ mẽː ɑː.neː keː lɪ.eː ɑːm t̪ɔːɾ pəɾ kɪ.siː pɾə.kɑːɾ keː ˈstʰaː.nɪ.k ˈgʰə.ʈə.k kiː ɑː.ʋəʃ.jək.t̪ɑː ɦoː.t̪iː ɦɛː d͡ʒɪ.seː ˈmaː.n.tʃɪ.tr pəɾ ɾə.kʰɑː d͡ʒɑː sək.t̪ɑː ɦɛː d͡ʒɛː.seː nɪ.ˈrdeː.ʃŋaː.k st̪ʰɑːn keː nɑːm jɑː pə.ˈteː ɪs.neː ˈbʰuː.goː.l koː ˈmaː.n.tʃɪ.trə.kə.laː ɔːɾ st̪ʰɑːn keː ˈnaː.moː̃ seː ˈdʒoː.ɽ d̪ɪ.jɑː ɦɛː
+ˈɦaː.lŋaː.kɪ kə.iː ˈbʰuː.goː.lə.ʋeː.ttaː.oː̃ koː stʰə.ˈlaː.kə.tɪ ɔːɾ ˈmaː.n.tʃɪ.tr ʋɪɡ.jɑːn mẽː pr.ˈʃɪ.kʂɪ.t kɪ.jɑː d͡ʒɑː.t̪ɑː ɦɛː pəɾ jəɦ ʊn.kɑː mʊkʰ.jə ʋjə.ʋə.ˈsaː.j nə.ɦĩː ɦɛː ˈbʰuː.goː.lə.ʋeː.ttaː pɾɪt̪ʰ.ʋiː keː ˈstʰaː.nɪ.k ɔːɾ ˈlɔː.kɪ.k ˈʋɪ.tə.rə.ɳ gʰə.ʈə.ˈnaː.oː̃ prə.krɪ.ˈjaː.oː̃ ɔːɾ ʋɪ.ˈʃeː.ʂə.taː.oː̃ keː ˈsaː.tʰə.saː.tʰ mə.nʊ.ˈʂjoː̃ ɔːɾ ʊn.keː pəɾ.jɑː.ʋə.ɾəɳ kiː nə.təɦ.krɪ.ˈjaː kɑː əd̪ʱ.jə.jən kəɾ.t̪eː ɦɛ̃ː
+ˈspeː.s ɔːɾ st̪ʰɑːn ˈʋɪ.bʰɪ.nn pɾə.kɑːɾ keː ʋɪ.ʂə.ˈjoː̃ koː pɾə.bʱɑː.ʋɪt̪ kəɾ.t̪eː ɦɛ̃ː d͡ʒɛː.seː kɪ ə.rtʰ.ˈʃaː.str ˈsʋaː.stʰj dʒə.lə.ˈʋaː.jʊ ˈpɔː.dʰeː ɔːɾ d͡ʒɑːn.ʋəɾ ˈə.tɦ ˈbʰuː.goː.l ˈə.tjə.dʰɪ.k ˈə.ntɦ ə.nʊ.ˈʃaː.sɪ.t ɦɛː ˈbʰɔː.goː.lɪ.k də.ʂʈɪ.ˈkoː.ɳ kiː ˈə.ntɦ ə.nʊ.ˈʃaː.sɪ.t pɾək.ɾɪ.t̪iː ˈbʰɔː.tɪ.k ɔːɾ ˈmaː.nə.ʋiː.j gʰə.ʈə.ˈnaː.oː̃ ɔːɾ ʊn.keː ˈstʰaː.nɪ.k ˈpɛː.ʈə.rn keː biːt͡ʃ smə.bnə.ˈdʰoː̃ pəɾ d̪ʱjɑːn d̪eː.neː pəɾ nɪɾ.bʱəɾ kəɾ.t̪iː ɦɛː
+ˈbʰuː.goː.l pɾɪt̪ʰ.ʋiː ɡɾəɦ seː ˈʋɪ.ʃɪ.ʂʈ ɾuːp seː dʒʊ.ˈɽaː ɦɛː ɔːɾ ən.jə kʰə.ˈgoː.liː.j pɳɪ.ˈɖoː̃ koː bʱiː ɪs.mẽː ʃɑː.mɪl kɪ.jɑː ɡə.jɑː ɦɛː d͡ʒɛː.seː ˈmŋə.gə.l ɡɾəɦ kɑː ˈbʰuː.goː.l jɑː ən.jə nɑːm ˈeː.rɪ.joː.graː.pʰiː d̪ɪ.eː ɡə.eː ɦɛ̃ː
+jəɦ eːk oːɾ ən.jə ʃrə.kʰə.ˈlaː.bə.ddʰ ʋɪ.ˈdʒɲaː.noː̃ seː pɾɑːpt̪ ɡjɑːn kɑː ʊp.joːɡ ʊs siː.mɑː t̪ək kəɾ.t̪ɑː ɦɛː d͡ʒə.ɦɑ̃ː t̪ək ʋəɦ gʰə.ʈə.ˈnaː.oː̃ ɔːɾ ʋɪ.ˈʃleː.ʂə.ɳoː̃ kiː sə.ˈmiː.kʂaː tə.ˈtʰaː ʊn.keː smə.bnə.ˈdʰoː̃ mẽː jə.ˈtʰaː.smə.bʰə.ʋ ˈsə.mə.nʋə.j kəɾ.neː mẽː sə.ɦɑː.jək ɦoː.t̪ɑː ɦɛː
+d̪uːs.ɾiː oːɾ ən.jə ʋɪ.ˈdʒɲaː.noː̃ seː pɾɑːpt̪ d͡ʒɪs ɡjɑːn kɑː ʊp.joːɡ ˈbʰuː.goː.l kəɾ.t̪ɑː ɦɛː ʊ.sə.ˈmeː̃ ə.ˈneː.k ˈʊ.tpə.ttɪ smə.bnə.ˈdʰiː ˈdʰaː.rə.ɳaː.eː̃ ˈeː.ʋ̃ nɪ.ˈrdʰaː.rɪ.t ʋə.ˈrgiː.kə.rə.ɳ ɦoː.t̪eː ɦɛ̃ː jə.d̪iː jeː ˈdʰaː.rə.ɳaː.eː̃ ɔːɾ ʋə.ˈrgiː.kə.rə.ɳ ˈbʰɔː.goː.lɪ.k ʊ.ˈddeː.ʃjoː̃ keː lɪ.jeː ʊ.pə.ˈjoː.giː nə ɦõː t̪oː ˈbʰuː.goː.l koː nɪ.d͡ʒiː ˈʊ.tpə.ttɪ smə.bnə.ˈdʰiː ˈdʰaː.rə.ɳaː.eː̃ tə.ˈtʰaː ʋə.ˈrgiː.kə.rə.ɳ kiː pɾə.ɳɑː.liː ʋɪk.sɪt̪ kəɾ.niː ɦoː.t̪iː ɦɛː
+ˈə.tɦ ˈbʰuː.goː.l ˈmaː.nə.ʋiː.j ɡjɑːn kiː ʋɾɪd̪.d̪ʱiː mẽː t̪iːn pɾə.kɑːɾ seː sə.ɦɑː.jək ɦoː.t̪ɑː ɦɛː
+ʋɪ.ˈdʒɲaː.noː̃ seː pɾɑːpt̪ tə.ˈtʰjoː̃ kɑː ʋɪ.ˈʋeː.tʃə.n kəɾ.keː ˈmaː.nə.ʋiː.j nɪ.ˈʋaː.s st̪ʰɑːn keː ɾuːp mẽː pɾɪt̪ʰ.ʋiː kɑː əd̪ʱ.jə.jən kəɾ.t̪ɑː ɦɛː
+ən.jə ʋɪ.ˈdʒɲaː.noː̃ keː d̪ʋɑː.ɾɑː ʋɪk.sɪt̪ ˈdʰaː.rə.ɳaː.oː̃ mẽː ˈnə.tə.rnɪ.ɦɪ.t t̪ət̪ʰ.jᵊ kiː pə.ˈriː.kʂaː kɑː əʋ.səɾ d̪eː.t̪ɑː ɦɛː kjõː.kiː ˈbʰuː.goː.l ʊn ˈdʰaː.rə.ɳaː.oː̃ kɑː st̪ʰɑːn ʋɪ.ʃeːʂ pəɾ pɾə.joːɡ kəɾ sək.t̪ɑː ɦɛː
+jəɦ ˈsaː.rʋ.dʒə.nɪ.k ə.tʰə.ˈʋaː nɪ.d͡ʒiː ˈniː.tɪ.joː̃ keː nɪ.ˈrdʰaː.rə.ɳ mẽː əp.niː ˈʋɪ.ʃɪ.ʂʈ pə.ʂʈʰə.ˈbʰuː.mɪ pɾə.d̪ɑːn kəɾ.t̪ɑː ɦɛː dʒɪ.sə.ˈkeː ɑː.d̪ʱɑːɾ pəɾ sə.mə.ˈsjaː.oː̃ kɑː spə.ˈʂʈiː.kə.rə.ɳ sʊ.ʋɪ.ˈdʰaː.dʒə.nə.k ɦoː.t̪ɑː ɦɛː
+ˈbʰuː.goː.l pɾɪt̪ʰ.ʋiː kɪ ˈdʒʰə.lə.k koː sʋəɾɡ mẽː d̪eːkʰ.neː ˈʋaː.laː ˈaː.bʰaː.mə.j ʋɪɡ.jɑːn ɦɛ̃ː ˈklaː.ɖɪ.jə.s ʈə.lə.ˈmiː
+ˈbʰuː.goː.l eːk ɛː.sɑː sʋə.t̪ən.t̪ɾᵊ ʋɪ.ʂəj ɦɛː d͡ʒɪs.kɑː ʊd̪.d̪eːʃ.jᵊ loː.ɡõː koː ɪs ʋɪʃ.ʋə kɑː ˈaː.kaː.ʃiː.j pɪ.ˈɳɖoː kɑː ˈstʰə.l mə.ˈɦaː.saː.gə.r ˈdʒiː.ʋ.dʒə.ntʊ.oː̃ ʋə.nə.spə.tɪ.ˈjoː̃ pʰə.ˈloː̃ tə.ˈtʰaː ˈbʰuː.dʰə.raː.tə.l keː ˈkʂeː.troː̃ meː ˈdeː.kʰiː d͡ʒɑː.neː ʋɑː.liː pɾət̪.jeːk ən.jə ˈʋə.stʊ kɑː ɡjɑːn pɾɑːpt̪ kə.ˈraː.naː ɦɛ̃ː ˈsʈrɛː.boː
+ˈbʰuː.goː.l mẽː pɾɪt̪ʰ.ʋiː ˈtə.l kɑː əd̪ʱ.jə.jən ˈmaː.nə.ʋiː.j nɪ.ˈʋaː.s keː ɾuːp mẽː ˈkʂeː.trɪ.j bʰɪ.nnə.ˈtaː.oː̃ keː ɑː.d̪ʱɑːɾ pəɾ kɪ.jɑː d͡ʒɑː.t̪ɑː ɦɛː ˈmŋoː.kə.ɦaː.ʊ.s
+ˈbʰuː.goː.l eːk ˈpraː.tʃiː.nə.tə.m ʋɪɡ.jɑːn ɦɛː ɔːɾ ɪs.kiː ˈnniː.ʋ ˈpraː.rmə.bʰɪ.k ˈjuː.naː.niː ʋɪ.ˈdʋaː.noː̃ keː ˈkaː.rjoː̃ mẽː d̪ɪ.kʰɑː.iː pə.ɽə.ˈtiː ɦɛː ˈbʰuː.goː.l ʃəbd̪ kɑː ˈprə.tʰə.m pɾə.joːɡ ˈjuː.naː.niː ʋɪ.ˈdʋaː.n ɪ.ˈrɛː.ʈoː.stʰə.niː.dʒ neː ˈtiː.sə.riː ʃə.ˈtaː.bdiː ˈiː.saː puːɾʋ mẽː kɪ.jɑː t̪ʰɑː
+ˈbʰuː.goː.l ˈʋɪ.stə.t ˈpɛː.maː.neː pəɾ sə.bʱiː ˈbʰɔː.tɪ.k ʋə ˈmaː.nə.ʋiː.j tə.ˈtʰjoː̃ kiː ə.ntə.rkrɪ.ˈjaː.oː̃ ɔːɾ ɪn ə.ntə.rkrɪ.ˈjaː.oː̃ seː ˈʊ.tpə.nn stʰə.lə.ˈruː.poː̃ kɑː əd̪ʱ.jə.jən kəɾ.t̪ɑː ɦɛː jəɦ bə.t̪ɑː.t̪ɑː ɦɛː kɪ kɛː.seː kjõː ɔːɾ kə.ɦɑ̃ː ˈmaː.nə.ʋiː.j ʋə ˈpraː.kə.tɪ.k krɪ.ˈjaː.kə.laː.poː̃ kɑː ˈʊ.dbʰə.ʋ ɦoː.t̪ɑː ɦɛː ɔːɾ kɛː.seː jeː krɪ.ˈjaː.kə.laː.p eːk d̪uːs.ɾeː seː ˈə.ntə.rsmə.bnə.dʰɪ.t ɦɛ̃ː
+ˈbʰuː.goː.l kiː əd̪ʱ.jə.jən ˈʋɪ.dʰɪ ˈpə.rɪ.ʋə.rtɪ.t ɦoː.t̪iː ɾə.ɦiː ɦɛː ˈpraː.rmə.bʰɪ.k ʋɪ.ˈdʋaː.n ʋə.rɳə.ˈnaː.tmə.k ˈbʰuː.goː.lə.ʋeː.ttaː t̪ʰeː bɑːd̪ mẽː ˈbʰuː.goː.l ʋɪ.ˈʃleː.ʂə.ɳaː.tmə.k ˈbʰuː.goː.l keː ɾuːp mẽː ʋɪk.sɪt̪ ɦʊ.ɑː ɑːd͡ʒ jəɦ ʋɪ.ʂəj nə keː.ʋəl ˈʋə.rɳə.n kəɾ.t̪ɑː ɦɛː bəl.kiː ʋɪ.ˈʃleː.ʂə.ɳ keː ˈsaː.tʰə.saː.tʰ bʰə.ʋɪ.ʂjə.ˈʋaː.ɳiː bʱiː kəɾ.t̪ɑː ɦɛː
+jəɦ ˈkaː.l pnə.drə.ɦə.ˈʋiː̃ sə.ˈdiː keː ˈmə.dʰj seː ʃʊ.ɾuː(ʔ) ˈɦoː.kə.r ə.ˈʈʰaː.rə.ɦə.ʋiː̃ sə.ˈdiː keː puːɾʋ t̪ək t͡ʃə.lɑː jəɦ ˈkaː.l ˈaː.rmə.bʰɪ.k ˈbʰuː.goː.lə.ʋeː.ttaː.oː̃ kiː ˈkʰoː.dʒoː̃ ɔːɾ ə.ˈnʋeː.ʂə.ɳoː̃ d̪ʋɑː.ɾɑː ʋɪʃ.ʋə kɑː ʋɪ.ˈstaː.rɪ.t ˈtʃɪ.trə.ɳ kəɾ.t̪ɑː ɦɛː
+nə.dɪ.ˈjaː̃ pɾɪt̪ʰ.ʋiː kiː ˈsə.tə.ɦ pəɾ d͡ʒəl keː pɾə.mʊkʰ ˈʋaː.ɦə.k ɦɛ̃ː ɔːɾ mɑː.nəʋ sə.bʰjə.ˈtaː nə.dɪ.ˈjoː̃ keː kɪ.ˈnaː.reː ʋɪk.sɪt̪ ɦʊ.iː ɦɛː
+pə.ɦɑːɽ ˈmɛː.daː.n pə.ˈʈʰaː.r ɔːɾ ˈmə.rʊ.stʰə.l ˈbʰuː.goː.l keː mʊkʰ.jə stʰə.lə.ˈruː.p ɦɛ̃ː
+dʒə.lə.ˈʋaː.jʊ lmə.ˈbeː sə.məj t̪ək mɔː.səm keː ˈɔː.sə.t ˈpɛː.ʈə.rn koː də.ˈrʃaː.tiː ɦɛː
+ˈmaː.n.tʃɪ.tr ˈbʰuː.goː.l kiː bʱɑː.ʂɑː ɦɛ̃ː ɔːɾ nɪ.ˈrdeː.ʃŋaː.k st̪ʰɑːn koː sŋə.ˈkʰjaː.tmə.k ɾuːp seː nɪ.ˈrdʰaː.rɪ.t kəɾ.t̪eː ɦɛ̃ː
+bʱɑː.ɾət̪ eːk ʋɪ.ˈʃaː.l d̪eːʃ ɦɛː d͡ʒɪs.mẽː ˈʋɪ.ʋɪ.dʰ ˈbʰaː.ʂaː.eː̃ snə.skə.tɪ.ˈjaː̃ ɔːɾ ˈbʰɔː.goː.lɪ.k ʋɪ.ˈʃeː.ʂə.taː.eː̃ ˈpaː.iː d͡ʒɑː.t̪iː ɦɛ̃ː
+ɦɪ.ˈndiː bʱɑː.ɾət̪ kiː eːk pɾə.mʊkʰ ˈaː.dʰɪ.kaː.rɪ.k bʱɑː.ʂɑː ɦɛː ɔːɾ ˈdeː.ʋə.naː.gə.riː ˈlɪ.pɪ mẽː lɪ.ˈkʰiː d͡ʒɑː.t̪iː ɦɛː
+nə.iː dɪ.ˈlliː bʱɑː.ɾət̪ kiː ˈraː.dʒə.dʰaː.niː ɦɛː mmʊ.bə.ˈiː eːk pɾə.mʊkʰ bnə.də.rə.ˈgaː.ɦ ʃə.ɦəɾ ɦɛː
+gŋə.ˈgaː nə.d̪iː ʊt̪.t̪əɾ bʱɑː.ɾət̪ kiː ˈdʒiː.ʋə.nə.reː.kʰaː ˈmaː.niː d͡ʒɑː.t̪iː ɦɛː ɦɪ.ˈmaː.lə.j ʋɪʃ.ʋə keː səb.seː ˈuː̃.tʃeː ˈpə.rʋə.t ɦɛ̃ː
+ˈkə.ʂɪ ʊ.ˈdjoː.g ɔːɾ seː.ʋɑː kʂeːt̪.ɾᵊ ə.rtʰə.ʋjə.ʋə.ˈstʰaː keː mʊkʰ.jə bʱɑːɡ ɦɛ̃ː ʃɪk.ʂɑː ɔːɾ ˈsʋaː.stʰj ˈseː.ʋaː.eː̃ ˈsaː.maː.dʒɪ.k ʋɪ.ˈkaː.s keː lɪ.eː mə.ɦət̪.ʋə.puːɾɳ ɦɛ̃ː
+ʋɪɡ.jɑːn ɔːɾ ˈprɔː.djoː.gɪ.kiː keː ʋɪ.ˈkaː.s neː mɑː.nəʋ d͡ʒiː.ʋən koː gə.ɦə.ˈraː.iː seː bəd̪.lɑː ɦɛː sɲ.ˈtʃaː.r ɔːɾ ˈpə.rɪ.ʋə.ɦə.n keː ˈsaː.dʰə.n d̪ʊ.nɪ.jɑː koː ˈsʊ.ʋjə.ʋə.stʰɪ.t kəɾ.t̪eː ɦɛ̃ː
+uːɾ.d͡ʒɑː snə.ˈsaː.dʰə.n ˈsiː.mɪ.t ɦɛ̃ː ɔːɾ nə.ˈʋiː.kə.rə.ɳiː.j uːɾ.d͡ʒɑː kɑː ʊp.joːɡ bəɽʱ ɾə.ɦɑː ɦɛː pəɾ.jɑː.ʋə.ɾəɳ ˈsnə.rə.kʂə.ɳ ˈʋɛː.ʃʋɪ.k tʃʊ.ˈnɔː.tiː ɦɛː
+sə.mʊd̪.ɾᵊ ˈtə.l seː ˈuː̃.tʃaː.iː ɔːɾ ə.ˈkʂnaː.ʃ ˈdeː.ʃnaː.tə.r st̪ʰɑːn koː pə.rɪ.ˈbʰaː.ʂɪ.t kəɾ.t̪eː ɦɛ̃ː sə.məj kʂeːt̪.ɾᵊ nə.tə.ˈrraː.ʂʈriː.j smə.bnə.ˈdʰoː̃ mẽː mə.ɦət̪.ʋə.puːɾɳ ɦɛ̃ː
+dʒə.nə.sŋə.ˈkʰjaː ʋɾɪd̪.d̪ʱiː ʃə.ɦə.ˈriː.kə.rə.ɳ ɔːɾ prə.ˈʋaː.s ˈbʰuː.goː.l keː əd̪ʱ.jə.jən keː ʋɪ.ʂəj ɦɛ̃ː ˈsnaː.skə.tɪ.k ˈbʰuː.goː.l mɑː.nəʋ ˈbʰuː.goː.l kiː eːk ˈʃaː.kʰaː ɦɛː
+ˈaː.rtʰɪ.k ˈbʰuː.goː.l ʊ.ˈtpaː.də.n ˈʋɪ.tə.rə.ɳ ɔːɾ ʊ.pə.ˈbʰoː.g keː ˈstʰaː.nɪ.k ˈpɛː.ʈə.rn kɑː əd̪ʱ.jə.jən kəɾ.t̪ɑː ɦɛː ˈraː.dʒə.niː.tɪ.k ˈbʰuː.goː.l ˈsiː.maː.oː̃ ɔːɾ ˈʃaː.sə.n prə.ˈɳaː.lɪ.joː̃ seː ˈsmə.bnə.dʰɪ.t ɦɛː
+ˈbʰuː.goː.l ʃɪk.ʂɑː mẽː ˈmaː.n.tʃɪ.tr pə.ɽʰə.ˈnaː ɖeː.ʈɑː ʋɪ.ˈʃleː.ʂə.ɳ ɔːɾ ˈkʂeː.triː.j əd̪ʱ.jə.jən ʃɑː.mɪl ɦɛ̃ː
+ˈʊ.pə.grə.ɦ ˈtʃɪ.trə.ɳ ɔːɾ ˈbʰuː.stʰaː.nɪ.k t̪ək.niːk ˈaː.dʰʊ.nɪ.k ˈbʰuː.goː.l keː ˈʊ.pə.kə.rə.ɳ ɦɛ̃ː
+ˈgloː.bə.l ˈʋaː.rmŋɪ.g dʒə.lə.ˈʋaː.jʊ pə.ɾɪ.ʋəɾ.t̪ən kɑː eːk pə.ɦə.ˈluː ɦɛː ˈgriː.nə.ɦaː.ʊ.s ˈgɛː.soː̃ kɑː st̪əɾ bəɽʱ ɾə.ɦɑː ɦɛː
+ʋə.ˈrʂaː ˈtaː.pə.maː.n ɔːɾ ɦə.ˈʋaː.eː̃ mɔː.səm pɾə.ɳɑː.liː bə.ˈnaː.tiː ɦɛ̃ː tʃə.krə.ˈʋaː.t ɔːɾ ˈbʰuː.kmə.p ˈpraː.kə.tɪ.k ˈaː.pə.daː.eː̃ ɦɛ̃ː
+ˈʋə.nə.spə.tɪ ɔːɾ ˈdʒiː.ʋoː̃ kɑː ˈʋɪ.tə.rə.ɳ dʒə.lə.ˈʋaː.jʊ ɔːɾ mɪʈ.ʈiː pəɾ nɪɾ.bʱəɾ kəɾ.t̪ɑː ɦɛː ˈdʒɛː.ʋ ʋɪ.ʋɪ.dʰə.ˈtaː ˈsnə.rə.kʂə.ɳ ɑː.ʋəʃ.jək ɦɛː
+mə.ˈdaː ˈbʰuː.goː.l mɪʈ.ʈiː keː ˈgə.ʈʰə.n ɔːɾ ˈʋɪ.tə.rə.ɳ kɑː əd̪ʱ.jə.jən ɦɛː dʒə.lə.ˈʋaː.jʊ ˈʃaː.str ˈʋaː.jʊ.mɳə.ɖə.liː.j prə.krɪ.ˈjaː.oː̃ pəɾ ˈkneː.drɪ.t ɦɛː
+sə.mʊd̪.ɾᵊ ʋɪɡ.jɑːn mə.ˈɦaː.saː.gə.roː̃ kiː gə.tɪ.ˈʃiː.lə.taː ɔːɾ d͡ʒiː.ʋən kɑː ʋɪ.ˈʃleː.ʂə.ɳ kəɾ.t̪ɑː ɦɛː ˈgleː.ʃɪ.jə.r dʰrʊ.ˈʋiː.j ˈkʂeː.troː̃ mẽː mə.ɦət̪.ʋə.puːɾɳ ɦɛ̃ː
+mə.rʊ.stʰə.ˈliː.kə.rə.ɳ ˈʃʊ.ʂk ˈkʂeː.troː̃ mẽː tʃʊ.ˈnɔː.tiː ɦɛː ʋə.ˈnoː̃ kiː kə.ˈʈaː.iː ˈdʒɛː.ʋ ʋɪ.ʋɪ.dʰə.ˈtaː koː pɾə.bʱɑː.ʋɪt̪ kəɾ.t̪iː ɦɛː
+ʃə.ɦə.ˈriː nɪ.ˈjoː.dʒə.n ˈjaː.taː.jaː.t ˈaː.ʋaː.s ɔːɾ ˈɦə.rɪ.t ˈkʂeː.troː̃ kɑː ˈsnə.tʊ.lə.n ˈsaː.dʰə.taː ɦɛː ˈgraː.miː.ɳ ˈbʰuː.goː.l ˈkə.ʂɪ bʱuː.miː ɔːɾ ˈseː.ʋaː.oː̃ pəɾ d̪ʱjɑːn d̪eː.t̪ɑː ɦɛː
+ˈpə.rɪ.ʋə.ɦə.n ˈneː.ʈə.ʋə.rk ʋə.stʊ.ˈoː̃ ɔːɾ loː.ɡõː kiː gə.tɪ.ˈʃiː.lə.taː koː ˈdʒoː.ɽə.teː ɦɛ̃ː sɲ.ˈtʃaː.r t̪ək.niːk d̪uː.ɾiː koː ˈsŋə.kʊ.tʃɪ.t kəɾ.t̪iː ɦɛː
+ˈsiː.maː.ʋə.rtiː kʂeːt̪.ɾᵊ ək.səɾ ˈsnaː.skə.tɪ.k ɔːɾ ˈaː.rtʰɪ.k ˈaː.daː.nə.prə.daː.n keː keːn.d̪ɾᵊ ɦoː.t̪eː ɦɛ̃ː bnə.də.rə.ˈgaː.ɦ nə.tə.ˈrraː.ʂʈriː.j ʋjɑː.pɑːɾ keː ˈdʋaː.r ɦɛ̃ː
+ʋɪʃ.ʋə ʋjɑː.pɑːɾ ˈsŋə.gə.ʈʰə.n ɔːɾ ən.jə snə.ˈstʰaː.eː̃ ˈʋɛː.ʃʋɪ.k nɪ.jəm t̪əj kəɾ.t̪iː ɦɛ̃ː ˈkʂeː.triː.j sə.m.ˈdʒʰɔː.teː ˈaː.rtʰɪ.k ˈeː.kiː.kə.rə.ɳ koː bə.ˈɽʰaː.ʋaː d̪eː.t̪eː ɦɛ̃ː
+ˈpə.rjə.ʈə.n stʰə.ˈloː̃ kɑː ˈbʰɔː.goː.lɪ.k ˈʋɪ.tə.rə.ɳ ˈaː.kə.rʂə.ɳ ɔːɾ pə.ɦʊ̃t͡ʃ pəɾ nɪɾ.bʱəɾ kəɾ.t̪ɑː ɦɛː ˈsnaː.skə.tɪ.k ʋɪ.ˈraː.sə.t ˈstʰə.l ˈsnə.rə.kʂə.ɳ kiː ɑː.ʋəʃ.jək.t̪ɑː ɾəkʰ.t̪eː ɦɛ̃ː
+dʒə.nə.gə.ɳə.ˈnaː ˈŋaː.kə.ɽeː dʒə.nə.ˈsŋaː.kʰjɪ.kiː.j ʋɪ.ˈʃleː.ʂə.ɳ keː ɑː.d̪ʱɑːɾ ɦɛ̃ː ˈsʋaː.stʰj ˈbʰuː.goː.l ˈroː.goː̃ keː ˈpʰɛː.laː.ʋ kɑː əd̪ʱ.jə.jən kəɾ.t̪ɑː ɦɛː
+ˈkʰaː.dj sʊ.ɾək.ʂɑː ʊ.ˈtpaː.də.n ɔːɾ ˈʋɪ.tə.rə.ɳ ʃrə.kʰə.ˈlaː.oː̃ pəɾ nɪɾ.bʱəɾ ɦɛː d͡ʒəl snə.ˈsaː.dʰə.n ˈprə.bnə.dʰə.n ˈdiː.rgʰə.kaː.lɪ.k joːd͡ʒ.nɑː ˈmŋaː.gə.teː ɦɛ̃ː
+uːɾ.d͡ʒɑː ˈbʰuː.goː.l snə.ˈsaː.dʰə.noː̃ keː st̪ʰɑːn ɔːɾ ˈpə.rɪ.ʋə.ɦə.n ˈmaː.rgoː̃ kɑː ˈmaː.n.tʃɪ.trə.ɳ kəɾ.t̪ɑː ɦɛː
+ˈbʰuː.kmə.piː.j ˈdʒoː.n ˈsə.krɪ.j ˈtə.l.tʃʰə.ʈ ˈsiː.maː.oː̃ keː pɑːs ə.d̪ʱɪk d͡ʒoː.kʰɪm ˈʋaː.leː ɦoː.t̪eː ɦɛ̃ː ˈdʒʋaː.laː.mʊ.kʰiː kʂeːt̪.ɾᵊ ˈbʰuː.mɪ.gə.t ˈgə.tɪ.ʋɪ.dʰɪ də.ˈrʃaː.teː ɦɛ̃ː
+tə.ˈʈiː.j kʂeːt̪.ɾᵊ ˈdʒʋaː.r ɔːɾ tʃə.krə.ˈʋaː.toː̃ keː pɾə.bʱɑːʋ mẽː ɾəɦ.t̪eː ɦɛ̃ː d̪ʋiːp d̪eːʃ sə.mʊd̪.ɾiː st̪əɾ pə.ɾɪ.ʋəɾ.t̪ən keː pɾə.t̪iː snə.ˈʋeː.də.n.ʃiː.l ɦɛ̃ː
+bʱuː.miː ʊp.joːɡ joːd͡ʒ.nɑː ˈkə.ʂɪ ʋən ɔːɾ ʃə.ɦə.ˈriː ʋɪs.t̪ɑːɾ keː biːt͡ʃ ˈsnə.tʊ.lə.n ˈsaː.dʰə.tiː ɦɛː
+ˈbʰuː.goː.l keː t͡ʃʰɑːt̪.ɾᵊ ˈmɛː.daː.niː sə.ˈrʋeː.kʂə.ɳ ɔːɾ prə.ˈjoː.g.ʃaː.laː ʋɪ.ˈʃleː.ʂə.ɳ d̪oː.nõː ˈsiː.kʰə.teː ɦɛ̃ː
+ˈɖɪ.dʒɪ.ʈə.l ˈuː̃.tʃaː.iː ˈmə.ɖə.l ˈbʰuː.aː.kə.tɪ kɑː trɪ.ˈaː.jaː.miː ˈprə.tɪ.nɪ.dʰɪ.tʋ d̪eː.t̪eː ɦɛ̃ː
+ˈbʰuː.goː.l ˈsuː.tʃə.naː pɾə.ɳɑː.liː ˈstʰaː.nɪ.k ɖeː.ʈɑː koː pə.rə.ˈtoː̃ mẽː ˈdʒoː.ɽə.tiː ɦɛː
+ˈduː.rə.snə.ʋeː.də.n pɾɪt̪ʰ.ʋiː kiː ˈsə.tə.ɦ kiː bə.ɽeː ˈpɛː.maː.neː pəɾ nɪ.gə.ˈraː.niː kəɾ.t̪ɑː ɦɛː
+ˈstʰaː.nɪ.k ʋɪ.ˈʃleː.ʂə.ɳ ˈsŋaː.kʰjɪ.kiː.j ˈpɛː.ʈə.rn ɔːɾ sə.ɦə.smə.bnə.ˈdʰoː̃ kiː pə.ɽə.ˈtaː.l kəɾ.t̪ɑː ɦɛː
+nə.ˈmuː.naː sə.ˈrʋeː.kʂə.ɳ ɔːɾ gʊ.ˈɳaː.tmə.k əd̪ʱ.jə.jən mɑː.nəʋ ˈbʰuː.goː.l mẽː ʊ.pə.ˈjoː.giː ɦɛ̃ː
+ˈbʰuː.goː.l keː sɪ.ˈddʰnaː.t st̪ʰɑːn ˈstʰə.l ɔːɾ pəɾ.jɑː.ʋə.ɾəɳ keː biːt͡ʃ smə.bnə.ˈdʰoː̃ koː spəʂʈ kəɾ.t̪eː ɦɛ̃ː
+ˈkʂeː.triː.j ˈbʰuː.goː.l eːk nɪʃ.t͡ʃɪt̪ bʱɑːɡ kɑː ˈʋɪ.stə.t əd̪ʱ.jə.jən ɦɛː tʊ.lə.ˈnaː.tmə.k ˈbʰuː.goː.l ˈʋɪ.bʰɪ.nn ˈkʂeː.troː̃ kiː sə.ˈmaː.nə.taː.eː̃ ɔːɾ bʰɪ.nnə.ˈtaː.eː̃ d̪eːkʰ.t̪ɑː ɦɛː
+ˈɛː.tɪ.ɦaː.sɪ.k ˈbʰuː.goː.l ə.t̪iːt̪ mẽː stʰə.ˈlaː.kə.tɪ ɔːɾ ˈsiː.maː.oː̃ keː pə.ɾɪ.ʋəɾ.t̪ən kɑː ʋɪ.ˈʃleː.ʂə.ɳ kəɾ.t̪ɑː ɦɛː
+bʰə.ʋɪ.ʂjə.ˈʋaː.ɳiː ˈmə.ɖə.l dʒə.nə.sŋə.ˈkʰjaː ɔːɾ dʒə.lə.ˈʋaː.jʊ rʊ.ˈdʒʰaː.noː̃ kɑː ə.nʊ.mɑːn lə.ˈgaː.teː ɦɛ̃ː
+ˈnɛː.tɪ.k ˈbʰuː.goː.l ˈʃoː.dʰ ɔːɾ ˈniː.tɪ mẽː ˈmuː.ljoː̃ kiː ˈbʰuː.mɪ.kaː pəɾ t͡ʃəɾ.t͡ʃɑː kəɾ.t̪ɑː ɦɛː
+sə.ɦə.ˈjoː.gaː.tmə.k ə.nʊ.snə.ˈdʰaː.n nə.tə.ˈrraː.ʂʈriː.j ˈʈiː.moː̃ d̪ʋɑː.ɾɑː kɪ.jɑː d͡ʒɑː.t̪ɑː ɦɛː
+ɖeː.ʈɑː gʊ.ɳə.ʋə.ˈttaː ɔːɾ prə.tɪ.ˈruː.pə.ɳ sə.ˈʈiː.k nɪ.ʂkə.ˈrʂoː̃ keː lɪ.eː ɑː.ʋəʃ.jək ɦɛ̃ː
+bʱɑː.ʂɑː ɔːɾ ˈnaː.mə.kə.rə.ɳ ˈbʰuː.goː.l mẽː ˈsnaː.skə.tɪ.k snə.ˈʋeː.də.n.ʃiː.lə.taː ˈmŋaː.gə.teː ɦɛ̃ː
+ˈmaː.n.tʃɪ.tr prə.ˈkʂeː.pə.ɳ sə.ˈpaː.ʈ ˈsə.tə.ɦ pəɾ ˈgoː.l pɾɪt̪ʰ.ʋiː koː də.ˈrʃaː.neː kiː ʋɪ.dʰɪ.ˈjaː̃ ɦɛ̃ː
+ˈpɛː.maː.naː ˈmaː.n.tʃɪ.tr pəɾ d̪uː.ɾiː ɔːɾ ˈkʂeː.trə.pʰə.l keː ə.nʊ.ˈpaː.t koː nɪ.jən.t̪ɾɪt̪ kəɾ.t̪ɑː ɦɛː
+stʰə.ˈlaː.kə.tɪ ˈreː.kʰaː.eː̃ sə.ˈmaː.n ˈuː̃.tʃaː.iː ˈʋaː.leː bnɪ.dʊ.ˈoː̃ koː ˈdʒoː.ɽə.tiː ɦɛ̃ː
+ɪ.ˈsoː.ɦaː.ɪ.ʈs sə.mʊd̪.ɾᵊ ˈtə.l seː sə.ˈmaː.n gə.ɦə.ˈraː.iː dɪ.ˈkʰaː.tiː ɦɛ̃ː
+ˈʋə.nə.spə.tɪ kʂeːt̪.ɾᵊ ˈpraː.kə.tɪ.k ˈʋə.nə.spə.tɪ keː prə.ˈkaː.roː̃ koː də.ˈrʃaː.teː ɦɛ̃ː
+mɪʈ.ʈiː ˈmaː.n.tʃɪ.tr mə.ˈdaː ˈʃreː.ɳɪ.joː̃ kɑː ˈʋɪ.tə.rə.ɳ dɪ.ˈkʰaː.teː ɦɛ̃ː
+dʒə.lə.ˈʋaː.jʊ ʋə.ˈrgiː.kə.rə.ɳ ˈkoː.peː.n ɔːɾ ən.jə prə.ˈɳaː.lɪ.joː̃ mẽː ˈʋə.rɳɪ.t ɦɛ̃ː
+ˈmaː.nə.suː.n ˈeː.ʃɪ.jaː kiː dʒə.lə.ˈʋaː.jʊ pɾə.ɳɑː.liː kɑː mə.ɦət̪.ʋə.puːɾɳ ɦɪs.sɑː ɦɛ̃ː
+ˈə.l ˈniː.noː sə.mʊd̪.ɾiː ˈsə.tə.ɦ keː ˈtaː.pə.maː.n keː ˈdoː.ɦə.raː.ʋ ˈʋaː.leː ˈpɛː.ʈə.rn ɦɛ̃ː
+ˈoː.dʒoː.n ˈpə.rə.t ˈsuː.rjiː.j ˈʋɪ.kɪ.rə.ɳ seː sʊ.ɾək.ʂɑː pɾə.d̪ɑːn kəɾ.t̪iː ɦɛː
+ˈkaː.rbə.n ˈtʃə.kr ˈdʒɛː.ʋə.mɳə.ɖə.l ɔːɾ ˈʋaː.jʊ.mɳə.ɖə.l keː biːt͡ʃ ˈkaː.rbə.n keː ˈaː.daː.nə.prə.daː.n koː sə.m.ˈdʒʰaː.taː ɦɛː
+ˈnaː.ɪ.ʈroː.dʒə.n ˈtʃə.kr mɪʈ.ʈiː ʊ.rʋə.rə.ˈtaː ɔːɾ d͡ʒəl prə.ˈduː.ʂə.ɳ seː dʒʊ.ˈɽaː ɦɛː
+pʰə.ˈspʰoː.rə.s ɔːɾ ən.jə ˈpoː.ʂə.k ˈtə.tʋ ˈkə.ʂɪ ɔːɾ ˈpaː.rɪ.stʰɪ.tɪ.kiː ˈtnə.tr mẽː mə.ɦət̪.ʋə.puːɾɳ ɦɛ̃ː
+ˈpaː.rɪ.stʰɪ.tɪ.kiː ˈtnə.tr ˈseː.ʋaː.eː̃ mɑː.nəʋ kə.ˈljaː.ɳ keː lɪ.eː ˈpraː.kə.tɪ.k lɑːbʱ ɦɛ̃ː
+ˈdʒɛː.ʋ ˈbʰuː.goː.l pr.ˈdʒaː.tɪ.joː̃ keː ˈʋɪ.tə.rə.ɳ ɔːɾ ˈʊ.tpə.ttɪ kɑː əd̪ʱ.jə.jən kəɾ.t̪ɑː ɦɛː
+ˈbʰuː.goː.l ˈʃɪ.kʂə.k kə.ˈkʂaː.oː̃ mẽː ˈstʰaː.nɪ.k soːt͡ʃ ʋɪk.sɪt̪ kəɾ.neː pəɾ zoːɾ d̪eː.t̪eː ɦɛ̃ː
+ˈkʂeː.triː.j joːd͡ʒ.nɑː ˈbʰuː.goː.l kiː ˈnə.tə.rdə.ʂʈɪ pəɾ nɪɾ.bʱəɾ kəɾ.t̪iː ɦɛː
+ˈaː.pə.daː ˈprə.bnə.dʰə.n d͡ʒoː.kʰɪm ˈmaː.n.tʃɪ.trə.ɳ ɔːɾ puːɾʋ t͡ʃeː.t̪ɑːʋ.niː seː ˈlaː.bʰaː.nʋɪ.t ɦoː.t̪ɑː ɦɛː
+ˈsə.tə.t ʋɪ.ˈkaː.s lək.ʂjᵊ ˈʋɛː.ʃʋɪ.k ˈniː.tɪ ˈeː.dʒɳeː.ɖeː kɑː ɦɪs.sɑː ɦɛ̃ː
+ˈbʰuː.goː.l ˈsaː.ɦɪ.tj mẽː ə.ˈneː.k mə.ɦɑːn ˈgrnə.tʰ ɔːɾ ˈnɪ.bnə.dʰ ʃɑː.mɪl ɦɛ̃ː
+ən.t̪ə.ɾɪkʂ ˈjʊ.g neː pɾɪt̪ʰ.ʋiː kiː tə.ˈsʋiː.roː̃ koː ˈsaː.rʋ.dʒə.nɪ.k ˈtʃeː.tə.naː mẽː laː d̪ɪ.jɑː
+ˈɖɪ.dʒɪ.ʈə.l ˈbʰuː.goː.l nə.ˈlaː.ɪ.n ˈmaː.n.tʃɪ.tr ɔːɾ kʰʊ.ˈleː ɖeː.ʈɑː pəɾ nɪɾ.bʱəɾ kəɾ.t̪ɑː ɦɛː
+ˈnaː.gə.rɪ.k ʋɪɡ.jɑːn pə.rɪ.ˈjoː.dʒə.naː.eː̃ st̪ʰɑː.niː.jᵊ ɖeː.ʈɑː ˈeː.kə.tr kəɾ.neː mẽː sə.ɦɑː.jək ɦɛ̃ː
+ˈbʰuː.goː.l kɑː bʱə.ʋɪʂ.jə nə.təɦ.ə.nʊ.ˈʃaː.sə.nə.taː ɔːɾ nə.ˈʋiː.n ʋɪ.dʰɪ.ˈjoː̃ keː sɑːt̪ʰ ˈʊ.dʒdʒʋə.l ɦɛː
+ˈstʰə.lə.mɳə.ɖə.l pɾɪt̪ʰ.ʋiː kiː ˈʈʰoː.s ˈbaː.ɦə.riː ˈpə.rə.t koː də.ˈrʃaː.taː ɦɛː
+ˈdʒə.lə.mɳə.ɖə.l sə.bʱiː d͡ʒəl nɪ.ˈkaː.joː̃ koː ˈsə.mmɪ.lɪ.t kəɾ.t̪ɑː ɦɛː
+ˈʋaː.jʊ.mɳə.ɖə.l ˈgɛː.soː̃ kɑː ˈmɪ.ʃrə.ɳ ɦɛː d͡ʒoː d͡ʒiː.ʋən kɑː sə.məɾ.t̪ʰən kəɾ.t̪ɑː ɦɛː
+ˈdʒɛː.ʋə.mɳə.ɖə.l d͡ʒiː.ʋɪt̪ ˈpraː.ɳɪ.joː̃ ɔːɾ ʊn.keː pəɾ.jɑː.ʋə.ɾəɳ koː eːk sɑːt̪ʰ d̪eːkʰ.t̪ɑː ɦɛː
+ˈmaː.nə.ʋə.mɳə.ɖə.l ˈsnaː.skə.tɪ.k ɔːɾ ˈaː.rtʰɪ.k gə.tɪ.ʋɪ.dʰɪ.ˈjoː̃ pəɾ ˈkneː.drɪ.t ɦɛː
+ˈbʰuː.goː.l eːk ˈdʒiː.ʋnə.t ʋɪɡ.jɑːn ɦɛː d͡ʒoː ˈnɪ.rnə.tə.r nə.iː ˈkʰoː.dʒoː̃ keː sɑːt̪ʰ ʋɪk.sɪt̪ ɦoː.t̪ɑː ɦɛː

@@ -5,10 +5,9 @@
 #   https://download.moonshine.ai/model/diarization-community1/embedding.ort
 #
 # These two were compiled into the library until version 26.8; see
-# docs/diarization-models.md for why they became a download. The copies under
-# test-assets/diarization are the source of truth, which is deliberate: the
-# tests run against exactly the bytes clients download, so a mismatch is not
-# expressible.
+# docs/diarization-models.md for why they became a download. Local copies under
+# test-assets/diarization are fetched from the CDN (scripts/fetch-voice-assets.sh)
+# so tests run against exactly the bytes clients download.
 #
 # The catalog pins a directory rather than overwriting one, because the
 # clustering parameters still compiled into the library were fitted against this
@@ -49,18 +48,20 @@ DEST="r2:${CDN_R2_BUCKET}/${REMOTE_DIR}"
 # and the manifest clients download cannot drift apart.
 FILES=(segmentation.ort embedding.ort)
 
+if [[ ! -f "${SRC}/segmentation.ort" || ! -f "${SRC}/embedding.ort" ]]; then
+  echo "Fetching diarization fixtures via scripts/fetch-voice-assets.sh..." >&2
+  "${ROOT}/scripts/fetch-voice-assets.sh" test-assets
+fi
+
 for file in "${FILES[@]}"; do
   if [[ ! -f "${SRC}/${file}" ]]; then
-    echo "Missing ${SRC}/${file}." >&2
-    echo "It is tracked with Git LFS; try 'git lfs pull'." >&2
+    echo "Missing ${SRC}/${file} after fetch." >&2
     exit 1
   fi
-  # Guard against uploading an LFS pointer, which is a small text file that
-  # would otherwise publish cleanly and fail for every client. ORT flatbuffers
-  # carry "ORTM" as the file identifier at offset 4.
+  # Guard against uploading a truncated/corrupt file. ORT flatbuffers carry
+  # "ORTM" as the file identifier at offset 4.
   if [[ "$(dd if="${SRC}/${file}" bs=1 skip=4 count=4 2>/dev/null)" != "ORTM" ]]; then
     echo "${SRC}/${file} is not an ORT model (no ORTM magic)." >&2
-    echo "If this is a Git LFS pointer, run 'git lfs pull'." >&2
     exit 1
   fi
 done

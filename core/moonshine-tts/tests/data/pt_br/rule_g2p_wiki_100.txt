@@ -1,3 +1,100 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:63c13ee44b5cb6a5c1a38c808279f2c010170d627f2b90fd599ddd0db9a9b732
-size 21316
+astɾonoˈmiə ˈɛ ˈumɐ siˈẽsiə nɐtuɾˈal ki esˈtudə ˈkɔxpʊs sɪlˈestɪs (kˈomʊ esˈtɾeləs, plaˈnɛtəs, koˈmɛtəs, nebuˈlɔzəs, aglomeˈɾadʊs dʒɪ esˈtɾeləs, gaˈlaksiəs) i feˈnõmenʊs ki sˈe oɾiˈʒĩnãʊ̃ fˈoɾɐ dɐ atʃmosˈfeɾə dɐ ˈtɛxə (kˈomʊ ɐ xadʒiaˈsãʊ̃ ˈkɔzmikə dʒɪ ˈfũdʊ ˈẽỹ mikɾoˈõdəs).
+pɾeokuˈpadə kõ ɐ evoluˈsãʊ̃, ɐ ˈfizikə i ɐ ˈkĩmikə dʒɪ obˈʒɛtʊs sɪlˈestɪs, bˈem kˈomʊ ɐ foɣmaˈsãʊ̃ i u dezẽvowviˈmẽtʊ dʊ univˈeɾsʊ.
+ɐ astɾonoˈmiə ˈɛ ˈumɐ ˈdas mˈajs ãˈtʃigəs siˈẽsiəs.
+kuwˈtuɾəs ˈpɾɛ-isˈtɔɾikəs deyˈʃaɾãʊ̃ xeʒisˈtɾadʊs ˈvaɾiʊs axteˈfatʊs astɾoˈnõmikʊs, kˈomʊ stʊnɪˈenʒɪ, ʊs mˈontɪs dʒɪ nɪwɡʁˈanʒɪ i ʊs meˈniɾɪs.
+ˈas pɾiˈmeyɾəs sivilizaˈsõỹs, kˈomʊ ʊs babiˈlõniʊs, ˈgɾegʊs, ʃinˈesɪs, ĩdʒiˈãnʊs, ˈpɛxsəs i ˈmayəs xealiˈzaɾãʊ̃ obsɛɣvaˈsõỹs meˈtɔdʒikəs dʊ ˈsɛʊ nʊtˈuɾnʊ.
+nʊ ẽˈtãtʊ, ɐ ĩvẽˈsãʊ̃ dʊ telesˈkɔpiʊ peɣmiˈtʃiw u dezẽvowviˈmẽtʊ dɐ astɾonoˈmiə moˈdɛɣnə.
+istoɾikaˈmẽtʃɪ, ɐ astɾonoˈmiə ĩˈkluyu dʒisiˈplinəs ˈtãʊ̃ dʒiˈvɛxsəs kˈomʊ astɾomiˈtɾiə, navegaˈsãʊ̃ astɾoˈnõmikə, astɾonoˈmiə obseɣvasioˈnaw i ɐ elaboɾaˈsãʊ̃ dʒɪ kalẽˈdaɾiʊs.
+duˈɾãtʃɪ u peˈɾiodʊ medʒiɛˈvaw, sˈew esˈtudʊ ˈɛɾə obɾigaˈtɔɾiʊ i esˈtavə ĩkluˈidʊ nʊ kwɐdʁˈivium ki, ˈʒũtʊ kõ u tʁˈivium, kõˈpũɲə ɐ mɪtʊdʊlˈoʒiɐ dʒɪ ɪnzˈinʊ ˈdas sˈetɪ ˈaxtʃɪs libˈeɾajs.
+duˈɾãtʃɪ u sˈɛkulʊ ˈvĩtʃi, u kˈampʊ dɐ astɾonoˈmiə pʁʊfisziʊnˈal dividˈiu-sˈe ˈẽỹ dˈojs ˈxãmʊs: ɐ astɾonoˈmiə obseɣvasioˈnaw i ɐ astɾonoˈmiə teˈɔɾikə.
+ɐ pɾiˈmeyɾə esˈta foˈkadə nɐ akiziˈsãʊ̃ dʒɪ ˈdadʊs ɐ pɐɾtˈiɾ dɐ obseɣvaˈsãʊ̃ dʒɪ obˈʒɛtʊs sɪlˈestɪs, ki ˈsãʊ̃ ẽˈtãʊ̃ analiˈzadʊs utʃiliˈzãdʊ ʊs pɾĩˈsipiʊs ˈbazikʊs dɐ ˈfizikə.
+ʒˈa ɐ seˈgũdə ˈɛ oɾiẽˈtʃadə pˈaɾɐ u dezẽvowviˈmẽtʊ dʒɪ moˈdelʊs anaˈlitʃikʊs ki desˈkɾɛvẽỹ obˈʒɛtʊs i feˈnõmenʊs astɾoˈnõmikʊs.
+ʊs dˈojs ˈkãpʊs sˈe kõpleˈmẽtãʊ̃, kõ ɐ astɾonoˈmiə teˈɔɾikə pɾokuˈɾãdʊ espliˈkax ʊs xezuwˈtadʊs ʊbzɪɾvɐsˈionajs, bˈem kõ ˈas obsɛɣvaˈsõỹs ˈsẽdʊ uˈzadəs pˈaɾɐ kõfiɣˈmax (ow ˈnãʊ̃) ʊs xezuwˈtadʊs teˈɔɾikʊs.
+ʊs asˈtɾõnomʊs amaˈdoɾɪs ˈtẽỹ kõtɾibuˈĩdʊ pˈaɾɐ ˈmũỹtəs i impʊɾtˈantɪs deskoˈbɛxtəs astɾoˈnõmikəs.
+ɐ astɾonoˈmiə ˈɛ ˈumɐ ˈdas ˈpowkəs siˈẽsiəs ˈondɪ ʊs amaˈdoɾɪs ˈpɔdẽỹ dezẽpẽˈɲax ũ pɐpˈel aˈtʃivʊ, espesiawˈmẽtʃɪ nɐ deskoˈbɛxtə i obseɣvaˈsãʊ̃ dʒɪ feˈnõmenʊs tɾãsiˈtɔɾiʊs.
+ɐ astɾonoˈmiə ˈnãʊ̃ dˈevɪ sˈeɾ kõfũˈdʒidə kõ ɐ astɾoloˈʒiə, sisˈtẽmə dʒɪ ˈkɾẽsə ki aˈfiɣmə ki ʊs əˈsũtʊs uˈmãnʊs, kˈomʊ ɐ pexsonaliˈdadʒɪ, ɛsˈtãʊ̃ koxelasioˈnadʊs kõ ˈas poziˈsõỹs ˈdʊs obˈʒɛtʊs sɪlˈestɪs.
+ẽˈbɔɾə ʊs dˈojs ˈkãpʊs kʊmpɐɾtˈiʎɪm ˈumɐ oˈɾigẽỹ kˈomum, ɐtuɐlmˈentɪ ˈelɪs ɛsˈtãʊ̃ totawˈmẽtʃɪ dʒiʃˈtʃĩtʊs.
+isˈtɔɾiə
+inisiawˈmẽtʃɪ, ɐ astɾonoˈmiə ẽvowˈvew sɔˈmẽtʃɪ ɐ obseɣvaˈsãʊ̃ i ɐ pɾeviˈzãʊ̃ ˈdʊs moviˈmẽtʊs ˈdʊs obˈʒɛtʊs nʊ ˈsɛʊ ki poˈdʒiãʊ̃ sˈeɾ ˈvistʊs ɐ ˈoʎʊ nˈu.
+u ʁiɡvˈedɐ ʁɪfˈeɾɪ-sˈe awʃ ˈvĩtʃɪ i sˈetɪ asteˈɾizmʊs ow nɐksˈatʁɐs asosiˈadʊs awʃ moviˈmẽtʊs dʊ sˈol i tãˈbẽỹ ɐʃ dˈozɪ dʒiviˈzõỹs zʊdˈiakajs dʊ ˈsɛʊ.
+duˈɾãtʃɪ miˈʎaɾɪs dʒɪ ˈãnʊs, ˈas peˈsoəs ĩveʃtʃiˈgaɾãʊ̃ u esˈpasʊ i ɐ situaˈsãʊ̃ dɐ ˈtɛxə.
+nʊ ˈãnʊ kwˈatʁʊ mˈil ɐ.
+ˈsẽtʃi.
+, ʊs eˈʒipsiʊs dezẽvowˈveɾãʊ̃ ũ kalẽˈdaɾiʊ baziˈadʊ nʊ mʊvimˈentʊ ˈdʊs obˈʒɛtʊs sɪlˈestɪs.
+ɐ obseɣvaˈsãʊ̃ ˈdʊs sˈews leˈvow a pɾeviˈzãʊ̃ dʒɪ eˈvẽtʊs kˈomʊ ʊs ɪklˈipsɪs.
+ʊs ãˈtʃigʊs ˈgɾegʊs fiˈzɛɾãʊ̃ impʊɾtˈantɪs kõtɾibuyˈsõỹs pˈaɾɐ ɐ astɾonoˈmiə, ˈentʁɪ ˈɛləs ɐ definiˈsãʊ̃ dʒɪ mɐɡnitˈudɪ apaˈɾẽtʃɪ.
+ɐ ˈbibliə kʊntˈɛm ũ ˈnũmeɾʊ dʒɪ afiɣmaˈsõỹs ˈsobɾɪ ɐ poziˈsãʊ̃ dɐ ˈtɛxə nʊ univˈeɾsʊ i ˈsobɾɪ ɐ natuˈɾezə ˈdas esˈtɾeləs i ˈdʊs plaˈnɛtəs, ɐ mayoˈɾiə ˈdas kwˈais ˈsãʊ̃ poˈɛtʃikəs i ˈnãʊ̃ ˈdɛvẽỹ sˈeɾ ĩtexpɾeˈtadəs litɪɾɐlmˈentɪ; vˈeɾ kʊsmʊlˈoʒiɐ ˈbiblikə.
+ˈnʊs ˈãnʊs kĩˈɲẽtʊs, ɐɾɐbˈatɐ apɾezẽˈtow ũ sisˈtẽmə mateˈmatʃikʊ ki kõsideˈɾavə ki ɐ ˈtɛxə xoˈdavə ˈẽỹ tˈoɾnʊ dʊ sˈew ˈeyʃʊ i ki ʊs plaˈnɛtəs sˈe dezloˈkavãʊ̃ ˈẽỹ xelaˈsãʊ̃ aw sˈol.
+u esˈtudʊ dɐ astɾonoˈmiə kwˈasɪ paˈɾow duˈɾãtʃɪ ɐ idˈadɪ ˈmɛdʒiə, a eseˈsãʊ̃ dʊ tɾaˈbaʎʊ ˈdʊs ɐstʁˈɔnʊmʊs ˈaɾabɪs.
+nʊ finˈal dʊ sˈɛkulʊ ˈnɔvi, u ɐstʁˈɔnʊmʊ ˈaɾabɪ ow ˈpɛxsə ˈal-fɐɾɡɐnˈi (ɐbˈul-ˈabbɐs ˈamɐd ˈibn muˈammɐd ˈibn kɐtˈiɾ ˈal-fɐɾɡɐnˈi) eskɾeˈvew estẽsivaˈmẽtʃɪ ˈsobɾɪ u mʊvimˈentʊ ˈdʊs ˈkɔxpʊs sɪlˈestɪs.
+nʊ sˈɛkulʊ ˈdɔzi, ʊs sˈews tɾaˈbaʎʊs ˈfoɾãʊ̃ tɾaduˈzidʊs pˈaɾɐ u lˈatim, i dˈiz-sˈe ki dˈantɪ apɾẽˈdew astɾonoˈmiə ˈpelʊs ˈlivɾʊs dʒɪ ˈal-fɐɾɡɐnˈi.
+nʊ finˈal dʊ sˈɛkulʊ ˈdɛjs, ũ obseɣvaˈtɔɾiʊ eˈnoɣmɪ fˈoj kõstɾuˈidʊ pˈeɾtʊ dʒɪ teɛˈɾã, iˈɾã, ˈpelʊ asˈtɾõnomʊ ˈal-kuʒɐndˈi, ki obseɣˈvow ˈumɐ sˈɛɾiɪ dʒɪ ˈtɾãsitʊs meɾidʒiˈãnʊs dʊ sˈol, ki pɪɾmitˈiu-ʎˈe kawkuˈlax ɐ oblikiˈdadʒɪ dɐ eˈkliptʃikə, tãˈbẽỹ kõɲeˈsidə kˈomʊ ɐ ĩklinaˈsãʊ̃ dʊ ˈeyʃʊ dɐ ˈtɛxə xelatʃivaˈmẽtʃɪ aw sˈol.
+kˈomʊ sˈabɪ-sˈe ˈoʒɪ, ɐ ĩklinaˈsãʊ̃ dɐ ˈtɛxə ˈɛ dʒɪ apɾosimadaˈmẽtʃɪ ˈvĩtʃɪ i tʁˈɛs°ˈtɾĩtə i kwˈatʁʊ, i ˈal-kuʒɐndˈi mɪdˈiu-ˈa kˈomʊ ˈsẽdʊ ˈvĩtʃɪ i tʁˈɛs°ˈtɾĩtə i dojsdɪzɪnˈovɪ".
+uˈzãdʊ ˈɛstə ĩfoɣmaˈsãʊ̃, kõpiˈlow tãˈbẽỹ ˈumɐ ˈlistə ˈdas lɐtitˈudɪs i ˈdas lʊnʒitˈudɪs dʒɪ siˈdadʒɪs pʁinsˈipajs.
+ʊmˈaɾ kˈaɐm (ɡˈiɐt ˈal-dˈin ɐbˈul-fˈat uˈmax ˈibn ibʁˈaim ˈal-nisɐbuɾˈi ˈal-kɐɐmˈi) fˈoj ũ ɡʁˈandɪ siẽˈtʃistə, fiˈlɔzofʊ i poˈɛtə ˈpɛxsə ki viˈvew dʒɪ mˈil i kwaˈɾẽtə i ˈoytʊ ɐ mˈil i ˈsẽtʊ i ˈtɾĩtə i ũ.
+kõpiˈlow ˈmũỹtəs taˈbɛləs astɾoˈnõmikəs i ezekuˈtow ˈumɐ xeˈfɔɣmə dʊ kalẽˈdaɾiʊ ki ˈɛɾə mˈajs eˈksatʊ dʊ ki u kalẽˈdaɾiʊ ʒuliˈãnʊ i sˈe apɾosiˈmavə dʊ kalẽˈdaɾiʊ ɡʁɪɡʊɾˈianʊ.
+ũ fˈejtʊ suxpɾɪẽˈdẽtʃɪ ˈɛɾə sˈew ˈkawkulʊ dʊ ˈãnʊ kˈomʊ ˈtẽdʊ tɾeˈzẽtʊs i seˈsẽtə i ˈsĩkʊ,24219858156 ˈdʒiəs, vaˈlox ˈessɪ kõsideˈɾãdʊ ɐ ezatʃiˈdãʊ̃ aˈtɛ ɐ sˈeʒtɐ ˈkazə dɪsimˈal sˈe kõpaˈɾadʊ kõ ʊs ˈnũmeɾʊs dʒɪ ˈoʒɪ, ĩˈdʒikə ki nˈessɪs mˈil ˈãnʊs pˈodɪ tˈeɾ aˈvidʊ awˈgũməs awteɾaˈsõỹs nɐ ˈɔɣbitə tɪʁˈestʁɪ.
+duˈɾãtʃɪ u xenasiˈmẽtʊ, koˈpɛɣnikʊ pɾoˈpos ũ moˈdelʊ elioˈsẽtɾikʊ dʊ sisˈtẽmə soˈlax.
+nʊ sˈɛkulʊ ˈtɾɛzi, u ĩpeɾaˈdox ulaˈgu, nˈetʊ dʒɪ ʒˈenʒis kˈan i ũ pɾotʃeˈtox ˈdas siˈẽsiəs, ˈaviɐ kõseˈdʒidʊ aw kõseˈʎeyɾʊ nɐsˈiɾ ˈel dˈin tusˈi awtoɾizaˈsãʊ̃ pˈaɾɐ edʒifiˈkax ũ obseɣvaˈtɔɾiʊ kõsideˈɾadʊ sɐ̃j̃ ɪkivɐlˈentɪs nɐ ˈɛpokə.
+ˈentʁɪ ʊs tɾaˈbaʎʊs dezẽvowˈvidʊs nʊ obseɣvaˈtɔɾiʊ dʒɪ mɐɾˈaɡɪ i ɐ ˈɔbɾə "dʒɪ ʁɪvʊlutiʊnˈibus ˈoɾbium kɐɪlˈestium" dʒɪ koˈpɛɣnikʊ, ˈa awˈgũməs semeˈʎãsəs ki ˈlɛvãʊ̃ ʊs istoɾiəˈdoɾɪs ɐ adʒmiˈtʃix ki ˈɛʃtʃɪ teˈɾiə tõˈmadʊ kõɲesiˈmẽtʊ ˈdʊs esˈtudʊs dʒɪ tusˈi, atɾaˈvɛs dʒɪ ˈkɔpiəs dʒɪ tɾaˈbaʎʊs dˈestɪ ɪʒistˈentɪs nʊ vɐtikˈanʊ.
+u moˈdelʊ elioˈsẽtɾikʊ dʊ sisˈtẽmə soˈlax fˈoj defẽˈdʒidʊ, dezẽvowˈvidʊ i koxiˈʒidʊ ˈpox galiˈlew ɡɐlilˈej i ʒʊˈannɪs kɪplˈeɾ.
+kɪplˈeɾ fˈoj u pɾiˈmeyɾʊ ɐ dezẽvowˈvex ũ sisˈtẽmə ki dɪskʁɪvˈessɪ koxetaˈmẽtʃɪ ʊs dɪtˈaʎɪs dʊ mʊvimˈentʊ ˈdʊs plaˈnɛtəs kõ u sˈol nʊ sˈentʁʊ.
+nʊ ẽˈtãtʊ, kɪplˈeɾ ˈnãʊ̃ kʊmpʁɪɪndˈew ʊs pɾĩˈsipiʊs ˈpox deˈtɾas ˈdas lˈejs ki deskoˈbɾiw.
+ˈeʃtʃɪs pɾĩˈsipiʊs ˈfoɾãʊ̃ deskoˈbɛxtʊs mˈajs tˈaɾdɪ ˈpox isˈaɐk nɪwtˈon, ki mosˈtɾow ki u mʊvimˈentʊ ˈdʊs plaˈnɛtəs sˈe poˈdʒiə espliˈkax ˈpelə lˈej dɐ gɾavitaˈsãʊ̃ univɪɾsˈal i ˈpeləs lˈejs dɐ dʒiˈnãmikə.
+kʊnstɐtˈow-sˈe ki ˈas esˈtɾeləs ˈsãʊ̃ obˈʒɛtʊs ˈmũỹtʊ distˈantɪs.
+kõ u adʒˈvẽtʊ dɐ espektɾoskoˈpiə pʁʊvˈow-sˈe ki ˈsãʊ̃ simiˈlaɾɪs aw nˈossʊ ˈpɾɔpɾiʊ sˈol, ˈmas kõ ˈumɐ ɡʁˈandɪ vaɾieˈdadʒɪ dʒɪ tẽpeɾaˈtuɾəs, ˈmasəs i taˈmãɲʊs.
+ɐ ezisˈtẽsiə dʒɪ nˈossɐ gaˈlaksiə, ɐ vˈia ˈlaktɪə, kˈomʊ ũ ɡʁˈupʊ sepaˈɾadʊ ˈdas esˈtɾeləs fˈoj pɾoˈvadə sɔˈmẽtʃɪ nʊ sˈɛkulʊ ˈvĩtʃi, bˈem kˈomʊ ɐ ezisˈtẽsiə dʒɪ gaˈlaksiəs "esˈtɛɣnəs", i ˈlɔgʊ dˈepojs, ɐ espãˈsãʊ̃ dʊ univˈeɾsʊ ˈdadə ɐ xeseˈsãʊ̃ dɐ mayoˈɾiə ˈdas gaˈlaksiəs dʒɪ ˈnɔs.
+ɐ kʊsmʊlˈoʒiɐ fˈez aˈvãsʊs eˈnoɣmɪs duˈɾãtʃɪ u sˈɛkulʊ ˈvĩtʃi, kõ u moˈdelʊ dʊ bˈiɡ bˈanɡ fʊɾtɪmˈentɪ apoyˈadʊ ˈpeləs eviˈdẽsiəs foɣneˈsidəs ˈpelə astɾonoˈmiə i ˈpelə ˈfizikə, tˈajs kˈomʊ ɐ xadʒiaˈsãʊ̃ ˈkɔzmikə dʒɪ mikɾoˈõdəs dʒɪ ˈfũdʊ, ɐ lˈej dʒɪ ˈubblɪ i ɐ abũˈdãsiə kozmoˈlɔʒikə ˈdʊs eleˈmẽtʊs.
+ˈkãpʊs
+ˈpox tˈeɾ ũ obˈʒɛtʊ dʒɪ esˈtudʊ ˈtãʊ̃ vˈastʊ, ɐ astɾonoˈmiə ˈɛ dʒiviˈdʒidə ˈẽỹ ˈmũỹtəs ˈaɾɪəs.
+ˈumɐ dʒiʃtʃĩˈsãʊ̃ pɾĩsiˈpaw ˈɛ ˈentʁɪ ɐ astɾonoˈmiə teˈɔɾikə i ɐ obseɣvasioˈnaw.
+obseɣvaˈdoɾɪs ˈuzãʊ̃ ˈvaɾiʊs ˈmeyʊs pˈaɾɐ ʊbtˈeɾ ˈdadʊs ˈsobɾɪ dʒiˈvɛxsʊs feˈnõmenʊs, ki ˈsãʊ̃ uˈzadʊs ˈpelʊs teˈɔɾikʊs pˈaɾɐ kɾiˈax i tesˈtax tɛoˈɾiəs i moˈdelʊs, pˈaɾɐ espliˈkax obsɛɣvaˈsõỹs i pˈaɾɐ pɾeˈvex ˈnɔvʊs xezuwˈtadʊs.
+u obseɣvaˈdox i u teˈɔɾikʊ ˈnãʊ̃ ˈsãʊ̃ nesesaɾiaˈmẽtʃɪ peˈsoəs difɪɾˈentɪs i, ˈẽỹ vˈez dʒɪ dˈojs ˈkãpʊs pexfeytaˈmẽtʃɪ delimiˈtadʊs, ˈa ũ kʊntˈinuʊ dʒɪ siẽˈtʃistəs ki ˈpõỹ majˈoɾ ow mɪnˈoɾ ˈẽfazɪ nɐ obseɣvaˈsãʊ̃ ow nɐ teoˈɾiə.
+ʊs ˈkãpʊs dʒɪ esˈtudʊ ˈpɔdẽỹ tãˈbẽỹ sˈeɾ kategoɾiˈzadʊs kwˈantʊ:
+aw aˈsũtʊ: ˈẽỹ ʒɪɾˈal dʒɪ aˈkɔɣdʊ kõ ɐ xeʒiˈãʊ̃ dʊ esˈpasʊ (ˈeks.
+astɾonoˈmiə ɡɐlˈaktikɐ) ow awʃ pɾoˈblẽməs ˈpox xezowˈvex (tˈajs kˈomʊ foɣmaˈsãʊ̃ ˈdas esˈtɾeləs ow kʊsmʊlˈoʒiɐ); a fˈoɾmɐ kˈomʊ sˈe obˈtẽỹ ɐ ĩfoɣmaˈsãʊ̃ (esẽsiawˈmẽtʃɪ, ki ˈfayʃə dʊ esˈpɛktɾʊ ɪlɪtʁʊmɐɡnˈɛtikʊ ˈɛ uˈzadə).
+ẽˈkwãtʊ ɐ pɾiˈmeyɾə dʒiviˈzãʊ̃ sˈe aˈplikə tˈantʊ ɐ obseɣvaˈdoɾɪs kˈomʊ tãˈbẽỹ ɐ teˈɔɾikʊs, ɐ seˈgũdə sˈe aˈplikə ɐ obseɣvaˈdoɾɪs, pˈojs ʊs teˈɔɾikʊs ˈtẽtãʊ̃ uˈzax ˈtodə ĩfoɣmaˈsãʊ̃ dʒispoˈnivew, ˈẽỹ ˈtodʊs ʊs kõpɾiˈmẽtʊs dʒɪ ˈondɐ, i obseɣvaˈdoɾɪs fɾekẽtʃiˈmẽtʃɪ obˈsɛɣvãʊ̃ ˈẽỹ mˈajs dʒɪ ˈumɐ ˈfayʃə dʊ esˈpɛktɾʊ.
+astɾonoˈmiə obseɣvasioˈnaw
+nɐ astɾonoˈmiə, ɐ pɾĩsiˈpaw fˈoɾmɐ dʒɪ ʊbtˈeɾ ĩfoɣmaˈsãʊ̃ ˈɛ atɾaˈvɛs dɐ detekˈsãʊ̃ i ɐnˈalisɪ dɐ ˈlʊs viˈzivew ow ˈowtɾəs xeʒiˈõỹs dɐ xadʒiaˈsãʊ̃ ɪlɪtʁʊmɐɡnˈɛtikɐ.
+ˈmas ɐ ĩfoɣmaˈsãʊ̃ ˈɛ adʒkiˈɾidə tãˈbẽỹ ˈpox ˈxayʊs ˈkɔzmikʊs, newtʁˈinʊs, i, nʊ fuˈtuɾʊ ˈpɾɔsimʊ, ˈondɐs ɡʁɐvitɐsˈionajs (ˈveʒə ˈligʊ i lˈisɐ).
+ˈumɐ dʒiviˈzãʊ̃ tʁɐdisiʊnˈal dɐ astɾonoˈmiə ˈɛ ˈdadə ˈpelə ˈfayʃə dʊ esˈpɛktɾʊ ɪlɪtʁʊmɐɡnˈɛtikʊ obseɣˈvadʊ.
+awˈgũməs pˈaɾtɪs dʊ esˈpɛktɾʊ ˈpɔdẽỹ sˈeɾ obseɣˈvadəs dɐ supɪɾfˈisiɪ dɐ ˈtɛxə, ẽˈkwãtʊ ˈowtɾəs pˈaɾtɪs ˈsɔ ˈsãʊ̃ ʊbzɪɾvˈavejs dʒɪ ɡʁˈandɪs ɐltitˈudɪs ow nʊ esˈpasʊ.
+ʁɐdiʊɐstʁʊnˈomiɐ
+ɐ ʁɐdiʊɐstʁʊnˈomiɐ esˈtudə ɐ xadʒiaˈsãʊ̃ kõ kõpɾiˈmẽtʊ dʒɪ ˈondɐ majˈoɾ ki apɾosimadaˈmẽtʃɪ ũ milˈimɪtʁʊ.
+ɐ ʁɐdiʊɐstʁʊnˈomiɐ ˈɛ dʒifeˈɾẽtʃɪ dɐ mayoˈɾiə ˈdas ˈowtɾəs ˈfoɣməs dʒɪ astɾonoˈmiə obseɣvasioˈnaw ˈpelʊ fˈatʊ dʒɪ ˈas ˈondɐs dʒɪ ˈxadʒiʊ ʊbzɪɾvˈavejs poˈdeɾẽỹ sˈeɾ tɾaˈtadəs kˈomʊ ˈondɐs aw ĩˈvɛs dʒɪ fˈɔtʊns dʒisˈkɾɛtʊs.
+kõ ˈissʊ, ˈɛ xelatʃivaˈmẽtʃɪ mˈajs ˈfasɪw dʒɪ meˈdʒix ɐ ɐmplitˈudɪ i ɐ fˈasɪ ˈdas ˈondɐs dʒɪ ˈxadʒiʊ.
+apeˈzax dʒɪ awˈgũməs ˈondɐs dʒɪ ˈxadʒiʊ ˈseɾẽỹ pɾoduˈzidəs ˈpox obˈʒɛtʊs astɾoˈnõmikʊs nɐ fˈoɾmɐ dʒɪ xadʒiaˈsãʊ̃ tˈɛɾmikɐ, ɐ majˈoɾ pˈaɾtɪ ˈdas emiˈsõỹs dʒɪ ˈxadʒiʊ ki ˈsãʊ̃ obseɣˈvadəs dɐ ˈtɛxə ˈsãʊ̃ ˈvistəs nɐ fˈoɾmɐ dʒɪ xadʒiaˈsãʊ̃ sˈinkʁʊtʁʊn, ki ˈɛ pɾoduˈzidə ˈkwãdʊ eˈlɛtɾõs ow ˈowtɾəs paxˈtikuləs eletɾikaˈmẽtʃɪ kaxeˈgadəs desˈkɾɛvẽỹ ˈumɐ tɾaʒeˈtɔɾiə ˈkuɣvə ˈẽỹ ũ kˈampʊ mɐɡnˈɛtikʊ.
+adʒisionawˈmẽtʃɪ, dʒiˈvɛxsəs ˈlĩɲəs ɪspˈektʁajs pɾoduˈzidəs ˈpox ˈgas ĩteɾesteˈlax, nʊtɐdɐmˈentɪ ɐ ˈlĩɲə espikˈtɾaw dʊ idɾoˈʒẽniʊ dʒɪ ˈvĩtʃɪ i ũ kmˈ, ˈsãʊ̃ ʊbzɪɾvˈavejs nʊ kõpɾiˈmẽtʊ dʒɪ ˈondɐ dʒɪ ˈxadʒiʊ.
+ˈumɐ ɡʁˈandɪ vaɾieˈdadʒɪ dʒɪ obˈʒɛtʊs ˈsãʊ̃ ʊbzɪɾvˈavejs nʊ kõpɾiˈmẽtʊ dʒɪ ˈondɐ dʒɪ ˈxadʒiʊ, ĩkluˈĩdʊ supeɣˈnɔvəs, ˈgas ĩteɾesteˈlax, puwˈsaɾɪs i ˈnukleʊs dʒɪ gaˈlaksiəs aˈtʃivəs.
+astɾonoˈmiə ĩfɾaveɣˈmeʎə
+ɐ astɾonoˈmiə ĩfɾaveɣˈmeʎə ˈlidə kõ ɐ detekˈsãʊ̃ i ɐnˈalisɪ dɐ xadʒiaˈsãʊ̃ ĩfɾaveɣˈmeʎə, ˈkuʒə fɾeˈkẽsiə ˈɛ mɪnˈoɾ dʊ ki ɐ dɐ ˈlʊs veɣˈmeʎə.
+eˈsetʊ ˈpox kõpɾiˈmẽtʊs dʒɪ ˈondɐ mˈajs ˈpɾɔsiməs a ˈlʊs viˈzivew, ɐ xadʒiaˈsãʊ̃ ĩfɾaveɣˈmeʎə ˈɛ nɐ majˈoɾ pˈaɾtɪ absoɣˈvidə ˈpelə atʃmosˈfeɾə, i ɐ atʃmosˈfeɾə pɾoˈdus emiˈsãʊ̃ ĩfɾaveɣˈmeʎə ˈnũmə kwɐntidˈadɪ siɡnifikˈantɪ.
+kõsekẽtʃɛˈmẽtʃɪ, obseɣvaˈtɔɾiʊs dʒɪ ĩfɾaveɣˈmeʎʊ pɾeˈsizãʊ̃ esˈtax lokaliˈzadʊs ˈẽỹ luˈgaɾɪs ˈawtʊs i ˈsɛkʊs, ow nʊ esˈpasʊ.
+u esˈpɛktɾʊ ĩfɾaveɣˈmeʎʊ ˈɛ ˈutil pˈaɾɐ estuˈdax obˈʒɛtʊs ki ˈsãʊ̃ ˈmũỹtʊ ˈfɾiʊs pˈaɾɐ ɪmitˈiɾ ˈlʊs viˈzivew, kˈomʊ ʊs plaˈnɛtəs i ˈdʒiskʊs siɾkunstʁɪlˈaɾɪs.
+kõpɾiˈmẽtʊs dʒɪ ˈondɐ ĩfɾaveɣˈmeʎə majˈoɾ ˈpɔdẽỹ tãˈbẽỹ peneˈtɾax nˈuvɪns dʒɪ poˈeyɾə ki bloˈkeyãʊ̃ ɐ ˈlʊs viˈzivew, peɣmiˈtʃĩdʊ ɐ obseɣvaˈsãʊ̃ dʒɪ esˈtɾeləs ʒˈovɪns ˈẽỹ nˈuvɪns molekuˈlaɾɪs i u sˈentʁʊ dʒɪ gaˈlaksiəs.
+awˈgũməs muˈlɛkuləs ʁˈadiɐm fʊɾtɪmˈentɪ nʊ ĩfɾaveɣˈmeʎʊ, i ˈissʊ pˈodɪ sˈeɾ uˈzadʊ pˈaɾɐ estuˈdax ɐ ˈkĩmikə nʊ esˈpasʊ, ˈassim kˈomʊ detekˈtax ˈagwə ˈẽỹ koˈmɛtəs.
+astɾonoˈmiə ˈɔptʃikə
+istoɾikaˈmẽtʃɪ, ɐ astɾonoˈmiə ˈɔptʃikə (tãˈbẽỹ ʃaˈmadə dʒɪ astɾonoˈmiə dɐ ˈlʊs viˈzivew) ˈɛ ɐ fˈoɾmɐ mˈajs ãˈtʃigə dɐ astɾonoˈmiə.
+imˈaʒɪns ˈɔptʃikəs ˈɛɾãʊ̃ oɾiʒinawˈmẽtʃɪ dezẽˈɲadəs a ˈmãʊ̃.
+nʊ finˈal dʊ sˈɛkulʊ dɛzenˈɔvi i nɐ majˈoɾ pˈaɾtɪ dʊ sˈɛkulʊ ˈvĩtʃi ˈas imˈaʒɪns ˈɛɾãʊ̃ kɾiˈadəs uˈzãdʊ ekipaˈmẽtʊs fotoˈgɾafikʊs.
+imˈaʒɪns moˈdɛɣnəs ˈsãʊ̃ kɾiˈadəs uˈzãdʊ detekˈtoɾɪs diʒˈitajs, pɾĩsipawˈmẽtʃɪ detekˈtoɾɪs uˈzãdʊ dʒispoziˈtʃivʊs dʒɪ ˈkaɣgəs akoˈpladʊs (kkdsˈ).
+apeˈzax dɐ ˈlʊs viˈzivew estẽˈdex dʒɪ apɾosimadaˈmẽtʃɪ aˈtɛ (kwatɾoˈsẽtʊs nmˈ aˈtɛ setʃeˈsẽtʊs nmˈ), u ˈmezmʊ ekipaˈmẽtʊ uˈzadʊ nˈessɪ kõpɾiˈmẽtʊ dʒɪ ˈondɐ ˈɛ tãˈbẽỹ uˈzadʊ pˈaɾɐ obʃeɣˈvax xadʒiaˈsãʊ̃ dʒɪ ˈlʊs viˈzivew ˈpɾɔsimə ɐ uwtɾavioˈlɛtə i ĩfɾaveɣˈmeʎʊ.
+astɾonoˈmiə uwtɾavioˈlɛtə
+ɐ astɾonoˈmiə uwtɾavioˈlɛtə ˈɛ noɣmawˈmẽtʃɪ uˈzadə pˈaɾɐ sˈe xefeˈɾix ɐ obsɛɣvaˈsõỹs nʊ kõpɾiˈmẽtʊ dʒɪ ˈondɐ uwtɾavioˈlɛtə, apɾosimadaˈmẽtʃɪ ˈentʁɪ ˈsẽỹ i (dˈez i tɾeˈzẽtʊs i ˈvĩtʃɪ nmˈ).
+ɐ ˈlʊs nˈessɪ kõpɾiˈmẽtʊ dʒɪ ˈondɐ ˈɛ absoɣˈvidə ˈpelə atʃmosˈfeɾə dɐ ˈtɛxə, ẽˈtãʊ̃ ˈas obsɛɣvaˈsõỹs ˈdɛvẽỹ sˈeɾ ˈfeytəs nɐ atʃmosˈfeɾə supeɾiˈox ow nʊ esˈpasʊ.
+ɐ astɾonoˈmiə uwtɾavioˈlɛtə ˈɛ mˈajs utʃiliˈzadə pˈaɾɐ u esˈtudʊ dɐ xadʒiaˈsãʊ̃ tˈɛɾmikɐ i ˈlĩɲəs dʒɪ emiˈsãʊ̃ espikˈtɾaw dʒɪ esˈtɾeləs aˈzuw ˈkẽtʃɪ (esˈtɾelə ˈob) ki ˈsãʊ̃ ˈmũỹtʊ bʁiʎˈantɪs nˈessɐ ˈbãdə dʒɪ ˈondɐ.
+ˈissʊ inklˈui esˈtɾeləs aˈzuys ˈẽỹ ˈowtɾəs gaˈlaksiəs, ki ˈtẽỹ ˈsidʊ ˈawvʊs dʒɪ ˈvaɾiəs pesˈkizəs ˈnɛstə ˈaɾɪə.
+ˈowtɾʊs obˈʒɛtʊs noɣmawˈmẽtʃɪ obseɣˈvadʊs ĩˈkluẽỹ ɐ nebuˈlɔzə planeˈtaɾiə, ʁɪmɐnɪssˈentɪ dʒɪ supeɣˈnɔvə, i ˈnukleʊs dʒɪ gaˈlaksiəs aˈtʃivəs.
+ẽtɾeˈtãtʊ, ɐ ˈlʊs uwtɾavioˈlɛtə ˈɛ fɐsilmˈentɪ absoɣˈvidə ˈpelə poˈeyɾə ĩteɾesteˈlax, i ˈas medʒiˈsõỹs dɐ ˈlʊs uwtɾavioˈlɛtə dˈessɪs obˈʒɛtʊs pɾeˈsizãʊ̃ sˈeɾ koxiˈʒidəs.
+astɾonoˈmiə dʒɪ ʁˈajʊs-ksˈ
+ɐ astɾonoˈmiə dʒɪ ʁˈajʊ-ksˈ ˈɛ u esˈtudʊ dʒɪ obˈʒɛtʊs astɾoˈnõmikʊs nʊ kõpɾiˈmẽtʊ dʒɪ ˈondɐ dʒɪ ʁˈajʊ-ksˈ.
+noɣmawˈmẽtʃɪ ʊs obˈʒɛtʊs eˈmitẽỹ xadʒiaˈsãʊ̃ dʒɪ ʁˈajʊ-ksˈ kˈomʊ xadʒiaˈsãʊ̃ sˈinkʁʊtʁʊn (pɾoduˈzidə ˈpelə osilaˈsãʊ̃ dʒɪ eˈlɛtɾõs ˈẽỹ vˈoltɐ dʒɪ ˈkãpʊs mɐɡnˈɛtikʊs), emiˈsãʊ̃ tɪɾmˈal dʒɪ ɡˈasɪs ˈfĩnʊs (ʃaˈmadə dʒɪ xadʒiaˈsãʊ̃ bʁɪmstʁˈalunɡ) mayˈɔɾɪs ki ˈsẽtʊ i sˈetɪ kɪlvˈin, i emiˈsãʊ̃ tɪɾmˈal dʒɪ ɡˈasɪs ˈgɾɔsʊs (ʃaˈmadə xadʒiaˈsãʊ̃ dʒɪ kˈoɾpʊ ˈnɛgɾʊ) mayˈɔɾɪs ki ˈsẽtʊ i sˈetɪ kɪlvˈin.
+kˈomʊ ʊs ʁˈajʊ-ksˈ ˈsãʊ̃ absoɣˈvidʊs ˈpelə atʃmosˈfeɾə tɪʁˈestʁɪ ˈtodəs ˈas obsɛɣvaˈsõỹs ˈdɛvẽỹ sˈeɾ ˈfeytəs dʒɪ baˈlõỹs dʒɪ ɡʁˈandɪ ɐltitˈudɪ, fʊɡˈetɪs, ow nˈavɪs ɪspɐsˈiais.
+fˈontɪs dʒɪ ʁˈajʊ-ksˈ nʊtˈavejs ĩˈkluẽỹ biˈnaɾiʊ dʒɪ ʁˈajʊ ˈdɛjs, puwˈsaɾɪs, ʁɪmɐnɪssˈentɪs dʒɪ supeɣˈnɔvəs, gaˈlaksiəs eˈliptʃikəs, aglomeˈɾadʊs dʒɪ gaˈlaksiəs i ˈnukleʊs ɡɐlˈaktikʊs aˈtʃivʊs.
+astɾonoˈmiə dʒɪ ˈxayʊs ɡˈamɐ
+ɐ astɾonoˈmiə dʒɪ ˈxayʊs ɡˈamɐ ˈɛ u esˈtudʊ dʒɪ obˈʒɛtʊs astɾoˈnõmikʊs ki ˈuzãʊ̃ ʊs meˈnɔɾɪs kõpɾiˈmẽtʊs dʒɪ ˈondɐ dʊ esˈpɛktɾʊ ɪlɪtʁʊmɐɡnˈɛtikʊ.
+ʊs ˈxayʊs ɡˈamɐ ˈpɔdẽỹ sˈeɾ obseɣˈvadʊs dʒiɾɛtaˈmẽtʃɪ ˈpox sɐtˈɛlitɪs kˈomʊ u obseɣvaˈtɔɾiʊ dʒɪ ˈxayʊs ɡˈamɐ kʊmptˈon ow ˈpox telesˈkɔpiʊs espesialiˈzadʊs ʃaˈmadʊs ʃɪɾˈenkʊv.
+ʊs telesˈkɔpiʊs ʃɪɾˈenkʊv ˈnãʊ̃ deˈtɛktãʊ̃ ʊs ˈxayʊs ɡˈamɐ dʒiɾɛtaˈmẽtʃɪ ˈmas deˈtɛktãʊ̃ flˈasɪs dʒɪ ˈlʊs viˈzivew pɾoduˈzidʊs ˈkwãdʊ ʊs ˈxayʊs ɡˈamɐ ˈsãʊ̃ absoɣˈvidʊs ˈpelə atʃmosˈfeɾə dɐ ˈtɛxə.
+ɐ mayoˈɾiə ˈdas fˈontɪs emiˈsoɾəs dʒɪ ʁˈajʊ ɡˈamɐ ˈsãʊ̃ nɐ veɣˈdadʒɪ eɾupˈsõỹs dʒɪ ˈxayʊs ɡˈamɐ, obˈʒɛtʊs ki pɾoˈduzẽỹ xadʒiaˈsãʊ̃ ɡˈamɐ aˈpẽnəs ˈpox ˈpowkʊs milisiˈgũdʊs ɐ aˈtɛ miˈʎaɾɪs dʒɪ seˈgũdʊs ˈantɪs dʒɪ dezapaɾeˈseɾẽỹ.
+aˈpẽnəs dˈez% ˈdas fˈontɪs dʒɪ ʁˈajʊ ɡˈamɐ ˈsãʊ̃ fˈontɪs ˈnãʊ̃ tʁɐnssɪndˈentɪs, ĩkluˈĩdʊ puwˈsaɾɪs, esˈtɾeləs dʒɪ nˈewtʁʊns, i kãdʒiˈdatʊs ɐ buˈɾakʊs ˈnegɾʊs kˈomʊ ˈnukleʊs ɡɐlˈaktikʊs aˈtʃivʊs.
+ˈkãpʊs ˈnãʊ̃ baziˈadʊs nʊ esˈpɛktɾʊ ɪlɪtʁʊmɐɡnˈɛtikʊ aˈlẽỹ dɐ xadʒiaˈsãʊ̃ ɪlɪtʁʊmɐɡnˈɛtikɐ ˈowtɾəs ˈkoyzəs ˈpɔdẽỹ sˈeɾ obseɣˈvadəs dɐ ˈtɛxə ki sˈe oɾiˈʒĩnãʊ̃ dʒɪ ɡʁˈandɪs dʒisˈtãsiəs.

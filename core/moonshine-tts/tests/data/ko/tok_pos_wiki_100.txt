@@ -1,3 +1,100 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:af949d96e40c9a30467f0d6201985944ffed85c35c8c31baf5a45b29508e3e52
-size 22810
+제임스/NOUN 얼/NOUN 카터/NOUN 주니어/NOUN (,/PUNCT 1924년/NOUN 10월/NOUN 1일~/NUM )는/ADP 민주당/NOUN 출신/NOUN 미국의/NOUN 제39대/NOUN 대통령/NOUN (1977년~1981년/NOUN )이다/PUNCT ./PUNCT 
+생애/NOUN 
+어린/ADJ 시절/NOUN 지미/NOUN 카터는/NOUN 조지아주/NOUN 섬터/NOUN 카운티/NOUN 플레인스/NOUN 마을에서/ADP 태어났다/VERB ./PUNCT 
+조지아/NOUN 공과대학교를/NOUN 졸업하였다/NOUN ./PUNCT 
+그/PRON 후/ADP 해군에/ADP 들어가/VERB 전함/NOUN ·원자력/NOUN ·잠수함의/NOUN 승무원으로/ADP 일하였다/NOUN ./PUNCT 
+1953년/NOUN 미국/NOUN 해군/NOUN 대위로/ADP 예편하였고/NOUN 이후/ADV 땅콩/NOUN ·면화/PUNCT 등을/ADP 가꿔/VERB 많은/PART 돈을/NOUN 벌었다/AUX ./PUNCT 
+그의/ADP 별명이/NOUN "땅콩/NOUN 농부/NOUN "/PUNCT (Peanut/NOUN Farmer/NOUN )로/ADP 알려졌다/VERB ./PUNCT 
+정계/NOUN 입문/NOUN 1962년/NOUN 조지아주/NOUN 상원/NOUN 의원/NOUN 선거에서/ADP 낙선하였으나/NOUN ,/PUNCT 그/DET 선거가/NOUN 부정선거/NOUN 였음을/PART 입증하게/NOUN 되어/CCONJ 당선되고/NOUN ,/PUNCT 1966년/NOUN 조지아/NOUN 주지사/NOUN 선거에/NOUN 낙선하지만/NOUN ,/PUNCT 1970년/NOUN 조지아/NOUN 주지사/NOUN 선거에서/ADP 당선됐다/NOUN ./PUNCT 
+대통령이/NOUN 되기/PART 전/ADP 조지아주/NOUN 상원의원을/NOUN 두번/NUM 연임했으며/NOUN ,/PUNCT 1971년부터/ADP 1975년까지/ADP 조지아/NOUN 지사로/NOUN 근무했다/NOUN ./PUNCT 
+조지아/NOUN 주지사로/ADP 지내면서/CCONJ ,/PUNCT 미국에/ADP 사는/PART 흑인/NOUN 등용법을/NOUN 내세웠다/VERB ./PUNCT 
+대통령/NOUN 재임/NOUN 
+1976년/NOUN 미합중국/NOUN 제39대/NOUN 대통령/NOUN 선거에/ADP 민주당/NOUN 후보로/ADP 출마하여/NOUN 도덕주의/NOUN 정책으로/ADP 내세워서/NOUN ,/PUNCT 많은/PART 지지를/NOUN 받았는데/CCONJ 제럴드/NOUN 포드/NOUN 대통령을/NOUN 누르고/VERB 당선되었다/PART ./PUNCT 
+카터/NOUN 대통령은/NOUN 에너지/NOUN 개발을/NOUN 촉구했으나/NOUN 공화당의/ADP 반대로/ADP 무산되었다/PART ./PUNCT 
+외교/NOUN 정책/NOUN 카터는/ADP 이집트와/NOUN 이스라엘을/ADP 조정하여/NOUN 캠프/NOUN 데이비드에서/ADP 안와르/NOUN 사다트/NOUN 대통령과/NOUN 메나헴/NOUN 베긴/NOUN 수상과/NOUN 함께/ADV 중동/NOUN 평화를/NOUN 위한/VERB 캠프데이비드/NOUN 협정을/NOUN 체결했다/NOUN ./PUNCT 
+이것은/ADP 공화당과/CCONJ 미국의/ADP 유대인/NOUN 단체의/NOUN 반발을/NOUN 일으켰다/VERB ./PUNCT 
+그러나/ADV 1979년/NOUN ,/PUNCT 양국/NOUN 간의/ADP 평화조약이/NOUN 백악관에서/ADP 이루어졌다/NOUN ./PUNCT 
+소련과/CCONJ 제2차/NOUN 전략/NOUN 무기/NOUN 제한/NOUN 협상/NOUN (SALT/NOUN II/NUM )에/ADP 조인했다/NOUN ./PUNCT 
+카터는/ADP 1970년대/NUM 후반/NOUN 당시/ADV 대한민국/NOUN 등/NOUN 인권/NOUN 후진국의/NOUN 국민들의/NOUN 인권을/ADP 지키기/PART 위해/VERB 노력했으며/NOUN ,/PUNCT 취임/NOUN 이후/ADP 계속해서/NOUN 도덕정치를/NOUN 내세웠다/VERB ./PUNCT 
+임기/NOUN 말/NOUN ,/PUNCT 소련의/NOUN 아프가니스탄/NOUN 침공/NOUN 사건으로/ADP 인해/VERB 1980년/NOUN 하계/NOUN 올림픽에/NOUN 반공국가들의/NOUN 보이콧을/NOUN 하였다/VERB ./PUNCT 
+그는/ADP 주이란/PART 미국/NOUN 대사관/NOUN 인질/NOUN 사건의/NOUN 인질/NOUN 구출/NOUN 실패로/ADP 인한/VERB 원인으로/NOUN ,/PUNCT 1980년/NOUN 제40대/NOUN 대통령/NOUN 선거에서/NOUN 공화당의/ADP 로널드/NOUN 레이건에게/ADP 패하며/PART 재선에/ADP 실패하였다/NOUN ./PUNCT 
+대한민국과의/ADP 관계/NOUN 
+지미/NOUN 카터는/NOUN 한국과의/ADP 관계에서도/ADP 중요한/NOUN 영향을/ADP 미쳤던/VERB 대통령/NOUN 중/ADP 하나다/NOUN ./PUNCT 
+인권/NOUN 문제와/NOUN 주한미군/NOUN 철수/NOUN 문제로/ADP 한때/ADV 한미/NOUN 관계가/NOUN 불편하기도/NOUN 했다/VERB ./PUNCT 
+1978년/NOUN 대한민국에/ADP 대한/VERB 북한의/NOUN 위협에/ADP 대비해/NOUN 한미연합사를/NOUN 창설하면서/NOUN ,/PUNCT 1982년까지/ADP 3단계에/ADP 걸쳐/VERB 주한미군을/NOUN 철수하기로/NOUN 했다/VERB ./PUNCT 
+그러나/ADV 주한미군사령부와/NOUN 정보기관/NOUN ·의회의/NOUN 반대에/ADP 부딪혀/VERB 주한미군은/NOUN 완전철수/NOUN 대신/ADV 6/NUM ,000명을/ADP 감축하는/PART 데/ADV 그쳤다/VERB ./PUNCT 
+또한/ADV 박정희/NOUN 정권의/NOUN 인권/NOUN 문제/NOUN 등과의/ADP 논란으로/ADP 불협화음을/ADP 냈으나/VERB ,/PUNCT 1979년/NOUN 6월/NOUN 하순/NOUN ,/PUNCT 대한민국을/ADP 방문했는데/NOUN 관계가/NOUN 다소/ADV 회복되었다/PART ./PUNCT 
+1979년~1980년/NOUN 대한민국의/ADP 정치적/PART 격변기/NOUN 당시의/ADP 대통령이었던/AUX 그는/ADP 이에/ADP 대해/VERB 애매한/NOUN 태도를/ADP 보였고/VERB ,/PUNCT 이는/ADP 후에/ADP 대한민국/NOUN 내에서/ADP 고조되는/PART 반미/NOUN 운동의/NOUN 한/NUM 원인이/ADP 됐다/VERB ./PUNCT 
+10월/NOUN 26일/NOUN ,/PUNCT 박정희/NOUN 대통령이/NOUN 김재규/NOUN 중앙정보부장에/NOUN 의해/VERB 살해된/NOUN 것에/ADP 대해/VERB 그는/ADP 이/DET 사건으로/ADP 큰/ADJ 충격을/NOUN 받았으며/CCONJ ,/PUNCT 사이러스/NOUN 밴스/NOUN 국무장관을/NOUN 조문사절로/NOUN 파견했다/NOUN ./PUNCT 
+12/NUM ·12/NUM 군사/NOUN 반란과/NOUN 5/NUM ./PUNCT 
+17/NUM 쿠데타에/NOUN 대해/VERB 초기에는/ADP 강하게/CCONJ 비난했으나/NOUN ,/PUNCT 미국/NOUN 정부가/NOUN 신군부를/NOUN 설득하는데/PART ,/PUNCT 한계가/NOUN 있었고/CCONJ 결국/ADV 묵인하는/PART 듯한/NOUN 태도를/NOUN 보이게/CCONJ 됐다/VERB ./PUNCT 
+퇴임/NOUN 이후/ADP 
+퇴임/NOUN 이후/ADP 민간/NOUN 자원을/NOUN 적극/ADV 활용한/NOUN 비영리/NOUN 기구인/NOUN 카터/NOUN 재단을/NOUN 설립한/NOUN 뒤/NOUN 민주주의/NOUN 실현을/ADP 위해/VERB 제/PART 3세계의/NOUN 선거/NOUN 감시/NOUN 활동/NOUN 및/CCONJ 기니/NOUN 벌레에/ADP 의한/VERB 드라쿤쿠르스/NOUN 질병/NOUN 방재를/ADP 위해/VERB 힘썼다/VERB ./PUNCT 
+미국의/ADP 빈곤층/NOUN 지원/NOUN 활동/NOUN ,/PUNCT 사랑의/NOUN 집짓기/NOUN 운동/NOUN ,/PUNCT 국제/NOUN 분쟁/NOUN 중재/NOUN 등의/ADP 활동도/ADP 했다/VERB ./PUNCT 
+카터는/NOUN 카터/NOUN 행정부/NOUN 이후/ADP 미국이/NOUN 북핵/NOUN 위기/NOUN ,/PUNCT 코소보/NOUN 전쟁/NOUN ,/PUNCT 이라크/NOUN 전쟁과/NOUN 같이/ADV 미국이/NOUN 군사적/PART 행동을/NOUN 최후로/NOUN 선택하는/PART 전통적/PART 사고를/NOUN 버리고/CCONJ 군사적/PART 행동을/NOUN 선행하는/PART 행위에/ADP 대해/VERB 깊은/PART 유감을/NOUN 표시/NOUN 하며/PART 미국의/NOUN 군사적/PART 활동에/ADP 강한/ADJ 반대/NOUN 입장을/NOUN 보이고/VERB 있다/PART ./PUNCT 
+특히/ADV 국제/NOUN 분쟁/NOUN 조정을/ADP 위해/VERB 북한의/NOUN 김일성/NOUN ,/PUNCT 아이티의/ADP 세드라스/NOUN 장군/NOUN ,/PUNCT 팔레인스타인의/NOUN 하마스/NOUN ,/PUNCT 보스니아의/NOUN 세르비아계/NOUN 정권/NOUN 같이/ADV 미국/NOUN 정부에/ADP 대해/VERB 협상을/NOUN 거부하면서/NOUN 사태의/NOUN 위기를/NOUN 초래한/NOUN 인물/NOUN 및/CCONJ 단체를/NOUN 직접/ADV 만나/VERB 분쟁의/NOUN 원인을/NOUN 근본적으로/ADP 해결하기/NOUN 위해/VERB 힘썼다/VERB ./PUNCT 
+이/DET 과정에서/ADP 미국/NOUN 행정부와/NOUN 갈등을/NOUN 보이기도/ADP 했지만/CCONJ ,/PUNCT 전직/NOUN 대통령의/NOUN 권한과/NOUN 재야/NOUN 유명/NOUN 인사들의/NOUN 활약으로/ADP 해결해/NOUN 나갔다/VERB ./PUNCT 
+1978년에/ADP 채결된/NOUN 캠프데이비드/NOUN 협정의/NOUN 이행이/NOUN 지지부진/NOUN 하자/VERB 중동/NOUN 분쟁/NOUN 분제를/ADP 해결하기/NOUN 위해/VERB 1993년/NOUN 퇴임/NOUN 후/ADP 직접/ADV 이스라엘과/NOUN 팔레인스타인의/NOUN 오슬로/NOUN 협정을/NOUN 이끌어/VERB 내는/PART 데도/ADP 성공했다/NOUN ./PUNCT 
+1993년/NOUN 1차/NOUN 북핵/NOUN 위기/NOUN 당시/ADP 북한에/ADP 대한/VERB 미국의/NOUN 군사적/PART 행동이/NOUN 임박했으나/NOUN ,/PUNCT 미국/NOUN 전직/NOUN 대통령으로는/ADP 처음으로/ADP 북한을/ADP 방문하고/NOUN 미국과/NOUN 북/NOUN 양국의/NOUN 중재에/ADP 큰/ADJ 기여를/NOUN 해/VERB 위기를/NOUN 해결했다는/NOUN 평가를/NOUN 받았다/AUX ./PUNCT 
+또한/ADV 이/DET 때/NOUN 김영삼/NOUN 대통령과/NOUN 김일성/NOUN 주석의/NOUN 만남을/ADP 주선했다/NOUN ./PUNCT 
+하지만/ADV 그로부터/ADP 수주일/NOUN 후/ADP 김일성이/ADP 갑자기/ADV 사망하였는데/NOUN 김일성과/CCONJ 김영삼의/ADP 정상회담은/NOUN 이루어지지/CCONJ 못했다/VERB ./PUNCT 
+미국의/NOUN 관타나모/NOUN 수용소/NOUN 문제/NOUN ,/PUNCT 세계의/NOUN 인권문제에서도/ADP 관심이/NOUN 깊어/CCONJ 유엔에/ADP 유엔인권고등판무관의/NOUN 제도를/NOUN 시행하도록/NOUN 노력하여/NOUN 독재자들의/NOUN 인권/NOUN 유린에/NOUN 대해/VERB 제약을/NOUN 하고/VERB ,/PUNCT 국제형사재판소를/NOUN 만드는데/CCONJ 기여하여/NOUN 독재자들/PART 같은/PART 인권유린범죄자를/NOUN 재판소로/ADP 회부하여/NOUN 국제적인/NOUN 처벌을/NOUN 받게/VERB 하는/PART 등/NOUN 인권/NOUN 신장에/ADP 크나/VERB 큰/ADJ 기여를/ADP 했다/VERB ./PUNCT 
+2011년/NOUN 4월/NOUN 26일부터/ADP 29일까지/ADP 북한을/ADP 3일간/ADP 방문했다/NOUN ./PUNCT 
+평가/NOUN 경제문제를/NOUN 해결하지/PART 못하고/CCONJ 주/NOUN 이란/NOUN 미국/NOUN 대사관/NOUN 인질/NOUN 사건에/ADP 발목이/ADP 잡혀/VERB 실패한/NOUN 대통령으로/NOUN 평가를/ADP 받지만/CCONJ 이란/NOUN 사태는/NOUN 미국/NOUN 내/NOUN 이란/ADP 재산을/NOUN 풀어주겠다는/VERB 조건을/NOUN 내세워서/VERB 사실상/ADV 카터가/ADP 해결한/NOUN 것이었고/AUX ,/PUNCT 사랑의/NOUN 집짓기/NOUN 운동/NOUN 등으로/ADP 퇴임/NOUN 후에/ADP 훨씬/ADV 더/ADV 존경받는/NOUN 미국/NOUN 대통령/NOUN 중에/ADP 특이한/NOUN 인물로/ADP 남았다/PART ./PUNCT 
+그는/ADP 2002년/NOUN 말/NOUN 인권과/NOUN 중재/NOUN 역할에/ADP 대한/VERB 공로를/NOUN 인정받아/CCONJ 노벨/NOUN 평화상을/NOUN 받게/VERB 되었다/PART ./PUNCT 
+이외에도/ADP ,/PUNCT 그는/ADP 대통령/NOUN 재임/NOUN 시절은/ADP 물론/ADV 퇴임/NOUN 후에도/ADP 지속적으로/ADP 여러/ADJ 장기/NOUN 집권중인/PART 독재자들을/NOUN 만나왔는데/AUX ,/PUNCT 그와/ADP 만난/VERB 독재자들/NOUN 중/ADP 절대/ADV 다수가/ADP 얼마/NOUN 되지/CCONJ 않아/CCONJ 최후를/ADP 맞이하게/CCONJ 되며/CCONJ '독재자의/NOUN 사신/NOUN '이라는/PUNCT 별명이/NOUN 붙기도/VERB 했다/VERB ./PUNCT 
+같이/ADV 보기/PART 주한/NOUN 미군의/NOUN 철수/NOUN 한반도/NOUN 평화협정/NOUN 
+역대/NOUN 선거/NOUN 결과/NOUN 
+각주/NOUN 
+참고/NOUN 문헌/NOUN 《진정한/PUNCT 리더는/NOUN 떠난/VERB 후에/ADP 아름답다/CCONJ 》/PUNCT 저자/NOUN :/PUNCT 지미/NOUN 카터/NOUN 《지미/PUNCT 카터/NOUN 》/PUNCT 저자/NOUN :/PUNCT 지미/NOUN 카터/NOUN (지식의날개/PROPN ,/PUNCT 2018/NUM )/PUNCT 
+외부/NOUN 링크/NOUN 
+수학/NOUN (/PUNCT 數/SYM 學/SYM ,/PUNCT ,/PUNCT 줄여서/VERB math/NOUN )은/ADP 수/NOUN ,/PUNCT 양/NOUN ,/PUNCT 구조/NOUN ,/PUNCT 공간/NOUN ,/PUNCT 변화/NOUN 등의/ADP 개념을/ADP 다루는/PART 학문이다/NOUN ./PUNCT 
+널리/ADV 받아들여지는/PART 명확한/NOUN 정의는/NOUN 없으나/CCONJ 현대/NOUN 수학은/NOUN 일반적으로/NOUN 엄밀한/NOUN 논리에/ADP 근거하여/NOUN 추상적/NOUN 대상을/NOUN 탐구하며/PART ,/PUNCT 이는/ADP 규칙의/NOUN 발견과/NOUN 문제의/NOUN 제시/NOUN 및/CCONJ 해결의/NOUN 과정으로/ADP 이루어진다/VERB ./PUNCT 
+수학은/NOUN 그/DET 발전/NOUN 과정에/ADP 있어서/VERB 철학/NOUN ,/PUNCT 과학과/NOUN 깊은/PART 연관을/ADP 맺고/CCONJ 있으며/CCONJ ,/PUNCT 엄밀한/NOUN 논리와/NOUN 특유의/NOUN 추상성/NOUN ,/PUNCT 보편성에/ADP 의해/VERB 다른/ADJ 학문들과/NOUN 구별된다/NOUN ./PUNCT 
+특히/ADV 수학은/NOUN 과학의/NOUN 여느/DET 분야들과는/ADP 달리/VERB 자연계에서/NOUN 관측되지/PART 않는/PART 개념들에/ADP 대해서까지/ADP 이론을/NOUN 추상화시키는/PART 특징을/ADP 보이는데/CCONJ ,/PUNCT 수학자들은/ADP 그러한/NOUN 개념들에/ADP 대한/VERB 추측을/NOUN 제시하고/NOUN 적절하게/PART 선택된/NOUN 정의와/NOUN 공리로부터/NOUN 엄밀한/NOUN 연역을/ADP 거쳐/VERB 그/DET 진위를/NOUN 파악한다/NOUN ./PUNCT 
+수학의/NOUN 개념들은/ADP 기원전/NOUN 600년/NOUN 경에/ADP 활동하며/PART 최초의/NOUN 수학자로도/ADP 여겨지는/PART 탈레스의/ADP 기록은/ADP 물론/ADV ,/PUNCT 다른/ADJ 고대/NOUN 문명들에서도/ADP 찾아볼/VERB 수/NOUN 있으며/CCONJ 인류의/NOUN 문명과/NOUN 함께/ADV 발전해/NOUN 왔다/VERB ./PUNCT 
+오늘날/NOUN 수학은/NOUN 자연과학/NOUN ,/PUNCT 사회과학/NOUN ,/PUNCT 공학/NOUN ,/PUNCT 의학/NOUN 등/NOUN 거의/ADV 모든/DET 학문에서도/ADP 핵심적인/NOUN 역할을/NOUN 하며/CCONJ 다양한/NOUN 방식으로/ADP 응용된다/NOUN ./PUNCT 
+수학을/NOUN 의미하는/PART 매스매틱스/NOUN (mathematics/NOUN )라는/PUNCT 단어는/NOUN '아는/PUNCT 모든/DET 것/NOUN ',/PUNCT '배우는/PUNCT 모든/DET 것/NOUN '이라는/PUNCT 뜻의/NOUN 고대/NOUN 그리스어/NOUN 'máthēma/PUNCT '(μάθημα/PUNCT )/PUNCT 및/CCONJ 그/DET 활용형/NOUN mathēmatikós/NOUN (μαθηματικός/PUNCT )에서/ADP 유래되었다/PART ./PUNCT 
+역사/NOUN 
+역사적으로/ADP 고대부터/NOUN 현대에/ADP 이르기까지/ADP 문명에/NOUN 필수적인/NOUN 건축/NOUN ,/PUNCT 천문학/NOUN ,/PUNCT 정치/NOUN ,/PUNCT 상업/NOUN 등에/ADP 수학적/PART 개념들이/PART 응용되어/PART 왔다/VERB ./PUNCT 
+교역/NOUN ·분배/NOUN ·과세/NOUN 등/NOUN 인류의/NOUN 사회/NOUN 생활에/ADP 필요한/NOUN 모든/DET 계산에/NOUN 수학이/ADP 관여해/NOUN 왔고/VERB ,/PUNCT 농경/NOUN 생활에/ADP 필수적인/NOUN 천문/NOUN 관측과/NOUN 달력의/NOUN 제정/NOUN ,/PUNCT 토지의/NOUN 측량/NOUN 또한/ADV 수학이/ADP 직접적으로/NOUN 사용된/NOUN 분야이다/NOUN ./PUNCT 
+고대/NOUN 수학을/NOUN 크게/CCONJ 발전시킨/NOUN 문명으로는/ADP 메소포타미아/PROPN ,/PUNCT 이집트/NOUN ,/PUNCT 인도/NOUN ,/PUNCT 중국/NOUN ,/PUNCT 그리스/NOUN 등이/ADP 있다/PART ./PUNCT 
+특히/ADV 고대/NOUN 그리스/NOUN 문명에서는/ADP 처음으로/ADP 방정식에서/NOUN 변수를/NOUN 문자로/ADP 쓰는/PART 등/NOUN 추상화가/ADP 발전하였고/NOUN 유클리드의/NOUN 원론에서는/ADP 최초로/ADP 엄밀한/NOUN 논증에/NOUN 근거한/NOUN 수학이/NOUN 나타난다/VERB ./PUNCT 
+수학의/NOUN 발전은/NOUN 이후로도/ADP 계속되어/CCONJ 16세기의/ADP 르네상스에/ADP 이르러서는/ADP 과학적/PART 방법과의/ADP 상호/NOUN 작용을/ADP 통해/VERB 수학과/NOUN 자연과학에/NOUN 있어서/VERB 혁명적인/NOUN 연구들이/PART 진척되었고/CCONJ ,/PUNCT 이는/ADP 인류/NOUN 문명/NOUN 발달에/ADP 큰/ADJ 영향을/NOUN 미치게/CCONJ 되었다/PART ./PUNCT 
+세부/NOUN 분야/NOUN 
+수학의/NOUN 각/DET 분야들은/ADP 상업에/ADP 필요한/NOUN 계산을/NOUN 하기/PART 위해/VERB ,/PUNCT 숫자들의/NOUN 관계를/ADP 이해하기/NOUN 위해/VERB ,/PUNCT 토지를/NOUN 측량하기/NOUN 위해/VERB ,/PUNCT 그리고/CCONJ 천문학적/NOUN 사건들을/NOUN 예견하기/NOUN 위해/VERB 발전되어왔다/VERB ./PUNCT 
+이/DET 네/NUM 가지/NOUN 목적은/NOUN 대략적으로/ADP 수학이/ADP 다루는/PART 대상인/NOUN 양/NOUN ,/PUNCT 구조/NOUN ,/PUNCT 공간/NOUN 및/CCONJ 변화에/ADP 대응되며/PART ,/PUNCT 이들을/ADP 다루는/PART 수학의/NOUN 분야를/ADP 각각/ADV 산술/NOUN ,/PUNCT 대수학/NOUN ,/PUNCT 기하학/NOUN ,/PUNCT 해석학이라/CCONJ 한다/VERB ./PUNCT 
+또한/ADV 이/DET 밖에도/ADP 근대/NOUN 이후에/ADP 나타난/VERB 수학기초론과/NOUN 이산수학/NOUN 및/CCONJ 응용수학/NOUN 등이/ADP 있다/PART ./PUNCT 
+산술/NOUN 
+산술은/ADP 자연수와/NOUN 정수/NOUN 및/CCONJ 이에/ADP 대한/VERB 사칙연산에/NOUN 대한/VERB 연구로서/NOUN 시작했다/NOUN ./PUNCT 
+수론은/ADP 이런/ADJ 주제들을/NOUN 보다/ADV 깊게/CCONJ 다루는/PART 학문으로/ADP ,/PUNCT 그/DET 결과로는/ADP 페르마의/ADP 마지막/NOUN 정리/NOUN 등이/ADP 유명하다/PART ./PUNCT 
+또한/ADV 쌍둥이/NOUN 소수/NOUN 추측과/NOUN 골드바흐/NOUN 추측/NOUN 등을/ADP 비롯해/NOUN 오랜/ADJ 세월/NOUN 동안/ADP 해결되지/PART 않고/CCONJ 남아있는/PART 문제들도/ADP 여럿/ADJ 있다/PART ./PUNCT 
+수의/NOUN 체계가/ADP 보다/ADV 발전하면서/NOUN ,/PUNCT 정수의/NOUN 집합을/NOUN 유리수의/NOUN 집합의/NOUN 부분집합으로/ADP 여기게/VERB 되었다/AUX ./PUNCT 
+또한/ADV 유리수의/ADP 집합은/NOUN 실수의/NOUN 집합의/ADP 부분집합이며/NOUN ,/PUNCT 이는/ADP 또다시/ADV 복소수/NOUN 집합의/NOUN 일부분으로/ADP 볼/VERB 수/NOUN 있다/PART ./PUNCT 
+여기에서/ADP 더/ADV 나아가면/CCONJ 사원수와/CCONJ 팔원수/NOUN 등의/ADP 개념을/ADP 생각할/NOUN 수도/ADV 있다/PART ./PUNCT 
+이와는/ADP 약간/ADV 다른/ADJ 방향으로/ADP ,/PUNCT 자연수를/ADP 무한대까지/ADP 세어나간다는/NOUN 개념을/NOUN 형식화하여/NOUN 순서수의/NOUN 개념을/ADP 얻으며/CCONJ ,/PUNCT 집합의/NOUN 크기/NOUN 비교를/ADP 이용하여/NOUN 무한대를/ADP 다루기/PART 위한/VERB 또다른/ADV 방법으로는/ADP 기수의/NOUN 개념도/ADP 있다/PART ./PUNCT 
+대수학/NOUN 
+수/NOUN 대신/ADP 문자를/NOUN 써서/VERB 문제해결을/NOUN 쉽게/CCONJ 하는/PART 것과/CCONJ ,/PUNCT 마찬가지로/ADP 수학적/PART 법칙을/NOUN 일반적이고/CCONJ 간명하게/PART 나타내는/PART 것을/ADP 포함한다/NOUN ./PUNCT 
+고전대수학은/NOUN 대수방정식/NOUN 및/CCONJ 연립방정식의/NOUN 해법에서/ADP 시작하여/NOUN 군/NOUN ,/PUNCT 환/NOUN ,/PUNCT 체/NOUN 등의/ADP 추상대수학을/NOUN 거쳐/VERB 현대에/ADP 와서는/NOUN 대수계의/NOUN 구조를/NOUN 보는/PART 것을/NOUN 중심으로/ADP 하는/PART 선형대수학으로/NOUN 전개되었다/PART ./PUNCT 
+수의/NOUN 집합이나/NOUN 함수와/NOUN 같은/PART 많은/PART 수학적/PART 대상들은/ADP 내재적인/NOUN 구조를/ADP 보인다/VERB ./PUNCT 
+이러한/NOUN 대상들의/NOUN 구조적/NOUN 특성들이/NOUN 군론/NOUN ,/PUNCT 환론/NOUN ,/PUNCT 체론/NOUN 그리고/CCONJ 그/DET 외의/ADP 수많은/PART 대수적/NOUN 구조들을/ADP 연구하면서/NOUN 다루어지며/CCONJ ,/PUNCT 그것들/PART 하나하나가/ADP 내재적/NOUN 구조를/ADP 지닌/VERB 수학적/PART 대상이다/NOUN ./PUNCT 
+이/DET 분야에서/ADP 중요한/NOUN 개념은/NOUN 벡터/NOUN ,/PUNCT 벡터/NOUN 공간으로의/ADP 일반화/NOUN ,/PUNCT 그리고/CCONJ 선형대수학에서의/ADP 지식들이다/NOUN ./PUNCT 
+벡터의/ADP 연구에는/ADP 산술/NOUN ,/PUNCT 대수/NOUN ,/PUNCT 기하라는/PART 수학의/NOUN 중요한/NOUN 세개의/NOUN 분야가/NOUN 조합되어/PART 있다/PART ./PUNCT 
+벡터/NOUN 미적분학은/NOUN 여기에/ADP 해석학의/NOUN 영역이/NOUN 추가된다/NOUN ./PUNCT 
+텐서/NOUN 미적분학은/NOUN 대칭성과/NOUN 회전축의/ADP 영향/NOUN 아래에서/ADP 벡터의/ADP 움직임을/ADP 연구한다/NOUN ./PUNCT 
+눈금없는/PART 자와/NOUN 컴퍼스와/ADP 관련된/NOUN 많은/PART 고대의/NOUN 미해결/NOUN 문제들이/PART 갈루아/NOUN 이론을/NOUN 사용하여/NOUN 비로소/ADV 해결되었다/PART ./PUNCT 
+기하학/NOUN 
+공간에/ADP 대한/VERB 연구는/NOUN 기하학에서/NOUN 시작되었고/PART ,/PUNCT 특히/ADV 유클리드/NOUN 기하학에서/ADP 비롯되었다/PART ./PUNCT 
+삼각법은/ADP 공간과/NOUN 수들을/ADP 결합하였고/NOUN ,/PUNCT 잘/ADV 알려진/VERB 피타고라스의/NOUN 정리를/NOUN 포함한다/NOUN ./PUNCT 
+현대에/ADP 와서/VERB 공간에/NOUN 대한/VERB 연구는/NOUN ,/PUNCT 이러한/NOUN 개념들은/NOUN 더/ADV 높은/PART 차원의/NOUN 기하학을/ADP 다루기/PART 위해/VERB 비유클리드/NOUN 기하학/NOUN (상대성이론에서/NOUN 핵심적인/NOUN 역할을/NOUN 함/PART )과/PUNCT 위상수학으로/NOUN 일반화되었다/PART ./PUNCT 
+수론과/CCONJ 공간에/NOUN 대한/VERB 이해는/NOUN 모두/ADV 해석/NOUN 기하학/NOUN ,/PUNCT 미분기하학/NOUN ,/PUNCT 대수기하학에/NOUN 중요한/NOUN 역할을/NOUN 한다/VERB ./PUNCT 
+리/NOUN 군도/NOUN 공간과/NOUN 구조/NOUN ,/PUNCT 변화를/ADP 다루는데/CCONJ 사용된다/NOUN ./PUNCT 
+위상수학은/NOUN 20세기/NOUN 수학의/NOUN 다양한/NOUN 지류속에서/ADP 괄목할만한/NOUN 성장을/NOUN 한/NUM 분야이며/CCONJ ,/PUNCT 푸앵카레/NOUN 추측과/NOUN 인간에/ADP 의해서/VERB 증명되지/PART 못하고/CCONJ 오직/ADV 컴퓨터로만/ADP 증명된/NOUN 4색정리를/NOUN 포함한다/NOUN ./PUNCT 
+해석학/SYM 
+변화에/ADP 대한/VERB 이해와/NOUN 묘사는/NOUN 자연과학에/NOUN 있어서/VERB 일반적인/NOUN 주제이며/CCONJ ,/PUNCT 미적분학은/NOUN 변화를/ADP 탐구하는/PART 강력한/NOUN 도구로서/NOUN 발전되었다/PART ./PUNCT 
+함수는/NOUN 변화하는/PART 양을/ADP 묘사함에/ADP 있어서/VERB 중추적인/NOUN 개념으로써/NOUN 떠오르게/CCONJ 된다/VERB ./PUNCT 
+실수와/NOUN 실변수로/NOUN 구성된/NOUN 함수의/NOUN 엄밀한/NOUN 탐구가/NOUN 실해석학이라는/NOUN 분야로/ADP 알려지게/NOUN 되었고/CCONJ ,/PUNCT 복소수에/NOUN 대한/VERB 이와/ADV 같은/NOUN 탐구/NOUN 분야는/ADP 복소해석학이라고/ADP 한다/VERB ./PUNCT 
+함수해석학은/NOUN 함수의/NOUN 공간/NOUN (특히/PUNCT 무한차원/NOUN )의/ADP 탐구에/NOUN 주목한다/NOUN ./PUNCT 
+함수해석학의/NOUN 많은/PART 응용분야/NOUN 중/ADP 하나가/ADP 양자역학이다/NOUN ./PUNCT 
+많은/PART 문제들이/NOUN 자연스럽게/PART 양과/NOUN 그/DET 양의/ADP 변화율의/NOUN 관계로/ADP 귀착되고/CCONJ ,/PUNCT 이러한/NOUN 문제들이/NOUN 미분방정식으로/NOUN 다루어진다/NOUN ./PUNCT 
+자연의/NOUN 많은/PART 현상들이/NOUN 동역학계로/NOUN 기술될/NOUN 수/NOUN 있다/PART ./PUNCT 

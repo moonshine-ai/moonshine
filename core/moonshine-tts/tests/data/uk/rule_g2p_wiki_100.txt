@@ -1,3 +1,100 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:779f209e540cb8fcc1ad00602f63d83392c20306a8949168b6d4e6c0db79b500
-size 12866
+ɦɛˈoɦɾáfʲˈija, ˈabo zˈast.
+zˈɛmlɛ́pˈɪs (ʋʲˈid — ˈopɪs zˈɛmlʲi; dˈɛ — zˈɛmlʲa ˈi — pɪsˈatɪ, opɪsuʋˈatɪ) — sɪstˈɛma nˈauk, ʃtʃˈo ʋɪwtʃˈajɛ ɦɛoɦɾafʲˈitʃnu obolˈonku zˈɛmlʲi (ɛpʲiɦɛosfˈɛɾu), ˈjiji pɾostoɾˈoʋu pɾɪɾˈodnu ˈi sotsiˈalʲno-ɛkonomʲˈitʃnu ɾʲiznomanʲˈitnʲistʲ, ɦospodˈaɾstʋo ˈi nasɛlˈɛnnʲa planˈɛtɪ, okɾˈɛmɪx ˈjiji ɾɛɦʲiˈonʲiw tˈa kɾˈajin, ˈa tˈakoʒ zʋˈjazkɪ mʲˈiʒ pɾɪɾˈodnɪm sɛɾɛdoʋˈɪʃtʃɛm ˈi dʲijalʲnʲˈistʲu lʲudˈɪnɪ.
+w sutʃasnˈomu ɾozumʲˈinnʲi ponʲˈattʲa «ɦɛoɦɾafʲˈija» zamʲiʃtʃˈɛno ponʲˈattʲam «ɦɛoɦɾafʲˈitʃni naˈukɪ».
+ponʲˈattʲa upˈɛɾʃɛ tˈɛɾmʲin «ɦɛoɦɾafʲˈija» bˈuw zapɾoponoʋanˈɪɪ dawnʲoɦɾˈɛtskɪm ɦɛoɦɾˈafom ɛɾatosfˈɛnom (dʋʲˈistʲi sʲimdˈɛsʲat ʃˈistʲ—stˈo dɛʋjanˈosto tʃotˈɪɾɪ dˈo n.
+ˈɛ.
+).
+stɾuktˈuɾa
+osnˈownɛ zawdˈannʲa sutʃasnˈoji ɦɛoɦɾafʲˈiji polʲaɦˈajɛ ˈu ʋɪwtʃˈɛnnʲi zakˈonʲiw ˈi zakonomʲiɾnostˈɛɪ ɾozmʲiʃtʃˈɛnnʲa tˈa wzajɛmodʲˈiji komponˈɛntʲiw ɦɛoɦɾafʲitʃnˈoɦo sɛɾɛdoʋˈɪʃtʃa tˈa ˈjixnʲix poˈjɛdnanʲ nˈa ɾʲˈiznɪx ɾʲˈiwnʲax.
+sklˈadnʲistʲ obˈjɛkta doslʲidʒˈɛnnʲa ˈi ʃɪɾˈota pɾɛdmɛtnˈoji oblˈastʲi zumoʋˈɪlɪ dɪfɛɾɛntsiatsˈiju jɛdɪnˈoji ɦɛoɦɾafʲˈiji nˈa nˈɪzku spɛtsialʲizoʋˈanɪx (ɦaluzˈɛʋɪx) naukˈoʋɪx dɪstsˈɪplʲin, ˈjakʲi utʋoɾʲˈujutʲ sɪstˈɛmu ɦɛoɦɾafʲˈitʃnɪx nˈauk.
+ʋodnˈotʃas okɾˈɛmʲi doslʲidnˈɪkɪ namaɦalˈɪsʲa pojɛdnuʋˈatɪ suspʲˈilʲnʲi pɾotsˈɛsɪ z komponɛntˈamɪ ɦɛoɦɾafʲitʃnˈoɦo sɛɾɛdoʋˈɪʃtʃa.
+ˈu takˈɪɪ spˈosʲib potʃɪnˈalɪ zaɾodʒuʋatˈɪsʲa nˈoʋʲi napɾʲˈamkɪ ɦɛoɦɾafʲˈitʃnɪx doslʲˈidʒɛnʲ, ˈjakʲi, potʃɪnaˈjutʃɪ z stolʲˈittʲa, nabˈulɪ sutʃˈasnɪx ɾˈɪs.
+ʋʲidpoʋʲˈidno dˈo obˈjɛktʲiw ʋɪwtʃˈɛnnʲa w sutʃasnʲˈiɪ ɦɛoɦɾafʲˈiji ʋɪdʲilʲˈajutʲ pɾɪɾodnˈɪtʃo-ɦɛoɦɾafʲˈitʃni ˈi suspʲˈilʲno-ɦɛoɦɾafʲˈitʃni naˈukɪ, ˈjakʲi tʲˈisno mʲˈiʒ sobˈoju poʋjazˈanʲi spʲilʲnˈɪmɪ zawdannʲˈamɪ wsɛbʲitʃnˈoɦo ʋɪwtʃˈɛnnʲa pɾɪɾˈodno- ˈi ʋɪɾobnˈɪtʃo-tɛɾɪtoɾʲiˈalʲnɪx komplˈɛksʲiw tˈa ˈjixnʲix komponˈɛntʲiw.
+pɾɪɾodnˈɪtʃo-ɦɛoɦɾafʲˈitʃni (fʲizˈɪko-ɦɛoɦɾafʲˈitʃni) naˈukɪ ʋɪwtʃˈajutʲ zakonomʲiɾnˈostʲi budˈoʋɪ ˈɪ ɾozʋˈɪtku ɦɛoɦɾafʲitʃnˈoji obolˈonkɪ tˈa ˈjiji okɾˈɛmɪx skladˈoʋɪx tʃˈastɪn (ɾˈɛlʲɛf, klʲˈimat, ʋˈodɪ, ɡɾˈuntɪ, ɾoslɪnnˈɪɪ ˈi tʋaɾɪnnˈɪɪ sʋʲˈit).
+dˈo nˈɪx nalˈɛʒatʲ zaɦˈalʲna fʲizˈɪtʃna ɦɛoɦɾafʲˈija (zɛmlɛznˈawstʋo), landʃaftoznˈawstʋo, palɛoɦɛoɦɾafʲˈija tˈa ɦaluzˈɛʋʲi fʲizˈɪko-ɦɛoɦɾafʲˈitʃni dɪstsɪplʲˈinɪ — ɦɛomoɾfoloɦʲˈija, klʲimatoloɦʲˈija, ɦʲidɾoloɦʲˈija, okɛanoloɦʲˈija, ɦlʲatsioloɦʲˈija, ɦɛokɾʲioloɦʲˈija, ɦɛoɦɾafʲˈija ɡɾˈuntʲiw, bʲioɦɛoɦɾafʲˈija.
+dˈo suspʲˈilʲno-ɦɛoɦɾafʲˈitʃnɪx (sotsiˈalʲno-ɛkonomʲˈitʃnɪx) nalˈɛʒatʲ naˈukɪ, ʃtʃˈo ʋɪwtʃˈajutʲ ɦɛoɦɾafʲˈitʃnɛ ɾozmʲiʃtʃˈɛnnʲa ʋɪɾobnˈɪtstʋa, umˈoʋɪ tˈa osoblɪʋˈostʲi ɪˈoɦo ɾozʋˈɪtku w ɾʲˈiznɪx kɾaˈjinax tˈa ɾaɪˈonax — ɛkonomʲˈitʃna, polʲitˈɪtʃna, ɦɛoɦɾafʲˈija nasɛlˈɛnnʲa, ɦaluzˈɛɪ ɛkonomʲˈikɪ (pɾomɪsloʋˈostʲi, sʲilʲsʲkˈoɦo ɦospodˈaɾstʋa, tɾanspˈoɾtu tˈoʃtʃo).
+sɪstˈɛma ɦɛoɦɾafʲˈitʃnɪx nˈauk wklʲutʃˈajɛ tˈakoʒ intɛɦɾˈalʲnʲi naukˈoʋʲi dɪstsɪplʲˈinɪ: ɦɛoɛkoloɦʲˈiju, istoɾˈɪtʃnu ɦɛoɦɾafʲˈiju, kaɾtoɦɾafʲˈiju, kɾajinoznˈawstʋo tˈa tɛoɾɛtˈɪtʃnu ɦɛoɦɾafʲˈiju.
+kɾʲˈim tˈoɦo, dˈo ɦɛoɦɾafʲˈiji nalˈɛʒatʲ dɪstsɪplʲˈinɪ pɾɪkladnˈoɦo xaɾaktˈɛɾu: ʋʲiɪsʲkˈoʋa, inʒɛnˈɛɾna, kosmʲˈitʃna, mɛlʲioɾatˈɪwna, mɛdˈɪtʃna tˈa ɾɛkɾɛatsiˈɪna ɦɛoɦɾafʲˈija tˈoʃtʃo.
+fʲizˈɪtʃna ɦɛoɦɾafʲˈija
+fʲizˈɪtʃna ɦɛoɦɾafʲˈija ʋɪwtʃˈajɛ zakonomʲiɾnˈostʲi budˈoʋɪ ˈi ɾozʋˈɪtku ɦɛoɦɾafʲitʃnˈoji poʋˈɛɾxnʲi tˈa ˈjiji okɾˈɛmɪx tʃˈastɪn.
+tˈobto obˈjɛktom ʋɪwtʃˈɛnnʲa fʲizɪtʃnˈoji ɦɛoɦɾafʲˈiji ˈjɛ ɦɛoɦɾafʲˈitʃna obolˈonka zaɦˈalom, ˈabo okɾˈɛmʲi ˈjiji «sfˈɛɾɪ» — atmosfˈɛɾa, lʲitosfˈɛɾa, ɦʲidɾosfˈɛɾa, pɛdosfˈɛɾa, bʲiosfˈɛɾa.
+osnˈoʋu fʲizɪtʃnˈoji ɦɛoɦɾafʲˈiji stanˈoʋɪtʲ zaɦˈalʲnɛ zɛmlɛznˈawstʋo ˈi landʃaftoznˈawstʋo.
+zˈa dˈowɦɛ isnuʋˈannʲa lʲudsʲkˈoji populʲatsˈiji ˈjiji doslʲidnˈɪkɪ sklˈalɪ znatʃnˈɪɪ pɛɾˈɛlʲik ɦɛoɦɾafʲˈitʃnɪx fʲizˈɪtʃnɪx dɪstsˈɪplʲin, ˈjakʲi stʋoɾʲˈujutʲ ponʲˈattʲa «naˈukɪ pɾˈo zˈɛmlʲu».
+sɪstˈɛma fʲizɪtʃnˈoji ɦɛoɦɾafʲˈiji wklʲutʃˈajɛ tˈakoʒ kaɾtoɦɾafʲˈiju, xˈotʃa inkˈolɪ ˈjiji okɾˈɛmo ʋɪdʲilʲˈajutʲ ʋʲˈid ɦolownˈoji ɦʲˈilkɪ ˈjak okɾˈɛmu ɦɛoɦɾafʲˈitʃnu dɪstsɪplʲˈinu.
+dˈo fʲizˈɪko-ɦɛoɦɾafʲˈitʃnɪx nˈauk nalˈɛʒatʲ: zɛmlɛznˈawstʋo (zaɦˈalʲna fʲizˈɪtʃna ɦɛoɦɾafʲˈija) — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ zakonomʲiɾnˈostʲi ɦɛoɦɾafʲitʃnˈoji obolˈonkɪ zaɦˈalom.
+fʲizˈɪtʃna ɦɛoɦɾafʲˈija — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ .
+landʃaftoznˈawstʋo — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ pɾɪɾˈodno-tɛɾɪtoɾʲiˈalʲnʲi komplˈɛksɪ (landʃˈaftnʲi), sfoɾmoʋˈanʲi w mˈɛʒax ɦɛoɦɾafʲitʃnˈoji obolˈonkɪ.
+palɛoɦɛoɦɾafʲˈija (ʋʲˈid — dɾɛwnʲˈiɪ) — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ dawnomɪnulˈɪɪ stˈan ɦɛoɦɾafʲitʃnˈoji obolˈonkɪ zˈɛmlʲi.
+tˈobto dɾˈɛwnʲi fʲizˈɪko-ɦɛoɦɾafʲˈitʃni obstanˈowkɪ, ˈjixnʲu dɪnamʲˈiku tˈa faktˈoɾɪ tsiˈjɛji dɪnamʲˈikɪ w ɦɛoloɦʲitʃnˈomu mɪnulˈomu (zmʲˈinɪ klʲimˈatu, tɛktonʲˈitʃni ɾˈuxɪ, ɡɾˈuntɪ ˈi kˈoɾɪ ʋɪʋʲitɾʲuʋˈannʲa, znˈɪklʲi ɛkotˈopɪ).
+isnˈujɛ dʋˈa pʲidxˈodɪ, ˈjakʲi ɾozɦlʲadˈajutʲ naˈuku ˈabo w komplˈɛksʲi ɦɛoloɦʲˈitʃnɪx nˈauk, ˈjak ɾˈozdʲil istoɾɪtʃnˈoji ɦɛoloɦʲˈiji (zaɪmaˈjɛtʲsʲa ʋɪwtʃˈɛnnʲam istoɾʲˈiji ɾozʋˈɪtku zɛmnˈoji kˈoɾɪ ˈi zˈɛmlʲi zaɦˈalom), ˈabo ɦɛoɦɾafʲˈitʃnɪx, ˈjak tʃastˈɪnu fʲizɪtʃnˈoji ɦɛoɦɾafʲˈiji (zaɪmaˈjɛtʲsʲa ʋɪwtʃˈɛnnʲam fʲizˈɪko-ɦɛoɦɾafʲˈitʃnɪx umˈoʋɪ mɪnulˈoɦo).
+podʲilʲaˈjɛtʲsʲa nˈa palɛoɦɛomoɾfoloɦʲˈiju, ~pɛdoloɦʲˈiju, ~klʲimatoloɦʲˈiju, ~ɦʲidɾoloɦʲˈiju, ~bʲioɦɛoɦɾafʲˈiju, ~landʃaftoznˈawstʋo tˈa ˈinʃi.
+tʲˈisno poʋjazˈana ˈiz zɛmlɛznˈawstʋom, ɦɛoloɦʲiˈjɛju, bʲioloɦʲiˈjɛju tˈa inʃˈɪmɪ pɾɪɾodnɪtʃˈɪmɪ naukˈamɪ.
+dˈawnʲu pɾɪɾˈodu zɛmnˈoji poʋˈɛɾxnʲi ʋʲidtʋoɾʲˈujutʲ ʃlˈaxom doslʲidʒˈɛnnʲa ɾˈɛʃtok, ʃtʃˈo zbɛɾɛɦlˈɪsʲa (palɛoɦɛoɦɾafʲˈitʃnɪx pamˈjatok), tˈa slʲˈidʲiw (palɛoɦɛoɦɾafʲˈitʃnɪx indɪkatˈoɾʲiw), ʃtʃˈo spʲˈilʲno utʋoɾʲˈujutʲ katɛɦoɾʲˈiju palɛoɦɛoɦɾafʲˈitʃnɪx dokumˈɛntʲiw.
+palɛoɦɛoɦɾafʲˈija ʃɪɾˈoko zastosoʋˈujɛ zaɦalʲnoɦɛoɦɾafʲˈitʃni mɛtˈodɪ ˈɪ instɾumˈɛntɪ w istoɾɪtʃnˈomu aspˈɛktʲi, ʋɪɾobˈɪwʃɪ nˈa jixnʲˈiɪ osnˈoʋʲi wlˈasnʲi spɛtsiˈalʲnʲi: palɛoɦɛomoɾfoloɦʲitʃnˈɪɪ, ~pɛdoloɦʲitʃnˈɪɪ, ~klʲimatɪtʃnˈɪɪ, ~landʃaftnˈɪɪ tˈa ˈinʃi.
+pɾaktˈɪtʃnɛ zawdˈannʲa naˈukɪ polʲaɦˈajɛ ˈu ɾozɾˈobtsi palɛoɦɛoɦɾafʲˈitʃnɪx aspˈɛktʲiw ˈosnow ɾatsionalʲnˈoɦo pɾɪɾodokoɾɪstuʋˈannʲa pɾˈɪ poʃˈukax ˈi ɾozʋʲˈidtsi koɾˈɪsnɪx kopˈalɪn, mɛlʲioɾatsˈiji zˈɛmɛlʲ, pɾoɦnozuʋˈannʲi maɪbˈutnʲix zmʲˈin sutʃasnˈoɦo stˈanu nawkolɪʃnʲˈoɦo sɛɾɛdoʋˈɪʃtʃa tˈoʃtʃo.
+ɦaluzˈɛʋʲi dɪstsɪplʲˈinɪ: ɦɛodɛzʲˈija — .
+ɦɛomoɾfoloɦʲˈija — .
+bɛɾɛɦoznˈawstʋo — .
+kaɾstoznˈawstʋo — .
+spɛlɛoloɦʲˈija — .
+mɛtɛoɾoloɦʲˈija — .
+klʲimatoloɦʲˈija — .
+ɦʲidɾoloɦʲˈija — .
+ɦʲidɾoloɦʲˈija suxodˈolu — .
+okɛanoloɦʲˈija — .
+kɾʲioloɦʲˈija — .
+ɦɛokɾʲioloɦʲˈija — .
+ɦlʲatsioloɦʲˈija — .
+ɡɾuntoznˈawstʋo — .
+ɦɛoɦɾafʲˈija ɡɾˈuntʲiw — .
+bʲioɦɛoɦɾafʲˈija — .
+fʲitoɦɛoɦɾafʲˈija (ɦɛoɦɾafʲˈija ɾˈoslɪn) — .
+zooɦɛoɦɾafʲˈija (ɦɛoɦɾafʲˈija tʋˈaɾɪn) — .
+palɛoɦɛoɦɾafʲitʃnˈɪɪ tsˈɪkl dɪstsˈɪplʲin: tʃɛtʋɛɾtˈɪnna ɦɛoloɦʲˈija — .
+palɛoɦɛomoɾfoloɦʲˈija — .
+palɛoklʲimatoloɦʲˈija — .
+palɛopɛdoloɦʲˈija — .
+palɛoɦʲidɾoloɦʲˈija — .
+palɛobʲioɦɛoɦɾafʲˈija — .
+palɛolandʃaftoznˈawstʋo — .
+suspʲˈilʲna ɦɛoɦɾafʲˈija
+ʋɪokɾɛmlʲˈujutʲ okɾˈɛmʲi ɦalˈuzʲi suspʲilʲnˈoji ɦɛoɦɾafʲˈiji: ɦɛoɦɾafʲˈija nasɛlˈɛnnʲa, pɾomɪsloʋˈostʲi, sʲilʲsʲkˈoɦo ɦospodˈaɾstʋa, tɾanspˈoɾtu, nɛʋɪɾobnɪtʃˈoji sfˈɛɾɪ tˈa ˈinʃi.
+sotsiˈalʲnu ɦɛoɦɾafʲˈiju tʃˈasto ɾozɦlʲadˈajutʲ ˈu komplˈɛksʲi z ɛkonomʲitʃnˈoju ɦɛoɦɾafʲiˈjɛju.
+dˈo sotsiˈalʲno-ɛkonomʲˈitʃnɪx ɦɛoɦɾafʲˈitʃnɪx nˈauk nalˈɛʒatʲ: ɛkonomʲˈitʃna ɦɛoɦɾafʲˈija — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ .
+sotsiˈalʲna ɦɛoɦɾafʲˈija — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ .
+polʲitˈɪtʃna ɦɛoɦɾafʲˈija — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ .
+ɦɛoɦɾafʲˈija nasɛlˈɛnnʲa — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ .
+ɦaluzˈɛʋʲi dɪstsɪplʲˈinɪ:
+sotsialʲnˈɪɪ tsˈɪkl dɪstsˈɪplʲin: ɦumanʲitˈaɾna ɦɛoɦɾafʲˈija — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ .
+ɦɛoɦɾafʲˈija kulʲtˈuɾɪ — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ .
+ɦɛoɦɾafʲˈija ɾɛlʲiɦʲˈiji — dɪstsɪplʲˈina, ʃtʃˈo ʋɪwtʃˈajɛ .
+ɦɛoɦɾafʲˈija spˈoɾtu — dɪstsɪplʲˈina, ʃtʃˈo ʋɪwtʃˈajɛ .
+ɛtnoɦɾafʲˈija — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ .
+poʋɛdʲinkˈoʋa ɦɛoɦɾafʲˈija — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ .
+polʲitɪtʃnˈɪɪ tsˈɪkl dɪstsˈɪplʲin: ɦɛopolʲitˈɪka — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ .
+ɦɛoɛkonomʲˈika — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ .
+ɛlɛktoɾˈalʲna ɦɛoɦɾafʲˈija — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ .
+ɾɛɦʲionalʲistˈɪka — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ .
+ɛkonomʲitʃnˈɪɪ tsˈɪkl dɪstsˈɪplʲin: ɦɛoɦɾafʲˈija ɾozʋˈɪtku — dɪstsɪplʲˈina, ʃtʃˈo ʋɪwtʃˈajɛ .
+ɦɛoɦɾafʲˈija sʋʲitoʋˈoɦo ɦospodˈaɾstʋa — dɪstsɪplʲˈina, ʃtʃˈo ʋɪwtʃˈajɛ .
+ɦɛoɦɾafʲˈija pɾomɪsloʋˈostʲi — dɪstsɪplʲˈina, ʃtʃˈo ʋɪwtʃˈajɛ .
+ɦɛoɦɾafʲˈija sʲilʲsʲkˈoɦo ɦospodˈaɾstʋa — dɪstsɪplʲˈina, ʃtʃˈo ʋɪwtʃˈajɛ .
+ɦɛoɦɾafʲˈija sfˈɛɾɪ pˈosluɦ — dɪstsɪplʲˈina, ʃtʃˈo ʋɪwtʃˈajɛ .
+ɦɛoɦɾafʲˈija toɾɦʲˈiwlʲi — dɪstsɪplʲˈina, ʃtʃˈo ʋɪwtʃˈajɛ .
+ɦɛoɦɾafʲˈija tɾanspˈoɾtu — dɪstsɪplʲˈina, ʃtʃˈo ʋɪwtʃˈajɛ .
+ɦɛoɦɾafʲˈija tuɾˈɪzmu — dɪstsɪplʲˈina, ʃtʃˈo ʋɪwtʃˈajɛ .
+dɛmoɦɾafʲitʃnˈɪɪ tsˈɪkl dɪstsˈɪplʲin: dɛmoɦɾafʲˈija — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ .
+ɦɛouɾbanʲistˈɪka — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ .
+polʲitˈɪtʃna ɦɛoɦɾafʲˈija
+polʲitˈɪtʃna ɦɛoɦɾafʲˈija — suspʲˈilʲno-ɦɛoɦɾafʲˈitʃna dɪstsɪplʲˈina, ˈjaka zaɪmaˈjɛtʲsʲa ʋɪwtʃˈɛnnʲam tɛɾɪtoɾʲialʲnˈoji (ɦɛopɾostoɾoʋˈoji) oɾɦanʲizatsˈiji tˈa doslʲidʒˈɛnnʲam ɦɛoɦɾafʲˈitʃnɪx zakonomʲiɾnostˈɛɪ foɾmuʋˈannʲa ˈi ɾozʋˈɪtku polʲitɪtʃnˈoji sfˈɛɾɪ ʒˈɪttʲa suspʲˈilʲstʋa.
+ɾɛɦʲionˈalʲna ɦɛoɦɾafʲˈija
+intɛɦɾˈalʲna ɦɛoɦɾafʲˈija
+dˈo intɛɦɾˈalʲnɪx ɦɛoɦɾafʲˈitʃnɪx nˈauk nalˈɛʒatʲ: ɦɛoɛkoloɦʲˈija — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ .
+ɛkoloɦʲitʃnˈɪɪ mɛnˈɛdʒmɛnt — dɪstsɪplʲˈina, ʃtʃˈo ʋɪwtʃˈajɛ .
+landʃˈaftna ɛkoloɦʲˈija — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ .
+ɛnʋaɪɾonmɛntoloɦʲˈija — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ .
+landʃˈaftna aɾxʲitɛktˈuɾa — dɪstsɪplʲˈina, ʃtʃˈo ʋɪwtʃˈajɛ .
+landʃˈaftna ɛkoloɦʲˈija — dɪstsɪplʲˈina, ʃtʃˈo ʋɪwtʃˈajɛ .
+ɛnʋaɪɾomɛntalʲnˈɪɪ mɛnˈɛdʒmɛnt — dɪstsɪplʲˈina, ʃtʃˈo ʋɪwtʃˈajɛ .
+istoɾˈɪtʃna ɦɛoɦɾafʲˈija — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ .
+xɾonoɦɛoɦɾafʲˈija — naˈuka, ʃtʃˈo ʋɪwtʃˈajɛ .

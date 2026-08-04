@@ -59,3 +59,17 @@ pico_monitor.log
 /plans/
 /wasm/node_modules/
 /wasm/dist/
+
+# Voice / model binaries fetched by scripts/fetch-voice-assets.sh (CDN or HF).
+# Licensing READMEs under core/moonshine-tts/data/ stay tracked in git.
+/core/moonshine-tts/data/**
+!/core/moonshine-tts/data/**/
+!/core/moonshine-tts/data/**/*.md
+/test-assets/**/*.ort
+/test-assets/tiny-en/tokenizer.bin
+/test-assets/tiny-streaming-en/tokenizer.bin
+/test-assets/tiny-streaming-en/streaming_config.json
+/android/java/androidTest/assets/tiny-en/*.ort
+/android/java/androidTest/assets/tiny-en/tokenizer.bin
+/python/src/moonshine_voice/assets/tiny-en/*.ort
+/examples/**/tts-data/
