@@ -7,6 +7,7 @@ setters, register handlers before anything is loaded, then load() and start().
 """
 
 from types import SimpleNamespace
+from pathlib import Path
 
 import pytest
 
@@ -177,12 +178,14 @@ def test_load_passes_configuration_through(mic_module, fake_native):
     assert mic.load() is mic
 
     transcriber = fake_native[0]
-    assert transcriber.model_path == "some/model/dir"
+    assert Path(transcriber.model_path) == Path("some/model/dir")
     assert transcriber.model_arch == ModelArch.TINY
     assert transcriber.options["identify_speakers"] == "true"
     # Asking for speaker IDs fetches the diarization models and points the
     # transcriber at them; they are no longer part of the library.
-    assert transcriber.options["diarization_model_dir"] == "downloaded/diarization"
+    assert Path(transcriber.options["diarization_model_dir"]) == Path(
+        "downloaded/diarization"
+    )
     assert mic.mic_stream.update_interval == 0.25
     assert mic.mic_stream.transcribe_flags == 4
 
