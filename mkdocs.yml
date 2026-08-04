@@ -1,0 +1,43 @@
+site_name: Moonshine Voice
+site_description: Fast, accurate, on-device AI library for building interactive voice applications
+site_url: !ENV [READTHEDOCS_CANONICAL_URL, "https://moonshine-voice.readthedocs.io/"]
+repo_url: https://github.com/moonshine-ai/moonshine
+repo_name: moonshine-ai/moonshine
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - content.code.copy
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+
+nav:
+  - Home: index.md
+  - Guides:
+      - Execution providers: execution-providers.md
+      - Word-level timestamps: word-level-timestamps.md
+      - Diarization models: diarization-models.md
+      - ORT-only models: ort-only-models.md
+  - Design:
+      - API principles: design/api-principles.md
+      - API comparison: design/api-comparison.md
+      - API regularization: design/api-regularization.md
+  - Internals:
+      - Release process: release-process.md
+      - LFS purge: lfs-purge.md

@@ -1,4 +1,5 @@
 build/
+site/
 .DS_Store
 .gradle/
 .env

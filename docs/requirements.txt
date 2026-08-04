@@ -1,0 +1,3 @@
+# Documentation build dependencies for Read the Docs / local `mkdocs serve`
+mkdocs>=1.6,<2
+mkdocs-material>=9.5,<10
