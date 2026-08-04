@@ -136,6 +136,8 @@ void parse_transcriber_options(const OptionVector &options,
       out_options.vad_max_segment_duration = float_from_string(option_value);
     } else if (option_name == "max_tokens_per_second") {
       out_options.max_tokens_per_second = float_from_string(option_value);
+    } else if (option_name == "use_speculative_decoding") {
+      out_options.use_speculative_decoding = bool_from_string(option_value);
     } else if (option_name == "identify_speakers") {
       out_options.identify_speakers = bool_from_string(option_value);
     } else if (option_name == "diarization_cluster_cadence") {

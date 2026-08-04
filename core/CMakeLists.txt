@@ -813,6 +813,36 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
     )
     target_link_libraries(word-alignment-benchmark PRIVATE moonshine moonshine-utils)
 
+    add_executable(speculative-decode-bench speculative-decode-bench.cpp)
+    set_target_properties(speculative-decode-bench PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(speculative-decode-bench PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+        ${CMAKE_CURRENT_LIST_DIR}/ort-utils
+        ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
+    )
+    target_link_libraries(speculative-decode-bench PRIVATE moonshine moonshine-utils)
+
+    add_executable(speculative-mismatch-investigate speculative-mismatch-investigate.cpp)
+    set_target_properties(speculative-mismatch-investigate PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(speculative-mismatch-investigate PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+        ${CMAKE_CURRENT_LIST_DIR}/ort-utils
+        ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
+    )
+    target_link_libraries(speculative-mismatch-investigate PRIVATE moonshine moonshine-utils)
+
     add_executable(text-embedder-test text-embedder-test.cpp text-embedder.cpp gemma-embedding-model.cpp)
     set_target_properties(text-embedder-test PROPERTIES
         CXX_STANDARD 20

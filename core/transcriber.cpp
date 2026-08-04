@@ -1195,6 +1195,7 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
     this->streaming_state.reset(config);
     this->current_streaming_segment_id = segment_id;
     this->streaming_samples_processed = 0;
+    this->last_streaming_tokens.clear();
   }
 
   // Calculate how many new samples we need to process
@@ -1257,39 +1258,71 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
                                           this->options.max_tokens_per_second)),
                256);
   std::vector<int64_t> tokens;
-  tokens.push_back(config.bos_id);
-
-  std::vector<float> logits(config.vocab_size);
-  int current_token = config.bos_id;
 
   {
     std::lock_guard<std::mutex> lock(this->streaming_model_mutex);
 
-    for (int step = 0; step < max_tokens; ++step) {
-      int err = this->streaming_model->decode_step(
-          &this->streaming_state, current_token, logits.data());
+    if (this->options.use_speculative_decoding && !is_new_segment &&
+        !this->last_streaming_tokens.empty()) {
+      // Previous content tokens as draft (strip BOS/EOS).
+      std::vector<int> draft;
+      draft.reserve(this->last_streaming_tokens.size());
+      for (int t : this->last_streaming_tokens) {
+        if (t == config.bos_id || t == config.eos_id) continue;
+        draft.push_back(t);
+      }
+
+      int *out = nullptr;
+      int out_len = 0;
+      const int *draft_ptr = draft.empty() ? nullptr : draft.data();
+      int err = this->streaming_model->decode_full(
+          &this->streaming_state, draft_ptr, static_cast<int>(draft.size()),
+          &out, &out_len);
       if (err != 0) {
-        break;
+        LOGF("Speculative decode_full failed: %d", err);
+        throw std::runtime_error("Speculative decode_full failed: " +
+                                 std::to_string(err));
       }
+      tokens.push_back(config.bos_id);
+      for (int i = 0; i < out_len; ++i) {
+        tokens.push_back(out[i]);
+      }
+      // Match greedy path: append EOS when decode_full stopped without it.
+      if (tokens.empty() || tokens.back() != config.eos_id) {
+        // decode_full omits EOS; leave as-is for text conversion.
+      }
+      std::free(out);
+    } else {
+      tokens.push_back(config.bos_id);
+      std::vector<float> logits(config.vocab_size);
+      int current_token = config.bos_id;
 
-      // Argmax
-      int next_token = 0;
-      float max_logit = logits[0];
-      for (int i = 1; i < config.vocab_size; ++i) {
-        if (logits[i] > max_logit) {
-          max_logit = logits[i];
-          next_token = i;
+      for (int step = 0; step < max_tokens; ++step) {
+        int err = this->streaming_model->decode_step(
+            &this->streaming_state, current_token, logits.data());
+        if (err != 0) {
+          break;
         }
+
+        // Argmax
+        int next_token = 0;
+        float max_logit = logits[0];
+        for (int i = 1; i < config.vocab_size; ++i) {
+          if (logits[i] > max_logit) {
+            max_logit = logits[i];
+            next_token = i;
+          }
+        }
+
+        tokens.push_back(next_token);
+        current_token = next_token;
+
+        if (next_token == config.eos_id) break;
       }
-
-      tokens.push_back(next_token);
-      current_token = next_token;
-
-      if (next_token == config.eos_id) break;
     }
   }
 
-  // Save tokens for word timestamp alignment
+  // Save tokens for word timestamp alignment / next speculative draft
   this->last_streaming_tokens.clear();
   for (auto t : tokens) {
     this->last_streaming_tokens.push_back(static_cast<int>(t));

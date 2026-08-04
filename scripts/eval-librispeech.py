@@ -148,8 +148,149 @@ def parse_args():
         default=0.5,
         help="Update interval (s) for moonshine_c_streaming (default 0.5).",
     )
+    parser.add_argument(
+        "--use-speculative-decoding",
+        action="store_true",
+        help="Enable decode_full speculative verify on streaming re-decodes. "
+        "Implies --backend moonshine_c_streaming (batch has only one decode).",
+    )
+    parser.add_argument(
+        "--suite",
+        default=None,
+        help="Run a named panel: 'librispeech' (test-clean only), 'official' "
+        "(Open ASR Leaderboard 7-set average), 'suite' (internal hourly panel), "
+        "or a comma-separated list of set names. Overrides --dataset-config.",
+    )
+    parser.add_argument(
+        "--sample-size",
+        default=None,
+        help="Limit per set: N for all, or 'N,librispeech=0' style overrides "
+        "(0 = full split). Default: full for librispeech*, 400 for others when "
+        "using --suite.",
+    )
     parser.add_argument("--verbose", action="store_true")
     return parser.parse_args()
+
+
+# Matches moonshine-internal-2/scripts/eval_seq2seq_librispeech.py.
+ESB_REPO = "hf-audio/esb-datasets-test-only-sorted"
+OFFICIAL_REPO = "hf-audio/open-asr-leaderboard"
+
+EVAL_SETS = {
+    "librispeech": {
+        "dataset": ESB_REPO,
+        "name": "librispeech",
+        "split": "test.clean",
+        "text_column": "text",
+    },
+    "librispeech_other": {
+        "dataset": ESB_REPO,
+        "name": "librispeech",
+        "split": "test.other",
+        "text_column": "text",
+    },
+    "ami": {
+        "dataset": ESB_REPO,
+        "name": "ami",
+        "split": "test",
+        "text_column": "text",
+    },
+    "earnings22": {
+        "dataset": ESB_REPO,
+        "name": "earnings22",
+        "split": "test",
+        "text_column": "text",
+    },
+    "voxpopuli": {
+        "dataset": ESB_REPO,
+        "name": "voxpopuli",
+        "split": "test",
+        "text_column": "text",
+    },
+    "spgispeech": {
+        "dataset": OFFICIAL_REPO,
+        "name": "spgispeech",
+        "split": "test",
+        "text_column": "text",
+    },
+    "common_voice": {
+        "dataset": ESB_REPO,
+        "name": "common_voice",
+        "split": "test",
+        "text_column": "text",
+    },
+    "gigaspeech": {
+        "dataset": ESB_REPO,
+        "name": "gigaspeech",
+        "split": "test",
+        "text_column": "text",
+    },
+}
+
+SUITE = [
+    "librispeech",
+    "ami",
+    "earnings22",
+    "voxpopuli",
+    "common_voice",
+    "gigaspeech",
+]
+
+OFFICIAL = [
+    "ami",
+    "earnings22",
+    "gigaspeech",
+    "librispeech",
+    "librispeech_other",
+    "spgispeech",
+    "voxpopuli",
+]
+
+
+def resolve_suite(suite_arg):
+    if suite_arg is None:
+        return None
+    if suite_arg == "librispeech":
+        return ["librispeech"]
+    if suite_arg == "suite":
+        return list(SUITE)
+    if suite_arg == "official":
+        return list(OFFICIAL)
+    return [s.strip() for s in suite_arg.split(",") if s.strip()]
+
+
+def parse_sample_size(sample_size_arg, set_names):
+    """Return {set_name: limit_or_None} where None means full split."""
+    defaults = {}
+    for name in set_names:
+        if name.startswith("librispeech"):
+            defaults[name] = None  # full
+        else:
+            defaults[name] = 400
+    if sample_size_arg is None:
+        return defaults
+    # Forms: "500" or "400,librispeech=0,ami=200"
+    parts = [p.strip() for p in sample_size_arg.split(",") if p.strip()]
+    global_n = None
+    for part in parts:
+        if "=" in part:
+            k, v = part.split("=", 1)
+            n = int(v)
+            defaults[k] = None if n == 0 else n
+        else:
+            global_n = int(part)
+    if global_n is not None:
+        for name in set_names:
+            if name not in sample_size_arg:  # crude; overrides already applied
+                pass
+        # Apply global only where not explicitly overridden in the string.
+        overridden = {
+            p.split("=", 1)[0] for p in parts if "=" in p
+        }
+        for name in set_names:
+            if name not in overridden:
+                defaults[name] = None if global_n == 0 else global_n
+    return defaults
 
 
 def detect_text_column(sample):
@@ -206,6 +347,8 @@ def make_moonshine_c_backend(args, streaming):
         path, arch = get_model_for_language(language, arch)
 
     options = {"max_tokens_per_second": args.max_tokens_per_second}
+    if getattr(args, "use_speculative_decoding", False):
+        options["use_speculative_decoding"] = True
     if not args.enable_vad:
         # Disable VAD: threshold 0 turns off speech gating, and a huge max
         # segment duration stops the transcriber chopping the clip into
@@ -216,6 +359,8 @@ def make_moonshine_c_backend(args, streaming):
 
     transcriber = Transcriber(path, arch, options=options)
     print(f"Loaded C library model from {path} (arch={arch})", file=sys.stderr)
+    if options.get("use_speculative_decoding"):
+        print("Speculative decoding: ENABLED", file=sys.stderr)
 
     def transcribe_batch(audio, sample_rate):
         transcript = transcriber.transcribe_without_streaming(
@@ -288,27 +433,29 @@ def make_hf_backend(args):
     return transcribe
 
 
-def main():
-    args = parse_args()
-    dataset = load_eval_dataset(args)
+def evaluate_one(args, transcribe, dataset_config, split, text_column_override,
+                 limit, label):
+    print(
+        f"Loading {args.dataset} ({dataset_config}, split={split})"
+        + (f" limit={limit}" if limit else "")
+        + "...",
+        file=sys.stderr,
+    )
+    dataset = load_dataset(args.dataset, dataset_config, split=split)
+    if limit is not None:
+        # ESB splits are sorted longest-first; a plain head() would only score
+        # the longest clips. Seeded shuffle matches the internal eval harness.
+        dataset = dataset.shuffle(seed=0).select(range(min(limit, len(dataset))))
+    dataset = dataset.cast_column("audio", Audio(decode=False))
 
-    text_column = args.text_column or detect_text_column(dataset[0])
-
-    if args.backend == "hf":
-        transcribe = make_hf_backend(args)
-    else:
-        transcribe = make_moonshine_c_backend(
-            args, streaming=(args.backend == "moonshine_c_streaming")
-        )
+    text_column = text_column_override or detect_text_column(dataset[0])
 
     references = []
     hypotheses = []
-    per_sample_wer = []
-    per_sample_weight = []
     total_audio_seconds = 0.0
 
     start_time = time.time()
-    for sample in tqdm(dataset, desc=args.backend):
+    for sample in tqdm(dataset, desc=label):
         audio, sample_rate = decode_audio(sample["audio"])
         total_audio_seconds += len(audio) / sample_rate
 
@@ -321,46 +468,132 @@ def main():
         references.append(reference)
         hypotheses.append(hypothesis)
 
-        measures = process_words([reference], [hypothesis])
-        errors = measures.substitutions + measures.deletions + measures.insertions
-        n_words = measures.hits + measures.substitutions + measures.deletions
-        per_sample_wer.append(errors / max(1, n_words))
-        # Weight by character count to match eval-model-accuracy.py.
-        per_sample_weight.append(len(reference))
-
         if args.verbose:
             print(f"\nREF: {reference}", file=sys.stderr)
             print(f"HYP: {hypothesis}", file=sys.stderr)
 
     elapsed = time.time() - start_time
+    if not references:
+        return {
+            "label": label,
+            "n": 0,
+            "wer": None,
+            "words": 0,
+            "audio_s": total_audio_seconds,
+            "elapsed_s": elapsed,
+        }
 
     corpus = process_words(references, hypotheses)
     corpus_errors = corpus.substitutions + corpus.deletions + corpus.insertions
     corpus_words = corpus.hits + corpus.substitutions + corpus.deletions
     corpus_wer = corpus_errors / max(1, corpus_words)
+    return {
+        "label": label,
+        "n": len(references),
+        "wer": corpus_wer,
+        "words": corpus_words,
+        "subs": corpus.substitutions,
+        "dels": corpus.deletions,
+        "ins": corpus.insertions,
+        "audio_s": total_audio_seconds,
+        "elapsed_s": elapsed,
+    }
 
-    weights = np.asarray(per_sample_weight, dtype=np.float64)
-    char_weighted_wer = float(
-        np.average(per_sample_wer, weights=weights)
-    ) if len(per_sample_wer) else 0.0
+
+def main():
+    args = parse_args()
+
+    if args.use_speculative_decoding and args.backend != "moonshine_c_streaming":
+        print(
+            "Note: --use-speculative-decoding forces moonshine_c_streaming "
+            "(batch path only decodes once).",
+            file=sys.stderr,
+        )
+        args.backend = "moonshine_c_streaming"
+
+    suite = resolve_suite(args.suite)
+
+    if args.backend == "hf":
+        transcribe = make_hf_backend(args)
+    else:
+        transcribe = make_moonshine_c_backend(
+            args, streaming=(args.backend == "moonshine_c_streaming")
+        )
+
+    if suite is None:
+        # Legacy single-set mode.
+        dataset = load_eval_dataset(args)
+        text_column = args.text_column or detect_text_column(dataset[0])
+        # Reuse evaluate_one via a thin adapter: reload is fine / consistent.
+        result = evaluate_one(
+            args,
+            transcribe,
+            args.dataset_config,
+            args.split,
+            text_column,
+            args.limit,
+            args.dataset_config,
+        )
+        results = [result]
+    else:
+        limits = parse_sample_size(args.sample_size, suite)
+        if args.limit is not None:
+            for k in list(limits.keys()):
+                limits[k] = args.limit
+        results = []
+        for name in suite:
+            if name not in EVAL_SETS:
+                raise SystemExit(f"Unknown eval set '{name}'. Known: {sorted(EVAL_SETS)}")
+            cfg = EVAL_SETS[name]
+            # Temporarily point args.dataset at the set's repo.
+            saved_dataset = args.dataset
+            args.dataset = cfg["dataset"]
+            result = evaluate_one(
+                args,
+                transcribe,
+                cfg["name"],
+                cfg["split"],
+                cfg.get("text_column"),
+                limits.get(name),
+                name,
+            )
+            args.dataset = saved_dataset
+            results.append(result)
+            wer_s = f"{result['wer']:.2%}" if result["wer"] is not None else "n/a"
+            print(
+                f"{name} WER = {wer_s} (n={result['n']})",
+                file=sys.stderr,
+            )
 
     print("\n" + "=" * 60)
     print(f"Backend:            {args.backend}")
     print(f"Model arch:         {args.model_arch}")
+    print(f"Speculative:        {args.use_speculative_decoding}")
     if args.backend == "hf":
         print(f"HF checkpoint:      {args.hf_model or HF_DEFAULT_CHECKPOINT[args.model_arch]}")
     else:
         print(f"VAD:                {'enabled' if args.enable_vad else 'DISABLED'}")
         print(f"max_tokens_per_sec: {args.max_tokens_per_second}")
-    print(f"Utterances:         {len(references)}")
-    print(f"Reference words:    {corpus_words}")
+        if args.backend == "moonshine_c_streaming":
+            print(f"update_interval:    {args.update_interval}s")
+            print(f"chunk_duration:     {args.chunk_duration}s")
     print("-" * 60)
-    print(f"Corpus WER (OpenASR method):        {corpus_wer:.2%}")
-    print(f"  substitutions={corpus.substitutions} deletions={corpus.deletions} insertions={corpus.insertions}")
-    print(f"Char-weighted avg WER (old script): {char_weighted_wer:.2%}")
-    print("-" * 60)
-    print(f"Audio duration:     {total_audio_seconds:.1f}s")
-    print(f"Wall time:          {elapsed:.1f}s  (RTF={elapsed / max(1e-9, total_audio_seconds):.3f})")
+    wers = []
+    for r in results:
+        if r["wer"] is None:
+            print(f"{r['label']:20s}  n/a (n=0)")
+            continue
+        print(
+            f"{r['label']:20s}  WER={r['wer']:.2%}  n={r['n']}  "
+            f"words={r['words']}  "
+            f"S/D/I={r.get('subs',0)}/{r.get('dels',0)}/{r.get('ins',0)}  "
+            f"RTF={r['elapsed_s'] / max(1e-9, r['audio_s']):.3f}"
+        )
+        wers.append(r["wer"])
+    if len(wers) > 1:
+        macro = float(np.mean(wers))
+        print("-" * 60)
+        print(f"{'macro average':20s}  WER={macro:.2%}  ({len(wers)} sets)")
     print("=" * 60)
 
 

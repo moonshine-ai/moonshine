@@ -168,6 +168,11 @@ struct TranscriberOptions {
   size_t vad_look_behind_sample_count = 8192;
   float vad_max_segment_duration = 15.0f;
   float max_tokens_per_second = 6.5f;
+  // When true, streaming re-decodes verify the previous hypothesis with
+  // decode_full and continue from the first mismatch instead of greedy
+  // redecode from BOS. Experimental: current quantized decoder_kv activation
+  // scales make multi-token verify inequivalent to step-by-step AR.
+  bool use_speculative_decoding = false;
   // Minimum seconds of new audio between diarization re-clustering passes.
   float diarization_cluster_cadence = 2.0f;
   // Seconds between diarization segmentation/embedding model runs. Zero
