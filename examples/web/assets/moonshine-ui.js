@@ -435,6 +435,28 @@ export function describeError(err) {
 /** Where the chosen capture device is remembered across pages and reloads. */
 const DEVICE_KEY = 'moonshine.audioInputDeviceId';
 
+/** Where the snippet language tab is remembered across demo pages. */
+const SNIPPET_LANGUAGE_KEY = 'moonshine.snippetLanguage';
+
+/** The language tab the visitor last picked, or null if they have not chosen. */
+export function preferredSnippetLanguage() {
+  try {
+    return localStorage.getItem(SNIPPET_LANGUAGE_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Remembers which snippet language tab to open on the next demo page. */
+export function setPreferredSnippetLanguage(language) {
+  try {
+    if (language) localStorage.setItem(SNIPPET_LANGUAGE_KEY, language);
+    else localStorage.removeItem(SNIPPET_LANGUAGE_KEY);
+  } catch {
+    // Not being able to remember is fine; the tabs still switch for this page.
+  }
+}
+
 /**
  * The capture device the visitor picked, or null to let the browser choose.
  *
@@ -740,7 +762,7 @@ function codeLines(code, language) {
  *   `path`, added to the link as a `#L12-L34` anchor. Per-tab as
  *   `tabs[].lines`.
  * @param {string} [options.active]  Id of the tab to open on. Defaults to the
- *   first.
+ *   remembered choice, then the first tab.
  * @param {(pane: object, index: number) => void} [options.onTab]  Called when
  *   the reader switches language, and once on creation.
  */
@@ -756,8 +778,9 @@ export function codePanel({
   onTab,
 }) {
   const panes = tabs ?? [{ id: language, label: language, file, path, lines, code, install }];
+  const preferred = active ?? preferredSnippetLanguage();
   const initial = Math.max(
-    panes.findIndex((pane) => pane.id === active),
+    panes.findIndex((pane) => pane.id === preferred),
     0,
   );
   const installLine = (pane) =>
@@ -839,7 +862,13 @@ export function codePanel({
   show(initial);
 
   for (const tab of wrap.querySelectorAll('[data-tab]')) {
-    tab.addEventListener('click', () => show(Number(tab.dataset.tab)));
+    tab.addEventListener('click', () => {
+      const index = Number(tab.dataset.tab);
+      show(index);
+      // Only write on a click: opening a page that lacks the saved language
+      // falls back to the first tab, and must not erase the preference.
+      setPreferredSnippetLanguage(panes[index].id);
+    });
   }
 
   const copyButton = wrap.querySelector('[data-copy]');
