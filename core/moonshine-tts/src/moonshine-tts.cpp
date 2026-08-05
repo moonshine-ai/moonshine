@@ -782,8 +782,7 @@ std::vector<std::string> kokoro_vocoder_dependency_keys_with_options(
     vid = select_voice_id(profile.kokoro_lang, opt.voice, profile.default_voice,
                           voices_dir, &opt.files, g2p.g2p_root);
   }
-  return {std::string(kTtsKokoroModelKey),
-          std::string(kTtsKokoroConfigJsonKey),
+  return {std::string(kTtsKokoroModelKey), std::string(kTtsKokoroConfigJsonKey),
           std::string("kokoro/voices/") + vid + ".kokorovoice"};
 }
 
@@ -1061,8 +1060,7 @@ struct KokoroTtsEngine {
     LOGF_IF(log_profiling_, "KokoroTtsEngine: model='%s', config='%s'",
             model_path_.c_str(), config_path_.c_str());
 
-    const auto mit =
-        tts_files_.entries.find(std::string(kTtsKokoroModelKey));
+    const auto mit = tts_files_.entries.find(std::string(kTtsKokoroModelKey));
     const auto cit =
         tts_files_.entries.find(std::string(kTtsKokoroConfigJsonKey));
     if (mit == tts_files_.entries.end() || cit == tts_files_.entries.end()) {

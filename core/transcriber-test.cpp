@@ -825,9 +825,9 @@ TEST_CASE("transcriber-test") {
     // One turn per line plus one straddling the boundary, so that both the
     // turns that touch a line's edges exactly and the one that crosses it are
     // covered.
-    const std::vector<SpeakerTurn> turns = {
-        make_turn(0.0f, 10.0f, 7), make_turn(5.0f, 10.0f, 8),
-        make_turn(10.0f, 10.0f, 9)};
+    const std::vector<SpeakerTurn> turns = {make_turn(0.0f, 10.0f, 7),
+                                            make_turn(5.0f, 10.0f, 8),
+                                            make_turn(10.0f, 10.0f, 9)};
 
     REQUIRE(Transcriber::apply_speaker_turns_to_lines(turns, &output));
 
@@ -891,7 +891,7 @@ TEST_CASE("transcriber-test") {
     std::vector<SpeakerTurn> turns;
     turns.reserve(kLines);
     for (size_t i = 0; i < kLines; i++) {
-      const float start = (float)(i)*4.0f;
+      const float start = (float)(i) * 4.0f;
       TranscriberLine line;
       line.id = (uint64_t)(i + 1);
       line.start_time = start;
@@ -916,7 +916,7 @@ TEST_CASE("transcriber-test") {
       const std::vector<SpeakerTurn> &spans =
           output.internal_lines_map.at((uint64_t)(i + 1)).speaker_spans;
       if (spans.size() == 1 && spans[0].speaker_id == (uint64_t)(i % 3) &&
-          std::abs(spans[0].start_time - (float)(i)*4.0f) < 0.001f &&
+          std::abs(spans[0].start_time - (float)(i) * 4.0f) < 0.001f &&
           std::abs(spans[0].duration - 4.0f) < 0.001f) {
         exact += 1;
       }

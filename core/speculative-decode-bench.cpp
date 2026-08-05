@@ -161,7 +161,8 @@ std::vector<int> content_tokens(const std::vector<int> &tokens, int bos_id,
   return out;
 }
 
-int longest_common_prefix(const std::vector<int> &a, const std::vector<int> &b) {
+int longest_common_prefix(const std::vector<int> &a,
+                          const std::vector<int> &b) {
   const int n = static_cast<int>(std::min(a.size(), b.size()));
   int i = 0;
   for (; i < n; ++i) {
@@ -246,9 +247,9 @@ FileResult run_file(MoonshineStreamingModel &model, const std::string &wav_path,
   audio.resize((audio.size() / kChunkSamples) * kChunkSamples);
   result.duration_sec = audio.size() / static_cast<float>(kSampleRate);
 
-  const int samples_per_update =
-      std::max(kChunkSamples,
-               static_cast<int>(std::lround(update_interval_sec * kSampleRate)));
+  const int samples_per_update = std::max(
+      kChunkSamples,
+      static_cast<int>(std::lround(update_interval_sec * kSampleRate)));
   const int updates_per_file =
       static_cast<int>(audio.size() / samples_per_update);
   if (updates_per_file < 2) {
@@ -263,9 +264,8 @@ FileResult run_file(MoonshineStreamingModel &model, const std::string &wav_path,
 
   size_t processed = 0;
   while (processed + kChunkSamples <= audio.size()) {
-    const size_t update_end =
-        std::min(processed + static_cast<size_t>(samples_per_update),
-                 audio.size());
+    const size_t update_end = std::min(
+        processed + static_cast<size_t>(samples_per_update), audio.size());
     // Feed new audio chunks for this update.
     while (processed + kChunkSamples <= update_end) {
       if (model.process_audio_chunk(state, audio.data() + processed,
@@ -288,9 +288,9 @@ FileResult run_file(MoonshineStreamingModel &model, const std::string &wav_path,
     // Match decode_full's token budget (memory frames are 20 ms each).
     const float duration_sec = processed / static_cast<float>(kSampleRate);
     const float memory_sec = state->memory_len * 0.020f;
-    const int max_tokens = std::min(
-        static_cast<int>(std::ceil(memory_sec * 6.5f)),
-        cfg.max_seq_len > 0 ? cfg.max_seq_len : 256);
+    const int max_tokens =
+        std::min(static_cast<int>(std::ceil(memory_sec * 6.5f)),
+                 cfg.max_seq_len > 0 ? cfg.max_seq_len : 256);
 
     UpdateStats stats;
     stats.audio_sec = duration_sec;
@@ -314,8 +314,7 @@ FileResult run_file(MoonshineStreamingModel &model, const std::string &wav_path,
 
       // Speculative decode_full with previous content tokens.
       {
-        const int *draft =
-            prev_content.empty() ? nullptr : prev_content.data();
+        const int *draft = prev_content.empty() ? nullptr : prev_content.data();
         const int draft_len = static_cast<int>(prev_content.size());
         model.decoder_reset(state);
         int *out = nullptr;
@@ -360,8 +359,7 @@ FileResult run_file(MoonshineStreamingModel &model, const std::string &wav_path,
         content_tokens(greedy_tokens, cfg.bos_id, cfg.eos_id);
     const std::vector<int> speculative_content =
         content_tokens(speculative_tokens, cfg.bos_id, cfg.eos_id);
-    stats.accepted_prefix =
-        longest_common_prefix(prev_content, greedy_content);
+    stats.accepted_prefix = longest_common_prefix(prev_content, greedy_content);
     stats.match = (greedy_content == speculative_content);
 
     result.updates.push_back(stats);
@@ -409,11 +407,12 @@ void print_file_result(const FileResult &result) {
   const double s = mean(spec);
   const double n = mean(nospec);
   const double speedup = s > 0 ? g / s : 0.0;
-  printf("means: greedy=%.2fms  speculative=%.2fms  decode_full=%.2fms  "
-         "speedup vs greedy=%.2fx  mean accept=%.1f%%  mismatches=%d/%zu "
-         "(drafted updates=%d)\n",
-         g, s, n, speedup, mean(accept_rates), mismatches,
-         result.updates.size(), speculative_updates);
+  printf(
+      "means: greedy=%.2fms  speculative=%.2fms  decode_full=%.2fms  "
+      "speedup vs greedy=%.2fx  mean accept=%.1f%%  mismatches=%d/%zu "
+      "(drafted updates=%d)\n",
+      g, s, n, speedup, mean(accept_rates), mismatches, result.updates.size(),
+      speculative_updates);
 }
 
 }  // namespace

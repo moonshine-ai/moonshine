@@ -37,8 +37,8 @@ inline std::string ort_only_message(std::string_view what) {
 inline void require_ort_model_path(const std::filesystem::path& path,
                                    std::string_view what) {
   if (is_onnx_model_name(path.filename().string())) {
-    throw std::runtime_error(detail::ort_only_message(what) + " Got: " +
-                             path.string());
+    throw std::runtime_error(detail::ort_only_message(what) +
+                             " Got: " + path.string());
   }
 }
 

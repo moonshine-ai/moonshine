@@ -32,9 +32,10 @@ struct G2pTransformerModel {
 /// Loads *model_file* from *opt*'s asset bundle when available, else from disk
 /// under *model_dir*.
 ///
-/// Prefers the split ORT pair (``<stem>.model.ort`` plus ``<stem>.weights.ort``)
-/// and falls back to a single model, which itself resolves a sibling ``.ort``
-/// ahead of the named ``.onnx``. *owner* only labels error messages.
+/// Prefers the split ORT pair (``<stem>.model.ort`` plus
+/// ``<stem>.weights.ort``) and falls back to a single model, which itself
+/// resolves a sibling ``.ort`` ahead of the named ``.onnx``. *owner* only
+/// labels error messages.
 G2pTransformerModel load_g2p_transformer_model(
     Ort::Env& env, const MoonshineG2POptions* opt, std::string_view bundle_key,
     std::string_view model_file, const std::filesystem::path& model_dir,

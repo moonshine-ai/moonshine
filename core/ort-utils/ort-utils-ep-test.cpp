@@ -71,8 +71,8 @@ TEST_CASE("ort_append_execution_providers") {
   // fails the build under -Werror.
 #if defined(__APPLE__) || defined(__ANDROID__)
   auto check_optional_provider = [&](const char *name) {
-    OrtStatus *status = ort_append_execution_providers(api, opts, {name},
-                                                       nullptr);
+    OrtStatus *status =
+        ort_append_execution_providers(api, opts, {name}, nullptr);
     if (status == nullptr) {
       return;
     }
@@ -166,7 +166,9 @@ TEST_CASE("ort session with execution providers") {
 #endif
 
 #if defined(__ANDROID__)
-  SUBCASE("nnapi session creation") { check_optional_provider_session("nnapi"); }
+  SUBCASE("nnapi session creation") {
+    check_optional_provider_session("nnapi");
+  }
 #endif
 
   api->ReleaseEnv(env);

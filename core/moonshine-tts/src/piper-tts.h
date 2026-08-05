@@ -114,8 +114,9 @@ class PiperTTS {
 /// (basename or stem), it selects that voice instead of the table default (same
 /// rules as ``PiperTTSOptions::onnx_model``).
 ///
-/// A voice ships either as a split ORT pair or as a single ``.ort``, so the model
-/// side is a list; see ``piper_voice_model_filenames``. The config keeps its
+/// A voice ships either as a split ORT pair or as a single ``.ort``, so the
+/// model side is a list; see ``piper_voice_model_filenames``. The config keeps
+/// its
 /// ``.onnx.json`` name in both cases.
 bool piper_default_model_bundle_relative_paths(
     std::string_view lang_cli, const MoonshineG2POptions& opt,

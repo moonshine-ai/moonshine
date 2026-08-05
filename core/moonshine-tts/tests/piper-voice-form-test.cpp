@@ -1,12 +1,12 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
-#include "piper-voice-catalog.h"
-
 #include <doctest/doctest.h>
 
 #include <filesystem>
 #include <set>
 #include <string>
 #include <vector>
+
+#include "piper-voice-catalog.h"
 
 using namespace moonshine_tts;
 
@@ -51,8 +51,7 @@ TEST_CASE("catalog voice form matches the shipped files") {
       const std::string name = ent.path().filename().string();
       // Longest first: ".ort" would otherwise swallow the ".weights" in
       // "<stem>.weights.ort" and invent a voice named "<stem>.weights".
-      for (const std::string suffix :
-           {".weights.ort", ".model.ort", ".ort"}) {
+      for (const std::string suffix : {".weights.ort", ".model.ort", ".ort"}) {
         if (name.size() > suffix.size() &&
             name.compare(name.size() - suffix.size(), suffix.size(), suffix) ==
                 0) {

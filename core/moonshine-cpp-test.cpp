@@ -539,7 +539,8 @@ TEST_CASE("moonshine-cpp-test") {
     moonshine::TextToSpeech tts("en_us", {{"g2p_root", g2p_root}});
     CHECK_FALSE(tts.isCloned());
 
-    // The transcript is supplied here so the test needs no speech-to-text model.
+    // The transcript is supplied here so the test needs no speech-to-text
+    // model.
     tts.cloneFrom(audio, sample_rate, "Ever tried. Ever failed. No matter.");
     CHECK(tts.isCloned());
 

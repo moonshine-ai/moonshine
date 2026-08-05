@@ -329,8 +329,7 @@ std::vector<std::string> diarization_component_files() {
 
 ModelDependencies diarization_model_dependencies() {
   ModelDependencies deps;
-  deps.groups.push_back(make_group(std::string(kCdnModelBase) +
-                                       kDiarizationDir,
+  deps.groups.push_back(make_group(std::string(kCdnModelBase) + kDiarizationDir,
                                    diarization_component_files()));
   return deps;
 }

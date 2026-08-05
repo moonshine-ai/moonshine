@@ -19,8 +19,7 @@ TEST_CASE(
       r::moonshine_tts_bundled_data_dir_relative() / "ja" / "wiki-text.txt";
   const std::filesystem::path golden =
       r::tests_data_dir(repo) / "ja" / "onnx_g2p_wiki_100.txt";
-  if (!r::model_present(model) ||
-      !std::filesystem::is_regular_file(dict) ||
+  if (!r::model_present(model) || !std::filesystem::is_regular_file(dict) ||
       !std::filesystem::is_regular_file(wiki) ||
       !std::filesystem::is_regular_file(golden)) {
     return;

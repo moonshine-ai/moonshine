@@ -771,8 +771,7 @@ std::string ArabicDiacOnnx::diacritize(std::string_view text_utf8) const {
   // its MatMul takes a much slower path below this many rows. Padding up costs
   // nothing: attention_mask zeroes the padding out.
   const int64_t padded =
-      split_weights_.empty() ? T
-                             : std::max(T, kSplitWeightsMinSequenceLength);
+      split_weights_.empty() ? T : std::max(T, kSplitWeightsMinSequenceLength);
   ids_mut.resize(static_cast<size_t>(padded), pad_id_);
   std::vector<int64_t> mask(static_cast<size_t>(padded), 0);
   for (int64_t i = 0; i < T; ++i) {
@@ -792,9 +791,8 @@ std::string ArabicDiacOnnx::diacritize(std::string_view text_utf8) const {
   append_split_weight_inputs(split_weights_, mem_, inputs, in_names);
 
   const char* out_names[] = {logits_output_name_.c_str()};
-  auto outputs =
-      session_->Run(Ort::RunOptions{nullptr}, in_names.data(), inputs.data(),
-                    inputs.size(), out_names, 1);
+  auto outputs = session_->Run(Ort::RunOptions{nullptr}, in_names.data(),
+                               inputs.data(), inputs.size(), out_names, 1);
   const float* logits = outputs[0].GetTensorData<float>();
   const auto info = outputs[0].GetTensorTypeAndShapeInfo();
   const auto oshape = info.GetShape();

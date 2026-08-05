@@ -13,8 +13,7 @@ TEST_CASE("korean tok pos: single sentence matches reference file") {
       r::moonshine_tts_bundled_data_dir_relative());
   const std::filesystem::path golden =
       r::tests_data_dir(repo) / "ko" / "tok_pos_sample.txt";
-  if (!r::model_present(model) ||
-      !std::filesystem::is_regular_file(golden)) {
+  if (!r::model_present(model) || !std::filesystem::is_regular_file(golden)) {
     return;
   }
   const std::string expected = r::load_ref_text_trimmed(golden);
@@ -35,8 +34,7 @@ TEST_CASE(
       r::moonshine_tts_bundled_data_dir_relative() / "ko" / "wiki-text.txt";
   const std::filesystem::path golden =
       r::tests_data_dir(repo) / "ko" / "tok_pos_wiki_100.txt";
-  if (!r::model_present(model) ||
-      !std::filesystem::is_regular_file(wiki) ||
+  if (!r::model_present(model) || !std::filesystem::is_regular_file(wiki) ||
       !std::filesystem::is_regular_file(golden)) {
     return;
   }

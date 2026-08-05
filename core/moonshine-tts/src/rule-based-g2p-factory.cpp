@@ -20,7 +20,6 @@
 #include "english.h"
 #include "french.h"
 #include "g2p-path.h"
-#include "ort-session-options.h"
 #include "g2p-transformer-model.h"
 #include "german.h"
 #include "hindi.h"
@@ -28,6 +27,7 @@
 #include "japanese.h"
 #include "korean.h"
 #include "moonshine-g2p-options.h"
+#include "ort-session-options.h"
 #include "portuguese.h"
 #include "rule-based-g2p.h"
 #include "russian.h"
@@ -165,9 +165,10 @@ bool g2p_onnx_bundle_includes_model_file(
     // meta.json, in which case both halves must be there. See split-weights.h.
     const std::string split_model = g2p_split_model_file(onnx_name);
     const std::string split_weights = g2p_split_weights_file(onnx_name);
-    const bool split_in_bundle =
-        o.asset_is_available(g2p_bundle_file_key(bundle_dir_key, split_model)) &&
-        o.asset_is_available(g2p_bundle_file_key(bundle_dir_key, split_weights));
+    const bool split_in_bundle = o.asset_is_available(g2p_bundle_file_key(
+                                     bundle_dir_key, split_model)) &&
+                                 o.asset_is_available(g2p_bundle_file_key(
+                                     bundle_dir_key, split_weights));
     const bool split_on_disk =
         std::filesystem::is_regular_file(disk_dir / split_model) &&
         std::filesystem::is_regular_file(disk_dir / split_weights);

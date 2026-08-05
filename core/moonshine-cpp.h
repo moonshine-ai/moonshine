@@ -738,11 +738,11 @@ struct SpeechClip {
   float speechDuration;
   /// Whether a window with enough speech in it was found.
   bool isComplete;
-  /// UTF-8 transcript when create-time clone ASR refine ran (extract is VAD-only).
+  /// UTF-8 transcript when create-time clone ASR refine ran (extract is
+  /// VAD-only).
   std::string transcript;
 
-  SpeechClip()
-      : startTime(0.0f), speechDuration(0.0f), isComplete(false) {}
+  SpeechClip() : startTime(0.0f), speechDuration(0.0f), isComplete(false) {}
 };
 
 /// Finds the best short window of speech in a recording.
@@ -760,8 +760,7 @@ struct SpeechClip {
 /// ``tail_pad_seconds``, ``max_extension_seconds``.
 /// @throws MoonshineException if the search fails
 SpeechClip extractSpeechClip(const std::vector<float> &audioData,
-                             int32_t sampleRate,
-                             int32_t ttsSynthesizerHandle,
+                             int32_t sampleRate, int32_t ttsSynthesizerHandle,
                              const Options &options = {});
 
 /// Captures the short reference clip that zero-shot voice cloning needs.

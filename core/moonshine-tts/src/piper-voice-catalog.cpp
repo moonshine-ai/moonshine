@@ -1,7 +1,8 @@
 // Bundled Piper voice stems, kept in sync with
 // ``moonshine-tts/data/*/piper-voices/``. Regenerate the initializer from that
 // tree when adding voices (see repo ``data`` layout). Voices are stored in ORT
-// format, so a stem's files are ``<stem>.model.ort`` + ``<stem>.weights.ort`` or
+// format, so a stem's files are ``<stem>.model.ort`` + ``<stem>.weights.ort``
+// or
 // ``<stem>.ort``, always beside a ``<stem>.onnx.json`` config;
 // ``piper_voice_form_test`` checks this file against what is actually there.
 
@@ -129,8 +130,8 @@ const std::vector<std::string>& piper_bundled_voice_stems_for_data_subdir(
 
 bool piper_voice_ships_split(const std::string& stem) {
   // Almost every voice is quantized and so ships split. Listing the exceptions
-  // keeps this table short; ``piper_voice_form_test`` fails if the data tree and
-  // this set disagree.
+  // keeps this table short; ``piper_voice_form_test`` fails if the data tree
+  // and this set disagree.
   static const std::unordered_set<std::string> k_single_file_voices = {
       "en_US-saikat",
   };

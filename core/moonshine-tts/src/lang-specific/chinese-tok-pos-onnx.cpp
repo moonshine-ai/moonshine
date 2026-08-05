@@ -754,12 +754,11 @@ std::vector<std::pair<std::string, std::string>> ChineseTokPosOnnx::annotate(
 
     const int64_t T = static_cast<int64_t>(enc.input_ids.size());
     // A split model's weights are graph inputs and so cannot be pre-packed, and
-    // its MatMul takes a much slower path below this many rows. Padding up costs
-    // nothing: attention_mask zeroes the padding out.
-    const int64_t padded =
-        split_weights_.empty()
-            ? T
-            : std::max(T, kSplitWeightsMinSequenceLength);
+    // its MatMul takes a much slower path below this many rows. Padding up
+    // costs nothing: attention_mask zeroes the padding out.
+    const int64_t padded = split_weights_.empty()
+                               ? T
+                               : std::max(T, kSplitWeightsMinSequenceLength);
     std::vector<int64_t> ids = enc.input_ids;
     ids.resize(static_cast<size_t>(padded), pad_id_);
     std::vector<int64_t> mask(static_cast<size_t>(padded), 0);
@@ -780,9 +779,8 @@ std::vector<std::pair<std::string, std::string>> ChineseTokPosOnnx::annotate(
     append_split_weight_inputs(split_weights_, mem_, inputs, in_names);
 
     const char* out_names[] = {logits_output_name_.c_str()};
-    auto outputs =
-        session_->Run(Ort::RunOptions{nullptr}, in_names.data(), inputs.data(),
-                      inputs.size(), out_names, 1);
+    auto outputs = session_->Run(Ort::RunOptions{nullptr}, in_names.data(),
+                                 inputs.data(), inputs.size(), out_names, 1);
     const float* logits = outputs[0].GetTensorData<float>();
     const auto info = outputs[0].GetTensorTypeAndShapeInfo();
     const auto oshape = info.GetShape();

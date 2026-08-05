@@ -86,7 +86,8 @@ void ignore_status(OrtStatus *status) {
 struct OrtEnvHandle {
   OrtEnv *env = nullptr;
   OrtEnvHandle() {
-    ignore_status(api()->CreateEnv(ORT_LOGGING_LEVEL_ERROR, "load-sweep", &env));
+    ignore_status(
+        api()->CreateEnv(ORT_LOGGING_LEVEL_ERROR, "load-sweep", &env));
   }
   ~OrtEnvHandle() {
     if (env != nullptr) {
@@ -116,8 +117,7 @@ OrtSessionOptions *make_options() {
 std::string session_error(OrtEnv *env, const fs::path &model) {
   OrtSessionOptions *opts = make_options();
   OrtSession *session = nullptr;
-  OrtStatus *status =
-      api()->CreateSession(env, model.c_str(), opts, &session);
+  OrtStatus *status = api()->CreateSession(env, model.c_str(), opts, &session);
   std::string message;
   if (status != nullptr) {
     message = api()->GetErrorMessage(status);
@@ -162,11 +162,10 @@ std::string session_error_from_memory(OrtEnv *env, const void *data,
 std::vector<fs::path> model_roots() {
   std::vector<fs::path> roots;
   const char *override_root = std::getenv("MOONSHINE_MODEL_ROOT");
-  fs::path dir = override_root != nullptr ? fs::path(override_root)
-                                          : fs::current_path();
+  fs::path dir =
+      override_root != nullptr ? fs::path(override_root) : fs::current_path();
   for (int up = 0; up < 4; ++up) {
-    for (const char *relative :
-         {"core/moonshine-tts/data", "test-assets"}) {
+    for (const char *relative : {"core/moonshine-tts/data", "test-assets"}) {
       const fs::path candidate = dir / relative;
       if (fs::is_directory(candidate)) {
         roots.push_back(candidate);

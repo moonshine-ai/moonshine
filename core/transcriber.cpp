@@ -57,8 +57,9 @@ size_t vad_sample_count_from_duration(float duration) {
 // the transcriber wins over the same asset arriving in the keyed file map.
 SpeakerDiarizerModel first_present(const SpeakerDiarizerModel &preferred,
                                    const SpeakerDiarizerModel &fallback) {
-  const bool has_preferred = (preferred.data != nullptr && preferred.size > 0) ||
-                             !preferred.path.empty();
+  const bool has_preferred =
+      (preferred.data != nullptr && preferred.size > 0) ||
+      !preferred.path.empty();
   return has_preferred ? preferred : fallback;
 }
 
@@ -1130,9 +1131,9 @@ bool Transcriber::apply_speaker_turns_to_lines(
 
     // Clip each diarization turn that reaches the line to its time range.
     spans.clear();
-    const size_t first = (size_t)(std::upper_bound(reach.begin(), reach.end(),
-                                                   line_start) -
-                                  reach.begin());
+    const size_t first =
+        (size_t)(std::upper_bound(reach.begin(), reach.end(), line_start) -
+                 reach.begin());
     for (size_t i = first; i < turns.size(); i++) {
       const SpeakerTurn &turn = turns[i];
       // Sorted by start time, a turn beginning at or after the line ends means

@@ -39,8 +39,7 @@ void apply_synthesis_output_effects(std::vector<float>& audio,
 }
 
 MoonshineTTSOptions::MoonshineTTSOptions() {
-  files.set_path(kTtsKokoroModelKey,
-                 std::filesystem::path{kTtsKokoroModelKey});
+  files.set_path(kTtsKokoroModelKey, std::filesystem::path{kTtsKokoroModelKey});
   files.set_path(kTtsKokoroConfigJsonKey,
                  std::filesystem::path{kTtsKokoroConfigJsonKey});
 }
@@ -121,8 +120,7 @@ void MoonshineTTSOptions::parse_options(
       const std::string t = trim(value);
       if (!t.empty()) {
         const std::filesystem::path d(t);
-        files.set_path(kTtsKokoroModelKey,
-                       ort_model_path(d, "model.ort"));
+        files.set_path(kTtsKokoroModelKey, ort_model_path(d, "model.ort"));
         files.set_path(kTtsKokoroConfigJsonKey, d / "config.json");
       }
     } else if (key == "kokoro_model" || key == "kokoro_model_onnx") {

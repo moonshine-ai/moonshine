@@ -789,10 +789,11 @@ struct moonshine_speech_clip_t {
    of speech, ``out_clip->is_complete`` is zero and no audio is returned; the
    caller should record more and call again (streaming capture).
 
-   Extract is VAD-only and stays cheap enough for the capture loop. When ZipVoice
-   is later created without ``zipvoice_clone_transcript``, the owned clone ASR
-   (from ``g2p_root/clone_asr/`` or ``clone_asr/...`` memory keys) refines the
-   clip and fills the transcript once — see ``moonshine_get_tts_dependencies``.
+   Extract is VAD-only and stays cheap enough for the capture loop. When
+   ZipVoice is later created without ``zipvoice_clone_transcript``, the owned
+   clone ASR (from ``g2p_root/clone_asr/`` or ``clone_asr/...`` memory keys)
+   refines the clip and fills the transcript once — see
+   ``moonshine_get_tts_dependencies``.
 
    The returned clip is always 16 kHz mono regardless of ``sample_rate``.
 
@@ -909,16 +910,18 @@ MOONSHINE_EXPORT int32_t moonshine_get_g2p_dependencies(
 
 /* Returns merged G2P + TTS vocoder download dependencies as a JSON object with
    a ``groups`` array (same shape as ``moonshine_get_stt_dependencies``). Each
-   group is ``{ "base_url", "files": [{name,url,size,checksum,checksum_type}] }``.
+   group is ``{ "base_url", "files": [{name,url,size,checksum,checksum_type}]
+   }``.
    ``languages`` is comma-separated; empty or NULL means all known languages.
    ``options`` / ``options_count``: same entries as
    ``moonshine_create_tts_synthesizer_from_files``
    (``voice`` with optional ``kokoro_`` / ``piper_`` / ``zipvoice_`` prefix,
    ``g2p_root``, …). Vocoder keys follow Kokoro vs Piper vs ZipVoice selection.
 
-   When ``voice`` selects ZipVoice, an additional group with ``"role":"clone_asr"``
-   lists the catalog-default STT for the language (including the attention
-   decoder for word timestamps). Local ``name``s are prefixed ``clone_asr/``;
+   When ``voice`` selects ZipVoice, an additional group with
+   ``"role":"clone_asr"`` lists the catalog-default STT for the language
+   (including the attention decoder for word timestamps). Local ``name``s are
+   prefixed ``clone_asr/``;
    ``url``s point at the STT CDN. Bindings should download those files under
    ``g2p_root/clone_asr/`` (or pass ``clone_asr/...`` memory keys on create).
 
@@ -951,8 +954,9 @@ MOONSHINE_EXPORT int32_t moonshine_get_tts_dependencies(
    catalog plus any extra ``*.kokorovoice`` in the bundle; Piper lists the
    language default voice stem plus every voice in the resolved voices
    directory, in either shipped form (``<stem>.ort``, or the split
-   ``<stem>.model.ort`` plus ``<stem>.weights.ort`` pair). ``found`` means the asset is on disk or supplied via the in-memory
-   file map like ``MoonshineTTS``. Free with ``free``.
+   ``<stem>.model.ort`` plus ``<stem>.weights.ort`` pair). ``found`` means the
+   asset is on disk or supplied via the in-memory file map like
+   ``MoonshineTTS``. Free with ``free``.
 */
 MOONSHINE_EXPORT int32_t moonshine_get_tts_voices(
     const char *languages, const struct moonshine_option_t *options,

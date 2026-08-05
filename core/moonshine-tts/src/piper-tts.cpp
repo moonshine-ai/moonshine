@@ -239,7 +239,8 @@ std::vector<std::string> piper_voice_stems_on_disk(
   return {stems.begin(), stems.end()};
 }
 
-/// Resolves a voice request to the nominal ``<stem>.onnx`` path in *voices_dir*.
+/// Resolves a voice request to the nominal ``<stem>.onnx`` path in
+/// *voices_dir*.
 ///
 /// The returned path is an anchor rather than a file to open: the ``.onnx`` may
 /// not exist, since a voice can ship as ORT instead. Everything downstream
@@ -651,15 +652,16 @@ struct PiperTTS::Impl {
       const uint8_t* ob = nullptr;
       size_t on = 0;
       of.load(&ob, &on);
-      require_ort_model_bytes(ob, on, "Piper voice supplied as " + k_piper_onnx);
+      require_ort_model_bytes(ob, on,
+                              "Piper voice supplied as " + k_piper_onnx);
       session_ = Ort::Session(env_, ob, on, session_opts);
       of.free();
     } else {
       // onnx_path_ is only an anchor for the voice name; the file on disk is
       // an .ort, in one of the two forms piper_voice_model_path knows.
-      const std::filesystem::path model_path =
-          piper_voice_model_path(onnx_path_.parent_path(),
-                                 piper_voice_stem(onnx_path_.filename().string()));
+      const std::filesystem::path model_path = piper_voice_model_path(
+          onnx_path_.parent_path(),
+          piper_voice_stem(onnx_path_.filename().string()));
       if (model_path.empty()) {
         throw std::runtime_error("PiperTTS: no ORT model for voice " +
                                  onnx_path_.stem().string() + " in " +
@@ -838,8 +840,7 @@ std::vector<std::pair<std::string, bool>> piper_list_voices_with_availability(
   if (explicit_onnx_file) {
     const std::filesystem::path onnx_path =
         resolve_path_under_root(g2p_opt.g2p_root, opt.explicit_onnx_path);
-    const std::string stem =
-        piper_voice_stem(onnx_path.filename().string());
+    const std::string stem = piper_voice_stem(onnx_path.filename().string());
     if (std::filesystem::is_regular_file(onnx_path) ||
         piper_voice_model_present(onnx_path.parent_path(), stem)) {
       return {{stem, true}};
@@ -918,7 +919,8 @@ bool piper_default_model_bundle_relative_paths(
     for (const std::string& name : piper_voice_model_filenames(stem)) {
       model_relpaths_out->push_back(dir + name);
     }
-    // The config keeps its ``.onnx.json`` name whatever form the model ships in.
+    // The config keeps its ``.onnx.json`` name whatever form the model ships
+    // in.
     *onnx_json_relpath_out = dir + stem + ".onnx.json";
     return true;
   } catch (const std::exception&) {

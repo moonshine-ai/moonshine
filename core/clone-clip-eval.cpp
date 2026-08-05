@@ -29,7 +29,8 @@ struct FixtureAudio {
   std::string name;
   std::vector<float> pcm;
   int32_t sample_rate = 0;
-  // If >= 0, force this VAD window start instead of running extract_speech_clip.
+  // If >= 0, force this VAD window start instead of running
+  // extract_speech_clip.
   float forced_start = -1.0f;
 };
 
@@ -158,7 +159,8 @@ bool load_fixture(const char *path, const char *name, float forced_start,
 float pick_synthetic_midword_start(const std::vector<CloneClipWord> &words,
                                    float audio_duration) {
   // Find a word whose midpoint leaves at least requested_duration of audio
-  // after a cut through the middle of that word — guarantees a baseline tail cut.
+  // after a cut through the middle of that word — guarantees a baseline tail
+  // cut.
   for (const CloneClipWord &w : words) {
     const float mid = 0.5f * (w.start + w.end);
     const float start = mid - kRequestedDuration;
@@ -297,25 +299,27 @@ int main(int argc, char **argv) {
   if (!fixtures.empty() && !two_cities_words.empty()) {
     FixtureAudio syn = fixtures.front();
     syn.name = "synthetic_midword";
-    const float dur =
-        static_cast<float>(syn.pcm.size()) / static_cast<float>(syn.sample_rate);
+    const float dur = static_cast<float>(syn.pcm.size()) /
+                      static_cast<float>(syn.sample_rate);
     syn.forced_start = pick_synthetic_midword_start(two_cities_words, dur);
     run_case(syn, two_cities_words);
   }
 
   std::printf("%s\n", std::string(100, '-').c_str());
-  const float inv = case_count > 0 ? 1.0f / static_cast<float>(case_count) : 0.0f;
+  const float inv =
+      case_count > 0 ? 1.0f / static_cast<float>(case_count) : 0.0f;
   std::printf("SUMMARY  cases=%d\n", case_count);
-  std::printf("  baseline: mid_word_cuts=%d  tail_cut_rate=%.2f  "
-              "mean_overshoot_s=%.3f\n",
-              baseline_total_cuts,
-              static_cast<float>(baseline_fixtures_with_tail) * inv,
-              baseline_overshoot_sum * inv);
-  std::printf("  refined:  mid_word_cuts=%d  tail_cut_rate=%.2f  "
-              "mean_overshoot_s=%.3f\n",
-              refined_total_cuts,
-              static_cast<float>(refined_fixtures_with_tail) * inv,
-              refined_overshoot_sum * inv);
+  std::printf(
+      "  baseline: mid_word_cuts=%d  tail_cut_rate=%.2f  "
+      "mean_overshoot_s=%.3f\n",
+      baseline_total_cuts,
+      static_cast<float>(baseline_fixtures_with_tail) * inv,
+      baseline_overshoot_sum * inv);
+  std::printf(
+      "  refined:  mid_word_cuts=%d  tail_cut_rate=%.2f  "
+      "mean_overshoot_s=%.3f\n",
+      refined_total_cuts, static_cast<float>(refined_fixtures_with_tail) * inv,
+      refined_overshoot_sum * inv);
 
   const auto wall_end = std::chrono::steady_clock::now();
   const double elapsed_s =
@@ -325,8 +329,7 @@ int main(int argc, char **argv) {
   moonshine_free_transcriber(handle);
 
   if (refined_total_cuts != 0) {
-    std::fprintf(stderr,
-                 "FAIL: refined path still has %d mid-word cut(s)\n",
+    std::fprintf(stderr, "FAIL: refined path still has %d mid-word cut(s)\n",
                  refined_total_cuts);
     return 2;
   }

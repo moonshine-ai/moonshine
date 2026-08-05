@@ -625,7 +625,8 @@ TEST_CASE("moonshine-test-v2") {
       }
       const auto& p = ent.path();
       const std::string name = p.filename().string();
-      if (p.extension() == ".ort" && name.find(".model.ort") == std::string::npos &&
+      if (p.extension() == ".ort" &&
+          name.find(".model.ort") == std::string::npos &&
           name.find(".weights.ort") == std::string::npos) {
         onnx_path = p;
         break;
@@ -976,8 +977,9 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     // Chinese ships as a split pair, so both halves must be listed.
     CHECK(csv.find("zh_hans/roberta_chinese_base_upos_onnx/model.model.ort") !=
           std::string::npos);
-    CHECK(csv.find("zh_hans/roberta_chinese_base_upos_onnx/model.weights.ort") !=
-          std::string::npos);
+    CHECK(
+        csv.find("zh_hans/roberta_chinese_base_upos_onnx/model.weights.ort") !=
+        std::string::npos);
     CHECK(csv.find("zh_hans/roberta_chinese_base_upos_onnx/model.onnx") ==
           std::string::npos);
     CHECK(csv.find("ja/roberta_japanese_char_luw_upos_onnx/model.ort") !=

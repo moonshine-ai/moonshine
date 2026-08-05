@@ -16,7 +16,8 @@ const std::vector<std::string>& piper_bundled_voice_stems_for_data_subdir(
 /// directory, in the order a client must fetch them.
 ///
 /// Voices whose weights are stored as int8 ship as a split ORT pair
-/// (``<stem>.model.ort`` plus ``<stem>.weights.ort``); the rest ship as a single
+/// (``<stem>.model.ort`` plus ``<stem>.weights.ort``); the rest ship as a
+/// single
 /// ``<stem>.ort``. See ``scripts/convert-models-to-ort.py`` for why the two
 /// forms exist. Callers must not consult the local disk instead: this list is
 /// what a client with no files yet needs to download.

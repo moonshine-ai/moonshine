@@ -52,6 +52,7 @@ SOFTWARE.
 #include <vector>
 
 #include "bin-tokenizer.h"
+#include "clone-clip.h"
 #include "debug-utils.h"
 #include "moonshine-asset-catalog.h"
 #include "moonshine-g2p.h"
@@ -62,9 +63,8 @@ SOFTWARE.
 #include "moonshine-tensor-view.h"
 #include "moonshine-tts.h"
 #include "ort-utils.h"
-#include "clone-clip.h"
-#include "speech-clip.h"
 #include "resampler.h"
+#include "speech-clip.h"
 #include "string-utils.h"
 #include "text-embedder.h"
 #include "transcriber.h"
@@ -802,7 +802,8 @@ std::string transcript_line_text(const transcript_t *transcript) {
   return text;
 }
 
-std::vector<CloneClipWord> transcript_clone_words(const transcript_t *transcript) {
+std::vector<CloneClipWord> transcript_clone_words(
+    const transcript_t *transcript) {
   std::vector<CloneClipWord> words;
   if (transcript == nullptr) {
     return words;
@@ -924,9 +925,8 @@ int32_t try_create_clone_asr_from_assets(
   const std::filesystem::path clone_dir =
       std::filesystem::path(tts_options.g2p_options.g2p_root) / "clone_asr";
   const bool have_memory = !clone_files.entries.empty();
-  const bool have_dir =
-      !tts_options.g2p_options.g2p_root.empty() &&
-      std::filesystem::is_directory(clone_dir);
+  const bool have_dir = !tts_options.g2p_options.g2p_root.empty() &&
+                        std::filesystem::is_directory(clone_dir);
 
   if (!have_memory && !have_dir) {
     return -1;
@@ -996,10 +996,10 @@ int32_t refine_clip_with_asr(const std::vector<float> &audio,
   if (asr_handle < 0 || audio.empty() || out_clip == nullptr) {
     return MOONSHINE_ERROR_INVALID_ARGUMENT;
   }
-  const float audio_seconds =
-      static_cast<float>(audio.size()) / static_cast<float>(kCloneClipSampleRate);
-  max_extension =
-      std::min(max_extension, std::max(0.0f, audio_seconds - requested_duration));
+  const float audio_seconds = static_cast<float>(audio.size()) /
+                              static_cast<float>(kCloneClipSampleRate);
+  max_extension = std::min(max_extension,
+                           std::max(0.0f, audio_seconds - requested_duration));
 
   transcript_t *asr_transcript = nullptr;
   {
@@ -1019,7 +1019,8 @@ int32_t refine_clip_with_asr(const std::vector<float> &audio,
     }
   }
 
-  const std::vector<CloneClipWord> words = transcript_clone_words(asr_transcript);
+  const std::vector<CloneClipWord> words =
+      transcript_clone_words(asr_transcript);
   CloneClipBounds bounds;
   if (!words.empty()) {
     bounds = refine_clone_clip_bounds(0.0f, requested_duration, words,
@@ -1095,8 +1096,7 @@ void maybe_autotranscribe_zipvoice_clone(
   float max_extension = kDefaultCloneMaxExtensionSeconds;
   for (const auto &kv : options) {
     std::string key = replace_all(to_lowercase(kv.first), "-", "_");
-    if (key == "clip_duration_seconds" ||
-        key == "requested_duration_seconds") {
+    if (key == "clip_duration_seconds" || key == "requested_duration_seconds") {
       requested_duration = float_from_string(kv.second);
     } else if (key == "max_extension_seconds") {
       max_extension = float_from_string(kv.second);
@@ -1118,9 +1118,8 @@ void maybe_autotranscribe_zipvoice_clone(
   }
 
   moonshine_speech_clip_t refined{};
-  const int32_t err = refine_clip_with_asr(audio, clone_asr_handle,
-                                           requested_duration, max_extension,
-                                           &refined);
+  const int32_t err = refine_clip_with_asr(
+      audio, clone_asr_handle, requested_duration, max_extension, &refined);
   if (err != MOONSHINE_ERROR_NONE || refined.audio_data == nullptr ||
       refined.audio_length == 0) {
     if (refined.audio_data != nullptr) {
@@ -1163,13 +1162,10 @@ void maybe_autotranscribe_zipvoice_clone(
 
 }  // namespace
 
-int32_t moonshine_extract_speech_clip(const float *audio_data,
-                                      uint64_t audio_length,
-                                      int32_t sample_rate,
-                                      int32_t tts_synthesizer_handle,
-                                      const moonshine_option_t *options,
-                                      uint64_t options_count,
-                                      moonshine_speech_clip_t *out_clip) {
+int32_t moonshine_extract_speech_clip(
+    const float *audio_data, uint64_t audio_length, int32_t sample_rate,
+    int32_t tts_synthesizer_handle, const moonshine_option_t *options,
+    uint64_t options_count, moonshine_speech_clip_t *out_clip) {
   if (out_clip == nullptr) {
     return MOONSHINE_ERROR_INVALID_ARGUMENT;
   }
@@ -1407,7 +1403,8 @@ void moonshine_free_tts_synthesizer(int32_t tts_synthesizer_handle) {
       text_to_speech_synthesizer_map[tts_synthesizer_handle] = nullptr;
       text_to_speech_synthesizer_map.erase(tts_synthesizer_handle);
     }
-    const auto asr_it = text_to_speech_clone_asr_map.find(tts_synthesizer_handle);
+    const auto asr_it =
+        text_to_speech_clone_asr_map.find(tts_synthesizer_handle);
     if (asr_it != text_to_speech_clone_asr_map.end()) {
       clone_asr = asr_it->second;
       text_to_speech_clone_asr_map.erase(asr_it);

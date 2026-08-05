@@ -252,9 +252,10 @@ void compare_multitoken_vs_step(MoonshineStreamingModel &model,
 
   printf("  multi vs step-by-step teacher-force on %zu tokens (+BOS):\n",
          content.size());
-  printf("    max|Δlogit|=%.6g  first_logit_diff_pos=%d  "
-         "first_argmax_diff_pos=%d\n",
-         max_abs_diff, first_logit_diff, first_argmax_diff);
+  printf(
+      "    max|Δlogit|=%.6g  first_logit_diff_pos=%d  "
+      "first_argmax_diff_pos=%d\n",
+      max_abs_diff, first_logit_diff, first_argmax_diff);
 }
 
 }  // namespace
@@ -365,35 +366,33 @@ int main(int argc, char **argv) {
 
     if ((!nospec_ok || !spec_ok || !self_ok) && details < max_details) {
       const float audio_sec = processed / static_cast<float>(kSampleRate);
-      printf("\n=== upd=%zu audio=%.2fs mem=%d max_tokens=%d draft_len=%zu ===\n",
-             upd, audio_sec, state->memory_len, max_tokens, prev_content.size());
+      printf(
+          "\n=== upd=%zu audio=%.2fs mem=%d max_tokens=%d draft_len=%zu ===\n",
+          upd, audio_sec, state->memory_len, max_tokens, prev_content.size());
       printf("greedy_len=%zu nospec_len=%zu spec_len=%zu self_len=%zu\n",
              greedy_c.size(), nospec_c.size(), spec_c.size(), self_c.size());
-      printf("greedy vs nospec: %s (diff_at=%d)\n", nospec_ok ? "MATCH" : "DIFF",
-             first_diff(greedy_c, nospec_c));
+      printf("greedy vs nospec: %s (diff_at=%d)\n",
+             nospec_ok ? "MATCH" : "DIFF", first_diff(greedy_c, nospec_c));
       printf("greedy vs spec:   %s (diff_at=%d)\n", spec_ok ? "MATCH" : "DIFF",
              first_diff(greedy_c, spec_c));
       printf("greedy vs self-draft decode_full: %s (diff_at=%d)\n",
              self_ok ? "MATCH" : "DIFF", first_diff(greedy_c, self_c));
-      printf("greedy text: %s\n",
-             model
-                 .tokens_to_text(
-                     std::vector<int64_t>(greedy.begin(), greedy.end()))
-                 .c_str());
-      printf("nospec text: %s\n",
-             model
-                 .tokens_to_text(
-                     std::vector<int64_t>(nospec.begin(), nospec.end()))
-                 .c_str());
-      printf("spec text:   %s\n",
-             model
-                 .tokens_to_text(std::vector<int64_t>(spec.begin(), spec.end()))
-                 .c_str());
-      printf("self text:   %s\n",
-             model
-                 .tokens_to_text(
-                     std::vector<int64_t>(self_draft.begin(), self_draft.end()))
-                 .c_str());
+      printf("greedy text: %s\n", model
+                                      .tokens_to_text(std::vector<int64_t>(
+                                          greedy.begin(), greedy.end()))
+                                      .c_str());
+      printf("nospec text: %s\n", model
+                                      .tokens_to_text(std::vector<int64_t>(
+                                          nospec.begin(), nospec.end()))
+                                      .c_str());
+      printf(
+          "spec text:   %s\n",
+          model.tokens_to_text(std::vector<int64_t>(spec.begin(), spec.end()))
+              .c_str());
+      printf("self text:   %s\n", model
+                                      .tokens_to_text(std::vector<int64_t>(
+                                          self_draft.begin(), self_draft.end()))
+                                      .c_str());
 
       // If self-draft fails, check whether multi-token ≠ step-by-step.
       if (!self_ok) {
