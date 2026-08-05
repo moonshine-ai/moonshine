@@ -37,9 +37,14 @@ struct ModelFile {
 // is one or more of these groups: STT is a single group, plus an optional
 // second group for the alphanumeric spelling model (which lives under a
 // different CDN path). Each file already carries its full `url`.
+//
+// ``role`` is empty for ordinary groups. TTS dependency manifests set
+// ``role`` to ``"clone_asr"`` for the ZipVoice-owned speech-to-text group
+// (local ``name``s are prefixed ``clone_asr/``; ``url``s stay on the STT CDN).
 struct ModelDependencyGroup {
   std::string base_url;
   std::vector<ModelFile> files;
+  std::string role;
 };
 
 struct ModelDependencies {

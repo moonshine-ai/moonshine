@@ -821,9 +821,9 @@ export function codePanel({
     if (fileEl) {
       const { file: name, path: source, lines: range } = panes[index];
       fileEl.textContent = name ?? '';
-      // Without a path there is nothing to point at, so it stays a plain
-      // caption rather than becoming a link that goes nowhere.
-      if (source) {
+      // Without a visible name, hide the caption so it cannot crowd the tabs.
+      fileEl.hidden = !name;
+      if (name && source) {
         const anchor = range ? `#L${range[0]}-L${range[1]}` : '';
         fileEl.href = `${SOURCE_BASE}/${source}${anchor}`;
         fileEl.title = range ? `${source} lines ${range[0]}-${range[1]}` : source;

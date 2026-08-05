@@ -175,7 +175,7 @@ public final class AssetDownloader: @unchecked Sendable {
                 options.append(TranscriberOption(name: "voice", value: voice))
             }
             let json = try api.getTtsDependencies(languages: language, options: options)
-            return try filesFromKeyArray(json)
+            return try filesFromGroupManifest(json)
 
         case .g2p(let language):
             let options: [TranscriberOption] = [
@@ -221,7 +221,7 @@ public final class AssetDownloader: @unchecked Sendable {
         return result
     }
 
-    /// Parses the flat JSON array of canonical keys emitted by the TTS dependency API.
+    /// Prefer ``filesFromGroupManifest`` for TTS now that the C API returns groups.
     private func filesFromKeyArray(_ json: String) throws -> [ResolvedFile] {
         guard let data = json.data(using: .utf8),
             let keys = try? JSONSerialization.jsonObject(with: data) as? [String]

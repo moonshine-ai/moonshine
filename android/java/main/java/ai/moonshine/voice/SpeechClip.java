@@ -25,12 +25,17 @@ public final class SpeechClip {
     /** True once a window with enough speech in it was found. */
     public final boolean isComplete;
 
+    /** Transcript when the TTS owns clone ASR and refine ran; null otherwise. */
+    @Nullable
+    public final String transcript;
+
     public SpeechClip(@Nullable float[] audio, float startTime, float speechDuration,
-            boolean isComplete) {
+            boolean isComplete, @Nullable String transcript) {
         this.audio = audio;
         this.startTime = startTime;
         this.speechDuration = speechDuration;
         this.isComplete = isComplete;
+        this.transcript = transcript;
     }
 
     /** Sample rate of {@link #audio}. */

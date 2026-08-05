@@ -738,21 +738,31 @@ struct SpeechClip {
   float speechDuration;
   /// Whether a window with enough speech in it was found.
   bool isComplete;
+  /// UTF-8 transcript when create-time clone ASR refine ran (extract is VAD-only).
+  std::string transcript;
 
-  SpeechClip() : startTime(0.0f), speechDuration(0.0f), isComplete(false) {}
+  SpeechClip()
+      : startTime(0.0f), speechDuration(0.0f), isComplete(false) {}
 };
 
 /// Finds the best short window of speech in a recording.
 ///
+/// ``ttsSynthesizerHandle`` must be a valid synthesizer from
+/// ``moonshine_create_tts_synthesizer_*``. Extract is VAD-only so capture loops
+/// stay responsive; ZipVoice clone ASR refine runs once at create when
+/// ``zipvoice_clone_transcript`` is omitted.
+///
 /// Safe to call repeatedly on a growing buffer, which is how ``VoiceClone`` is
-/// built. Runs the voice-activity detector compiled into the library, so it
-/// needs no model files and no network.
+/// built. Runs the voice-activity detector compiled into the library.
 ///
 /// Recognised options: ``clip_duration_seconds`` (default 4),
-/// ``minimum_speech_seconds`` (default 2), ``vad_threshold`` (default 0.5).
+/// ``minimum_speech_seconds`` (default 2), ``vad_threshold`` (default 0.5),
+/// ``tail_pad_seconds``, ``max_extension_seconds``.
 /// @throws MoonshineException if the search fails
 SpeechClip extractSpeechClip(const std::vector<float> &audioData,
-                             int32_t sampleRate, const Options &options = {});
+                             int32_t sampleRate,
+                             int32_t ttsSynthesizerHandle,
+                             const Options &options = {});
 
 /// Captures the short reference clip that zero-shot voice cloning needs.
 ///
@@ -776,9 +786,12 @@ class VoiceClone {
   /// Sample rate of the clip handed back by ``audio()``.
   static const int32_t CLIP_SAMPLE_RATE = 16000;
 
+  /// @param ttsSynthesizerHandle Synthesizer handle passed to extract (from
+  ///        ``TextToSpeech::getHandle()`` or ``startCloning()``'s parent).
   /// @param clipDurationSeconds Length of the window to look for.
   /// @param minimumSpeechSeconds How much of it has to be speech.
-  explicit VoiceClone(float clipDurationSeconds = 4.0f,
+  explicit VoiceClone(int32_t ttsSynthesizerHandle,
+                      float clipDurationSeconds = 4.0f,
                       float minimumSpeechSeconds = 2.0f);
 
   /// Feeds captured audio in. The search for a usable window runs a few times
@@ -797,6 +810,9 @@ class VoiceClone {
 
   /// Speech found in the best window so far, in seconds.
   float speechSeconds() const;
+
+  /// Transcript from extract when the TTS owns clone ASR, else empty.
+  std::string transcript() const;
 
   /// How much audio has been fed in, in seconds.
   float recordedSeconds() const;
@@ -818,6 +834,7 @@ class VoiceClone {
 
  private:
   struct State {
+    int32_t ttsHandle;
     float clipDurationSeconds;
     float minimumSpeechSeconds;
     mutable std::mutex mutex;
@@ -825,13 +842,15 @@ class VoiceClone {
     int32_t recordingSampleRate;
     size_t samplesSinceSearch;
     std::vector<float> clip;
+    std::string transcript;
     bool complete;
     float speech;
     std::vector<std::function<void()>> readyHandlers;
     std::vector<std::function<void(float, float)>> progressHandlers;
 
-    State(float clipDuration, float minimumSpeech)
-        : clipDurationSeconds(clipDuration),
+    State(int32_t ttsHandleIn, float clipDuration, float minimumSpeech)
+        : ttsHandle(ttsHandleIn),
+          clipDurationSeconds(clipDuration),
           minimumSpeechSeconds(minimumSpeech),
           recordingSampleRate(CLIP_SAMPLE_RATE),
           samplesSinceSearch(0),
@@ -952,30 +971,19 @@ class TextToSpeech {
   ///
   /// The recording is trimmed to the best few seconds of speech first, so it
   /// can be longer than the clip the vocoder needs. ``transcript`` is what the
-  /// speaker said in that clip; pass the overload taking a ``Transcriber`` to
-  /// have Moonshine work it out instead.
+  /// speaker said in that clip; when empty, ``g2p_root/clone_asr/`` (or
+  /// ``clone_asr/...`` memory keys from ``getDependencies``) must be present
+  /// so the library can refine and auto-transcribe the clip.
   ///
   /// This needs the ZipVoice assets, which the ``zipvoice/*`` keys or
   /// ``g2p_root`` have to resolve to; cloning is English only for now.
   /// @throws MoonshineException if no speech is found or the rebuild fails
   void cloneFrom(const std::vector<float> &samples, int32_t sampleRate,
-                 const std::string &transcript);
-
-  /// Clone the voice in ``samples``, transcribing the reference clip with
-  /// ``transcriber`` rather than making the caller supply the words. The
-  /// transcriber only has to outlive the call.
-  /// @throws MoonshineException if no speech is found or the rebuild fails
-  void cloneFrom(const std::vector<float> &samples, int32_t sampleRate,
-                 Transcriber &transcriber);
+                 const std::string &transcript = {});
 
   /// Clone the voice captured by a ``VoiceClone``.
   /// @throws MoonshineException if the clone has not captured enough speech
-  void cloneFrom(const VoiceClone &clone, const std::string &transcript);
-
-  /// Clone the voice captured by a ``VoiceClone``, transcribing its clip with
-  /// ``transcriber``.
-  /// @throws MoonshineException if the clone has not captured enough speech
-  void cloneFrom(const VoiceClone &clone, Transcriber &transcriber);
+  void cloneFrom(const VoiceClone &clone, const std::string &transcript = {});
 
   /// Start capturing a reference voice for cloning. Feed the result with
   /// ``VoiceClone::addAudio`` and hand it back to ``cloneFrom``.
@@ -999,10 +1007,10 @@ class TextToSpeech {
   static std::string getVoices(const std::string &languages,
                                const Options &options = {});
 
-  /// Get TTS asset dependency keys for one or more languages
+  /// Get TTS asset download dependencies for one or more languages
   /// @param languages Comma-separated language tags (empty for all)
   /// @param options Configuration options (voice, g2p_root, etc.)
-  /// @return JSON array string of asset keys
+  /// @return JSON object string with a ``groups`` array (same shape as STT)
   /// @throws MoonshineException on failure
   static std::string getDependencies(const std::string &languages,
                                      const Options &options = {});
@@ -1021,13 +1029,12 @@ class TextToSpeech {
 
   /// Replaces the live synthesizer with one speaking the voice in
   /// ``cloneBytes_``. Shared by every ``cloneFrom`` overload.
-  void rebuildForClone(int32_t sampleRate, const std::string &transcript,
-                       const Transcriber *transcriber);
+  void rebuildForClone(int32_t sampleRate, const std::string &transcript);
 
   /// Trims a recording to the window ZipVoice wants, and reports usefully when
   /// there is no speech in it.
-  static std::vector<float> clipForCloning(const std::vector<float> &samples,
-                                           int32_t sampleRate);
+  std::vector<float> clipForCloning(const std::vector<float> &samples,
+                                    int32_t sampleRate) const;
 
   int32_t handle_;
   std::string language_;
@@ -1762,13 +1769,14 @@ inline void Stream::checkError(int32_t error) const {
 // Speech clip implementation
 inline SpeechClip extractSpeechClip(const std::vector<float> &audioData,
                                     int32_t sampleRate,
+                                    int32_t ttsSynthesizerHandle,
                                     const Options &options) {
   detail::OptionsBuffer buf = detail::buildOptions("", options);
   moonshine_speech_clip_t clip_c;
   std::memset(&clip_c, 0, sizeof(clip_c));
   int32_t err = moonshine_extract_speech_clip(
       audioData.empty() ? nullptr : audioData.data(),
-      static_cast<uint64_t>(audioData.size()), sampleRate,
+      static_cast<uint64_t>(audioData.size()), sampleRate, ttsSynthesizerHandle,
       buf.options.empty() ? nullptr : buf.options.data(),
       static_cast<uint64_t>(buf.options.size()), &clip_c);
   if (err < 0) {
@@ -1785,13 +1793,19 @@ inline SpeechClip extractSpeechClip(const std::vector<float> &audioData,
                       clip_c.audio_data + clip_c.audio_length);
     moonshine_free_buffer(clip_c.audio_data);
   }
+  if (clip_c.transcript != nullptr) {
+    clip.transcript = clip_c.transcript;
+    moonshine_free_buffer(clip_c.transcript);
+  }
   return clip;
 }
 
 // VoiceClone implementation
-inline VoiceClone::VoiceClone(float clipDurationSeconds,
+inline VoiceClone::VoiceClone(int32_t ttsSynthesizerHandle,
+                              float clipDurationSeconds,
                               float minimumSpeechSeconds)
-    : state_(new State(clipDurationSeconds, minimumSpeechSeconds)) {}
+    : state_(new State(ttsSynthesizerHandle, clipDurationSeconds,
+                       minimumSpeechSeconds)) {}
 
 inline void VoiceClone::addAudio(const std::vector<float> &pcm,
                                  int32_t sampleRate) {
@@ -1825,6 +1839,7 @@ inline void VoiceClone::addAudio(const std::vector<float> &pcm,
 inline void VoiceClone::search(bool acceptAnything) {
   std::vector<float> samples;
   int32_t rate = CLIP_SAMPLE_RATE;
+  int32_t ttsHandle = -1;
   float minimumSpeech = 0.0f;
   float clipDuration = 0.0f;
   {
@@ -1834,6 +1849,7 @@ inline void VoiceClone::search(bool acceptAnything) {
     }
     samples = state_->recording;
     rate = state_->recordingSampleRate;
+    ttsHandle = state_->ttsHandle;
     minimumSpeech = acceptAnything ? 0.0f : state_->minimumSpeechSeconds;
     clipDuration = state_->clipDurationSeconds;
   }
@@ -1844,7 +1860,7 @@ inline void VoiceClone::search(bool acceptAnything) {
   SpeechClip found;
   try {
     found = extractSpeechClip(
-        samples, rate,
+        samples, rate, ttsHandle,
         {{"clip_duration_seconds", std::to_string(clipDuration)},
          {"minimum_speech_seconds", std::to_string(minimumSpeech)}});
   } catch (const MoonshineException &) {
@@ -1865,6 +1881,7 @@ inline void VoiceClone::search(bool acceptAnything) {
     progress = state_->progressHandlers;
     if (!found.audio.empty()) {
       state_->clip = found.audio;
+      state_->transcript = found.transcript;
       state_->complete = true;
       ready.swap(state_->readyHandlers);
     }
@@ -1893,6 +1910,11 @@ inline std::vector<float> VoiceClone::audio() const {
 inline float VoiceClone::speechSeconds() const {
   std::lock_guard<std::mutex> lock(state_->mutex);
   return state_->speech;
+}
+
+inline std::string VoiceClone::transcript() const {
+  std::lock_guard<std::mutex> lock(state_->mutex);
+  return state_->transcript;
 }
 
 inline float VoiceClone::recordedSeconds() const {
@@ -1942,6 +1964,7 @@ inline void VoiceClone::reset() {
   state_->recording.clear();
   state_->samplesSinceSearch = 0;
   state_->clip.clear();
+  state_->transcript.clear();
   state_->complete = false;
   state_->speech = 0.0f;
 }
@@ -2045,8 +2068,11 @@ inline TtsSynthesisResult TextToSpeech::synthesizeFromPhonemes(
 }
 
 inline std::vector<float> TextToSpeech::clipForCloning(
-    const std::vector<float> &samples, int32_t sampleRate) {
-  SpeechClip clip = extractSpeechClip(samples, sampleRate);
+    const std::vector<float> &samples, int32_t sampleRate) const {
+  if (handle_ < 0) {
+    throw MoonshineException("TextToSpeech is not initialized");
+  }
+  SpeechClip clip = extractSpeechClip(samples, sampleRate, handle_);
   if (!clip.isComplete || clip.audio.empty()) {
     throw MoonshineException(
         "No usable speech found in the reference recording (" +
@@ -2057,8 +2083,7 @@ inline std::vector<float> TextToSpeech::clipForCloning(
 }
 
 inline void TextToSpeech::rebuildForClone(int32_t sampleRate,
-                                          const std::string &transcript,
-                                          const Transcriber *transcriber) {
+                                          const std::string &transcript) {
   // Replay whatever built this synthesizer, swapping the voice for ZipVoice
   // and adding the reference clip. The C API borrows the clip bytes rather
   // than copying them, so cloneBytes_ has to stay put for the new handle's
@@ -2068,14 +2093,9 @@ inline void TextToSpeech::rebuildForClone(int32_t sampleRate,
   options.push_back({"zipvoice_clone_sample_rate", std::to_string(sampleRate)});
   if (!transcript.empty()) {
     options.push_back({"zipvoice_clone_transcript", transcript});
-  } else if (transcriber != nullptr) {
-    options.push_back({"zipvoice_asr_transcriber_handle",
-                       std::to_string(transcriber->getHandle())});
-  } else {
-    throw MoonshineException(
-        "Cloning needs either the words spoken in the reference clip or a "
-        "Transcriber to work them out.");
   }
+  // Owned ASR loads from g2p_root/clone_asr or clone_asr/... memory keys in
+  // modelFiles_ (advertised by getDependencies for ZipVoice).
 
   std::map<std::string, std::pair<const uint8_t *, size_t>> files = modelFiles_;
   files["zipvoice/clone_audio"] = {cloneBytes_.data(), cloneBytes_.size()};
@@ -2105,16 +2125,7 @@ inline void TextToSpeech::cloneFrom(const std::vector<float> &samples,
   const uint8_t *bytes = reinterpret_cast<const uint8_t *>(clip.data());
   cloneBytes_.assign(bytes, bytes + clip.size() * sizeof(float));
   // extractSpeechClip always resamples to 16 kHz, whatever went in.
-  rebuildForClone(VoiceClone::CLIP_SAMPLE_RATE, transcript, nullptr);
-}
-
-inline void TextToSpeech::cloneFrom(const std::vector<float> &samples,
-                                    int32_t sampleRate,
-                                    Transcriber &transcriber) {
-  const std::vector<float> clip = clipForCloning(samples, sampleRate);
-  const uint8_t *bytes = reinterpret_cast<const uint8_t *>(clip.data());
-  cloneBytes_.assign(bytes, bytes + clip.size() * sizeof(float));
-  rebuildForClone(VoiceClone::CLIP_SAMPLE_RATE, "", &transcriber);
+  rebuildForClone(VoiceClone::CLIP_SAMPLE_RATE, transcript);
 }
 
 inline void TextToSpeech::cloneFrom(const VoiceClone &clone,
@@ -2127,25 +2138,19 @@ inline void TextToSpeech::cloneFrom(const VoiceClone &clone,
   }
   const uint8_t *bytes = reinterpret_cast<const uint8_t *>(clip.data());
   cloneBytes_.assign(bytes, bytes + clip.size() * sizeof(float));
-  rebuildForClone(clone.sampleRate(), transcript, nullptr);
-}
-
-inline void TextToSpeech::cloneFrom(const VoiceClone &clone,
-                                    Transcriber &transcriber) {
-  const std::vector<float> clip = clone.audio();
-  if (clip.empty()) {
-    throw MoonshineException(
-        "That VoiceClone has not captured enough speech yet; wait for "
-        "isReady(), or call finish() to take the best window so far.");
+  std::string resolved = transcript;
+  if (resolved.empty()) {
+    resolved = clone.transcript();
   }
-  const uint8_t *bytes = reinterpret_cast<const uint8_t *>(clip.data());
-  cloneBytes_.assign(bytes, bytes + clip.size() * sizeof(float));
-  rebuildForClone(clone.sampleRate(), "", &transcriber);
+  rebuildForClone(clone.sampleRate(), resolved);
 }
 
 inline VoiceClone TextToSpeech::startCloning(float clipDurationSeconds,
                                              float minimumSpeechSeconds) const {
-  return VoiceClone(clipDurationSeconds, minimumSpeechSeconds);
+  if (handle_ < 0) {
+    throw MoonshineException("TextToSpeech is not initialized");
+  }
+  return VoiceClone(handle_, clipDurationSeconds, minimumSpeechSeconds);
 }
 
 inline void TextToSpeech::close() {

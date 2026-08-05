@@ -929,9 +929,8 @@ a.ms-code__file[href]:hover {
 /* Three slots tall, showing the word before and after the current one. The
    negative margins keep it from stretching the line it sits in: the extra two
    slots overflow the line box instead of growing it. */
-/* The line holding a reel carries three words, so it needs the leading for
-   them. Without this the words above and below overlap the neighbouring line
-   as soon as the copy wraps. */
+/* The line holding a reel still needs room for those overflowing neighbours
+   once the copy wraps, or they paint over the next line. */
 :where(h1, h2, h3, p):has(.ms-reel) {
   line-height: calc(var(--ms-reel-step) * 3);
 }
@@ -939,8 +938,13 @@ a.ms-code__file[href]:hover {
 .ms-reel {
   position: relative;
   display: inline-block;
+  /* Layout height is one step (see margins below), so middle matches a word. */
   vertical-align: middle;
+  /* Cap-height sits a hair low in the slot against neighbouring text. */
+  transform: translateY(-0.06em);
   height: calc(var(--ms-reel-step) * 3);
+  margin-top: calc(var(--ms-reel-step) * -1);
+  margin-bottom: calc(var(--ms-reel-step) * -1);
   line-height: var(--ms-reel-step);
   overflow: hidden;
   text-align: center;
@@ -985,9 +989,11 @@ a.ms-code__file[href]:hover {
 
 .ms-reel__sizer > span,
 .ms-reel__track > span {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   height: var(--ms-reel-step);
-  line-height: var(--ms-reel-step);
+  line-height: 1;
   white-space: nowrap;
 }
 

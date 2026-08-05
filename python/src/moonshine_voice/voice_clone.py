@@ -49,9 +49,11 @@ class VoiceClone:
     def __init__(
         self,
         *,
+        tts_handle: int,
         clip_duration_seconds: float = 4.0,
         minimum_speech_seconds: float = 2.0,
     ):
+        self._tts_handle = int(tts_handle)
         self._clip_duration_seconds = float(clip_duration_seconds)
         self._minimum_speech_seconds = float(minimum_speech_seconds)
         self._lock = threading.RLock()
@@ -59,6 +61,7 @@ class VoiceClone:
         self._recording_sample_rate = VoiceClone.CLIP_SAMPLE_RATE
         self._samples_since_search = 0
         self._clip: Optional[List[float]] = None
+        self._transcript: Optional[str] = None
         self._speech_seconds = 0.0
         self._ready_handlers: List[Callable[[], None]] = []
         self._progress_handlers: List[Callable[[float, float], None]] = []
@@ -101,6 +104,12 @@ class VoiceClone:
     @property
     def sample_rate(self) -> int:
         return VoiceClone.CLIP_SAMPLE_RATE
+
+    @property
+    def transcript(self) -> Optional[str]:
+        """Unused for VAD capture; clone_from fills the transcript via create-time ASR."""
+        with self._lock:
+            return self._transcript
 
     @property
     def speech_seconds(self) -> float:
@@ -214,6 +223,7 @@ class VoiceClone:
             self._recording = []
             self._samples_since_search = 0
             self._clip = None
+            self._transcript = None
             self._speech_seconds = 0.0
 
     # ------------------------------------------------------------ internals
@@ -231,6 +241,7 @@ class VoiceClone:
             result = moonshine_extract_speech_clip(
                 samples,
                 rate,
+                self._tts_handle,
                 clip_duration_seconds=self._clip_duration_seconds,
                 minimum_speech_seconds=(
                     0.0 if accept_anything else self._minimum_speech_seconds
@@ -248,6 +259,7 @@ class VoiceClone:
             ready_handlers: List[Callable[[], None]] = []
             if result.audio:
                 self._clip = result.audio
+                self._transcript = result.transcript
                 ready_handlers = self._ready_handlers
                 self._ready_handlers = []
 

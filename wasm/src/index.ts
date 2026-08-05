@@ -75,6 +75,7 @@ export { MicTranscriber, type ProgressCallback } from './mic-transcriber.js';
 // Only usable if the module was built with TTS support.
 export {
   TextToSpeech,
+  splitSayUtterances,
   type CloneSource,
   type TtsVoiceEntry,
   type TtsVoicesOptions,

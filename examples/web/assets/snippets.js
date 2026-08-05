@@ -130,16 +130,17 @@ export const TEXT_TO_SPEECH = [
     label: 'JavaScript',
     file: 'speak.js',
     path: 'examples/web/tts/index.html',
-    lines: [455, 466],
+    lines: [465, 509],
     code: `import { TextToSpeech } from '@moonshine-ai/moonshine-wasm';
 
 const tts = new TextToSpeech().language('en_us').voice('kokoro_af_heart');
 await tts.load();
 await tts.say('Hello from Moonshine.');
 
-// Cloning: hand it a few seconds of speech and keep going.
-await tts.cloneFrom(recording);
-await tts.say('Now I sound like you.');`,
+const cloneTts = new TextToSpeech().language('en_us').cloning();
+await cloneTts.load();
+await cloneTts.cloneFrom(recording);
+await cloneTts.say('Now I sound like you.');`,
   },
   {
     id: 'python',
@@ -153,9 +154,10 @@ tts = TextToSpeech().language('en_us').voice('kokoro_af_heart')
 tts.load()
 tts.say('Hello from Moonshine.')
 
-# Cloning: hand it a few seconds of speech and keep going.
-tts.clone_from(recording)
-tts.say('Now I sound like you.')`,
+clone_tts = TextToSpeech().language('en_us').cloning()
+clone_tts.load()
+clone_tts.clone_from(recording)
+clone_tts.say('Now I sound like you.')`,
   },
   {
     id: 'swift',
@@ -170,9 +172,12 @@ tts.say('Now I sound like you.')`,
 try await tts.load()
 try await tts.say("Hello from Moonshine.")
 
-// Cloning: hand it a few seconds of speech and keep going.
-try await tts.cloneFrom(recording)
-try await tts.say("Now I sound like you.")`,
+let cloneTts = MoonshineVoice.TextToSpeech()
+    .language("en_us")
+    .cloning()
+try await cloneTts.load()
+try await cloneTts.cloneFrom(recording)
+try await cloneTts.say("Now I sound like you.")`,
   },
   {
     id: 'java',
@@ -188,9 +193,12 @@ worker.execute(() -> {
     tts.load();
     tts.say("Hello from Moonshine.");
 
-    // Cloning: hand it a few seconds of speech and keep going.
-    tts.cloneFrom(recording);
-    tts.say("Now I sound like you.");
+    TextToSpeech cloneTts = new TextToSpeech(this)
+        .language("en_us")
+        .cloning();
+    cloneTts.load();
+    cloneTts.cloneFrom(recording);
+    cloneTts.say("Now I sound like you.");
 });`,
   },
 ];
@@ -212,7 +220,6 @@ export const AGENT_FLOW = [
   {
     id: 'javascript',
     label: 'JavaScript',
-    file: 'wifi-agent.js',
     path: 'examples/web/agent-flow/index.html',
     lines: [402, 421],
     steps: { askSsid: 1, confirmSsid: 3, startOver: 4, confirmApply: 7, done: 8, unchanged: 10 },
@@ -233,7 +240,6 @@ export const AGENT_FLOW = [
   {
     id: 'python',
     label: 'Python',
-    file: 'agent_flow.py',
     path: 'examples/python/agent_flow.py',
     lines: [30, 51],
     steps: { askSsid: 1, confirmSsid: 3, startOver: 4, confirmApply: 7, done: 8, unchanged: 10 },
@@ -255,7 +261,6 @@ agent.listen_for("set up wifi", setup_wifi)`,
   {
     id: 'swift',
     label: 'Swift',
-    file: 'AgentFlowApp.swift',
     path: 'examples/ios/AgentFlow/AgentFlow/AgentFlowApp.swift',
     lines: [24, 47],
     steps: { askSsid: 1, confirmSsid: 3, startOver: 4, confirmApply: 8, done: 9, unchanged: 11 },
@@ -279,7 +284,6 @@ agent.listenFor("set up wifi", wifiSetup)`,
   {
     id: 'java',
     label: 'Android',
-    file: 'MainActivity.java',
     path: 'examples/android/AgentFlow/app/src/main/java/ai/moonshine/examples/agentflow/MainActivity.java',
     lines: [41, 62],
     steps: { askSsid: 1, confirmSsid: 2, startOver: 3, confirmApply: 7, done: 8, unchanged: 10 },

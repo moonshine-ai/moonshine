@@ -18,8 +18,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Covers the clip-finding half of voice cloning, which needs no model download
- * because the voice-activity detector is compiled into the library.
+ * Covers the clip-finding half of voice cloning. Extract now requires a loaded
+ * TTS synthesizer handle; these tests load one when TTS assets are available.
  */
 public class VoiceCloneTest {
 
@@ -36,10 +36,22 @@ public class VoiceCloneTest {
                 InstrumentationRegistry.getInstrumentation().getContext(), "beckett.wav");
     }
 
+    private int ttsHandleOrSkip() {
+        TextToSpeech tts = new TextToSpeech(context).language("en");
+        try {
+            tts.load();
+            return tts.getHandleForTests();
+        } catch (RuntimeException e) {
+            org.junit.Assume.assumeNoException("TTS assets unavailable", e);
+            return -1;
+        }
+    }
+
     @Test
     public void testExtractsAClipFromSpeech() throws IOException {
+        int handle = ttsHandleOrSkip();
         Utils.WavData wav = speech();
-        SpeechClip clip = JNI.moonshineExtractSpeechClip(wav.data, wav.sampleRate, 4f, 2f);
+        SpeechClip clip = JNI.moonshineExtractSpeechClip(wav.data, wav.sampleRate, handle, 4f, 2f);
         assertNotNull(clip);
         assertTrue("expected a complete clip from real speech", clip.isComplete);
         assertNotNull(clip.audio);
@@ -49,7 +61,8 @@ public class VoiceCloneTest {
 
     @Test
     public void testSilenceNeverBecomesReady() {
-        VoiceClone clone = new VoiceClone(context);
+        int handle = ttsHandleOrSkip();
+        VoiceClone clone = new VoiceClone(context, handle);
         clone.addAudio(new float[10 * VoiceClone.CLIP_SAMPLE_RATE], VoiceClone.CLIP_SAMPLE_RATE);
         assertFalse(clone.isReady());
         assertNull(clone.getAudio());
@@ -57,8 +70,9 @@ public class VoiceCloneTest {
 
     @Test
     public void testBecomesReadyAndReportsProgress() throws IOException {
+        int handle = ttsHandleOrSkip();
         Utils.WavData wav = speech();
-        VoiceClone clone = new VoiceClone(context);
+        VoiceClone clone = new VoiceClone(context, handle);
         AtomicBoolean ready = new AtomicBoolean(false);
         AtomicInteger progressCalls = new AtomicInteger(0);
         clone.onReady(() -> ready.set(true));
@@ -83,8 +97,9 @@ public class VoiceCloneTest {
 
     @Test
     public void testResetClearsTheClip() throws IOException {
+        int handle = ttsHandleOrSkip();
         Utils.WavData wav = speech();
-        VoiceClone clone = new VoiceClone(context);
+        VoiceClone clone = new VoiceClone(context, handle);
         clone.addAudio(wav.data, wav.sampleRate);
         assertTrue(clone.isReady());
         clone.reset();

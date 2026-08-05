@@ -168,6 +168,7 @@ class SpeechClipC(ctypes.Structure):
         ("start_time", ctypes.c_float),
         ("speech_duration", ctypes.c_float),
         ("is_complete", ctypes.c_int32),
+        ("transcript", ctypes.c_char_p),
     ]
 
 
@@ -385,7 +386,7 @@ def moonshine_get_tts_dependencies_string(
     languages: Optional[str] = None,
     options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
 ) -> str:
-    """Call ``moonshine_get_tts_dependencies`` and return the JSON array string (UTF-8)."""
+    """Call ``moonshine_get_tts_dependencies`` and return the JSON string (UTF-8)."""
     lib = _MoonshineLib().lib
     opt_arr, opt_n, opt_keep = moonshine_options_array(options)
     lang_b = languages.encode("utf-8") if languages is not None else None
@@ -570,11 +571,14 @@ class SpeechClip:
     ``audio`` is 16 kHz mono PCM, and is ``None`` until the recording holds
     enough speech, which is how incremental capture knows to keep listening.
     ``speech_duration`` is useful for showing progress while it does.
+    ``transcript`` is filled when the TTS synthesizer owns clone ASR and the
+    window was complete enough to refine; otherwise ``None``.
     """
 
     audio: Optional[List[float]]
     start_time: float
     speech_duration: float
+    transcript: Optional[str] = None
 
     @property
     def is_complete(self) -> bool:
@@ -602,21 +606,29 @@ def _float_array(audio: Any) -> Tuple[Any, int, Any]:
 def moonshine_extract_speech_clip(
     audio: Any,
     sample_rate: int,
+    tts_synthesizer_handle: int,
     *,
     clip_duration_seconds: float = 4.0,
     minimum_speech_seconds: float = 2.0,
+    tail_pad_seconds: float = 0.0,
 ) -> SpeechClip:
     """Find the best short window of speech in ``audio``, for voice cloning.
 
     Wraps ``moonshine_extract_speech_clip``, which runs the built-in
-    voice-activity detector. No model files or downloads are involved, so this
-    is cheap enough to call repeatedly while the user is still talking.
+    voice-activity detector on ``tts_synthesizer_handle``. When that synthesizer
+    was created as ZipVoice with ``clone_asr/...`` assets under ``g2p_root``,
+    a complete window is
+    further refined with owned ASR and ``transcript`` may be filled.
+
+    ``tail_pad_seconds`` appends extra audio after the VAD window so refine can
+    finish the last word when the TTS owns clone ASR.
     """
     lib = _MoonshineLib().lib
     buffer, length, _owner = _float_array(audio)
     options = {
         "clip_duration_seconds": str(clip_duration_seconds),
         "minimum_speech_seconds": str(minimum_speech_seconds),
+        "tail_pad_seconds": str(tail_pad_seconds),
     }
     opt_arr, opt_n, _keep = moonshine_options_array(options)
     clip = SpeechClipC()
@@ -624,6 +636,7 @@ def moonshine_extract_speech_clip(
         buffer,
         ctypes.c_uint64(length),
         ctypes.c_int32(int(sample_rate)),
+        ctypes.c_int32(int(tts_synthesizer_handle)),
         opt_arr,
         opt_n,
         ctypes.byref(clip),
@@ -646,10 +659,21 @@ def moonshine_extract_speech_clip(
             samples = list(block)
         finally:
             moonshine_free(ctypes.cast(clip.audio_data, ctypes.c_void_p).value)
+
+    transcript: Optional[str] = None
+    if clip.transcript:
+        try:
+            transcript = ctypes.string_at(clip.transcript).decode(
+                "utf-8", errors="ignore"
+            )
+        finally:
+            moonshine_free(ctypes.cast(clip.transcript, ctypes.c_void_p).value)
+
     return SpeechClip(
         audio=samples,
         start_time=float(clip.start_time),
         speech_duration=float(clip.speech_duration),
+        transcript=transcript,
     )
 
 
@@ -1020,6 +1044,7 @@ class _MoonshineLib:
         lib.moonshine_extract_speech_clip.argtypes = [
             ctypes.POINTER(ctypes.c_float),
             ctypes.c_uint64,
+            ctypes.c_int32,
             ctypes.c_int32,
             ctypes.POINTER(TranscriberOptionC),
             ctypes.c_uint64,

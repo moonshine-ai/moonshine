@@ -56,12 +56,15 @@ SOFTWARE.
 #include "moonshine-asset-catalog.h"
 #include "moonshine-g2p.h"
 #include "moonshine-model-catalog.h"
+#include "moonshine-model-file-metadata.h"
 #include "moonshine-model.h"
 #include "moonshine-ort-allocator.h"
 #include "moonshine-tensor-view.h"
 #include "moonshine-tts.h"
 #include "ort-utils.h"
+#include "clone-clip.h"
 #include "speech-clip.h"
+#include "resampler.h"
 #include "string-utils.h"
 #include "text-embedder.h"
 #include "transcriber.h"
@@ -741,14 +744,28 @@ namespace {
 
 std::mutex text_to_speech_synthesizer_map_mutex;
 std::map<int32_t, moonshine_tts::MoonshineTTS *> text_to_speech_synthesizer_map;
+// Clone ASR owned by a ZipVoice synthesizer (same lifetime as the TTS handle).
+std::map<int32_t, int32_t> text_to_speech_clone_asr_map;
 int32_t next_text_to_speech_synthesizer_handle = 0;
 
 int32_t allocate_text_to_speech_synthesizer_handle(
-    moonshine_tts::MoonshineTTS *synthesizer) {
+    moonshine_tts::MoonshineTTS *synthesizer, int32_t clone_asr_handle = -1) {
   std::lock_guard<std::mutex> lock(text_to_speech_synthesizer_map_mutex);
   int32_t handle = next_text_to_speech_synthesizer_handle++;
   text_to_speech_synthesizer_map[handle] = synthesizer;
+  if (clone_asr_handle >= 0) {
+    text_to_speech_clone_asr_map[handle] = clone_asr_handle;
+  }
   return handle;
+}
+
+int32_t clone_asr_for_tts_handle(int32_t tts_handle) {
+  std::lock_guard<std::mutex> lock(text_to_speech_synthesizer_map_mutex);
+  const auto it = text_to_speech_clone_asr_map.find(tts_handle);
+  if (it == text_to_speech_clone_asr_map.end()) {
+    return -1;
+  }
+  return it->second;
 }
 
 void parse_tts_options(const OptionVector &options,
@@ -759,20 +776,313 @@ void parse_tts_options(const OptionVector &options,
   out_options.parse_options(options, &cli_language_out, &language_was_set_out);
 }
 
-// When the ZipVoice engine is selected with a caller-supplied clone reference
-// clip (memory key
-// ``zipvoice/clone_audio``) but no transcript, and the caller passed an
-// existing ASR transcriber via the ``zipvoice_asr_transcriber_handle`` option,
-// transcribe the clip with Moonshine ASR and use the result as the clone
-// transcript. This keeps the TTS library free of an ASR dependency (the ASR
-// call happens here, at the C API layer, which already owns both subsystems).
+constexpr float kDefaultCloneRequestedDurationSeconds = 4.0f;
+constexpr float kDefaultCloneMaxExtensionSeconds = 1.5f;
+constexpr int32_t kCloneClipSampleRate = 16000;
+
+std::string transcript_line_text(const transcript_t *transcript) {
+  std::string text;
+  if (transcript == nullptr) {
+    return text;
+  }
+  for (uint64_t i = 0; i < transcript->line_count; ++i) {
+    const char *line = transcript->lines[i].text;
+    if (line == nullptr) {
+      continue;
+    }
+    std::string t = trim(std::string(line));
+    if (t.empty()) {
+      continue;
+    }
+    if (!text.empty()) {
+      text += " ";
+    }
+    text += t;
+  }
+  return text;
+}
+
+std::vector<CloneClipWord> transcript_clone_words(const transcript_t *transcript) {
+  std::vector<CloneClipWord> words;
+  if (transcript == nullptr) {
+    return words;
+  }
+  for (uint64_t i = 0; i < transcript->line_count; ++i) {
+    const transcript_line_t &line = transcript->lines[i];
+    for (uint64_t j = 0; j < line.word_count; ++j) {
+      const transcript_word_t &w = line.words[j];
+      if (w.text == nullptr || w.text[0] == '\0') {
+        continue;
+      }
+      words.push_back({w.text, w.start, w.end});
+    }
+  }
+  return words;
+}
+
+char *malloc_c_string(const std::string &text) {
+  char *out = static_cast<char *>(std::malloc(text.size() + 1));
+  if (out == nullptr) {
+    return nullptr;
+  }
+  std::memcpy(out, text.c_str(), text.size() + 1);
+  return out;
+}
+
+constexpr const char *kTtsCdnBaseUrl = "https://download.moonshine.ai/tts/";
+constexpr const char *kCloneAsrPrefix = "clone_asr/";
+constexpr size_t kCloneAsrPrefixLen = 10;  // strlen("clone_asr/")
+
+// TTS language tags are regional (en_us); STT catalog codes are not (en).
+std::string stt_language_from_tts_language(const std::string &tts_lang) {
+  const std::string trimmed = trim(tts_lang);
+  const size_t cut = trimmed.find_first_of("_-");
+  if (cut == std::string::npos || cut == 0) {
+    return to_lowercase(trimmed);
+  }
+  return to_lowercase(trimmed.substr(0, cut));
+}
+
+uint32_t default_stt_model_arch_for_language(const std::string &stt_lang) {
+  for (const moonshine::SttCatalogLanguage &lang :
+       moonshine::stt_catalog_listing()) {
+    if (lang.code != stt_lang) {
+      continue;
+    }
+    for (const moonshine::SttCatalogModel &model : lang.models) {
+      if (model.is_default) {
+        return static_cast<uint32_t>(model.model_arch);
+      }
+    }
+    if (!lang.models.empty()) {
+      return static_cast<uint32_t>(lang.models.front().model_arch);
+    }
+  }
+  return static_cast<uint32_t>(MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING);
+}
+
+moonshine::ModelDependencyGroup tts_cdn_group_from_keys(
+    const std::vector<std::string> &keys) {
+  moonshine::ModelDependencyGroup group;
+  group.base_url = kTtsCdnBaseUrl;
+  group.files.reserve(keys.size());
+  for (const std::string &key : keys) {
+    moonshine::ModelFile file;
+    file.name = key;
+    // Base already ends with '/'; avoid a double slash.
+    file.url = std::string(kTtsCdnBaseUrl) + key;
+    const moonshine::ModelFileMetadata meta =
+        moonshine::find_model_file_metadata(file.url);
+    file.size = meta.size;
+    file.checksum = meta.checksum;
+    file.checksum_type = meta.checksum_type;
+    group.files.push_back(std::move(file));
+  }
+  return group;
+}
+
+void append_clone_asr_groups(moonshine::ModelDependencies &deps,
+                             const std::string &tts_language) {
+  const std::string stt_lang = stt_language_from_tts_language(tts_language);
+  const std::optional<moonshine::ModelDependencies> stt =
+      moonshine::stt_model_dependencies(stt_lang, std::nullopt,
+                                        /*include_spelling=*/false,
+                                        /*include_word_timestamps=*/true);
+  if (!stt.has_value()) {
+    return;
+  }
+  for (moonshine::ModelDependencyGroup group : stt->groups) {
+    group.role = "clone_asr";
+    for (moonshine::ModelFile &file : group.files) {
+      file.name = std::string(kCloneAsrPrefix) + file.name;
+    }
+    deps.groups.push_back(std::move(group));
+  }
+}
+
+// Create the owned clone ASR from ZipVoice assets under g2p_root/clone_asr/ or
+// clone_asr/* memory keys. Returns -1 if assets are missing or load fails.
+int32_t try_create_clone_asr_from_assets(
+    const moonshine_tts::MoonshineTTSOptions &tts_options,
+    const std::string &tts_language) {
+  FileInformationMap clone_files;
+  for (const auto &entry : tts_options.files.entries) {
+    const std::string &key = entry.first;
+    if (key.size() <= kCloneAsrPrefixLen ||
+        key.compare(0, kCloneAsrPrefixLen, kCloneAsrPrefix) != 0) {
+      continue;
+    }
+    const std::string stt_key = key.substr(kCloneAsrPrefixLen);
+    const FileInformation &info = entry.second;
+    if (info.memory != nullptr && info.memory_size > 0) {
+      clone_files.set_memory(stt_key, info.memory, info.memory_size);
+    } else if (!info.path.empty()) {
+      clone_files.set_path(stt_key, info.path);
+    }
+  }
+
+  const std::filesystem::path clone_dir =
+      std::filesystem::path(tts_options.g2p_options.g2p_root) / "clone_asr";
+  const bool have_memory = !clone_files.entries.empty();
+  const bool have_dir =
+      !tts_options.g2p_options.g2p_root.empty() &&
+      std::filesystem::is_directory(clone_dir);
+
+  if (!have_memory && !have_dir) {
+    return -1;
+  }
+
+  const std::string stt_lang = stt_language_from_tts_language(tts_language);
+  const uint32_t model_arch = default_stt_model_arch_for_language(stt_lang);
+
+  try {
+    TranscriberOptions transcriber_options;
+    transcriber_options.word_timestamps = true;
+    transcriber_options.model_arch = model_arch;
+    std::string dir_str;
+    if (have_memory) {
+      transcriber_options.model_source =
+          TranscriberOptions::ModelSource::MEMORY_FILES;
+      transcriber_options.model_files = std::move(clone_files);
+    } else {
+      transcriber_options.model_source = TranscriberOptions::ModelSource::FILES;
+      dir_str = clone_dir.string();
+      transcriber_options.model_path = dir_str.c_str();
+    }
+    auto *transcriber = new Transcriber(transcriber_options);
+    return allocate_transcriber_handle(transcriber);
+  } catch (const std::exception &e) {
+    LOGF("Failed to create clone ASR from ZipVoice assets: %s", e.what());
+    return -1;
+  }
+}
+
+bool zipvoice_clone_audio_present(
+    const moonshine_tts::MoonshineTTSOptions &tts_options) {
+  const std::string clone_key{moonshine_tts::kTtsZipVoiceCloneAudioKey};
+  const auto pit = tts_options.files.entries.find(clone_key);
+  return pit != tts_options.files.entries.end() &&
+         pit->second.memory != nullptr &&
+         pit->second.memory_size >= sizeof(float);
+}
+
+// Load owned clone ASR only when ZipVoice create must auto-transcribe a
+// reference clip. Extract is VAD-only, so the ASR is not kept on the TTS
+// handle afterward — keeping it loaded made every ZipVoice create (including
+// preset voices) pay for a full STT session on the UI thread.
+int32_t maybe_create_clone_asr_for_autotranscribe(
+    const moonshine_tts::MoonshineTTSOptions &tts_options,
+    const std::string &lang) {
+  if (tts_options.vocoder_engine != "zipvoice") {
+    return -1;
+  }
+  if (!tts_options.zipvoice_clone_transcript.empty()) {
+    return -1;
+  }
+  if (!zipvoice_clone_audio_present(tts_options)) {
+    return -1;
+  }
+  return try_create_clone_asr_from_assets(tts_options, lang);
+}
+
+// Refine ``audio`` (16 kHz) with ``asr_handle``. On success fills out_clip
+// (malloc'd audio + optional transcript). Word-timestamp failure falls back to
+// the requested window + line text.
+int32_t refine_clip_with_asr(const std::vector<float> &audio,
+                             int32_t asr_handle, float requested_duration,
+                             float max_extension,
+                             moonshine_speech_clip_t *out_clip) {
+  *out_clip = moonshine_speech_clip_t{};
+  if (asr_handle < 0 || audio.empty() || out_clip == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  const float audio_seconds =
+      static_cast<float>(audio.size()) / static_cast<float>(kCloneClipSampleRate);
+  max_extension =
+      std::min(max_extension, std::max(0.0f, audio_seconds - requested_duration));
+
+  transcript_t *asr_transcript = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(transcriber_map_mutex);
+    const auto tit = transcriber_map.find(asr_handle);
+    if (tit == transcriber_map.end() || tit->second == nullptr) {
+      return MOONSHINE_ERROR_INVALID_HANDLE;
+    }
+    try {
+      tit->second->transcribe_without_streaming(
+          const_cast<float *>(audio.data()),
+          static_cast<uint64_t>(audio.size()), kCloneClipSampleRate, 0,
+          &asr_transcript);
+    } catch (const std::exception &e) {
+      LOGF("clone ASR transcription failed: %s", e.what());
+      return MOONSHINE_ERROR_UNKNOWN;
+    }
+  }
+
+  const std::vector<CloneClipWord> words = transcript_clone_words(asr_transcript);
+  CloneClipBounds bounds;
+  if (!words.empty()) {
+    bounds = refine_clone_clip_bounds(0.0f, requested_duration, words,
+                                      max_extension, /*end_pad=*/0.05f);
+  } else {
+    // No word timings: keep the VAD/requested window and use line text.
+    bounds.start_seconds = 0.0f;
+    bounds.end_seconds = std::min(requested_duration, audio_seconds);
+    bounds.transcript = transcript_line_text(asr_transcript);
+  }
+
+  bounds.start_seconds = std::max(0.0f, bounds.start_seconds);
+  bounds.end_seconds = std::min(bounds.end_seconds, audio_seconds);
+  if (!(bounds.end_seconds > bounds.start_seconds)) {
+    bounds.start_seconds = 0.0f;
+    bounds.end_seconds = audio_seconds;
+  }
+
+  const size_t from = static_cast<size_t>(
+      std::lround(bounds.start_seconds * kCloneClipSampleRate));
+  const size_t to = static_cast<size_t>(
+      std::lround(bounds.end_seconds * kCloneClipSampleRate));
+  const size_t begin = std::min(from, audio.size());
+  const size_t end = std::min(std::max(to, begin + 1), audio.size());
+  const size_t count = end - begin;
+
+  float *buffer = static_cast<float *>(std::malloc(count * sizeof(float)));
+  if (buffer == nullptr) {
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+  std::memcpy(buffer, audio.data() + begin, count * sizeof(float));
+  out_clip->audio_data = buffer;
+  out_clip->audio_length = static_cast<uint64_t>(count);
+  out_clip->start_time = bounds.start_seconds;
+  out_clip->speech_duration = bounds.end_seconds - bounds.start_seconds;
+  out_clip->is_complete = 1;
+  out_clip->transcript = nullptr;
+  if (!bounds.transcript.empty()) {
+    out_clip->transcript = malloc_c_string(bounds.transcript);
+    if (out_clip->transcript == nullptr) {
+      std::free(buffer);
+      *out_clip = moonshine_speech_clip_t{};
+      return MOONSHINE_ERROR_UNKNOWN;
+    }
+  }
+  return MOONSHINE_ERROR_NONE;
+}
+
+// When ZipVoice has a caller-supplied clone clip but no transcript, refine
+// with the owned clone ASR (from g2p_root/clone_asr or clone_asr/... memory
+// keys). Keeps the TTS
+// library free of an ASR dependency.
 void maybe_autotranscribe_zipvoice_clone(
     const OptionVector &options,
-    moonshine_tts::MoonshineTTSOptions &tts_options) {
+    moonshine_tts::MoonshineTTSOptions &tts_options,
+    std::vector<uint8_t> *owned_clone_pcm, int32_t clone_asr_handle) {
   if (tts_options.vocoder_engine != "zipvoice") {
     return;
   }
   if (!tts_options.zipvoice_clone_transcript.empty()) {
+    return;
+  }
+  if (clone_asr_handle < 0) {
     return;
   }
   const std::string clone_key{moonshine_tts::kTtsZipVoiceCloneAudioKey};
@@ -781,67 +1091,62 @@ void maybe_autotranscribe_zipvoice_clone(
       pit->second.memory_size < sizeof(float)) {
     return;
   }
-  int32_t asr_handle = -1;
-  bool have_handle = false;
+  float requested_duration = kDefaultCloneRequestedDurationSeconds;
+  float max_extension = kDefaultCloneMaxExtensionSeconds;
   for (const auto &kv : options) {
     std::string key = replace_all(to_lowercase(kv.first), "-", "_");
-    if (key == "zipvoice_asr_transcriber_handle" ||
-        key == "asr_transcriber_handle") {
-      const std::string v = trim(kv.second);
-      if (!v.empty()) {
-        try {
-          asr_handle = static_cast<int32_t>(std::stol(v));
-          have_handle = true;
-        } catch (const std::exception &) {
-          have_handle = false;
-        }
-      }
+    if (key == "clip_duration_seconds" ||
+        key == "requested_duration_seconds") {
+      requested_duration = float_from_string(kv.second);
+    } else if (key == "max_extension_seconds") {
+      max_extension = float_from_string(kv.second);
     }
-  }
-  if (!have_handle) {
-    return;  // No ASR handle: engine tolerates an empty transcript (lower
-             // quality).
   }
   const size_t n = pit->second.memory_size / sizeof(float);
-  std::vector<float> pcm(n);
-  std::memcpy(pcm.data(), pit->second.memory, n * sizeof(float));
-  transcript_t *out_transcript = nullptr;
-  {
-    std::lock_guard<std::mutex> lock(transcriber_map_mutex);
-    const auto tit = transcriber_map.find(asr_handle);
-    if (tit == transcriber_map.end() || tit->second == nullptr) {
-      return;
-    }
-    try {
-      tit->second->transcribe_without_streaming(
-          pcm.data(), static_cast<uint64_t>(pcm.size()),
-          moonshine_tts::MoonshineTTS::kSampleRateHz, 0, &out_transcript);
-    } catch (const std::exception &e) {
-      LOGF("ZipVoice clone auto-transcription failed: %s", e.what());
-      return;
-    }
+  const float *pcm = reinterpret_cast<const float *>(pit->second.memory);
+  const std::vector<float> input(pcm, pcm + n);
+  const float source_rate =
+      tts_options.zipvoice_clone_sample_rate > 0
+          ? static_cast<float>(tts_options.zipvoice_clone_sample_rate)
+          : static_cast<float>(moonshine_tts::MoonshineTTS::kSampleRateHz);
+  const std::vector<float> audio =
+      source_rate == static_cast<float>(kCloneClipSampleRate)
+          ? input
+          : resample_audio(input, source_rate, kCloneClipSampleRate);
+  if (audio.empty()) {
+    return;
   }
-  std::string text;
-  if (out_transcript != nullptr) {
-    for (uint64_t i = 0; i < out_transcript->line_count; ++i) {
-      const char *line = out_transcript->lines[i].text;
-      if (line == nullptr) {
-        continue;
-      }
-      std::string t = trim(std::string(line));
-      if (t.empty()) {
-        continue;
-      }
-      if (!text.empty()) {
-        text += " ";
-      }
-      text += t;
+
+  moonshine_speech_clip_t refined{};
+  const int32_t err = refine_clip_with_asr(audio, clone_asr_handle,
+                                           requested_duration, max_extension,
+                                           &refined);
+  if (err != MOONSHINE_ERROR_NONE || refined.audio_data == nullptr ||
+      refined.audio_length == 0) {
+    if (refined.audio_data != nullptr) {
+      moonshine_free_buffer(refined.audio_data);
     }
-    // ``out_transcript`` points into transcriber-owned storage; it must not be
-    // freed here.
+    if (refined.transcript != nullptr) {
+      moonshine_free_buffer(refined.transcript);
+    }
+    LOGF("ZipVoice clone refine failed: %d", err);
+    return;
   }
-  if (!text.empty()) {
-    tts_options.zipvoice_clone_transcript = std::move(text);
+
+  if (owned_clone_pcm != nullptr) {
+    const size_t byte_count = refined.audio_length * sizeof(float);
+    owned_clone_pcm->resize(byte_count);
+    std::memcpy(owned_clone_pcm->data(), refined.audio_data, byte_count);
+    pit->second.memory = owned_clone_pcm->data();
+    pit->second.memory_size = byte_count;
+  }
+  moonshine_free_buffer(refined.audio_data);
+
+  if (refined.transcript != nullptr && refined.transcript[0] != '\0') {
+    tts_options.zipvoice_clone_transcript = refined.transcript;
+  }
+  if (refined.transcript != nullptr) {
+    moonshine_free_buffer(refined.transcript);
   }
 }
 
@@ -861,6 +1166,7 @@ void maybe_autotranscribe_zipvoice_clone(
 int32_t moonshine_extract_speech_clip(const float *audio_data,
                                       uint64_t audio_length,
                                       int32_t sample_rate,
+                                      int32_t tts_synthesizer_handle,
                                       const moonshine_option_t *options,
                                       uint64_t options_count,
                                       moonshine_speech_clip_t *out_clip) {
@@ -874,13 +1180,22 @@ int32_t moonshine_extract_speech_clip(const float *audio_data,
   if (options_count > 0 && options == nullptr) {
     return MOONSHINE_ERROR_INVALID_ARGUMENT;
   }
+  {
+    std::lock_guard<std::mutex> lock(text_to_speech_synthesizer_map_mutex);
+    if (tts_synthesizer_handle < 0 ||
+        !text_to_speech_synthesizer_map.contains(tts_synthesizer_handle)) {
+      LOGF("Moonshine text to speech synthesizer handle is invalid: handle %d",
+           (int)tts_synthesizer_handle);
+      return MOONSHINE_ERROR_INVALID_HANDLE;
+    }
+  }
 
   OptionVector option_vector = parse_option_vector(options, options_count);
   OptionVector uncommon_options = parse_common_options(option_vector);
   if (log_api_calls) {
     LOGF("moonshine_extract_speech_clip(audio_length=%" PRIu64
-         ", sample_rate=%d, options_count=%" PRIu64 ")",
-         audio_length, sample_rate, options_count);
+         ", sample_rate=%d, tts_handle=%d, options_count=%" PRIu64 ")",
+         audio_length, sample_rate, tts_synthesizer_handle, options_count);
   }
 
   SpeechClipOptions clip_options;
@@ -891,6 +1206,8 @@ int32_t moonshine_extract_speech_clip(const float *audio_data,
       clip_options.minimum_speech_seconds = float_from_string(value);
     } else if (key == "vad_threshold") {
       clip_options.vad_threshold = float_from_string(value);
+    } else if (key == "tail_pad_seconds") {
+      clip_options.tail_pad_seconds = float_from_string(value);
     }
   }
 
@@ -906,10 +1223,14 @@ int32_t moonshine_extract_speech_clip(const float *audio_data,
   out_clip->start_time = clip.start_time_seconds;
   out_clip->speech_duration = clip.speech_seconds;
   out_clip->is_complete = clip.is_complete ? 1 : 0;
+  out_clip->transcript = nullptr;
   if (!clip.is_complete || clip.audio.empty()) {
     return MOONSHINE_ERROR_NONE;
   }
 
+  // VAD only here. Owned clone ASR refine + transcript run once at ZipVoice
+  // create (maybe_autotranscribe_zipvoice_clone), so incremental VoiceClone
+  // search stays responsive on the audio / UI thread.
   const size_t byte_count = clip.audio.size() * sizeof(float);
   float *buffer = static_cast<float *>(std::malloc(byte_count));
   if (buffer == nullptr) {
@@ -946,16 +1267,24 @@ int32_t moonshine_create_tts_synthesizer_from_files(
   bool lang_from_options_set = false;
   parse_tts_options(uncommon_options, tts_options, lang_from_options,
                     lang_from_options_set);
-  maybe_autotranscribe_zipvoice_clone(uncommon_options, tts_options);
   std::string lang = (language != nullptr && language[0] != '\0')
                          ? std::string(language)
                          : std::string("en_us");
   if (lang_from_options_set) {
     lang = std::move(lang_from_options);
   }
+  const int32_t clone_asr =
+      maybe_create_clone_asr_for_autotranscribe(tts_options, lang);
+  std::vector<uint8_t> owned_clone_pcm;
+  maybe_autotranscribe_zipvoice_clone(uncommon_options, tts_options,
+                                      &owned_clone_pcm, clone_asr);
+  // ASR was only needed for autotranscribe; do not keep it on the TTS handle.
+  if (clone_asr >= 0) {
+    free_transcriber_handle(clone_asr);
+  }
   try {
     auto *synthesizer = new moonshine_tts::MoonshineTTS(lang, tts_options);
-    return allocate_text_to_speech_synthesizer_handle(synthesizer);
+    return allocate_text_to_speech_synthesizer_handle(synthesizer, -1);
   } catch (const std::exception &e) {
     LOGF("Failed to create TTS synthesizer: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
@@ -1001,7 +1330,8 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
       const bool is_tts_only =
           (key.size() >= 7 && key.compare(0, 7, "kokoro/") == 0) ||
           (key.size() >= 6 && key.compare(0, 6, "piper/") == 0) ||
-          (key.size() >= 9 && key.compare(0, 9, "zipvoice/") == 0);
+          (key.size() >= 9 && key.compare(0, 9, "zipvoice/") == 0) ||
+          (key.size() >= 10 && key.compare(0, 10, "clone_asr/") == 0);
       FileInformationMap &dest =
           is_tts_only ? tts_options.files : tts_options.g2p_options.files;
       if (memory[i] != nullptr && memory_sizes[i] > 0) {
@@ -1033,15 +1363,29 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
     bool lang_from_options_set = false;
     parse_tts_options(uncommon_options, tts_options, lang_from_options,
                       lang_from_options_set);
-    maybe_autotranscribe_zipvoice_clone(uncommon_options, tts_options);
     std::string lang = (language != nullptr && language[0] != '\0')
                            ? std::string(language)
                            : std::string("en_us");
     if (lang_from_options_set) {
       lang = std::move(lang_from_options);
     }
-    auto *synthesizer = new moonshine_tts::MoonshineTTS(lang, tts_options);
-    return allocate_text_to_speech_synthesizer_handle(synthesizer);
+    const int32_t clone_asr =
+        maybe_create_clone_asr_for_autotranscribe(tts_options, lang);
+    try {
+      std::vector<uint8_t> owned_clone_pcm;
+      maybe_autotranscribe_zipvoice_clone(uncommon_options, tts_options,
+                                          &owned_clone_pcm, clone_asr);
+      if (clone_asr >= 0) {
+        free_transcriber_handle(clone_asr);
+      }
+      auto *synthesizer = new moonshine_tts::MoonshineTTS(lang, tts_options);
+      return allocate_text_to_speech_synthesizer_handle(synthesizer, -1);
+    } catch (...) {
+      if (clone_asr >= 0) {
+        free_transcriber_handle(clone_asr);
+      }
+      throw;
+    }
   } catch (const std::exception &e) {
     LOGF("Failed to create TTS synthesizer from memory: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
@@ -1055,11 +1399,22 @@ void moonshine_free_tts_synthesizer(int32_t tts_synthesizer_handle) {
   if (log_api_calls) {
     LOGF("moonshine_free_tts_synthesizer(handle=%d)", tts_synthesizer_handle);
   }
-  std::lock_guard<std::mutex> lock(text_to_speech_synthesizer_map_mutex);
-  if (text_to_speech_synthesizer_map.contains(tts_synthesizer_handle)) {
-    delete text_to_speech_synthesizer_map[tts_synthesizer_handle];
-    text_to_speech_synthesizer_map[tts_synthesizer_handle] = nullptr;
-    text_to_speech_synthesizer_map.erase(tts_synthesizer_handle);
+  int32_t clone_asr = -1;
+  {
+    std::lock_guard<std::mutex> lock(text_to_speech_synthesizer_map_mutex);
+    if (text_to_speech_synthesizer_map.contains(tts_synthesizer_handle)) {
+      delete text_to_speech_synthesizer_map[tts_synthesizer_handle];
+      text_to_speech_synthesizer_map[tts_synthesizer_handle] = nullptr;
+      text_to_speech_synthesizer_map.erase(tts_synthesizer_handle);
+    }
+    const auto asr_it = text_to_speech_clone_asr_map.find(tts_synthesizer_handle);
+    if (asr_it != text_to_speech_clone_asr_map.end()) {
+      clone_asr = asr_it->second;
+      text_to_speech_clone_asr_map.erase(asr_it);
+    }
+  }
+  if (clone_asr >= 0) {
+    free_transcriber_handle(clone_asr);
   }
 }
 
@@ -1334,6 +1689,10 @@ std::string json_model_dependencies(const moonshine::ModelDependencies &deps) {
     const moonshine::ModelDependencyGroup &group = deps.groups[i];
     o += "{\"base_url\":";
     o += json_utf8_string_literal(group.base_url);
+    if (!group.role.empty()) {
+      o += ",\"role\":";
+      o += json_utf8_string_literal(group.role);
+    }
     o += ",\"files\":[";
     for (size_t j = 0; j < group.files.size(); ++j) {
       if (j > 0) {
@@ -1568,6 +1927,7 @@ int32_t moonshine_get_tts_dependencies(const char *languages,
       tts_opt.g2p_options.g2p_root = std::filesystem::current_path();
     }
     std::vector<std::string> merged;
+    std::vector<std::string> lang_tags_for_clone;
     if (all_langs) {
       merged = moonshine_tts::
           moonshine_asset_catalog_all_g2p_dependency_keys_union();
@@ -1579,6 +1939,7 @@ int32_t moonshine_get_tts_dependencies(const char *languages,
             moonshine_tts::moonshine_catalog_tts_vocoder_only_dependency_keys(
                 tag, tts_opt));
       }
+      lang_tags_for_clone = tags;
     } else {
       const std::vector<std::string> parts =
           split_comma_nonempty_language_tokens(languages);
@@ -1593,6 +1954,7 @@ int32_t moonshine_get_tts_dependencies(const char *languages,
               moonshine_tts::moonshine_catalog_tts_vocoder_only_dependency_keys(
                   tag, tts_opt));
         }
+        lang_tags_for_clone = tags;
       } else {
         for (const std::string &part : parts) {
           const std::optional<std::vector<std::string>> g2p =
@@ -1615,10 +1977,35 @@ int32_t moonshine_get_tts_dependencies(const char *languages,
           }
           append_unique_in_order(merged, *g2p);
           append_unique_in_order(merged, voc);
+          lang_tags_for_clone.push_back(part);
         }
       }
     }
-    const std::string dumped = json_flat_string_array(merged);
+
+    moonshine::ModelDependencies deps;
+    if (!merged.empty()) {
+      deps.groups.push_back(tts_cdn_group_from_keys(merged));
+    }
+
+    // ZipVoice owns a catalog-default STT (with word timestamps) for clone
+    // refine. Advertise it so bindings download under clone_asr/.
+    if (tts_opt.vocoder_engine == "zipvoice") {
+      std::unordered_set<std::string> seen_stt_langs;
+      for (const std::string &tag : lang_tags_for_clone) {
+        const std::string stt_lang = stt_language_from_tts_language(tag);
+        if (!seen_stt_langs.insert(stt_lang).second) {
+          continue;
+        }
+        append_clone_asr_groups(deps, tag);
+      }
+      // Bare zipvoice / all-langs with zipvoice voice still needs English STT
+      // when no language tags were collected.
+      if (lang_tags_for_clone.empty()) {
+        append_clone_asr_groups(deps, "en_us");
+      }
+    }
+
+    const std::string dumped = json_model_dependencies(deps);
     char *buf = malloc_string_copy(dumped);
     if (buf == nullptr) {
       return MOONSHINE_ERROR_UNKNOWN;

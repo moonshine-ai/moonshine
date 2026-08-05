@@ -4,8 +4,7 @@ import XCTest
 @testable import MoonshineVoice
 
 /// Covers the reference-clip capture used for voice cloning. These feed audio
-/// in directly rather than opening a microphone, so they need no hardware and
-/// no model download: the voice-activity detector is compiled into the library.
+/// in directly rather than opening a microphone, so they need no hardware.
 final class VoiceCloneTests: XCTestCase {
 
     /// Real speech, which the detector should find a window in.
@@ -15,10 +14,22 @@ final class VoiceCloneTests: XCTestCase {
         return (wav.audioData, Int32(wav.sampleRate))
     }
 
+    /// A loaded TTS handle for extractSpeechClip (VAD-only is sufficient).
+    private func ttsHandle() throws -> Int32 {
+        let g2pRoot = "../core/moonshine-tts/data/"
+        guard FileManager.default.fileExists(atPath: g2pRoot + "zipvoice/vocoder.ort") else {
+            throw XCTSkip("zipvoice assets not available")
+        }
+        let tts = try TextToSpeech(language: "en_us", g2pRoot: g2pRoot)
+        return tts.synthesizerHandle
+    }
+
     func testExtractsAClipFromSpeech() throws {
         let (samples, rate) = try speechSamples()
+        let handle = try ttsHandle()
         let result = try MoonshineAPI.shared.extractSpeechClip(
-            audioData: samples, sampleRate: rate, clipDurationSeconds: 4,
+            audioData: samples, sampleRate: rate, ttsSynthesizerHandle: handle,
+            clipDurationSeconds: 4,
             minimumSpeechSeconds: 2)
 
         let clip = try XCTUnwrap(result.audio, "should find speech in two_cities.wav")
@@ -27,9 +38,11 @@ final class VoiceCloneTests: XCTestCase {
     }
 
     func testSilenceYieldsNoClip() throws {
+        let handle = try ttsHandle()
         let silence = [Float](repeating: 0, count: 16000 * 6)
         let result = try MoonshineAPI.shared.extractSpeechClip(
-            audioData: silence, sampleRate: 16000, clipDurationSeconds: 4,
+            audioData: silence, sampleRate: 16000, ttsSynthesizerHandle: handle,
+            clipDurationSeconds: 4,
             minimumSpeechSeconds: 2)
 
         XCTAssertNil(result.audio, "silence should not produce a reference clip")
@@ -37,9 +50,11 @@ final class VoiceCloneTests: XCTestCase {
 
     func testTooShortToFillAWindowYieldsNoClip() throws {
         let (samples, rate) = try speechSamples()
+        let handle = try ttsHandle()
         let oneSecond = Array(samples.prefix(Int(rate)))
         let result = try MoonshineAPI.shared.extractSpeechClip(
-            audioData: oneSecond, sampleRate: rate, clipDurationSeconds: 4,
+            audioData: oneSecond, sampleRate: rate, ttsSynthesizerHandle: handle,
+            clipDurationSeconds: 4,
             minimumSpeechSeconds: 2)
 
         XCTAssertNil(result.audio)
@@ -47,7 +62,8 @@ final class VoiceCloneTests: XCTestCase {
 
     func testIncrementalCaptureBecomesReady() throws {
         let (samples, rate) = try speechSamples()
-        let clone = VoiceClone()
+        let handle = try ttsHandle()
+        let clone = VoiceClone(ttsHandle: handle)
         let readyCount = ReadyCounter()
         clone.onReady { readyCount.bump() }
 
@@ -76,7 +92,8 @@ final class VoiceCloneTests: XCTestCase {
 
     func testResetDiscardsTheClip() throws {
         let (samples, rate) = try speechSamples()
-        let clone = VoiceClone()
+        let handle = try ttsHandle()
+        let clone = VoiceClone(ttsHandle: handle)
         clone.addAudio(samples, sampleRate: rate)
         XCTAssertTrue(clone.isReady)
 
@@ -89,7 +106,8 @@ final class VoiceCloneTests: XCTestCase {
 
     func testProgressReportsSpeechFound() throws {
         let (samples, rate) = try speechSamples()
-        let clone = VoiceClone()
+        let handle = try ttsHandle()
+        let clone = VoiceClone(ttsHandle: handle)
         let updates = ProgressLog()
         clone.onProgress { recorded, speech in updates.add(recorded, speech) }
 

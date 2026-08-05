@@ -61,9 +61,11 @@ def main():
         parser.error("a cloned voice comes from the recording, so --voice cannot be set")
 
     cloning = bool(args.clone or args.clone_from_mic)
-    tts = TextToSpeech().language(args.language).cloning(cloning)
+    tts = TextToSpeech().language(args.language)
     if args.voice is not None:
         tts.voice(args.voice)
+    elif cloning:
+        tts.cloning()
     if sys.stderr.isatty():
         tts.on_progress(ProgressBar().update)
 

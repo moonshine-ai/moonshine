@@ -71,14 +71,19 @@ await tts.say('Hello from Moonshine.');
 tts.close();
 ```
 
-Cloning a voice takes one more call. Pass a URL, a `File`, a `Blob`, or raw PCM;
-the binding trims it to a few seconds of speech and transcribes that clip for
-the vocoder:
+Cloning is a create-time mode. Call `.cloning()` before `load()` so ZipVoice
+and clone ASR download with the synthesizer; then pass a URL, `File`, `Blob`,
+or raw PCM to `cloneFrom`:
 
 ```ts
+const tts = new TextToSpeech().language('en_us').cloning();
+await tts.load();
 await tts.cloneFrom('some-speech.wav');
 await tts.say('Now I sound like the recording.');
 ```
+
+In the browser, `load()` / `say()` / `cloneFrom()` run synthesis on a Web Worker
+so the page stays responsive. `synthesize()` stays on the main thread.
 
 ## Dialog flows
 

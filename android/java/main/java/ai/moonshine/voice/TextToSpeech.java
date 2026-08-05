@@ -48,8 +48,10 @@ public class TextToSpeech {
 
     /** Canonical asset key under which a ZipVoice clone reference clip is supplied. */
     private static final String CLONE_AUDIO_KEY = "zipvoice/clone_audio";
-    /** The only engine that can clone an arbitrary reference voice. */
+    /** Engine name used when creating ZipVoice from a captured clone clip. */
     private static final String CLONE_VOICE = "zipvoice";
+    /** Built-in ZipVoice voice used by {@link #cloning(boolean)} before a clip exists. */
+    private static final String CLONE_PRESET_VOICE = "zipvoice_american_female";
     /** Reference clips are resampled to this rate before cloning. */
     private static final int CLONE_SAMPLE_RATE = 16000;
 
@@ -68,8 +70,6 @@ public class TextToSpeech {
     /** The clip the current voice was cloned from, if any. */
     @Nullable private float[] cloneSamples;
     @Nullable private String cloneTranscript;
-    /** Loaded lazily, the first time a clone clip needs transcribing. */
-    @Nullable private Transcriber clipTranscriber;
 
     private final Object sayLock = new Object();
     /** {@code Integer.MIN_VALUE} means no track has been built yet. */
@@ -97,9 +97,10 @@ public class TextToSpeech {
         return this;
     }
 
-    /** Voice id, e.g. {@code "kokoro_af_heart"}. Defaults to the engine's own default. */
+    /** Catalog voice id, e.g. {@code "kokoro_af_heart"}. Clears {@link #cloning(boolean)}. */
     public TextToSpeech voice(String id) {
         this.voiceId = id;
+        this.cloningWanted = false;
         return this;
     }
 
@@ -110,12 +111,22 @@ public class TextToSpeech {
     }
 
     /**
-     * Fetches the cloning engine during {@link #load()} rather than on the first
-     * {@link #cloneFrom(String)}, so the first clone is quick.
+     * Create this synthesizer as a ZipVoice cloning engine. Call before
+     * {@link #load()} so ZipVoice and clone-ASR assets are fetched up front.
+     * Clears {@link #voice(String)}. Only then may {@link #cloneFrom} /
+     * {@link #startCloning()} be used.
      */
     public TextToSpeech cloning(boolean enabled) {
         this.cloningWanted = enabled;
+        if (enabled) {
+            this.voiceId = null;
+        }
         return this;
+    }
+
+    /** Same as {@link #cloning(boolean) cloning(true)}. */
+    public TextToSpeech cloning() {
+        return cloning(true);
     }
 
     /** Asset download progress, as a {@code 0..1} fraction plus the file being fetched. */
@@ -147,14 +158,12 @@ public class TextToSpeech {
 
     /**
      * Downloads the voice assets if needed and prepares the synthesizer. Blocks;
-     * call from a background thread.
+     * call from a background thread. With {@link #cloning()}, ZipVoice and clone
+     * ASR are both fetched here.
      */
     public void load() {
         if (cloningWanted && cloneSamples == null) {
-            // The cloning engine can't exist until there's a voice to clone, so
-            // all load() can usefully do is fetch its assets into the cache that
-            // the first cloneFrom() reads from.
-            ensureAssets(CLONE_VOICE);
+            build(CLONE_PRESET_VOICE);
             return;
         }
         build(voiceId);
@@ -213,9 +222,10 @@ public class TextToSpeech {
 
     /** Clones the voice in {@code samples}, with the words of the clip supplied. */
     public void cloneFrom(float[] samples, int sampleRate, @Nullable String transcript) {
+        requireCloningMode("cloneFrom()");
         float[] clip = clipForCloning(samples, sampleRate);
         cloneSamples = clip;
-        cloneTranscript = transcript != null ? transcript : transcribeClip(clip);
+        cloneTranscript = transcript;
         build(CLONE_VOICE);
     }
 
@@ -231,6 +241,9 @@ public class TextToSpeech {
             throw new IllegalStateException(
                     "That VoiceClone has not captured enough speech yet - wait for onReady.");
         }
+        if (transcript == null || transcript.isEmpty()) {
+            transcript = clone.getTranscript();
+        }
         cloneFrom(audio, clone.getSampleRate(), transcript);
     }
 
@@ -239,12 +252,16 @@ public class TextToSpeech {
      * returned object reports when it has heard enough.
      */
     public VoiceClone startCloning() {
-        return new VoiceClone(appContext);
+        requireCloningMode("startCloning()");
+        checkLoaded();
+        return new VoiceClone(appContext, handle);
     }
 
     /** As {@link #startCloning()}, with the clip length and speech minimum tuned. */
     public VoiceClone startCloning(float clipDurationSeconds, float minimumSpeechSeconds) {
-        return new VoiceClone(appContext, clipDurationSeconds, minimumSpeechSeconds);
+        requireCloningMode("startCloning()");
+        checkLoaded();
+        return new VoiceClone(appContext, handle, clipDurationSeconds, minimumSpeechSeconds);
     }
 
     // -- Synthesis -----------------------------------------------------------
@@ -300,9 +317,11 @@ public class TextToSpeech {
      *
      * <p>Utterances play in the order they were requested, and synthesis of the
      * next one is pipelined with playback of the current one, so several
-     * concurrent {@code say} calls still come out in order without gaps.
-     * {@link #stop()} cancels everything queued and halts the audio playing now,
-     * which makes the waiting calls return early.
+     * concurrent {@code say} calls still come out in order without gaps. Long
+     * strings are split on an approximate sentence boundary ({@code .},
+     * {@code !}, or {@code ?} followed by whitespace) so the first sentence can
+     * start sooner. {@link #stop()} cancels everything queued and halts the
+     * audio playing now, which makes the waiting calls return early.
      */
     public void say(String text) {
         say(text, null);
@@ -313,7 +332,9 @@ public class TextToSpeech {
         if (text == null || text.isEmpty()) {
             return;
         }
-        enqueue(text, options);
+        for (String sentence : splitSayUtterances(text)) {
+            enqueue(sentence, options);
+        }
         waitUntilDone();
     }
 
@@ -324,7 +345,9 @@ public class TextToSpeech {
         }
         for (String text : texts) {
             if (text != null && !text.isEmpty()) {
-                enqueue(text, null);
+                for (String sentence : splitSayUtterances(text)) {
+                    enqueue(sentence, null);
+                }
             }
         }
         waitUntilDone();
@@ -338,7 +361,9 @@ public class TextToSpeech {
         if (text == null || text.isEmpty()) {
             return;
         }
-        enqueue(text, null);
+        for (String sentence : splitSayUtterances(text)) {
+            enqueue(sentence, null);
+        }
     }
 
     /** Blocks until all queued utterances have been synthesized and played. */
@@ -447,73 +472,23 @@ public class TextToSpeech {
      * resampling to 16 kHz on the way.
      */
     private float[] clipForCloning(float[] samples, int sampleRate) {
+        checkLoaded();
         if (sampleRate == CLONE_SAMPLE_RATE && samples.length <= CLONE_SAMPLE_RATE * 10) {
             return samples;
         }
-        SpeechClip clip = JNI.moonshineExtractSpeechClip(samples, sampleRate, 4f, 2f);
+        SpeechClip clip = JNI.moonshineExtractSpeechClip(samples, sampleRate, handle, 4f, 2f);
         if (clip != null && clip.audio != null) {
             return clip.audio;
         }
         // Nothing clearly speech-like. Rather than refuse outright, take the best
         // window the detector found - a poor clone beats no clone for a caller
         // who explicitly handed us this recording.
-        clip = JNI.moonshineExtractSpeechClip(samples, sampleRate, 4f, 0f);
+        clip = JNI.moonshineExtractSpeechClip(samples, sampleRate, handle, 4f, 0f);
         if (clip != null && clip.audio != null) {
             return clip.audio;
         }
         throw new IllegalArgumentException(
                 "Couldn't find enough speech in that recording to clone from.");
-    }
-
-    /**
-     * Transcribes a clone clip so the vocoder knows what the reference voice
-     * said. The speech-to-text model this needs is an implementation detail, so
-     * it is loaded here rather than being the caller's problem. Cloning still
-     * works without a transcript, just less faithfully, so a failure here is
-     * swallowed rather than sinking the whole operation.
-     */
-    @Nullable
-    private String transcribeClip(float[] clip) {
-        try {
-            if (clipTranscriber == null) {
-                Transcriber transcriber = new Transcriber();
-                ModelSpec spec = ModelSpec.stt(sttLanguage(languageTag),
-                        JNI.MOONSHINE_MODEL_ARCH_BASE, false);
-                File directory = Models.ensureOne(appContext, spec, assetDirectory,
-                        progressCallback);
-                transcriber.loadFromFiles(directory.getAbsolutePath(),
-                        JNI.MOONSHINE_MODEL_ARCH_BASE);
-                clipTranscriber = transcriber;
-            }
-            Transcript transcript = clipTranscriber.transcribeWithoutStreaming(clip,
-                    CLONE_SAMPLE_RATE);
-            StringBuilder text = new StringBuilder();
-            if (transcript != null && transcript.lines != null) {
-                for (TranscriptLine line : transcript.lines) {
-                    if (line.text == null || line.text.isEmpty()) {
-                        continue;
-                    }
-                    if (text.length() > 0) {
-                        text.append(' ');
-                    }
-                    text.append(line.text);
-                }
-            }
-            String result = text.toString().trim();
-            return result.isEmpty() ? null : result;
-        } catch (Exception e) {
-            Log.w("MoonshineTTS", "Couldn't transcribe the clone clip; cloning without it", e);
-            return null;
-        }
-    }
-
-    /** TTS languages are regional ({@code en_us}); speech-to-text ones are not ({@code en}). */
-    private static String sttLanguage(String ttsLanguage) {
-        int cut = ttsLanguage.indexOf('_');
-        if (cut < 0) {
-            cut = ttsLanguage.indexOf('-');
-        }
-        return cut > 0 ? ttsLanguage.substring(0, cut) : ttsLanguage;
     }
 
     private static byte[] floatPcmToLeBytes(float[] pcm) {
@@ -527,10 +502,62 @@ public class TextToSpeech {
 
     private void checkLoaded() {
         if (handle < 0) {
-            throw new IllegalStateException(cloningWanted
-                            ? "Call cloneFrom() before synthesizing with a cloned voice."
-                            : "Call load() before synthesizing.");
+            throw new IllegalStateException("Call load() before synthesizing.");
         }
+    }
+
+    /**
+     * Approximate sentence split for {@link #say}: break on {@code .} / {@code !}
+     * / {@code ?} / {@code :} followed by whitespace so the first clause can
+     * start sooner.
+     */
+    static List<String> splitSayUtterances(String text) {
+        String stripped = text == null ? "" : text.trim();
+        if (stripped.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+        List<String> parts = new ArrayList<>();
+        int start = 0;
+        int i = 0;
+        final int n = stripped.length();
+        while (i < n) {
+            char ch = stripped.charAt(i);
+            if ((ch == '.' || ch == '!' || ch == '?' || ch == ':') && i + 1 < n
+                    && Character.isWhitespace(stripped.charAt(i + 1))) {
+                int end = i + 1;
+                int j = i + 1;
+                while (j < n && Character.isWhitespace(stripped.charAt(j))) {
+                    j++;
+                }
+                String piece = stripped.substring(start, end).trim();
+                if (!piece.isEmpty()) {
+                    parts.add(piece);
+                }
+                start = j;
+                i = j;
+                continue;
+            }
+            i++;
+        }
+        String tail = stripped.substring(start).trim();
+        if (!tail.isEmpty()) {
+            parts.add(tail);
+        }
+        return parts;
+    }
+
+    private void requireCloningMode(String what) {
+        if (!cloningWanted) {
+            throw new IllegalStateException(
+                    "Call cloning() before load() to use " + what
+                            + ". Catalog voices and cloning are separate synthesizer modes.");
+        }
+    }
+
+    /** Package-visible for instrumented tests that need an extractSpeechClip handle. */
+    int getHandleForTests() {
+        checkLoaded();
+        return handle;
     }
 
     private static TranscriberOption[] toArray(@Nullable List<TranscriberOption> options) {
@@ -552,7 +579,7 @@ public class TextToSpeech {
         return json;
     }
 
-    /** JSON array of merged G2P + vocoder keys (see {@code moonshine_get_tts_dependencies}). */
+    /** JSON groups manifest of merged G2P + vocoder (+ ZipVoice clone ASR) assets. */
     public static String getTtsDependencies(String languages, List<TranscriberOption> options) {
         JNI.ensureLibraryLoaded();
         String json = JNI.moonshineGetTtsDependencies(languages, toArray(options));
@@ -908,10 +935,6 @@ public class TextToSpeech {
         if (handle >= 0) {
             JNI.moonshineFreeTtsSynthesizer(handle);
             handle = -1;
-        }
-        if (clipTranscriber != null) {
-            clipTranscriber.close();
-            clipTranscriber = null;
         }
     }
 

@@ -5,7 +5,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { importApi, loadRawModule, ttsAssetMapOrNull } from './helpers.mjs';
+import { importApi, loadRawModule, flattenTtsDependencyKeys, ttsAssetMapOrNull } from './helpers.mjs';
 
 const mod = await loadRawModule();
 const ttsSupported =
@@ -25,14 +25,15 @@ test('the en_us voice catalog lists kokoro voices', { skip: skipSurface }, () =>
 
 test('the en_us dependency manifest lists the kokoro model + voice', { skip: skipSurface }, () => {
   const deps = JSON.parse(mod.ttsDependencies('en_us', ''));
-  assert.ok(Array.isArray(deps) && deps.length > 0);
-  assert.ok(deps.includes('kokoro/model.ort'));
-  assert.ok(deps.includes('kokoro/config.json'));
-  assert.ok(deps.some((k) => k.startsWith('kokoro/voices/')));
+  assert.ok(deps && Array.isArray(deps.groups) && deps.groups.length > 0);
+  const keys = flattenTtsDependencyKeys(deps);
+  assert.ok(keys.includes('kokoro/model.ort'));
+  assert.ok(keys.includes('kokoro/config.json'));
+  assert.ok(keys.some((k) => k.startsWith('kokoro/voices/')));
 });
 
 const depKeys = ttsSupported
-  ? JSON.parse(mod.ttsDependencies('en_us', ''))
+  ? flattenTtsDependencyKeys(JSON.parse(mod.ttsDependencies('en_us', '')))
   : [];
 const assets = ttsSupported ? ttsAssetMapOrNull(depKeys) : null;
 const synthSkip = !ttsSupported
@@ -85,25 +86,77 @@ test('configuration setters chain and return the engine', async () => {
   assert.equal(tts.isCloned, false);
 });
 
+test('splitSayUtterances breaks on punct plus space', async () => {
+  const { splitSayUtterances } = await importApi();
+  assert.deepEqual(splitSayUtterances(''), []);
+  assert.deepEqual(splitSayUtterances('Hello'), ['Hello']);
+  assert.deepEqual(splitSayUtterances('Hello.'), ['Hello.']);
+  assert.deepEqual(splitSayUtterances('Hello. World'), ['Hello.', 'World']);
+  assert.deepEqual(splitSayUtterances('Hello! World? Yes.'), [
+    'Hello!',
+    'World?',
+    'Yes.',
+  ]);
+  assert.deepEqual(splitSayUtterances('3.14 is pi.'), ['3.14 is pi.']);
+  assert.deepEqual(splitSayUtterances('Warning: the core is hot.'), [
+    'Warning:',
+    'the core is hot.',
+  ]);
+});
+
 test('synthesizing before load() is a clear error', async () => {
   const { TextToSpeech } = await importApi();
   const tts = new TextToSpeech();
   assert.throws(() => tts.synthesize('Hello'), /load\(\)/);
 });
 
-test('loading in clone mode waits for a voice to clone', { skip: skipSurface }, async () => {
+test('startCloning before load() is a clear error', async () => {
   const { TextToSpeech } = await importApi();
-  // There is no engine to build until cloneFrom() supplies a reference voice,
-  // so load() only fetches the assets rather than failing.
+  const tts = new TextToSpeech().cloning().useModule(mod);
+  assert.throws(() => tts.startCloning(), /load\(\)/);
+});
+
+test('cloneFrom without cloning() is a clear error', async () => {
+  const { TextToSpeech } = await importApi();
+  const tts = new TextToSpeech().useModule(mod);
+  await assert.rejects(() => tts.cloneFrom(new Float32Array(16)), /cloning\(\)/);
+});
+
+test('voice() and cloning() are mutually exclusive', async () => {
+  const { TextToSpeech } = await importApi();
+  const tts = new TextToSpeech().voice('kokoro_af_heart').cloning();
+  assert.equal(tts.cloning(), tts);
+  // cloning cleared the catalog voice; voice() clears cloning.
+  tts.voice('kokoro_af_heart');
+  assert.throws(() => tts.startCloning(), /cloning\(\)/);
+});
+
+const zipvoiceDepKeys = ttsSupported
+  ? flattenTtsDependencyKeys(
+      JSON.parse(mod.ttsDependencies('en_us', 'zipvoice_american_female')),
+    )
+  : [];
+const zipvoiceAssets = ttsSupported ? ttsAssetMapOrNull(zipvoiceDepKeys) : null;
+const cloneLoadSkip = !ttsSupported
+  ? 'no TTS support in this build'
+  : zipvoiceAssets === null
+    ? 'zipvoice TTS assets not vendored locally (download-only)'
+    : false;
+
+test('loading in clone mode builds ZipVoice for startCloning', { skip: cloneLoadSkip }, async () => {
+  const { TextToSpeech } = await importApi();
+  // startCloning needs a synthesizer handle (for extract + owned clone ASR),
+  // so load() builds a built-in ZipVoice preset even before a clip exists.
   const tts = new TextToSpeech()
     .language('en_us')
     .cloning()
-    .assets(new Map())
+    .assets(zipvoiceAssets)
     .useModule(mod);
   try {
     await tts.load();
     assert.equal(tts.isCloned, false);
-    assert.throws(() => tts.synthesize('Hello'), /cloneFrom\(\)/);
+    const clone = tts.startCloning();
+    assert.ok(clone);
   } finally {
     tts.close();
   }

@@ -200,6 +200,22 @@ final class TextToSpeechTests: XCTestCase {
         XCTAssertFalse(tts.isTalking())
     }
 
+    func testSplitSayUtterances() {
+        XCTAssertEqual(TextToSpeech.splitSayUtterances(""), [])
+        XCTAssertEqual(TextToSpeech.splitSayUtterances("Hello"), ["Hello"])
+        XCTAssertEqual(TextToSpeech.splitSayUtterances("Hello."), ["Hello."])
+        XCTAssertEqual(
+            TextToSpeech.splitSayUtterances("Hello. World"), ["Hello.", "World"])
+        XCTAssertEqual(
+            TextToSpeech.splitSayUtterances("Hello! World? Yes."),
+            ["Hello!", "World?", "Yes."])
+        XCTAssertEqual(
+            TextToSpeech.splitSayUtterances("3.14 is pi."), ["3.14 is pi."])
+        XCTAssertEqual(
+            TextToSpeech.splitSayUtterances("Warning: the core is hot."),
+            ["Warning:", "the core is hot."])
+    }
+
     // MARK: - Static Query Tests
 
     func testGetVoices() throws {

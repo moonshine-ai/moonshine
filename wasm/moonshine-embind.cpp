@@ -392,6 +392,7 @@ struct JsSpeechClip {
   float startTime = 0.0f;
   float speechDuration = 0.0f;
   bool isComplete = false;
+  std::string transcript;
 };
 
 // Wraps moonshine_extract_speech_clip. `clipDurationSeconds` and
@@ -399,6 +400,7 @@ struct JsSpeechClip {
 // repeatedly on a growing buffer: `isComplete` reports whether enough speech
 // has been captured yet.
 JsSpeechClip extract_speech_clip(val audio, int32_t sample_rate,
+                                 int32_t tts_synthesizer_handle,
                                  float clip_duration_seconds,
                                  float minimum_speech_seconds) {
   const std::vector<float> pcm = to_float_vector(audio);
@@ -413,8 +415,9 @@ JsSpeechClip extract_speech_clip(val audio, int32_t sample_rate,
       {"minimum_speech_seconds", minimum_speech.c_str()},
   };
   moonshine_speech_clip_t clip{};
-  check(moonshine_extract_speech_clip(pcm.data(), pcm.size(), sample_rate,
-                                      options, 2, &clip));
+  check(moonshine_extract_speech_clip(
+      pcm.data(), pcm.size(), sample_rate, tts_synthesizer_handle, options, 2,
+      &clip));
   result.startTime = clip.start_time;
   result.speechDuration = clip.speech_duration;
   result.isComplete = clip.is_complete != 0;
@@ -425,6 +428,10 @@ JsSpeechClip extract_speech_clip(val audio, int32_t sample_rate,
         val(emscripten::typed_memory_view(clip.audio_length, clip.audio_data));
     result.audio.call<void>("set", heap);
     moonshine_free_buffer(clip.audio_data);
+  }
+  if (clip.transcript != nullptr) {
+    result.transcript = clip.transcript;
+    moonshine_free_buffer(clip.transcript);
   }
   return result;
 }
@@ -499,6 +506,8 @@ class TextToSpeech {
     free(audio);
     return JsTtsResult{result, sample_rate};
   }
+
+  int32_t handle() const { return handle_; }
 
   void close() {
     if (handle_ >= 0) {
@@ -698,7 +707,8 @@ EMSCRIPTEN_BINDINGS(moonshine) {
       .field("audio", &JsSpeechClip::audio)
       .field("startTime", &JsSpeechClip::startTime)
       .field("speechDuration", &JsSpeechClip::speechDuration)
-      .field("isComplete", &JsSpeechClip::isComplete);
+      .field("isComplete", &JsSpeechClip::isComplete)
+      .field("transcript", &JsSpeechClip::transcript);
 
   class_<Transcriber>("Transcriber")
       .constructor<val, val, uint32_t, val, val>()
@@ -727,6 +737,7 @@ EMSCRIPTEN_BINDINGS(moonshine) {
   class_<TextToSpeech>("TextToSpeech")
       .constructor<std::string, val, val, val, val>()
       .function("say", &TextToSpeech::say)
+      .function("handle", &TextToSpeech::handle)
       .function("close", &TextToSpeech::close);
 
   class_<GraphemeToPhonemizer>("GraphemeToPhonemizer")

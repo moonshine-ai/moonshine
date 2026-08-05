@@ -549,7 +549,7 @@ tts.say("Ask not what your country can do for you, but what you can do for your 
 tts.wait()
 ```
 
-`cloning()` tells `load()` to fetch the ZipVoice engine up front, so the first `clone_from()` is quick. Leave it out and the engine comes down on the first clone instead. Either way the engine is selected by cloning itself, so there's no `voice()` call to make.
+`cloning()` tells `load()` to fetch ZipVoice and its clone-ASR assets up front, so `clone_from()` only swaps the reference clip. Call `cloning()` before `load()` — without it, `clone_from()` / `start_cloning()` raise a clear error. Catalog voices and cloning are mutually exclusive: `voice()` clears cloning, and `cloning()` clears the catalog voice.
 
 To clone from someone speaking into the microphone rather than from a file, `start_cloning()` hands back a `VoiceClone` that listens until it has heard enough usable speech:
 

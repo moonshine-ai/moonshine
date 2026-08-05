@@ -233,9 +233,11 @@ tts.clone_from("some-speech.wav")
 tts.say("Now I sound like you.")
 ```
 
-`cloning()` fetches the cloning engine during `load()` so the first clone is
-quick. To capture the reference clip from the microphone instead, `start_cloning()`
-hands back a `VoiceClone` that listens until it has heard enough usable speech.
+`cloning()` fetches ZipVoice and clone ASR during `load()` so `clone_from()`
+only swaps the reference clip. Call it before `load()`; without it,
+`clone_from()` / `start_cloning()` raise. To capture the reference clip from
+the microphone instead, `start_cloning()` hands back a `VoiceClone` that
+listens until it has heard enough usable speech.
 
 ```python
 clone = tts.start_cloning()

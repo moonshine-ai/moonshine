@@ -52,6 +52,7 @@ export interface MoonshineModule {
   extractSpeechClip?(
     audio: Float32Array,
     sampleRate: number,
+    ttsHandle: number,
     clipDurationSeconds: number,
     minimumSpeechSeconds: number,
   ): RawSpeechClip;
@@ -64,6 +65,7 @@ export interface RawSpeechClip {
   startTime: number;
   speechDuration: number;
   isComplete: boolean;
+  transcript?: string;
 }
 
 export interface RawTranscriber {
@@ -87,6 +89,7 @@ export interface RawEmbeddingModel {
 
 export interface RawTextToSpeech {
   say(text: string): { audio: Float32Array; sampleRate: number };
+  handle(): number;
   close(): void;
 }
 

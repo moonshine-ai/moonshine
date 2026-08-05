@@ -10,7 +10,10 @@ cloud bill and the instance-lifecycle dance, at the cost of the guest only being
 reachable from inside the house.
 
 The host keeps running Linux as its main OS; Windows is just a guest, so the
-machine remains available for training work.
+machine remains available for training work. Autostart is disabled, and
+`build-all-platforms.sh` starts the guest for the windows stage then shuts it
+down on exit (via `WINDOWS_LIBVIRT_DOMAIN` in `.env`) so qemu does not keep
+eight host cores busy between releases.
 
 ## Reaching it
 

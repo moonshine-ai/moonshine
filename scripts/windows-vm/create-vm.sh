@@ -127,6 +127,12 @@ for _ in $(seq 1 20); do
     sleep 2
 done
 
+# Do not bring the guest back on host reboot. build-all-platforms.sh starts it
+# for the windows stage and shuts it down afterwards; leaving autostart on would
+# burn 8 host cores whenever the Linux box reboots.
+sudo virsh autostart --disable "${VM_NAME}" >/dev/null
+
 echo
 echo "${VM_NAME} is installing. Expect roughly 15-25 minutes unattended."
 echo "Watch it with: ${SCRIPT_DIR}/screenshot.sh"
+echo "Autostart is disabled; start it with: sudo virsh start ${VM_NAME}"

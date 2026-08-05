@@ -36,12 +36,15 @@ test('every snippet carries what a tab needs to render', async (t) => {
 
       for (const snippet of snippets) {
         assert.ok(snippet.label, `${snippet.id} needs a tab label`);
-        assert.ok(snippet.file, `${snippet.id} needs a filename caption`);
         assert.ok(snippet.code.trim(), `${snippet.id} needs code`);
         assert.ok(INSTALL[snippet.id], `${snippet.id} has no install line`);
         assert.equal(snippet.lines?.length, 2, `${snippet.id} needs a [start, end] range`);
         // A caption links to its source, so a path that no longer exists would
-        // ship a 404 to the reader.
+        // ship a 404 to the reader. File captions are optional (AgentFlow omits
+        // them so four tabs fit without crowding Android).
+        if (snippet.file) {
+          assert.ok(snippet.path, `${snippet.id} caption needs a source path`);
+        }
         await access(path.join(REPO_ROOT, snippet.path));
       }
     });

@@ -138,9 +138,12 @@ internal final class MoonshineAPI: @unchecked Sendable {
     func extractSpeechClip(
         audioData: [Float],
         sampleRate: Int32,
+        ttsSynthesizerHandle: Int32,
         clipDurationSeconds: Float,
         minimumSpeechSeconds: Float
-    ) throws -> (audio: [Float]?, startTime: Float, speechDuration: Float) {
+    ) throws -> (
+        audio: [Float]?, startTime: Float, speechDuration: Float, transcript: String?
+    ) {
         let options = [
             TranscriberOption(
                 name: "clip_duration_seconds", value: String(clipDurationSeconds)),
@@ -164,6 +167,7 @@ internal final class MoonshineAPI: @unchecked Sendable {
                         audio.baseAddress,
                         UInt64(audioData.count),
                         sampleRate,
+                        ttsSynthesizerHandle,
                         opts.baseAddress,
                         UInt64(options.count),
                         &clip
@@ -173,12 +177,18 @@ internal final class MoonshineAPI: @unchecked Sendable {
         }
         try checkError(error)
 
+        var transcript: String?
+        if let transcriptPtr = clip.transcript {
+            transcript = String(cString: transcriptPtr)
+            moonshine_free_buffer(transcriptPtr)
+        }
+
         guard clip.is_complete != 0, let samples = clip.audio_data, clip.audio_length > 0 else {
-            return (nil, clip.start_time, clip.speech_duration)
+            return (nil, clip.start_time, clip.speech_duration, transcript)
         }
         let audio = Array(UnsafeBufferPointer(start: samples, count: Int(clip.audio_length)))
         moonshine_free_buffer(samples)
-        return (audio, clip.start_time, clip.speech_duration)
+        return (audio, clip.start_time, clip.speech_duration, transcript)
     }
 
     /// Create a stream for real-time transcription.

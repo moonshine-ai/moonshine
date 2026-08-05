@@ -560,7 +560,7 @@ One-shot, from a URL, a `File`, a `Blob`, an `AudioBuffer`, or a
 `Float32Array`:
 
 ```javascript
-const tts = new TextToSpeech();
+const tts = new TextToSpeech().language('en_us').cloning();
 await tts.load();
 await tts.cloneFrom('some-speech.wav');
 await tts.say('Hello world!');
@@ -570,7 +570,7 @@ Streaming, for capturing a reference clip from a live microphone, with the
 readiness flag the principles ask for:
 
 ```javascript
-const tts = new TextToSpeech();
+const tts = new TextToSpeech().language('en_us').cloning();
 await tts.load();
 
 const clone = tts.startCloning();
@@ -612,7 +612,7 @@ let result = try tts.synthesize(text: "Cloning a custom voice.")
 ### Swift, after
 
 ```swift
-let tts = TextToSpeech()
+let tts = TextToSpeech().cloning()
 try await tts.load()
 try await tts.cloneFrom(url)
 try await tts.say("Hello world!")
@@ -642,7 +642,7 @@ TtsSynthesisResult result = tts.synthesize("Cloning a custom voice.");
 This is the example from the principles document, and it now compiles:
 
 ```java
-TextToSpeech tts = new TextToSpeech(context);
+TextToSpeech tts = new TextToSpeech(context).cloning();
 tts.load();
 tts.cloneFrom("some-speech.wav");
 tts.say("Hello world!");
@@ -670,11 +670,15 @@ full clip's worth of speech yet, which is what backs `VoiceClone.isReady` in all
 three bindings. The Silero model is compiled into the library, so this needs no
 downloads.
 
-**Clone-clip transcription is already in the core.** The C API accepts
-`zipvoice_asr_transcriber_handle`, so `cloneFrom` can load a small speech-to-text
-model internally and hand its handle to the synthesiser rather than making the
-application transcribe the reference clip. The `TextToSpeech` load path pulls
-that model down alongside the voice assets when cloning is requested.
+**Clone-clip transcription is already in the core.** When ZipVoice is selected,
+`moonshine_get_tts_dependencies` advertises a `role: "clone_asr"` group (catalog
+default STT with word timestamps). Bindings download those files under
+`g2p_root/clone_asr/` (or as `clone_asr/...` memory keys). Create loads that ASR
+only when a clone clip is present and `zipvoice_clone_transcript` is omitted,
+runs auto-transcribe, then releases it — so preset ZipVoice loads do not keep a
+full STT session. `moonshine_extract_speech_clip` stays VAD-only so capture
+loops stay responsive. The WASM binding additionally transcribes in JS before
+create so the UI thread can yield between download, ASR, and ZipVoice load.
 
 **`AgentFlow` is ported from Python and JavaScript to Swift and Java.** The
 routing, retry, re-prompt, and cancellation logic in

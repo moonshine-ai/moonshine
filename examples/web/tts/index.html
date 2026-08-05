@@ -72,6 +72,12 @@
         background: rgba(163, 112, 247, 0.06);
       }
 
+      /* Shared CSS keeps .ms-loading in the layout when closed so other pages
+         do not jump; here that just leaves a dead gap above the clone panel. */
+      .ms-loading:not(.is-open) {
+        display: none;
+      }
+
       .clone__head {
         display: flex;
         align-items: center;
@@ -153,15 +159,6 @@
           opacity: 0.4;
         }
       }
-
-      #player {
-        width: 100%;
-        margin-top: 1.1rem;
-      }
-
-      #player[hidden] {
-        display: none;
-      }
     </style>
   </head>
   <body>
@@ -204,12 +201,10 @@ Hello from Moonshine. I am running right inside your browser, and nothing I say 
           <p class="ms-loading-note" id="loadingNote"></p>
         </div>
 
-        <audio id="player" controls hidden></audio>
-
         <div class="clone" id="clonePanel">
           <div class="clone__head">
             <h3>Clone your own voice</h3>
-            <button id="record" class="ms-btn" type="button">Record 4 seconds</button>
+            <button id="record" class="ms-btn" type="button" disabled>Record 4 seconds</button>
           </div>
           <ol class="clone__steps" id="cloneSteps">
             <li data-step="0">Record about four seconds of yourself talking.</li>
@@ -289,27 +284,25 @@ Hello from Moonshine. I am running right inside your browser, and nothing I say 
       const forcedVoice = params.get('voice');
 
       /**
-       * The shortlist shown as cards. Kokoro leads because it is much the
-       * quickest to download, which decides how long the first visit waits
-       * before hearing anything. Descriptions rather than ids, so choosing a
-       * voice does not require knowing what "af_heart" means.
+       * The shortlist shown as cards. Order is deliberate: British Emma first
+       * as the default, then the other Kokoro picks left to right.
        */
       const FEATURED = [
-        { id: 'kokoro_af_heart', name: 'Heart', desc: 'Warm American narrator' },
-        { id: 'kokoro_am_michael', name: 'Michael', desc: 'Steady American male' },
         { id: 'kokoro_bf_emma', name: 'Emma', desc: 'Crisp British female' },
         { id: 'kokoro_am_puck', name: 'Puck', desc: 'Bright and playful' },
+        { id: 'kokoro_af_heart', name: 'Heart', desc: 'Warm American narrator' },
+        { id: 'kokoro_am_michael', name: 'Michael', desc: 'Steady American male' },
       ];
 
       const PRESETS = [
         'Hello from Moonshine. I am running right inside your browser, and nothing I say is sent to a server.',
         'Your table is ready. Please make your way to the host stand.',
-        'Warning: the reactor core temperature is outside the safe operating range.',
+        'Warning: the reactor core temperature is outside the safe operating limits.',
         'Once upon a time, in a valley nobody had bothered to name, there lived a very stubborn goat.',
       ];
 
       const ENGINE_SAMPLE_VOICE = {
-        kokoro: 'kokoro_af_heart',
+        kokoro: 'kokoro_bf_emma',
         piper: 'piper_en_US-lessac-medium',
         zipvoice: 'zipvoice_american_female',
       };
@@ -324,13 +317,17 @@ Hello from Moonshine. I am running right inside your browser, and nothing I say 
         progress: document.getElementById('progress'),
         note: document.getElementById('loadingNote'),
         detail: document.getElementById('loadingDetail'),
-        player: document.getElementById('player'),
         engine: document.getElementById('engine'),
         voice: document.getElementById('voice'),
         record: document.getElementById('record'),
         cloneStatus: document.getElementById('cloneStatus'),
         cloneSteps: document.getElementById('cloneSteps'),
       };
+
+      /** Object URL for the Download WAV link; revoked when replaced. */
+      let downloadUrl = null;
+      /** Last text+voice spoken, so the status line can say Playing vs Speaking. */
+      let lastSpoken = null;
 
       document.getElementById('proof').innerHTML = statStrip([
         { value: '16', label: 'Languages, from Arabic to Vietnamese' },
@@ -359,9 +356,16 @@ Hello from Moonshine. I am running right inside your browser, and nothing I say 
       // --- State ------------------------------------------------------------
 
       let module = null;
+      /** Catalog-voice synthesizer used by Speak until a clone succeeds. */
       let tts = null;
       let ttsReady = null;
       let loadToken = 0;
+      /**
+       * Separate `.cloning()` synthesizer. Loaded in the background so Record
+       * never swaps kokoro → ZipVoice mid-flight on the speak path.
+       */
+      let cloningTts = null;
+      let cloningReady = null;
       let clonedVoice = null;
       let audioContext = null;
       let selectedVoice = forcedVoice ?? FEATURED[0].id;
@@ -442,13 +446,18 @@ Hello from Moonshine. I am running right inside your browser, and nothing I say 
 
       // --- Loading the synthesizer -------------------------------------------
 
-      /** Builds a TextToSpeech for the current selection and preloads it. */
-      async function applySelection({ cloning = false } = {}) {
+      /** Builds a catalog-voice TextToSpeech for Speak. */
+      async function applySelection() {
         const token = ++loadToken;
         els.speak.disabled = true;
+        // Keep Record available once the cloning engine has warmed up.
+        els.record.disabled = !cloningTts;
 
         const previous = tts;
         tts = null;
+        clonedVoice = null;
+        lastSpoken = null;
+        els.download.hidden = true;
         ttsReady = (async () => {
           try {
             loading.setStatus('Loading…');
@@ -457,33 +466,26 @@ Hello from Moonshine. I am running right inside your browser, and nothing I say 
               .useModule(module)
               .onProgress(loading.onProgress);
             if (ASSET_BASE) instance.modelsFrom(ASSET_BASE);
-            // .cloning() pulls the cloning engine up front, so the first
-            // cloneFrom() after a recording does not go back to the network.
-            if (cloning) instance.cloning();
-            else instance.voice(selectedVoice);
+            instance.voice(selectedVoice);
 
             await instance.load();
-            if (cloning && clonedVoice) await instance.cloneFrom(clonedVoice);
 
             if (token !== loadToken) {
               instance.close(); // superseded by a newer selection
               return null;
             }
             tts = instance;
-            previous?.close();
+            if (previous && previous !== cloningTts) previous.close();
             loading.done();
-
-            if (cloning && !clonedVoice) {
-              loading.setStatus('Record a sample');
-            } else {
-              loading.setStatus('Ready', 'ready');
-              els.speak.disabled = false;
-            }
+            loading.setStatus('Ready', 'ready');
+            els.speak.disabled = false;
+            els.record.disabled = false;
             return instance;
           } catch (err) {
             if (token === loadToken) {
               loading.done();
               loading.setStatus(describeError(err), 'error');
+              els.record.disabled = false;
             }
             return null;
           }
@@ -491,34 +493,69 @@ Hello from Moonshine. I am running right inside your browser, and nothing I say 
         return ttsReady;
       }
 
+      /**
+       * Prefetches ZipVoice + clone ASR via `.cloning()`. Safe to call many
+       * times; shares one promise. Does not replace the catalog Speak path.
+       */
+      function ensureCloningEngine() {
+        if (cloningReady) return cloningReady;
+        cloningReady = (async () => {
+          const instance = new TextToSpeech()
+            .language(LANGUAGE)
+            .useModule(module)
+            .cloning();
+          if (ASSET_BASE) instance.modelsFrom(ASSET_BASE);
+          await instance.load();
+          cloningTts = instance;
+          els.record.disabled = false;
+          return instance;
+        })().catch((err) => {
+          cloningReady = null;
+          throw err;
+        });
+        return cloningReady;
+      }
+
       // --- Synthesis ----------------------------------------------------------
+
+      function publishDownload(audio, sampleRate) {
+        if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+        downloadUrl = URL.createObjectURL(pcmToWavBlob(audio, sampleRate));
+        els.download.href = downloadUrl;
+        els.download.hidden = false;
+        window.__ttsResult = { samples: audio.length, sampleRate };
+      }
+
+      function speakCacheKey() {
+        return clonedVoice ? 'cloned' : selectedVoice;
+      }
 
       async function speak() {
         els.speak.disabled = true;
-        els.download.hidden = true;
         try {
           const synth = (await ttsReady) ?? (await applySelection());
           if (!synth) return;
-          loading.setStatus('Synthesizing…');
-          // synthesize() hands back the PCM so the page can offer a download;
-          // synth.say() would just play it.
-          const { audio, sampleRate } = synth.synthesize(els.text.value);
-
-          const url = URL.createObjectURL(pcmToWavBlob(audio, sampleRate));
-          if (els.player.dataset.url) URL.revokeObjectURL(els.player.dataset.url);
-          els.player.src = url;
-          els.player.dataset.url = url;
-          els.player.hidden = false;
-          els.download.href = url;
-          els.download.hidden = false;
-          window.__ttsResult = { samples: audio.length, sampleRate };
-
-          const seconds = (audio.length / sampleRate).toFixed(1);
-          loading.setStatus(`Done, ${seconds}s of audio`, 'ready');
-          try {
-            await els.player.play();
-          } catch {
-            /* autoplay may be blocked; the controls still work */
+          const text = els.text.value;
+          const voiceKey = speakCacheKey();
+          const cacheHit =
+            lastSpoken?.text === text && lastSpoken?.voiceKey === voiceKey;
+          loading.setStatus(cacheHit ? 'Playing…' : 'Speaking…');
+          // Route playback through the click-unlocked AudioContext.
+          if (audioContext) synth.audioContext(audioContext);
+          // Yield so the disabled Speak button paints before sync WASM synth
+          // blocks the main thread on the first (uncached) sentence.
+          await new Promise((r) => setTimeout(r, 0));
+          // say() splits on sentences (first audio ASAP), pipelines the rest,
+          // and replays from its cache when the text is unchanged.
+          await synth.say(text);
+          lastSpoken = { text, voiceKey };
+          const said = synth.lastSaid;
+          if (said) {
+            publishDownload(said.audio, said.sampleRate);
+            const seconds = (said.audio.length / said.sampleRate).toFixed(1);
+            loading.setStatus(`Done, ${seconds}s of audio`, 'ready');
+          } else {
+            loading.setStatus('Ready', 'ready');
           }
         } catch (err) {
           loading.setStatus(describeError(err), 'error');
@@ -535,13 +572,10 @@ Hello from Moonshine. I am running right inside your browser, and nothing I say 
         els.cloneStatus.classList.add('pulse');
         els.cloneStatus.textContent = 'Asking for the microphone…';
         try {
-          // Cloning only exists on ZipVoice, so switch engines behind the scenes
-          // rather than making that the visitor's problem.
-          if (engineOf(selectedVoice) !== 'zipvoice' || !tts) {
-            await applySelection({ cloning: true });
+          if (!cloningTts) {
+            els.cloneStatus.textContent = 'Loading the cloning engine…';
           }
-          const synth = await ttsReady;
-          if (!synth) return;
+          const synth = await ensureCloningEngine();
 
           const clone = synth.startCloning();
           clone.onProgress((recorded, speech) => {
@@ -556,9 +590,17 @@ Hello from Moonshine. I am running right inside your browser, and nothing I say 
           els.cloneStatus.classList.remove('pulse');
           setCloneStep(1);
           els.cloneStatus.textContent = 'Trimming and transcribing your clip…';
+          // Yield so the status line paints before sync WASM create + ASR.
+          await new Promise((r) => setTimeout(r, 0));
 
           await synth.cloneFrom(clone);
           clonedVoice = clone;
+          lastSpoken = null;
+          els.download.hidden = true;
+          // Speak now uses the cloned engine; drop the catalog handle.
+          if (tts && tts !== synth) tts.close();
+          tts = synth;
+          ttsReady = Promise.resolve(synth);
           renderVoiceCards();
           setCloneStep(2);
           const seconds = (clone.audio.length / clone.sampleRate).toFixed(1);
@@ -601,6 +643,11 @@ Hello from Moonshine. I am running right inside your browser, and nothing I say 
       els.engine.value = engineOf(selectedVoice);
       await populateVoiceList(engineOf(selectedVoice), selectedVoice);
       await applySelection();
+      // Warm ZipVoice + clone ASR in the background so Record does not stall
+      // the catalog Speak path or replace it mid-flight.
+      ensureCloningEngine().catch(() => {
+        /* Record will retry and surface the error */
+      });
     </script>
   </body>
 </html>

@@ -13,8 +13,8 @@ import Foundation
 /// Finding a usable clip means locating a window of the recording that is mostly
 /// speech rather than silence or breathing. That search runs in the core, so the
 /// browser, iOS and Android bindings all agree on what a good clip looks like.
-/// No model download is involved: the voice-activity detector is compiled into
-/// the library.
+/// Extract stays VAD-only; ZipVoice clone ASR refine happens once inside
+/// ``cloneFrom``.
 public final class VoiceClone: @unchecked Sendable {
     /// Sample rate of the clip handed back by ``audio``.
     public static let clipSampleRate: Int32 = 16000
@@ -23,6 +23,7 @@ public final class VoiceClone: @unchecked Sendable {
     /// Give up looking for a good window after this much recording.
     public static let defaultMaxRecordSeconds = 20.0
 
+    private let ttsHandle: Int32
     private let clipDurationSeconds: Float
     private let minimumSpeechSeconds: Float
     private let api = MoonshineAPI.shared
@@ -32,13 +33,19 @@ public final class VoiceClone: @unchecked Sendable {
     private var recordingSampleRate: Int32 = VoiceClone.clipSampleRate
     private var samplesSinceSearch = 0
     private var clip: [Float]?
+    private var clipTranscript: String?
     private var speech: Float = 0
     private var readyHandlers: [() -> Void] = []
     private var progressHandlers: [(Double, Double) -> Void] = []
 
     private var engine: AVAudioEngine?
 
-    public init(clipDurationSeconds: Float = 4, minimumSpeechSeconds: Float = 2) {
+    public init(
+        ttsHandle: Int32,
+        clipDurationSeconds: Float = 4,
+        minimumSpeechSeconds: Float = 2
+    ) {
+        self.ttsHandle = ttsHandle
         self.clipDurationSeconds = clipDurationSeconds
         self.minimumSpeechSeconds = minimumSpeechSeconds
     }
@@ -83,6 +90,13 @@ public final class VoiceClone: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return clip
+    }
+
+    /// Unused for VAD capture; cloneFrom fills the transcript via create-time ASR.
+    public var transcript: String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return clipTranscript
     }
 
     public var sampleRate: Int32 {
@@ -173,6 +187,7 @@ public final class VoiceClone: @unchecked Sendable {
         recording.removeAll(keepingCapacity: false)
         samplesSinceSearch = 0
         clip = nil
+        clipTranscript = nil
         speech = 0
         lock.unlock()
     }
@@ -193,6 +208,7 @@ public final class VoiceClone: @unchecked Sendable {
             let result = try? api.extractSpeechClip(
                 audioData: samples,
                 sampleRate: rate,
+                ttsSynthesizerHandle: ttsHandle,
                 clipDurationSeconds: clipDurationSeconds,
                 minimumSpeechSeconds: acceptAnything ? 0 : minimumSpeechSeconds)
         else {
@@ -207,6 +223,7 @@ public final class VoiceClone: @unchecked Sendable {
         var ready: [() -> Void] = []
         if let audio = result.audio, !audio.isEmpty {
             clip = audio
+            clipTranscript = result.transcript
             ready = readyHandlers
             readyHandlers.removeAll()
         }

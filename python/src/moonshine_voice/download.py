@@ -211,7 +211,11 @@ def _download_manifest_group(
 
 
 def _stt_dependency_manifest(
-    language: str, model_arch: Optional[ModelArch], *, include_spelling: bool = False
+    language: str,
+    model_arch: Optional[ModelArch],
+    *,
+    include_spelling: bool = False,
+    include_word_timestamps: bool = False,
 ) -> dict:
     """Fetches and parses the native STT download manifest for a language+arch."""
     options: Dict[str, Union[str, int, float, bool]] = {}
@@ -219,6 +223,8 @@ def _stt_dependency_manifest(
         options["model_arch"] = int(model_arch)
     if include_spelling:
         options["include_spelling"] = True
+    if include_word_timestamps:
+        options["word_timestamps"] = True
     return json.loads(moonshine_get_stt_dependencies_string(language, options))
 
 
@@ -278,14 +284,18 @@ def get_components_for_model_info(model_info: dict) -> list[str]:
     return result
 
 
-def _primary_stt_group(model_info: dict) -> dict:
+def _primary_stt_group(
+    model_info: dict, *, include_word_timestamps: bool = False
+) -> dict:
     """The manifest group holding the model itself, which is always the first.
 
     Its files carry fully-qualified URLs plus expected size / CRC32C, which
     ``_download_manifest_group`` verifies.
     """
     manifest = _stt_dependency_manifest(
-        model_info["language"], model_info["model_arch"]
+        model_info["language"],
+        model_info["model_arch"],
+        include_word_timestamps=include_word_timestamps,
     )
     groups = manifest.get("groups", [])
     if not groups:
@@ -301,14 +311,20 @@ def download_model_from_info(
     cache_root: Optional[Path] = None,
     on_progress: Optional[ProgressCallback] = None,
     tracker: Optional[_ProgressTracker] = None,
+    include_word_timestamps: bool = False,
 ) -> tuple[str, ModelArch]:
     """Downloads the model named by ``model_info`` and returns its root path.
 
     ``tracker`` is for callers spanning several downloads under one percentage
     (see :func:`get_model_for_language`); pass ``on_progress`` instead to get a
     fraction covering just this model.
+
+    When ``include_word_timestamps`` is true, also fetch the optional attention
+    decoder used by the ``word_timestamps`` transcriber option.
     """
-    group = _primary_stt_group(model_info)
+    group = _primary_stt_group(
+        model_info, include_word_timestamps=include_word_timestamps
+    )
     if tracker is None and on_progress is not None:
         tracker = _ProgressTracker.for_groups(on_progress, [group])
     root_model_path = _download_manifest_group(
@@ -510,6 +526,7 @@ def get_model_for_language(
     *,
     cache_root: Optional[Path] = None,
     on_progress: Optional[ProgressCallback] = None,
+    include_word_timestamps: bool = False,
 ) -> tuple[str, ModelArch]:
     """Downloads the transcription model for a language and returns
     ``(model_root_path, model_arch)``.
@@ -518,6 +535,9 @@ def get_model_for_language(
     fetched. The fraction spans the spelling model as well as the transcriber,
     so it rises once to 1 rather than filling twice. Supplying it also silences
     the default tqdm bars, on the assumption that you are drawing your own.
+
+    When ``include_word_timestamps`` is true, also fetch the optional attention
+    decoder used by the ``word_timestamps`` transcriber option.
     """
     model_info = find_model_info(wanted_language, wanted_model_arch)
     if wanted_language != "en":
@@ -528,14 +548,21 @@ def get_model_for_language(
 
     tracker = None
     if on_progress is not None:
-        groups = [_primary_stt_group(model_info)]
+        groups = [
+            _primary_stt_group(
+                model_info, include_word_timestamps=include_word_timestamps
+            )
+        ]
         spelling = _spelling_group_for_language(model_info["language"])
         if spelling is not None:
             groups.append(spelling)
         tracker = _ProgressTracker.for_groups(on_progress, groups)
 
     result = download_model_from_info(
-        model_info, cache_root=cache_root, tracker=tracker
+        model_info,
+        cache_root=cache_root,
+        tracker=tracker,
+        include_word_timestamps=include_word_timestamps,
     )
     # Best-effort: pre-fetch the alphanumeric spelling model alongside
     # the transcriber when one is published for this language. Failures
@@ -1018,6 +1045,29 @@ def cdn_url_for_tts_asset_key(key: str) -> str:
     return f"{TTS_CDN_BASE_URL}{encoded}"
 
 
+def list_tts_dependency_manifest(
+    languages: str,
+    *,
+    voice: Optional[str] = None,
+    options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
+) -> dict:
+    """Parse ``moonshine_get_tts_dependencies`` as a ``{"groups":[...]}`` manifest."""
+    lang_arg = languages.strip() if languages else ""
+    opts = _merge_tts_query_options(options, voice=voice)
+    raw = moonshine_get_tts_dependencies_string(
+        lang_arg if lang_arg else None,
+        opts if opts else None,
+    )
+    if not raw.strip():
+        return {"groups": []}
+    parsed = json.loads(raw)
+    if isinstance(parsed, dict) and isinstance(parsed.get("groups"), list):
+        return parsed
+    raise ValueError(
+        "moonshine_get_tts_dependencies did not return a groups manifest"
+    )
+
+
 def list_tts_dependency_keys(
     languages: str,
     *,
@@ -1028,19 +1078,75 @@ def list_tts_dependency_keys(
     Resolve required TTS asset paths via the native ``moonshine_get_tts_dependencies`` API.
 
     ``languages`` may be a comma-separated list (e.g. ``\"en_us,de\"``), matching the C API.
+    Returns the flat list of file ``name``s across all groups (including
+    ``clone_asr/...`` entries when ZipVoice is selected).
     """
-    lang_arg = languages.strip() if languages else ""
-    opts = _merge_tts_query_options(options, voice=voice)
-    raw = moonshine_get_tts_dependencies_string(
-        lang_arg if lang_arg else None,
-        opts if opts else None,
+    manifest = list_tts_dependency_manifest(
+        languages, voice=voice, options=options
     )
-    if not raw.strip():
-        return []
-    keys = json.loads(raw)
-    if not isinstance(keys, list):
-        raise ValueError("moonshine_get_tts_dependencies did not return a JSON array")
-    return [str(k) for k in keys]
+    keys: List[str] = []
+    for group in manifest.get("groups", []):
+        for file_info in group.get("files", []):
+            name = file_info.get("name")
+            if name:
+                keys.append(str(name))
+    return keys
+
+
+def _download_tts_dependency_manifest(
+    manifest: dict,
+    root: Path,
+    *,
+    show_progress: bool = True,
+    on_progress: Optional[ProgressCallback] = None,
+) -> None:
+    """Download every file in a TTS groups manifest into ``root`` / ``name``.
+
+    Unlike STT downloads (which nest under the CDN host path), TTS assets keep
+    their canonical relative keys under the TTS cache root so ``g2p_root``
+    layout stays ``en_us/...``, ``zipvoice/...``, ``clone_asr/...``.
+    """
+    files = [
+        f
+        for group in manifest.get("groups", [])
+        for f in group.get("files", [])
+        if f.get("name") and is_downloadable_tts_asset_key(str(f["name"]))
+    ]
+    tracker = (
+        _ProgressTracker.for_groups(on_progress, [{"files": files}])
+        if on_progress is not None and files
+        else None
+    )
+    for file_info in files:
+        name = str(file_info["name"])
+        url = file_info.get("url")
+        if not url:
+            for group in manifest.get("groups", []):
+                for candidate in group.get("files", []):
+                    if candidate.get("name") == name:
+                        base = group.get("base_url") or TTS_CDN_BASE_URL
+                        url = f"{base.rstrip('/')}/{name}"
+                        break
+                if url:
+                    break
+        if not url:
+            url = cdn_url_for_tts_asset_key(name)
+        size = file_info.get("size")
+        checksum = file_info.get("checksum") or None
+        checksum_type = file_info.get("checksum_type") or ""
+        dest = root / name
+        if tracker is not None:
+            tracker.start(name, size if isinstance(size, int) else None)
+        download_model(
+            url,
+            str(dest),
+            expected_size=size if isinstance(size, int) and size >= 0 else None,
+            expected_crc32c=checksum if checksum_type == "crc32c" else None,
+            show_progress=show_progress and tracker is None,
+            on_bytes=tracker.add_bytes if tracker is not None else None,
+        )
+        if tracker is not None:
+            tracker.finish()
 
 
 def list_g2p_dependency_keys(
@@ -1104,13 +1210,13 @@ def download_tts_assets(
     if not _options_specify_asset_root(dep_opts):
         dep_opts = dict(dep_opts)
         dep_opts["g2p_root"] = str(root)
-    keys = list_tts_dependency_keys(
+    manifest = list_tts_dependency_manifest(
         lang_tag,
         voice=download_voice,
         options=dep_opts,
     )
-    _download_asset_keys(
-        keys, root, show_progress=show_progress, on_progress=on_progress
+    _download_tts_dependency_manifest(
+        manifest, root, show_progress=show_progress, on_progress=on_progress
     )
     return root
 

@@ -1019,7 +1019,8 @@ Java_ai_moonshine_voice_JNI_moonshineGetTtsVoices(JNIEnv *env,
 extern "C" JNIEXPORT jobject JNICALL
 Java_ai_moonshine_voice_JNI_moonshineExtractSpeechClip(
     JNIEnv *env, jobject /* this */, jfloatArray audio_data, jint sample_rate,
-    jfloat clip_duration_seconds, jfloat minimum_speech_seconds) {
+    jint tts_synthesizer_handle, jfloat clip_duration_seconds,
+    jfloat minimum_speech_seconds) {
   try {
     if (audio_data == nullptr) {
       return nullptr;
@@ -1034,8 +1035,8 @@ Java_ai_moonshine_voice_JNI_moonshineExtractSpeechClip(
     };
     moonshine_speech_clip_t clip = {};
     const int32_t err = moonshine_extract_speech_clip(
-        audio, static_cast<uint64_t>(audio_length), sample_rate, options, 2,
-        &clip);
+        audio, static_cast<uint64_t>(audio_length), sample_rate,
+        tts_synthesizer_handle, options, 2, &clip);
     env->ReleaseFloatArrayElements(audio_data, audio, JNI_ABORT);
     if (err != MOONSHINE_ERROR_NONE) {
       return nullptr;
@@ -1047,11 +1048,16 @@ Java_ai_moonshine_voice_JNI_moonshineExtractSpeechClip(
                                clip.audio_data);
     }
     moonshine_free_buffer(clip.audio_data);
+    jstring jtranscript = nullptr;
+    if (clip.transcript != nullptr) {
+      jtranscript = env->NewStringUTF(clip.transcript);
+      moonshine_free_buffer(clip.transcript);
+    }
     jclass clipClass = get_class(env, "ai/moonshine/voice/SpeechClip");
-    jmethodID ctor = get_method(env, clipClass, "<init>", "([FFFZ)V");
+    jmethodID ctor = get_method(env, clipClass, "<init>", "([FFFZLjava/lang/String;)V");
     jobject result = env->NewObject(
         clipClass, ctor, jaudio, clip.start_time, clip.speech_duration,
-        clip.is_complete != 0 ? JNI_TRUE : JNI_FALSE);
+        clip.is_complete != 0 ? JNI_TRUE : JNI_FALSE, jtranscript);
     env->DeleteLocalRef(clipClass);
     return result;
   } catch (const std::exception &e) {

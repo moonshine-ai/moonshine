@@ -85,9 +85,14 @@ SpeechClip extract_speech_clip(const float *audio_data, size_t audio_data_size,
 
   size_t from = static_cast<size_t>(std::lround(best_start * kClipSampleRate));
   from = std::min(from, audio.size() - clip_sample_count);
-  result.audio.assign(
-      audio.begin() + static_cast<ptrdiff_t>(from),
-      audio.begin() + static_cast<ptrdiff_t>(from + clip_sample_count));
+  size_t to = from + clip_sample_count;
+  if (options.tail_pad_seconds > 0.0f) {
+    const size_t pad_samples = static_cast<size_t>(
+        std::lround(options.tail_pad_seconds * kClipSampleRate));
+    to = std::min(from + clip_sample_count + pad_samples, audio.size());
+  }
+  result.audio.assign(audio.begin() + static_cast<ptrdiff_t>(from),
+                      audio.begin() + static_cast<ptrdiff_t>(to));
   result.start_time_seconds = static_cast<float>(from) / kClipSampleRate;
   result.is_complete = true;
   return result;

@@ -31,6 +31,40 @@ from moonshine_voice.moonshine_api import (
 from moonshine_voice.voice_clone import VoiceClone
 
 
+def split_say_utterances(text: str) -> List[str]:
+    """Approximate sentence split so :meth:`TextToSpeech.say` can speak sooner.
+
+    Splits on ``.``, ``!``, ``?``, or ``:`` followed by whitespace. Not a full
+    sentence segmenter — good enough to start playback of the first clause
+    while later ones synthesize.
+    """
+    stripped = (text or "").strip()
+    if not stripped:
+        return []
+    parts: List[str] = []
+    start = 0
+    i = 0
+    n = len(stripped)
+    while i < n:
+        ch = stripped[i]
+        if ch in ".!?:" and i + 1 < n and stripped[i + 1].isspace():
+            end = i + 1
+            j = i + 1
+            while j < n and stripped[j].isspace():
+                j += 1
+            piece = stripped[start:end].strip()
+            if piece:
+                parts.append(piece)
+            start = j
+            i = j
+            continue
+        i += 1
+    tail = stripped[start:].strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
 @dataclass
 class _SayRequest:
     """Queued utterance for the background synthesis worker."""
@@ -388,40 +422,6 @@ def _normalize_clone_argument(
     )
 
 
-def _autotranscribe_clone_pcm(
-    pcm: Any,
-    sample_rate: int,
-    *,
-    language: str = "en_us",
-) -> str:
-    """Transcribe a clone reference clip so ZipVoice gets text aligned with the audio."""
-    from moonshine_voice.download import ModelArch, get_model_for_language
-    from moonshine_voice.transcriber import Transcriber
-
-    model_path, model_arch = get_model_for_language(
-        language.split("_", 1)[0].split("-", 1)[0],
-        wanted_model_arch=ModelArch.BASE)
-    try:
-        import numpy as _np  # type: ignore
-        samples = _np.asarray(pcm, dtype=_np.float32).ravel().tolist()
-    except Exception:
-        samples = [float(x) for x in pcm]
-    with Transcriber(model_path=model_path, model_arch=model_arch) as tr:
-        transcript = tr.transcribe_without_streaming(samples, sample_rate=sample_rate)
-    parts = [
-        line.text.strip()
-        for line in transcript.lines
-        if line.text and line.text.strip()
-    ]
-    text = " ".join(parts).strip()
-    if not text:
-        raise MoonshineError(
-            "Could not auto-transcribe the clone reference clip; pass clone_transcript "
-            "with the text spoken in the clip."
-        )
-    return text
-
-
 def _say_resolve_output_index(
     spec_key: Tuple[Any, ...],
     outs: List[Tuple[int, str]],
@@ -500,6 +500,8 @@ class TextToSpeech:
 
     # Voice id the native layer uses for a caller-supplied reference clip.
     _CLONE_VOICE = "zipvoice"
+    # Built-in ZipVoice voice used by cloning() before a reference clip exists.
+    _CLONE_PRESET_VOICE = "zipvoice_american_female"
 
     def __init__(self, *args, **kwargs):
         if args or kwargs:
@@ -537,8 +539,10 @@ class TextToSpeech:
         return self
 
     def voice(self, voice_id: str) -> "TextToSpeech":
-        """Voice id, e.g. ``"kokoro_af_heart"``. Defaults to the engine's own."""
+        """Catalog voice id, e.g. ``"kokoro_af_heart"``. Clears :meth:`cloning`
+        — a synthesizer is either a catalog voice or a cloning engine."""
         self._voice = voice_id
+        self._cloning_wanted = False
         return self
 
     def models_from(
@@ -555,9 +559,16 @@ class TextToSpeech:
         return self
 
     def cloning(self, enabled: bool = True) -> "TextToSpeech":
-        """Fetch the cloning engine during :meth:`load` rather than on the
-        first :meth:`clone_from`, so the first clone is quick."""
+        """Create this synthesizer as a ZipVoice cloning engine.
+
+        Call before :meth:`load` so ZipVoice and clone-ASR assets are fetched
+        up front; afterwards :meth:`clone_from` does not download again.
+        Clears :meth:`voice`. Only then may :meth:`clone_from` /
+        :meth:`start_cloning` be used.
+        """
         self._cloning_wanted = bool(enabled)
+        if self._cloning_wanted:
+            self._voice = None
         return self
 
     def on_progress(self, handler: ProgressCallback) -> "TextToSpeech":
@@ -595,15 +606,13 @@ class TextToSpeech:
 
         Blocking, since the first call may have to fetch a few hundred
         megabytes; report progress with :meth:`on_progress`. Calling it again
-        is a no-op.
+        is a no-op. With :meth:`cloning`, ZipVoice and clone ASR are both
+        fetched here so :meth:`clone_from` stays offline afterward.
         """
         if self._handle is not None:
             return self
         if self._cloning_wanted and self._clone_samples is None:
-            # The cloning engine can't exist until there is a voice to clone,
-            # so all load() can usefully do is fetch its assets into the cache
-            # that the first clone_from() reads from.
-            self._asset_root = self._ensure_assets(voice=self._CLONE_VOICE)
+            self._build(voice=self._CLONE_PRESET_VOICE)
             return self
         self._build(voice=self._voice)
         return self
@@ -634,14 +643,17 @@ class TextToSpeech:
     ) -> "TextToSpeech":
         """Clone the voice in ``source`` and use it for subsequent synthesis.
 
-        ``source`` may be a path to a ``.wav`` file, a ``(pcm, sample_rate)``
-        pair of mono float PCM, or a :class:`VoiceClone` that has captured
-        enough speech.
+        Requires :meth:`cloning` before :meth:`load`. ``source`` may be a path
+        to a ``.wav`` file, a ``(pcm, sample_rate)`` pair of mono float PCM, or
+        a :class:`VoiceClone` that has captured enough speech.
 
-        The clip is transcribed for the vocoder, downloading a small
-        speech-to-text model the first time it needs to. Callers who already
-        know what was said can skip that by passing ``transcript``.
+        The clip is transcribed for the vocoder via assets already fetched by
+        ``load`` when ``transcript`` is omitted.
         """
+        self._require_cloning_mode("clone_from()")
+        if self._handle is None:
+            raise MoonshineError("Call load() before clone_from().")
+
         if isinstance(source, VoiceClone):
             audio = source.audio
             if audio is None:
@@ -650,6 +662,8 @@ class TextToSpeech:
                     "wait for on_ready."
                 )
             pcm, sample_rate = audio, source.sample_rate
+            if transcript is None and source.transcript:
+                transcript = source.transcript
         else:
             pcm, sample_rate = _normalize_clone_argument(source)
 
@@ -669,9 +683,12 @@ class TextToSpeech:
         clip_duration_seconds: float = 4.0,
         minimum_speech_seconds: float = 2.0,
     ) -> VoiceClone:
-        """Start capturing a reference voice for cloning. The returned object
-        reports when it has heard enough."""
+        """Start capturing a reference voice for cloning. Requires
+        :meth:`cloning` before :meth:`load`."""
+        self._require_cloning_mode("start_cloning()")
+        handle = self._require_loaded("start_cloning()")
         return VoiceClone(
+            tts_handle=handle,
             clip_duration_seconds=clip_duration_seconds,
             minimum_speech_seconds=minimum_speech_seconds,
         )
@@ -836,24 +853,16 @@ class TextToSpeech:
 
         if self._clone_transcript is None:
             print(
-                "TextToSpeech: transcribing clone reference clip with Moonshine ASR...",
-                file=sys.stderr,
-                flush=True,
-            )
-            self._clone_transcript = _autotranscribe_clone_pcm(
-                pcm if pcm is not None else self._clone_samples,
-                self._clone_sample_rate,
-                language=self._language,
-            )
-            print(
-                f"TextToSpeech: clone transcript: {self._clone_transcript!r}",
+                "TextToSpeech: auto-transcribing clone reference clip with "
+                "owned ZipVoice ASR...",
                 file=sys.stderr,
                 flush=True,
             )
 
         create_opts = self._c_options_for_create(voice or self._CLONE_VOICE)
         create_opts["zipvoice_clone_sample_rate"] = int(self._clone_sample_rate)
-        create_opts["zipvoice_clone_transcript"] = self._clone_transcript
+        if self._clone_transcript is not None:
+            create_opts["zipvoice_clone_transcript"] = self._clone_transcript
         opt_arr, opt_n, _keep_opts = moonshine_options_array(create_opts)
 
         filenames = (ctypes.c_char_p * 1)(b"zipvoice/clone_audio")
@@ -972,13 +981,15 @@ class TextToSpeech:
 
     def _require_loaded(self, what: str) -> int:
         if self._handle is None:
-            if self._cloning_wanted:
-                raise MoonshineError(
-                    f"Call clone_from() before {what}: cloning() was set, so "
-                    "there is no voice until a reference clip arrives."
-                )
             raise MoonshineError(f"Call load() before {what}.")
         return self._handle
+
+    def _require_cloning_mode(self, what: str) -> None:
+        if not self._cloning_wanted:
+            raise MoonshineError(
+                f"Call cloning() before load() to use {what}. "
+                "Catalog voices and cloning are separate synthesizer modes."
+            )
 
     def synthesize(
         self,
@@ -1043,7 +1054,9 @@ class TextToSpeech:
         Queue ``text`` for synthesis and playback, returning immediately.
 
         ``text`` may be a single string or a list of strings. A list is equivalent to calling
-        ``say`` once per element in order.
+        ``say`` once per element in order. Long strings are split on an approximate
+        sentence boundary (``.``, ``!``, or ``?`` followed by whitespace) so the first
+        sentence can start playing while later ones synthesize.
 
         Utterances are played in order. Synthesis of the next utterance is pipelined with playback
         of the current one so there is minimal gap between consecutive utterances. Call `stop` to
@@ -1065,15 +1078,16 @@ class TextToSpeech:
         if self._volume is not None:
             volume = self._volume
 
-        texts = text if isinstance(text, list) else [text]
-        for t in texts:
-            self._say_queue.put(_SayRequest(
-                text=t,
-                speed=speed,
-                volume=volume,
-                device=device,
-                options=options,
-            ))
+        chunks = text if isinstance(text, list) else [text]
+        for chunk in chunks:
+            for sentence in split_say_utterances(chunk):
+                self._say_queue.put(_SayRequest(
+                    text=sentence,
+                    speed=speed,
+                    volume=volume,
+                    device=device,
+                    options=options,
+                ))
         self._ensure_say_workers()
 
     def play_error(

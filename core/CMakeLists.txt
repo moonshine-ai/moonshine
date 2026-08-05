@@ -106,6 +106,7 @@ set(MOONSHINE_SRC_FILES
     voice-activity-detector.cpp
     silero-vad.cpp
     speech-clip.cpp
+    clone-clip.cpp
     resampler.cpp
     transcriber.cpp
     gemma-embedding-model.cpp
@@ -576,6 +577,33 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
             ${ONNXRUNTIME_LIB_PATH}
         )
     endif()
+
+    add_executable(clone-clip-test clone-clip-test.cpp clone-clip.cpp)
+    set_target_properties(clone-clip-test PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(clone-clip-test PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+    )
+
+    add_executable(clone-clip-eval clone-clip-eval.cpp)
+    set_target_properties(clone-clip-eval PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(clone-clip-eval PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+        ${CMAKE_CURRENT_LIST_DIR}/ort-utils
+        ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
+    )
+    target_link_libraries(clone-clip-eval PRIVATE moonshine moonshine-utils)
+    copy_onnxruntime_dll(clone-clip-eval)
 
     add_executable(resampler-test resampler-test.cpp resampler.cpp)
     set_target_properties(resampler-test PROPERTIES

@@ -1062,8 +1062,7 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.size() >= 2);
-    CHECK(json.front() == '[');
-    CHECK(json.back() == ']');
+    CHECK(json.find("\"groups\"") != std::string::npos);
     CHECK(json.find("\"kokoro/model.ort\"") != std::string::npos);
     CHECK(json.find("\"en_us/dict_filtered_heteronyms.tsv\"") !=
           std::string::npos);
@@ -1076,7 +1075,7 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
             MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
-    CHECK(json.front() == '[');
+    CHECK(json.find("\"groups\"") != std::string::npos);
     CHECK(json.find("\"kokoro/model.ort\"") != std::string::npos);
     std::free(out);
   }
@@ -1269,12 +1268,19 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
             MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
+    CHECK(json.find("\"groups\"") != std::string::npos);
     CHECK(json.find("\"zipvoice/text_encoder.ort\"") != std::string::npos);
     CHECK(json.find("\"zipvoice/fm_decoder.ort\"") != std::string::npos);
     CHECK(json.find("\"zipvoice/vocoder.ort\"") != std::string::npos);
     CHECK(json.find("\"zipvoice/tokens.txt\"") != std::string::npos);
     CHECK(json.find("\"kokoro/model.ort\"") == std::string::npos);
     CHECK(json.find("piper-voices") == std::string::npos);
+    CHECK(json.find("\"role\":\"clone_asr\"") != std::string::npos);
+    CHECK(json.find("\"clone_asr/") != std::string::npos);
+    const bool has_attention =
+        json.find("decoder_kv_with_attention.ort") != std::string::npos ||
+        json.find("decoder_with_attention.ort") != std::string::npos;
+    CHECK(has_attention);
     std::free(out);
   }
 
@@ -1617,32 +1623,56 @@ TEST_CASE("moonshine-catalog-listing-api") {
 }
 
 TEST_CASE("moonshine-extract-speech-clip-api") {
+  const auto data_root = find_moonshine_tts_data_dir();
+  if (!data_root) {
+    MESSAGE("skip: moonshine-tts data directory not found");
+    return;
+  }
+  const std::string model_root_str = data_root->string();
+  const moonshine_option_t tts_opts[] = {
+      {"model_root", model_root_str.c_str()},
+      {"lang", "en_us"},
+      {"voice", "kokoro_af_heart"},
+  };
+  const int32_t tts = moonshine_create_tts_synthesizer_from_files(
+      "en_us", nullptr, 0, tts_opts,
+      static_cast<uint64_t>(sizeof(tts_opts) / sizeof(tts_opts[0])),
+      MOONSHINE_HEADER_VERSION);
+  if (tts < 0) {
+    MESSAGE("skip: could not create Kokoro TTS synthesizer");
+    return;
+  }
+
   SUBCASE("rejects bad arguments") {
     const std::vector<float> quiet(16000 * 6, 0.0f);
     moonshine_speech_clip_t clip{};
-    CHECK(moonshine_extract_speech_clip(quiet.data(), quiet.size(), 16000,
+    CHECK(moonshine_extract_speech_clip(quiet.data(), quiet.size(), 16000, tts,
                                         nullptr, 0, nullptr) ==
           MOONSHINE_ERROR_INVALID_ARGUMENT);
-    CHECK(
-        moonshine_extract_speech_clip(nullptr, 16, 16000, nullptr, 0, &clip) ==
-        MOONSHINE_ERROR_INVALID_ARGUMENT);
-    CHECK(moonshine_extract_speech_clip(quiet.data(), 0, 16000, nullptr, 0,
+    CHECK(moonshine_extract_speech_clip(nullptr, 16, 16000, tts, nullptr, 0,
                                         &clip) ==
           MOONSHINE_ERROR_INVALID_ARGUMENT);
-    CHECK(moonshine_extract_speech_clip(quiet.data(), quiet.size(), 0, nullptr,
-                                        0, &clip) ==
+    CHECK(moonshine_extract_speech_clip(quiet.data(), 0, 16000, tts, nullptr, 0,
+                                        &clip) ==
           MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(moonshine_extract_speech_clip(quiet.data(), quiet.size(), 0, tts,
+                                        nullptr, 0, &clip) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(moonshine_extract_speech_clip(quiet.data(), quiet.size(), 16000, -1,
+                                        nullptr, 0, &clip) ==
+          MOONSHINE_ERROR_INVALID_HANDLE);
   }
 
   SUBCASE("silence yields no clip") {
     const std::vector<float> quiet(16000 * 6, 0.0f);
     moonshine_speech_clip_t clip{};
     REQUIRE(moonshine_extract_speech_clip(quiet.data(), quiet.size(), 16000,
-                                          nullptr, 0,
+                                          tts, nullptr, 0,
                                           &clip) == MOONSHINE_ERROR_NONE);
     CHECK(clip.is_complete == 0);
     CHECK(clip.audio_data == nullptr);
     CHECK(clip.audio_length == 0);
+    CHECK(clip.transcript == nullptr);
   }
 
   SUBCASE("speech yields a four second clip") {
@@ -1659,12 +1689,14 @@ TEST_CASE("moonshine-extract-speech-clip-api") {
 
     moonshine_speech_clip_t clip{};
     REQUIRE(moonshine_extract_speech_clip(wav_data, wav_data_size,
-                                          wav_sample_rate, nullptr, 0,
+                                          wav_sample_rate, tts, nullptr, 0,
                                           &clip) == MOONSHINE_ERROR_NONE);
     CHECK(clip.is_complete == 1);
     REQUIRE(clip.audio_data != nullptr);
     CHECK(clip.audio_length == 4 * 16000);
     CHECK(clip.speech_duration >= 2.0f);
+    // Kokoro TTS has no owned clone ASR, so transcript stays null.
+    CHECK(clip.transcript == nullptr);
     moonshine_free_buffer(clip.audio_data);
   }
 
@@ -1686,13 +1718,15 @@ TEST_CASE("moonshine-extract-speech-clip-api") {
     };
     moonshine_speech_clip_t clip{};
     REQUIRE(moonshine_extract_speech_clip(wav_data, wav_data_size,
-                                          wav_sample_rate, options, 2,
+                                          wav_sample_rate, tts, options, 2,
                                           &clip) == MOONSHINE_ERROR_NONE);
     CHECK(clip.is_complete == 1);
     REQUIRE(clip.audio_data != nullptr);
     CHECK(clip.audio_length == 2 * 16000);
     moonshine_free_buffer(clip.audio_data);
   }
+
+  moonshine_free_tts_synthesizer(tts);
 }
 
 // Full ZipVoice synthesis needs the model bundle under ``<data>/zipvoice`` (not

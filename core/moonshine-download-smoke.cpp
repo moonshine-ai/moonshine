@@ -165,16 +165,27 @@ int manifest_tts(const std::vector<std::string>& spec) {
   if (err != MOONSHINE_ERROR_NONE || out == nullptr) {
     return fail("moonshine_get_tts_dependencies failed");
   }
-  const nlohmann::json keys = nlohmann::json::parse(out);
+  const nlohmann::json manifest = nlohmann::json::parse(out);
   moonshine_free_buffer(out);
-  for (const auto& entry : keys) {
-    const std::string key = entry.get<std::string>();
-    // Skip in-memory override labels (no path component), like the Python
-    // downloader's is_downloadable_tts_asset_key.
-    if (key.find('/') == std::string::npos) {
+  if (!manifest.contains("groups") || !manifest["groups"].is_array()) {
+    return fail("moonshine_get_tts_dependencies: expected groups manifest");
+  }
+  for (const auto& group : manifest["groups"]) {
+    if (!group.contains("files") || !group["files"].is_array()) {
       continue;
     }
-    std::cout << kTtsCdnBase << url_encode_path(key) << "\t" << key << "\n";
+    for (const auto& file : group["files"]) {
+      const std::string key = file.value("name", "");
+      if (key.find('/') == std::string::npos) {
+        continue;
+      }
+      const std::string url = file.value("url", std::string());
+      if (!url.empty()) {
+        std::cout << url << "\t" << key << "\n";
+      } else {
+        std::cout << kTtsCdnBase << url_encode_path(key) << "\t" << key << "\n";
+      }
+    }
   }
   return 0;
 }

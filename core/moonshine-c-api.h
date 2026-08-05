@@ -772,19 +772,27 @@ struct moonshine_speech_clip_t {
   float speech_duration;
   /* Non-zero once a window with enough speech in it was found. */
   int32_t is_complete;
+  /* UTF-8 transcript of the clip when the TTS synthesizer owns a clone ASR
+     and the window was complete enough to refine. NULL otherwise. Allocated
+     with malloc; release with moonshine_free_buffer. */
+  char *transcript;
 };
 
 /* Finds the best short window of speech in a recording, for use as the
    reference clip in zero-shot voice cloning.
 
-   Runs the built-in voice-activity detector (no model files or downloads
-   required) over ``audio_data``, slides a window of ``clip_duration_seconds``
-   across the result, and returns the window with the most speech in it. If no
-   window contains at least ``minimum_speech_seconds`` of speech,
-   ``out_clip->is_complete`` is zero and no audio is returned; the caller should
-   record more and call again. This makes the function safe to call repeatedly
-   on a growing buffer, which is how the streaming voice-capture APIs in the
-   language bindings are built.
+   ``tts_synthesizer_handle`` must be a valid synthesizer from
+   ``moonshine_create_tts_synthesizer_*``. The call always runs the built-in
+   voice-activity detector (no download) over ``audio_data``, slides a window
+   of ``clip_duration_seconds`` across the result, and returns the window with
+   the most speech. If no window contains at least ``minimum_speech_seconds``
+   of speech, ``out_clip->is_complete`` is zero and no audio is returned; the
+   caller should record more and call again (streaming capture).
+
+   Extract is VAD-only and stays cheap enough for the capture loop. When ZipVoice
+   is later created without ``zipvoice_clone_transcript``, the owned clone ASR
+   (from ``g2p_root/clone_asr/`` or ``clone_asr/...`` memory keys) refines the
+   clip and fills the transcript once — see ``moonshine_get_tts_dependencies``.
 
    The returned clip is always 16 kHz mono regardless of ``sample_rate``.
 
@@ -792,14 +800,15 @@ struct moonshine_speech_clip_t {
      ``clip_duration_seconds``  length of the window (default 4).
      ``minimum_speech_seconds`` speech required in it (default 2).
      ``vad_threshold``          speech probability threshold (default 0.5).
+     ``tail_pad_seconds``       extra audio after the VAD window (default 0).
 
    Returns zero on success, or a non-zero error code on failure. The error code
    can be converted to a human-readable string using moonshine_error_to_string.
 */
 MOONSHINE_EXPORT int32_t moonshine_extract_speech_clip(
     const float *audio_data, uint64_t audio_length, int32_t sample_rate,
-    const struct moonshine_option_t *options, uint64_t options_count,
-    struct moonshine_speech_clip_t *out_clip);
+    int32_t tts_synthesizer_handle, const struct moonshine_option_t *options,
+    uint64_t options_count, struct moonshine_speech_clip_t *out_clip);
 
 /* ------------------------------ TEXT TO SPEECH ------------------------- */
 
@@ -823,6 +832,15 @@ MOONSHINE_EXPORT int32_t moonshine_extract_speech_clip(
    ``zipvoice/vocoder.ort``, ``zipvoice/tokens.txt``,
    ``zipvoice/model.json``) are resolved under ``g2p_root`` or supplied in
    memory. English only for now.
+
+   For ZipVoice cloning, download TTS dependencies (including the
+   ``role":"clone_asr"`` group) under ``g2p_root`` so ``g2p_root/clone_asr/``
+   holds the catalog STT, or pass ``clone_asr/<stt-filename>`` memory keys to
+   ``moonshine_create_tts_synthesizer_from_memory``. The library owns that ASR
+   for the synthesizer lifetime and uses it inside
+   ``moonshine_extract_speech_clip``. When a caller-supplied
+   ``zipvoice/clone_audio`` clip has no ``zipvoice_clone_transcript``, the clip
+   is refined with that ASR at create time.
 */
 MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_files(
     const char *language, const char **filenames, uint64_t filenames_count,
@@ -843,9 +861,9 @@ MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_files(
    caller-supplied reference clip is passed as key ``zipvoice/clone_audio``
    (raw little-endian float32 mono PCM); set ``zipvoice_clone_sample_rate`` and,
    optionally, ``zipvoice_clone_transcript``. When the transcript is omitted,
-   pass ``zipvoice_asr_transcriber_handle=<handle>`` (an existing transcriber
-   from ``moonshine_create_transcriber_*``) to auto-transcribe the clip with
-   Moonshine ASR. When ``memory[i]`` is non-NULL and
+   supply ``clone_asr/<stt-filename>`` keys (from the ZipVoice TTS dependency
+   ``clone_asr`` group) so the library can refine and auto-transcribe the clip
+   with its owned ASR. When ``memory[i]`` is non-NULL and
    ``memory_sizes[i]`` > 0, that buffer is used as the asset bytes; the library
    does not copy it—keep the buffers valid until
    ``moonshine_free_tts_synthesizer``. When ``memory[i]`` is NULL or
@@ -889,18 +907,23 @@ MOONSHINE_EXPORT int32_t moonshine_get_g2p_dependencies(
     const char *languages, const struct moonshine_option_t *options,
     uint64_t options_count, char **out_dependencies_json);
 
-/* Returns merged G2P + TTS vocoder canonical asset keys as a JSON array of
-   strings (flat list).
+/* Returns merged G2P + TTS vocoder download dependencies as a JSON object with
+   a ``groups`` array (same shape as ``moonshine_get_stt_dependencies``). Each
+   group is ``{ "base_url", "files": [{name,url,size,checksum,checksum_type}] }``.
    ``languages`` is comma-separated; empty or NULL means all known languages.
    ``options`` / ``options_count``: same entries as
    ``moonshine_create_tts_synthesizer_from_files``
-   (``voice`` with optional ``kokoro_`` / ``piper_`` prefix, ``g2p_root``,
-   ``piper_onnx``,
-   ``kokoro_model``, …; ``vocoder_engine`` / ``engine`` are ignored). Vocoder
-   keys follow Kokoro vs Piper selection and the requested ``voice`` like
-   ``MoonshineTTS``. On success,
-   ``*out_dependencies_json`` is a NUL-terminated JSON array; free with
-   ``free``.
+   (``voice`` with optional ``kokoro_`` / ``piper_`` / ``zipvoice_`` prefix,
+   ``g2p_root``, …). Vocoder keys follow Kokoro vs Piper vs ZipVoice selection.
+
+   When ``voice`` selects ZipVoice, an additional group with ``"role":"clone_asr"``
+   lists the catalog-default STT for the language (including the attention
+   decoder for word timestamps). Local ``name``s are prefixed ``clone_asr/``;
+   ``url``s point at the STT CDN. Bindings should download those files under
+   ``g2p_root/clone_asr/`` (or pass ``clone_asr/...`` memory keys on create).
+
+   On success, ``*out_dependencies_json`` is a NUL-terminated JSON object; free
+   with ``free``.
 */
 MOONSHINE_EXPORT int32_t moonshine_get_tts_dependencies(
     const char *languages, const struct moonshine_option_t *options,

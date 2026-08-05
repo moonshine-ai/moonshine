@@ -189,30 +189,21 @@
       </div>
 
       <section class="ms-section" id="proof"></section>
-
-      <section class="ms-section">
-        <div class="ms-card">
-          <h2 class="ms-card__title">Why it is worth the download</h2>
-          <p class="ms-card__hint">
-            Moonshine's streaming models were built for live speech rather than
-            batch files, which is where the difference shows up.
-          </p>
-          <p class="ms-small ms-muted" style="margin: 0">
-            Whisper has to wait for a 30-second window before it can start work.
-            Moonshine transcribes incrementally while you are still talking, so the
-            final transcript lands about a tenth of a second after you stop, roughly
-            a hundred times sooner than Whisper Large v3 on the same machine, and with
-            a lower word error rate. On this page that means you can hold a
-            conversation with a model running on your laptop's CPU.
-          </p>
-        </div>
-      </section>
     </main>
 
     <script type="module">
-      import { mountChrome, statStrip } from '/assets/moonshine-ui.js';
+      import {
+        mountChrome,
+        rotatingWords,
+        PLATFORMS,
+        statStrip,
+      } from '/assets/moonshine-ui.js';
 
-      mountChrome({ active: 'home', ctaTitle: 'Ship a voice interface this afternoon.' });
+      mountChrome({
+        active: 'home',
+        ctaTitle:
+          'Ship your ' + rotatingWords(PLATFORMS) + ' voice app this afternoon',
+      });
 
       document.getElementById('proof').innerHTML = statStrip([
         { value: '6.65%', label: 'HuggingFace’s OpenASR Leaderboard average, beating Whisper Large v3’s 7.44%' },

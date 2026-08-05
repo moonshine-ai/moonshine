@@ -111,13 +111,39 @@ export function twoCities16kPath() {
 }
 
 /**
+ * Flattens a TTS dependency groups manifest (or a legacy string[]) into
+ * canonical asset keys.
+ */
+export function flattenTtsDependencyKeys(deps) {
+  if (Array.isArray(deps)) {
+    return deps.map(String);
+  }
+  if (deps && Array.isArray(deps.groups)) {
+    const keys = [];
+    for (const group of deps.groups) {
+      for (const file of group.files ?? []) {
+        if (file?.name) keys.push(String(file.name));
+      }
+    }
+    return keys;
+  }
+  return [];
+}
+
+/**
  * Builds an in-memory asset map for a comma/JSON list of canonical keys, read
  * from the local TTS data tree. Returns null if any file is missing so callers
  * can skip (the large kokoro model.ort isn't vendored in-repo).
+ *
+ * Keys under ``clone_asr/`` are skipped when checking the local TTS tree —
+ * those come from the STT CDN and are not expected beside kokoro assets.
  */
 export function ttsAssetMapOrNull(keys) {
   const map = new Map();
   for (const key of keys) {
+    if (String(key).startsWith('clone_asr/')) {
+      continue;
+    }
     const file = path.join(TTS_DATA, key);
     if (!fileExists(file)) return null;
     map.set(key, fs.readFileSync(file));

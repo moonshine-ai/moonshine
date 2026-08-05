@@ -11,8 +11,8 @@
  * Finding a usable clip means locating a window of the recording that is mostly
  * speech rather than silence or breathing. That search runs in the core (see
  * `moonshine_extract_speech_clip`), so the browser, iOS and Android bindings
- * all agree on what a good clip looks like. No model download is involved: the
- * voice-activity detector is compiled into the library.
+ * all agree on what a good clip looks like. Extract stays VAD-only; ZipVoice
+ * clone ASR refine + transcript happen once inside {@link TextToSpeech.cloneFrom}.
  */
 
 import { resampleTo16k } from './mic-transcriber.js';
@@ -33,6 +33,7 @@ export interface VoiceCloneOptions {
 
 export class VoiceClone {
   private readonly module: MoonshineModule;
+  private readonly ttsHandle: number;
   private readonly clipSeconds: number;
   private readonly minimumSpeechSeconds: number;
 
@@ -40,6 +41,7 @@ export class VoiceClone {
   private sampleCount = 0;
   private samplesSinceSearch = 0;
   private clip?: Float32Array;
+  private clipTranscript?: string;
   private speech = 0;
   private readyCallbacks: Array<() => void> = [];
   private progressCallbacks: Array<
@@ -47,8 +49,13 @@ export class VoiceClone {
   > = [];
   private stopCapture?: () => Promise<void>;
 
-  constructor(module: MoonshineModule, options: VoiceCloneOptions = {}) {
+  constructor(
+    module: MoonshineModule,
+    ttsHandle: number,
+    options: VoiceCloneOptions = {},
+  ) {
     this.module = module;
+    this.ttsHandle = ttsHandle;
     this.clipSeconds = options.clipSeconds ?? 4;
     this.minimumSpeechSeconds = options.minimumSpeechSeconds ?? 2;
     if (!module.extractSpeechClip) {
@@ -84,6 +91,11 @@ export class VoiceClone {
   /** Speech found in the best window so far, in seconds. */
   get speechSeconds(): number {
     return this.speech;
+  }
+
+  /** Transcript is unused for VAD capture; cloneFrom fills it via create-time ASR. */
+  get transcript(): string | undefined {
+    return this.clipTranscript;
   }
 
   get recordedSeconds(): number {
@@ -202,6 +214,7 @@ export class VoiceClone {
     this.sampleCount = 0;
     this.samplesSinceSearch = 0;
     this.clip = undefined;
+    this.clipTranscript = undefined;
     this.speech = 0;
   }
 
@@ -210,6 +223,7 @@ export class VoiceClone {
     const result = this.module.extractSpeechClip!(
       recording,
       TARGET_SAMPLE_RATE,
+      this.ttsHandle,
       this.clipSeconds,
       options.acceptAnything ? 0 : this.minimumSpeechSeconds,
     );
@@ -219,6 +233,7 @@ export class VoiceClone {
     }
     if (result.isComplete && result.audio && result.audio.length > 0) {
       this.clip = result.audio;
+      this.clipTranscript = result.transcript || undefined;
       const callbacks = this.readyCallbacks;
       this.readyCallbacks = [];
       for (const cb of callbacks) cb();
@@ -233,7 +248,10 @@ export class VoiceClone {
 export async function extractSpeechClip(
   audio: Float32Array,
   sampleRate: number,
-  options: VoiceCloneOptions & { module?: MoonshineModule } = {},
+  options: VoiceCloneOptions & {
+    module?: MoonshineModule;
+    ttsHandle: number;
+  },
 ): Promise<Float32Array> {
   const module = options.module ?? (await loadMoonshineModule());
   if (!module.extractSpeechClip) {
@@ -245,6 +263,7 @@ export async function extractSpeechClip(
   const result = module.extractSpeechClip(
     audio,
     sampleRate,
+    options.ttsHandle,
     clipSeconds,
     options.minimumSpeechSeconds ?? 2,
   );

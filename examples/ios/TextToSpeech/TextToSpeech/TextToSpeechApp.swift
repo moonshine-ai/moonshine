@@ -192,8 +192,7 @@ class TTSModel: ObservableObject {
                 Task { @MainActor in self?.downloadStatus = snapshot }
             }
         if cloning {
-            // Pulls the cloning engine down during load, so the first
-            // cloneFrom() after a recording does not go back to the network.
+            // Create-time mode: ZipVoice + clone ASR download with load().
             instance.cloning()
         } else if let voice {
             instance.voice(voice)

@@ -60,12 +60,19 @@
 #   WINDOWS_CLOUD_INSTANCE - GCP instance name for the Windows VM (optional)
 #   WINDOWS_CLOUD_ZONE     - GCP zone for the Windows VM (e.g. us-central1-b)
 #   WINDOWS_CLOUD_PROJECT  - GCP project ID for the Windows VM
+#   WINDOWS_LIBVIRT_DOMAIN - libvirt domain name for a Windows KVM guest hosted
+#                            on LINUX_CLOUD_HOST (e.g. moonshine-win). Used when
+#                            WINDOWS_CLOUD_INSTANCE is unset. The guest is
+#                            started before the windows stage and shut down on
+#                            exit so qemu does not keep burning host cores.
 #   GCP_SERVICE_ACCOUNT_KEY - path to a service account key file used for the
 #                            gcloud calls below. Optional, but see the note.
 #
 # When the LINUX_CLOUD_INSTANCE / WINDOWS_CLOUD_INSTANCE variables are set the
 # script will start the corresponding GCP VM before connecting and stop it
-# again on exit (including on error) to minimize compute costs.
+# again on exit (including on error) to minimize compute costs. The local
+# Windows KVM guest (WINDOWS_LIBVIRT_DOMAIN) gets the same start/stop treatment
+# via virsh on LINUX_CLOUD_HOST.
 #
 # Those gcloud calls are why GCP_SERVICE_ACCOUNT_KEY exists. A personal login's
 # session expires part-way through a multi-hour release, and the next gcloud
@@ -173,6 +180,83 @@ gcp_suspend_instance() {
         || echo "Warning: failed to suspend ${instance}." >&2
 }
 
+# True when Windows CI runs against a libvirt KVM guest on LINUX_CLOUD_HOST
+# rather than a GCP VM. The guest is expensive to leave idle (8 vCPUs / 16 GB),
+# so the windows stage starts it and cleanup shuts it down.
+windows_uses_libvirt_guest() {
+    [ -z "${WINDOWS_CLOUD_INSTANCE:-}" ] \
+        && [ -n "${WINDOWS_LIBVIRT_DOMAIN:-}" ] \
+        && [ -n "${LINUX_CLOUD_HOST:-}" ]
+}
+
+# Run a virsh command on the Linux host that owns the Windows KVM guest.
+libvirt_windows_virsh() {
+    # shellcheck disable=SC2029 # intentional remote expansion of the domain name
+    ssh -o BatchMode=yes "${LINUX_CLOUD_HOST}" \
+        "sudo virsh $*"
+}
+
+# Boot the local Windows KVM guest and wait until SSH answers.
+libvirt_windows_start() {
+    local domain="${WINDOWS_LIBVIRT_DOMAIN}"
+    local ssh_target="${WINDOWS_CLOUD_USER}@${WINDOWS_CLOUD_HOST}"
+    local state
+
+    state="$(libvirt_windows_virsh domstate "${domain}" 2>/dev/null || true)"
+    if [ "${state}" != "running" ]; then
+        echo "Starting libvirt guest ${domain} on ${LINUX_CLOUD_HOST}..."
+        libvirt_windows_virsh start "${domain}"
+    else
+        echo "Libvirt guest ${domain} is already running."
+    fi
+
+    echo "Waiting for SSH on ${ssh_target} to be ready..."
+    local attempt=0
+    until ssh -o BatchMode=yes \
+              -o ConnectTimeout=5 \
+              -o StrictHostKeyChecking=accept-new \
+              "${ssh_target}" exit 2>/dev/null; do
+        attempt=$((attempt + 1))
+        if [ ${attempt} -ge 60 ]; then
+            echo "Timed out waiting for SSH on ${ssh_target}." >&2
+            return 1
+        fi
+        sleep 5
+    done
+    echo "SSH on ${ssh_target} is ready."
+}
+
+# Shut down the local Windows KVM guest. Prefer ACPI shutdown, then destroy.
+# Failures are reported but do not abort cleanup of anything else.
+libvirt_windows_shutdown() {
+    local domain="${WINDOWS_LIBVIRT_DOMAIN}"
+    local state
+    local i
+
+    state="$(libvirt_windows_virsh domstate "${domain}" 2>/dev/null || true)"
+    if [ -z "${state}" ] || [ "${state}" = "shut off" ]; then
+        echo "Libvirt guest ${domain} is already shut off."
+        return 0
+    fi
+
+    echo "Shutting down libvirt guest ${domain} on ${LINUX_CLOUD_HOST}..."
+    libvirt_windows_virsh shutdown "${domain}" \
+        || echo "Warning: virsh shutdown ${domain} failed." >&2
+
+    for i in $(seq 1 24); do
+        state="$(libvirt_windows_virsh domstate "${domain}" 2>/dev/null || true)"
+        if [ "${state}" = "shut off" ]; then
+            echo "Libvirt guest ${domain} is shut off."
+            return 0
+        fi
+        sleep 5
+    done
+
+    echo "Guest ${domain} still '${state}' after graceful shutdown; destroying..." >&2
+    libvirt_windows_virsh destroy "${domain}" \
+        || echo "Warning: virsh destroy ${domain} failed." >&2
+}
+
 cleanup() {
     local exit_code=$?
     set +e
@@ -192,6 +276,8 @@ cleanup() {
             "${WINDOWS_CLOUD_INSTANCE}" \
             "${WINDOWS_CLOUD_ZONE}" \
             "${WINDOWS_CLOUD_PROJECT}"
+    elif windows_uses_libvirt_guest; then
+        libvirt_windows_shutdown
     fi
     exit ${exit_code}
 }
@@ -278,6 +364,8 @@ stage_windows() {
             "${WINDOWS_CLOUD_ZONE}" \
             "${WINDOWS_CLOUD_PROJECT}" \
             "${WINDOWS_CLOUD_USER}@${WINDOWS_CLOUD_HOST}"
+    elif windows_uses_libvirt_guest; then
+        libvirt_windows_start
     fi
 
     # Keepalives so a brief network stall doesn't tear down the session. A

@@ -1767,7 +1767,8 @@ const TAB_PAGES = [
     name: 'Voice agent',
     url: '/agent-flow/?local=1&assets=local&nomic=1',
     labels: ['JavaScript', 'Python', 'Swift', 'Android'],
-    files: ['wifi-agent.js', 'agent_flow.py', 'AgentFlowApp.swift', 'MainActivity.java'],
+    // No filename captions: four tabs plus MainActivity.java crowded Android.
+    files: ['', '', '', ''],
     expect: [
       /agent\.listenFor\(/,
       /def setup_wifi\(d\):/,
@@ -1797,13 +1798,18 @@ for (const page_ of TAB_PAGES) {
         assert.equal(pane.visible, 1, `${pane.label} should show exactly one snippet`);
         // Each tab shows its own language, not copies of the JavaScript one.
         assert.match(pane.code, page_.expect[i], `${page_.name} ${pane.label} snippet`);
-        // The caption links to the file it names, on the main branch, anchored
-        // at the lines the snippet came from.
-        assert.match(
-          pane.href ?? '',
-          /^https:\/\/github\.com\/moonshine-ai\/moonshine\/blob\/main\/examples\/\S+#L\d+-L\d+$/,
-          `${pane.label} caption should link to its source lines`,
-        );
+        if (page_.files[i]) {
+          // The caption links to the file it names, on the main branch, anchored
+          // at the lines the snippet came from.
+          assert.match(
+            pane.href ?? '',
+            /^https:\/\/github\.com\/moonshine-ai\/moonshine\/blob\/main\/examples\/\S+#L\d+-L\d+$/,
+            `${pane.label} caption should link to its source lines`,
+          );
+        } else {
+          assert.equal(pane.file, '', `${pane.label} should omit the filename caption`);
+          assert.equal(pane.href, null, `${pane.label} should not link a missing caption`);
+        }
       }
 
       assert.deepEqual(

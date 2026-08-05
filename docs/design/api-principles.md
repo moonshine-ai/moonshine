@@ -35,7 +35,7 @@ agent.startListening();
 
 ```java
 
-TextToSpeech tts = new TextToSpeechCloner();
+TextToSpeech tts = new TextToSpeech(context).cloning();
 
 tts.load();
 

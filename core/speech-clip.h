@@ -15,6 +15,12 @@
 // The clip is a *contiguous* window of the original recording rather than the
 // speech segments spliced together, because the cloning vocoder wants natural
 // running speech, pauses and all.
+//
+// This step is VAD-only so streaming capture can call it frequently without a
+// model. Word-boundary refinement (extend past the requested duration to finish
+// the last word, and emit a matching transcript) lives in
+// ``moonshine_extract_speech_clip`` when the TTS synthesizer owns a clone ASR;
+// the algorithm is ``refine_clone_clip_bounds`` in clone-clip.h.
 
 struct SpeechClipOptions {
   // Length of the window to extract.
@@ -25,6 +31,10 @@ struct SpeechClipOptions {
   float minimum_speech_seconds = 2.0f;
   // Silero VAD speech probability threshold.
   float vad_threshold = 0.5f;
+  // Extra audio to include after the VAD window (clamped to the recording).
+  // Used when a follow-on word-timestamp refine step will extend the end to
+  // finish the last word. Streaming capture leaves this at zero.
+  float tail_pad_seconds = 0.0f;
 };
 
 struct SpeechClip {

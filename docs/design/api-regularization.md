@@ -159,13 +159,11 @@ tag is now `language_tag`, as it is in Swift.
 
 `clone_from()` accepts a `.wav` path, a `(pcm, sample_rate)` pair, or a
 `VoiceClone`, and rebuilds the synthesizer in place, freeing the previous one.
-That means a synthesizer can start out on a catalog voice and be switched to a
-cloned one later, which the old constructor-only path could not express.
-`cloning()` fetches the ZipVoice engine during `load()` so the first clone is
-quick; without it the engine comes down on the first `clone_from()` instead.
-Since there is no voice until a clip arrives, `say()` on a `cloning()`
-synthesizer that has not been cloned yet raises an error naming `clone_from()`
-rather than a generic "not loaded".
+`cloning()` is create-time, like `voice()`: call it before `load()` so ZipVoice
+and owned clone ASR are fetched up front; `clone_from()` / `start_cloning()`
+require that mode and raise without it. `voice()` and `cloning()` clear each
+other. Until a clip is cloned, synthesis uses the ZipVoice preset voice
+built during `load()`.
 
 `VoiceClone` is backed by the same `moonshine_extract_speech_clip` core call
 that Swift and Java use, so this was binding work rather than new algorithm
@@ -378,19 +376,18 @@ Blocked on phase 1 for Python and phase 2 for Swift.
 Both mobile text-to-speech apps hit the same two things, neither of which the
 command-line references show, because a CLI that clones does nothing else.
 
-**Cloning means a different engine.** It only exists on ZipVoice, so a
-synthesizer built for a catalogue voice cannot clone. Both apps do what the web
-page does and switch engines behind the scenes when the record button is
-pressed, rather than making the visitor pick an engine first. That download is
-also why cloning is a second button and not something every reader pays for at
-launch. Picking a preset voice afterwards switches back, which is the only way
-back to a catalogue voice.
+**Cloning means a different engine.** It only exists on ZipVoice, so
+`.cloning()` before `load()` is required — a synthesizer built for a catalogue
+voice cannot clone. Apps that offer both Speak and Record keep two synthesizers
+(or swap to a `.cloning()` instance when the record button is pressed) rather
+than making the visitor pick an engine first. The web demo prefetches the
+cloning engine in the background so Record never tears down the catalogue Speak
+path mid-flight. Picking a preset voice afterwards switches back.
 
-The two platforms differ in what that leaves behind. Java's `load()` on a
-cloning synthesizer fetches assets without building a handle, so between the
-engine swap and a successful `cloneFrom` there is a synthesizer that cannot
-speak; the Android app holds `engineReady` false across that window and rebuilds
-the preset voice if the recording fails. Swift has no equivalent gap.
+The two platforms differ slightly around readiness. Java's `load()` on a
+cloning synthesizer builds a ZipVoice preset handle, so `startCloning` works
+before a clip exists; until `cloneFrom` succeeds the app may still treat Speak
+as not ready if it only wants the cloned voice. Swift matches that pattern.
 
 **iOS has to put the audio session back.** The library takes the shared session
 over for recording and deactivates it when it is done, so an app that set

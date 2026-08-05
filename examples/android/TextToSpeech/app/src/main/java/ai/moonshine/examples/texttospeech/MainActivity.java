@@ -285,8 +285,7 @@ public class MainActivity extends AppCompatActivity {
                                 (fraction, file) ->
                                         runOnUiThread(() -> showProgress(fraction, file)));
         if (cloning) {
-            // Pulls the cloning engine down during load, so the first cloneFrom()
-            // after a recording does not go back to the network.
+            // Create-time mode: ZipVoice + clone ASR download with load().
             synthesizer.cloning(true);
         } else if (voiceId != null) {
             synthesizer.voice(voiceId);

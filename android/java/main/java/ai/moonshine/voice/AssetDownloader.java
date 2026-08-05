@@ -149,7 +149,7 @@ public final class AssetDownloader {
             case TTS: {
                 String json = TextToSpeech.getTtsDependencies(
                         spec.primary, spec.toOptions(root.getAbsolutePath()));
-                return filesFromKeyArray(json);
+                return filesFromGroupManifest(json);
             }
             case G2P: {
                 String csv = TextToSpeech.getG2pDependencies(
@@ -193,7 +193,7 @@ public final class AssetDownloader {
         return result;
     }
 
-    /** Parses the flat JSON array of canonical keys emitted by the TTS dependency API. */
+    /** Legacy flat key array parser (G2P still uses CSV; TTS uses {@link #filesFromGroupManifest}). */
     private List<ResolvedFile> filesFromKeyArray(String json) throws IOException {
         try {
             JSONArray array = new JSONArray(json);

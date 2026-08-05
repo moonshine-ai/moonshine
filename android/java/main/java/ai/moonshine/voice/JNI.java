@@ -161,7 +161,7 @@ public class JNI {
      * how incremental capture knows to keep listening.
      */
     public static native SpeechClip moonshineExtractSpeechClip(float[] audioData, int sampleRate,
-            float clipDurationSeconds, float minimumSpeechSeconds);
+            int ttsSynthesizerHandle, float clipDurationSeconds, float minimumSpeechSeconds);
 
     public static native TtsSynthesisResult moonshineTextToSpeech(int tts_synthesizer_handle,
             String text, TranscriberOption[] options);

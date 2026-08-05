@@ -241,6 +241,22 @@ def test_saying_something_before_load_says_what_to_do(tts_module, fake_native):
         tts_module.TextToSpeech().say("hello")
 
 
+def test_split_say_utterances_breaks_on_punct_plus_space(tts_module):
+    split = tts_module.split_say_utterances
+    assert split("") == []
+    assert split("  ") == []
+    assert split("Hello") == ["Hello"]
+    assert split("Hello.") == ["Hello."]
+    assert split("Hello. World") == ["Hello.", "World"]
+    assert split("Hello! World? Yes.") == ["Hello!", "World?", "Yes."]
+    assert split("3.14 is pi.") == ["3.14 is pi."]
+    assert split("Hello.  World") == ["Hello.", "World"]
+    assert split("Warning: the core is hot.") == [
+        "Warning:",
+        "the core is hot.",
+    ]
+
+
 def test_synthesizing_before_load_says_what_to_do(tts_module, fake_native):
     from moonshine_voice.errors import MoonshineError
 
@@ -260,32 +276,40 @@ def test_asset_root_before_load_says_what_to_do(tts_module, fake_native):
 # ---------------------------------------------------------------------------
 
 
-def test_cloning_fetches_the_engine_but_leaves_the_voice_open(tts_module, fake_native):
+def test_cloning_builds_zipvoice_so_start_cloning_works(tts_module, fake_native):
     tts = tts_module.TextToSpeech().cloning()
 
     tts.load()
 
-    # There is nothing to clone yet, so the assets come down without a
-    # synthesizer being built on top of them.
-    assert fake_native.downloads[0]["voice"] == "zipvoice"
-    assert fake_native.created_from_files == []
+    assert fake_native.downloads[0]["voice"] == "zipvoice_american_female"
+    assert len(fake_native.created_from_files) == 1
     assert not tts.is_cloned
+    clone = tts.start_cloning()
+    assert clone is not None
+    assert clone._tts_handle == tts._handle
 
 
-def test_using_a_cloning_synthesizer_early_points_at_clone_from(
-    tts_module, fake_native
-):
+def test_voice_and_cloning_are_mutually_exclusive(tts_module, fake_native):
+    tts = tts_module.TextToSpeech().voice("kokoro_af_heart").cloning()
+    assert tts._voice is None
+    assert tts._cloning_wanted
+
+    tts.voice("kokoro_af_heart")
+    assert tts._cloning_wanted is False
+
+
+def test_clone_from_requires_cloning_mode(tts_module, fake_native):
     from moonshine_voice.errors import MoonshineError
 
-    tts = tts_module.TextToSpeech().cloning()
+    tts = tts_module.TextToSpeech()
     tts.load()
 
-    with pytest.raises(MoonshineError, match="clone_from"):
-        tts.synthesize("hello")
+    with pytest.raises(MoonshineError, match="cloning"):
+        tts.clone_from(([0.1, 0.2, 0.3], 16000), transcript="hello there")
 
 
 def test_clone_from_samples_builds_from_memory(tts_module, fake_native):
-    tts = tts_module.TextToSpeech()
+    tts = tts_module.TextToSpeech().cloning()
     tts.load()
 
     tts.clone_from(([0.1, 0.2, 0.3], 16000), transcript="hello there")
@@ -298,7 +322,7 @@ def test_clone_from_samples_builds_from_memory(tts_module, fake_native):
 
 
 def test_cloning_replaces_the_earlier_synthesizer(tts_module, fake_native):
-    tts = tts_module.TextToSpeech().voice("kokoro_af_heart")
+    tts = tts_module.TextToSpeech().cloning()
     tts.load()
     first = tts._handle
 
@@ -310,10 +334,10 @@ def test_cloning_replaces_the_earlier_synthesizer(tts_module, fake_native):
 def test_clone_from_a_voice_clone_uses_its_audio(tts_module, fake_native):
     from moonshine_voice.voice_clone import VoiceClone
 
-    clone = VoiceClone()
+    clone = VoiceClone(tts_handle=0)
     clone._clip = [0.1, 0.2, 0.3]
 
-    tts = tts_module.TextToSpeech()
+    tts = tts_module.TextToSpeech().cloning()
     tts.load()
     tts.clone_from(clone, transcript="hello")
 
@@ -325,20 +349,21 @@ def test_clone_from_an_unfinished_voice_clone_says_to_wait(tts_module, fake_nati
     from moonshine_voice.errors import MoonshineError
     from moonshine_voice.voice_clone import VoiceClone
 
-    tts = tts_module.TextToSpeech()
+    tts = tts_module.TextToSpeech().cloning()
     tts.load()
 
     with pytest.raises(MoonshineError, match="on_ready"):
-        tts.clone_from(VoiceClone())
+        tts.clone_from(VoiceClone(tts_handle=0))
 
 
 def test_start_cloning_passes_its_thresholds_on(tts_module, fake_native):
-    clone = tts_module.TextToSpeech().start_cloning(
-        clip_duration_seconds=6, minimum_speech_seconds=3
-    )
+    tts = tts_module.TextToSpeech().cloning()
+    tts.load()
+    clone = tts.start_cloning(clip_duration_seconds=6, minimum_speech_seconds=3)
 
     assert clone._clip_duration_seconds == 6
     assert clone._minimum_speech_seconds == 3
+    assert clone._tts_handle == tts._handle
 
 
 # ---------------------------------------------------------------------------

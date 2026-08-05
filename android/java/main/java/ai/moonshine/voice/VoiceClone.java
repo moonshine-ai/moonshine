@@ -44,6 +44,7 @@ public final class VoiceClone {
     }
 
     private final Context appContext;
+    private final int ttsHandle;
     private final float clipDurationSeconds;
     private final float minimumSpeechSeconds;
 
@@ -53,6 +54,7 @@ public final class VoiceClone {
     private int recordingSampleRate = CLIP_SAMPLE_RATE;
     private int samplesSinceSearch = 0;
     @Nullable private float[] clip;
+    @Nullable private String transcript;
     private float speechSeconds = 0;
 
     private final CopyOnWriteArrayList<ReadyCallback> readyCallbacks = new CopyOnWriteArrayList<>();
@@ -61,16 +63,18 @@ public final class VoiceClone {
 
     private volatile boolean capturing = false;
 
-    public VoiceClone(Context context) {
-        this(context, 4f, 2f);
+    public VoiceClone(Context context, int ttsHandle) {
+        this(context, ttsHandle, 4f, 2f);
     }
 
-    public VoiceClone(Context context, float clipDurationSeconds, float minimumSpeechSeconds) {
+    public VoiceClone(Context context, int ttsHandle, float clipDurationSeconds,
+            float minimumSpeechSeconds) {
         if (context == null) {
             throw new IllegalArgumentException("context is required");
         }
         JNI.ensureLibraryLoaded();
         this.appContext = context.getApplicationContext();
+        this.ttsHandle = ttsHandle;
         this.clipDurationSeconds = clipDurationSeconds;
         this.minimumSpeechSeconds = minimumSpeechSeconds;
     }
@@ -119,6 +123,14 @@ public final class VoiceClone {
     public float getSpeechSeconds() {
         synchronized (lock) {
             return speechSeconds;
+        }
+    }
+
+    /** Unused for VAD capture; cloneFrom fills the transcript via create-time ASR. */
+    @Nullable
+    public String getTranscript() {
+        synchronized (lock) {
+            return transcript;
         }
     }
 
@@ -218,6 +230,7 @@ public final class VoiceClone {
             recordedSamples = 0;
             samplesSinceSearch = 0;
             clip = null;
+            transcript = null;
             speechSeconds = 0;
         }
     }
@@ -237,8 +250,8 @@ public final class VoiceClone {
         if (samples.length == 0) {
             return;
         }
-        SpeechClip found = JNI.moonshineExtractSpeechClip(samples, rate, clipDurationSeconds,
-                acceptAnything ? 0f : minimumSpeechSeconds);
+        SpeechClip found = JNI.moonshineExtractSpeechClip(samples, rate, ttsHandle,
+                clipDurationSeconds, acceptAnything ? 0f : minimumSpeechSeconds);
         if (found == null) {
             return;
         }
@@ -249,6 +262,7 @@ public final class VoiceClone {
             speechSeconds = found.speechDuration;
             if (found.audio != null && found.audio.length > 0) {
                 clip = found.audio;
+                transcript = found.transcript;
                 ready = new ArrayList<>(readyCallbacks);
                 readyCallbacks.clear();
             }

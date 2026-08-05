@@ -450,15 +450,24 @@ TEST_CASE("moonshine-cpp-test") {
     const std::vector<float> audio(wav_data, wav_data + sample_count);
     free(wav_data);
 
+    const std::string g2p_root = "../core/moonshine-tts/data/";
+    if (!file_exists(g2p_root + "zipvoice/vocoder.ort")) {
+      MESSAGE("skip: zipvoice assets not in moonshine-tts/data");
+      return;
+    }
+    moonshine::TextToSpeech tts("en_us", {{"g2p_root", g2p_root}});
+    const int32_t tts_handle = tts.getHandle();
+
     const moonshine::SpeechClip clip =
-        moonshine::extractSpeechClip(audio, sample_rate);
+        moonshine::extractSpeechClip(audio, sample_rate, tts_handle);
     REQUIRE(clip.isComplete);
     CHECK(clip.speechDuration > 1.0f);
     CHECK(clip.audio.size() ==
           static_cast<size_t>(4 * moonshine::VoiceClone::CLIP_SAMPLE_RATE));
 
     const std::vector<float> silence(sample_rate * 5, 0.0f);
-    CHECK_FALSE(moonshine::extractSpeechClip(silence, sample_rate).isComplete);
+    CHECK_FALSE(moonshine::extractSpeechClip(silence, sample_rate, tts_handle)
+                    .isComplete);
   }
   SUBCASE("VoiceClone becomes ready as audio arrives") {
     const std::string wav_path = "beckett.wav";
@@ -474,7 +483,14 @@ TEST_CASE("moonshine-cpp-test") {
     const std::vector<float> audio(wav_data, wav_data + sample_count);
     free(wav_data);
 
-    moonshine::VoiceClone clone;
+    const std::string g2p_root = "../core/moonshine-tts/data/";
+    if (!file_exists(g2p_root + "zipvoice/vocoder.ort")) {
+      MESSAGE("skip: zipvoice assets not in moonshine-tts/data");
+      return;
+    }
+    moonshine::TextToSpeech tts("en_us", {{"g2p_root", g2p_root}});
+
+    moonshine::VoiceClone clone(tts.getHandle());
     int ready_calls = 0;
     clone.onReady([&ready_calls] { ready_calls++; });
     CHECK_FALSE(clone.isReady());
@@ -523,8 +539,7 @@ TEST_CASE("moonshine-cpp-test") {
     moonshine::TextToSpeech tts("en_us", {{"g2p_root", g2p_root}});
     CHECK_FALSE(tts.isCloned());
 
-    // The transcript is supplied here so the test needs no speech-to-text
-    // model; the Transcriber overload covers the other route.
+    // The transcript is supplied here so the test needs no speech-to-text model.
     tts.cloneFrom(audio, sample_rate, "Ever tried. Ever failed. No matter.");
     CHECK(tts.isCloned());
 
@@ -548,8 +563,9 @@ TEST_CASE("moonshine-cpp-test") {
   }
   SUBCASE("VoiceClone copies share one capture") {
     // VoiceClone is a handle onto shared state, matching the reference-typed
-    // VoiceClone in the Swift and Java bindings.
-    moonshine::VoiceClone clone;
+    // VoiceClone in the Swift and Java bindings. A real TTS is unnecessary here
+    // because this case never reaches extract.
+    moonshine::VoiceClone clone(/*ttsSynthesizerHandle=*/-1);
     moonshine::VoiceClone alias = clone;
     const std::vector<float> silence(16000, 0.0f);
     alias.addAudio(silence, 16000);
