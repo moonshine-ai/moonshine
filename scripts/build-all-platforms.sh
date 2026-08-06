@@ -657,6 +657,12 @@ main() {
     run_stage build-swift        scripts/build-swift.sh
     run_publish_stage publish-swift scripts/publish-swift.sh
     run_stage test-android-arm64 scripts/test-android.sh --avd "${ANDROID_ARM64_AVD:-moonshine_api26_arm64}"
+    # Physical Pixel + iPad Tiny Streaming latency (same metric as the README
+    # table). Requires the devices to be plugged into this Mac; set
+    # MOBILE_LATENCY_OPTIONAL=1 to skip when hardware is absent. Does not rewrite
+    # the README here (this is a disposable worktree) -- refresh figures with
+    # scripts/test-mobile-latency.sh --update-readme on the candidate branch.
+    run_stage test-mobile-latency scripts/test-mobile-latency.sh --skip-build-swift
     run_stage build-android      scripts/build-android.sh "${ANDROID_ARGS[@]}"
     run_stage build-pip          scripts/build-pip.sh "${UPLOAD_ARGS[@]}"
     run_stage build-pip-docker   scripts/build-pip-docker.sh "${UPLOAD_ARGS[@]}"

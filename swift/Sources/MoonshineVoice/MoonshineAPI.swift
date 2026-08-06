@@ -352,7 +352,8 @@ internal final class MoonshineAPI: @unchecked Sendable {
                 haveSpeakersChanged: lineC.have_speakers_changed != 0,
                 speakerSpans: speakerSpans,
                 audioData: audioData,
-                words: words
+                words: words,
+                lastTranscriptionLatencyMs: lineC.last_transcription_latency_ms
             )
             lines.append(line)
         }

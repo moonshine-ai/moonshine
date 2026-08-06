@@ -108,14 +108,14 @@ You can look at [github.com/moonshine-ai/pi-help-bot](https://github.com/moonshi
 
 TL;DR - When you're working with live speech.
 
-| Model                      | WER    | # Parameters | MacBook Pro | Linux x86 | R. Pi 5   |
-| -------------------------- | ------ | ------------ | ----------- | --------- | --------- |
-| Moonshine Medium Streaming | 6.65%  | 245 million  | 107ms       | 269ms     | 802ms     |
-| Whisper Large v3           | 7.44%  | 1.5 billion  | 11,286ms    | 16,919ms  | N/A       |
-| Moonshine Small Streaming  | 7.84%  | 123 million  | 73ms        | 165ms     | 527ms     |
-| Whisper Small              | 8.59%  | 244 million  | 1940ms      | 3,425ms   | 10,397ms  |
-| Moonshine Tiny Streaming   | 12.00% | 34 million   | 34ms        | 69ms      | 237ms     |
-| Whisper Tiny               | 12.81% | 39 million   | 277ms       | 1,141ms   | 5,863ms   |
+| Model                      | WER    | # Parameters | MacBook Pro | Linux x86 | R. Pi 5   | Pixel 10a | iPad (A16) |
+| -------------------------- | ------ | ------------ | ----------- | --------- | --------- | --------- | ---------- |
+| Moonshine Medium Streaming | 6.65%  | 245 million  | 103ms       | 269ms     | 802ms     | 1091ms    | 294ms      |
+| Whisper Large v3           | 7.44%  | 1.5 billion  | 11,286ms    | 16,919ms  | N/A       | —         | —          |
+| Moonshine Small Streaming  | 7.84%  | 123 million  | 80ms        | 165ms     | 527ms     | 586ms     | 185ms      |
+| Whisper Small              | 8.59%  | 244 million  | 1940ms      | 3,425ms   | 10,397ms  | —         | —          |
+| Moonshine Tiny Streaming   | 12.00% | 34 million   | 32ms        | 69ms      | 237ms     | 191ms     | 68ms       |
+| Whisper Tiny               | 12.81% | 39 million   | 277ms       | 1,141ms   | 5,863ms   | —         | —          |
 
 _See [benchmarks](#benchmarks) for how these numbers were measured._
 
@@ -989,6 +989,13 @@ The latency metric needs a bit of explanation. What most applications care about
 By default the benchmark binary uses the Tiny English model and the `two_cities.wav` recording from this repository's `test-assets` folder, which is why it's run from the build directory, but you can pass in the `--model-path`, `--model-arch`, and `--wav-path` parameters to choose [a model you've downloaded](#downloading-models) or a different recording.
 
 You can also choose how often the transcript should be updated using the `--transcription-interval` argument. This defaults to 0.5 seconds, but the right value will depend on how fast your application needs updates. Longer intervals reduce the compute required a bit, at the cost of slower updates.
+
+The MacBook Pro, Pixel 10a, and iPad (A16) Tiny / Small / Medium Streaming cells in the comparison table use the same latency metric, measured by [`scripts/test-mobile-latency.sh`](scripts/test-mobile-latency.sh) (also run from [`scripts/build-all-platforms.sh`](scripts/build-all-platforms.sh)). That script downloads the models from the CDN, feeds `two_cities.wav` in small chunks as fast as the device can process, and averages `lastTranscriptionLatencyMs` over completed lines. Re-measure and refresh the README with:
+
+<!-- doc-test: skip -->
+```bash
+./scripts/test-mobile-latency.sh --update-readme
+```
 
 #### Whisper Comparisons
 

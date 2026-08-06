@@ -475,19 +475,23 @@ public class TextToSpeech: @unchecked Sendable {
         let sentences = Self.splitSayUtterances(text)
         guard !sentences.isEmpty else { return }
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            let lock = NSLock()
-            var remaining = sentences.count
-            var firstError: Error?
+            final class SpeakState: @unchecked Sendable {
+                let lock = NSLock()
+                var remaining: Int
+                var firstError: Error?
+                init(remaining: Int) { self.remaining = remaining }
+            }
+            let state = SpeakState(remaining: sentences.count)
             for sentence in sentences {
                 enqueueSay(text: sentence, deviceID: deviceID, options: options) { error in
-                    lock.lock()
-                    if let error, firstError == nil {
-                        firstError = error
+                    state.lock.lock()
+                    if let error, state.firstError == nil {
+                        state.firstError = error
                     }
-                    remaining -= 1
-                    let done = remaining == 0
-                    let failure = firstError
-                    lock.unlock()
+                    state.remaining -= 1
+                    let done = state.remaining == 0
+                    let failure = state.firstError
+                    state.lock.unlock()
                     if done {
                         if let failure {
                             continuation.resume(throwing: failure)

@@ -57,6 +57,7 @@ build-*/
 pico_monitor.log
 .claude/
 .release-state/
+.mobile-latency/
 /plans/
 /wasm/node_modules/
 /wasm/dist/

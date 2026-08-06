@@ -1,0 +1,54 @@
+name: StreamingLatency
+options:
+  bundleIdPrefix: ai.moonshine
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    DEVELOPMENT_TEAM: S3AJ7B7ZCG
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+packages:
+  Moonshine:
+    path: ../../../swift
+targets:
+  StreamingLatency:
+    type: application
+    platform: iOS
+    sources:
+      - path: StreamingLatency
+    dependencies:
+      - package: Moonshine
+        product: MoonshineVoice
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.moonshine.StreamingLatency
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        # App Transport / outgoing HTTPS for CDN model downloads.
+        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads: NO
+        GENERATE_INFOPLIST_FILE: YES
+  StreamingLatencyTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - StreamingLatencyTests
+    dependencies:
+      - target: StreamingLatency
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.moonshine.StreamingLatencyTests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/StreamingLatency.app/StreamingLatency"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+schemes:
+  StreamingLatency:
+    build:
+      targets:
+        StreamingLatency: all
+        StreamingLatencyTests: [test]
+    test:
+      targets:
+        - StreamingLatencyTests

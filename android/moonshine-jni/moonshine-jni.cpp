@@ -128,6 +128,8 @@ static jobject c_transcript_to_jobject(JNIEnv *env,
       get_field(env, lineClass, "hasTextChanged", "Z");
   jfieldID haveSpeakersChangedField =
       get_field(env, lineClass, "haveSpeakersChanged", "Z");
+  jfieldID lastTranscriptionLatencyMsField =
+      get_field(env, lineClass, "lastTranscriptionLatencyMs", "I");
   jmethodID listConstructor = get_method(env, listClass, "<init>", "()V");
   jobject linesList = env->NewObject(listClass, listConstructor);
 
@@ -159,6 +161,8 @@ static jobject c_transcript_to_jobject(JNIEnv *env,
     env->SetBooleanField(jline, hasTextChangedField, line->has_text_changed);
     env->SetBooleanField(jline, haveSpeakersChangedField,
                          line->have_speakers_changed);
+    env->SetIntField(jline, lastTranscriptionLatencyMsField,
+                     static_cast<jint>(line->last_transcription_latency_ms));
 
     // Populate speaker spans if available
     if (line->speaker_spans != nullptr && line->speaker_span_count > 0) {

@@ -204,29 +204,6 @@ struct UpdateStats {
   std::string nospec_text;
 };
 
-int first_diff(const std::vector<int> &a, const std::vector<int> &b) {
-  const int n = static_cast<int>(std::min(a.size(), b.size()));
-  for (int i = 0; i < n; ++i) {
-    if (a[i] != b[i]) return i;
-  }
-  if (a.size() != b.size()) return n;
-  return -1;
-}
-
-std::vector<int> decode_full_vec(MoonshineStreamingModel &model,
-                                 MoonshineStreamingState *state,
-                                 const int *draft, int draft_len) {
-  model.decoder_reset(state);
-  int *out = nullptr;
-  int out_len = 0;
-  if (model.decode_full(state, draft, draft_len, &out, &out_len) != 0) {
-    throw std::runtime_error("decode_full failed");
-  }
-  std::vector<int> tokens(out, out + out_len);
-  std::free(out);
-  return tokens;
-}
-
 struct FileResult {
   std::string path;
   float duration_sec = 0;

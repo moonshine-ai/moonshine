@@ -759,15 +759,6 @@ int32_t allocate_text_to_speech_synthesizer_handle(
   return handle;
 }
 
-int32_t clone_asr_for_tts_handle(int32_t tts_handle) {
-  std::lock_guard<std::mutex> lock(text_to_speech_synthesizer_map_mutex);
-  const auto it = text_to_speech_clone_asr_map.find(tts_handle);
-  if (it == text_to_speech_clone_asr_map.end()) {
-    return -1;
-  }
-  return it->second;
-}
-
 void parse_tts_options(const OptionVector &options,
                        moonshine_tts::MoonshineTTSOptions &out_options,
                        std::string &cli_language_out,

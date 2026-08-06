@@ -1,0 +1,442 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		79C5372018F534A61EE13169 /* StreamingLatencyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED83875DD1A04BE17505B36 /* StreamingLatencyApp.swift */; };
+		84FDEE141CB9DD9763A439CA /* MoonshineVoice in Frameworks */ = {isa = PBXBuildFile; productRef = 5BFEA68BF35186E493DA6202 /* MoonshineVoice */; };
+		EA015F004E43D705466977F3 /* StreamingLatencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D705AD41DF338B332560FFB /* StreamingLatencyTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		67FD5B0333BB8D67DF9605F3 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BB36D9A5E684D6C5A8FE5064 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 38359E5F5640567FA47B5957;
+			remoteInfo = StreamingLatency;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		3ED83875DD1A04BE17505B36 /* StreamingLatencyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingLatencyApp.swift; sourceTree = "<group>"; };
+		9D705AD41DF338B332560FFB /* StreamingLatencyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingLatencyTests.swift; sourceTree = "<group>"; };
+		CB9C919FBCAFDDF9971BDE1E /* swift */ = {isa = PBXFileReference; lastKnownFileType = folder; name = swift; path = ../../../swift; sourceTree = SOURCE_ROOT; };
+		F17A62165B3C9D29E81D6EFA /* StreamingLatency.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = StreamingLatency.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F5961EB5A917724E08E9C84F /* StreamingLatencyTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = StreamingLatencyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		ED2202B96729EE4F48BEFA1A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				84FDEE141CB9DD9763A439CA /* MoonshineVoice in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		85DA5A2567A097F24699A53D /* StreamingLatencyTests */ = {
+			isa = PBXGroup;
+			children = (
+				9D705AD41DF338B332560FFB /* StreamingLatencyTests.swift */,
+			);
+			path = StreamingLatencyTests;
+			sourceTree = "<group>";
+		};
+		874B7DE511B6F1632A9B41E3 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F17A62165B3C9D29E81D6EFA /* StreamingLatency.app */,
+				F5961EB5A917724E08E9C84F /* StreamingLatencyTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		8C08B18F56EA44A6E4462150 = {
+			isa = PBXGroup;
+			children = (
+				D719DF93B2BF933CF19093F1 /* Packages */,
+				A89C7C574A6B828E6543B08C /* StreamingLatency */,
+				85DA5A2567A097F24699A53D /* StreamingLatencyTests */,
+				874B7DE511B6F1632A9B41E3 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A89C7C574A6B828E6543B08C /* StreamingLatency */ = {
+			isa = PBXGroup;
+			children = (
+				3ED83875DD1A04BE17505B36 /* StreamingLatencyApp.swift */,
+			);
+			path = StreamingLatency;
+			sourceTree = "<group>";
+		};
+		D719DF93B2BF933CF19093F1 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				CB9C919FBCAFDDF9971BDE1E /* swift */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		38359E5F5640567FA47B5957 /* StreamingLatency */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 08D23640393C516F697F3699 /* Build configuration list for PBXNativeTarget "StreamingLatency" */;
+			buildPhases = (
+				EAB5493CB6549E197A3D0AC7 /* Sources */,
+				ED2202B96729EE4F48BEFA1A /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = StreamingLatency;
+			packageProductDependencies = (
+				5BFEA68BF35186E493DA6202 /* MoonshineVoice */,
+			);
+			productName = StreamingLatency;
+			productReference = F17A62165B3C9D29E81D6EFA /* StreamingLatency.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A88FABE00C4F0B943F7E681E /* StreamingLatencyTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A3FFE51A532BD1371D08C979 /* Build configuration list for PBXNativeTarget "StreamingLatencyTests" */;
+			buildPhases = (
+				A1ED36EF3EB865ADF142647F /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				17C0BCBEDCFB83E8D11B1B38 /* PBXTargetDependency */,
+			);
+			name = StreamingLatencyTests;
+			packageProductDependencies = (
+			);
+			productName = StreamingLatencyTests;
+			productReference = F5961EB5A917724E08E9C84F /* StreamingLatencyTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		BB36D9A5E684D6C5A8FE5064 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					38359E5F5640567FA47B5957 = {
+						DevelopmentTeam = S3AJ7B7ZCG;
+						ProvisioningStyle = Automatic;
+					};
+					A88FABE00C4F0B943F7E681E = {
+						DevelopmentTeam = S3AJ7B7ZCG;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = DD71F323D5123872200E0D3C /* Build configuration list for PBXProject "StreamingLatency" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 8C08B18F56EA44A6E4462150;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				94261F441B64C39E118617A2 /* XCLocalSwiftPackageReference "../../../swift" */,
+			);
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				38359E5F5640567FA47B5957 /* StreamingLatency */,
+				A88FABE00C4F0B943F7E681E /* StreamingLatencyTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A1ED36EF3EB865ADF142647F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EA015F004E43D705466977F3 /* StreamingLatencyTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EAB5493CB6549E197A3D0AC7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				79C5372018F534A61EE13169 /* StreamingLatencyApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		17C0BCBEDCFB83E8D11B1B38 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 38359E5F5640567FA47B5957 /* StreamingLatency */;
+			targetProxy = 67FD5B0333BB8D67DF9605F3 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		14C38540E69985FAF95A039A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = NO;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ai.moonshine.StreamingLatency;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		3D8F2B48F3CBC82445811CCC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ai.moonshine.StreamingLatencyTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StreamingLatency.app/StreamingLatency";
+			};
+			name = Release;
+		};
+		63375AADECDC75C9DF47BA36 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ai.moonshine.StreamingLatencyTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StreamingLatency.app/StreamingLatency";
+			};
+			name = Debug;
+		};
+		C973224395922A1DFE7FDEE4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = S3AJ7B7ZCG;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		D5C78702B355E5B2DEAD2C32 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = NO;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ai.moonshine.StreamingLatency;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		DC0E6F253603F6E5AB63E4D3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = S3AJ7B7ZCG;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		08D23640393C516F697F3699 /* Build configuration list for PBXNativeTarget "StreamingLatency" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				14C38540E69985FAF95A039A /* Debug */,
+				D5C78702B355E5B2DEAD2C32 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		A3FFE51A532BD1371D08C979 /* Build configuration list for PBXNativeTarget "StreamingLatencyTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				63375AADECDC75C9DF47BA36 /* Debug */,
+				3D8F2B48F3CBC82445811CCC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		DD71F323D5123872200E0D3C /* Build configuration list for PBXProject "StreamingLatency" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DC0E6F253603F6E5AB63E4D3 /* Debug */,
+				C973224395922A1DFE7FDEE4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		94261F441B64C39E118617A2 /* XCLocalSwiftPackageReference "../../../swift" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../../swift;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		5BFEA68BF35186E493DA6202 /* MoonshineVoice */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MoonshineVoice;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = BB36D9A5E684D6C5A8FE5064 /* Project object */;
+}

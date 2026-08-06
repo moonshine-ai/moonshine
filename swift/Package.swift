@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "Moonshine",
     platforms: [
-        .iOS(.v14),
+        .iOS(.v15),
         .macOS(.v13),
     ],
     products: [

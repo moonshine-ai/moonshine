@@ -77,6 +77,11 @@ public struct TranscriptLine: Sendable {
     /// Word-level timestamps. Empty if word_timestamps option is not enabled.
     public let words: [WordTiming]
 
+    /// Streaming-only: milliseconds between VAD phrase-end and delivery of this
+    /// line's final transcript. Matches the C++/Java `last_transcription_latency_ms`
+    /// / `lastTranscriptionLatencyMs` fields used by the README benchmarks.
+    public let lastTranscriptionLatencyMs: UInt32
+
     internal init(
         text: String,
         startTime: Float,
@@ -89,7 +94,8 @@ public struct TranscriptLine: Sendable {
         haveSpeakersChanged: Bool = false,
         speakerSpans: [SpeakerSpan] = [],
         audioData: [Float]? = nil,
-        words: [WordTiming] = []
+        words: [WordTiming] = [],
+        lastTranscriptionLatencyMs: UInt32 = 0
     ) {
         self.text = text
         self.startTime = startTime
@@ -103,13 +109,14 @@ public struct TranscriptLine: Sendable {
         self.speakerSpans = speakerSpans
         self.audioData = audioData
         self.words = words
+        self.lastTranscriptionLatencyMs = lastTranscriptionLatencyMs
     }
 
     public var description: String {
         let spans = speakerSpans.map {
             "(start: \($0.startTime), duration: \($0.duration), speakerId: \($0.speakerId), speakerIndex: \($0.speakerIndex))"
         }.joined(separator: ", ")
-        return "TranscriptLine(text: \(text), startTime: \(startTime), duration: \(duration), lineId: \(lineId), isComplete: \(isComplete), isUpdated: \(isUpdated), isNew: \(isNew), hasTextChanged: \(hasTextChanged), haveSpeakersChanged: \(haveSpeakersChanged), speakerSpans: [\(spans)])"
+        return "TranscriptLine(text: \(text), startTime: \(startTime), duration: \(duration), lineId: \(lineId), isComplete: \(isComplete), isUpdated: \(isUpdated), isNew: \(isNew), hasTextChanged: \(hasTextChanged), haveSpeakersChanged: \(haveSpeakersChanged), speakerSpans: [\(spans)], lastTranscriptionLatencyMs: \(lastTranscriptionLatencyMs))"
     }
 }
 
