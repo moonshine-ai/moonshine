@@ -348,6 +348,9 @@ MOONSHINE_EXPORT const char *moonshine_transcript_to_string(
    iOS and Android libraries ship with no other choice — see
    docs/execution-providers.md), and ``coreml_cache_dir`` (directory for the
    CoreML compiled model cache on macOS).
+   Pass ``use_speculative_decoding`` (bool, default true) to control
+   speculative re-decode of the previous hypothesis on streaming updates
+   (set false to fall back to greedy redecode from BOS).
    Pass ``identify_speakers`` (bool, default false) to enable speaker
    diarization: each line then carries a ``speaker_spans`` array describing
    who spoke when, including UTF-8 character ranges into the line text.

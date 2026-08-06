@@ -110,11 +110,11 @@ TL;DR - When you're working with live speech.
 
 | Model                      | WER    | # Parameters | MacBook Pro | Linux x86 | R. Pi 5   | Pixel 10a | iPad (A16) |
 | -------------------------- | ------ | ------------ | ----------- | --------- | --------- | --------- | ---------- |
-| Moonshine Medium Streaming | 6.65%  | 245 million  | 103ms       | 269ms     | 802ms     | 1091ms    | 294ms      |
+| Moonshine Medium Streaming | 6.65%  | 245 million  | 74ms        | 269ms     | 802ms     | 916ms     | 181ms      |
 | Whisper Large v3           | 7.44%  | 1.5 billion  | 11,286ms    | 16,919ms  | N/A       | —         | —          |
-| Moonshine Small Streaming  | 7.84%  | 123 million  | 80ms        | 165ms     | 527ms     | 586ms     | 185ms      |
+| Moonshine Small Streaming  | 7.84%  | 123 million  | 49ms        | 165ms     | 527ms     | 394ms     | 99ms       |
 | Whisper Small              | 8.59%  | 244 million  | 1940ms      | 3,425ms   | 10,397ms  | —         | —          |
-| Moonshine Tiny Streaming   | 12.00% | 34 million   | 32ms        | 69ms      | 237ms     | 191ms     | 68ms       |
+| Moonshine Tiny Streaming   | 12.00% | 34 million   | 32ms        | 69ms      | 237ms     | 114ms     | 39ms       |
 | Whisper Tiny               | 12.81% | 39 million   | 277ms       | 1,141ms   | 5,863ms   | —         | —          |
 
 _See [benchmarks](#benchmarks) for how these numbers were measured._
@@ -1281,6 +1281,7 @@ Handles the speech to text pipeline.
   - <a id="transcriber-options"></a>`options`: These are flags that affect how the transcription process works inside the library, often enabling performance optimizations or debug logging. They are passed as a dictionary mapping strings to strings, even if the values are to be interpreted as numbers - for example `{"max_tokens_per_second", "15"}`.
     - `skip_transcription`: If you only want the voice-activity detection and segmentation, but want to do further processing in your app, you can set this to "true" and then use the `audioData` array in each line.
     - `max_tokens_per_second`: The models occassionally get caught in an infinite decoder loop, where the same words are repeated over and over again. As a heuristic to catch this we compare the number of tokens in the current run to the duration of the audio, and if there seem to be too many tokens we truncate the decoding. By default this is set to 6.5, but for non-English languages where the models produce a lot more raw tokens per second, you may want to bump this to 13.0.
+    - `use_speculative_decoding`: A boolean (default true) that speeds up streaming re-decodes by verifying the previous hypothesis and continuing from the first mismatch instead of greedily redecoding from BOS. Set to false to disable.
     - `transcription_interval`: How often to run transcription, in seconds.
     - `vad_threshold`: Controls the sensitivity of the initial voice-activity detection stage that decides how to break raw audio into segments. This defaults to 0.5, with lower values creating longer segments, potentially with more background noise sections, and higher values breaking up speech into smaller chunks, at the risk of losing some actual speech by clipping. If you set it to zero, it disables the VAD entirely, though speech will still be broken up into `vad_max_segment_duration` sized chunks.
     - `save_input_wav_path`: One of the most common causes of poor transcription quality is incorrect conversion or corruption of the audio that's fed into the pipeline. If you set this option to a folder path, the transcriber will save out exactly what it has received as 16KHz mono WAV files, so you can ensure that your input audio is as you expect.
