@@ -990,7 +990,7 @@ By default the benchmark binary uses the Tiny English model and the `two_cities.
 
 You can also choose how often the transcript should be updated using the `--transcription-interval` argument. This defaults to 0.5 seconds, but the right value will depend on how fast your application needs updates. Longer intervals reduce the compute required a bit, at the cost of slower updates.
 
-The MacBook Pro, Pixel 10a, and iPad (A16) Tiny / Small / Medium Streaming cells in the comparison table use the same latency metric, measured by [`scripts/test-mobile-latency.sh`](scripts/test-mobile-latency.sh) (also run from [`scripts/build-all-platforms.sh`](scripts/build-all-platforms.sh)). That script downloads the models from the CDN, feeds `two_cities.wav` in small chunks as fast as the device can process, and averages `lastTranscriptionLatencyMs` over completed lines. Re-measure and refresh the README with:
+The MacBook Pro, Pixel 10a, and iPad (A16) Tiny / Small / Medium Streaming cells in the comparison table use the same latency metric, measured by [`scripts/test-mobile-latency.sh`](scripts/test-mobile-latency.sh) (also run from [`scripts/build-all-platforms.sh`](scripts/build-all-platforms.sh)). That script downloads the models from the CDN, feeds `two_cities.wav` in small chunks as fast as the device can process, and averages `lastTranscriptionLatencyMs` over completed lines. Re-measure and refresh the README with the command below; a cell is rewritten only when the new average differs from the published value by more than 5%:
 
 <!-- doc-test: skip -->
 ```bash

@@ -21,8 +21,9 @@
 #   --skip-macos              Skip the MacBook Pro stage
 #   --skip-build-swift        Do not run build-swift.sh before iOS/macOS tests
 #                             (assumes swift/Moonshine.xcframework is current)
-#   --update-readme           Rewrite MacBook Pro / Pixel / iPad Tiny Streaming
-#                             cells in README.md from measured averages
+#   --update-readme           Rewrite MacBook Pro / Pixel / iPad Streaming
+#                             latency cells in README.md from measured results
+#                             (only when a cell changes by more than 5%)
 #
 # Environment:
 #   ANDROID_HOME / ANDROID_SDK_ROOT
@@ -379,6 +380,7 @@ macos = {"tiny": sys.argv[2], "small": sys.argv[3], "medium": sys.argv[4]}
 android = {"tiny": sys.argv[5], "small": sys.argv[6], "medium": sys.argv[7]}
 ios = {"tiny": sys.argv[8], "small": sys.argv[9], "medium": sys.argv[10]}
 text = open(path).read()
+THRESHOLD = 0.05  # only rewrite a cell if relative change exceeds 5%
 
 header_pat = re.compile(
     r"(\| Model\s+\| WER\s+\| # Parameters\s+\| MacBook Pro\s+\| Linux x86\s+\| R\. Pi 5\s+\|)"
@@ -409,37 +411,65 @@ if n != 1:
     sys.exit("could not find README latency table separator")
 
 def ms(v):
-    return f"{int(float(v))}ms"
+    return f"{int(round(float(v)))}ms"
 
+def parse_ms(cell):
+    if not cell:
+        return None
+    m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*ms", cell.strip(), re.I)
+    return float(m.group(1)) if m else None
+
+def choose_ms(new_v, old_cell):
+    """Keep the README value unless the new measurement differs by >5%."""
+    new_f = float(new_v)
+    old_f = parse_ms(old_cell)
+    if old_f is None or old_f == 0:
+        return ms(new_f)
+    if abs(new_f - old_f) / old_f > THRESHOLD:
+        return ms(new_f)
+    return old_cell.strip()
+
+changed = []
 rows = []
 for line in text2.splitlines():
     if not line.startswith("| Moonshine ") and not line.startswith("| Whisper "):
         rows.append(line)
         continue
     cells = [c.strip() for c in line.strip().strip("|").split("|")]
-    while len(cells) < 6:
+    while len(cells) < 8:
         cells.append("")
-    if len(cells) > 6:
-        cells = cells[:6]
     name = cells[0]
+    size = None
     if name.startswith("Moonshine Tiny Streaming"):
-        cells[3] = ms(macos["tiny"])
-        cells.extend([ms(android["tiny"]), ms(ios["tiny"])])
+        size = "tiny"
     elif name.startswith("Moonshine Small Streaming"):
-        cells[3] = ms(macos["small"])
-        cells.extend([ms(android["small"]), ms(ios["small"])])
+        size = "small"
     elif name.startswith("Moonshine Medium Streaming"):
-        cells[3] = ms(macos["medium"])
-        cells.extend([ms(android["medium"]), ms(ios["medium"])])
+        size = "medium"
+    if size is not None:
+        for idx, label, measured in (
+            (3, f"Mac/{size}", macos[size]),
+            (6, f"Pixel/{size}", android[size]),
+            (7, f"iPad/{size}", ios[size]),
+        ):
+            old = cells[idx]
+            new = choose_ms(measured, old)
+            if new != old.strip():
+                changed.append(f"{label}: {old or '(empty)'} -> {new}")
+            cells[idx] = new
     else:
-        cells.extend(["—", "—"])
-    rows.append("| " + " | ".join(cells) + " |")
+        if not cells[6]:
+            cells[6] = "—"
+        if not cells[7]:
+            cells[7] = "—"
+    rows.append("| " + " | ".join(cells[:8]) + " |")
 open(path, "w").write("\n".join(rows) + ("\n" if text.endswith("\n") else ""))
-print(
-    f"Updated {path}: Mac tiny/small/medium={macos['tiny']}/{macos['small']}/{macos['medium']} "
-    f"Pixel={android['tiny']}/{android['small']}/{android['medium']} "
-    f"iPad={ios['tiny']}/{ios['small']}/{ios['medium']}"
-)
+if changed:
+    print(f"Updated {path} ({len(changed)} cell(s) >{THRESHOLD:.0%}):")
+    for c in changed:
+        print(f"  {c}")
+else:
+    print(f"No README latency updates (all within {THRESHOLD:.0%} of existing values)")
 PY
 }
 
