@@ -50,7 +50,7 @@ export const MIC_TRANSCRIPTION = [
     file: 'live-transcription.js',
     path: 'examples/web/stt/index.html',
     lines: [334, 356],
-    code: `import { MicTranscriber, ModelArch } from '@moonshine-ai/moonshine-wasm';
+    code: `import { MicTranscriber, ModelArch } from 'https://cdn.jsdelivr.net/npm/@moonshine-ai/moonshine-wasm/dist/index.js';
 
 const mic = new MicTranscriber()
   .modelArch(ModelArch.MediumStreaming)
@@ -85,7 +85,9 @@ with mic:
     file: 'TranscriberApp.swift',
     path: 'examples/ios/Transcriber/Transcriber/TranscriberApp.swift',
     lines: [41, 63],
-    code: `let mic = MicTranscriber()
+    code: `import MoonshineVoice
+
+let mic = MicTranscriber()
     .onText { [weak self] text in
         Task { @MainActor in self?.liveText = text }
     }
@@ -102,7 +104,9 @@ try mic.start()       // opens the microphone and starts transcribing`,
     file: 'MainActivity.java',
     path: 'examples/android/Transcriber/app/src/main/java/ai/moonshine/androidtranscriber/MainActivity.java',
     lines: [36, 56],
-    code: `mic = new MicTranscriber(this)
+    code: `import ai.moonshine.voice.MicTranscriber;
+
+mic = new MicTranscriber(this)
         .onText(text -> transcriptText.setText(finishedLines + text))
         .onLine(line -> {
             finishedLines.append(line.text).append('\\n');
@@ -131,7 +135,7 @@ export const TEXT_TO_SPEECH = [
     file: 'speak.js',
     path: 'examples/web/tts/index.html',
     lines: [465, 509],
-    code: `import { TextToSpeech } from '@moonshine-ai/moonshine-wasm';
+    code: `import { TextToSpeech } from 'https://cdn.jsdelivr.net/npm/@moonshine-ai/moonshine-wasm/dist/index.js';
 
 const tts = new TextToSpeech().language('en_us').voice('kokoro_af_heart');
 await tts.load();
@@ -165,7 +169,9 @@ clone_tts.say('Now I sound like you.')`,
     file: 'TextToSpeechApp.swift',
     path: 'examples/ios/TextToSpeech/TextToSpeech/TextToSpeechApp.swift',
     lines: [187, 204],
-    code: `let tts = MoonshineVoice.TextToSpeech()
+    code: `import MoonshineVoice
+
+let tts = MoonshineVoice.TextToSpeech()
     .language("en_us")
     .voice("kokoro_af_heart")
 
@@ -185,7 +191,9 @@ try await cloneTts.say("Now I sound like you.")`,
     file: 'MainActivity.java',
     path: 'examples/android/TextToSpeech/app/src/main/java/ai/moonshine/examples/texttospeech/MainActivity.java',
     lines: [281, 299],
-    code: `TextToSpeech tts = new TextToSpeech(this)
+    code: `import ai.moonshine.voice.TextToSpeech;
+
+TextToSpeech tts = new TextToSpeech(this)
         .language("en_us")
         .voice("kokoro_af_heart");
 
@@ -222,8 +230,10 @@ export const AGENT_FLOW = [
     label: 'JavaScript',
     path: 'examples/web/agent-flow/index.html',
     lines: [402, 421],
-    steps: { askSsid: 1, confirmSsid: 3, startOver: 4, confirmApply: 7, done: 8, unchanged: 10 },
-    code: `agent.listenFor('set up wifi', async (d) => {
+    steps: { askSsid: 3, confirmSsid: 5, startOver: 6, confirmApply: 9, done: 10, unchanged: 12 },
+    code: `import { AgentFlow } from 'https://cdn.jsdelivr.net/npm/@moonshine-ai/moonshine-wasm/dist/index.js';
+
+agent.listenFor('set up wifi', async (d) => {
   const ssid = await d.ask("What's the name of your wifi network?");
 
   if (!(await d.confirm(\`I heard \${ssid}. Is that right?\`))) {
@@ -242,8 +252,10 @@ export const AGENT_FLOW = [
     label: 'Python',
     path: 'examples/python/agent_flow.py',
     lines: [30, 51],
-    steps: { askSsid: 1, confirmSsid: 3, startOver: 4, confirmApply: 7, done: 8, unchanged: 10 },
-    code: `def setup_wifi(d):
+    steps: { askSsid: 3, confirmSsid: 5, startOver: 6, confirmApply: 9, done: 10, unchanged: 12 },
+    code: `from moonshine_voice import AgentFlow
+
+def setup_wifi(d):
     ssid = yield d.ask("What's the name of your wifi network?")
 
     if not (yield d.confirm(f"I heard, {ssid}. Is that right?")):
@@ -263,8 +275,10 @@ agent.listen_for("set up wifi", setup_wifi)`,
     label: 'Swift',
     path: 'examples/ios/AgentFlow/AgentFlow/AgentFlowApp.swift',
     lines: [24, 47],
-    steps: { askSsid: 1, confirmSsid: 3, startOver: 4, confirmApply: 8, done: 9, unchanged: 11 },
-    code: `func wifiSetup(_ d: Dialog) async throws {
+    steps: { askSsid: 3, confirmSsid: 5, startOver: 6, confirmApply: 10, done: 11, unchanged: 13 },
+    code: `import MoonshineVoice
+
+func wifiSetup(_ d: Dialog) async throws {
     let ssid = try await d.ask("What's the name of your wifi network?")
 
     guard try await d.confirm("I heard \\(ssid). Is that right?") else {
@@ -286,8 +300,10 @@ agent.listenFor("set up wifi", wifiSetup)`,
     label: 'Android',
     path: 'examples/android/AgentFlow/app/src/main/java/ai/moonshine/examples/agentflow/MainActivity.java',
     lines: [41, 62],
-    steps: { askSsid: 1, confirmSsid: 2, startOver: 3, confirmApply: 7, done: 8, unchanged: 10 },
-    code: `private void wifiSetup(AgentFlow.Dialog d) {
+    steps: { askSsid: 3, confirmSsid: 4, startOver: 5, confirmApply: 9, done: 10, unchanged: 12 },
+    code: `import ai.moonshine.voice.AgentFlow;
+
+private void wifiSetup(AgentFlow.Dialog d) {
     String ssid = d.ask("What's the name of your wifi network?");
     if (!d.confirm("I heard " + ssid + ". Is that right?")) {
         d.say("No problem, let's start over.");
