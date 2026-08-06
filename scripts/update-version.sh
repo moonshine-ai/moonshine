@@ -163,6 +163,7 @@ main() {
 		--exclude=finish-release.sh \
 		--exclude=build-all-platforms.sh \
 		--exclude=release-process.md \
+		--exclude=CHANGELOGS.md \
 		"${bounded}" .)
 
 	local unknown=()
