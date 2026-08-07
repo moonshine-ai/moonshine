@@ -793,7 +793,7 @@ The Python package is [hosted on PyPi](https://pypi.org/project/moonshine-voice/
 
 ##### Command-line tools
 
-Installing the pip package adds a `moonshine-voice` command (with a shorter `moonshine` alias) that groups the built-in tools as subcommands:
+Installing the pip package adds a `moonshine-voice` command (with a shorter `moonshine` alias) that groups the built-in tools as subcommands. These are designed for one-off use cases, if you need multiple Moonshine calls for the same task then loading the models once from Python will be more efficient.
 
 <!-- doc-test: parse-only -->
 ```bash
