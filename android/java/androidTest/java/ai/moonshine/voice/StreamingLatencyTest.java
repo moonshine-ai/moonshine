@@ -3,11 +3,13 @@ package ai.moonshine.voice;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
+import android.os.Build;
 import android.util.Log;
 
 import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.LargeTest;
 
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -62,6 +64,13 @@ public class StreamingLatencyTest {
     @Before
     public void setUp() throws IOException {
         JNI.ensureLibraryLoaded();
+        // Medium Streaming (~245M params) routinely OOMs / crashes the process on
+        // the API 26 CI emulator used by scripts/test-android.sh. Tiny/Small still
+        // exercise that path; Medium is covered on physical devices via
+        // scripts/test-mobile-latency.sh.
+        Assume.assumeFalse(
+                "medium-streaming-en skipped on API < 28 (CI emulator OOM)",
+                "medium-streaming-en".equals(modelName) && Build.VERSION.SDK_INT < 28);
         tempDir = Files.createTempDirectory("voice-streaming-latency");
     }
 
