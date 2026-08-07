@@ -378,10 +378,11 @@ stage_windows() {
         -o TCPKeepAlive=yes
     )
 
-    # The Windows guest often has no persistent `gh auth` (fresh/libvirt images).
-    # Upload stages need a token; forward the Mac host's credentials into the
-    # remote PowerShell session so `gh release upload` works there.
-    local windows_auth_prefix=""
+    # The Windows guest has no persistent gh auth or PyPI credentials. For
+    # upload runs, push secrets from this Mac into a short-lived env script on
+    # the guest (via SSH stdin — never argv, so `ps` cannot leak them), then
+    # dot-source it for the CI session and delete it afterwards.
+    local windows_env_bootstrap=""
     if [ -n "${WINDOWS_UPLOAD_FLAG}" ]; then
         local gh_token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
         if [ -z "${gh_token}" ] && command -v gh >/dev/null 2>&1; then
@@ -392,10 +393,37 @@ stage_windows() {
                 "gh on this Mac (the guest has no gh auth of its own)." >&2
             exit 1
         fi
-        # PowerShell single-quoted string: escape embedded ' as ''.
-        local gh_token_ps="${gh_token//\'/\'\'}"
-        windows_auth_prefix="\$env:GH_TOKEN='${gh_token_ps}'; \$env:GITHUB_TOKEN='${gh_token_ps}'; "
-        echo "Forwarding GitHub token into Windows session for release uploads."
+        local pypirc="${REPO_ROOT_DIR}/.pypirc"
+        if [ ! -f "${pypirc}" ]; then
+            echo "Windows upload requires ${pypirc} for twine (PyPI)." >&2
+            exit 1
+        fi
+
+        echo "Installing short-lived upload credentials on Windows guest..."
+        # Build a PowerShell env script locally and stream it over SSH stdin so
+        # neither GH nor PyPI secrets appear in process argv.
+        python3 - "${gh_token}" "${pypirc}" <<'PY' | ssh "${windows_ssh_opts[@]}" \
+            "${WINDOWS_CLOUD_USER}@${WINDOWS_CLOUD_HOST}" \
+            "powershell -NoProfile -Command \"Set-Content -LiteralPath (Join-Path \$env:USERPROFILE '.moonshine-release-env.ps1') -Value ([Console]::In.ReadToEnd()) -Encoding utf8\""
+import configparser, sys
+from pathlib import Path
+
+def ps_single(s: str) -> str:
+    return "'" + s.replace("'", "''") + "'"
+
+gh_token = sys.argv[1]
+cfg = configparser.ConfigParser()
+cfg.read(Path(sys.argv[2]))
+user = cfg["pypi"]["username"]
+password = cfg["pypi"]["password"]
+print("$env:GH_TOKEN = " + ps_single(gh_token))
+print("$env:GITHUB_TOKEN = $env:GH_TOKEN")
+print("$env:TWINE_USERNAME = " + ps_single(user))
+print("$env:TWINE_PASSWORD = " + ps_single(password))
+PY
+
+        windows_env_bootstrap='. (Join-Path $env:USERPROFILE ".moonshine-release-env.ps1"); '
+        echo "Forwarding GitHub + PyPI credentials into Windows session for uploads."
     fi
 
     # The Windows login shell is PowerShell. Sync to the build point first (that
@@ -406,10 +434,11 @@ stage_windows() {
     # than masking it behind the exit code of the last chained command. The
     # sync command is expanded locally (via the single-quote break) so PowerShell
     # variables like $LASTEXITCODE stay intact for the remote shell.
-    local windows_remote_cmd="${windows_auth_prefix}"'cd moonshine `
+    local windows_remote_cmd="${windows_env_bootstrap}"'try { cd moonshine `
       ; '"${WIN_GIT_SYNC}"' `
       ; if ($LASTEXITCODE -ne 0) { Write-Host "git sync failed"; exit 1 } `
-      ; pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\run-windows-ci.ps1'"${WINDOWS_UPLOAD_FLAG}"
+      ; pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\run-windows-ci.ps1'"${WINDOWS_UPLOAD_FLAG}"' `
+      } finally { Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:USERPROFILE ".moonshine-release-env.ps1") }'
 
     # Transient SSH/network disconnects (not build defects) have killed runs
     # mid-compile. The remote build is a clean rebuild and therefore idempotent,
