@@ -79,6 +79,11 @@ for PLATFORM_PATH in "${EXAMPLES_DIR}"/*; do
 	for PROJECT_PATH in "${PLATFORM_PATH}"/*; do
 		[[ -d "${PROJECT_PATH}" ]] || continue
 		NAME="$(basename "${PROJECT_PATH}")"
+		# Internal latency harness, not a user-facing example (uses in-tree
+		# ../../../swift). Exercised by scripts/test-mobile-latency.sh instead.
+		if [[ "${PLATFORM}" == "ios" && "${NAME}" == "StreamingLatency" ]]; then
+			continue
+		fi
 		TAR_NAME="${PLATFORM}-${NAME}.tar.gz"
 		TAR_PATH="${TMPDIR:-/tmp}/${TAR_NAME}"
 		rm -f "${TAR_PATH}"

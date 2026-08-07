@@ -731,6 +731,12 @@ run_ios_builds() {
 	local found=0
 	while IFS= read -r proj; do
 		[[ -z "${proj}" ]] && continue
+		# Internal on-device latency harness (scripts/test-mobile-latency.sh); it
+		# pins XCLocalSwiftPackageReference ../../../swift and is not a shipped
+		# example. Skip it when the tree is copied out of the repo layout.
+		case "${proj}" in
+		*/StreamingLatency/*) continue ;;
+		esac
 		found=1
 		local scheme
 		scheme="$(pick_xcode_scheme "${proj}")"
