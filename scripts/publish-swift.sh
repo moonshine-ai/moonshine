@@ -68,3 +68,42 @@ gh release create "${TAG}" "${ZIP_NAME}" \
 	--repo "${REPO}" \
 	--title "${TAG}" \
 	--notes "${TAG}"
+
+# SPM records a trust-on-first-use fingerprint per version. Moving/retagging
+# vX.Y.Z to a new commit makes later xcodebuild resolves fail with
+# "does not match previously recorded value" on this machine (where
+# publish-examples runs next). Drop the cached fingerprint + binary artifact.
+clear_spm_caches_for_retagged_swift_package() {
+	local version="$1"
+	local fp_dir="${HOME}/Library/org.swift.swiftpm/security/fingerprints"
+	local f
+	if [[ -d "${fp_dir}" ]]; then
+		for f in "${fp_dir}"/moonshine-swift-*.json; do
+			[[ -f "${f}" ]] || continue
+			python3 - "${f}" "${version}" <<'PY'
+import json, sys
+path, version = sys.argv[1], sys.argv[2]
+with open(path, encoding="utf-8") as fh:
+    data = json.load(fh)
+vfs = data.get("versionFingerprints") or {}
+if version in vfs:
+    del vfs[version]
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2)
+        fh.write("\n")
+    print(f"cleared SPM fingerprint for {version} in {path}")
+PY
+		done
+	fi
+	local artifacts="${HOME}/Library/Caches/org.swift.swiftpm/artifacts"
+	if [[ -d "${artifacts}" ]]; then
+		find "${artifacts}" -maxdepth 1 -iname "*moonshine*swift*v${version}*" -exec rm -rf {} +
+		find "${artifacts}" -maxdepth 1 -iname "*moonshine_swift*v${version}*" -exec rm -rf {} +
+	fi
+	# Stale checkouts under DerivedData also pin the old tag SHA.
+	find "${HOME}/Library/Developer/Xcode/DerivedData" \
+		-type d -path '*/SourcePackages/checkouts/moonshine-swift' \
+		-prune -exec rm -rf {} + 2>/dev/null || true
+}
+
+clear_spm_caches_for_retagged_swift_package "${VERSION}"

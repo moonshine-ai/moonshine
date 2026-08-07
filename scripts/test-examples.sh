@@ -626,6 +626,64 @@ run_android_builds() {
 	fi
 }
 
+# Drop SPM trust-on-first-use fingerprints for moonshine-swift versions pinned by
+# the example Xcode projects. Needed after publish-swift.sh retags the same
+# semver onto a new commit (fingerprint mismatch → xcodebuild exit 74).
+clear_spm_moonshine_swift_fingerprint_for_examples() {
+	local ios_root="$1"
+	local versions
+	versions="$(
+		python3 - "${ios_root}" <<'PY'
+import os, re, sys
+root = sys.argv[1]
+found = set()
+for dirpath, _, files in os.walk(root):
+    if "project.pbxproj" not in files:
+        continue
+    text = open(os.path.join(dirpath, "project.pbxproj"), encoding="utf-8", errors="ignore").read()
+    if "moonshine-swift" not in text:
+        continue
+    for m in re.finditer(r'(?:minimumVersion|version)\s*=\s*([0-9]+\.[0-9]+\.[0-9]+)', text):
+        found.add(m.group(1))
+for v in sorted(found):
+    print(v)
+PY
+	)"
+	[[ -z "${versions}" ]] && return 0
+
+	local version fp_dir f artifacts
+	fp_dir="${HOME}/Library/org.swift.swiftpm/security/fingerprints"
+	artifacts="${HOME}/Library/Caches/org.swift.swiftpm/artifacts"
+	while IFS= read -r version; do
+		[[ -z "${version}" ]] && continue
+		log "clearing SPM moonshine-swift fingerprint for ${version} (retag-safe resolve)"
+		if [[ -d "${fp_dir}" ]]; then
+			for f in "${fp_dir}"/moonshine-swift-*.json; do
+				[[ -f "${f}" ]] || continue
+				python3 - "${f}" "${version}" <<'PY'
+import json, sys
+path, version = sys.argv[1], sys.argv[2]
+with open(path, encoding="utf-8") as fh:
+    data = json.load(fh)
+vfs = data.get("versionFingerprints") or {}
+if version in vfs:
+    del vfs[version]
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2)
+        fh.write("\n")
+PY
+			done
+		fi
+		if [[ -d "${artifacts}" ]]; then
+			find "${artifacts}" -maxdepth 1 \( -iname "*moonshine*swift*v${version}*" -o -iname "*moonshine_swift*v${version}*" \) -exec rm -rf {} +
+		fi
+	done <<<"${versions}"
+
+	find "${HOME}/Library/Developer/Xcode/DerivedData" \
+		-type d -path '*/SourcePackages/checkouts/moonshine-swift' \
+		-prune -exec rm -rf {} + 2>/dev/null || true
+}
+
 run_ios_builds() {
 	local root="$1"
 	if [[ "$(uname -s)" != "Darwin" ]]; then
@@ -638,6 +696,13 @@ run_ios_builds() {
 	fi
 	if ! command -v xcodebuild >/dev/null 2>&1; then
 		die "xcodebuild not found in PATH"
+	fi
+
+	# When consuming the published moonshine-swift package, a retagged release
+	# (same semver, new commit) trips SPM's trust-on-first-use fingerprint on
+	# this host. Clear it for the version the examples pin.
+	if [[ "${USE_LOCAL_LIBRARY}" -eq 0 ]]; then
+		clear_spm_moonshine_swift_fingerprint_for_examples "${root}"
 	fi
 
 	local found=0
