@@ -5,12 +5,13 @@ REPO_ROOT_DIR="$(dirname "${SCRIPTS_DIR}")"
 BUILD_DIR="${REPO_ROOT_DIR}/core/build"
 MOONSHINE_TTS_BUILD_DIR="${REPO_ROOT_DIR}/core/moonshine-tts/build"
 
-# Model/TTS binaries are no longer in Git LFS; bootstrap from the CDN when missing.
-if [[ ! -f "${REPO_ROOT_DIR}/test-assets/tiny-en/encoder_model.ort" ]] || \
-   [[ ! -f "${REPO_ROOT_DIR}/core/moonshine-tts/data/kokoro/model.ort" ]]; then
-  echo "Fetching voice assets from CDN/HF (scripts/fetch-voice-assets.sh)..."
-  "${SCRIPTS_DIR}/fetch-voice-assets.sh" all
-fi
+# Model/TTS binaries are no longer in Git LFS. Always run the fetch script: it
+# is idempotent (skips files whose size already matches the CDN inventory) and
+# repairs partial trees left by an interrupted earlier download. Gating on a
+# single sentinel (kokoro/model.ort) let incomplete trees skip the repair and
+# fail later (e.g. Chinese Kokoro voices without zh_hans ONNX on the Pi).
+echo "Fetching voice assets from CDN/HF (scripts/fetch-voice-assets.sh)..."
+"${SCRIPTS_DIR}/fetch-voice-assets.sh" all
 
 rm -rf ${BUILD_DIR}
 mkdir -p ${BUILD_DIR}

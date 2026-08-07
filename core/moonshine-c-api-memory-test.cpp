@@ -200,9 +200,24 @@ TEST_CASE(
   std::sort(voice_stems.begin(), voice_stems.end());
   REQUIRE_FALSE(voice_stems.empty());
 
+  const bool chinese_onnx_ready = fs::is_regular_file(
+      g_data_root / "zh_hans" / "roberta_chinese_base_upos_onnx" / "meta.json");
+  const bool japanese_onnx_ready = fs::is_regular_file(
+      g_data_root / "ja" / "roberta_japanese_char_luw_upos_onnx" / "meta.json");
+
   for (const std::string& voice : voice_stems) {
     const char* lang = kokoro_lang_for_voice_stem(voice);
     REQUIRE(lang != nullptr);
+    // Match moonshine-c-api-test: optional ONNX G2P bundles may be absent on a
+    // partial CDN tree; skip those languages rather than fail create_from_memory.
+    if (std::strcmp(lang, "zh_hans") == 0 && !chinese_onnx_ready) {
+      MESSAGE("skip Chinese Kokoro voice (ONNX G2P bundle missing): ", voice);
+      continue;
+    }
+    if (std::strcmp(lang, "ja") == 0 && !japanese_onnx_ready) {
+      MESSAGE("skip Japanese Kokoro voice (ONNX G2P bundle missing): ", voice);
+      continue;
+    }
 
     std::vector<std::string> keys_storage;
     std::vector<const uint8_t*> mem_ptrs;
