@@ -95,14 +95,23 @@ if version in vfs:
 PY
 		done
 	fi
+	# SPM names cached download URLs with dots → underscores (v0_1_1).
+	local version_us="${version//./_}"
 	local artifacts="${HOME}/Library/Caches/org.swift.swiftpm/artifacts"
 	if [[ -d "${artifacts}" ]]; then
-		find "${artifacts}" -maxdepth 1 -iname "*moonshine*swift*v${version}*" -exec rm -rf {} +
-		find "${artifacts}" -maxdepth 1 -iname "*moonshine_swift*v${version}*" -exec rm -rf {} +
+		find "${artifacts}" -maxdepth 1 \( \
+			-iname "*moonshine*swift*v${version}*" -o \
+			-iname "*moonshine*swift*v${version_us}*" -o \
+			-iname "*moonshine_swift*v${version}*" -o \
+			-iname "*moonshine_swift*v${version_us}*" \
+		\) -exec rm -rf {} +
 	fi
-	# Stale checkouts under DerivedData also pin the old tag SHA.
+	# Stale checkouts / extracted binary artifacts under DerivedData also pin
+	# the old tag SHA or a pre-retag xcframework zip checksum.
 	find "${HOME}/Library/Developer/Xcode/DerivedData" \
-		-type d -path '*/SourcePackages/checkouts/moonshine-swift' \
+		\( -type d -path '*/SourcePackages/checkouts/moonshine-swift' \
+		-o -type d -path '*/SourcePackages/artifacts/moonshine-swift' \
+		-o -type d -path '*/SourcePackages/artifacts/extract/moonshine-swift' \) \
 		-prune -exec rm -rf {} + 2>/dev/null || true
 }
 

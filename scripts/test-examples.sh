@@ -686,13 +686,24 @@ if version in vfs:
 PY
 			done
 		fi
+		# SPM names cached download URLs with dots → underscores (v0_1_1). A
+		# retagged release replaces the zip but leaves the old file under this
+		# path, which then fails checksum validation against Package.swift.
+		local version_us="${version//./_}"
 		if [[ -d "${artifacts}" ]]; then
-			find "${artifacts}" -maxdepth 1 \( -iname "*moonshine*swift*v${version}*" -o -iname "*moonshine_swift*v${version}*" \) -exec rm -rf {} +
+			find "${artifacts}" -maxdepth 1 \( \
+				-iname "*moonshine*swift*v${version}*" -o \
+				-iname "*moonshine*swift*v${version_us}*" -o \
+				-iname "*moonshine_swift*v${version}*" -o \
+				-iname "*moonshine_swift*v${version_us}*" \
+			\) -exec rm -rf {} +
 		fi
 	done <<<"${versions}"
 
 	find "${HOME}/Library/Developer/Xcode/DerivedData" \
-		-type d -path '*/SourcePackages/checkouts/moonshine-swift' \
+		\( -type d -path '*/SourcePackages/checkouts/moonshine-swift' \
+		-o -type d -path '*/SourcePackages/artifacts/moonshine-swift' \
+		-o -type d -path '*/SourcePackages/artifacts/extract/moonshine-swift' \) \
 		-prune -exec rm -rf {} + 2>/dev/null || true
 }
 
