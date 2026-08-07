@@ -83,7 +83,7 @@ Synthesizes and speaks the text.
 
 ### iOS
 
-Add `https://github.com/moonshine-ai/moonshine-swift/ `as a package dependency to your project in Xcode.
+First [add `https://github.com/moonshine-ai/moonshine-swift/ `as a package dependency to your project in Xcode](#ios-or-macos).
 
 ```swift
 import MoonshineVoice
@@ -140,7 +140,7 @@ g++ transcriber.cpp -Imoonshine-voice/include -Lmoonshine-voice/lib -lmoonshine 
  
 ### MacOS
 
-Add `https://github.com/moonshine-ai/moonshine-swift/ `as a package dependency to your project in Xcode.
+First [add `https://github.com/moonshine-ai/moonshine-swift/ `as a package dependency to your project in Xcode](#ios-or-macos).
 
 ```swift
 import MoonshineVoice
