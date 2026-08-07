@@ -676,6 +676,17 @@ main() {
         fi
     fi
 
+    # The worktree is always recreated from the build commit, so build products
+    # from prior stages (e.g. swift/Moonshine.xcframework) are gone even when
+    # their breadcrumbs remain. Drop any breadcrumb whose artifact is missing so
+    # the stage re-runs instead of later consumers failing with a skip flag.
+    if [[ -f "${STATE_DIR}/build-swift.done" ]] && \
+       [[ ! -d "${RELEASE_DIR}/swift/Moonshine.xcframework" ]]; then
+        echo "build-swift.done but ${RELEASE_DIR}/swift/Moonshine.xcframework is" \
+             "missing in the fresh worktree; clearing the breadcrumb so it rebuilds."
+        rm -f "${STATE_DIR}/build-swift.done"
+    fi
+
     cd "${RELEASE_DIR}"
     run_stage test-core          scripts/test-core.sh
     run_stage test-python        scripts/test-python.sh
