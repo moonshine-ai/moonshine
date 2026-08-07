@@ -650,6 +650,32 @@ main() {
         fi
     done
 
+    # Model/TTS binaries are gitignored (fetched from the CDN). A resumed run
+    # recreates the worktree but may skip test-core, which is the stage that
+    # normally bootstraps them — leaving later stages (build-swift, etc.) with
+    # an empty test-assets tree. Prefer a fast copy from the main checkout when
+    # those files are already present; otherwise fetch into the worktree.
+    if [[ ! -f "${RELEASE_DIR}/test-assets/tiny-en/encoder_model.ort" ]] || \
+       [[ ! -f "${RELEASE_DIR}/core/moonshine-tts/data/kokoro/model.ort" ]]; then
+        if [[ -f "${REPO_ROOT_DIR}/test-assets/tiny-en/encoder_model.ort" ]] && \
+           [[ -f "${REPO_ROOT_DIR}/core/moonshine-tts/data/kokoro/model.ort" ]]; then
+            echo "Copying voice assets from main checkout into release worktree..."
+            # test-assets: copy gitignored model blobs the tracked tree lacks.
+            mkdir -p "${RELEASE_DIR}/test-assets"
+            rsync -a --ignore-existing \
+                "${REPO_ROOT_DIR}/test-assets/" "${RELEASE_DIR}/test-assets/"
+            rsync -a --ignore-existing \
+                "${REPO_ROOT_DIR}/core/moonshine-tts/data/" \
+                "${RELEASE_DIR}/core/moonshine-tts/data/"
+        else
+            echo "Fetching voice assets into release worktree..."
+            (
+                cd "${RELEASE_DIR}"
+                scripts/fetch-voice-assets.sh all
+            )
+        fi
+    fi
+
     cd "${RELEASE_DIR}"
     run_stage test-core          scripts/test-core.sh
     run_stage test-python        scripts/test-python.sh
