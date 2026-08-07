@@ -151,9 +151,41 @@ fetch_tts_via_hf() {
   echo "TTS tree populated under ${dest}"
 }
 
+# Percent-encode one path segment as UTF-8 bytes (works without Python).
+urlencode_segment() {
+  local s="$1"
+  local i c o out=""
+  local LC_ALL=C
+  for ((i = 0; i < ${#s}; i++)); do
+    c="${s:i:1}"
+    case "${c}" in
+      [A-Za-z0-9._~-]) out+="${c}" ;;
+      *)
+        # Mask to 8 bits: bash's "'$c" is signed for high UTF-8 bytes.
+        printf -v o '%d' "'${c}"
+        printf -v c '%%%02X' $((o & 0xFF))
+        out+="${c}"
+        ;;
+    esac
+  done
+  printf '%s' "${out}"
+}
+
+# Encode each /-separated segment of a CDN-relative path.
+urlencode_cdn_path() {
+  local path="$1"
+  local out="" seg rest="${path}/"
+  while [[ -n "${rest}" ]]; do
+    seg="${rest%%/*}"
+    rest="${rest#*/}"
+    [[ -n "${out}" ]] && out+="/"
+    out+="$(urlencode_segment "${seg}")"
+  done
+  printf '%s' "${out}"
+}
+
 fetch_tts_via_cdn_inventory() {
   need_cmd curl
-  need_cmd python3
   echo "=== TTS via CDN (inventory from HF FILES.tsv) ==="
   local dest="${ROOT}/core/moonshine-tts/data"
   mkdir -p "${dest}"
@@ -166,66 +198,41 @@ fetch_tts_via_cdn_inventory() {
   fi
 
   # Cloudflare WAF rejects Python-urllib's default User-Agent (HTTP 403) on
-  # download.moonshine.ai, so enumerate paths in Python and fetch with curl —
-  # same as fetch_url / the test-assets path above.
-  local manifest
-  manifest="$(mktemp)"
-  python3 - "${tsv}" "${CDN_BASE}" "${dest}" "${FORCE}" "${manifest}" <<'PY'
-import os, sys
-from urllib.parse import quote
-
-tsv, cdn_base, dest, force, manifest = sys.argv[1:6]
-force = bool(force)
-count = 0
-skipped = 0
-with open(tsv, encoding="utf-8") as f, open(manifest, "w", encoding="utf-8") as out:
-    f.readline()  # header
-    for line in f:
-        line = line.rstrip("\n")
-        if not line or line.startswith("#"):
-            continue
-        parts = line.split("\t")
-        path = parts[0]
-        if not path.startswith("tts/"):
-            continue
-        rel = path[len("tts/") :]
-        size = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
-        dest_path = os.path.join(dest, rel)
-        if not force and os.path.isfile(dest_path) and size is not None:
-            if os.path.getsize(dest_path) == size:
-                skipped += 1
-                continue
-        # Encode each path segment so non-ASCII names (e.g. pt_PT-tugão-…)
-        # work with curl on hosts that reject raw UTF-8 URLs (HTTP 400).
-        enc_path = "/".join(quote(seg, safe="") for seg in path.split("/"))
-        url = f"{cdn_base}/{enc_path}"
-        out.write(f"{url}\t{dest_path}\n")
-        count += 1
-print(f"queued {count} TTS downloads ({skipped} already present)", flush=True)
-PY
-  local status=$?
+  # download.moonshine.ai, so fetch with curl. Enumerate FILES.tsv in bash so
+  # this also works on Windows Git Bash (no working python3 on PATH).
+  local path size rel dest_path enc_path url tmp
+  local count=0 skipped=0 downloaded=0
+  # Skip header line.
+  {
+    read -r _
+    while IFS=$'\t' read -r path size _ || [[ -n "${path}" ]]; do
+      [[ -z "${path}" || "${path}" == \#* ]] && continue
+      [[ "${path}" == tts/* ]] || continue
+      rel="${path#tts/}"
+      dest_path="${dest}/${rel}"
+      if [[ -z "${FORCE}" && -f "${dest_path}" && "${size}" =~ ^[0-9]+$ ]]; then
+        if [[ "$(wc -c <"${dest_path}" | tr -d ' ')" == "${size}" ]]; then
+          skipped=$((skipped + 1))
+          continue
+        fi
+      fi
+      enc_path="$(urlencode_cdn_path "${path}")"
+      url="${CDN_BASE}/${enc_path}"
+      echo "get ${url}"
+      mkdir -p "$(dirname "${dest_path}")"
+      tmp="${dest_path}.tmp"
+      if ! curl -fL --retry 3 --retry-delay 2 -o "${tmp}" "${url}"; then
+        rm -f "${tmp}" "${tsv}"
+        echo "error: download failed: ${url}" >&2
+        return 1
+      fi
+      mv -f "${tmp}" "${dest_path}"
+      downloaded=$((downloaded + 1))
+      count=$((count + 1))
+    done
+  } <"${tsv}"
   rm -f "${tsv}"
-  if [[ "${status}" -ne 0 ]]; then
-    rm -f "${manifest}"
-    return "${status}"
-  fi
-
-  local url out_path tmp downloaded=0
-  while IFS=$'\t' read -r url out_path; do
-    [[ -z "${url}" ]] && continue
-    echo "get ${url}"
-    mkdir -p "$(dirname "${out_path}")"
-    tmp="${out_path}.tmp"
-    if ! curl -fL --retry 3 --retry-delay 2 -o "${tmp}" "${url}"; then
-      rm -f "${tmp}" "${manifest}"
-      echo "error: download failed: ${url}" >&2
-      return 1
-    fi
-    mv -f "${tmp}" "${out_path}"
-    downloaded=$((downloaded + 1))
-  done <"${manifest}"
-  rm -f "${manifest}"
-  echo "downloaded ${downloaded} TTS files"
+  echo "downloaded ${downloaded} TTS files (${skipped} already present)"
 }
 
 fetch_tts() {
