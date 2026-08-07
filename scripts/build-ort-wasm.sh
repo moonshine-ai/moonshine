@@ -42,7 +42,7 @@ set -o pipefail
 # contains an ORT_ENFORCE and so can throw. Profiling browser TTS showed ~66% of
 # total synthesis time spent in those trampolines, and building with the flags
 # below took Kokoro from a real-time factor of 2.6 to 0.59 (4.4x) with no change
-# in output. See scripts/bench-wasm-tts.mjs / scripts/profile-wasm-tts.mjs.
+# in output. See scripts/bench-wasm-tts.mjs.
 #
 # Disabling exception *catching* while keeping it at the API boundary is the
 # same configuration Microsoft ships for the onnxruntime-web packages: ORT
