@@ -1,13 +1,19 @@
 #!/usr/bin/env bash -ex
-# Verify the iOS, Android, and portable C++ examples build standalone: either
+# Verify the iOS, Android, portable C++, and web examples build standalone: either
 # from GitHub Release archives (default) or from a temporary copy of
-# examples/android, examples/ios, and examples/c++ (--local-examples).
+# examples/android, examples/ios, examples/c++, and packaged web demos
+# (--local-examples).
 #
 # The C++ example is exercised exactly like the Linux quickstart in README.md:
 # fetch the library + a small model + sample audio with download-library.sh,
 # compile transcriber.cpp with a single compiler command, and run it. It is
 # platform-aware (macOS and Linux; skipped elsewhere) so it validates whatever
 # host it runs on. Windows has its own scripts/test-examples.bat.
+#
+# Web demos are the five self-contained archives from
+# scripts/web-example-archive.sh (web-stt.tar.gz, …). Each is extracted (or
+# staged from this checkout), served with its bundled serve.mjs, and checked for
+# the Cross-Origin Isolation headers plus the shared assets the page needs.
 #
 # Usage:
 #   ./scripts/test-examples.sh [--repo OWNER/REPO] [--tag vX.Y.Z] [--workdir DIR] [--keep-workdir]
@@ -35,11 +41,14 @@
 #     from this checkout by scripts/publish-binary.sh, instead of letting it fetch
 #     the published archive for a release that does not exist yet. That compiles
 #     core unless an earlier stage left a build in core/build to package as-is.
+#   - Web: stages the same self-contained trees publish-examples.sh would upload,
+#     and points serve.mjs at this checkout via MOONSHINE_REPO_ROOT so ?local=1
+#     mounts keep working during the smoke test.
 #
 # Environment:
 #   ANDROID_HOME or ANDROID_SDK_ROOT — required for Android (unless SKIP_ANDROID=1)
 #   GITHUB_TOKEN — optional; avoids anonymous rate limits on api.github.com if needed
-#   SKIP_ANDROID=1 / SKIP_IOS=1 / SKIP_CPP=1 — skip that platform
+#   SKIP_ANDROID=1 / SKIP_IOS=1 / SKIP_CPP=1 / SKIP_WEB=1 — skip that platform
 #   CXX — C++ compiler for the C++ example (default: g++)
 #   TEST_EXAMPLES_TAG — same as --tag when --tag is omitted (e.g. v0.1.1)
 #   TEST_EXAMPLES_USE_LOCAL=1 — same as --local-examples
@@ -47,8 +56,9 @@
 # Defaults:
 #   --repo moonshine-ai/moonshine
 #   Archives: one asset per example app, named <platform>-<project>.tar.gz
-#   (e.g. android-Transcriber.tar.gz, ios-TextToSpeech.tar.gz). Names are
-#   resolved from this repo's examples/android and examples/ios directories.
+#   (e.g. android-Transcriber.tar.gz, ios-TextToSpeech.tar.gz, web-stt.tar.gz).
+#   Names are resolved from this repo's examples/<platform> directories (web demos
+#   from scripts/web-example-archive.sh list).
 
 set -euo pipefail
 
@@ -59,6 +69,7 @@ KEEP_WORKDIR=0
 SKIP_ANDROID="${SKIP_ANDROID:-0}"
 SKIP_IOS="${SKIP_IOS:-0}"
 SKIP_CPP="${SKIP_CPP:-0}"
+SKIP_WEB="${SKIP_WEB:-0}"
 USE_LOCAL_EXAMPLES=0
 USE_LOCAL_LIBRARY=0
 # Path to a Gradle init script (created at runtime when --local-library is used)
@@ -68,6 +79,7 @@ LOCAL_LIBRARY_INIT_SCRIPT=""
 # --local-library. Empty otherwise, which leaves download-library.sh fetching the
 # published archive as a user would.
 LOCAL_LIBRARY_ARCHIVE_CPP=""
+WEB_ARCHIVE_SCRIPT=""
 
 usage() {
 	cat <<'EOF'
@@ -75,15 +87,17 @@ Usage:
   test-examples.sh [--repo OWNER/REPO] [--tag vX.Y.Z] [--workdir DIR] [--keep-workdir]
   test-examples.sh --local-examples [--workdir DIR] [--keep-workdir]
 
-Default mode: downloads each published example archive for Android and iOS
-from GitHub Releases (see header comment for naming), merges them under one
+Default mode: downloads each published example archive for Android, iOS, and
+web from GitHub Releases (see header comment for naming), merges them under one
 tree per platform, and runs standalone builds:
   Android: every directory containing ./gradlew → ./gradlew assembleDebug
   macOS:   every *.xcodeproj → xcodebuild (iOS Simulator, no code signing)
+  Web:     each web-<demo>.tar.gz → node serve.mjs + HTTP smoke test
 
 --local-examples: copy <repo>/examples/android and <repo>/examples/ios into the
-work directory (temporary copy; does not modify the originals), then run the
-same build steps. Implies repository root is the parent of scripts/.
+work directory (temporary copy; does not modify the originals), stage the web
+demo archives from this checkout, then run the same build / smoke steps.
+Implies repository root is the parent of scripts/.
 
 --local-library: implies --local-examples. Build the Android examples against
 this checkout's AAR (installed into the local Maven cache) and the iOS examples
@@ -94,7 +108,7 @@ library changes (e.g. a new API or a lowered minSdk) before publishing.
 Options:
   --repo OWNER/REPO   GitHub repository (default: moonshine-ai/moonshine); only for downloads
   --tag vX.Y.Z        Use .../releases/download/TAG/... (default: latest/download); only for downloads
-  --local-examples    Use examples/android and examples/ios from this checkout instead of archives
+  --local-examples    Use examples from this checkout instead of archives
   --local-library     Build + consume this checkout's Android AAR from the local Maven cache
   --workdir DIR       Extract / copy and build here instead of a fresh mktemp directory
   --keep-workdir      Do not delete the work directory on exit (implies useful with --workdir)
@@ -104,6 +118,7 @@ Environment:
   SKIP_ANDROID=1      Skip Android builds
   SKIP_IOS=1          Skip iOS builds (also implied on non-Darwin)
   SKIP_CPP=1          Skip the portable C++ example build/run
+  SKIP_WEB=1          Skip the web example smoke tests
   CXX                 C++ compiler for the C++ example (default: g++)
   TEST_EXAMPLES_USE_LOCAL=1   Same as --local-examples
 EOF
@@ -162,6 +177,8 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+WEB_ARCHIVE_SCRIPT="${SCRIPT_DIR}/web-example-archive.sh"
+[[ -f "${WEB_ARCHIVE_SCRIPT}" ]] || die "missing ${WEB_ARCHIVE_SCRIPT}"
 
 if [[ "${USE_LOCAL_EXAMPLES}" -eq 1 && -n "${TAG}" ]]; then
 	log "note: --tag / TEST_EXAMPLES_TAG is ignored with --local-examples"
@@ -698,6 +715,162 @@ run_cpp_build() {
 	)
 }
 
+# --- Web examples -----------------------------------------------------------
+
+# Stage or download every self-contained web-<demo>.tar.gz into dest_root/<demo>/.
+obtain_web_examples() {
+	local dest_root="$1"
+	local name
+	rm -rf "${dest_root}"
+	mkdir -p "${dest_root}"
+
+	if [[ "${USE_LOCAL_EXAMPLES}" -eq 1 ]]; then
+		while IFS= read -r name; do
+			[[ -z "${name}" ]] && continue
+			# Pack then extract so we exercise the same archive layout publish
+			# uploads, not only the stage helper.
+			local archive_path="${WORKDIR}/web-${name}.tar.gz"
+			log "packing + extracting web demo ${name}"
+			"${WEB_ARCHIVE_SCRIPT}" pack "${name}" "${archive_path}"
+			extract_tgz "web-${name}.tar.gz" "${dest_root}"
+			rm -f "${archive_path}"
+			[[ -f "${dest_root}/${name}/serve.mjs" ]] ||
+				die "web-${name}.tar.gz is not self-contained (missing ${name}/serve.mjs)"
+			[[ -d "${dest_root}/${name}/assets" ]] ||
+				die "web-${name}.tar.gz is not self-contained (missing ${name}/assets)"
+			[[ -f "${dest_root}/${name}/${name}/index.html" ]] ||
+				die "web-${name}.tar.gz is not self-contained (missing ${name}/${name}/index.html)"
+		done < <("${WEB_ARCHIVE_SCRIPT}" list)
+		return 0
+	fi
+
+	while IFS= read -r name; do
+		[[ -z "${name}" ]] && continue
+		local archive="web-${name}.tar.gz"
+		download_one "${archive}"
+		# Archive top-level is <demo>/; extract into dest_root so we get
+		# dest_root/<demo>/serve.mjs.
+		extract_tgz "${archive}" "${dest_root}"
+		rm -f "${WORKDIR}/${archive}"
+		[[ -f "${dest_root}/${name}/serve.mjs" ]] ||
+			die "${archive} is not self-contained (missing ${name}/serve.mjs)"
+		[[ -d "${dest_root}/${name}/assets" ]] ||
+			die "${archive} is not self-contained (missing ${name}/assets)"
+		[[ -f "${dest_root}/${name}/${name}/index.html" ]] ||
+			die "${archive} is not self-contained (missing ${name}/${name}/index.html)"
+	done < <("${WEB_ARCHIVE_SCRIPT}" list)
+}
+
+# Pick a free TCP port on localhost.
+web_free_port() {
+	python3 - <<'PY'
+import socket
+s = socket.socket()
+s.bind(("127.0.0.1", 0))
+print(s.getsockname()[1])
+s.close()
+PY
+}
+
+# Assert a URL returns 200 with the Cross-Origin Isolation headers SharedArrayBuffer needs.
+web_assert_isolated() {
+	local url="$1"
+	local tmp headers status
+	tmp="$(mktemp)"
+	headers="$(mktemp)"
+	status="$(curl -sS -o "${tmp}" -D "${headers}" -w '%{http_code}' "${url}" || true)"
+	if [[ "${status}" != "200" ]]; then
+		rm -f "${tmp}" "${headers}"
+		die "GET ${url} → HTTP ${status}"
+	fi
+	if ! grep -qi '^Cross-Origin-Opener-Policy:[[:space:]]*same-origin' "${headers}"; then
+		rm -f "${tmp}" "${headers}"
+		die "${url} missing Cross-Origin-Opener-Policy: same-origin"
+	fi
+	if ! grep -qi '^Cross-Origin-Embedder-Policy:[[:space:]]*require-corp' "${headers}"; then
+		rm -f "${tmp}" "${headers}"
+		die "${url} missing Cross-Origin-Embedder-Policy: require-corp"
+	fi
+	if [[ ! -s "${tmp}" ]]; then
+		rm -f "${tmp}" "${headers}"
+		die "${url} returned an empty body"
+	fi
+	rm -f "${tmp}" "${headers}"
+}
+
+# Serve one staged/extracted demo and confirm the page + shared assets are reachable.
+smoke_test_web_demo() {
+	local demo_root="$1"
+	local demo
+	demo="$(basename "${demo_root}")"
+	[[ -f "${demo_root}/serve.mjs" ]] || die "no serve.mjs in ${demo_root}"
+
+	local port pid=""
+	port="$(web_free_port)"
+	log "web ${demo}: starting serve.mjs on :${port}"
+
+	cleanup_web_server() {
+		if [[ -n "${pid}" ]]; then
+			kill "${pid}" 2>/dev/null || true
+			wait "${pid}" 2>/dev/null || true
+			pid=""
+		fi
+	}
+	trap cleanup_web_server RETURN
+
+	(
+		cd "${demo_root}"
+		# With --local-examples, keep the /wasm and /test-assets mounts pointed at
+		# this checkout so the smoke test can optionally hit them later.
+		if [[ "${USE_LOCAL_EXAMPLES}" -eq 1 ]]; then
+			export MOONSHINE_REPO_ROOT="${REPO_ROOT}"
+		fi
+		exec node serve.mjs "${port}"
+	) >/dev/null 2>&1 &
+	pid=$!
+
+	local origin="http://127.0.0.1:${port}"
+	local deadline=$((SECONDS + 15))
+	until curl -fsS "${origin}/" >/dev/null 2>&1; do
+		if ! kill -0 "${pid}" 2>/dev/null; then
+			die "web ${demo}: serve.mjs exited before becoming ready"
+		fi
+		if ((SECONDS >= deadline)); then
+			die "web ${demo}: serve.mjs did not become ready on :${port}"
+		fi
+		sleep 0.15
+	done
+
+	web_assert_isolated "${origin}/"
+	web_assert_isolated "${origin}/${demo}/"
+	web_assert_isolated "${origin}/assets/moonshine-ui.js"
+	web_assert_isolated "${origin}/assets/moonshine.css"
+	web_assert_isolated "${origin}/assets/snippets.js"
+
+	# The demo HTML must pull shared chrome from /assets/, not a CDN copy we
+	# forgot to ship.
+	curl -fsS "${origin}/${demo}/" | grep -q '/assets/moonshine-ui.js' ||
+		die "web ${demo}: index.html does not reference /assets/moonshine-ui.js"
+
+	if [[ "${USE_LOCAL_EXAMPLES}" -eq 1 && -f "${REPO_ROOT}/wasm/dist/index.js" ]]; then
+		web_assert_isolated "${origin}/wasm/dist/index.js"
+	fi
+
+	log "web ${demo}: smoke test passed"
+	cleanup_web_server
+	trap - RETURN
+}
+
+run_web_tests() {
+	local dest_root="$1"
+	local demo_root
+	obtain_web_examples "${dest_root}"
+	while IFS= read -r demo_root; do
+		[[ -z "${demo_root}" ]] && continue
+		smoke_test_web_demo "${demo_root}"
+	done < <(find "${dest_root}" -mindepth 1 -maxdepth 1 -type d | LC_ALL=C sort)
+}
+
 main() {
 	log "repo=${REPO} tag=${TAG:-<latest>} workdir=${WORKDIR} local_examples=${USE_LOCAL_EXAMPLES} local_library=${USE_LOCAL_LIBRARY}"
 
@@ -735,6 +908,12 @@ main() {
 		run_cpp_build "${cpp_root}"
 	else
 		log "SKIP_CPP=1 — skipping C++ example test"
+	fi
+
+	if [[ "${SKIP_WEB}" != "1" ]]; then
+		run_web_tests "${WORKDIR}/web-examples-tree"
+	else
+		log "SKIP_WEB=1 — skipping web example tests"
 	fi
 
 	log "all requested example builds succeeded"

@@ -57,8 +57,8 @@ const mic = new MicTranscriber()
   .onText((text) => showInProgress(text))
   .onLine((line) => appendLine(line.text, line.lastTranscriptionLatencyMs));
 
-await mic.load();   // downloads the model once, then it is cached
-await mic.start();  // opens the microphone and starts transcribing`,
+await mic.load();
+await mic.start();`,
   },
   {
     id: 'python',
@@ -72,10 +72,10 @@ mic = (MicTranscriber()
        .on_text(rewriter.partial)
        .on_line(rewriter.final))
 
-mic.load()  # downloads the model once, then it is cached
+mic.load()
 
 with mic:
-    mic.start()  # opens the microphone and starts transcribing
+    mic.start()
     while True:
         time.sleep(0.1)`,
   },
@@ -95,8 +95,8 @@ let mic = MicTranscriber()
         Task { @MainActor in self?.lines.append(line.text) }
     }
 
-try await mic.load()  // downloads the model once, then it is cached
-try mic.start()       // opens the microphone and starts transcribing`,
+try await mic.load()
+try mic.start()`,
   },
   {
     id: 'java',
@@ -114,8 +114,8 @@ mic = new MicTranscriber(this)
         });
 
 worker.execute(() -> {
-    mic.load();   // downloads the model once, then it is cached
-    mic.start();  // opens the microphone and starts transcribing
+    mic.load();
+    mic.start();
 });`,
   },
 ];

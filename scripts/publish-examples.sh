@@ -46,6 +46,10 @@ fi
 
 EXAMPLES_DIR="${REPO_ROOT_DIR}/examples"
 
+# Web demos are packaged as self-contained archives (demo + assets + serve.mjs),
+# not as bare project folders. See scripts/web-example-archive.sh.
+WEB_ARCHIVE_SCRIPT="${SCRIPTS_DIR}/web-example-archive.sh"
+
 for PLATFORM_PATH in "${EXAMPLES_DIR}"/*; do
 	[[ -d "${PLATFORM_PATH}" ]] || continue
 	PLATFORM="$(basename "${PLATFORM_PATH}")"
@@ -56,6 +60,20 @@ for PLATFORM_PATH in "${EXAMPLES_DIR}"/*; do
 	# subdirectories), so it is shipped as one archive below rather than via the
 	# per-project loop.
 	if [[ "${PLATFORM}" == "c++" ]]; then
+		continue
+	fi
+	if [[ "${PLATFORM}" == "web" ]]; then
+		while IFS= read -r NAME; do
+			[[ -z "${NAME}" ]] && continue
+			TAR_NAME="web-${NAME}.tar.gz"
+			TAR_PATH="${TMPDIR:-/tmp}/${TAR_NAME}"
+			rm -f "${TAR_PATH}"
+			"${WEB_ARCHIVE_SCRIPT}" pack "${NAME}" "${TAR_PATH}"
+			if [[ -n "${DO_UPLOAD}" ]]; then
+				gh release upload "v${VERSION}" "${TAR_PATH}" --clobber
+			fi
+			rm -f "${TAR_PATH}"
+		done < <("${WEB_ARCHIVE_SCRIPT}" list)
 		continue
 	fi
 	for PROJECT_PATH in "${PLATFORM_PATH}"/*; do

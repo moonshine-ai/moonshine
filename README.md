@@ -5,6 +5,14 @@
 **Voice Interfaces for Everyone**
 
 - [Quickstart](#quickstart)
+  - [Javascript](#javascript)
+  - [Python](#python)
+  - [iOS](#ios)
+  - [Android](#android)
+  - [Linux](#linux)
+  - [MacOS](#macos)
+  - [Windows](#windows)
+  - [Raspberry Pi](#raspberry-pi)
 - [When should you choose Moonshine over Whisper?](#when-should-you-choose-moonshine-over-whisper)
 - [Using the Library](#using-the-library)
   - [Speech to Text](#getting-started-with-transcription)
@@ -30,7 +38,24 @@
 
 [Join our community on Discord to get live support](https://discord.gg/27qp9zSRXF).
 
-Example apps for iOS, Android, macOS, Windows, and Raspberry Pi are published on [GitHub Releases](https://github.com/moonshine-ai/moonshine/releases/latest) as separate archives (mostly **`{platform}-{Project}.tar.gz`**, matching folder names under [`examples/`](examples/); Windows also ships [`moonshine-voice-windows-x86_64.tar.gz`](https://github.com/moonshine-ai/moonshine/releases/latest/download/moonshine-voice-windows-x86_64.tar.gz) for the C++ sample). See the [Examples](#examples) section for the full list of release downloads.
+### Javascript
+
+In node run `npm install @moonshine-ai/moonshine-wasm`, or for the web import directly from the CDN.
+
+<!-- doc-test: parse-only -->
+```js
+import { MicTranscriber, ModelArch } from 'https://cdn.jsdelivr.net/npm/@moonshine-ai/moonshine-wasm/dist/index.js';
+ 
+const mic = new MicTranscriber()
+  .modelArch(ModelArch.MediumStreaming)
+  .onText((text) => showInProgress(text))
+  .onLine((line) => appendLine(line.text, line.lastTranscriptionLatencyMs));
+ 
+await mic.load();
+await mic.start();
+```
+
+You can see live examples running at [moonshine.ai](https://moonshine.ai), or download the [speech to text](https://github.com/moonshine-ai/moonshine/releases/latest/download/web-stt.tar.gz), [text to speech](https://github.com/moonshine-ai/moonshine/releases/latest/download/web-tts.tar.gz), [voice agent](https://github.com/moonshine-ai/moonshine/releases/latest/download/web-agent-flow.tar.gz), [dictation](https://github.com/moonshine-ai/moonshine/releases/latest/download/web-dictation.tar.gz), or [meeting note taker](https://github.com/moonshine-ai/moonshine/releases/latest/download/web-stt.tar.gz) projects. To serve them run `node serve.mjs` and navigate to [http://localhost:8080/](http://localhost:8080/).
 
 ### Python
 
@@ -58,9 +83,44 @@ Synthesizes and speaks the text.
 
 ### iOS
 
+Add `https://github.com/moonshine-ai/moonshine-swift/ `as a package dependency to your project in Xcode.
+
+```swift
+import MoonshineVoice
+ 
+let mic = MicTranscriber()
+    .onText { [weak self] text in
+        Task { @MainActor in self?.liveText = text }
+    }
+    .onLine { [weak self] line in
+        Task { @MainActor in self?.lines.append(line.text) }
+    }
+ 
+try await mic.load()
+try mic.start()
+```
+
 Download [github.com/moonshine-ai/moonshine/releases/latest/download/ios-Transcriber.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/ios-Transcriber.tar.gz), extract it, and then open the `Transcriber/Transcriber.xcodeproj` project in Xcode.
 
 ### Android
+
+Add `ai.moonshine:moonshine-voice:0.1.1` to your project's `build.gradle.kts` (or equivalent).
+
+```java
+import ai.moonshine.voice.MicTranscriber;
+ 
+mic = new MicTranscriber(this)
+        .onText(text -> transcriptText.setText(finishedLines + text))
+        .onLine(line -> {
+            finishedLines.append(line.text).append('\n');
+            transcriptText.setText(finishedLines.toString());
+        });
+ 
+worker.execute(() -> {
+    mic.load();
+    mic.start();
+});
+```
 
 Download [github.com/moonshine-ai/moonshine/releases/latest/download/android-Transcriber.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-Transcriber.tar.gz), extract it, and then open the `Transcriber` folder in Android Studio.
 
@@ -80,7 +140,24 @@ g++ transcriber.cpp -Imoonshine-voice/include -Lmoonshine-voice/lib -lmoonshine 
  
 ### MacOS
 
-Moonshine Voice supports both Apple Silicon (arm64) and Intel (x86_64) Macs.
+Add `https://github.com/moonshine-ai/moonshine-swift/ `as a package dependency to your project in Xcode.
+
+```swift
+import MoonshineVoice
+ 
+let mic = MicTranscriber()
+    .onText { [weak self] text in
+        Task { @MainActor in self?.liveText = text }
+    }
+    .onLine { [weak self] line in
+        Task { @MainActor in self?.lines.append(line.text) }
+    }
+ 
+try await mic.load()
+try mic.start()
+```
+
+This code is identical to the iOS version.
 
 Download [github.com/moonshine-ai/moonshine/releases/latest/download/macos-MicTranscription.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/macos-MicTranscription.tar.gz), extract it, and then open the `MicTranscription/MicTranscription.xcodeproj` project in Xcode.
 
@@ -103,6 +180,10 @@ You'll need a USB microphone plugged in to get audio input, but the Python pip p
 I've recorded [a screencast on YouTube](https://www.youtube.com/watch?v=NNcqx1wFxl0) to help you get started, and you can also download [github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz) for some fun, Pi-specific examples. [The README](examples/raspberry-pi/my-dalek/README.md) has information about using a virtual environment for the Python install if you don't want to use `--break-system-packages`.
 
 You can look at [github.com/moonshine-ai/pi-help-bot](https://github.com/moonshine-ai/pi-help-bot) for a more advanced example.
+
+## More examples
+
+Example apps for the web, iOS, Android, macOS, Windows, and Raspberry Pi are published on [GitHub Releases](https://github.com/moonshine-ai/moonshine/releases/latest) as separate archives (mostly **`{platform}-{Project}.tar.gz`**, matching folder names under [`examples/`](examples/); Windows also ships [`moonshine-voice-windows-x86_64.tar.gz`](https://github.com/moonshine-ai/moonshine/releases/latest/download/moonshine-voice-windows-x86_64.tar.gz) for the C++ sample). See the [Examples](#examples) section for the full list of release downloads.
 
 ## When should you choose Moonshine over Whisper?
 
@@ -689,12 +770,12 @@ The [`examples`](examples/) folder has code samples organized by platform. We us
 - **[Raspberry Pi](examples/raspberry-pi/)**
   - [my-dalek](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz)
   - [Pi Help Bot](https://github.com/moonshine-ai/pi-help-bot/archive/refs/heads/main.zip)
-- **[Web](examples/web/)** (single pages, no build step; serve them with `node examples/web/serve.mjs`)
-  - [stt](examples/web/stt/index.html)
-  - [tts](examples/web/tts/index.html)
-  - [agent-flow](examples/web/agent-flow/index.html)
-  - [dictation](examples/web/dictation/index.html)
-  - [meeting-notes](examples/web/meeting-notes/index.html)
+- **[Web](examples/web/)** (self-contained archives: `node serve.mjs`, then open the demo path)
+  - [stt](https://github.com/moonshine-ai/moonshine/releases/latest/download/web-stt.tar.gz)
+  - [tts](https://github.com/moonshine-ai/moonshine/releases/latest/download/web-tts.tar.gz)
+  - [agent-flow](https://github.com/moonshine-ai/moonshine/releases/latest/download/web-agent-flow.tar.gz)
+  - [dictation](https://github.com/moonshine-ai/moonshine/releases/latest/download/web-dictation.tar.gz)
+  - [meeting-notes](https://github.com/moonshine-ai/moonshine/releases/latest/download/web-meeting-notes.tar.gz)
 
 The examples usually include one minimal project that just creates a transcriber and then feeds it data from a WAV file, and another that's pulling audio from a microphone using the platform's default framework for accessing audio devices. Each one is a self-contained project you can copy out of the tree: the Android samples depend on **`ai.moonshine:moonshine-voice:0.1.1`** from Maven Central, and the Apple ones pull **`MoonshineVoice`** from the Swift package.
 

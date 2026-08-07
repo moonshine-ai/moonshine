@@ -44,12 +44,29 @@
 
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-// Repo root, so examples can import the built binding at /wasm/dist/index.js.
-const REPO_ROOT = path.resolve(ROOT, '..', '..');
+// When this file lives in the monorepo at examples/web/, walk up to the repo
+// root so /wasm and /test-assets mounts work for local testing. When it was
+// shipped inside a self-contained release archive, those siblings are absent —
+// serve only ROOT unless MOONSHINE_REPO_ROOT points at a checkout.
+function detectRepoRoot(webRoot) {
+  if (process.env.MOONSHINE_REPO_ROOT) {
+    return path.resolve(process.env.MOONSHINE_REPO_ROOT);
+  }
+  const candidate = path.resolve(webRoot, '..', '..');
+  if (
+    existsSync(path.join(candidate, 'wasm')) ||
+    existsSync(path.join(candidate, 'test-assets'))
+  ) {
+    return candidate;
+  }
+  return webRoot;
+}
+const REPO_ROOT = detectRepoRoot(ROOT);
 const PORT = Number(process.argv[2] ?? 8080);
 
 // URL-prefix -> on-disk directory mounts. The first matching prefix wins; the
@@ -69,6 +86,12 @@ function resolveFilePath(pathname) {
     }
   }
   return path.join(ROOT, pathname);
+}
+
+/** True when the resolved path is under the web root or the repo mounts. */
+function isAllowed(filePath) {
+  const normalized = path.normalize(filePath);
+  return normalized.startsWith(ROOT) || normalized.startsWith(REPO_ROOT);
 }
 
 const MIME = {
@@ -102,8 +125,8 @@ const server = http.createServer(async (req, res) => {
     if (pathname.endsWith('/')) pathname += 'index.html';
 
     const filePath = path.normalize(resolveFilePath(pathname));
-    // Prevent path traversal outside the repo (all mounts live under it).
-    if (!filePath.startsWith(REPO_ROOT)) {
+    // Prevent path traversal outside the web root / repo mounts.
+    if (!isAllowed(filePath)) {
       log(403, pathname);
       res.writeHead(403).end('Forbidden');
       return;
