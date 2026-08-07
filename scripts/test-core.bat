@@ -10,15 +10,36 @@ for %%I in ("!SCRIPTS_DIR!") do set "REPO_ROOT_DIR=%%~dpI"
 set "REPO_ROOT_DIR=!REPO_ROOT_DIR:~0,-1!"
 set "BUILD_DIR=!REPO_ROOT_DIR!\core\build"
 
-if not exist "!REPO_ROOT_DIR!\test-assets\tiny-en\encoder_model.ort" (
-    echo Fetching voice assets from CDN/HF...
-    bash "!SCRIPTS_DIR!\fetch-voice-assets.sh" test-assets
-    if errorlevel 1 exit /b 1
+REM Git for Windows ships bash, but it is often not on PATH for cmd.exe /
+REM pwsh-launched batch files. Prefer PATH, then the usual install locations.
+set "BASH_EXE="
+where bash >nul 2>&1 && for /f "delims=" %%B in ('where bash') do (
+    if not defined BASH_EXE set "BASH_EXE=%%B"
 )
-if not exist "!REPO_ROOT_DIR!\core\moonshine-tts\data\kokoro\model.ort" (
-    echo Fetching TTS assets from CDN/HF...
-    bash "!SCRIPTS_DIR!\fetch-voice-assets.sh" tts
+if not defined BASH_EXE if exist "C:\Program Files\Git\bin\bash.exe" (
+    set "BASH_EXE=C:\Program Files\Git\bin\bash.exe"
+)
+if not defined BASH_EXE if exist "C:\Program Files (x86)\Git\bin\bash.exe" (
+    set "BASH_EXE=C:\Program Files (x86)\Git\bin\bash.exe"
+)
+
+REM Always run the fetch when bash is available: the script is idempotent and
+REM repairs partial CDN trees. Fall back to the old sentinel check only if bash
+REM cannot be found (should not happen on the CI image).
+if defined BASH_EXE (
+    echo Fetching voice assets from CDN/HF...
+    "!BASH_EXE!" "!SCRIPTS_DIR!\fetch-voice-assets.sh" all
     if errorlevel 1 exit /b 1
+) else (
+    echo WARNING: bash not found; cannot run scripts\fetch-voice-assets.sh
+    if not exist "!REPO_ROOT_DIR!\test-assets\tiny-en\encoder_model.ort" (
+        echo error: missing test-assets and no bash to fetch them >&2
+        exit /b 1
+    )
+    if not exist "!REPO_ROOT_DIR!\core\moonshine-tts\data\kokoro\model.ort" (
+        echo error: missing kokoro TTS assets and no bash to fetch them >&2
+        exit /b 1
+    )
 )
 
 if exist "!BUILD_DIR!" (
