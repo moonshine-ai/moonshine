@@ -17,6 +17,7 @@ const MODEL_CACHE = 'moonshine-models-v1';
 const GITHUB_URL = 'https://github.com/moonshine-ai/moonshine';
 const SITE_URL = 'https://moonshine.ai';
 const DISCORD_URL = 'https://discord.gg/27qp9zSRXF';
+const CONTACT_URL = 'mailto:contact@moonshine.ai';
 const NPM_PACKAGE = '@moonshine-ai/moonshine-wasm';
 // Snippet captions link here. Main rather than a tag, so a link keeps working
 // as the examples move around between releases.
@@ -36,14 +37,20 @@ const DEMOS = [
 /**
  * Reads the query parameters the examples share.
  *
- * `local=1` swaps the published jsDelivr binding for the one built into
- * /wasm/dist, and `assets=local` points the model downloads at the copies
- * vendored in the repo so a page can run with no network at all. The browser
- * integration test uses both.
+ * `local=1` forces the binding built into /wasm/dist. On the deployed demos
+ * (moonshine.ai / staging) that same-origin path is the default, because the
+ * threaded build's pthread Workers cannot be constructed from a cross-origin
+ * CDN URL under COOP/COEP. Append `cdn=1` to exercise the published jsDelivr
+ * package instead. `assets=local` points model downloads at the copies
+ * vendored in the repo so a page can run with no network at all.
  */
 export function pageConfig() {
   const params = new URLSearchParams(location.search);
-  const useLocal = params.get('local') === '1';
+  const useCdn = params.get('cdn') === '1';
+  const onDeployedSite = ['moonshine.ai', 'www.moonshine.ai', 'staging.moonshine.ai'].includes(
+    location.hostname,
+  );
+  const useLocal = params.get('local') === '1' || (onDeployedSite && !useCdn);
   return {
     params,
     useLocal,
@@ -57,7 +64,7 @@ export function pageConfig() {
 /** Preserves the demo-wiring params when linking between pages. */
 function carryParams(href, params) {
   const keep = new URLSearchParams();
-  for (const name of ['local', 'assets']) {
+  for (const name of ['local', 'assets', 'cdn']) {
     const value = params.get(name);
     if (value !== null) keep.set(name, value);
   }
@@ -126,6 +133,7 @@ export function mountChrome({ active, ctaTitle } = {}) {
       <div class="ms-footer__links">
         <a href="${SITE_URL}" target="_blank" rel="noopener">moonshine.ai</a>
         <a href="${DISCORD_URL}" target="_blank" rel="noopener">Discord</a>
+        <a href="${CONTACT_URL}">Contact</a>
         <a href="https://pypi.org/project/moonshine-voice/" target="_blank" rel="noopener">Python</a>
         <a href="https://www.npmjs.com/package/${NPM_PACKAGE}" target="_blank" rel="noopener">npm</a>
         <a href="https://huggingface.co/UsefulSensors" target="_blank" rel="noopener">Hugging Face</a>

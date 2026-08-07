@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Publish examples/web to the R2 bucket behind the moonshine.ai static site.
 #
-# Staging is live at https://staging.moonshine.ai (custom domain on the
-# www-moonshine-ai bucket). Production cutover points moonshine.ai /
-# www.moonshine.ai at the same bucket once the wasm library is ready.
+# Served from the www-moonshine-ai R2 bucket on:
+#   https://moonshine.ai
+#   https://www.moonshine.ai
+#   https://staging.moonshine.ai
 #
 # R2 has no index-document feature, so directory URLs rely on Transform Rules
 # in the moonshine.ai zone (see scripts/setup-web-site-rules.sh). Those rules
@@ -16,7 +17,7 @@
 # Environment:
 #   MOONSHINE_WWW_R2_BUCKET   Bucket name (default: www-moonshine-ai)
 #   MOONSHINE_WWW_HOST        Hostname used in purge URLs
-#                             (default: staging.moonshine.ai)
+#                             (default: moonshine.ai)
 #   MOONSHINE_WWW_CACHE_CONTROL
 #                             Cache-Control for uploaded objects
 #                             (default: "public, max-age=300")
@@ -31,7 +32,7 @@ SRC="${ROOT}/examples/web"
 EXTRA="${MOONSHINE_RCLONE_EXTRA:-}"
 CACHE_CONTROL="${MOONSHINE_WWW_CACHE_CONTROL:-public, max-age=300}"
 WWW_BUCKET="${MOONSHINE_WWW_R2_BUCKET:-www-moonshine-ai}"
-WWW_HOST="${MOONSHINE_WWW_HOST:-staging.moonshine.ai}"
+WWW_HOST="${MOONSHINE_WWW_HOST:-moonshine.ai}"
 
 if [[ ! -f "${SRC}/index.html" ]]; then
   echo "Missing ${SRC}/index.html" >&2
@@ -64,16 +65,8 @@ cat >"${FILTER}" <<'EOF'
 + /**
 EOF
 
-echo "Sync ${SRC} -> ${DEST} (Cache-Control: ${CACHE_CONTROL})" >&2
-# --checksum matches upload-tts-assets.sh. sync (not copy) is correct here:
-# removed demos should disappear from the site.
-# shellcheck disable=SC2086
-rclone sync "${SRC}" "${DEST}" --checksum \
-  --filter-from "${FILTER}" \
-  --header-upload "Cache-Control: ${CACHE_CONTROL}" \
-  --use-json-log --log-level INFO --log-file "${LOG}" ${EXTRA}
-
-TRANSFERRED=$(python3 - "${LOG}" <<'PY'
+collect_transferred() {
+  python3 - "$1" <<'PY'
 import json, sys
 objects = []
 for line in open(sys.argv[1], errors="replace"):
@@ -84,14 +77,47 @@ for line in open(sys.argv[1], errors="replace"):
         entry = json.loads(line)
     except ValueError:
         continue
-    # rclone JSON logs use "object" for the remote key on transfers.
     obj = entry.get("object")
     msg = entry.get("msg", "")
     if obj and ("Copied" in msg or "Updated" in msg or "Deleted" in msg):
         objects.append(obj)
 print("\n".join(objects))
 PY
-)
+}
+
+echo "Sync ${SRC} -> ${DEST} (Cache-Control: ${CACHE_CONTROL})" >&2
+# --checksum matches upload-tts-assets.sh. sync (not copy) is correct here:
+# removed demos should disappear from the site.
+# shellcheck disable=SC2086
+rclone sync "${SRC}" "${DEST}" --checksum \
+  --filter-from "${FILTER}" \
+  --header-upload "Cache-Control: ${CACHE_CONTROL}" \
+  --use-json-log --log-level INFO --log-file "${LOG}" ${EXTRA}
+
+TRANSFERRED=$(collect_transferred "${LOG}")
+
+# Same-origin copy of the WASM binding. Deployed demos load /wasm/dist so
+# pthread Workers are not cross-origin under COOP/COEP (see pageConfig).
+WASM_DIST="${ROOT}/wasm/dist"
+if [[ -f "${WASM_DIST}/index.js" && -f "${WASM_DIST}/moonshine.wasm" ]]; then
+  : >"${LOG}"
+  echo "Sync ${WASM_DIST} -> ${DEST}/wasm/dist" >&2
+  # shellcheck disable=SC2086
+  rclone sync "${WASM_DIST}" "${DEST}/wasm/dist" --checksum \
+    --exclude '*.map' \
+    --header-upload "Cache-Control: ${CACHE_CONTROL}" \
+    --use-json-log --log-level INFO --log-file "${LOG}" ${EXTRA}
+  wasm_transferred=$(collect_transferred "${LOG}")
+  if [[ -n "${wasm_transferred}" ]]; then
+    while IFS= read -r key; do
+      [[ -n "${key}" ]] || continue
+      TRANSFERRED+=$'\n'"wasm/dist/${key}"
+    done <<<"${wasm_transferred}"
+  fi
+else
+  echo "Warning: ${WASM_DIST} is incomplete; demos expect /wasm/dist/index.js." >&2
+  echo "Build with: (cd wasm && npm run build) && scripts/build-wasm.sh" >&2
+fi
 
 count=$(grep -c . <<<"${TRANSFERRED}" || true)
 echo "Transferred/deleted ${count} object(s)." >&2
@@ -104,8 +130,9 @@ if [[ -n "${MOONSHINE_INVALIDATE_CDN:-}" ]]; then
   done <<<"${TRANSFERRED}"
   # Root is rewritten to /index.html; purge both so either URL is fresh.
   urls+=("https://${WWW_HOST}/" "https://${WWW_HOST}/index.html")
+  urls+=("https://staging.moonshine.ai/" "https://www.moonshine.ai/")
   if ((${#urls[@]})); then
-    echo "Purging ${#urls[@]} URL(s) on ${WWW_HOST}..." >&2
+    echo "Purging ${#urls[@]} URL(s)..." >&2
     cdn_purge_urls "${urls[@]}"
   fi
 else

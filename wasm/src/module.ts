@@ -127,6 +127,24 @@ function printErr(...args: unknown[]): void {
   console.error(...args);
 }
 
+/** Absolute URL of the generated Emscripten ES module next to this file. */
+function moonshineMjsUrl(): string {
+  return new URL('./moonshine.mjs', import.meta.url).href;
+}
+
+/**
+ * True when `url` is on a different origin than the current browsing context.
+ * Node has no `location`, so this is always false there (no Workers involved).
+ */
+function isCrossOrigin(url: string): boolean {
+  if (typeof location === 'undefined') return false;
+  try {
+    return new URL(url, location.href).origin !== location.origin;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Resolves the Emscripten factory. By default it dynamically imports the
  * sibling `./moonshine.mjs` emitted by the build; callers can inject their own
@@ -144,6 +162,42 @@ async function resolveFactory(
 }
 
 /**
+ * Module constructor args, including the cross-origin pthread workaround.
+ *
+ * The threaded build spawns `new Worker(moonshine.mjs)`. Browsers refuse that
+ * when the script is cross-origin (e.g. jsDelivr), even with CORS — hence the
+ * "cannot be accessed from origin" SecurityError. Fetching the script into a
+ * Blob and passing it as `mainScriptUrlOrBlob` gives the Workers a same-origin
+ * URL. `locateFile` must then pin `.wasm` (and friends) to the real script
+ * directory, because `import.meta.url` inside the blob worker is `blob:`.
+ */
+async function emscriptenModuleArgs(
+  options: LoadModuleOptions,
+): Promise<Record<string, unknown>> {
+  const moduleArgs: Record<string, unknown> = { printErr };
+  const mjsUrl = moonshineMjsUrl();
+
+  if (options.locateFile) {
+    moduleArgs.locateFile = options.locateFile;
+  }
+
+  if (isCrossOrigin(mjsUrl)) {
+    const response = await fetch(mjsUrl);
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch ${mjsUrl} for pthread workers (${response.status}).`,
+      );
+    }
+    moduleArgs.mainScriptUrlOrBlob = await response.blob();
+    if (!options.locateFile) {
+      moduleArgs.locateFile = (path: string) => new URL(path, mjsUrl).href;
+    }
+  }
+
+  return moduleArgs;
+}
+
+/**
  * Loads (and memoizes) the Moonshine WASM module. Safe to call repeatedly; the
  * heavy compile happens once.
  */
@@ -154,9 +208,7 @@ export function loadMoonshineModule(
     cached = (async () => {
       try {
         const factory = await resolveFactory(options);
-        const moduleArgs: Record<string, unknown> = { printErr };
-        if (options.locateFile) moduleArgs.locateFile = options.locateFile;
-        return await factory(moduleArgs);
+        return await factory(await emscriptenModuleArgs(options));
       } catch (err) {
         cached = undefined; // allow retry on failure
         throw toMoonshineError(err);

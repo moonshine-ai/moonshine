@@ -41,6 +41,26 @@ export function moonshineWasmBaseUrl(): string {
   return new URL('./', import.meta.url).href;
 }
 
+/**
+ * Spawns a module Worker for `scriptUrl`, using a same-origin blob bridge when
+ * the script is cross-origin. Browsers reject `new Worker(crossOriginUrl)` even
+ * when the URL is CORS-enabled (same restriction that hits Emscripten pthreads).
+ */
+function spawnModuleWorker(scriptUrl: URL): Worker {
+  const href = scriptUrl.href;
+  if (
+    typeof location !== 'undefined' &&
+    new URL(href).origin !== location.origin
+  ) {
+    const bridge = `import ${JSON.stringify(href)};`;
+    const blobUrl = URL.createObjectURL(
+      new Blob([bridge], { type: 'text/javascript' }),
+    );
+    return new Worker(blobUrl, { type: 'module' });
+  }
+  return new Worker(scriptUrl, { type: 'module' });
+}
+
 export class TtsWorkerHost {
   private worker: Worker;
   private nextId = 1;
@@ -50,9 +70,7 @@ export class TtsWorkerHost {
 
   constructor(wasmBaseUrl: string = moonshineWasmBaseUrl()) {
     this.wasmBaseUrl = wasmBaseUrl;
-    this.worker = new Worker(new URL('./tts-worker.js', import.meta.url), {
-      type: 'module',
-    });
+    this.worker = spawnModuleWorker(new URL('./tts-worker.js', import.meta.url));
     this.worker.onmessage = (event: MessageEvent<TtsWorkerResponse>) => {
       const msg = event.data;
       const slot = this.pending.get(msg.id);

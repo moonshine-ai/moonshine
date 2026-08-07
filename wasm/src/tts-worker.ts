@@ -5,35 +5,11 @@
  * `moonshine_text_to_speech` work off the page's main thread.
  */
 
-import type { MoonshineModule, RawTextToSpeech } from './module.js';
+import { loadMoonshineModule } from './module.js';
+import type { RawTextToSpeech } from './module.js';
 import type { TtsWorkerRequest, TtsWorkerResponse } from './tts-worker-protocol.js';
 
-type EmscriptenFactory = (opts?: Record<string, unknown>) => Promise<MoonshineModule>;
-
-let modulePromise: Promise<MoonshineModule> | undefined;
 let raw: RawTextToSpeech | undefined;
-
-const SUPPRESSED_STDERR = /Unknown CPU vendor\. cpuinfo_vendor value:/;
-
-function printErr(...args: unknown[]): void {
-  if (typeof args[0] === 'string' && SUPPRESSED_STDERR.test(args[0])) return;
-  console.error(...args);
-}
-
-async function loadModule(wasmBaseUrl: string): Promise<MoonshineModule> {
-  if (!modulePromise) {
-    modulePromise = (async () => {
-      // @ts-expect-error generated at build time
-      const mod = await import('./moonshine.mjs');
-      const factory = (mod.default ?? mod) as EmscriptenFactory;
-      return factory({
-        printErr,
-        locateFile: (path: string) => new URL(path, wasmBaseUrl).href,
-      });
-    })();
-  }
-  return modulePromise;
-}
 
 function reply(msg: TtsWorkerResponse, transfer?: Transferable[]): void {
   if (transfer?.length) {
@@ -54,7 +30,11 @@ onmessage = (event: MessageEvent<TtsWorkerRequest>) => {
     try {
       switch (msg.type) {
         case 'setEngine': {
-          const mod = await loadModule(msg.wasmBaseUrl);
+          // loadMoonshineModule applies the cross-origin pthread blob workaround
+          // when this worker (or the binding) was loaded from a CDN.
+          const mod = await loadMoonshineModule({
+            locateFile: (path) => new URL(path, msg.wasmBaseUrl).href,
+          });
           if (!mod.TextToSpeech) {
             throw new Error('This Moonshine WASM build was compiled without TTS support.');
           }

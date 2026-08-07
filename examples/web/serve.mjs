@@ -17,8 +17,9 @@
 // /stt/, /tts/, /agent-flow/, /dictation/, /meeting-notes/.
 //
 // By default the examples import the published binding from the jsDelivr CDN.
-// To test the locally-built binding served from /wasm/dist/index.js instead,
-// append ?local=1 to the URL, e.g. http://localhost:8080/stt/?local=1.
+// On moonshine.ai / staging they load /wasm/dist instead (pthread Workers need
+// same-origin under COOP/COEP). Append ?local=1 to force /wasm/dist anywhere,
+// or ?cdn=1 on the deployed site to exercise jsDelivr.
 //
 // A few extra path prefixes are mounted so the examples (and the browser
 // integration test) can load model files straight from the repo instead of the
