@@ -303,10 +303,11 @@ final class TextToSpeechTests: XCTestCase {
     }
 
     @available(iOS 15.0, macOS 12.0, *)
-    func testLoadingInCloneModeWaitsForAVoice() async throws {
+    func testLoadingInCloneModeBuildsZipVoiceReadyForCapture() async throws {
         let dataPath = try Self.getTtsDataPath()
-        // There is no engine to build until cloneFrom() supplies a reference
-        // voice, so load() prepares the assets rather than failing.
+        // cloning() before load() fetches ZipVoice (plus clone ASR) with a
+        // built-in preset so startCloning() / synthesize work immediately;
+        // cloneFrom() later swaps in the user's reference clip.
         let tts = TextToSpeech()
             .language("en_us")
             .cloning()
@@ -315,10 +316,9 @@ final class TextToSpeechTests: XCTestCase {
 
         try await tts.load()
         XCTAssertFalse(tts.isCloned)
-        XCTAssertThrowsError(try tts.synthesize("Hello")) { error in
-            XCTAssertTrue("\(error)".contains("cloneFrom()"),
-                          "Expected the error to point at cloneFrom(), got \(error)")
-        }
+        _ = tts.startCloning()
+        let result = try tts.synthesize("Hello")
+        XCTAssertGreaterThan(result.samples.count, 0)
     }
 
     // MARK: - Device Enumeration (macOS only)
