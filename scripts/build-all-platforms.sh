@@ -769,7 +769,14 @@ main() {
     run_stage build-pip          scripts/build-pip.sh "${UPLOAD_ARGS[@]}"
     run_stage build-pip-docker   scripts/build-pip-docker.sh "${UPLOAD_ARGS[@]}"
     run_stage publish-binary     scripts/publish-binary.sh "${UPLOAD_ARGS[@]}"
-    run_stage build-wasm         scripts/build-wasm.sh "${UPLOAD_ARGS[@]}"
+    # upload attaches moonshine-voice-wasm.tar.gz to the GitHub release;
+    # publish-npm pushes @moonshine-ai/moonshine-wasm so the web demos' default
+    # jsDelivr import resolves (without it, /stt/ etc. 404 on the CDN).
+    if [ -n "${PUBLISH}" ]; then
+        run_stage build-wasm     scripts/build-wasm.sh publish-npm "${UPLOAD_ARGS[@]}"
+    else
+        run_stage build-wasm     scripts/build-wasm.sh "${UPLOAD_ARGS[@]}"
+    fi
     run_stage publish-examples   scripts/publish-examples.sh "${UPLOAD_ARGS[@]}"
 
     run_stage linux   stage_linux

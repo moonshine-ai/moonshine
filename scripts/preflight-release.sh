@@ -111,6 +111,17 @@ main() {
             fail "gh is not authenticated; the upload stages will fail." \
                 "  gh auth login"
         fi
+        if command -v npm >/dev/null 2>&1; then
+            if npm whoami >/dev/null 2>&1; then
+                pass "npm is authenticated as $(npm whoami 2>/dev/null)"
+            else
+                fail "npm is not authenticated; build-wasm publish-npm will fail" \
+                    "and the web demos' jsDelivr CDN import will 404." \
+                    "  npm login"
+            fi
+        else
+            fail "npm is not installed; the wasm publish stage needs it."
+        fi
     else
         fail "gh is not installed; the release upload stages need it."
     fi
