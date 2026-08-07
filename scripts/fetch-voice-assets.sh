@@ -172,6 +172,7 @@ fetch_tts_via_cdn_inventory() {
   manifest="$(mktemp)"
   python3 - "${tsv}" "${CDN_BASE}" "${dest}" "${FORCE}" "${manifest}" <<'PY'
 import os, sys
+from urllib.parse import quote
 
 tsv, cdn_base, dest, force, manifest = sys.argv[1:6]
 force = bool(force)
@@ -194,7 +195,10 @@ with open(tsv, encoding="utf-8") as f, open(manifest, "w", encoding="utf-8") as 
             if os.path.getsize(dest_path) == size:
                 skipped += 1
                 continue
-        url = f"{cdn_base}/{path}"
+        # Encode each path segment so non-ASCII names (e.g. pt_PT-tugão-…)
+        # work with curl on hosts that reject raw UTF-8 URLs (HTTP 400).
+        enc_path = "/".join(quote(seg, safe="") for seg in path.split("/"))
+        url = f"{cdn_base}/{enc_path}"
         out.write(f"{url}\t{dest_path}\n")
         count += 1
 print(f"queued {count} TTS downloads ({skipped} already present)", flush=True)
