@@ -165,14 +165,19 @@ fetch_tts_via_cdn_inventory() {
     return 1
   fi
 
-  python3 - "${tsv}" "${CDN_BASE}" "${dest}" "${FORCE}" <<'PY'
-import os, sys, urllib.request
+  # Cloudflare WAF rejects Python-urllib's default User-Agent (HTTP 403) on
+  # download.moonshine.ai, so enumerate paths in Python and fetch with curl —
+  # same as fetch_url / the test-assets path above.
+  local manifest
+  manifest="$(mktemp)"
+  python3 - "${tsv}" "${CDN_BASE}" "${dest}" "${FORCE}" "${manifest}" <<'PY'
+import os, sys
 
-tsv, cdn_base, dest, force = sys.argv[1:5]
+tsv, cdn_base, dest, force, manifest = sys.argv[1:6]
 force = bool(force)
 count = 0
 skipped = 0
-with open(tsv, encoding="utf-8") as f:
+with open(tsv, encoding="utf-8") as f, open(manifest, "w", encoding="utf-8") as out:
     f.readline()  # header
     for line in f:
         line = line.rstrip("\n")
@@ -184,28 +189,39 @@ with open(tsv, encoding="utf-8") as f:
             continue
         rel = path[len("tts/") :]
         size = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
-        out = os.path.join(dest, rel)
-        if not force and os.path.isfile(out) and size is not None:
-            if os.path.getsize(out) == size:
+        dest_path = os.path.join(dest, rel)
+        if not force and os.path.isfile(dest_path) and size is not None:
+            if os.path.getsize(dest_path) == size:
                 skipped += 1
                 continue
-        os.makedirs(os.path.dirname(out), exist_ok=True)
         url = f"{cdn_base}/{path}"
-        print(f"get {url}", flush=True)
-        tmp = out + ".tmp"
-        try:
-            urllib.request.urlretrieve(url, tmp)
-            os.replace(tmp, out)
-        except Exception as e:
-            if os.path.exists(tmp):
-                os.remove(tmp)
-            raise SystemExit(f"download failed for {url}: {e}") from e
+        out.write(f"{url}\t{dest_path}\n")
         count += 1
-print(f"downloaded {count} TTS files ({skipped} already present)", flush=True)
+print(f"queued {count} TTS downloads ({skipped} already present)", flush=True)
 PY
   local status=$?
   rm -f "${tsv}"
-  return "${status}"
+  if [[ "${status}" -ne 0 ]]; then
+    rm -f "${manifest}"
+    return "${status}"
+  fi
+
+  local url out_path tmp downloaded=0
+  while IFS=$'\t' read -r url out_path; do
+    [[ -z "${url}" ]] && continue
+    echo "get ${url}"
+    mkdir -p "$(dirname "${out_path}")"
+    tmp="${out_path}.tmp"
+    if ! curl -fL --retry 3 --retry-delay 2 -o "${tmp}" "${url}"; then
+      rm -f "${tmp}" "${manifest}"
+      echo "error: download failed: ${url}" >&2
+      return 1
+    fi
+    mv -f "${tmp}" "${out_path}"
+    downloaded=$((downloaded + 1))
+  done <"${manifest}"
+  rm -f "${manifest}"
+  echo "downloaded ${downloaded} TTS files"
 }
 
 fetch_tts() {
