@@ -274,7 +274,19 @@ copy_local_example_trees() {
 	log "copying ${android_src}/ → ${android_dest}/"
 	cp -a "${android_src}/." "${android_dest}/"
 	log "copying ${ios_src}/ → ${ios_dest}/"
-	cp -a "${ios_src}/." "${ios_dest}/"
+	# Prefer rsync so gitignored Package.resolved pins from a developer machine
+	# do not override the exactVersion in project.pbxproj (those files are not in
+	# a fresh release worktree, but --local-examples from a dirty checkout would
+	# otherwise resolve an ancient moonshine-swift tag).
+	if command -v rsync >/dev/null 2>&1; then
+		rsync -a --exclude 'Package.resolved' --exclude '.build/' \
+			"${ios_src}/" "${ios_dest}/"
+	else
+		cp -a "${ios_src}/." "${ios_dest}/"
+	fi
+	# Belt-and-suspenders: drop any Package.resolved that slipped through (e.g.
+	# when rsync is unavailable on a non-macOS host that still stages iOS trees).
+	find "${ios_dest}" -name 'Package.resolved' -delete 2>/dev/null || true
 }
 
 # Portable in-place edit (BSD/macOS sed and GNU sed differ on -i), applied to
