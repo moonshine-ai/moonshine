@@ -678,13 +678,22 @@ main() {
 
     # The worktree is always recreated from the build commit, so build products
     # from prior stages (e.g. swift/Moonshine.xcframework) are gone even when
-    # their breadcrumbs remain. Drop any breadcrumb whose artifact is missing so
-    # the stage re-runs instead of later consumers failing with a skip flag.
-    if [[ -f "${STATE_DIR}/build-swift.done" ]] && \
-       [[ ! -d "${RELEASE_DIR}/swift/Moonshine.xcframework" ]]; then
-        echo "build-swift.done but ${RELEASE_DIR}/swift/Moonshine.xcframework is" \
-             "missing in the fresh worktree; clearing the breadcrumb so it rebuilds."
-        rm -f "${STATE_DIR}/build-swift.done"
+    # their breadcrumbs remain. Restore a cached copy when we have one; otherwise
+    # drop the breadcrumb so build-swift re-runs.
+    if [[ -f "${STATE_DIR}/build-swift.done" ]]; then
+        if [[ ! -d "${RELEASE_DIR}/swift/Moonshine.xcframework" ]]; then
+            if [[ -d "${STATE_DIR}/Moonshine.xcframework" ]]; then
+                echo "Restoring cached Moonshine.xcframework into the fresh worktree..."
+                mkdir -p "${RELEASE_DIR}/swift"
+                rm -rf "${RELEASE_DIR}/swift/Moonshine.xcframework"
+                cp -R "${STATE_DIR}/Moonshine.xcframework" \
+                    "${RELEASE_DIR}/swift/Moonshine.xcframework"
+            else
+                echo "build-swift.done but no xcframework in the worktree or cache;" \
+                     "clearing the breadcrumb so it rebuilds."
+                rm -f "${STATE_DIR}/build-swift.done"
+            fi
+        fi
     fi
 
     cd "${RELEASE_DIR}"
@@ -692,6 +701,13 @@ main() {
     run_stage test-python        scripts/test-python.sh
     run_stage test-docs          scripts/test-docs.sh --skip-build
     run_stage build-swift        scripts/build-swift.sh
+    # Keep a copy outside the disposable worktree so resumed runs can skip the
+    # multi-platform Swift rebuild when only later stages still need to run.
+    if [[ -d "${RELEASE_DIR}/swift/Moonshine.xcframework" ]]; then
+        rm -rf "${STATE_DIR}/Moonshine.xcframework"
+        cp -R "${RELEASE_DIR}/swift/Moonshine.xcframework" \
+            "${STATE_DIR}/Moonshine.xcframework"
+    fi
     run_publish_stage publish-swift scripts/publish-swift.sh
     run_stage test-android-arm64 scripts/test-android.sh --avd "${ANDROID_ARM64_AVD:-moonshine_api26_arm64}"
     # Physical Pixel + iPad Tiny Streaming latency (same metric as the README

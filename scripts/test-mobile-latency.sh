@@ -169,10 +169,13 @@ pick_ios_udid() {
 		return 0
 	fi
 	local json="/tmp/moonshine-ios-devices-$$.json"
-	xcrun devicectl list devices --json-output "${json}" >/dev/null
 	# Prefer a connected physical iPad; else any connected iPhone/iPad.
-	IOS_UDID="$(
-		python3 - "${json}" <<'PY'
+	# CoreDevice often lists a wired, booted device as tunnelState=disconnected
+	# with ddiServicesAvailable=false until something pokes it (Xcode, or a
+	# device info query). Treat paired+booted physical phones/tablets as
+	# candidates, then wake DDI before accepting them.
+	_ios_candidates_from_json() {
+		python3 - "$1" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
 devices = data.get("result", {}).get("devices", [])
@@ -183,26 +186,48 @@ for d in devices:
     conn = d.get("connectionProperties", {})
     state = (d.get("state") or "").lower()
     tunnel = (conn.get("tunnelState") or "").lower()
+    pairing = (conn.get("pairingState") or "").lower()
+    boot = (props.get("bootState") or "").lower()
+    transport = (conn.get("transportType") or "").lower()
     udid = hw.get("udid") or ""
+    ident = d.get("identifier") or udid
     dtype = (hw.get("deviceType") or "").lower()
     reality = (hw.get("reality") or "").lower()
     if reality and reality != "physical":
         continue
     if dtype not in ("ipad", "iphone"):
         continue
-    online = state in ("connected", "available") or tunnel in ("connected", "available")
-    if props.get("ddiServicesAvailable") is True:
-        online = True
+    online = (
+        state in ("connected", "available")
+        or tunnel in ("connected", "available")
+        or props.get("ddiServicesAvailable") is True
+        or (
+            pairing == "paired"
+            and boot == "booted"
+            and transport in ("wired", "localNetwork", "network")
+        )
+    )
     if not online or not udid:
         continue
     name = props.get("name") or ""
-    connected.append((dtype == "ipad", name, udid))
+    connected.append((dtype == "ipad", name, udid, ident))
 connected.sort(key=lambda t: (not t[0], t[1]))
-if connected:
-    print(connected[0][2])
+for row in connected:
+    print("\t".join(row[2:]))
 PY
-	)"
+	}
+
+	xcrun devicectl list devices --json-output "${json}" >/dev/null
+	local candidates candidate udid ident
+	candidates="$(_ios_candidates_from_json "${json}")"
 	rm -f "${json}"
+	while IFS=$'\t' read -r udid ident; do
+		[[ -z "${udid}" ]] && continue
+		# Wake developer services when the tunnel is idle.
+		xcrun devicectl device info details --device "${ident:-$udid}" >/dev/null 2>&1 || true
+		IOS_UDID="${udid}"
+		break
+	done <<<"${candidates}"
 	if [[ -z "${IOS_UDID}" ]]; then
 		skip_or_die "no connected physical iOS device (devicectl)"
 	fi
