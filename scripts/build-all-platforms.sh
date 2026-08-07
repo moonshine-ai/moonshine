@@ -378,6 +378,26 @@ stage_windows() {
         -o TCPKeepAlive=yes
     )
 
+    # The Windows guest often has no persistent `gh auth` (fresh/libvirt images).
+    # Upload stages need a token; forward the Mac host's credentials into the
+    # remote PowerShell session so `gh release upload` works there.
+    local windows_auth_prefix=""
+    if [ -n "${WINDOWS_UPLOAD_FLAG}" ]; then
+        local gh_token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+        if [ -z "${gh_token}" ] && command -v gh >/dev/null 2>&1; then
+            gh_token="$(gh auth token 2>/dev/null || true)"
+        fi
+        if [ -z "${gh_token}" ]; then
+            echo "Windows upload requires GH_TOKEN/GITHUB_TOKEN or a logged-in" \
+                "gh on this Mac (the guest has no gh auth of its own)." >&2
+            exit 1
+        fi
+        # PowerShell single-quoted string: escape embedded ' as ''.
+        local gh_token_ps="${gh_token//\'/\'\'}"
+        windows_auth_prefix="\$env:GH_TOKEN='${gh_token_ps}'; \$env:GITHUB_TOKEN='${gh_token_ps}'; "
+        echo "Forwarding GitHub token into Windows session for release uploads."
+    fi
+
     # The Windows login shell is PowerShell. Sync to the build point first (that
     # also refreshes run-windows-ci.ps1 itself), then hand off to the
     # orchestrator, which runs each step with heavy, disconnect-surviving logging
@@ -386,7 +406,7 @@ stage_windows() {
     # than masking it behind the exit code of the last chained command. The
     # sync command is expanded locally (via the single-quote break) so PowerShell
     # variables like $LASTEXITCODE stay intact for the remote shell.
-    local windows_remote_cmd='cd moonshine `
+    local windows_remote_cmd="${windows_auth_prefix}"'cd moonshine `
       ; '"${WIN_GIT_SYNC}"' `
       ; if ($LASTEXITCODE -ne 0) { Write-Host "git sync failed"; exit 1 } `
       ; pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\run-windows-ci.ps1'"${WINDOWS_UPLOAD_FLAG}"
