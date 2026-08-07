@@ -13,8 +13,14 @@ fi
 
 TMP_DIR=$(mktemp -d)
 gh repo clone $REPO $TMP_DIR
-cp -R -P swift/* $TMP_DIR/
-cp swift/.gitignore $TMP_DIR/
+# Mirror this checkout into the cloned package repo. --delete drops renamed or
+# removed Swift sources that would otherwise linger (e.g. DialogFlow.swift after
+# the rename to AgentFlow.swift) and break consumers with "invalid redeclaration".
+# .git / .build are excluded so the clone metadata and any local SPM cache stay put.
+rsync -a --delete \
+	--exclude '.git/' \
+	--exclude '.build/' \
+	swift/ "${TMP_DIR}/"
 cd $TMP_DIR
 
 XCFRAMEWORK_PATH="$FRAMEWORK_NAME.xcframework"
@@ -33,8 +39,10 @@ sed -i '' "s|\"https://github.com/.*\"|\"https://github.com/$REPO/releases/downl
 
 rm -rf Tests/MoonshineVoiceTests/test-assets
 
-git add Package.swift Sources Tests .gitignore
-git commit -a -m "Release v$VERSION"
+# Stage adds, updates, and deletions under the package paths (rsync --delete may
+# have removed files that git still tracked on moonshine-swift).
+git add -A -- .gitignore Package.swift Package.swift.remote README.md Sources Tests
+git commit -m "Release v$VERSION"
 git push origin main
 
 # Remove the tag if it already exists
