@@ -10,6 +10,7 @@ import android.content.Context;
 
 import androidx.test.InstrumentationRegistry;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -24,11 +25,21 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class VoiceCloneTest {
 
     private Context context;
+    /** Kept alive so {@link #ttsHandleOrSkip()} is not freed mid-test. */
+    private TextToSpeech retainedTts;
 
     @Before
     public void setUp() {
         JNI.ensureLibraryLoaded();
         context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+    }
+
+    @After
+    public void tearDown() {
+        if (retainedTts != null) {
+            retainedTts.close();
+            retainedTts = null;
+        }
     }
 
     private static Utils.WavData speech() throws IOException {
@@ -40,11 +51,18 @@ public class VoiceCloneTest {
         TextToSpeech tts = new TextToSpeech(context).language("en");
         try {
             tts.load();
-            return tts.getHandleForTests();
         } catch (RuntimeException e) {
+            tts.close();
             org.junit.Assume.assumeNoException("TTS assets unavailable", e);
             return -1;
         }
+        // Must outlive extractSpeechClip / VoiceClone — closing here invalidates
+        // the native handle the rest of the test still uses.
+        if (retainedTts != null) {
+            retainedTts.close();
+        }
+        retainedTts = tts;
+        return retainedTts.getHandleForTests();
     }
 
     @Test
