@@ -375,58 +375,123 @@ copy_local_swift_package() {
 	rsync -a --exclude '.build' "${REPO_ROOT}/swift/." "${dest}/"
 }
 
-# Rewrite one project.pbxproj so its remote moonshine-swift package reference
-# becomes a local reference at ${relpath}. The XCSwiftPackageProductDependency
-# links by productName, so only the package reference object needs to change.
+# Rewrite one project.pbxproj so its moonshine-swift package reference (remote
+# GitHub package, or an in-tree XCLocalSwiftPackageReference like
+# ../../../swift used by StreamingLatency) becomes a local reference at
+# ${relpath}. The XCSwiftPackageProductDependency links by productName, so only
+# the package reference object needs to change.
 rewrite_pbxproj_to_local_package() {
 	local pbxproj="$1"
 	local relpath="$2"
 	python3 - "$pbxproj" "$relpath" <<'PY'
+import re
 import sys
 
 pbxproj, relpath = sys.argv[1], sys.argv[2]
 with open(pbxproj, "r") as f:
     text = f.read()
 
-marker = ' /* XCRemoteSwiftPackageReference "moonshine-swift" */ = {'
-out = []
-idx = 0
+def replace_package_block(text, marker, relpath):
+    out = []
+    idx = 0
+    changed = 0
+    while True:
+        pos = text.find(marker, idx)
+        if pos == -1:
+            out.append(text[idx:])
+            break
+        # The object id immediately precedes the marker on the same line.
+        line_start = text.rfind("\n", 0, pos) + 1
+        obj_id = text[line_start:pos].strip()
+        out.append(text[idx:line_start])
+        # Brace-match from the opening '{' at the end of the marker.
+        i = pos + len(marker)  # position just after '{'
+        depth = 1
+        while i < len(text) and depth > 0:
+            c = text[i]
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+            i += 1
+        if i < len(text) and text[i] == ";":
+            i += 1
+        out.append(
+            '\t\t{id} /* XCLocalSwiftPackageReference "{name}" */ = {{\n'
+            "\t\t\tisa = XCLocalSwiftPackageReference;\n"
+            '\t\t\trelativePath = "{rel}";\n'
+            "\t\t}};".format(id=obj_id, name=relpath, rel=relpath)
+        )
+        idx = i
+        changed += 1
+    return "".join(out), changed
+
 changed = 0
-while True:
-    pos = text.find(marker, idx)
-    if pos == -1:
-        out.append(text[idx:])
-        break
-    # The 24-char object id immediately precedes the marker on the same line.
-    line_start = text.rfind("\n", 0, pos) + 1
-    obj_id = text[line_start:pos].strip()
-    out.append(text[idx:line_start])
-    # Brace-match from the opening '{' at the end of the marker.
-    i = pos + len(marker)  # position just after '{'
-    depth = 1
-    while i < len(text) and depth > 0:
-        c = text[i]
-        if c == "{":
-            depth += 1
-        elif c == "}":
-            depth -= 1
-        i += 1
-    if i < len(text) and text[i] == ";":
-        i += 1
-    out.append(
-        '\t\t{id} /* XCLocalSwiftPackageReference "{name}" */ = {{\n'
-        "\t\t\tisa = XCLocalSwiftPackageReference;\n"
-        '\t\t\trelativePath = "{rel}";\n'
-        "\t\t}};".format(id=obj_id, name=relpath, rel=relpath)
-    )
-    idx = i
-    changed += 1
+remote_marker = ' /* XCRemoteSwiftPackageReference "moonshine-swift" */ = {'
+text, n = replace_package_block(text, remote_marker, relpath)
+changed += n
 
-if changed == 0:
-    sys.exit(0)
+# Examples that already depend on the in-repo swift/ package (e.g. StreamingLatency
+# via XcodeGen path: ../../../swift) need their relativePath rewritten when the
+# tree is copied into a temp dir where ../../../swift no longer exists.
+def rewrite_locals(src):
+    global changed
+    out = []
+    idx = 0
+    while True:
+        pos = src.find(" /* XCLocalSwiftPackageReference ", idx)
+        if pos == -1:
+            out.append(src[idx:])
+            break
+        line_start = src.rfind("\n", 0, pos) + 1
+        line_end = src.find("\n", pos)
+        line = src[line_start:line_end if line_end != -1 else len(src)]
+        if "Begin XCLocalSwiftPackageReference" in line or "End XCLocalSwiftPackageReference" in line:
+            out.append(src[idx:pos + 1])
+            idx = pos + 1
+            continue
+        if " = {" not in line:
+            out.append(src[idx:pos + 1])
+            idx = pos + 1
+            continue
+        brace = src.find("{", pos)
+        i = brace + 1
+        depth = 1
+        while i < len(src) and depth > 0:
+            c = src[i]
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+            i += 1
+        if i < len(src) and src[i] == ";":
+            i += 1
+        block = src[line_start:i]
+        m = re.search(r"relativePath = ([^;]+);", block)
+        if not m:
+            out.append(src[idx:i])
+            idx = i
+            continue
+        old = m.group(1).strip().strip('"')
+        if old == relpath:
+            out.append(src[idx:i])
+            idx = i
+            continue
+        obj_id = src[line_start:pos].strip()
+        out.append(src[idx:line_start])
+        out.append(
+            '\t\t{id} /* XCLocalSwiftPackageReference "{name}" */ = {{\n'
+            "\t\t\tisa = XCLocalSwiftPackageReference;\n"
+            '\t\t\trelativePath = "{rel}";\n'
+            "\t\t}};".format(id=obj_id, name=relpath, rel=relpath)
+        )
+        changed += 1
+        idx = i
+    return "".join(out)
 
-text = "".join(out)
-# Fix up the (cosmetic) packageReferences entry and section header comments.
+text = rewrite_locals(text)
+
+# Cosmetic packageReferences list entries + section headers for remote→local.
 text = text.replace(
     '/* XCRemoteSwiftPackageReference "moonshine-swift" */',
     '/* XCLocalSwiftPackageReference "{}" */'.format(relpath),
@@ -439,6 +504,23 @@ text = text.replace(
     "/* End XCRemoteSwiftPackageReference section */",
     "/* End XCLocalSwiftPackageReference section */",
 )
+# Also refresh any leftover list-entry comments that still name the old path.
+text = re.sub(
+    r'/\* XCLocalSwiftPackageReference "[^"]*" \*/',
+    '/* XCLocalSwiftPackageReference "{}" */'.format(relpath),
+    text,
+)
+# XcodeGen local packages also emit a PBXFileReference folder pointing at the
+# package path; keep it in sync so the project navigator stays consistent.
+text = re.sub(
+    r'(path = )(?:\.\./)+swift(;)',
+    r"\1{}\2".format(relpath),
+    text,
+)
+
+if changed == 0:
+    sys.exit(0)
+
 with open(pbxproj, "w") as f:
     f.write(text)
 print("rewrote {} package reference(s) in {}".format(changed, pbxproj))
