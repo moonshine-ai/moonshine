@@ -2,14 +2,15 @@
 setlocal enabledelayedexpansion
 
 REM Runs the Python tests against a freshly built wheel. That is everything in
-REM python\tests except test_docs.py, which scripts\test-docs.sh runs separately
-REM because it needs the notebook and the nbmake plugin. This is the Windows
-REM counterpart to scripts\test-python.sh.
+REM language-bindings\python\tests except test_docs.py, which scripts\test-docs.sh
+REM runs separately because it needs the notebook and the nbmake plugin. This is
+REM the Windows counterpart to scripts\test-python.sh.
 REM
 REM Usage:
 REM   scripts\test-python.bat                Build the wheel first, then test.
 REM   scripts\test-python.bat --skip-build   Reuse the wheel already in
-REM                                          python\dist\ (used by the Windows CI
+REM                                          language-bindings\python\dist\ (used
+REM                                          by the Windows CI
 REM                                          orchestrator, which builds the wheel
 REM                                          in the preceding build-pip step).
 
@@ -18,7 +19,7 @@ pushd "%~dp0"
 set "SCRIPTS_DIR=%CD%"
 popd
 for %%i in ("%SCRIPTS_DIR%\..") do set "REPO_ROOT_DIR=%%~fi"
-set "PYTHON_DIR=%REPO_ROOT_DIR%\python"
+set "PYTHON_DIR=%REPO_ROOT_DIR%\language-bindings\python"
 
 REM Build the wheel unless the caller says to reuse the existing one.
 if /I not "%1"=="--skip-build" (

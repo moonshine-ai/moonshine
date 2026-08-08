@@ -8,7 +8,7 @@ popd
 
 REM Get repository root (parent of scripts directory)
 for %%i in ("%SCRIPTS_DIR%\..") do set "REPO_ROOT_DIR=%%~fi"
-set "PYTHON_DIR=%REPO_ROOT_DIR%\python"
+set "PYTHON_DIR=%REPO_ROOT_DIR%\language-bindings\python"
 
 set "CORE_DIR=%REPO_ROOT_DIR%\core"
 set "CORE_BUILD_DIR=%CORE_DIR%\build"
