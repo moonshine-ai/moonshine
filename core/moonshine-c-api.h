@@ -107,6 +107,8 @@ extern "C" {
 #define MOONSHINE_MODEL_ARCH_TINY (0)
 #define MOONSHINE_MODEL_ARCH_BASE (1)
 #define MOONSHINE_MODEL_ARCH_TINY_STREAMING (2)
+/* Note: BASE_STREAMING is defined for future use but is not currently
+   published in the model catalog.                                           */
 #define MOONSHINE_MODEL_ARCH_BASE_STREAMING (3)
 #define MOONSHINE_MODEL_ARCH_SMALL_STREAMING (4)
 #define MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING (5)
@@ -1056,7 +1058,8 @@ MOONSHINE_EXPORT int32_t moonshine_get_tts_voices(
    do are honored:
      - ``model_arch``: one of the MOONSHINE_MODEL_ARCH_* constants as a decimal
        string. When omitted, the default (first) model for the language is
-       used.
+       used. Note: MOONSHINE_MODEL_ARCH_BASE_STREAMING is defined but not
+       currently published in the model catalog.
      - ``word_timestamps`` (bool): when true, the optional attention decoder
        (``decoder_kv_with_attention.ort`` for streaming, or
        ``decoder_with_attention.ort`` for non-streaming) is included for
