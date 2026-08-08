@@ -35,7 +35,7 @@ if [ -n "${MOONSHINE_LIBRARY_ARCHIVE:-}" ]; then
     echo "Using local library archive ${MOONSHINE_LIBRARY_ARCHIVE}"
     tar xzf "${MOONSHINE_LIBRARY_ARCHIVE}" -C moonshine-voice --strip-components=1
 else
-    curl -f -O -L https://github.com/moonshine-ai/moonshine/releases/download/v0.1.1/moonshine-voice-${PLATFORM}.tar.gz
+    curl -f -O -L https://github.com/moonshine-ai/moonshine/releases/download/v0.1.2/moonshine-voice-${PLATFORM}.tar.gz
     tar xzf moonshine-voice-${PLATFORM}.tar.gz -C moonshine-voice --strip-components=1
     rm moonshine-voice-${PLATFORM}.tar.gz
 fi
