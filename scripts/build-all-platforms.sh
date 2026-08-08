@@ -434,11 +434,20 @@ PY
     # than masking it behind the exit code of the last chained command. The
     # sync command is expanded locally (via the single-quote break) so PowerShell
     # variables like $LASTEXITCODE stay intact for the remote shell.
-    local windows_remote_cmd="${windows_env_bootstrap}"'try { cd moonshine `
+    #
+    # The orchestrator's exit code is captured and re-raised explicitly rather
+    # than left to fall out of whatever ran last. The finally block deletes a
+    # credentials file that only an upload run creates, so on a dry run it
+    # removes a path that is not there and the session exits non-zero on the
+    # strength of that alone -- failing the stage immediately after the CI run
+    # reported success.
+    local windows_remote_cmd="${windows_env_bootstrap}"'$rc = 1; try { cd moonshine `
       ; '"${WIN_GIT_SYNC}"' `
       ; if ($LASTEXITCODE -ne 0) { Write-Host "git sync failed"; exit 1 } `
       ; pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\run-windows-ci.ps1'"${WINDOWS_UPLOAD_FLAG}"' `
-      } finally { Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:USERPROFILE ".moonshine-release-env.ps1") }'
+      ; $rc = $LASTEXITCODE `
+      } finally { Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:USERPROFILE ".moonshine-release-env.ps1") } `
+      ; exit $rc'
 
     # Transient SSH/network disconnects (not build defects) have killed runs
     # mid-compile. The remote build is a clean rebuild and therefore idempotent,
