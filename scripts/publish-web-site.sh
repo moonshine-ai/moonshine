@@ -98,7 +98,7 @@ TRANSFERRED=$(collect_transferred "${LOG}")
 
 # Same-origin copy of the WASM binding. Deployed demos load /wasm/dist so
 # pthread Workers are not cross-origin under COOP/COEP (see pageConfig).
-WASM_DIST="${ROOT}/wasm/dist"
+WASM_DIST="${ROOT}/language-bindings/wasm/dist"
 if [[ -f "${WASM_DIST}/index.js" && -f "${WASM_DIST}/moonshine.wasm" ]]; then
   : >"${LOG}"
   echo "Sync ${WASM_DIST} -> ${DEST}/wasm/dist" >&2

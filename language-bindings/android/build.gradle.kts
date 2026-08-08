@@ -21,6 +21,8 @@ android {
             // covers legacy 32-bit ARM devices. Each ABI needs a matching
             // libonnxruntime.so under
             // core/third-party/onnxruntime/lib/android/<abi>/ (see issue #174).
+            // Paths below are relative to this file, which is the Gradle root at
+            // language-bindings/android/; ../../ is the repository root.
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
         externalNativeBuild {
@@ -32,18 +34,18 @@ android {
 
     sourceSets {
         getByName("main") {
-            java.srcDirs("android/java/main")
+            java.srcDirs("java/main")
             // The sources live outside the default src/main tree, so the
             // manifest beside them has to be pointed at explicitly or the
             // library's permissions and MicrophonePermissionActivity never
             // reach the consuming app.
-            manifest.srcFile("android/java/main/AndroidManifest.xml")
+            manifest.srcFile("java/main/AndroidManifest.xml")
         }
         getByName("androidTest") {
-            java.srcDirs("android/java/androidTest")
+            java.srcDirs("java/androidTest")
             // Fixtures live in the repo test-assets/ tree (ORT models are fetched
             // via scripts/fetch-voice-assets.sh, not Git LFS).
-            assets.srcDirs("test-assets")
+            assets.srcDirs("../../test-assets")
         }
     }
     buildTypes {
@@ -61,7 +63,7 @@ android {
     }
     externalNativeBuild {
         cmake {
-            path = file("core/CMakeLists.txt")
+            path = file("../../core/CMakeLists.txt")
             version = "3.22.1"
         }
     }

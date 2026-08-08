@@ -24,7 +24,7 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "build:core": "../scripts/build-wasm.sh",
+    "build:core": "../../scripts/build-wasm.sh",
     "build:ts": "tsc -p tsconfig.json",
     "build": "npm run build:ts",
     "docs": "typedoc",
@@ -50,7 +50,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/moonshine-ai/moonshine.git",
-    "directory": "wasm"
+    "directory": "language-bindings/wasm"
   },
   "devDependencies": {
     "puppeteer-core": "^25.3.0",

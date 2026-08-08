@@ -1,7 +1,7 @@
 #!/bin/bash -ex
 
 # Runs the Python tests against a freshly built wheel. That is everything in
-# python/tests except test_docs.py, which scripts/test-docs.sh runs separately
+# language-bindings/python/tests except test_docs.py, which scripts/test-docs.sh runs separately
 # because it needs the notebook and the nbmake plugin.
 #
 # Naming the directory rather than individual files means a new test file is
@@ -11,11 +11,11 @@
 # Usage:
 #   ./scripts/test-python.sh                Build the wheel first, then test.
 #   ./scripts/test-python.sh --skip-build   Reuse the wheel already in
-#                                           python/dist/ (faster iteration).
+#                                           language-bindings/python/dist/ (faster iteration).
 
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR=$(dirname $SCRIPTS_DIR)
-PYTHON_DIR=${REPO_ROOT_DIR}/python
+PYTHON_DIR=${REPO_ROOT_DIR}/language-bindings/python
 
 if [[ "$1" != "--skip-build" ]]; then
     ${SCRIPTS_DIR}/build-pip.sh

@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 export const DIST = path.resolve(here, '..', 'dist');
-export const REPO_ROOT = path.resolve(here, '..', '..');
+export const REPO_ROOT = path.resolve(here, '..', '..', '..');
 export const TEST_ASSETS = path.join(REPO_ROOT, 'test-assets');
 export const TTS_DATA = path.join(REPO_ROOT, 'core', 'moonshine-tts', 'data');
 export const TINY_EN_DIR = path.join(TEST_ASSETS, 'tiny-en');

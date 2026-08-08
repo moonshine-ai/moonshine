@@ -1,21 +1,21 @@
 #!/bin/bash -ex
 
 # Tests that the code in the documentation still works, by executing the
-# fenced code blocks in README.md and python/README.md (see
-# python/tests/test_docs.py) and running the getting-started notebook end to
+# fenced code blocks in README.md and language-bindings/python/README.md (see
+# language-bindings/python/tests/test_docs.py) and running the getting-started notebook end to
 # end, all against a freshly built wheel.
 #
-# The Python module tests (python/tests/test_modules.py) are run separately
+# The Python module tests (language-bindings/python/tests/test_modules.py) are run separately
 # by scripts/test-python.sh.
 #
 # Usage:
 #   ./scripts/test-docs.sh                Build the wheel first, then test.
 #   ./scripts/test-docs.sh --skip-build   Reuse the wheel already in
-#                                         python/dist/ (faster iteration).
+#                                         language-bindings/python/dist/ (faster iteration).
 
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR=$(dirname $SCRIPTS_DIR)
-PYTHON_DIR=${REPO_ROOT_DIR}/python
+PYTHON_DIR=${REPO_ROOT_DIR}/language-bindings/python
 
 if [[ "$1" != "--skip-build" ]]; then
     ${SCRIPTS_DIR}/build-pip.sh

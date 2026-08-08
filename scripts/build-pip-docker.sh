@@ -27,8 +27,13 @@ else
 	PIP_ARGS=""
 fi
 
-docker build --platform linux/amd64 -t moonshine-ubuntu-amd64 .
-docker build --platform linux/arm64 -t moonshine-ubuntu-arm64 .
+# The build context has to stay the repo root: the Dockerfile copies .pypirc
+# from there. Passing it explicitly also removes the old dependency on the
+# caller's working directory.
+docker build --platform linux/amd64 -f "${SCRIPTS_DIR}/Dockerfile" \
+	-t moonshine-ubuntu-amd64 "${REPO_ROOT_DIR}"
+docker build --platform linux/arm64 -f "${SCRIPTS_DIR}/Dockerfile" \
+	-t moonshine-ubuntu-arm64 "${REPO_ROOT_DIR}"
 
 docker run --rm -v ${REPO_ROOT_DIR}:/home/user/moonshine moonshine-ubuntu-amd64 \
 	/bin/bash -c "cd /home/user/moonshine && scripts/build-pip.sh ${PIP_ARGS}"

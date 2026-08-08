@@ -24,13 +24,18 @@ git clone --mirror git@github.com:moonshine-ai/moonshine.git moonshine-lfs-purge
 cd moonshine-lfs-purge.git
 
 # Export listed paths out of LFS / remove their blobs from history.
-# Adjust the path list to match what was deleted from HEAD.
+# Adjust the path list to match what was deleted from HEAD. Patterns match paths
+# as they were in each historical commit, so the locations the Python and Android
+# assets had before the move under language-bindings/ are listed alongside the
+# current ones.
 git lfs migrate export --everything \
   --include="core/moonshine-tts/data/**,\
 examples/**/tts-data/**,\
 test-assets/**/*.ort,\
 test-assets/tiny-en/tokenizer.bin,\
 test-assets/tiny-streaming-en/**,\
+language-bindings/python/src/moonshine_voice/assets/tiny-en/*.ort,\
+language-bindings/android/java/androidTest/assets/tiny-en/*,\
 python/src/moonshine_voice/assets/tiny-en/*.ort,\
 android/java/androidTest/assets/tiny-en/*"
 ```

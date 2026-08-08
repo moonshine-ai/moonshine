@@ -80,7 +80,7 @@ for PLATFORM_PATH in "${EXAMPLES_DIR}"/*; do
 		[[ -d "${PROJECT_PATH}" ]] || continue
 		NAME="$(basename "${PROJECT_PATH}")"
 		# Internal latency harness, not a user-facing example (uses in-tree
-		# ../../../swift). Exercised by scripts/test-mobile-latency.sh instead.
+		# ../../../language-bindings/swift). Exercised by scripts/test-mobile-latency.sh instead.
 		if [[ "${PLATFORM}" == "ios" && "${NAME}" == "StreamingLatency" ]]; then
 			continue
 		fi

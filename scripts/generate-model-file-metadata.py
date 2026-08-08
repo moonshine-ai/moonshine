@@ -29,7 +29,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-PYTHON_SRC = REPO_ROOT / "python" / "src"
+PYTHON_SRC = REPO_ROOT / "language-bindings" / "python" / "src"
 OUTPUT_PATH = REPO_ROOT / "core" / "moonshine-model-file-metadata.generated.cpp"
 
 sys.path.insert(0, str(PYTHON_SRC))

@@ -20,7 +20,8 @@
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR=$(dirname $SCRIPTS_DIR)
 
-cd ${REPO_ROOT_DIR}
+# The Android library is its own Gradle root under language-bindings/android.
+cd ${REPO_ROOT_DIR}/language-bindings/android
 
 case "$1" in
 publish)

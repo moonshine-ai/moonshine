@@ -14,7 +14,7 @@ set -o pipefail
 
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR=$(dirname "${SCRIPTS_DIR}")
-WASM_DIR="${REPO_ROOT_DIR}/wasm"
+WASM_DIR="${REPO_ROOT_DIR}/language-bindings/wasm"
 DIST_DIR="${WASM_DIR}/dist"
 
 DO_BUILD=""

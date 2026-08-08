@@ -5,7 +5,7 @@
 # fills local trees used by offline tests, examples, and CDN publish:
 #   test-assets/…              STT / diarization / embedding fixtures
 #   core/moonshine-tts/data/…  TTS + G2P bundles (READMEs stay in git)
-#   android/java/androidTest/assets/tiny-en/   (optional; mirrors CDN tiny-en)
+#   language-bindings/android/java/androidTest/assets/tiny-en/   (optional; mirrors CDN tiny-en)
 #
 # Primary source: CDN. Optional fallback for the full TTS tree: Hugging Face
 #   moonshine-ai/moonshine-voice-assets  (paths match CDN under tts/ and model/).
@@ -112,12 +112,12 @@ fetch_test_assets() {
     "${ta}/spelling_cnn.ort"
 }
 
-# androidTest historically bundled its own tiny-en; build.gradle.kts now uses
+# androidTest historically bundled its own tiny-en; language-bindings/android/build.gradle.kts now uses
 # test-assets as the androidTest asset root. Keep this target for anyone who
-# still points at android/java/androidTest/assets explicitly.
+# still points at language-bindings/android/java/androidTest/assets explicitly.
 fetch_android_test() {
   echo "=== android instrumented-test tiny-en (CDN) ==="
-  local dest="${ROOT}/android/java/androidTest/assets/tiny-en"
+  local dest="${ROOT}/language-bindings/android/java/androidTest/assets/tiny-en"
   fetch_cdn "model/tiny-en/quantized/tiny-en/encoder_model.ort" \
     "${dest}/encoder_model.ort"
   fetch_cdn "model/tiny-en/quantized/tiny-en/decoder_model_merged.ort" \

@@ -12,7 +12,7 @@ settings:
     TARGETED_DEVICE_FAMILY: "1,2"
 packages:
   Moonshine:
-    path: ../../../swift
+    path: ../../../language-bindings/swift
 targets:
   StreamingLatency:
     type: application

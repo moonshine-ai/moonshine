@@ -20,7 +20,7 @@
 #   --ios-only                Only run the iOS stage
 #   --skip-macos              Skip the MacBook Pro stage
 #   --skip-build-swift        Do not run build-swift.sh before iOS/macOS tests
-#                             (assumes swift/Moonshine.xcframework is current)
+#                             (assumes language-bindings/swift/Moonshine.xcframework is current)
 #   --update-readme           Rewrite MacBook Pro / Pixel / iPad Streaming
 #                             latency cells in README.md from measured results
 #                             (only when a cell changes by more than 5%)
@@ -287,7 +287,7 @@ run_android() {
 	log "Android target: ${ANDROID_SERIAL}"
 	local out="${RESULTS_DIR}/android.log"
 	(
-		cd "${REPO_ROOT}"
+		cd "${REPO_ROOT}/language-bindings/android"
 		./gradlew -Pandroid.useAndroidX=true \
 			connectedAndroidTest \
 			-Pandroid.testInstrumentationRunnerArguments.class=ai.moonshine.voice.StreamingLatencyTest \
@@ -295,7 +295,7 @@ run_android() {
 	) 2>&1 | tee "${out}"
 
 	local logcat_hits
-	logcat_hits="$(find "${REPO_ROOT}/build/outputs/androidTest-results" \
+	logcat_hits="$(find "${REPO_ROOT}/language-bindings/android/build/outputs/androidTest-results" \
 		-name 'logcat-*StreamingLatency*' -type f 2>/dev/null | sort | tail -n1 || true)"
 	if [[ -n "${logcat_hits}" ]]; then
 		cat "${logcat_hits}" >>"${out}"
@@ -314,17 +314,17 @@ run_android() {
 
 ensure_swift_xcframework() {
 	if [[ "${SKIP_BUILD_SWIFT}" -eq 1 ]]; then
-		[[ -d "${REPO_ROOT}/swift/Moonshine.xcframework" ]] \
-			|| die "swift/Moonshine.xcframework missing; omit --skip-build-swift"
+		[[ -d "${REPO_ROOT}/language-bindings/swift/Moonshine.xcframework" ]] \
+			|| die "language-bindings/swift/Moonshine.xcframework missing; omit --skip-build-swift"
 	else
 		log "building Swift xcframework (needed for on-device / macOS tests)"
 		"${SCRIPT_DIR}/build-swift.sh"
 	fi
 	# Optional local two_cities.wav for faster macOS runs; models download from CDN.
 	if [[ -f "${REPO_ROOT}/test-assets/two_cities.wav" ]]; then
-		mkdir -p "${REPO_ROOT}/swift/Tests/MoonshineVoiceTests/test-assets"
+		mkdir -p "${REPO_ROOT}/language-bindings/swift/Tests/MoonshineVoiceTests/test-assets"
 		cp -f "${REPO_ROOT}/test-assets/two_cities.wav" \
-			"${REPO_ROOT}/swift/Tests/MoonshineVoiceTests/test-assets/two_cities.wav"
+			"${REPO_ROOT}/language-bindings/swift/Tests/MoonshineVoiceTests/test-assets/two_cities.wav"
 	fi
 }
 
@@ -334,7 +334,7 @@ run_macos() {
 
 	local out="${RESULTS_DIR}/macos.log"
 	(
-		cd "${REPO_ROOT}/swift"
+		cd "${REPO_ROOT}/language-bindings/swift"
 		swift test --filter MoonshineVoiceTests.StreamingLatencyTests/testStreamingLatencyTwoCities
 	) 2>&1 | tee "${out}"
 

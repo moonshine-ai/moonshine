@@ -82,7 +82,7 @@ def embedded_models(cache_dir):
 
 def catalog_model_urls():
     """Every ``.ort`` URL the native catalog can hand a client."""
-    sys.path.insert(0, str(REPO / "python" / "src"))
+    sys.path.insert(0, str(REPO / "language-bindings" / "python" / "src"))
     from moonshine_voice.download import (  # noqa: E402
         _embedding_catalog,
         _stt_catalog,

@@ -36,7 +36,7 @@
 #
 # Environment:
 #   ANDROID_SDK_ROOT / ANDROID_HOME  Android SDK (default: ~/Library/Android/sdk)
-#   ANDROID_NDK_VERSION              NDK to build with (default: matches build.gradle.kts)
+#   ANDROID_NDK_VERSION              NDK to build with (default: matches language-bindings/android/build.gradle.kts)
 #   ORT_ANDROID_CONFIG               Release (default) or MinSizeRel
 #   MOONSHINE_ORT_ROOT               where the ORT checkout and build trees live
 set -euo pipefail
@@ -47,7 +47,7 @@ source "${REPO_ROOT_DIR}/scripts/ort-build-common.sh"
 
 DEST_ROOT="${REPO_ROOT_DIR}/core/third-party/onnxruntime/lib/android"
 
-# minSdk in build.gradle.kts. Building against a higher API than the app
+# minSdk in language-bindings/android/build.gradle.kts. Building against a higher API than the app
 # supports would leave the library referencing symbols absent on older devices.
 ANDROID_API="${ANDROID_API:-26}"
 ANDROID_NDK_VERSION="${ANDROID_NDK_VERSION:-28.2.13676358}"

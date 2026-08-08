@@ -1,4 +1,4 @@
-![Moonshine Voice Logo](images/logo.png)
+![Moonshine Voice Logo](docs/images/logo.png)
 
 # Moonshine Voice
 
@@ -208,7 +208,7 @@ However, as we built applications that needed a live voice interface we found we
 - **Whisper doesn't cache anything**. Another common requirement for voice interfaces is that they display feedback as the user is talking, so that they know the app is listening and understanding them. This means calling the speech to text model repeatedly over time as a sentence is spoken. Most of the audio input is the same, with only a short addition to the end. Even though a lot of the input is constant, Whisper starts from scratch every time, doing a lot of redundant work on audio that it has seen before. Like the fixed input window, this unnecessary latency impairs the user experience.
 - **Whisper supports a lot of languages poorly**. Whisper's multilingual support is an incredible feat of engineering, and demonstrated a single model could handle many languages, and even offer translations. This chart from OpenAI ([raw data in Appendix D-2.4](https://cdn.openai.com/papers/whisper.pdf)) shows the drop-off in Word Error Rate (WER) with the very largest 1.5 billion parameter model.
 
-![Language Chart](images/lang-chart.png)
+![Language Chart](docs/images/lang-chart.png)
 
 82 languages are listed, but only 33 have sub-20% WER (what we consider usable). For the Base model size commonly used on edge devices, only 5 languages are under 20% WER. Asian languages like Korean and Japanese stand out as the native tongue of large markets with a lot of tech innovation, but Whisper doesn't offer good enough accuracy to use in most applications The proprietary in-house versions of Whisper that are available through OpenAI's cloud API seem to offer better accuracy, but aren't available as open models.
 
@@ -276,31 +276,31 @@ Traditionally, adding a voice interface to an application or product required in
 
 Moonshine Voice includes all of these stages in a single library, and abstracts away everything but the essential information your application needs to respond to user speech, whether you want to transcribe it or trigger actions.
 
-![Moonshine Voice Architecture](images/moonshine-voice-architecture.png)
+![Moonshine Voice Architecture](docs/images/moonshine-voice-architecture.png)
 
 Most developers should be able to treat the library as a black box that tells them when something interesting has happened, using our event-based classes to implement application logic. Of course the framework is fully open source, so speech experts can dive as deep under the hood as they'd like, but it's not necessary to use it.
 
 ### Concepts
 
-A [**Transcriber**](python/src/moonshine_voice/transcriber.py#L66) takes in audio input and turns any speech into text. This is the first object you'll need to create to use Moonshine, and you'll give it a path to [the models you've downloaded](#downloading-models).
+A [**Transcriber**](language-bindings/python/src/moonshine_voice/transcriber.py#L66) takes in audio input and turns any speech into text. This is the first object you'll need to create to use Moonshine, and you'll give it a path to [the models you've downloaded](#downloading-models).
 
-A [**MicTranscriber**](python/src/moonshine_voice/mic_transcriber.py#L39) is a helper class based on the general transcriber that takes care of connecting to a microphone using your platform's built-in support (for example sounddevice in Python) and then feeding the audio in as it's captured.
+A [**MicTranscriber**](language-bindings/python/src/moonshine_voice/mic_transcriber.py#L39) is a helper class based on the general transcriber that takes care of connecting to a microphone using your platform's built-in support (for example sounddevice in Python) and then feeding the audio in as it's captured.
 
-A [**Stream**](python/src/moonshine_voice/transcriber.py#L297) is a handler for audio input. The reason streams exist is because you may want to process multiple audio inputs at once, and a transcriber can support those through multiple streams, without duplicating the model resources. If you only have one input, the transcriber class includes the same methods (start/stop/add_audio) as a stream, and you can use that interface instead and forget about streams.
+A [**Stream**](language-bindings/python/src/moonshine_voice/transcriber.py#L297) is a handler for audio input. The reason streams exist is because you may want to process multiple audio inputs at once, and a transcriber can support those through multiple streams, without duplicating the model resources. If you only have one input, the transcriber class includes the same methods (start/stop/add_audio) as a stream, and you can use that interface instead and forget about streams.
 
-A [**TranscriptLine**](python/src/moonshine_voice/moonshine_api.py#L51) is a data structure holding information about one line in the transcript. When someone is speaking, the library waits for short pauses (where punctuation might go in written language) and starts a new line. These aren't exactly sentences, since a speech pause isn't a sure sign of the end of a sentence, but this does break the spoken audio into segments that can be considered phrases. A line includes state such as whether the line has just started, is still being spoken, or is complete, along with its start time and duration.
+A [**TranscriptLine**](language-bindings/python/src/moonshine_voice/moonshine_api.py#L51) is a data structure holding information about one line in the transcript. When someone is speaking, the library waits for short pauses (where punctuation might go in written language) and starts a new line. These aren't exactly sentences, since a speech pause isn't a sure sign of the end of a sentence, but this does break the spoken audio into segments that can be considered phrases. A line includes state such as whether the line has just started, is still being spoken, or is complete, along with its start time and duration.
 
-A [**Transcript**](python/src/moonshine_voice/moonshine_api.py#67) is a list of lines in time order holding information about what text has already been recognized, along with other state like when it was captured.
+A [**Transcript**](language-bindings/python/src/moonshine_voice/moonshine_api.py#67) is a list of lines in time order holding information about what text has already been recognized, along with other state like when it was captured.
 
-A [**TranscriptEvent**](python/src/moonshine_voice/transcriber.py#L22) contains information about changes to the transcript. Events include a new line being started, the text in a line being updated, and a line being completed. The event object includes the transcript line it's referring to as a member, holding the latest state of that line.
+A [**TranscriptEvent**](language-bindings/python/src/moonshine_voice/transcriber.py#L22) contains information about changes to the transcript. Events include a new line being started, the text in a line being updated, and a line being completed. The event object includes the transcript line it's referring to as a member, holding the latest state of that line.
 
-A [**TranscriptEventListener**](python/src/moonshine_voice/transcriber.py#L266) is a protocol that allows app-defined functions to be called when transcript events happen. This is the main way that most applications interact with the results of the transcription. When live speech is happening, applications usually need to respond or display results as new speech is recognized, and this approach allows you to handle those changes in a similar way to events from traditional user interfaces like touch screen gestures or mouse clicks on buttons.
+A [**TranscriptEventListener**](language-bindings/python/src/moonshine_voice/transcriber.py#L266) is a protocol that allows app-defined functions to be called when transcript events happen. This is the main way that most applications interact with the results of the transcription. When live speech is happening, applications usually need to respond or display results as new speech is recognized, and this approach allows you to handle those changes in a similar way to events from traditional user interfaces like touch screen gestures or mouse clicks on buttons.
 
-A [**TextToSpeech**](python/src/moonshine_voice/tts.py#L20) object synthesizes audio for playback to the user.
+A [**TextToSpeech**](language-bindings/python/src/moonshine_voice/tts.py#L20) object synthesizes audio for playback to the user.
 
-An [**AgentFlow**](python/src/moonshine_voice/agent_flow.py#L547) object manages conversations between the user and an agent. It opens the transcriber, microphone, and speech synthesizer it needs itself, and invokes a callback whenever someone says something close in meaning to a phrase you registered — the basis of voice command recognition.
+An [**AgentFlow**](language-bindings/python/src/moonshine_voice/agent_flow.py#L547) object manages conversations between the user and an agent. It opens the transcriber, microphone, and speech synthesizer it needs itself, and invokes a callback whenever someone says something close in meaning to a phrase you registered — the basis of voice command recognition.
 
-A [**Dialog**](python/src/moonshine_voice/agent_flow.py#L408) object is created for each conversational exchange, and allows the agent to hold a multi-step discussion with the user.
+A [**Dialog**](language-bindings/python/src/moonshine_voice/agent_flow.py#L408) object is created for each conversational exchange, and allows the agent to hold a multi-step discussion with the user.
 
 ### Getting Started with Transcription
 
@@ -647,7 +647,7 @@ You can also try cloning from the command line. Since you won't always have easy
 
 <!-- doc-test: parse-only -->
 ```bash
-curl -O -L 'https://github.com/moonshine-ai/moonshine/raw/refs/heads/main/python/src/moonshine_voice/assets/clone-test.wav'
+curl -O -L 'https://github.com/moonshine-ai/moonshine/raw/refs/heads/main/language-bindings/python/src/moonshine_voice/assets/clone-test.wav'
 
 python3 -m moonshine_voice.tts \
   --clone clone-test.wav \
@@ -892,7 +892,7 @@ After that completes you should have a set of binary executables you can run on 
 
 There are various scripts for building for different platforms and languages, but to see examples of how to build for all of the supported systems you should look at [`scripts/build-all-platforms.sh`](scripts/build-all-platforms.sh). This is the script we call for every release, and it builds all of the artifacts we upload to the various package manager systems. [`docs/release-process.md`](docs/release-process.md) describes how releases are branched and versioned: `main` always matches the most recently published binaries, and development happens on a `dev-v<version>` candidate branch.
 
-The different platforms and languages have a layer on top of the C interfaces to enable idiomatic use of the library within the different environments. The major systems have their own top-level folders in this repo, for example: [`python`](python/), [`android`](android/), and [`swift`](swift/) for iOS and MacOS. This is where you'll find the code that calls the underlying core library routines, and handles the event system for each platform.
+The different platforms and languages have a layer on top of the C interfaces to enable idiomatic use of the library within the different environments. The major systems each have their own folder under [`language-bindings/`](language-bindings/), for example: [`language-bindings/python`](language-bindings/python/), [`language-bindings/android`](language-bindings/android/), and [`language-bindings/swift`](language-bindings/swift/) for iOS and MacOS. This is where you'll find the code that calls the underlying core library routines, and handles the event system for each platform.
 
 #### Porting
 

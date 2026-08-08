@@ -49,7 +49,9 @@ Third-party and vendored code (`core/third-party/` and `core/cpp-annote/`) is
 
 ## Formatting
 
-- Formatting is **Google style**, defined by the repo's `.clang-format`.
+- Formatting is **Google style**, defined by `core/.clang-format`. `micro/` keeps
+  its own identical copy, since clang-format only discovers configs by walking up
+  from each source file.
 - Run `scripts/format-core.sh` to reformat first-party `core/` code in place.
   It runs anywhere `clang-format` is installed (including macOS) and never
   touches vendored trees.

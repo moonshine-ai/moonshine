@@ -25,13 +25,13 @@ set -euo pipefail
 KNOWN_FILES=(
 	./README.md
 	./core/CMakeLists.txt
-	./python/pyproject.toml
-	./python/setup.py
-	./python/src/moonshine_voice/__init__.py
-	./build.gradle.kts
-	./wasm/package.json
-	./wasm/package-lock.json
-	./wasm/tests/web-examples.integration.test.mjs
+	./language-bindings/python/pyproject.toml
+	./language-bindings/python/setup.py
+	./language-bindings/python/src/moonshine_voice/__init__.py
+	./language-bindings/android/build.gradle.kts
+	./language-bindings/wasm/package.json
+	./language-bindings/wasm/package-lock.json
+	./language-bindings/wasm/tests/web-examples.integration.test.mjs
 	./examples/web/assets/snippets.js
 	./examples/macos/BasicTranscription/BasicTranscription.xcodeproj/project.pbxproj
 	./examples/macos/BasicTranscription/Package.swift

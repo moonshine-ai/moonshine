@@ -41,7 +41,8 @@
 namespace {
 
 // Canonical TTS/G2P asset keys are relative to this CDN tree (mirrors
-// TTS_CDN_BASE_URL in python/src/moonshine_voice/download.py).
+// TTS_CDN_BASE_URL in
+// language-bindings/python/src/moonshine_voice/download.py).
 constexpr const char* kTtsCdnBase = "https://download.moonshine.ai/tts/";
 
 void print_usage() {

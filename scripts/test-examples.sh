@@ -32,10 +32,10 @@
 #     repository (via a Gradle init script) so it takes precedence, and syncs each
 #     example's requested moonshine-voice version to this checkout's coordinates().
 #     The example apps' minSdk (like the library's) comes from their Gradle files.
-#   - iOS/macOS: copies this checkout's swift/ package into the temp iOS tree and
+#   - iOS/macOS: copies this checkout's language-bindings/swift/ package into the temp iOS tree and
 #     rewrites each example's project.pbxproj to reference that local package
 #     (XCLocalSwiftPackageReference) instead of the remote moonshine-swift Git
-#     package. Requires swift/Moonshine.xcframework to exist; when it is missing,
+#     package. Requires language-bindings/swift/Moonshine.xcframework to exist; when it is missing,
 #     scripts/build-swift.sh is run to build it first.
 #   - C++: hands download-library.sh a moonshine-voice-<platform>.tar.gz packaged
 #     from this checkout by scripts/publish-binary.sh, instead of letting it fetch
@@ -101,7 +101,7 @@ Implies repository root is the parent of scripts/.
 
 --local-library: implies --local-examples. Build the Android examples against
 this checkout's AAR (installed into the local Maven cache) and the iOS examples
-against this checkout's swift/ package (referenced locally in place of the remote
+against this checkout's language-bindings/swift/ package (referenced locally in place of the remote
 moonshine-swift package), instead of the published artifacts. Use this to verify
 library changes (e.g. a new API or a lowered minSdk) before publishing.
 
@@ -302,12 +302,13 @@ portable_sed_inplace() {
 	done
 }
 
-# Read the moonshine-voice version this checkout would publish, parsed from the
-# root build.gradle.kts coordinates("ai.moonshine", "moonshine-voice", "X.Y.Z").
+# Read the moonshine-voice version this checkout would publish, parsed from
+# language-bindings/android/build.gradle.kts coordinates("ai.moonshine", "moonshine-voice", "X.Y.Z").
 read_library_version() {
 	local version
-	version="$(sed -n 's/.*coordinates("ai.moonshine", *"moonshine-voice", *"\([^"]*\)").*/\1/p' "${REPO_ROOT}/build.gradle.kts" | head -n1)"
-	[[ -n "${version}" ]] || die "could not parse moonshine-voice version from ${REPO_ROOT}/build.gradle.kts"
+	local gradle_file="${REPO_ROOT}/language-bindings/android/build.gradle.kts"
+	version="$(sed -n 's/.*coordinates("ai.moonshine", *"moonshine-voice", *"\([^"]*\)").*/\1/p' "${gradle_file}" | head -n1)"
+	[[ -n "${version}" ]] || die "could not parse moonshine-voice version from ${gradle_file}"
 	echo "${version}"
 }
 
@@ -358,23 +359,23 @@ apply_local_library_overrides() {
 	done < <(find "${android_root}" -type f -name libs.versions.toml 2>/dev/null)
 }
 
-# Directory name the local swift/ package is copied to inside the iOS tree.
+# Directory name the local language-bindings/swift/ package is copied to inside the iOS tree.
 LOCAL_SWIFT_PACKAGE_DIR="local-moonshine-swift"
 
 # Ensure a locally-built XCFramework exists for the swift package to wrap. The
 # example apps consume the MoonshineVoice product, whose binaryTarget points at
-# swift/Moonshine.xcframework; build it (via build-swift.sh) if it is missing.
+# language-bindings/swift/Moonshine.xcframework; build it (via build-swift.sh) if it is missing.
 ensure_local_swift_package() {
-	local framework="${REPO_ROOT}/swift/Moonshine.xcframework"
+	local framework="${REPO_ROOT}/language-bindings/swift/Moonshine.xcframework"
 	if [[ -d "${framework}" ]]; then
 		log "using existing ${framework} (run scripts/build-swift.sh to refresh if core changed)"
 		return 0
 	fi
-	log "swift/Moonshine.xcframework missing — building it via scripts/build-swift.sh"
+	log "language-bindings/swift/Moonshine.xcframework missing — building it via scripts/build-swift.sh"
 	"${SCRIPT_DIR}/build-swift.sh"
 }
 
-# Copy this checkout's swift/ package into the iOS tree so the examples can
+# Copy this checkout's language-bindings/swift/ package into the iOS tree so the examples can
 # reference it locally. Excludes the SwiftPM .build cache to keep the copy small;
 # the XCFramework and sources are preserved.
 copy_local_swift_package() {
@@ -382,14 +383,14 @@ copy_local_swift_package() {
 	local dest="${ios_root}/${LOCAL_SWIFT_PACKAGE_DIR}"
 	rm -rf "${dest}"
 	mkdir -p "${dest}"
-	log "copying ${REPO_ROOT}/swift/ → ${dest}/"
+	log "copying ${REPO_ROOT}/language-bindings/swift/ → ${dest}/"
 	# rsync is available on macOS (the only platform that runs the iOS builds).
-	rsync -a --exclude '.build' "${REPO_ROOT}/swift/." "${dest}/"
+	rsync -a --exclude '.build' "${REPO_ROOT}/language-bindings/swift/." "${dest}/"
 }
 
 # Rewrite one project.pbxproj so its moonshine-swift package reference (remote
 # GitHub package, or an in-tree XCLocalSwiftPackageReference like
-# ../../../swift used by StreamingLatency) becomes a local reference at
+# ../../../language-bindings/swift used by StreamingLatency) becomes a local reference at
 # ${relpath}. The XCSwiftPackageProductDependency links by productName, so only
 # the package reference object needs to change.
 rewrite_pbxproj_to_local_package() {
@@ -443,9 +444,9 @@ remote_marker = ' /* XCRemoteSwiftPackageReference "moonshine-swift" */ = {'
 text, n = replace_package_block(text, remote_marker, relpath)
 changed += n
 
-# Examples that already depend on the in-repo swift/ package (e.g. StreamingLatency
-# via XcodeGen path: ../../../swift) need their relativePath rewritten when the
-# tree is copied into a temp dir where ../../../swift no longer exists.
+# Examples that already depend on the in-repo language-bindings/swift/ package (e.g. StreamingLatency
+# via XcodeGen path: ../../../language-bindings/swift) need their relativePath rewritten when the
+# tree is copied into a temp dir where ../../../language-bindings/swift no longer exists.
 def rewrite_locals(src):
     global changed
     out = []
@@ -732,7 +733,7 @@ run_ios_builds() {
 	while IFS= read -r proj; do
 		[[ -z "${proj}" ]] && continue
 		# Internal on-device latency harness (scripts/test-mobile-latency.sh); it
-		# pins XCLocalSwiftPackageReference ../../../swift and is not a shipped
+		# pins XCLocalSwiftPackageReference ../../../language-bindings/swift and is not a shipped
 		# example. Skip it when the tree is copied out of the repo layout.
 		case "${proj}" in
 		*/StreamingLatency/*) continue ;;
@@ -1028,7 +1029,7 @@ smoke_test_web_demo() {
 	curl -fsS "${origin}/${demo}/" | grep -q '/assets/moonshine-ui.js' ||
 		die "web ${demo}: index.html does not reference /assets/moonshine-ui.js"
 
-	if [[ "${USE_LOCAL_EXAMPLES}" -eq 1 && -f "${REPO_ROOT}/wasm/dist/index.js" ]]; then
+	if [[ "${USE_LOCAL_EXAMPLES}" -eq 1 && -f "${REPO_ROOT}/language-bindings/wasm/dist/index.js" ]]; then
 		web_assert_isolated "${origin}/wasm/dist/index.js"
 	fi
 

@@ -2,7 +2,7 @@
 
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR=$(dirname $SCRIPTS_DIR)
-PYTHON_DIR=${REPO_ROOT_DIR}/python
+PYTHON_DIR=${REPO_ROOT_DIR}/language-bindings/python
 
 CORE_DIR=${REPO_ROOT_DIR}/core
 CORE_BUILD_DIR=${CORE_DIR}/build
@@ -66,7 +66,7 @@ elif [[ "$OSTYPE" == "msys"* ]]; then
 	cp ${CORE_DIR}/third-party/onnxruntime/lib/windows/x86_64/libonnxruntime*.dll ${PYTHON_DIR}/src/moonshine_voice/
 else
 	echo "Unsupported platform: $OSTYPE"
-	echo "You'll need to manually copy the ONNX Runtime library to the python/src/moonshine_voice/ directory."
+	echo "You'll need to manually copy the ONNX Runtime library to the language-bindings/python/src/moonshine_voice/ directory."
 fi
 
 cd ${PYTHON_DIR}

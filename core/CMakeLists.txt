@@ -91,8 +91,8 @@ add_subdirectory(
 
 if (ANDROID)
     add_subdirectory(
-        ${CMAKE_CURRENT_LIST_DIR}/../android/moonshine-jni
-        ${CMAKE_CURRENT_LIST_DIR}/../android/moonshine-jni/build
+        ${CMAKE_CURRENT_LIST_DIR}/../language-bindings/android/moonshine-jni
+        ${CMAKE_CURRENT_LIST_DIR}/../language-bindings/android/moonshine-jni/build
     )
 endif()
 
@@ -192,7 +192,7 @@ endif()
 
 # Build as STATIC framework for iOS/Swift (shared frameworks cannot be embedded)
 # Build as STATIC library for WebAssembly (Emscripten links it into the embind
-# module in wasm/). Build as SHARED library for other platforms.
+# module in language-bindings/wasm/). Build as SHARED library for other platforms.
 if (NOT MOONSHINE_BUILD_SHARED AND (IOS OR MOONSHINE_BUILD_SWIFT OR WIN32 OR EMSCRIPTEN))
     add_library(moonshine STATIC
         ${MOONSHINE_SRC_FILES}
@@ -366,7 +366,7 @@ if (EMSCRIPTEN)
     # Binary dir is relative to this build's binary dir (a unique subfolder) so
     # it never collides with the top-level wasm build directory.
     add_subdirectory(
-        ${CMAKE_CURRENT_LIST_DIR}/../wasm
+        ${CMAKE_CURRENT_LIST_DIR}/../language-bindings/wasm
         ${CMAKE_CURRENT_BINARY_DIR}/wasm-embind
     )
 endif()

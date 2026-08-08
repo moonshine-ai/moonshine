@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const SNIPPETS = path.join(REPO_ROOT, 'examples', 'web', 'assets', 'snippets.js');
 const { MIC_TRANSCRIPTION, TEXT_TO_SPEECH, AGENT_FLOW, INSTALL, withInstall } = await import(
   pathToFileURL(SNIPPETS).href

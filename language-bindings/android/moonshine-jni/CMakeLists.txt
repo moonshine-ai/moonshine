@@ -7,8 +7,8 @@ add_library(moonshine-jni SHARED
 )
 
 target_include_directories(moonshine-jni PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}/../../core
-    ${CMAKE_CURRENT_LIST_DIR}/../../core/third-party/utf-8
+    ${CMAKE_CURRENT_LIST_DIR}/../../../core
+    ${CMAKE_CURRENT_LIST_DIR}/../../../core/third-party/utf-8
 )
 
 target_link_libraries(moonshine-jni PUBLIC

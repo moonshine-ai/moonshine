@@ -312,7 +312,7 @@ export interface WordTiming {
 - `scripts/export-decoder-with-attention.py` — Generate attention-enabled decoder from existing model
 - `test-assets/tiny-en/decoder_with_attention.ort` — Non-streaming decoder with attention outputs
 - `test-assets/tiny-streaming-en/decoder_kv_with_attention.ort` — Streaming decoder with attention outputs
-- `android/java/main/java/ai/moonshine/voice/WordTiming.java` — Android word timing class
+- `language-bindings/android/java/main/java/ai/moonshine/voice/WordTiming.java` — Android word timing class
 - `docs/word-level-timestamps.md` — This document
 
 ### Modified Files
@@ -323,9 +323,9 @@ export interface WordTiming {
 - `core/moonshine-cpp.h` — Added `WordTiming`, `words` on `TranscriptLine`
 - `core/transcriber.h` / `core/transcriber.cpp` — Load attention-enabled decoder (both paths), compute word timestamps after transcription
 - `core/CMakeLists.txt` — Added `word-alignment.cpp`, test and benchmark targets
-- `python/src/moonshine_voice/moonshine_api.py` — Added `TranscriptWordC`, `WordTiming`, `words` field
-- `python/src/moonshine_voice/transcriber.py` — Parse words from C struct
-- `swift/Sources/MoonshineVoice/Transcript.swift` — Added `WordTiming`, `words` field
-- `swift/Sources/MoonshineVoice/MoonshineAPI.swift` — Parse words from C struct
-- `android/java/main/java/ai/moonshine/voice/TranscriptLine.java` — Added `words` field
-- `android/moonshine-jni/moonshine-jni.cpp` — Populate word timestamps via JNI
+- `language-bindings/python/src/moonshine_voice/moonshine_api.py` — Added `TranscriptWordC`, `WordTiming`, `words` field
+- `language-bindings/python/src/moonshine_voice/transcriber.py` — Parse words from C struct
+- `language-bindings/swift/Sources/MoonshineVoice/Transcript.swift` — Added `WordTiming`, `words` field
+- `language-bindings/swift/Sources/MoonshineVoice/MoonshineAPI.swift` — Parse words from C struct
+- `language-bindings/android/java/main/java/ai/moonshine/voice/TranscriptLine.java` — Added `words` field
+- `language-bindings/android/moonshine-jni/moonshine-jni.cpp` — Populate word timestamps via JNI

@@ -19,7 +19,7 @@ set -euo pipefail
 
 REPO_ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ORT_LIB_DIR="${REPO_ROOT_DIR}/core/third-party/onnxruntime/lib"
-XCFRAMEWORK="${REPO_ROOT_DIR}/swift/Moonshine.xcframework"
+XCFRAMEWORK="${REPO_ROOT_DIR}/language-bindings/swift/Moonshine.xcframework"
 
 WHICH="${1:-all}"
 

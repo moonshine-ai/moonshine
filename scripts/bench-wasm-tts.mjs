@@ -15,7 +15,7 @@ import {
   tryLoadPuppeteer,
   findChrome,
   startExampleServer,
-} from '../wasm/tests/browser-helpers.mjs';
+} from '../language-bindings/wasm/tests/browser-helpers.mjs';
 
 /**
  * Same flags as the integration-test launcher, but with a protocol timeout
@@ -58,7 +58,7 @@ const TEXTS = [
 
 async function main() {
   const puppeteer = await tryLoadPuppeteer();
-  if (!puppeteer) throw new Error('puppeteer-core is not installed (npm i in wasm/)');
+  if (!puppeteer) throw new Error('puppeteer-core is not installed (npm i in language-bindings/wasm/)');
   const chrome = findChrome();
   if (!chrome) throw new Error('No Chrome/Chromium found');
 

@@ -206,7 +206,8 @@ int main(int argc, char **argv) {
     return 1;
   }
   fixtures.push_back(std::move(f));
-  if (!load_fixture("../python/src/moonshine_voice/assets/clone-test.wav",
+  if (!load_fixture("../language-bindings/python/src/moonshine_voice/assets/"
+                    "clone-test.wav",
                     "clone-test", -1.0f, &f)) {
     return 1;
   }

@@ -71,7 +71,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-# Repo layout: moonshine_voice lives under python/src
+# Repo layout: moonshine_voice lives under language-bindings/python/src
 _SCRIPT_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _SCRIPT_DIR.parent
 _DEFAULT_WIKI_TEXT_DIR = _REPO_ROOT / "scripts" / "data" / "wiki-text"
@@ -79,7 +79,7 @@ _DEFAULT_JSON_REPORT = _REPO_ROOT / "scripts" / "data" / "tts_g2p_intelligibilit
 _DEFAULT_TTS_WAV_CACHE_DIR = _REPO_ROOT / "scripts" / "data" / "tts_g2p_intelligibility_wav_cache"
 _DEFAULT_TTS_DATA_ROOT = _REPO_ROOT / "core" / "moonshine-tts" / "data"
 _TTS_WAV_CACHE_FORMAT = 2
-sys.path.insert(0, str(_REPO_ROOT / "python" / "src"))
+sys.path.insert(0, str(_REPO_ROOT / "language-bindings" / "python" / "src"))
 
 import numpy as np
 from tqdm import tqdm

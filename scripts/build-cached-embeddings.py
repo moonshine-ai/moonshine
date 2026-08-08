@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pre-compute embeddings for Moonshine Voice's library-level phrases.
 
-Writes ``python/src/moonshine_voice/assets/cached_embeddings.tsv``, which
+Writes ``language-bindings/python/src/moonshine_voice/assets/cached_embeddings.tsv``, which
 is loaded at runtime by :class:`moonshine_voice.CachedEmbeddings` so that
 ``AgentFlow``'s default yes/no ``Confirm`` matcher (and any other
 library-level embedding consumer) does not need to embed its string
@@ -27,7 +27,7 @@ from typing import Dict, List, Tuple
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(HERE, os.pardir))
-PY_SRC = os.path.join(REPO_ROOT, "python", "src")
+PY_SRC = os.path.join(REPO_ROOT, "language-bindings", "python", "src")
 if os.path.isdir(PY_SRC) and PY_SRC not in sys.path:
     sys.path.insert(0, PY_SRC)
 

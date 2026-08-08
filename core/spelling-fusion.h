@@ -8,7 +8,7 @@
 #include <vector>
 
 /* C++ port of the matcher / fusion logic from
-   ``python/src/moonshine_voice/alphanumeric_listener.py``.
+   ``language-bindings/python/src/moonshine_voice/alphanumeric_listener.py``.
 
    The matcher classifies a single utterance (typically the text of one
    completed transcription line) into one of:

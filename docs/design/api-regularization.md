@@ -240,9 +240,9 @@ supposed to remove. Settle it in phase 2.
 There was no direct coverage of `MicTranscriber`'s or `TextToSpeech`'s public
 surface, only a threading test that mocked the transcriber out and a CLI smoke
 test, so the new APIs got tests written alongside them:
-`python/tests/test_mic_transcriber_api.py` and `python/tests/test_tts_api.py`
-for the builders, `python/tests/test_download_progress.py` for the progress
-plumbing, and `python/tests/test_voice_clone.py` for clip capture. The last of
+`language-bindings/python/tests/test_mic_transcriber_api.py` and `language-bindings/python/tests/test_tts_api.py`
+for the builders, `language-bindings/python/tests/test_download_progress.py` for the progress
+plumbing, and `language-bindings/python/tests/test_voice_clone.py` for clip capture. The last of
 those runs against the real detector rather than a mock, since it needs no
 model files.
 
@@ -440,8 +440,8 @@ a release. The web, Python and macOS examples are packaged without being built
 or run at all, and no GitHub Actions workflow touches examples.
 
 So this phase also needs: the Python examples exercised the way
-`python/tests/test_modules.py` exercises the library modules, the existing
-Puppeteer suite at `wasm/tests/web-examples.integration.test.mjs` brought into
+`language-bindings/python/tests/test_modules.py` exercises the library modules, the existing
+Puppeteer suite at `language-bindings/wasm/tests/web-examples.integration.test.mjs` brought into
 the pipeline rather than left opt-in, and the snippet freshness check run
 somewhere that a pull request will notice.
 

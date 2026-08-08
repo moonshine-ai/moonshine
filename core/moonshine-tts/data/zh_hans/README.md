@@ -54,4 +54,4 @@ Copy `dict.tsv` and the model directory into `data/zh_hans/` as needed.
 
 **After changing this model:** regenerate the wasm operator config and rebuild
 the archive, or the browser build will fail to load it. See
-"The minimal build, and what it costs you" in `wasm/README.md`.
+"The minimal build, and what it costs you" in `language-bindings/wasm/README.md`.

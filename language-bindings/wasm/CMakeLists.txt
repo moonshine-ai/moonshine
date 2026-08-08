@@ -21,7 +21,7 @@ set_target_properties(moonshine_wasm PROPERTIES
 )
 
 target_include_directories(moonshine_wasm PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}/../core
+    ${CMAKE_CURRENT_LIST_DIR}/../../core
 )
 
 # The core library (libmoonshine.a) is built with TTS enabled for Emscripten

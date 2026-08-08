@@ -1,13 +1,17 @@
 #!/bin/bash -ex
 
+SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT_DIR="$(dirname "${SCRIPTS_DIR}")"
+SWIFT_DIR="${REPO_ROOT_DIR}/language-bindings/swift"
+
 FRAMEWORK_NAME="Moonshine"
 VERSION="0.1.1"
 REPO="moonshine-ai/moonshine-swift"
 TAG="v${VERSION}"
 
 # Check that the XCFramework exists
-if [ ! -d "swift/$FRAMEWORK_NAME.xcframework" ]; then
-	echo "Error: swift/$FRAMEWORK_NAME.xcframework not found"
+if [ ! -d "${SWIFT_DIR}/$FRAMEWORK_NAME.xcframework" ]; then
+	echo "Error: ${SWIFT_DIR}/$FRAMEWORK_NAME.xcframework not found"
 	echo "Run scripts/build-swift.sh first, then run this script."
 	exit 1
 fi
@@ -24,7 +28,7 @@ gh repo clone $REPO $TMP_DIR
 rsync -a --delete \
 	--exclude '.git/' \
 	--exclude '.build/' \
-	swift/ "${TMP_DIR}/"
+	"${SWIFT_DIR}/" "${TMP_DIR}/"
 cd $TMP_DIR
 
 ZIP_NAME="$FRAMEWORK_NAME.xcframework.zip"

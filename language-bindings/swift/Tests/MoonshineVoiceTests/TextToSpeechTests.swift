@@ -19,7 +19,7 @@ final class TextToSpeechTests: XCTestCase {
             dir = dir.deletingLastPathComponent()
         }
         // Also try relative to the working directory
-        for rel in ["../core/moonshine-tts/data", "core/moonshine-tts/data"] {
+        for rel in ["../../core/moonshine-tts/data", "core/moonshine-tts/data"] {
             let url = URL(fileURLWithPath: rel).standardized
             var isDir: ObjCBool = false
             if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),

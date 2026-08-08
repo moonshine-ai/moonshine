@@ -11,7 +11,7 @@ The WebAssembly, iOS and Android builds link a *minimal* ONNX Runtime, cut down
 to the operators our models actually use. A minimal build has no ONNX parser
 compiled into it at all, so on those platforms a `.onnx` could never have been
 read, whatever the calling code did. See
-[the wasm README](../wasm/README.md#the-minimal-build-and-what-it-costs-you)
+[the wasm README](../language-bindings/wasm/README.md#the-minimal-build-and-what-it-costs-you)
 for what that buys.
 
 That left two formats supported on desktop and one on mobile, which is the

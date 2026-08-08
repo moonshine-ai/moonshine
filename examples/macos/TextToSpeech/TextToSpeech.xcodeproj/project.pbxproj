@@ -12,7 +12,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		2FD3C51B11D1077071E6E153 /* swift */ = {isa = PBXFileReference; lastKnownFileType = folder; name = swift; path = ../../../swift; sourceTree = SOURCE_ROOT; };
+		2FD3C51B11D1077071E6E153 /* swift */ = {isa = PBXFileReference; lastKnownFileType = folder; name = swift; path = ../../../language-bindings/swift; sourceTree = SOURCE_ROOT; };
 		51EE2CA85E2FDB2E60E66596 /* TextToSpeech */ = {isa = PBXFileReference; includeInIndex = 0; path = TextToSpeech; sourceTree = BUILT_PRODUCTS_DIR; };
 		CE838FC6EB48CA53408DC556 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -105,7 +105,7 @@
 			mainGroup = A2A30ACA12B2E39DF77BA3D7;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				6AB35A28DE3E33B40136D3D3 /* XCLocalSwiftPackageReference "../../../swift" */,
+				6AB35A28DE3E33B40136D3D3 /* XCLocalSwiftPackageReference "../../../language-bindings/swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
@@ -301,9 +301,9 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		6AB35A28DE3E33B40136D3D3 /* XCLocalSwiftPackageReference "../../../swift" */ = {
+		6AB35A28DE3E33B40136D3D3 /* XCLocalSwiftPackageReference "../../../language-bindings/swift" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../../../swift;
+			relativePath = ../../../language-bindings/swift;
 		};
 /* End XCLocalSwiftPackageReference section */
 

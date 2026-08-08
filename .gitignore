@@ -10,28 +10,29 @@ local.properties
 .venv/
 *.pyc
 __pycache__/
+.ruff_cache/
 uv.lock
 *.egg-info/
 libmoonshine*.so
 libmoonshine*.dylib
 libmoonshine*.dll
-/python/src/moonshine_voice/libonnxruntime*
-/python/src/moonshine_voice/*.so
-/python/src/moonshine_voice/*.so.*
-/python/src/moonshine_voice/*.dylib
-/python/src/moonshine_voice/*.dll
-/python/dist/
+/language-bindings/python/src/moonshine_voice/libonnxruntime*
+/language-bindings/python/src/moonshine_voice/*.so
+/language-bindings/python/src/moonshine_voice/*.so.*
+/language-bindings/python/src/moonshine_voice/*.dylib
+/language-bindings/python/src/moonshine_voice/*.dll
+/language-bindings/python/dist/
 .pypirc
-/swift/Moonshine.xcframework
+/language-bindings/swift/Moonshine.xcframework
 .build/
 *.xcodeproj/xcuserdata/
 *.xcworkspace/xcuserdata/
 *.xcworkspace/
 .swiftpm/
-/swift/Tests/MoonshineVoiceTests/test-assets/
+/language-bindings/swift/Tests/MoonshineVoiceTests/test-assets/
 project.xcworkspace
 xcuserdata/
-/swift/test-assets/
+/language-bindings/swift/test-assets/
 /.config/
 *.tar.gz
 /examples/c++/moonshine-voice/
@@ -59,8 +60,8 @@ pico_monitor.log
 .release-state/
 .mobile-latency/
 /plans/
-/wasm/node_modules/
-/wasm/dist/
+/language-bindings/wasm/node_modules/
+/language-bindings/wasm/dist/
 
 # Voice / model binaries fetched by scripts/fetch-voice-assets.sh (CDN or HF).
 # Licensing READMEs under core/moonshine-tts/data/ stay tracked in git.
@@ -71,7 +72,7 @@ pico_monitor.log
 /test-assets/tiny-en/tokenizer.bin
 /test-assets/tiny-streaming-en/tokenizer.bin
 /test-assets/tiny-streaming-en/streaming_config.json
-/android/java/androidTest/assets/tiny-en/*.ort
-/android/java/androidTest/assets/tiny-en/tokenizer.bin
-/python/src/moonshine_voice/assets/tiny-en/*.ort
+/language-bindings/android/java/androidTest/assets/tiny-en/*.ort
+/language-bindings/android/java/androidTest/assets/tiny-en/tokenizer.bin
+/language-bindings/python/src/moonshine_voice/assets/tiny-en/*.ort
 /examples/**/tts-data/

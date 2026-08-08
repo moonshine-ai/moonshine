@@ -30,11 +30,11 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 DOC_FILES = [
     REPO_ROOT / "README.md",
-    REPO_ROOT / "python" / "README.md",
+    REPO_ROOT / "language-bindings" / "python" / "README.md",
 ]
 
 ANNOTATION_PREFIX = "<!-- doc-test:"

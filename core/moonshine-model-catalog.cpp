@@ -81,8 +81,9 @@ bool is_streaming_arch(int32_t model_arch) {
          model_arch == MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING;
 }
 
-// Port of MODEL_INFO from python/src/moonshine_voice/download.py. The first
-// model listed for a language is its default.
+// Port of MODEL_INFO from
+// language-bindings/python/src/moonshine_voice/download.py. The first model
+// listed for a language is its default.
 const std::vector<SttLanguageEntry>& stt_catalog() {
   static const std::vector<SttLanguageEntry> catalog = {
       {"ar",

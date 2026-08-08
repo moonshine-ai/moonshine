@@ -17,7 +17,7 @@
 # that exercise the real AssetDownloader on each platform (they are opt-in and
 # skip on a plain `swift test` / `connectedAndroidTest`):
 #   - Swift: MOONSHINE_DOWNLOAD_TESTS=1 swift test --filter AssetDownloaderNetworkTests
-#     (macOS, when `swift` and swift/Moonshine.xcframework are present).
+#     (macOS, when `swift` and language-bindings/swift/Moonshine.xcframework are present).
 #   - Android: connectedAndroidTest for AssetDownloaderTest with
 #     moonshineDownloadTests=1 (only when a device/emulator is already
 #     connected; this script never boots one - use scripts/test-android.sh for
@@ -206,12 +206,12 @@ run_swift_framework_tests() {
         echo "SKIP: swift not found in PATH"
         return 0
     fi
-    if [[ ! -d "${REPO_ROOT_DIR}/swift/Moonshine.xcframework" ]]; then
-        echo "SKIP: swift/Moonshine.xcframework missing (build it with scripts/build-swift.sh)"
+    if [[ ! -d "${REPO_ROOT_DIR}/language-bindings/swift/Moonshine.xcframework" ]]; then
+        echo "SKIP: language-bindings/swift/Moonshine.xcframework missing (build it with scripts/build-swift.sh)"
         return 0
     fi
     if MOONSHINE_DOWNLOAD_TESTS=1 swift test \
-        --package-path "${REPO_ROOT_DIR}/swift" \
+        --package-path "${REPO_ROOT_DIR}/language-bindings/swift" \
         --filter 'AssetDownloaderNetworkTests'; then
         echo "PASS: Swift framework download tests"
         PASS_COUNT=$((PASS_COUNT + 1))
@@ -243,7 +243,7 @@ run_android_framework_tests() {
         echo "SKIP: no connected device/emulator (use scripts/test-android.sh to boot one)"
         return 0
     fi
-    if (cd "${REPO_ROOT_DIR}" && ANDROID_HOME="${sdk}" ./gradlew \
+    if (cd "${REPO_ROOT_DIR}/language-bindings/android" && ANDROID_HOME="${sdk}" ./gradlew \
         -Pandroid.useAndroidX=true \
         -Pandroid.testInstrumentationRunnerArguments.class=ai.moonshine.voice.AssetDownloaderTest \
         -Pandroid.testInstrumentationRunnerArguments.moonshineDownloadTests=1 \

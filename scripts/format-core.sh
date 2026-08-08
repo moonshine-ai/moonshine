@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Format (default) or check (--check) the first-party C++ in core/ against the
-# repo's Google-based .clang-format. Vendored/third-party trees are never
+# Google-based core/.clang-format. Vendored/third-party trees are never
 # touched. Runs anywhere clang-format is installed (e.g. `brew install
 # clang-format` on macOS); no Linux or full build required.
 #

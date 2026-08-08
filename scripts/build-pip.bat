@@ -44,12 +44,12 @@ if "%OS%"=="Windows_NT" (
         if errorlevel 1 exit /b 1
     ) else (
         echo Unsupported Windows architecture: %PROCESSOR_ARCHITECTURE%
-        echo You'll need to manually copy the ONNX Runtime library to the python/src/moonshine_voice/ directory.
+        echo You'll need to manually copy the ONNX Runtime library to the language-bindings/python/src/moonshine_voice/ directory.
         exit /b 1
     )
 ) else (
     echo Unsupported platform
-    echo You'll need to manually copy the ONNX Runtime library to the python/src/moonshine_voice/ directory.
+    echo You'll need to manually copy the ONNX Runtime library to the language-bindings/python/src/moonshine_voice/ directory.
     exit /b 1
 )
 

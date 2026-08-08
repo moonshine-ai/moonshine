@@ -6,7 +6,7 @@ set -o pipefail
 #      (scripts/build-ort-wasm.sh),
 #   2. configures + builds the embind module with Emscripten (emcmake),
 #      emitting moonshine.mjs + moonshine.wasm,
-#   3. compiles the idiomatic TypeScript layer (tsc) into wasm/dist,
+#   3. compiles the idiomatic TypeScript layer (tsc) into language-bindings/wasm/dist,
 #   4. copies the generated wasm artifacts alongside the compiled JS.
 #
 # We deliberately do NOT upload the library to download.moonshine.ai (that CDN
@@ -15,8 +15,8 @@ set -o pipefail
 # release, mirroring scripts/publish-binary.sh.
 #
 # Arguments (order-independent):
-#   publish-npm    - run `npm publish` from wasm/ after a successful build.
-#   upload         - attach a wasm/dist tarball to the GitHub release v<VERSION>.
+#   publish-npm    - run `npm publish` from language-bindings/wasm/ after a successful build.
+#   upload         - attach a language-bindings/wasm/dist tarball to the GitHub release v<VERSION>.
 #   single-thread  - build the SIMD-only (no pthreads) variant for pages that
 #                    can't be cross-origin isolated. Default is SIMD + threads.
 #   skip-ort       - assume the ORT-wasm archive is already vendored.
@@ -28,7 +28,7 @@ REPO="moonshine-ai/moonshine"
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR=$(dirname "${SCRIPTS_DIR}")
 CORE_DIR="${REPO_ROOT_DIR}/core"
-WASM_DIR="${REPO_ROOT_DIR}/wasm"
+WASM_DIR="${REPO_ROOT_DIR}/language-bindings/wasm"
 BUILD_DIR="${WASM_DIR}/build"
 DIST_DIR="${WASM_DIR}/dist"
 
@@ -95,7 +95,7 @@ if [ -z "${SKIP_CORE}" ]; then
     )
 fi
 
-# The moonshine_wasm target (OUTPUT_NAME=moonshine) emits into wasm/build.
+# The moonshine_wasm target (OUTPUT_NAME=moonshine) emits into language-bindings/wasm/build.
 MJS=$(find "${BUILD_DIR}" -name 'moonshine.mjs' -print -quit)
 WASM=$(find "${BUILD_DIR}" -name 'moonshine.wasm' -print -quit)
 if [ -z "${MJS}" ] || [ -z "${WASM}" ]; then

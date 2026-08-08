@@ -46,7 +46,7 @@
 
 **After changing this model:** regenerate the wasm operator config and rebuild
 the archive, or the browser build will fail to load it. See
-"The minimal build, and what it costs you" in `wasm/README.md`.
+"The minimal build, and what it costs you" in `language-bindings/wasm/README.md`.
 
 **Compatibility:** Recent `torch` + `transformers` combinations can fail inside BERT’s attention-mask handling when tracing (observed: `ValueError: Wrong shape for input_ids … or attention_mask` with torch 2.10). The checked-in ONNX was exported with an older stack; if the script fails, use a venv with pinned versions from the time of export, or adjust `scripts/export_arabic_msa_diacritizer_onnx.py` for the current `transformers` API.
 

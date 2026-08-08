@@ -71,12 +71,12 @@ for ARCH in ${ARCHS[@]}; do
 	rm -rf ${RESOURCES_PATH}/test-assets/output
 done
 
-rm -rf ${REPO_ROOT_DIR}/swift/Moonshine.xcframework
-cp -R -P ${CORE_BUILD_DIR}/Moonshine.xcframework ${REPO_ROOT_DIR}/swift/
+rm -rf ${REPO_ROOT_DIR}/language-bindings/swift/Moonshine.xcframework
+cp -R -P ${CORE_BUILD_DIR}/Moonshine.xcframework ${REPO_ROOT_DIR}/language-bindings/swift/
 
-cp -r ${REPO_ROOT_DIR}/test-assets ${REPO_ROOT_DIR}/swift/Tests/MoonshineVoiceTests/test-assets
+cp -r ${REPO_ROOT_DIR}/test-assets ${REPO_ROOT_DIR}/language-bindings/swift/Tests/MoonshineVoiceTests/test-assets
 
-cd ${REPO_ROOT_DIR}/swift
+cd ${REPO_ROOT_DIR}/language-bindings/swift
 swift package clean
 # First time test is run it fails? Maybe a build ordering issue?
 swift test || true

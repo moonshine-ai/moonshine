@@ -34,12 +34,18 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # The Android library is its own Gradle root under language-bindings/android, so the
+      # wrapper, settings.gradle.kts and caches all live there rather than at the
+      # repository root.
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          build-root-directory: language-bindings/android
 
       - name: Validate release tag matches Android artifact version
         if: github.event_name == 'release'
         shell: bash
+        working-directory: language-bindings/android
         run: |
           set -euo pipefail
           TAG_VERSION="${GITHUB_REF_NAME#v}"
@@ -54,4 +60,5 @@ jobs:
           fi
 
       - name: Publish and release Android artifacts to Maven Central
+        working-directory: language-bindings/android
         run: ./gradlew --no-daemon --stacktrace publishAndReleaseToMavenCentral

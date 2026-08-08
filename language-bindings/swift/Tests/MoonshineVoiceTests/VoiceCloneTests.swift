@@ -19,8 +19,8 @@ final class VoiceCloneTests: XCTestCase {
     /// `deinit` and make `extractSpeechClip` / `VoiceClone` fail with
     /// `invalidHandle`.
     private func makeTts() throws -> TextToSpeech {
-        let g2pRoot = "../core/moonshine-tts/data/"
-        guard FileManager.default.fileExists(atPath: g2pRoot + "zipvoice/vocoder.ort") else {
+        let g2pRoot = try TextToSpeechTests.getTtsDataPath()
+        guard FileManager.default.fileExists(atPath: g2pRoot + "/zipvoice/vocoder.ort") else {
             throw XCTSkip("zipvoice assets not available")
         }
         return try TextToSpeech(language: "en_us", g2pRoot: g2pRoot)

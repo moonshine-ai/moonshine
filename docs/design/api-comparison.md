@@ -682,7 +682,7 @@ create so the UI thread can yield between download, ASR, and ZipVoice load.
 
 **`AgentFlow` is ported from Python and JavaScript to Swift and Java.** The
 routing, retry, re-prompt, and cancellation logic in
-`python/src/moonshine_voice/agent_flow.py` and `wasm/src/agent-flow.ts` is the
+`language-bindings/python/src/moonshine_voice/agent_flow.py` and `language-bindings/wasm/src/agent-flow.ts` is the
 reference. Only the suspension mechanism differs per language: a promise in
 JavaScript, a continuation in Swift, and a blocking queue in Java.
 

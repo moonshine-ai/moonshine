@@ -6,7 +6,7 @@
 # Android runtime, so it is the real validation of the library on a device: a
 # successful link does not prove the bundled ONNX Runtime's symbols resolve on an
 # older OS, but running the tests on a matching-API emulator does. The library's
-# minSdk comes from build.gradle.kts; boot an emulator at (or above) that API to
+# minSdk comes from language-bindings/android/build.gradle.kts; boot an emulator at (or above) that API to
 # exercise the supported floor.
 #
 # Usage:
@@ -22,7 +22,7 @@
 #   ANDROID_HOME or ANDROID_SDK_ROOT — required.
 #
 # ABI note: the library ships native libs for arm64-v8a, armeabi-v7a and x86_64
-# (see build.gradle.kts abiFilters), so the device/emulator's ABI must be one of
+# (see language-bindings/android/build.gradle.kts abiFilters), so the device/emulator's ABI must be one of
 # those. On Apple Silicon use an "arm64-v8a" system image; x86_64 emulators only
 # run on an x86_64 host. Apple Silicon cannot run armeabi-v7a (32-bit ARM)
 # emulators; test that ABI on a real 32-bit-capable device via --serial.
@@ -158,7 +158,7 @@ fi
 export ANDROID_SERIAL="${SERIAL}"
 log "running instrumentation tests on ${SERIAL}"
 
-cd "${REPO_ROOT}"
+cd "${REPO_ROOT}/language-bindings/android"
 ./gradlew -Pandroid.useAndroidX=true connectedAndroidTest --no-daemon --stacktrace
 
 log "connectedAndroidTest passed on ${SERIAL}"

@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO_ROOT / "python" / "src"))
+sys.path.insert(0, str(REPO_ROOT / "language-bindings" / "python" / "src"))
 
 from moonshine_voice.tts import TextToSpeech, _write_wav_mono_pcm16  # noqa: E402
 
@@ -108,7 +108,7 @@ def main() -> int:
         "--also-copy-to-python-assets",
         action="store_true",
         default=True,
-        help="Also write python/src/moonshine_voice/assets/<basename> (default: on)",
+        help="Also write language-bindings/python/src/moonshine_voice/assets/<basename> (default: on)",
     )
     parser.add_argument(
         "--no-also-copy-to-python-assets",
@@ -134,7 +134,7 @@ def main() -> int:
 
     if args.also_copy_to_python_assets:
         py_path = (
-            REPO_ROOT / "python" / "src" / "moonshine_voice" / "assets" / out_path.name
+            REPO_ROOT / "language-bindings" / "python" / "src" / "moonshine_voice" / "assets" / out_path.name
         )
         _write_wav_mono_pcm16(py_path, samples, sample_rate)
         print(f"Wrote {py_path}")

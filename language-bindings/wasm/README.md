@@ -185,7 +185,7 @@ set these headers, build the SIMD-only fallback (see below) and load it with
 
 ## Examples
 
-See [`examples/web/`](../examples/web): `stt/`, `tts/`, `agent-flow/`, and
+See [`examples/web/`](../../examples/web): `stt/`, `tts/`, `agent-flow/`, and
 `dictation/`, with
 an index at `/` linking them together. `stt/`, `tts/` and `agent-flow/` show the
 Moonshine calls that drive them in a panel below the demo; `dictation/` is a
@@ -248,7 +248,7 @@ the code you just built. Two independent caches are in play:
   redownload, e.g. `http://localhost:8080/stt/?local=1&fresh=1`.
 
 If a source change still doesn't show up, rebuild before reloading: the pages
-serve `wasm/dist`, which is produced by `npm run build` (TypeScript) or
+serve `language-bindings/wasm/dist`, which is produced by `npm run build` (TypeScript) or
 `scripts/build-wasm.sh` (the C++ core).
 
 ## Building from source
@@ -260,7 +260,7 @@ You need [emsdk](https://emscripten.org/docs/getting_started/downloads.html)
 # One-time: build + vendor the ORT-wasm static library (SIMD + threads).
 scripts/build-ort-wasm.sh            # add `single-thread` for the fallback too
 
-# Build the module + TypeScript layer into wasm/dist.
+# Build the module + TypeScript layer into language-bindings/wasm/dist.
 scripts/build-wasm.sh                # `single-thread` for the SIMD-only build
 
 # Run the tests.
@@ -314,7 +314,7 @@ as it lives in a source listed in `EMBEDDED_SOURCES`.
 
 The two cpp-annote diarization models used to be in that third category and are
 now in the second, having become a download
-([docs/diarization-models.md](../docs/diarization-models.md)). Their operators
+([docs/diarization-models.md](../../docs/diarization-models.md)). Their operators
 did not change with the move, only where the generator reads them from.
 
 The `check-ort-op-config` ctest guards this. It runs offline against the
@@ -329,7 +329,7 @@ means rebuilding all three, not just the wasm archive. macOS, Linux and Windows
 still use the prebuilt full ORT, but they are held to the ORT-only rule anyway
 (`session.load_model_format=ORT` is set everywhere), so a model that would fail
 in the browser fails on the desktop you develop on. See
-[docs/ort-only-models.md](../docs/ort-only-models.md).
+[docs/ort-only-models.md](../../docs/ort-only-models.md).
 
 One difference worth knowing on mobile: an app is installed for months, while a
 model can be pushed to the CDN today. A new model needing an operator that the
@@ -340,7 +340,7 @@ client release before the model goes out.
 ## Versioning
 
 The npm package version tracks the core Moonshine version (see `package.json`
-and `python/pyproject.toml`). Keep the ORT pin in `scripts/build-ort-wasm.sh` in
+and `language-bindings/python/pyproject.toml`). Keep the ORT pin in `scripts/build-ort-wasm.sh` in
 lockstep with `core/third-party/onnxruntime/find-ort-library-path.cmake`.
 
 ## License

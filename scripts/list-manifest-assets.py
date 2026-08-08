@@ -32,7 +32,7 @@ import urllib.parse
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-PYTHON_SRC = REPO_ROOT / "python" / "src"
+PYTHON_SRC = REPO_ROOT / "language-bindings" / "python" / "src"
 
 sys.path.insert(0, str(PYTHON_SRC))
 

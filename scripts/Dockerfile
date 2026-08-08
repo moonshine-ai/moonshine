@@ -33,7 +33,7 @@ RUN echo 'alias python=python3' >> ~/.bashrc && \
 # Copy .pypirc configuration file from build context to Docker image user's home directory
 # Note: The .pypirc file must be in the build context (project root) for this to work.
 # To use your home directory .pypirc, copy it first: cp ~/.pypirc .pypirc
-# Then build: docker build -t <image> .
+# Then build from the repo root: docker build -f scripts/Dockerfile -t <image> .
 COPY --chown=user:user .pypirc /home/user/.pypirc
 
 # Default command

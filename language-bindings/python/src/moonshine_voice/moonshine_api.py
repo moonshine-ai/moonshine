@@ -824,8 +824,14 @@ class _MoonshineLib:
             # In the package directory
             Path(__file__).parent / lib_name,
             Path(__file__).parent.parent.parent / lib_name,
-            # In the build directory (for development)
-            Path(__file__).parent.parent.parent.parent / "core" / "build" / lib_name,
+            # In the build directory (for development). In a source checkout this
+            # file sits at language-bindings/python/src/moonshine_voice/, so the repo root
+            # is five levels up. Chained .parent rather than parents[4] so an
+            # installed wheel in a shallow path saturates at "/" instead of raising.
+            Path(__file__).parent.parent.parent.parent.parent
+            / "core"
+            / "build"
+            / lib_name,
             # System library paths
             Path("/usr/local/lib") / lib_name,
             Path("/usr/lib") / lib_name,

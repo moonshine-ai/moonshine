@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 FULL_RUN_TIMEOUT_SECONDS = 300
 # Long enough for a warm-cache model load to reach the microphone banner, short

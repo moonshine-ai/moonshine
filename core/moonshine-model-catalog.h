@@ -4,10 +4,10 @@
 // Native catalog of downloadable model assets (speech-to-text transcription,
 // the optional alphanumeric spelling model, and text embedding models). This
 // is the C++ port of the tables that previously lived only in
-// python/src/moonshine_voice/download.py, promoted here so every language
-// binding resolves the exact same download manifest from a single source of
-// truth. The TTS / G2P dependency catalog lives separately under
-// core/moonshine-tts/ and is surfaced by moonshine_get_tts_dependencies /
+// language-bindings/python/src/moonshine_voice/download.py, promoted here so
+// every language binding resolves the exact same download manifest from a
+// single source of truth. The TTS / G2P dependency catalog lives separately
+// under core/moonshine-tts/ and is surfaced by moonshine_get_tts_dependencies /
 // moonshine_get_g2p_dependencies; this file covers the remaining model types.
 
 #include <cstdint>

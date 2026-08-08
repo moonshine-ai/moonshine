@@ -8,7 +8,7 @@
 #
 # Installs: Temurin JDK 17, Android command-line tools, platform-tools, emulator,
 # the compileSdk platform + build-tools, the NDK + CMake pinned by
-# build.gradle.kts, an x86_64 system image, and an AVD for it.
+# language-bindings/android/build.gradle.kts, an x86_64 system image, and an AVD for it.
 set -euo pipefail
 
 SDK_ROOT="${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}"
@@ -16,7 +16,7 @@ JDK_DIR="$HOME/android-ci/jdk"
 CLT_URL="https://dl.google.com/android/repository/commandlinetools-linux-14742923_latest.zip"
 JDK_URL="https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse"
 
-# Keep these in sync with build.gradle.kts (ndkVersion / compileSdk / cmake).
+# Keep these in sync with language-bindings/android/build.gradle.kts (ndkVersion / compileSdk / cmake).
 NDK_VER="28.2.13676358"
 CMAKE_VER="3.22.1"
 PLATFORM_PKG="platforms;android-35"

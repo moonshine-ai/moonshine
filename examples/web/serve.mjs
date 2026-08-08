@@ -60,7 +60,7 @@ function detectRepoRoot(webRoot) {
   }
   const candidate = path.resolve(webRoot, '..', '..');
   if (
-    existsSync(path.join(candidate, 'wasm')) ||
+    existsSync(path.join(candidate, 'language-bindings', 'wasm')) ||
     existsSync(path.join(candidate, 'test-assets'))
   ) {
     return candidate;
@@ -74,7 +74,9 @@ const PORT = Number(process.argv[2] ?? 8080);
 // prefix itself is stripped and the remainder joined onto the target dir.
 // Everything else falls back to the examples/web tree (ROOT).
 const MOUNTS = [
-  { prefix: '/wasm/', dir: path.join(REPO_ROOT, 'wasm') },
+  // The /wasm/ URL prefix matches the deployed site layout, so it stays put even
+  // though the source moved under language-bindings/.
+  { prefix: '/wasm/', dir: path.join(REPO_ROOT, 'language-bindings', 'wasm') },
   { prefix: '/test-assets/', dir: path.join(REPO_ROOT, 'test-assets') },
   { prefix: '/tts-data/', dir: path.join(REPO_ROOT, 'core', 'moonshine-tts', 'data') },
 ];

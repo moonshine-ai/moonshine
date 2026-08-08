@@ -27,7 +27,7 @@ cmake --build . --config Release
 ```bash
 cd ../../ios
 xcodebuild -create-xcframework \
-    -framework ../core/build/build-macos/Release/moonshine.framework \
+    -framework ../../core/build/build-macos/Release/moonshine.framework \
     -framework Moonshine.xcframework/ios-arm64/moonshine.framework \
     -framework Moonshine.xcframework/ios-arm64_x86_64-simulator/moonshine.framework \
     -output Moonshine.xcframework

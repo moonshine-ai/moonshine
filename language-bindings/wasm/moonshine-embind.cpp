@@ -4,7 +4,7 @@
 // handles, raw heap pointers, and manual free_* calls behind small C++ classes
 // and returns plain JS values (via emscripten::val / value_objects). The
 // idiomatic, JS-native surface (Promises, EventTarget, Float32Array ergonomics,
-// error classes) lives in the TypeScript layer under wasm/src and is built on
+// error classes) lives in the TypeScript layer under language-bindings/wasm/src and is built on
 // top of what we register here.
 //
 // Everything registered here maps 1:1 onto the C ABI so the higher layers can
