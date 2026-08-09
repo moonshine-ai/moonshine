@@ -55,7 +55,7 @@ await mic.load();
 await mic.start();
 ```
 
-You can see live examples running at [moonshine.ai](https://moonshine.ai), or download the [speech to text](https://github.com/moonshine-ai/moonshine/releases/latest/download/web-stt.tar.gz), [text to speech](https://github.com/moonshine-ai/moonshine/releases/latest/download/web-tts.tar.gz), [voice agent](https://github.com/moonshine-ai/moonshine/releases/latest/download/web-agent-flow.tar.gz), [dictation](https://github.com/moonshine-ai/moonshine/releases/latest/download/web-dictation.tar.gz), or [meeting note taker](https://github.com/moonshine-ai/moonshine/releases/latest/download/web-stt.tar.gz) projects. To serve them run `node serve.mjs` and navigate to [http://localhost:8080/](http://localhost:8080/).
+You can see live examples running at [moonshine.ai](https://moonshine.ai), or download the [speech to text](https://github.com/moonshine-ai/moonshine/releases/latest/download/web-stt.tar.gz), [text to speech](https://github.com/moonshine-ai/moonshine/releases/latest/download/web-tts.tar.gz), [voice agent](https://github.com/moonshine-ai/moonshine/releases/latest/download/web-agent-flow.tar.gz), [dictation](https://github.com/moonshine-ai/moonshine/releases/latest/download/web-dictation.tar.gz), or [meeting note taker](https://github.com/moonshine-ai/moonshine/releases/latest/download/web-meeting-notes.tar.gz) projects. To serve them run `node serve.mjs` and navigate to [http://localhost:8080/](http://localhost:8080/).
 
 ### Python
 
@@ -83,7 +83,7 @@ Synthesizes and speaks the text.
 
 ### iOS
 
-First [add `https://github.com/moonshine-ai/moonshine-swift/ `as a package dependency to your project in Xcode](#ios-or-macos).
+First [add `https://github.com/moonshine-ai/moonshine-swift/` as a package dependency to your project in Xcode](#ios-or-macos).
 
 ```swift
 import MoonshineVoice
@@ -130,7 +130,7 @@ Moonshine Voice ships prebuilt shared libraries for both x86_64 and arm64 Linux.
 
 <!-- doc-test: skip -->
 ```bash
-curl -O -L https://github.com/moonshine-ai/moonshine/releases/download/v0.1.2/cpp-examples.tar.gz
+curl -O -L https://github.com/moonshine-ai/moonshine/releases/latest/download/cpp-examples.tar.gz
 tar xzf cpp-examples.tar.gz
 cd c++
 ./download-library.sh
@@ -140,7 +140,7 @@ g++ transcriber.cpp -Imoonshine-voice/include -Lmoonshine-voice/lib -lmoonshine 
  
 ### MacOS
 
-First [add `https://github.com/moonshine-ai/moonshine-swift/ `as a package dependency to your project in Xcode](#ios-or-macos).
+First [add `https://github.com/moonshine-ai/moonshine-swift/` as a package dependency to your project in Xcode](#ios-or-macos).
 
 ```swift
 import MoonshineVoice
@@ -200,7 +200,7 @@ TL;DR - When you're working with live speech.
 
 _See [benchmarks](#benchmarks) for how these numbers were measured._
 
-[OpenAI's release of their Whisper family of models]() was a massive step forward for open-source speech to text. They offered a range of sizes, allowing developers to trade off compute and storage space against accuracy to fit their applications. Their biggest models, like Large v3, also gave accuracy scores that were higher than anything available outside of large tech companies like Google or Apple. At Moonshine we were early and enthusiastic adopters of Whisper, and we still remain big fans of the models and the great frameworks like [FasterWhisper](https://github.com/SYSTRAN/faster-whisper) and others that have been built around them.
+[OpenAI's release of their Whisper family of models](https://openai.com/index/whisper/) was a massive step forward for open-source speech to text. They offered a range of sizes, allowing developers to trade off compute and storage space against accuracy to fit their applications. Their biggest models, like Large v3, also gave accuracy scores that were higher than anything available outside of large tech companies like Google or Apple. At Moonshine we were early and enthusiastic adopters of Whisper, and we still remain big fans of the models and the great frameworks like [FasterWhisper](https://github.com/SYSTRAN/faster-whisper) and others that have been built around them.
 
 However, as we built applications that needed a live voice interface we found we needed features that weren't available through Whisper:
 
@@ -260,7 +260,7 @@ The Moonshine API is designed to take care of the details around capturing and t
   - [Speech to Text Models](#speech-to-text-models)
   - [Embedding Models](#embedding-models)
   - [Text to Speech Models](#text-to-speech-models)
-- [Benchmarking](#benchmarking)
+- [Benchmarks](#benchmarks)
 
 ### Architecture
 
@@ -282,25 +282,25 @@ Most developers should be able to treat the library as a black box that tells th
 
 ### Concepts
 
-A [**Transcriber**](language-bindings/python/src/moonshine_voice/transcriber.py#L66) takes in audio input and turns any speech into text. This is the first object you'll need to create to use Moonshine, and you'll give it a path to [the models you've downloaded](#downloading-models).
+A [**Transcriber**](language-bindings/python/src/moonshine_voice/transcriber.py#L95) takes in audio input and turns any speech into text. This is the first object you'll need to create to use Moonshine, and you'll give it a path to [the models you've downloaded](#downloading-models). High-level helpers such as `MicTranscriber` and `AgentFlow` can download and open models for you via `load()` instead.
 
-A [**MicTranscriber**](language-bindings/python/src/moonshine_voice/mic_transcriber.py#L39) is a helper class based on the general transcriber that takes care of connecting to a microphone using your platform's built-in support (for example sounddevice in Python) and then feeding the audio in as it's captured.
+A [**MicTranscriber**](language-bindings/python/src/moonshine_voice/mic_transcriber.py#L52) is a helper class based on the general transcriber that takes care of connecting to a microphone using your platform's built-in support (for example sounddevice in Python) and then feeding the audio in as it's captured.
 
-A [**Stream**](language-bindings/python/src/moonshine_voice/transcriber.py#L297) is a handler for audio input. The reason streams exist is because you may want to process multiple audio inputs at once, and a transcriber can support those through multiple streams, without duplicating the model resources. If you only have one input, the transcriber class includes the same methods (start/stop/add_audio) as a stream, and you can use that interface instead and forget about streams.
+A [**Stream**](language-bindings/python/src/moonshine_voice/transcriber.py#L482) is a handler for audio input. The reason streams exist is because you may want to process multiple audio inputs at once, and a transcriber can support those through multiple streams, without duplicating the model resources. If you only have one input, the transcriber class includes the same methods (start/stop/add_audio) as a stream, and you can use that interface instead and forget about streams.
 
-A [**TranscriptLine**](language-bindings/python/src/moonshine_voice/moonshine_api.py#L51) is a data structure holding information about one line in the transcript. When someone is speaking, the library waits for short pauses (where punctuation might go in written language) and starts a new line. These aren't exactly sentences, since a speech pause isn't a sure sign of the end of a sentence, but this does break the spoken audio into segments that can be considered phrases. A line includes state such as whether the line has just started, is still being spoken, or is complete, along with its start time and duration.
+A [**TranscriptLine**](language-bindings/python/src/moonshine_voice/moonshine_api.py#L272) is a data structure holding information about one line in the transcript. When someone is speaking, the library waits for short pauses (where punctuation might go in written language) and starts a new line. These aren't exactly sentences, since a speech pause isn't a sure sign of the end of a sentence, but this does break the spoken audio into segments that can be considered phrases. A line includes state such as whether the line has just started, is still being spoken, or is complete, along with its start time and duration.
 
-A [**Transcript**](language-bindings/python/src/moonshine_voice/moonshine_api.py#67) is a list of lines in time order holding information about what text has already been recognized, along with other state like when it was captured.
+A [**Transcript**](language-bindings/python/src/moonshine_voice/moonshine_api.py#L299) is a list of lines in time order holding information about what text has already been recognized, along with other state like when it was captured.
 
-A [**TranscriptEvent**](language-bindings/python/src/moonshine_voice/transcriber.py#L22) contains information about changes to the transcript. Events include a new line being started, the text in a line being updated, and a line being completed. The event object includes the transcript line it's referring to as a member, holding the latest state of that line.
+A [**TranscriptEvent**](language-bindings/python/src/moonshine_voice/transcriber.py#L28) contains information about changes to the transcript. Events include a new line being started, the text in a line being updated, and a line being completed. The event object includes the transcript line it's referring to as a member, holding the latest state of that line.
 
-A [**TranscriptEventListener**](language-bindings/python/src/moonshine_voice/transcriber.py#L266) is a protocol that allows app-defined functions to be called when transcript events happen. This is the main way that most applications interact with the results of the transcription. When live speech is happening, applications usually need to respond or display results as new speech is recognized, and this approach allows you to handle those changes in a similar way to events from traditional user interfaces like touch screen gestures or mouse clicks on buttons.
+A [**TranscriptEventListener**](language-bindings/python/src/moonshine_voice/transcriber.py#L436) is a protocol that allows app-defined functions to be called when transcript events happen. This is the main way that most applications interact with the results of the transcription. When live speech is happening, applications usually need to respond or display results as new speech is recognized, and this approach allows you to handle those changes in a similar way to events from traditional user interfaces like touch screen gestures or mouse clicks on buttons.
 
-A [**TextToSpeech**](language-bindings/python/src/moonshine_voice/tts.py#L20) object synthesizes audio for playback to the user.
+A [**TextToSpeech**](language-bindings/python/src/moonshine_voice/tts.py#L470) object synthesizes audio for playback to the user.
 
-An [**AgentFlow**](language-bindings/python/src/moonshine_voice/agent_flow.py#L547) object manages conversations between the user and an agent. It opens the transcriber, microphone, and speech synthesizer it needs itself, and invokes a callback whenever someone says something close in meaning to a phrase you registered — the basis of voice command recognition.
+An [**AgentFlow**](language-bindings/python/src/moonshine_voice/agent_flow.py#L552) object manages conversations between the user and an agent. It opens the transcriber, microphone, and speech synthesizer it needs itself, and invokes a callback whenever someone says something close in meaning to a phrase you registered — the basis of voice command recognition.
 
-A [**Dialog**](language-bindings/python/src/moonshine_voice/agent_flow.py#L408) object is created for each conversational exchange, and allows the agent to hold a multi-step discussion with the user.
+A [**Dialog**](language-bindings/python/src/moonshine_voice/agent_flow.py#L413) object is created for each conversational exchange, and allows the agent to hold a multi-step discussion with the user.
 
 ### Getting Started with Transcription
 
@@ -726,7 +726,7 @@ Every language requires a different process to convert its written form into spe
 | vi_vn | 79.0% | 36.5% |
 | zh_hans | 37.8% | 32.6% |
 
-If you want access to just the grapheme to phoneme capability, without the speech synthesis, you can all it directly:
+If you want access to just the grapheme to phoneme capability, without the speech synthesis, you can call it directly:
 
 <!-- doc-test: run -->
 ```python
@@ -766,7 +766,7 @@ The [`examples`](examples/) folder has code samples organized by platform. We us
   - [mic_transcription.py](examples/python/mic_transcription.py)
   - [text_to_speech.py](examples/python/text_to_speech.py)
   - [agent_flow.py](examples/python/agent_flow.py)
-  - [ollama-voice/ollama_voice.py](examples/python/ollama-voice/ollama_voice.py )
+  - [ollama-voice/ollama_voice.py](examples/python/ollama-voice/ollama_voice.py)
 - **[Raspberry Pi](examples/raspberry-pi/)**
   - [my-dalek](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz)
   - [Pi Help Bot](https://github.com/moonshine-ai/pi-help-bot/archive/refs/heads/main.zip)
@@ -976,7 +976,7 @@ TTS assets root (use as g2p_root): /private/tmp/tts-files
 /private/tmp/tts-files
 ```
 
-The downloaded models are placed in child folders underneath the root folder, and by default the text to speech module expects the files to have the same relative paths so it can find them automatically given only the parent's path. If you do need to move them to different locations, you can supply new paths for each file using the `options` argument to `TextToSpeech`'s constructor, with the usual relative path as the key, and the actual path to the file as the key.
+The downloaded models are placed in child folders underneath the root folder, and by default the text to speech module expects the files to have the same relative paths so it can find them automatically given only the parent's path. If you do need to move them to different locations, you can supply new paths for each file using the `options()` setter on `TextToSpeech` (before `load()`), with the usual relative path as the key, and the actual path to the file as the value.
 
 If you have an application that may be stored in an arbitrary location after installation, you can also pass in a `tts_root` value as an option to set the path to the actual root folder of the TTS data at runtime.
 
@@ -1276,7 +1276,7 @@ transcriber = Transcriber(
 transcriber.set_keyterms(["Anushka Sharma", "Jurgen Klopp"])
 ```
 
-Match the capitalization and spelling you want in the output, since that's what gets produced. Terms can be phrases as well as words, and a list is a plain comma-separated string, so anywhere you can pass transcriber options you can pass key terms: `keyterms` and `keyterm_boost` in the Python options dictionary above, as `TranscriberOption` name/value pairs from Swift and Java, in the `options` record from JavaScript, or in the options array of `moonshine_transcriber_create` in C. Replacing the terms on a transcriber that is already running is wrapped in every binding — `set_keyterms()` in Python, `setKeyterms()` in Swift, Java and JavaScript, `moonshine_transcriber_set_keyterms` in C — and takes a list of terms rather than a joined string in the languages that have one. Only the streaming architectures support any of this; the older Tiny and Base models raise an error.
+Match the capitalization and spelling you want in the output, since that's what gets produced. Terms can be phrases as well as words, and a list is a plain comma-separated string, so anywhere you can pass transcriber options you can pass key terms: `keyterms` and `keyterm_boost` in the Python options dictionary above, as `TranscriberOption` name/value pairs from Swift and Java, in the `options` record from JavaScript, or in the options array of `moonshine_load_transcriber_from_files` / `moonshine_load_transcriber_from_memory_files` in C. Replacing the terms on a transcriber that is already running is wrapped in every binding — `set_keyterms()` in Python, `setKeyterms()` in Swift, Java and JavaScript, `moonshine_transcriber_set_keyterms` in C — and takes a list of terms rather than a joined string in the languages that have one. Only the streaming architectures support any of this; the older Tiny and Base models raise an error.
 
 **How it works.** Each term is tokenized and stored in a prefix tree over the model's subwords, and during decoding a bonus is added to the logits of the tokens that would continue one of those paths. A term spanning several subwords, like "Kubernetes", is therefore favored piece by piece rather than having to win in a single step. The bonus grows with how far into a term you already are, as `boost * (1 + ln(depth))`: cheap to start down a path, strongly rewarded to finish one. That ramp matters because greedy decoding cannot take back a token it has emitted, so a flat bonus would make a wrong first subword as attractive as a real completion, and terms would fire a syllable at a time on unrelated audio. The work per decoded token is one lookup per live path, bounded by the terms you passed rather than by the vocabulary, which is why the cost stays small.
 
@@ -1385,6 +1385,7 @@ Represents a single "line" or speech segment in a transcript. It includes inform
 - `duration`: A float that represents the duration in seconds of the current utterance.
 - `line_id`: An unsigned 64-bit integer that represents a line in a collision-resistant way, for use in storage and ensuring the application can keep track of lines as they change over time. See [Transcription Event Flow](#transcription-event-flow) for more details.
 - `is_complete`: A boolean that is false until the segment has been completed, and true for the remainder of the line's lifetime.
+- `last_transcription_latency_ms`: An integer giving the milliseconds between the library deciding speech had ended and the final transcript for that line being ready. Useful for measuring end-of-phrase responsiveness; see [Benchmarks](#benchmarks).
 
 - `is_updated`: A boolean that's true if any information about the line has changed since the last time the transcript was updated. Since the transcript will be periodically updated internally by the library as you add audio chunks, you can't rely on polling this to detect changes. You should rely on the event/listener flow to catch modifications instead. This applies to all of the booleans below too.
 - `is_new`: A boolean indicating whether the line has been added to the transcript by the last update call.
@@ -1404,7 +1405,7 @@ Represents a single "line" or speech segment in a transcript. It includes inform
 
 - `words`: An array of per-word timings, empty unless the `word_timestamps` option is enabled (which `identify_speakers` turns on for you). Each entry has the `word` itself, its `start` and `end` times in seconds, and a `confidence` value.
 
-- `audio_data`: An array of 32-bit floats representing the raw audio data that the line is based on, as 16KHz mono PCM data between 0.0 and 1.0. This can be useful for further processing (for example to drive a visual indicator or to feed into a specialized speech to text model after the line is complete).
+- `audio_data`: An array of 32-bit floats representing the raw audio data that the line is based on, as 16KHz mono PCM data between -1.0 and 1.0. This can be useful for further processing (for example to drive a visual indicator or to feed into a specialized speech to text model after the line is complete).
 
 #### Transcript
 
@@ -1426,7 +1427,7 @@ A single voice row from the native TTS catalog (as returned inside the map from 
 The dictionary shape returned by `list_tts_voices()`.
 
 - `present`: Sorted list of voice ids that are already available under the asset root used for the query.
-- `downloadable`: Sorted list of catalog voice ids that are not on disk yet but can be fetched (for example when constructing `TextToSpeech` with `download=True`).
+- `downloadable`: Sorted list of catalog voice ids that are not on disk yet but can be fetched (for example when `TextToSpeech().load()` downloads assets, or when you call `.models_from(directory, download=True)`).
 
 ### Classes
 
@@ -1438,7 +1439,7 @@ Handles the speech to text pipeline.
   - `model_path`: The path to the directory holding the component model files needed for the complete flow. Note that this is a path to the **folder**, not an individual **file**. You can download and get a path to a cached version of the standard models using the [download_model()](#downloading-models) function.
   - `model_arch`: The architecture of the model to load, from the selection defined in `ModelArch`.
   - `update_interval`: By default the transcriber will periodically run text transcription as new audio data is fed, so that update events can be triggered. This value is how often the speech to text model should be run. You can set this to a large duration to suppress updates between a line starting and ending, but because the streaming models do a lot of their work before the final speech to text stage, this may not reduce overall latency by much.
-  - <a id="transcriber-options"></a>`options`: These are flags that affect how the transcription process works inside the library, often enabling performance optimizations or debug logging. They are passed as a dictionary mapping strings to strings, even if the values are to be interpreted as numbers - for example `{"max_tokens_per_second", "15"}`.
+  - <a id="transcriber-options"></a>`options`: These are flags that affect how the transcription process works inside the library, often enabling performance optimizations or debug logging. They are passed as a dictionary mapping strings to strings, even if the values are to be interpreted as numbers - for example `{"max_tokens_per_second": "15"}`.
     - `skip_transcription`: If you only want the voice-activity detection and segmentation, but want to do further processing in your app, you can set this to "true" and then use the `audioData` array in each line.
     - `max_tokens_per_second`: The models occassionally get caught in an infinite decoder loop, where the same words are repeated over and over again. As a heuristic to catch this we compare the number of tokens in the current run to the duration of the audio, and if there seem to be too many tokens we truncate the decoding. By default this is set to 6.5, but for non-English languages where the models produce a lot more raw tokens per second, you may want to bump this to 13.0.
     - `use_speculative_decoding`: A boolean (default true) that speeds up streaming re-decodes by verifying the previous hypothesis and continuing from the first mismatch instead of greedily redecoding from BOS. Set to false to disable.
@@ -1466,7 +1467,7 @@ Handles the speech to text pipeline.
 - <a id="transcriber-transcribe-without-streaming"></a>`transcribe_without_streaming()`: A convenience function to extract text from a non-live audio source, such as a file. We optimize for streaming use cases, so you're probably better off using libraries that specialize in bulk, batched transcription if you use this a lot and have performance constraints. This will still call any registered event listeners as it processes the lines, so this can be useful to test your application using pre-recorded files, or to easily integrate offline audio sources.
   - `audio_data`: An array of 32-bit float values, representing mono PCM audio between -1.0 and 1.0, to be analyzed for speech.
   - `sample_rate`: The number of samples per second. The library uses this to convert to its working rate (16KHz) internally.
-  - `flags`: Integer, currently unused.
+  - `flags`: Integer, a bitwise OR of flags. Currently the only supported flag is `MOONSHINE_FLAG_SPELLING_MODE`, which applies alphanumeric-spelling fusion when a spelling model was loaded.
 
 - <a id="transcriber-start"></a>`start()`: Begins a new transcription session. You need to call this after you've created the `Transcriber` and before you add any audio.
 - <a id="transcriber-stop"></a>`stop()`: Ends a transcription session. If a speech segment was still active, it's marked as complete and the appropriate event handlers are called.
@@ -1488,6 +1489,9 @@ Handles the speech to text pipeline.
   - `listener`: An object you previously passed into `add_listener()`.
 
 - <a id="transcriber-remove-all-listeners"></a>`remove_all_listeners()`: Deletes all registered listeners so than none of them receive events anymore.
+
+- <a id="transcriber-set-keyterms"></a>`set_keyterms()`: Biases the decoder towards a list of jargon, product names, or proper nouns, replacing any previous list. Takes effect on the next transcription and does not rewrite text already emitted. Pass `None` or an empty list to turn biasing off. Strength is set with the `keyterm_boost` option at load time. See [Domain Customization](#domain-customization). Only streaming architectures support this.
+  - `keyterms`: Sequence of terms (for example `["Kubernetes", "Ceph"]`). Terms must not contain commas.
 
 #### MicTranscriber
 
@@ -1530,6 +1534,7 @@ The callbacks below cover almost everything. For line ids, speaker spans, word t
 - <a id="mictranscriber-on-progress"></a>`on_progress()`: Reports model download progress as a `0..1` fraction and the file being fetched. Attaching a handler also silences the default terminal progress bars.
 
 - <a id="mictranscriber-load"></a>`load()`: Downloads the model if needed, opens it, and returns the transcriber. Blocking, since the first call may have to fetch several hundred megabytes; report progress with [`on_progress()`](#mictranscriber-on-progress). Safe to call twice.
+- <a id="mictranscriber-set-keyterms"></a>`set_keyterms()`: Biases the decoder towards a list of terms while listening. Same semantics as [`Transcriber.set_keyterms()`](#transcriber-set-keyterms); call after `load()`. To start with a list instead, pass `keyterms` through [`options()`](#mictranscriber-options).
 - <a id="mictranscriber-start"></a>`start()`: Opens the microphone and begins transcribing. Raises if you haven't called `load()`.
 - <a id="mictranscriber-mute"></a>`mute()`: Drops incoming audio without closing the microphone, so an assistant doesn't transcribe its own synthesized speech.
 - <a id="mictranscriber-stop"></a>`stop()`: Stops listening and flushes any audio still in flight, so the final line is complete.
@@ -1626,7 +1631,7 @@ The context object passed as the first argument to every flow function. Each met
 - <a id="dialog-ask"></a>`ask()`: Returns a prompt that speaks a question and resumes the flow with the user's next utterance as a string.
   - `prompt`: The string for the assistant to speak before listening.
   - `mode`: One of `FREE` (free-form natural-language input, the default), `SPELLED` (the user dictates one character at a time, terminated by "done"/"stop"/"finish", with each character spoken back as feedback and support for NATO-alphabet style words and "delete"/"undo" commands), `DIGITS` (digits-only spelled input), or `PHRASE` (a single phrase). These constants are exported from the `moonshine_voice` package.
-  - `bias_terms`: Optional list of strings the recognizer should bias toward when interpreting the response.
+  - `bias_terms`: Optional list of strings reserved for future use; currently ignored. For runtime ASR biasing, pass `keyterms` / call [`set_keyterms()`](#transcriber-set-keyterms) on the underlying transcriber instead.
   - `timeout`: Seconds to wait for a response before reprompting. Defaults to 8 seconds.
   - `no_input_reprompt`: Template used to reprompt the user when no input arrives within the timeout. `{prompt}` is substituted with the original prompt text. Pass `None` to skip the reprompt.
   - `max_retries`: Number of times to reprompt before raising `NoInputError` into the flow. Defaults to 2.
@@ -1650,28 +1655,52 @@ The context object passed as the first argument to every flow function. Each met
 
 #### TextToSpeech
 
-On-device text-to-speech using the Moonshine native stack (Kokoro and Piper vocoders plus per-language G2P assets). Required files are resolved from the CDN unless you pass `download=False` and supply a populated tree. Invalid language tags raise `MoonshineTtsLanguageError`; missing or unknown voices raise `MoonshineTtsVoiceError`. Playback failures from `say()` raise `MoonshineAudioOutputError` with a list of output devices when enumeration succeeds.
+On-device text-to-speech using the Moonshine native stack (Kokoro, Piper, and ZipVoice vocoders plus per-language G2P assets). Invalid language tags raise `MoonshineTtsLanguageError`; missing or unknown voices raise `MoonshineTtsVoiceError`. Playback failures from `say()` raise `MoonshineAudioOutputError` with a list of output devices when enumeration succeeds.
+
+Construct one, configure it with chainable setters, call [`load()`](#texttospeech-load) to fetch and open the voice, then [`say()`](#texttospeech-say):
+
+```python
+tts = TextToSpeech().language("en_us").voice("kokoro_af_heart")
+tts.load()
+tts.say("Hello from Moonshine.")
+tts.wait()
+```
 
 `say()` is non-blocking and queued: each call returns immediately and utterances are played back in order by a background pipeline. A dedicated synthesis thread pre-synthesizes the next utterance while the current one is playing, minimizing the gap between consecutive utterances. Use `stop()` to cancel all pending speech, `wait()` to block until everything has been played, and `is_talking()` to poll playback state. The same API shape is available across Python, Swift, and Android (Java).
 
 Use `list_tts_languages()`, `list_tts_voices()`, and `get_tts_voice_catalog()` to discover supported tags and voices. Asset layout and licenses are summarized in [`core/moonshine-tts/data/README.md`](core/moonshine-tts/data/README.md); see also [Downloading Models](#text-to-speech-models).
 
-- <a id="texttospeech-init"></a>`__init__()`: Creates a synthesizer and optionally downloads dependencies into the package cache (or a custom root).
-  - `language`: BCP-47-style tag for the speaking locale (for example `en_us`, `de`, `fr`). Aliases such as `en-us` are normalized by the library.
-  - `voice`: Optional voice id. Prefix with `kokoro_` or `piper_` to choose the vocoder (for example `kokoro_af_heart`). When `download` is true, a catalogued voice that is not yet on disk is downloaded automatically.
-  - `options`: Optional mapping of string keys to strings, numbers, or booleans, passed through to the native option parser (see below). The Python binding always sets `g2p_root` to the resolved asset directory; do not rely on overriding that key for a different layout—use `asset_root` / `tts_root`-style options instead.
-  - `asset_root`: Optional directory to use as the TTS cache or as the on-disk asset tree. When `download` is true, downloads go under this root when set; when false, this path must already contain the expected `g2p_root` layout.
-  - `download`: When true (default), missing TTS assets are downloaded from `https://download.moonshine.ai/tts/`. When false, `asset_root` is required and must already contain the files the native layer expects.
-  - `clone`: Optional reference clip for ZipVoice voice cloning; either a path to a `.wav` file or a `(pcm, sample_rate)` pair of mono float PCM. When set, the ZipVoice engine is used automatically; passing `voice` together with `clone` raises an error.
-  - `clone_transcript`: Optional transcript of the `clone` clip (recommended for better cloning quality; requires `clone`).
+- <a id="texttospeech-init"></a>`__init__()`: Constructs an unconfigured synthesizer. Takes no arguments and cannot fail, so nothing is downloaded or opened until [`load()`](#texttospeech-load).
 
-- `language`: Read-only property returning the normalized language tag in use.
+Every setter returns the synthesizer, so one can be built in a single expression. Call them before `load()`.
 
-- `asset_root`: Read-only property returning the `pathlib.Path` directory passed to the native layer as `g2p_root`.
+- <a id="texttospeech-language"></a>`language()`: BCP-47-style tag for the speaking locale (for example `en_us`, `de`, `fr`). Aliases such as `en-us` are normalized by the library. Defaults to `"en"`.
+- <a id="texttospeech-voice"></a>`voice()`: Catalog voice id. Prefix with `kokoro_`, `piper_`, or `zipvoice_` to choose the vocoder (for example `kokoro_af_heart`). Clears [`cloning()`](#texttospeech-cloning).
+- <a id="texttospeech-models-from"></a>`models_from()`: Loads voice assets from a directory you supply rather than the default cache. Pass `download=True` to use that directory as the cache root and fetch anything missing into it; with `download=False` (the default for this setter) the directory must already be populated.
+- <a id="texttospeech-cloning"></a>`cloning()`: Creates this synthesizer as a ZipVoice cloning engine. Call before `load()` so ZipVoice and clone-ASR assets are fetched up front; afterwards [`clone_from()`](#texttospeech-clone-from) / [`start_cloning()`](#texttospeech-start-cloning) stay offline. Clears [`voice()`](#texttospeech-voice).
+- <a id="texttospeech-options"></a>`options()`: Escape hatch for native options the setters don't cover (see [Common `options` keys](#texttospeech-options-keys) below).
+- <a id="texttospeech-output-device"></a>`output_device()`: Playback device for `say()`, as a PortAudio index or a name substring. Defaults to the system default output.
+- <a id="texttospeech-volume"></a>`volume()`: Playback gain applied to everything `say()` plays.
+- <a id="texttospeech-on-progress"></a>`on_progress()`: Asset download progress, as a `0..1` fraction plus the file being fetched.
+- <a id="texttospeech-debug"></a>`debug()`: Trace synthesis and playback to stderr.
+
+- <a id="texttospeech-load"></a>`load()`: Downloads the voice assets if needed and prepares the synthesizer. Blocking, since the first call may have to fetch a few hundred megabytes; report progress with [`on_progress()`](#texttospeech-on-progress). Calling it again is a no-op. With [`cloning()`](#texttospeech-cloning), ZipVoice and clone ASR are both fetched here so [`clone_from()`](#texttospeech-clone-from) stays offline afterward.
+
+- `language_tag`: Read-only property returning the language tag in use.
+- `asset_root`: Read-only property returning the `pathlib.Path` directory passed to the native layer as `g2p_root` (raises if you have not called `load()` yet).
+- `is_cloned`: Read-only boolean that is `True` once a voice has been cloned into this synthesizer.
+
+- <a id="texttospeech-clone-from"></a>`clone_from()`: Clones the voice in `source` and uses it for subsequent synthesis. Requires [`cloning()`](#texttospeech-cloning) before `load()`.
+  - `source`: A path to a `.wav` file, a `(pcm, sample_rate)` pair of mono float PCM, or a `VoiceClone` that has captured enough speech.
+  - `transcript`: Optional transcript of the clip; when omitted, Moonshine auto-transcribes it with assets already fetched by `load()`.
+
+- <a id="texttospeech-start-cloning"></a>`start_cloning()`: Starts capturing a reference voice from the microphone. Requires [`cloning()`](#texttospeech-cloning) before `load()`. Returns a `VoiceClone` that listens until it has heard enough usable speech.
+  - `clip_duration_seconds`: Maximum capture window (default `4.0`).
+  - `minimum_speech_seconds`: Minimum speech required before the clone is ready (default `2.0`).
 
 - <a id="texttospeech-synthesize"></a>`synthesize()`: Converts `text` to mono PCM audio.
   - `text`: UTF-8 string to speak.
-  - `options`: Optional extra native options for this call only (merged with the constructor’s `options` semantics on the C side as documented there).
+  - `options`: Optional extra native options for this call only.
   - Returns a tuple `(samples, sample_rate)` where `samples` is a list of 32-bit floats in roughly the −1.0…1.0 range and `sample_rate` is the output sample rate in Hz.
 
 - <a id="texttospeech-say"></a>`say()`: Queues text for synthesis and playback, returning immediately. A background synthesis thread converts text to audio, then hands it to a playback thread that plays it on the selected output device. Synthesis of the next utterance overlaps with playback of the current one. Requires `pip install numpy sounddevice` on Python.
@@ -1685,18 +1714,18 @@ Use `list_tts_languages()`, `list_tts_voices()`, and `get_tts_voice_catalog()` t
 
 - <a id="texttospeech-is-talking"></a>`is_talking()`: Returns `True` if utterances are still queued, being synthesized, or currently playing. Named `isTalking()` on Swift and Android.
 
-- <a id="texttospeech-close"></a>`close()`: Stops any in-progress playback, discards pending utterances, and releases the native synthesizer handle. Called automatically when using a `with TextToSpeech(...) as tts:` block or on garbage collection.
+- <a id="texttospeech-close"></a>`close()`: Stops any in-progress playback, discards pending utterances, and releases the native synthesizer handle. Called automatically when using a `with TextToSpeech() as tts:` block or on garbage collection.
 
-<a id="texttospeech-options"></a>**Common `options` keys (TTS):** These mirror `MoonshineTTSOptions` in the C++ layer. Values are strings in the underlying API; the Python binding accepts bools and numbers where noted.
+<a id="texttospeech-options-keys"></a>**Common `options` keys (TTS):** These mirror `MoonshineTTSOptions` in the C++ layer. Values are strings in the underlying API; the Python binding accepts bools and numbers where noted. Pass them through [`options()`](#texttospeech-options) before `load()`, or as the per-call `options` argument to `say()` / `synthesize()`.
 
 - `tts_root`, `path_root`, `model_root`: Aliases for the asset root directory when you need to override layout discovery (same role as `g2p_root` in the native parser).
-- `voice`: Default voice id if not passed to the constructor (constructor argument wins when both are set in typical use).
+- `voice`: Default voice id if not set via [`voice()`](#texttospeech-voice) (the setter wins when both are used).
 - `speed`: Speaking rate multiplier (floating-point).
-- `kokoro_dir`, `kokoro_model` / `kokoro_model_onnx`, `kokoro_config` / `kokoro_config_json`: Override paths for Kokoro ONNX and config within the asset tree.
+- `kokoro_dir`, `kokoro_model` / `kokoro_model_onnx`, `kokoro_config` / `kokoro_config_json`: Override paths for Kokoro model and config within the asset tree.
 - `piper_onnx` / `piper_model_onnx`, `piper_onnx_json`, `piper_voices_dir` / `voices_dir`, `piper_voices_json_dir` / `voices_json_dir`: Override paths for Piper model, JSON sidecar, and voice directories.
 - `normalize_audio` / `piper_normalize_audio` (legacy alias), `output_volume` / `piper_output_volume` (legacy alias): Shared post-synthesis effects applied to both Kokoro and Piper output (peak-normalize, apply gain, then clip to `[-1, 1]`).
 - `piper_noise_scale` / `piper_noise_scale_override`, `piper_noise_w` / `piper_noise_w_override`: Piper inference tuning (see native option parsing for types).
-- `zipvoice_clone_sample_rate` / `clone_sample_rate`, `zipvoice_clone_transcript` / `clone_transcript`: Sample rate and transcript for a caller-supplied ZipVoice reference clip (memory key `zipvoice/clone_audio`); the Python `clone` / `clone_transcript` constructor arguments set these for you.
+- `zipvoice_clone_sample_rate` / `clone_sample_rate`, `zipvoice_clone_transcript` / `clone_transcript`: Sample rate and transcript for a caller-supplied ZipVoice reference clip (memory key `zipvoice/clone_audio`); Python [`clone_from()`](#texttospeech-clone-from) sets these for you.
 
 Additional keys are forwarded to the G2P option parser (language-specific ONNX overrides, feature flags, and so on).
 
@@ -1732,7 +1761,7 @@ This library is in active development, and we aim to implement:
 - More languages.
 - More streaming models.
 - Improved speaker identification.
-- Lightweight domain customization.
+- Broader domain customization (beyond runtime key-term biasing).
 
 ## Acknowledgements
 
