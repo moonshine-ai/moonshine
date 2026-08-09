@@ -28,6 +28,13 @@ struct BinTokenizer {
 
   template <typename T>
   T text_to_special_token(const std::string &text);
+
+ private:
+  // Token ids grouped by the byte they start with, in ascending id order, so
+  // that encoding only compares against the entries that could possibly match
+  // instead of walking the whole vocabulary for every subword it emits.
+  void build_first_byte_index();
+  std::vector<std::vector<int32_t>> tokens_by_first_byte;
 };
 
 #endif

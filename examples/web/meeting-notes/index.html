@@ -333,7 +333,25 @@
         padding: 0 0.25rem;
         margin-left: -0.25rem;
         border-radius: 0.2rem;
-        cursor: text;
+        /* A name is also the boundary it sits on, and is dragged to move it,
+           so the hand wins over the I-beam: renaming is a click, which a grab
+           cursor does not take away, while nothing else on the page would
+           suggest the label can be picked up. `-webkit-user-drag` is what
+           actually lifts the whole element rather than a selection of its
+           text, which is the difference between dragging a name and dragging
+           the word "Speaker". */
+        cursor: grab;
+        -webkit-user-drag: element;
+      }
+
+      .who:active {
+        cursor: grabbing;
+      }
+
+      /* Left behind while its drag is in the air, so the mark below is clearly
+         where the name is going rather than where it already is. */
+      .who.is-moving {
+        opacity: 0.35;
       }
 
       /* The names are editable, and editing one renames that speaker
@@ -345,6 +363,38 @@
 
       .who[data-src="you"] {
         color: #2f6f4f;
+      }
+
+      /* Where the boundary would land, in the red of the margin rule so it
+         reads as a mark made on the paper rather than as selected text.
+         Positioned against the viewport and parked in the body, because
+         anything put inside the sheet is inside a contenteditable: the reader
+         could type into it, and the exporter would have to know to skip it. */
+      .cut {
+        position: fixed;
+        z-index: 5;
+        width: 2px;
+        background: #c44e4e;
+        border-radius: 1px;
+        pointer-events: none;
+      }
+
+      /* Adding a name leaves the one being dragged where it is, so the mark
+         changes colour the moment Alt goes down: the only place the page can
+         say which of the two gestures is in progress is the mark itself. */
+      .cut.is-adding {
+        background: #2f6f4f;
+      }
+
+      .cut::before {
+        content: "";
+        position: absolute;
+        top: -0.3rem;
+        left: -0.22rem;
+        width: 0.55rem;
+        height: 0.55rem;
+        border-radius: 50%;
+        background: inherit;
       }
 
       /* The line whose audio is playing right now. */
@@ -543,7 +593,11 @@
         <span id="clock" class="deck__time">0:00 / 0:00</span>
         <span id="playHint" class="deck__hint">
           Click where you want to start, or select some text to hear just that.
-          Rename a speaker and every line of theirs follows.
+          Rename a speaker and every line of theirs follows; give two of them
+          the same name and they become one person. Drag a name into the words
+          above or below it to move where that speaker starts; Alt-drag to
+          leave a second name there instead, or Alt-click the words to start a
+          speaker nobody has heard yet.
         </span>
       </div>
 
@@ -822,8 +876,16 @@
 
       const speakerKey = (source, speaker) => `${source}:${speaker ?? ''}`;
 
+      /** The number given to each speaker the reader has introduced. */
+      const addedNumbers = new Map();
+
       function defaultName(source, speaker) {
         if (source === 'you') return 'You';
+        // A speaker the reader introduced is numbered when they introduce
+        // them, since there is no recognizer index to count from.
+        if (source === 'added') {
+          return `Speaker ${addedNumbers.get(speakerKey(source, speaker))}`;
+        }
         return speaker === null || speaker === undefined
           ? 'Meeting'
           : `Speaker ${speaker + 1}`;
@@ -841,6 +903,24 @@
 
       const speakerName = (key, source, speaker) =>
         speakerNames.get(key) || defaultName(source, speaker);
+
+      /**
+       * Whether two speaker ids are one person as far as the reader is
+       * concerned: different voices to the recognizer, one name from them.
+       *
+       * Diarization splits a single voice in two often enough -- somebody
+       * turns away from the microphone, or joins again from a worse line --
+       * and the reader says so by typing the same name over both. Two turns
+       * running, headed by the same name, is not what they asked for.
+       *
+       * Only names the reader typed count. Two speakers can come to show the
+       * same invented "Speaker 3" by coincidence, and those are two people the
+       * page has failed to tell apart rather than one it should join up.
+       */
+      function sameNamedSpeaker(a, b) {
+        const name = speakerNames.get(a);
+        return name !== undefined && name === speakerNames.get(b);
+      }
 
       /** Every heading on the page belonging to one speaker. */
       const headingsFor = (key) =>
@@ -877,10 +957,29 @@
         if (!key) return;
         const name = heading.textContent.replace(/\s+/g, ' ').trim();
         if (!name) return;
-        speakerNames.set(key, name);
-        for (const other of headingsFor(key)) {
-          if (other !== heading && other.textContent !== name) other.textContent = name;
+        renaming = heading;
+        // A turn can be more than one speaker: ids the reader has already
+        // given a single name to are laid out as one run under one heading, so
+        // a rename has to reach all of them. Reaching only the heading's own
+        // id would leave the others answering to the name before, and the next
+        // re-cut would pull the turn apart again along a seam the reader
+        // thought they had closed.
+        for (const renamed of speakersUnder(heading)) {
+          speakerNames.set(renamed, name);
+          for (const other of headingsFor(renamed)) {
+            if (other !== heading && other.textContent !== name) other.textContent = name;
+          }
         }
+      }
+
+      /** Every speaker id with words under one heading, its own included. */
+      function speakersUnder(heading) {
+        const keys = new Set([heading.dataset.who]);
+        for (const span of turnAfter(heading)?.querySelectorAll('.ln') ?? []) {
+          const line = lines.get(span.dataset.line);
+          if (line) keys.add(speakerKey(line.source, line.speaker));
+        }
+        return keys;
       }
 
       /**
@@ -907,7 +1006,7 @@
         // word: the exporter starts a paragraph at a block, and both the label
         // and the turn are blocks.
         const key = speakerKey(source, speaker);
-        if (key !== lastLabelled || !currentTurn) {
+        if ((key !== lastLabelled && !sameNamedSpeaker(key, lastLabelled)) || !currentTurn) {
           els.doc.append(newHeading(source, speaker));
           currentTurn = document.createElement('div');
           currentTurn.className = 'turn';
@@ -922,6 +1021,7 @@
         span.textContent = `${words} `;
         currentTurn.append(span);
 
+        markChanged();
         render();
         keepWritingInView();
       }
@@ -930,10 +1030,34 @@
         const key = speakerKey(source, speaker);
         const who = document.createElement('div');
         who.className = 'who';
+        who.draggable = true;
+        // Both of the things a name can do, said where someone wondering about
+        // the grab cursor will be looking. A gesture nothing on the page
+        // points at is a gesture nobody finds.
+        who.title = 'Click to rename. Drag into the words to move where this speaker starts.';
         who.dataset.src = source;
         who.dataset.who = key;
         who.textContent = speakerName(key, source, speaker);
         return who;
+      }
+
+      /** The source and speaker a heading stands for, read back off its key. */
+      function attributionOf(heading) {
+        const [source, speaker] = (heading.dataset.who ?? '').split(':');
+        return { source, speaker: speaker === '' ? null : Number(speaker) };
+      }
+
+      /** The turn a heading names, and the one belonging to the name above it. */
+      const turnAfter = (heading) => sibling(heading, 'nextElementSibling', 'turn');
+      const turnBefore = (heading) => sibling(heading, 'previousElementSibling', 'turn');
+      const headingAbove = (heading) => {
+        const before = turnBefore(heading);
+        return before ? sibling(before, 'previousElementSibling', 'who') : null;
+      };
+
+      function sibling(el, direction, className) {
+        const next = el[direction];
+        return next?.classList.contains(className) ? next : null;
       }
 
       /** Set while a revised set of speakers is waiting to be laid out. */
@@ -941,6 +1065,9 @@
 
       /** Set when a heading could not be relabelled because it was being typed into. */
       let regroupDeferred = false;
+
+      /** The heading being renamed, until the caret leaves it. */
+      let renaming = null;
 
       /** How many times the page has been re-cut, which the test watches. */
       let regroups = 0;
@@ -967,6 +1094,10 @@
         // standing guess about who is talking and put a "Meeting" heading back.
         if (speaker === null || speaker === undefined) return;
         if (!line || line.speaker === speaker) return;
+        // A line the reader has attributed by hand is settled. They can see
+        // the transcript and hear the meeting; the recognizer has only heard
+        // it, and has already been wrong about this one once.
+        if (line.manual) return;
         lines.set(id, { ...line, speaker });
         if (regroupPending) return;
         regroupPending = true;
@@ -997,7 +1128,7 @@
           if (!line) continue;
           const key = speakerKey(line.source, line.speaker);
           const last = runs[runs.length - 1];
-          if (last && last.key === key) last.spans.push(span);
+          if (last && (last.key === key || sameNamedSpeaker(last.key, key))) last.spans.push(span);
           else runs.push({ key, source: line.source, speaker: line.speaker, spans: [span] });
         }
         if (!runs.length) return;
@@ -1062,6 +1193,326 @@
       function holdsExactly(turn, spans) {
         const have = turn.querySelectorAll('.ln');
         return have.length === spans.length && spans.every((span, i) => have[i] === span);
+      }
+
+      // --- Moving a boundary by dragging its name -------------------------------
+      // Diarization is far likelier to get the words right and the join between
+      // two speakers slightly wrong than the other way about: a trailing "yeah"
+      // or an opening clause ends up under the name before it. The fix is the
+      // same shape as the mistake, so it is the same gesture -- the name *is*
+      // the boundary, so pick it up and put it where the boundary should have
+      // been. Dropped into the words above, those words join this speaker;
+      // dropped into this speaker's own words, the ones it has been dragged
+      // past go back to the speaker before.
+      //
+      // No further than those two runs. A name that could be dropped anywhere
+      // would be inviting the reader to re-cut the meeting by hand, and a join
+      // can only be somewhere between the two runs it separates, so everywhere
+      // else is a drop that could only have been a mistake.
+      //
+      // Two more operations fall out of that one rather than being built:
+      //
+      //   Adding a name is the same drag with Alt held, which is the copy
+      //   gesture everywhere else. The name lands as a second heading and the
+      //   words after it change hands, while the original stays where it was.
+      //   That covers the case the boundary drag cannot -- someone else spoke
+      //   in the middle of a run and diarization never noticed, so there is no
+      //   join there to move -- and needs no button of its own.
+      //
+      //   Deleting one needs nothing at all. Drop a name at the end of its own
+      //   words and its run is empty; re-cutting the page then finds one run
+      //   where there were two and drops the spare heading, which is the same
+      //   path a heading takes when diarization changes its mind.
+
+      /** The heading being dragged, while it is in the air. */
+      let dragged = null;
+
+      /** The mark showing where the boundary would land if it were let go. */
+      const cutMark = document.createElement('div');
+      cutMark.className = 'cut';
+      cutMark.hidden = true;
+      document.body.append(cutMark);
+
+      /** The caret under a point, however this browser spells the question. */
+      function caretAt(x, y) {
+        if (document.caretPositionFromPoint) {
+          const at = document.caretPositionFromPoint(x, y);
+          return at ? { node: at.offsetNode, offset: at.offset } : null;
+        }
+        const range = document.caretRangeFromPoint?.(x, y);
+        return range ? { node: range.startContainer, offset: range.startOffset } : null;
+      }
+
+      /**
+       * Where a drop or a click at this point would put the boundary, or null
+       * for nowhere.
+       *
+       * `within` holds it to the two runs either side of one name, which is
+       * the only place a join between those two speakers could be. Passing
+       * null allows anywhere, which is what putting a name down rather than
+       * moving one means.
+       *
+       * Snapped to the nearest gap between words, because a boundary inside a
+       * word is not something a meeting can have: half a word under each name
+       * reads as damage rather than as an attribution.
+       */
+      function boundaryAt(x, y, within) {
+        const caret = caretAt(x, y);
+        if (!caret || caret.node.nodeType !== Node.TEXT_NODE) return null;
+        const span = blockAt(caret.node, '.ln');
+        const turn = blockAt(caret.node, '.turn');
+        if (!span || !turn || !lines.has(span.dataset.line)) return null;
+        // Moving a join needs a run on each side of it. The opening name of
+        // the page has nothing above it to hand words to or take them from.
+        if (within) {
+          if (turn !== turnBefore(within) && turn !== turnAfter(within)) return null;
+          if (!headingAbove(within)) return null;
+        }
+
+        const text = caret.node.data;
+        let left = caret.offset;
+        let right = caret.offset;
+        while (left > 0 && !/\s/.test(text[left - 1])) left--;
+        while (right < text.length && !/\s/.test(text[right])) right++;
+        const offset = caret.offset - left <= right - caret.offset ? left : right;
+        return { node: caret.node, offset, span, turn };
+      }
+
+      function showCut(where, adding) {
+        const caret = document.createRange();
+        caret.setStart(where.node, where.offset);
+        caret.collapse(true);
+        let rect = caret.getBoundingClientRect();
+        // A collapsed range measures nothing at a soft wrap, so ask about the
+        // character beside it instead and take the edge they share.
+        if (!rect.height) {
+          const probe = caret.cloneRange();
+          const ahead = where.offset < where.node.data.length;
+          if (ahead) probe.setEnd(where.node, where.offset + 1);
+          else probe.setStart(where.node, Math.max(0, where.offset - 1));
+          const box = probe.getBoundingClientRect();
+          if (!box.height) return hideCut();
+          rect = new DOMRect(ahead ? box.left : box.right, box.top, 0, box.height);
+        }
+
+        // The sheet scrolls, so a boundary can be measured well outside it.
+        const paper = els.doc.getBoundingClientRect();
+        const top = Math.max(rect.top, paper.top);
+        const bottom = Math.min(rect.bottom, paper.bottom);
+        if (bottom - top < rect.height / 2) return hideCut();
+
+        cutMark.hidden = false;
+        cutMark.classList.toggle('is-adding', adding);
+        cutMark.style.left = `${rect.left - 1}px`;
+        cutMark.style.top = `${top}px`;
+        cutMark.style.height = `${bottom - top}px`;
+      }
+
+      function hideCut() {
+        cutMark.hidden = true;
+      }
+
+      /**
+       * Cuts the line a boundary falls inside in two, so that the boundary
+       * lies between two whole spans.
+       *
+       * Returns the first span at or after it, which is null when the boundary
+       * is at the end of the run. A line is a sentence or so of speech and the
+       * misattributed fragment is very often shorter than that, so a boundary
+       * that could only fall between lines would be no use against the mistake
+       * it exists to fix.
+       *
+       * The halves divide the line's stretch of recording between them in
+       * proportion to their length. That is a guess -- nobody speaks at a
+       * constant rate -- but it is a guess that keeps playback landing on
+       * roughly the right words and keeps the captions in order.
+       */
+      function splitLineAt({ node, offset, span, turn }) {
+        const line = lines.get(span.dataset.line);
+        const head = document.createRange();
+        head.setStart(span, 0);
+        head.setEnd(node, offset);
+        const before = head.toString();
+        const after = span.textContent.slice(before.length);
+        // Whitespace on one side of it means the boundary is already between
+        // two lines, whichever character the caret happened to name.
+        if (!before.trim()) return span;
+        if (!after.trim()) return spanAfter(turn, span);
+
+        const tail = document.createElement('span');
+        tail.className = 'ln';
+        tail.dataset.src = span.dataset.src;
+        tail.dataset.line = `${span.dataset.line}+${nextLocalId++}`;
+        const rest = document.createRange();
+        rest.setStart(node, offset);
+        rest.setEnd(span, span.childNodes.length);
+        // Extracted rather than re-typed, so bold, italics and anything else
+        // the reader has done to those words comes across with them.
+        tail.append(rest.extractContents());
+        span.after(tail);
+
+        const share = before.length / (before.length + after.length);
+        const at = line.startTime + (line.endTime - line.startTime) * share;
+        lines.set(span.dataset.line, { ...line, endTime: at, text: before.trim() });
+        lines.set(tail.dataset.line, { ...line, startTime: at, text: after.trim() });
+        return tail;
+      }
+
+      /**
+       * The next line span in a turn. Its own next sibling would do until a
+       * reader emboldens a phrase that runs across two lines, at which point
+       * the browser wraps both spans and they stop being siblings.
+       */
+      function spanAfter(turn, span) {
+        const spans = [...turn.querySelectorAll('.ln')];
+        return spans[spans.indexOf(span) + 1] ?? null;
+      }
+
+      /**
+       * Hands a line to a speaker, and stops the recognizer arguing about it.
+       *
+       * Diarization goes on revising who spoke for a couple of minutes after
+       * the words land -- which is exactly the window in which a reader
+       * notices a wrong attribution and fixes it -- and would otherwise put
+       * back what they had just corrected.
+       */
+      function attribute(span, { source, speaker }) {
+        const line = lines.get(span.dataset.line);
+        if (!line) return;
+        lines.set(span.dataset.line, { ...line, source, speaker, manual: true });
+        span.dataset.src = source;
+      }
+
+      function moveBoundary(heading, where, adding) {
+        // The words after the mark belong to the name dropped on them, unless
+        // the name was dropped into its own run, where the words it has been
+        // dragged past are the ones that change hands.
+        const claimsAfter = adding || where.turn !== turnAfter(heading);
+        const owner = sibling(where.turn, 'previousElementSibling', 'who');
+        // A name dropped on words already under it says nothing new, and
+        // should not leave a line cut in two to prove it.
+        if (claimsAfter && owner?.dataset.who === heading.dataset.who) return;
+
+        const boundary = splitLineAt(where);
+        const spans = [...where.turn.querySelectorAll('.ln')];
+        const at = boundary ? spans.indexOf(boundary) : spans.length;
+
+        if (claimsAfter) {
+          for (const span of spans.slice(at)) attribute(span, attributionOf(heading));
+        } else {
+          // Dropped into its own words, so the name has moved down the page
+          // and the words it has left behind belong to the name above it.
+          const above = headingAbove(heading);
+          if (!above) return;
+          for (const span of spans.slice(0, at)) attribute(span, attributionOf(above));
+        }
+        markChanged();
+        regroupTurns();
+      }
+
+      /** How many speakers the reader has introduced, for keys of their own. */
+      let addedSpeakers = 0;
+
+      /**
+       * A speaker the recognizer never found.
+       *
+       * Diarization can only tell apart the voices it has separated, and it
+       * does sometimes miss one outright: a brief interjection, or someone who
+       * only ever speaks over other people. There is then no name anywhere on
+       * the page to copy, so this makes one. It is numbered in a sequence of
+       * its own, so that a voice diarization separates out later cannot land
+       * on this one's key and silently become the same person; the number it
+       * is shown by is only a placeholder for whatever the reader calls them,
+       * but it still has to be one nobody else on the page is using.
+       */
+      function newSpeaker() {
+        const speaker = addedSpeakers++;
+        addedNumbers.set(speakerKey('added', speaker), freeSpeakerNumber());
+        return { source: 'added', speaker };
+      }
+
+      function freeSpeakerNumber() {
+        let taken = 0;
+        for (const line of lines.values()) {
+          if (line.source === 'meeting' && typeof line.speaker === 'number') {
+            taken = Math.max(taken, line.speaker + 1);
+          }
+        }
+        for (const number of addedNumbers.values()) taken = Math.max(taken, number);
+        for (const name of speakerNames.values()) {
+          const numbered = /^Speaker (\d+)$/.exec(name);
+          if (numbered) taken = Math.max(taken, Number(numbered[1]));
+        }
+        return taken + 1;
+      }
+
+      /** Gives the rest of a run to a speaker who has not been heard of yet. */
+      function addSpeakerAt(where) {
+        const boundary = splitLineAt(where);
+        const spans = [...where.turn.querySelectorAll('.ln')];
+        const at = boundary ? spans.indexOf(boundary) : spans.length;
+        // A name with no words under it is not a name.
+        if (at >= spans.length) return;
+        const speaker = newSpeaker();
+        for (const span of spans.slice(at)) attribute(span, speaker);
+        markChanged();
+        regroupTurns();
+      }
+
+      // Alt-click is Alt-drag with nothing in hand, and means the same thing:
+      // somebody else is talking from here. With no name being carried there
+      // is nobody to say it was, so the page makes a new speaker and leaves
+      // the reader to say who. One click only: two is how a word is selected,
+      // and three how a sentence is.
+      els.doc.addEventListener('click', (event) => {
+        if (!event.altKey || event.detail !== 1) return;
+        const where = boundaryAt(event.clientX, event.clientY, null);
+        if (where) addSpeakerAt(where);
+      });
+
+      els.doc.addEventListener('dragstart', (event) => {
+        const heading = headingAt(event.target);
+        if (!heading) return;
+        dragged = heading;
+        heading.classList.add('is-moving');
+        // Firefox will not begin a drag with an empty clipboard, and the name
+        // is the honest thing to put on it.
+        event.dataTransfer.setData('text/plain', heading.textContent);
+        event.dataTransfer.effectAllowed = 'copyMove';
+      });
+
+      els.doc.addEventListener('dragover', (event) => {
+        if (!dragged) return;
+        // Taken over whole. What a drag over editable text does by default is
+        // drop the thing being dragged into it, and the thing being dragged
+        // here is a heading, which would land in the middle of a sentence.
+        event.preventDefault();
+        const where = boundaryAt(event.clientX, event.clientY, event.altKey ? null : dragged);
+        event.dataTransfer.dropEffect = !where ? 'none' : event.altKey ? 'copy' : 'move';
+        if (where) showCut(where, event.altKey);
+        else hideCut();
+      });
+
+      // A drag that has wandered off the sheet is not pointing at anything.
+      document.addEventListener('dragover', (event) => {
+        if (dragged && !els.doc.contains(event.target)) hideCut();
+      });
+
+      els.doc.addEventListener('drop', (event) => {
+        if (!dragged) return;
+        event.preventDefault();
+        const heading = dragged;
+        const where = boundaryAt(event.clientX, event.clientY, event.altKey ? null : heading);
+        endDrag();
+        if (where) moveBoundary(heading, where, event.altKey);
+      });
+
+      els.doc.addEventListener('dragend', endDrag);
+
+      function endDrag() {
+        dragged?.classList.remove('is-moving');
+        dragged = null;
+        hideCut();
       }
 
       /** The in-flight phrase for one source, shown until the line finishes. */
@@ -1132,6 +1583,7 @@
         const heading = editedHeading();
         if (heading) renameSpeaker(heading);
         adoptOrphans();
+        markChanged();
         render();
       });
 
@@ -1865,10 +2317,19 @@ registerProcessor('moonshine-capture', MoonshineCapture);
       // for the play button is not the reader changing their mind about where
       // to start, and treating it as one would make resuming impossible.
       document.addEventListener('selectionchange', () => {
-        // A heading left alone mid-rename is relabelled once the caret is out
-        // of it, which is the next time the selection moves at all — including
-        // the move away from the document that this listener otherwise ignores.
-        if (regroupDeferred) {
+        // Two things wait for the caret to leave a heading, and the next move
+        // of the selection is when both happen — including the move away from
+        // the document that this listener otherwise ignores.
+        //
+        // A heading left alone mid-rename is relabelled. And a rename is
+        // finished, so a name that now matches the turn above or below it can
+        // be laid out as one turn with it: doing that as the reader types
+        // would act on every half-finished name on the way to the one they
+        // meant, and joining two speakers is not something to do on the way
+        // past.
+        const renamed = renaming !== null && editedHeading() !== renaming;
+        if (renamed) renaming = null;
+        if (regroupDeferred || renamed) {
           regroupDeferred = false;
           regroupTurns();
         }
@@ -1917,6 +2378,32 @@ registerProcessor('moonshine-capture', MoonshineCapture);
       });
 
       // --- Taking the notes with you ---------------------------------------------
+      // Nothing here is uploaded, which is the point of the page and also the
+      // one thing about it that can lose an afternoon's work: the notes exist
+      // in this tab and in no other place, there is no server to have
+      // autosaved them to, and closing the tab is the same gesture as closing
+      // a meeting that has just finished. So the page asks first, but only
+      // when there is something to lose: anything that changes the document
+      // arms the question, and anything that takes a copy of it away puts it
+      // back to rest. Saving the audio is not one of those things -- the
+      // recording is not the notes.
+
+      let exported = true;
+
+      function markChanged() {
+        exported = false;
+      }
+
+      function markExported() {
+        exported = true;
+      }
+
+      window.addEventListener('beforeunload', (event) => {
+        if (exported || isEmpty()) return;
+        event.preventDefault();
+        // Browsers older than the ones for which preventDefault is enough.
+        event.returnValue = true;
+      });
 
       const paragraphs = () =>
         readDocument(els.doc, { skip: (el) => el.classList.contains('prov') });
@@ -1938,6 +2425,7 @@ registerProcessor('moonshine-capture', MoonshineCapture);
       els.copy.addEventListener('click', async () => {
         try {
           await navigator.clipboard.writeText(toPlainText(paragraphs()));
+          markExported();
           const original = els.copy.textContent;
           els.copy.textContent = 'Copied';
           setTimeout(() => (els.copy.textContent = original), 1400);
@@ -1955,9 +2443,13 @@ registerProcessor('moonshine-capture', MoonshineCapture);
           new Blob([toMarkdown(paragraphs())], { type: 'text/markdown;charset=utf-8' }),
           filename('md'),
         );
+        markExported();
       });
 
-      els.word.addEventListener('click', () => save(toDocx(paragraphs()), filename('docx')));
+      els.word.addEventListener('click', () => {
+        save(toDocx(paragraphs()), filename('docx'));
+        markExported();
+      });
 
       els.wav.addEventListener('click', () => save(wavBlob(), filename('wav')));
 
@@ -1989,6 +2481,7 @@ registerProcessor('moonshine-capture', MoonshineCapture);
           out.push(`${index++}\n${stamp(start)} --> ${stamp(end)}\n${text}\n`);
         }
         save(new Blob([out.join('\n')], { type: 'text/plain;charset=utf-8' }), filename('srt'));
+        markExported();
       });
 
       // --- Typed lines -------------------------------------------------------------

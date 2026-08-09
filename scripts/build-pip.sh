@@ -27,7 +27,10 @@ fi
 # directory cannot be established"). See scripts/publish-binary.sh for the same
 # guard.
 cd ${CORE_DIR}
-cmake -S ${CORE_DIR} -B ${CORE_BUILD_DIR}
+# --config only reaches multi-config generators like Xcode, so the build type has
+# to be set at configure time as well or the Makefiles/Ninja build this normally
+# uses gets no optimization flag at all and the wheel ships debug-speed code.
+cmake -S ${CORE_DIR} -B ${CORE_BUILD_DIR} -DCMAKE_BUILD_TYPE=Release
 cmake --build ${CORE_BUILD_DIR} --config Release
 
 # Drop stale native libs from other platforms (e.g. macOS dylibs left in the

@@ -314,6 +314,22 @@ MOONSHINE_EXPORT const char *moonshine_error_to_string(int32_t error);
    the same runtime. Safe to call on NULL. */
 MOONSHINE_EXPORT void moonshine_free_buffer(void *ptr);
 
+/* Replaces the contextual-biasing key terms on an existing transcriber, so a
+   caller can follow whatever context the user is in - the contact list on
+   screen, the vocabulary of the document being dictated into - without
+   reloading the model. ``keyterms`` is a comma-separated list using the same
+   syntax as the ``keyterms`` load option; pass NULL or an empty string to turn
+   biasing off.
+
+   Safe to call between transcribe calls on a live stream. Takes effect on the
+   next transcribe call: it does not retroactively change text already emitted.
+
+   Returns ``MOONSHINE_ERROR_NONE`` on success, or a non-zero error code if the
+   handle is invalid or the loaded model is not a streaming architecture (only
+   those decode through a path that can apply the bias). */
+MOONSHINE_EXPORT int32_t moonshine_transcriber_set_keyterms(
+    int32_t transcriber_handle, const char *keyterms);
+
 /* Converts a transcript_t struct into a human-readable string for debugging
  * purposes. The string is owned by the library, and is valid until the next
  * call to moonshine_transcript_to_string. */
@@ -331,7 +347,7 @@ MOONSHINE_EXPORT const char *moonshine_transcript_to_string(
    example `python scripts/download-moonshine-model.py --model-type base
    --model-language en`.
    The source weights are available on the Hugging Face Model Hub at
-   https://huggingface.co/UsefulSensors/, and the download and conversion to
+   https://huggingface.co/moonshine-ai/, and the download and conversion to
    ONNX script is available in this repository at
    `scripts/convert-moonshine-model.sh`.
    The tokenizer.bin contains the token to character mapping for the model,
@@ -351,6 +367,18 @@ MOONSHINE_EXPORT const char *moonshine_transcript_to_string(
    Pass ``use_speculative_decoding`` (bool, default true) to control
    speculative re-decode of the previous hypothesis on streaming updates
    (set false to fall back to greedy redecode from BOS).
+   Pass ``keyterms`` (comma-separated terms, e.g.
+   ``Kubernetes,Anushka Sharma,ANSI/ISO``) to bias the decoder towards words it
+   would otherwise be unlikely to produce - jargon, product names, contact
+   names. No retraining is involved: each term is compiled into a subword trie
+   and used to nudge the decoder's logits, so the terms can be different on
+   every transcriber and can be replaced mid-stream with
+   ``moonshine_transcriber_set_keyterms``. Match the capitalization and
+   spelling you want to see in the output. Only the streaming architectures
+   apply this. ``keyterm_boost`` (float, default 2.0) sets the strength. The
+   default is where the terms come out most accurately; going higher recovers no
+   more of them and starts putting them where they were not said, so lower it if
+   general accuracy matters more than the list does, rather than raising it.
    Pass ``identify_speakers`` (bool, default false) to enable speaker
    diarization: each line then carries a ``speaker_spans`` array describing
    who spoke when, including UTF-8 character ranges into the line text.

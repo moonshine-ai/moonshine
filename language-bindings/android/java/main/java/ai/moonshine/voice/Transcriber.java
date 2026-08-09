@@ -282,6 +282,48 @@ public class Transcriber {
                                                    audioData, sampleRate, flags);
   }
 
+  /**
+   * Biases the decoder towards a list of terms, replacing any previous list.
+   *
+   * <p>Useful for jargon, product names and proper nouns the model would
+   * otherwise be unlikely to produce. No retraining is involved, so the list can
+   * follow whatever the user is looking at and can be changed while a stream is
+   * running; it takes effect on the next transcription and does not rewrite text
+   * already emitted.
+   *
+   * <p>Match the capitalization and spelling you want to see in the output. Pass
+   * {@code null} or an empty list to turn biasing off. Set the strength with the
+   * {@code keyterm_boost} option at load time.
+   *
+   * @param keyterms Terms to bias towards, e.g. {@code ["Kubernetes", "Ceph"]}.
+   *                 Commas are the delimiter used internally, so terms must not
+   *                 contain them.
+   * @throws RuntimeException if a term contains a comma, or if the loaded model
+   *                          is not a streaming architecture — only those decode
+   *                          through a path that can apply the bias.
+   */
+  public void setKeyterms(List<String> keyterms) {
+    StringBuilder joined = new StringBuilder();
+    if (keyterms != null) {
+      for (String term : keyterms) {
+        if (term.contains(",")) {
+          throw new RuntimeException(
+              "Key terms cannot contain commas, which separate them: " + term);
+        }
+        if (joined.length() > 0) {
+          joined.append(',');
+        }
+        joined.append(term);
+      }
+    }
+    int error = JNI.moonshineTranscriberSetKeyterms(this.transcriberHandle,
+                                                    joined.toString());
+    if (error != JNI.MOONSHINE_ERROR_NONE) {
+      throw new RuntimeException("Failed to set key terms: " +
+                                JNI.moonshineErrorToString(error));
+    }
+  }
+
   public int createStream() {
     return JNI.moonshineCreateStream(this.transcriberHandle, 0);
   }

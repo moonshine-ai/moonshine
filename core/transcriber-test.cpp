@@ -1191,4 +1191,111 @@ TEST_CASE("transcriber-test") {
     REQUIRE(aligned_lines > 0);
     free(wav_data);
   }
+  SUBCASE("keyterm-biasing") {
+    std::string wav_path = "two_cities.wav";
+    REQUIRE(std::filesystem::exists(wav_path));
+    float *wav_data = nullptr;
+    size_t wav_data_size = 0;
+    int32_t wav_sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
+                          &wav_sample_rate));
+    REQUIRE(wav_data != nullptr);
+    REQUIRE(wav_data_size > 0);
+    std::string root_model_path = "tiny-streaming-en";
+    REQUIRE(std::filesystem::exists(root_model_path));
+
+    // Biasing has to survive both decode paths, so run each configuration
+    // twice: once with the speculative re-decode that streaming uses by
+    // default, and once with the plain greedy loop.
+    auto transcribe_with = [&](const std::vector<std::string> &keyterms,
+                               float boost, bool speculative) -> std::string {
+      TranscriberOptions options;
+      options.model_source = TranscriberOptions::ModelSource::FILES;
+      options.model_path = root_model_path.c_str();
+      options.model_arch = MOONSHINE_MODEL_ARCH_TINY_STREAMING;
+      options.keyterms = keyterms;
+      options.keyterm_boost = boost;
+      options.use_speculative_decoding = speculative;
+      Transcriber transcriber(options);
+      struct transcript_t *transcript = nullptr;
+      transcriber.transcribe_without_streaming(wav_data, wav_data_size,
+                                               wav_sample_rate, 0, &transcript);
+      REQUIRE(transcript != nullptr);
+      std::string text;
+      for (size_t i = 0; i < transcript->line_count; i++) {
+        const struct transcript_line_t &line = transcript->lines[i];
+        if (line.text != nullptr) {
+          text += line.text;
+          text += " ";
+        }
+      }
+      return text;
+    };
+
+    // A term that does not occur in the audio, so that any appearance of it is
+    // unambiguously the biasing acting on the decoder, and any absence of it
+    // means the biasing is genuinely inactive.
+    const std::vector<std::string> keyterms = {"Kubernetes"};
+
+    // These assertions are all about whether the term appears, never about the
+    // exact transcript. Decoding is not bit-stable across process states -- the
+    // unbiased text of this clip varies by a word depending on what ran before
+    // it -- so comparing whole transcripts would be flaky for reasons that have
+    // nothing to do with biasing. context-biaser-test.cpp covers the exact
+    // numeric behaviour instead.
+    for (const bool speculative : {true, false}) {
+      const std::string baseline = transcribe_with({}, 0.0f, speculative);
+      REQUIRE_FALSE(baseline.empty());
+      LOGF("Baseline (speculative=%d): %s", speculative ? 1 : 0,
+           baseline.c_str());
+      CHECK(baseline.find("Kubernetes") == std::string::npos);
+
+      // Key terms present but a zero boost adds nothing, so the term must not
+      // be pulled in.
+      CHECK(transcribe_with(keyterms, 0.0f, speculative).find("Kubernetes") ==
+            std::string::npos);
+
+      // A boost this large overwhelms the acoustics, so the term should be
+      // forced into the output. The point is not the exact text but that the
+      // bias reaches the token choice at all, on both decode paths.
+      const std::string biased = transcribe_with(keyterms, 30.0f, speculative);
+      LOGF("Biased (speculative=%d): %s", speculative ? 1 : 0, biased.c_str());
+      CHECK(biased != baseline);
+      CHECK(biased.find("Kubernetes") != std::string::npos);
+    }
+
+    // Key terms can be replaced on a live transcriber, and clearing them
+    // restores the unbiased behaviour exactly.
+    TranscriberOptions options;
+    options.model_source = TranscriberOptions::ModelSource::FILES;
+    options.model_path = root_model_path.c_str();
+    options.model_arch = MOONSHINE_MODEL_ARCH_TINY_STREAMING;
+    options.keyterm_boost = 30.0f;
+    Transcriber transcriber(options);
+    auto transcribe_current = [&]() -> std::string {
+      struct transcript_t *transcript = nullptr;
+      transcriber.transcribe_without_streaming(wav_data, wav_data_size,
+                                               wav_sample_rate, 0, &transcript);
+      REQUIRE(transcript != nullptr);
+      std::string text;
+      for (size_t i = 0; i < transcript->line_count; i++) {
+        const struct transcript_line_t &line = transcript->lines[i];
+        if (line.text != nullptr) {
+          text += line.text;
+          text += " ";
+        }
+      }
+      return text;
+    };
+    const std::string unbiased = transcribe_current();
+    CHECK(unbiased.find("Kubernetes") == std::string::npos);
+    transcriber.set_keyterms(keyterms);
+    CHECK(transcribe_current().find("Kubernetes") != std::string::npos);
+    // Clearing has to actually turn the biasing off, including dropping the
+    // speculative draft that was decoded with it.
+    transcriber.set_keyterms({});
+    CHECK(transcribe_current().find("Kubernetes") == std::string::npos);
+
+    free(wav_data);
+  }
 }

@@ -21,6 +21,13 @@
 #   --skip-macos              Skip the MacBook Pro stage
 #   --skip-build-swift        Do not run build-swift.sh before iOS/macOS tests
 #                             (assumes language-bindings/swift/Moonshine.xcframework is current)
+#   --keyterms LIST           Comma-separated key terms to enable contextual
+#                             biasing for. Run once without and once with this
+#                             to measure the biasing overhead on a device.
+#                             Results land in .mobile-latency/*-biased.log.
+#                             Lists too long for a command line are pushed to
+#                             the device as a file automatically.
+#   --keyterm-boost VALUE     Boost for --keyterms (default: library default)
 #   --update-readme           Rewrite MacBook Pro / Pixel / iPad Streaming
 #                             latency cells in README.md from measured results
 #                             (only when a cell changes by more than 5%)
@@ -50,6 +57,8 @@ MACOS_ONLY=0
 SKIP_MACOS=0
 SKIP_BUILD_SWIFT=0
 UPDATE_README=0
+KEYTERMS=""
+KEYTERM_BOOST=""
 DEVELOPMENT_TEAM="${DEVELOPMENT_TEAM:-S3AJ7B7ZCG}"
 
 log() { echo "[mobile-latency] $*"; }
@@ -95,12 +104,20 @@ while [[ $# -gt 0 ]]; do
 		SKIP_BUILD_SWIFT=1
 		shift
 		;;
+	--keyterms)
+		KEYTERMS="$2"
+		shift 2
+		;;
+	--keyterm-boost)
+		KEYTERM_BOOST="$2"
+		shift 2
+		;;
 	--update-readme)
 		UPDATE_README=1
 		shift
 		;;
 	-h | --help)
-		sed -n '2,45p' "$0"
+		sed -n '2,48p' "$0"
 		exit 0
 		;;
 	*)
@@ -113,6 +130,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 RESULTS_DIR="${REPO_ROOT}/.mobile-latency"
 mkdir -p "${RESULTS_DIR}"
+
+# Keep biased runs in their own logs so a baseline run stays available to
+# compare against.
+RUN_TAG=""
+if [[ -n "${KEYTERMS}" ]]; then
+	RUN_TAG="-biased"
+	if [[ "${UPDATE_README}" -eq 1 ]]; then
+		die "--update-readme publishes baseline latency; drop --keyterms"
+	fi
+	log "key-term biasing on: $(awk -F, '{print NF}' <<<"${KEYTERMS}") terms, boost ${KEYTERM_BOOST:-default}"
+fi
 
 ensure_assets() {
 	# Models download from the CDN at test time. two_cities.wav is optional
@@ -285,12 +313,36 @@ run_android() {
 	pick_android_serial
 	export ANDROID_SERIAL
 	log "Android target: ${ANDROID_SERIAL}"
-	local out="${RESULTS_DIR}/android.log"
+	local out="${RESULTS_DIR}/android${RUN_TAG}.log"
+	local keyterm_args=()
+	if [[ -n "${KEYTERMS}" ]]; then
+		# adb rejects a command line holding a list of more than a few thousand
+		# terms, so past a conservative threshold the list travels as a file.
+		if [[ "${#KEYTERMS}" -gt 8192 ]]; then
+			local device_path="/data/local/tmp/moonshine-keyterms.txt"
+			log "pushing ${#KEYTERMS} bytes of key terms to ${device_path}"
+			printf '%s' "${KEYTERMS}" >"${RESULTS_DIR}/keyterms.txt"
+			"${ADB}" -s "${ANDROID_SERIAL}" push "${RESULTS_DIR}/keyterms.txt" \
+				"${device_path}" >/dev/null \
+				|| die "failed to push key terms to the device"
+			keyterm_args+=("-Pandroid.testInstrumentationRunnerArguments.keyterms_file=${device_path}")
+		else
+			keyterm_args+=("-Pandroid.testInstrumentationRunnerArguments.keyterms=${KEYTERMS}")
+		fi
+		if [[ -n "${KEYTERM_BOOST}" ]]; then
+			keyterm_args+=("-Pandroid.testInstrumentationRunnerArguments.keyterm_boost=${KEYTERM_BOOST}")
+		fi
+	fi
+	# Results are read back out of logcat, which is a ring buffer that survives
+	# between runs: without clearing it a previous run's numbers are still there
+	# to be parsed as though they belonged to this one.
+	"${ADB}" -s "${ANDROID_SERIAL}" logcat -c 2>/dev/null || true
 	(
 		cd "${REPO_ROOT}/language-bindings/android"
 		./gradlew -Pandroid.useAndroidX=true \
 			connectedAndroidTest \
 			-Pandroid.testInstrumentationRunnerArguments.class=ai.moonshine.voice.StreamingLatencyTest \
+			"${keyterm_args[@]+"${keyterm_args[@]}"}" \
 			--no-daemon --stacktrace
 	) 2>&1 | tee "${out}"
 
@@ -302,7 +354,7 @@ run_android() {
 	fi
 	"${ADB}" -s "${ANDROID_SERIAL}" logcat -d -s MoonshineLatency:I 2>/dev/null >>"${out}" || true
 
-	local envf="${RESULTS_DIR}/android.env"
+	local envf="${RESULTS_DIR}/android${RUN_TAG}.env"
 	parse_latency_results android "${envf}" "${out}"
 	load_env_file "${envf}"
 	ANDROID_DEVICE="${device}"
@@ -332,13 +384,15 @@ run_macos() {
 	log "MacBook Pro (host) target"
 	ensure_swift_xcframework
 
-	local out="${RESULTS_DIR}/macos.log"
+	local out="${RESULTS_DIR}/macos${RUN_TAG}.log"
 	(
 		cd "${REPO_ROOT}/language-bindings/swift"
+		export MOONSHINE_KEYTERMS="${KEYTERMS}"
+		export MOONSHINE_KEYTERM_BOOST="${KEYTERM_BOOST}"
 		swift test --filter MoonshineVoiceTests.StreamingLatencyTests/testStreamingLatencyTwoCities
 	) 2>&1 | tee "${out}"
 
-	local envf="${RESULTS_DIR}/macos.env"
+	local envf="${RESULTS_DIR}/macos${RUN_TAG}.env"
 	parse_latency_results macos "${envf}" "${out}"
 	load_env_file "${envf}"
 	MACOS_DEVICE="${device}"
@@ -360,10 +414,16 @@ run_ios() {
 	[[ -d "${proj_dir}/StreamingLatency.xcodeproj" ]] \
 		|| die "missing ${proj_dir}/StreamingLatency.xcodeproj (install xcodegen or commit the project)"
 
-	local out="${RESULTS_DIR}/ios.log"
+	local out="${RESULTS_DIR}/ios${RUN_TAG}.log"
 	local dest="platform=iOS,id=${IOS_UDID}"
 	(
 		cd "${proj_dir}"
+		# xcodebuild forwards variables from its own environment whose names
+		# start with TEST_RUNNER_ to the test process, with the prefix stripped.
+		# They have to be exported rather than passed as trailing arguments,
+		# which xcodebuild would read as build setting overrides instead.
+		export TEST_RUNNER_MOONSHINE_KEYTERMS="${KEYTERMS}"
+		export TEST_RUNNER_MOONSHINE_KEYTERM_BOOST="${KEYTERM_BOOST}"
 		xcodebuild test \
 			-project StreamingLatency.xcodeproj \
 			-scheme StreamingLatency \
@@ -382,7 +442,7 @@ run_ios() {
 			| rg "MOONSHINE_LATENCY" >>"${out}" || true
 	fi
 
-	local envf="${RESULTS_DIR}/ios.env"
+	local envf="${RESULTS_DIR}/ios${RUN_TAG}.env"
 	parse_latency_results ios "${envf}" "${out}"
 	load_env_file "${envf}"
 	IOS_DEVICE="${device}"
@@ -560,5 +620,5 @@ fi
 	echo "ios_small_ms=${IOS_SMALL_MS:-}"
 	echo "ios_medium_ms=${IOS_MEDIUM_MS:-}"
 	echo "ios_device=${IOS_DEVICE:-}"
-} >"${RESULTS_DIR}/summary.env"
-log "wrote ${RESULTS_DIR}/summary.env"
+} >"${RESULTS_DIR}/summary${RUN_TAG}.env"
+log "wrote ${RESULTS_DIR}/summary${RUN_TAG}.env"

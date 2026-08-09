@@ -75,12 +75,15 @@ else
     # ${CORE_DIR} sidesteps that race. A fresh build dir also makes the old
     # `make clean` step redundant.
     cd ${CORE_DIR}
+    # The build type has to be explicit: without it CMake passes no optimization
+    # flag at all, so the published archive would carry a debug-speed library.
     if [[ "$PLATFORM" == macos-* ]]; then
-      cmake -S ${CORE_DIR} -B ${BUILD_DIR} -DMOONSHINE_BUILD_SWIFT=YES
+      cmake -S ${CORE_DIR} -B ${BUILD_DIR} -DMOONSHINE_BUILD_SWIFT=YES \
+        -DCMAKE_BUILD_TYPE=Release
     else
-      cmake -S ${CORE_DIR} -B ${BUILD_DIR}
+      cmake -S ${CORE_DIR} -B ${BUILD_DIR} -DCMAKE_BUILD_TYPE=Release
     fi
-    cmake --build ${BUILD_DIR} -v
+    cmake --build ${BUILD_DIR} --config Release -v
 fi
 
 TMP_DIR=$(mktemp -d)

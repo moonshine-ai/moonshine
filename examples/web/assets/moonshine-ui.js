@@ -131,13 +131,15 @@ export function mountChrome({ active, ctaTitle } = {}) {
         </a>
       </div>
       <div class="ms-footer__links">
-        <a href="${SITE_URL}" target="_blank" rel="noopener">moonshine.ai</a>
-        <a href="${DISCORD_URL}" target="_blank" rel="noopener">Discord</a>
-        <a href="${CONTACT_URL}">Contact</a>
+        <a href="${GITHUB_URL}" target="_blank" rel="noopener">GitHub</a>
         <a href="https://pypi.org/project/moonshine-voice/" target="_blank" rel="noopener">Python</a>
         <a href="https://www.npmjs.com/package/${NPM_PACKAGE}" target="_blank" rel="noopener">npm</a>
-        <a href="https://huggingface.co/UsefulSensors" target="_blank" rel="noopener">Hugging Face</a>
+        <a href="https://huggingface.co/moonshine-ai" target="_blank" rel="noopener">HuggingFace</a>
         <span>Runs on-device. MIT licensed.</span>
+        <span class="ms-footer__reach">
+          <a href="${DISCORD_URL}" target="_blank" rel="noopener">Discord</a>
+          <a href="${CONTACT_URL}">Contact</a>
+        </span>
       </div>
     </div>`;
   document.body.append(footer);

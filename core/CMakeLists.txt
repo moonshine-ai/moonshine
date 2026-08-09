@@ -48,6 +48,24 @@ option(MOONSHINE_RELIABILITY
 # ASan, so scripts/reliability-remote.sh builds it into its own directory).
 set(MOONSHINE_SANITIZER "address,undefined" CACHE STRING
     "Sanitizer set for MOONSHINE_RELIABILITY builds (address,undefined|thread)")
+
+# CMake passes no optimization flag at all unless a build type is chosen, so
+# every script that configures without one has been producing a library that
+# runs at debug speed. Nothing in the ONNX Runtime inference path is affected
+# (it arrives prebuilt), which is exactly why it went unnoticed: only our own
+# code around it — the tokenizer, decoding loop and contextual biasing — pays.
+# Default to optimized with symbols, and leave an explicit choice alone.
+# Multi-config generators ignore this; the scripts that use them (build-swift.sh)
+# pass --config Release. Sanitizer builds are excluded so the reliability
+# pipeline keeps choosing its own flags.
+if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES
+    AND NOT MOONSHINE_RELIABILITY)
+  set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING
+      "Build type (defaulted to an optimized build with debug symbols)" FORCE)
+  message(STATUS
+      "No CMAKE_BUILD_TYPE specified; defaulting to ${CMAKE_BUILD_TYPE}")
+endif()
+
 if (MOONSHINE_RELIABILITY)
     set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
     add_compile_options(
@@ -115,6 +133,7 @@ set(MOONSHINE_SRC_FILES
     spelling-fusion.cpp
     spelling-fusion-data.cpp
     spelling-model.cpp
+    context-biaser.cpp
     word-alignment.cpp
 )
 
@@ -682,6 +701,29 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
             MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
         )
     endif()
+
+    add_executable(context-biaser-test context-biaser-test.cpp context-biaser.cpp)
+    set_target_properties(context-biaser-test PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(context-biaser-test PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+    )
+    if (IOS OR MOONSHINE_BUILD_SWIFT)
+        set_target_properties(context-biaser-test PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.context-biaser-test"
+            MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        )
+    endif()
+    target_link_libraries(context-biaser-test PRIVATE
+        moonshine-utils
+    )
 
     add_executable(transcriber-test transcriber-test.cpp transcriber.cpp voice-activity-detector.cpp resampler.cpp)
     set_target_properties(transcriber-test PROPERTIES

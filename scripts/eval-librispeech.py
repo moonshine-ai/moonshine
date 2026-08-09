@@ -155,6 +155,24 @@ def parse_args():
         "Implies --backend moonshine_c_streaming (batch has only one decode).",
     )
     parser.add_argument(
+        "--keyterms",
+        default=None,
+        help="Comma-separated key terms to bias the decoder towards. Use this "
+        "to measure what contextual biasing costs general accuracy.",
+    )
+    parser.add_argument(
+        "--keyterms-file",
+        default=None,
+        help="Read key terms from a file of comma or newline separated terms. "
+        "A list of any size fits here, unlike an argument.",
+    )
+    parser.add_argument(
+        "--keyterm-boost",
+        type=float,
+        default=None,
+        help="Boost for --keyterms (default: the library's own default).",
+    )
+    parser.add_argument(
         "--suite",
         default=None,
         help="Run a named panel: 'librispeech' (test-clean only), 'official' "
@@ -336,6 +354,18 @@ def decode_audio(audio_field):
 # ---------------------------------------------------------------------------
 
 
+def load_keyterms(args):
+    """Return the key terms named by --keyterms / --keyterms-file, in order."""
+    raw = ""
+    if args.keyterms_file:
+        with open(args.keyterms_file) as handle:
+            raw = handle.read()
+    elif args.keyterms:
+        raw = args.keyterms
+    terms = [term.strip() for term in raw.replace("\n", ",").split(",")]
+    return [term for term in terms if term]
+
+
 def make_moonshine_c_backend(args, streaming):
     from moonshine_voice import Transcriber, get_model_for_language, ModelArch
 
@@ -357,8 +387,25 @@ def make_moonshine_c_backend(args, streaming):
         options["vad_threshold"] = 0.0
         options["vad_max_segment_duration"] = 100000.0
 
+    keyterms = load_keyterms(args)
+    if keyterms:
+        options["keyterms"] = ",".join(keyterms)
+        if args.keyterm_boost is not None:
+            options["keyterm_boost"] = args.keyterm_boost
+
+    install_start = time.time()
     transcriber = Transcriber(path, arch, options=options)
+    load_seconds = time.time() - install_start
     print(f"Loaded C library model from {path} (arch={arch})", file=sys.stderr)
+    if keyterms:
+        # Every term is tokenized when the list is installed, so this grows with
+        # the length of the list and is worth reporting alongside the WER.
+        print(
+            f"Key terms: {len(keyterms)} "
+            f"(boost {args.keyterm_boost if args.keyterm_boost is not None else 'default'}, "
+            f"load took {load_seconds:.2f}s)",
+            file=sys.stderr,
+        )
     if options.get("use_speculative_decoding"):
         print("Speculative decoding: ENABLED", file=sys.stderr)
 
@@ -574,6 +621,9 @@ def main():
     else:
         print(f"VAD:                {'enabled' if args.enable_vad else 'DISABLED'}")
         print(f"max_tokens_per_sec: {args.max_tokens_per_second}")
+        keyterms = load_keyterms(args)
+        boost = args.keyterm_boost if args.keyterm_boost is not None else "default"
+        print(f"key terms:          {len(keyterms)} (boost {boost})")
         if args.backend == "moonshine_c_streaming":
             print(f"update_interval:    {args.update_interval}s")
             print(f"chunk_duration:     {args.chunk_duration}s")

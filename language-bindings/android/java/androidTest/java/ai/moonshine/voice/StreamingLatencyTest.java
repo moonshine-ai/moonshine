@@ -35,6 +35,13 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p>Models are downloaded from the CDN via {@link AssetDownloader} (network
  * required). Parseable summary for {@code scripts/test-mobile-latency.sh}:
  * {@code MOONSHINE_LATENCY platform=android device=... model=... avg_ms=...}
+ *
+ * <p>Pass {@code -e keyterms "Kubernetes,Ceph"} (and optionally
+ * {@code -e keyterm_boost 4.0}) to measure the same latency with contextual
+ * biasing switched on, so its per-token cost can be compared against a
+ * baseline run on the same device. A list of more than a few thousand terms
+ * will not fit in an instrumentation argument, so those go in a file pushed to
+ * the device and named with {@code -e keyterms_file /data/local/tmp/terms.txt}.
  */
 @LargeTest
 @RunWith(Parameterized.class)
@@ -93,7 +100,27 @@ public class StreamingLatencyTest {
         });
         assertTrue(downloader.isModelPresent(root, spec));
 
-        Transcriber transcriber = new Transcriber();
+        // Contextual biasing is off unless the runner passes key terms, so the
+        // default run stays the plain latency baseline.
+        List<TranscriberOption> options = new ArrayList<>();
+        android.os.Bundle arguments = InstrumentationRegistry.getArguments();
+        String keyterms = arguments.getString("keyterms");
+        String keytermBoost = arguments.getString("keyterm_boost");
+        String keytermsFile = arguments.getString("keyterms_file");
+        if (keytermsFile != null && !keytermsFile.isEmpty()) {
+            keyterms = readKeytermsFile(keytermsFile);
+        }
+        if (keyterms != null && !keyterms.isEmpty()) {
+            options.add(new TranscriberOption("keyterms", keyterms));
+            if (keytermBoost != null && !keytermBoost.isEmpty()) {
+                options.add(new TranscriberOption("keyterm_boost", keytermBoost));
+            }
+            Log.i(TAG, "key-term biasing enabled: "
+                    + keyterms.split(",").length + " terms, boost "
+                    + (keytermBoost == null ? "default" : keytermBoost));
+        }
+
+        Transcriber transcriber = new Transcriber(options);
         transcriber.loadFromFiles(root.getAbsolutePath() + "/", modelArch);
         transcriber.start();
 
@@ -138,8 +165,9 @@ public class StreamingLatencyTest {
         double avgMs = sum / (double) latencies.size();
         String device = android.os.Build.MODEL.replace(' ', '_');
         String summary = String.format(Locale.US,
-                "MOONSHINE_LATENCY platform=android device=%s model=%s avg_ms=%.0f lines=%d wall_s=%.2f",
-                device, modelName, avgMs, latencies.size(), wallSeconds);
+                "MOONSHINE_LATENCY platform=android device=%s model=%s avg_ms=%.0f lines=%d wall_s=%.2f keyterms=%d",
+                device, modelName, avgMs, latencies.size(), wallSeconds,
+                (keyterms == null || keyterms.isEmpty()) ? 0 : keyterms.split(",").length);
         Log.i(TAG, summary);
         System.out.println(summary);
 
@@ -148,5 +176,30 @@ public class StreamingLatencyTest {
                         "%s avg latency %.0fms exceeds regression ceiling %dms",
                         modelName, avgMs, maxAvgLatencyMs),
                 avgMs <= maxAvgLatencyMs);
+    }
+
+    /**
+     * Reads a key terms file of comma or newline separated terms into the
+     * comma-separated form the option expects.
+     */
+    private static String readKeytermsFile(String path) {
+        StringBuilder terms = new StringBuilder();
+        try (java.io.BufferedReader reader =
+                new java.io.BufferedReader(new java.io.FileReader(path))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty()) {
+                    continue;
+                }
+                if (terms.length() > 0) {
+                    terms.append(',');
+                }
+                terms.append(line);
+            }
+        } catch (java.io.IOException e) {
+            throw new AssertionError("Failed to read key terms file " + path, e);
+        }
+        return terms.toString();
     }
 }

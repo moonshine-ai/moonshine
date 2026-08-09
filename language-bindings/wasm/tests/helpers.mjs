@@ -16,6 +16,20 @@ export const REPO_ROOT = path.resolve(here, '..', '..', '..');
 export const TEST_ASSETS = path.join(REPO_ROOT, 'test-assets');
 export const TTS_DATA = path.join(REPO_ROOT, 'core', 'moonshine-tts', 'data');
 export const TINY_EN_DIR = path.join(TEST_ASSETS, 'tiny-en');
+export const TINY_STREAMING_EN_DIR = path.join(TEST_ASSETS, 'tiny-streaming-en');
+
+// Canonical manifest filenames the streaming loader expects, in the order the
+// other bindings copy them.
+const TINY_STREAMING_EN_FILES = [
+  'frontend.ort',
+  'encoder.ort',
+  'adapter.ort',
+  'cross_kv.ort',
+  'decoder_kv.ort',
+  'decoder_kv_with_attention.ort',
+  'streaming_config.json',
+  'tokenizer.bin',
+];
 
 /** Locate the sibling .wasm/.worker files regardless of the process cwd. */
 export function locateFile(file) {
@@ -104,6 +118,21 @@ export function tinyEnBytes() {
     decoder: fs.readFileSync(path.join(TINY_EN_DIR, 'decoder_model_merged.ort')),
     tokenizer: fs.readFileSync(path.join(TINY_EN_DIR, 'tokenizer.bin')),
   };
+}
+
+export function tinyStreamingEnAvailable() {
+  return TINY_STREAMING_EN_FILES.every((name) =>
+    fileExists(path.join(TINY_STREAMING_EN_DIR, name)),
+  );
+}
+
+/** Reads the bundled tiny-streaming-en model, keyed by canonical filename. */
+export function tinyStreamingEnFiles() {
+  const files = {};
+  for (const name of TINY_STREAMING_EN_FILES) {
+    files[name] = fs.readFileSync(path.join(TINY_STREAMING_EN_DIR, name));
+  }
+  return files;
 }
 
 export function twoCities16kPath() {

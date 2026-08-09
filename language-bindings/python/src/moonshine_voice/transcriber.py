@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import os
 import sys
 import time
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, Sequence
 from pathlib import Path
 
 from moonshine_voice.moonshine_api import (
@@ -313,6 +313,47 @@ class Transcriber:
             lines.append(line)
 
         return Transcript(lines=lines)
+
+    def set_keyterms(self, keyterms: Optional[Sequence[str]]) -> None:
+        """
+        Bias the decoder towards a list of terms, replacing any previous list.
+
+        Useful for jargon, product names and proper nouns that the model would
+        otherwise be unlikely to produce. No retraining is involved, so the
+        list can follow whatever the user is looking at and can be changed
+        while a stream is running; it takes effect on the next transcription
+        and does not rewrite text already emitted.
+
+        Match the capitalization and spelling you want to see in the output.
+        Pass ``None`` or an empty list to turn biasing off. Set the strength
+        with the ``keyterm_boost`` option at load time.
+
+        Args:
+            keyterms: Terms to bias towards, e.g. ``["Kubernetes", "Ceph"]``.
+                Commas are used as the delimiter internally, so terms must not
+                contain them.
+
+        Raises:
+            MoonshineError: If the transcriber is closed, a term contains a
+                comma, or the loaded model is not a streaming architecture
+                (only those decode through a path that can apply the bias).
+        """
+        if self._handle is None:
+            raise MoonshineError("Transcriber is not initialized")
+        terms = list(keyterms) if keyterms else []
+        for term in terms:
+            if "," in term:
+                raise MoonshineError(
+                    f"Key terms cannot contain commas, which separate them: {term!r}"
+                )
+        result = self._lib.moonshine_transcriber_set_keyterms(
+            self._handle, ",".join(terms).encode("utf-8")
+        )
+        if result != 0:
+            error_str = self._lib.moonshine_error_to_string(result)
+            raise MoonshineError(
+                f"Failed to set key terms: {error_str.decode('utf-8') if error_str else 'Unknown error'}"
+            )
 
     def get_version(self) -> int:
         """Get the version of the loaded Moonshine library."""

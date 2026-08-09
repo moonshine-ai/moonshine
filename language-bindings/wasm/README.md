@@ -60,6 +60,27 @@ console.log(transcript.lines.map((l) => l.text).join('\n'));
 transcriber.close();
 ```
 
+### Key terms
+
+Words the model is unlikely to produce on its own — product names, jargon, the
+names in a user's contact list — can be passed as key terms. The list can be
+replaced between phrases while audio is streaming, so it can follow whatever the
+user is looking at:
+
+```ts
+const mic = new MicTranscriber();
+await mic.load();
+mic.setKeyterms(['Anushka Sharma', 'Jurgen Klopp']);
+```
+
+`Transcriber.setKeyterms` is the same call on a transcriber you own, and
+`Transcriber.load` also takes the terms up front as
+`options: { keyterms: 'Kubernetes,Ceph,etcd' }` — pass such a transcriber to
+`mic.useTranscriber()` to start listening with a list already in place. Only the
+streaming architectures support any of this. See
+[Domain Customization](../../README.md#domain-customization) for what a list
+costs in accuracy and how to tune `keyterm_boost`.
+
 ## Text to speech
 
 ```ts

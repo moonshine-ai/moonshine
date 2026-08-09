@@ -938,6 +938,12 @@ class _MoonshineLib:
             ctypes.c_int32,
         ]
 
+        lib.moonshine_transcriber_set_keyterms.restype = ctypes.c_int32
+        lib.moonshine_transcriber_set_keyterms.argtypes = [
+            ctypes.c_int32,
+            ctypes.c_char_p,
+        ]
+
         lib.moonshine_transcribe_add_audio_to_stream.restype = ctypes.c_int32
         lib.moonshine_transcribe_add_audio_to_stream.argtypes = [
             ctypes.c_int32,

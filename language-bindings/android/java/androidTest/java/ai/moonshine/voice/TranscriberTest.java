@@ -125,6 +125,66 @@ public class TranscriberTest {
         assertTrue(allText.contains("worst of times"));
     }
 
+    /**
+     * Key terms can be replaced on a live transcriber, and clearing them puts the
+     * unbiased behaviour back.
+     */
+    @Test
+    public void testSetKeyterms() {
+        Context testContext = InstrumentationRegistry.getInstrumentation().getContext();
+        Utils.WavData wavData = null;
+        try {
+            wavData = Utils.loadWavFromAssets(testContext, "two_cities.wav");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        for (String file : new String[] {"frontend.ort", "encoder.ort", "adapter.ort",
+                     "cross_kv.ort", "decoder_kv.ort", "decoder_kv_with_attention.ort",
+                     "streaming_config.json", "tokenizer.bin"}) {
+            Utils.copyAssetToTempDir(testContext, tempDir, "tiny-streaming-en/" + file);
+        }
+        final String modelsPath = tempDir.toAbsolutePath().toString() + "/tiny-streaming-en/";
+
+        // A boost this large overwhelms the acoustics, so a term in the list is
+        // forced into the output. That keeps the assertions about whether biasing
+        // reached the decoder at all, rather than about the exact transcript.
+        List<TranscriberOption> options = new ArrayList<>();
+        options.add(new TranscriberOption("keyterm_boost", "30"));
+        Transcriber transcriber = new Transcriber(options);
+        transcriber.loadFromFiles(modelsPath, JNI.MOONSHINE_MODEL_ARCH_TINY_STREAMING);
+
+        final float[] audio = wavData.data;
+        final int sampleRate = wavData.sampleRate;
+
+        // A term that does not occur in the audio, so any appearance of it is
+        // unambiguously the biasing, and any absence means it really is off.
+        assertTrue(!transcribeAll(transcriber, audio, sampleRate).contains("Kubernetes"));
+
+        transcriber.setKeyterms(Arrays.asList("Kubernetes"));
+        assertTrue(transcribeAll(transcriber, audio, sampleRate).contains("Kubernetes"));
+
+        transcriber.setKeyterms(null);
+        assertTrue(!transcribeAll(transcriber, audio, sampleRate).contains("Kubernetes"));
+
+        try {
+            transcriber.setKeyterms(Arrays.asList("Kubernetes,Ceph"));
+            assertTrue("A term containing the delimiter should be rejected", false);
+        } catch (RuntimeException expected) {
+            // The comma separates terms, so one inside a term cannot be honoured.
+        }
+    }
+
+    private String transcribeAll(Transcriber transcriber, float[] audio, int sampleRate) {
+        Transcript transcript = transcriber.transcribeWithoutStreaming(audio, sampleRate, 0);
+        StringBuilder text = new StringBuilder();
+        for (TranscriptLine line : transcript.lines) {
+            text.append(line.text).append(" ");
+        }
+        logger.log(Level.INFO, "Transcript: " + text);
+        return text.toString();
+    }
+
     public void onLineStartedEvent(TranscriptLine line) {
         logger.log(Level.INFO, "Transcription started: " + line.toString());
         assertTrue(line.isNew);

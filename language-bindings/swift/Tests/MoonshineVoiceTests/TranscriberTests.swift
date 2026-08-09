@@ -34,6 +34,20 @@ final class TranscriberTests: XCTestCase {
         return modelPath
     }
 
+    /// Get the path to the tiny-streaming-en model
+    static func getTinyStreamingEnModelPath() throws -> String {
+        let testAssetsPath = try getTestAssetsPath()
+        let modelPath = (testAssetsPath as NSString).appendingPathComponent("tiny-streaming-en")
+
+        guard FileManager.default.fileExists(atPath: modelPath) else {
+            throw NSError(
+                domain: "TranscriberTests", code: 4,
+                userInfo: [NSLocalizedDescriptionKey: "Model directory not found at \(modelPath)"])
+        }
+
+        return modelPath
+    }
+
     /// Get the path to a WAV file in test assets
     static func getWAVFilePath(_ filename: String) throws -> String {
         let testAssetsPath = try getTestAssetsPath()
@@ -46,6 +60,43 @@ final class TranscriberTests: XCTestCase {
         }
 
         return wavPath
+    }
+
+    // MARK: - Key Terms
+
+    func testSetKeyterms() throws {
+        let modelPath = try Self.getTinyStreamingEnModelPath()
+        // A boost this large overwhelms the acoustics, so a term that is in the
+        // list is forced into the output. That makes the assertions below about
+        // whether biasing reached the decoder at all, rather than about the exact
+        // transcript, which is not stable enough to compare.
+        let transcriber = try Transcriber(
+            modelPath: modelPath,
+            modelArch: .tinyStreaming,
+            options: [TranscriberOption(name: "keyterm_boost", value: "30")]
+        )
+        defer { transcriber.close() }
+
+        let wavData = try loadWAVFile(try Self.getWAVFilePath("two_cities.wav"))
+        func transcribeCurrent() throws -> String {
+            let transcript = try transcriber.transcribeWithoutStreaming(
+                audioData: wavData.audioData,
+                sampleRate: Int32(wavData.sampleRate)
+            )
+            return transcript.lines.map { $0.text }.joined(separator: " ")
+        }
+
+        // A term that does not occur in the audio, so any appearance of it is
+        // unambiguously the biasing, and any absence means it really is off.
+        XCTAssertFalse(try transcribeCurrent().contains("Kubernetes"))
+
+        try transcriber.setKeyterms(["Kubernetes"])
+        XCTAssertTrue(try transcribeCurrent().contains("Kubernetes"))
+
+        try transcriber.setKeyterms([])
+        XCTAssertFalse(try transcribeCurrent().contains("Kubernetes"))
+
+        XCTAssertThrowsError(try transcriber.setKeyterms(["Kubernetes,Ceph"]))
     }
 
     // MARK: - Non-Streaming Tests

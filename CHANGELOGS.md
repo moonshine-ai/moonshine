@@ -4,6 +4,23 @@ All notable user-facing changes to Moonshine Voice are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- Speaker attribution can be corrected by hand in the meeting notes web example. A speaker's name is the boundary it sits on: drag it into the words above or below to move where that speaker starts, cutting a line in two if the join falls partway through one; Alt-drag to leave a second name partway through a turn; Alt-click the words to start a speaker diarization never separated out at all; and drag a name past its own last word to be rid of it. Hand-made corrections are pinned, so the next diarization pass over that window does not undo them.
+- Two speakers given the same name in the meeting notes web example are read as one person: where their turns run together, they are laid out as a single turn under a single name, and renaming it renames all of them. Diarization splits one voice in two often enough — someone turns away from the microphone, or rejoins on a worse line — and typing the same name over both is the whole correction. Only names typed by hand count, so two speakers the page has failed to tell apart are never quietly merged on the strength of a made-up "Speaker 3".
+- The meeting notes web example asks before closing a tab holding a transcript nobody has copied or exported since it last changed. Nothing is uploaded, so the tab is the only copy there is.
+- Runtime key-term biasing for streaming speech-to-text. Pass `keyterms` (a comma-separated list) to steer the decoder towards jargon, product names, or proper nouns with no retraining, and tune the strength with `keyterm_boost` (default 2.0). Terms can be replaced while audio is streaming, so an app can follow whatever context the user is in: `Transcriber.set_keyterms()` in Python, `setKeyterms()` in Swift, Java and JavaScript, and `moonshine_transcriber_set_keyterms` in the C API. On a biasing test set built from LibriSpeech test-clean, with a realistic hundred terms live per utterance, the default removes an eighth to a sixth of the errors on the listed words for about a tenth of a point on everything else, and all three streaming models agree on where to set it. A 100-term list adds about a millisecond to end-of-phrase latency on a physical iPad (A16), so it needs no extra latency budget. Longer lists cost accuracy rather than time: a hundred terms nobody says cost a third of a point of general WER, ten thousand cost a point and a half. See [Domain Customization](README.md#domain-customization) for the measured curves, `scripts/make-keyterm-testset.py` to build a test set out of any ASR corpus, `scripts/eval-keyterm-biasing.py` to sweep the boost on it, and `scripts/eval-librispeech.py --keyterms-file` for the effect on general accuracy.
+
+### Changed
+
+- Encoding text to tokens no longer scans the whole vocabulary for every subword, which made installing a large key-term list slow: 10,000 terms took about 55 seconds to compile on an iPad and now takes around a second. Transcription output is unaffected, since it only ever decodes.
+
+### Fixed
+
+- The native library is now built optimized everywhere. CMake adds no optimization flag at all unless a build type is chosen, and the pip wheels, the published binary archives and the Android debug variant were all configured without one, so they shipped code compiled at debug speed. ONNX Runtime is prebuilt and was never affected, so model inference kept its speed and the gap went unnoticed; what was slow was everything around it, and the more work a feature does outside the model the more it lost. On a Pixel 10a this made contextual biasing look about three times as expensive as it is. Streaming latency on the Pixel improved by 8-15% from the fix alone, and the README's measured latencies have been refreshed (the Linux x86 and Raspberry Pi 5 columns still await hardware to re-measure on).
+
 ## [0.1.1] - August 6th, 2026
 
 ### Added

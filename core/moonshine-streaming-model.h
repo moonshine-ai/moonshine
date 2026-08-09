@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "bin-tokenizer.h"
+#include "context-biaser.h"
 #include "moonshine-ort-allocator.h"
 #include "onnxruntime_c_api.h"
 #include "word-alignment.h"
@@ -162,9 +163,17 @@ struct MoonshineStreamingModel {
    * If speculative_tokens is provided, verifies them against new predictions
    * and continues from divergence point.
    * tokens_out is allocated by this function - caller must free with free().
+   * When ``biaser`` is non-null and holds key terms, its bonuses are added to
+   * the logits before every token choice, including the speculative
+   * verification. That has to happen here rather than in the caller because
+   * this function picks tokens internally: an unbiased verification would
+   * reject the biased draft from the previous pass and then re-decode without
+   * the bias, losing the biasing entirely on streaming updates. The biaser's
+   * walk state is reset and advanced by this call.
    * Returns 0 on success. */
   int decode_full(MoonshineStreamingState *state, const int *speculative_tokens,
-                  int speculative_len, int **tokens_out, int *tokens_len_out);
+                  int speculative_len, int **tokens_out, int *tokens_len_out,
+                  ContextBiaser *biaser = nullptr);
 
   void decoder_reset(MoonshineStreamingState *state);
 
@@ -173,6 +182,11 @@ struct MoonshineStreamingModel {
 
   /* Decode tokens to text using the tokenizer */
   std::string tokens_to_text(const std::vector<int64_t> &tokens);
+
+  /* Encode text into the decoder's subword IDs. Used to compile contextual
+   * biasing key terms into the same token space the decoder emits. Returns an
+   * empty vector if the tokenizer is not loaded. */
+  std::vector<int32_t> text_to_tokens(const std::string &text);
 
  private:
   int load_config(const char *config_path);

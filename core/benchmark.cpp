@@ -1,6 +1,9 @@
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -45,6 +48,9 @@ int main(int argc, char *argv[]) {
   moonshine::ModelArch model_arch = moonshine::ModelArch::TINY;
   std::string wav_path = "../../test-assets/two_cities.wav";
   float transcription_interval_seconds = 0.481f;
+  std::string keyterms;
+  std::string keyterm_boost;
+  std::string keyterms_path;
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
     if (arg == "-m" || arg == "--model-path") {
@@ -55,14 +61,68 @@ int main(int argc, char *argv[]) {
       wav_path = argv[++i];
     } else if (arg == "-t" || arg == "--transcription-interval") {
       transcription_interval_seconds = std::stof(argv[++i]);
+    } else if (arg == "-k" || arg == "--keyterms") {
+      keyterms = argv[++i];
+    } else if (arg == "--keyterms-file") {
+      keyterms_path = argv[++i];
+    } else if (arg == "-b" || arg == "--keyterm-boost") {
+      keyterm_boost = argv[++i];
     } else {
       std::cerr << "Unknown argument: " << arg << std::endl;
       return 1;
     }
   }
+  // A list long enough to be interesting does not fit comfortably on a command
+  // line, so it can come from a file of comma or newline separated terms.
+  if (!keyterms_path.empty()) {
+    std::ifstream file(keyterms_path);
+    if (!file) {
+      std::cerr << "Failed to open key terms file: " << keyterms_path
+                << std::endl;
+      return 1;
+    }
+    std::stringstream contents;
+    contents << file.rdbuf();
+    keyterms = contents.str();
+    for (char &c : keyterms) {
+      if (c == '\n' || c == '\r') c = ',';
+    }
+  }
+
+  moonshine::Options options;
+  size_t keyterm_count = 0;
+  if (!keyterms.empty()) {
+    options.emplace_back("keyterms", keyterms);
+    if (!keyterm_boost.empty()) {
+      options.emplace_back("keyterm_boost", keyterm_boost);
+    }
+    // Count the terms the library will actually keep, so that the trailing
+    // newline of a key terms file does not read as one term more than the file
+    // holds.
+    size_t start = 0;
+    while (start <= keyterms.size()) {
+      const size_t end = keyterms.find(',', start);
+      const size_t span =
+          (end == std::string::npos ? keyterms.size() : end) - start;
+      if (span > 0) {
+        keyterm_count++;
+      }
+      if (end == std::string::npos) {
+        break;
+      }
+      start = end + 1;
+    }
+  }
 
   AudioProducer audio_producer(wav_path);
-  moonshine::Transcriber transcriber(model_path, model_arch);
+  std::chrono::high_resolution_clock::time_point load_start =
+      std::chrono::high_resolution_clock::now();
+  moonshine::Transcriber transcriber(model_path, model_arch, 0.5, "", options);
+  const float load_seconds =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::high_resolution_clock::now() - load_start)
+          .count() /
+      1000.0f;
 
   std::chrono::high_resolution_clock::time_point start =
       std::chrono::high_resolution_clock::now();
@@ -98,6 +158,8 @@ int main(int argc, char *argv[]) {
     total_latency_ms += line.lastTranscriptionLatencyMs;
   }
   fprintf(stderr, "%s\n", transcript.toString().c_str());
+  fprintf(stderr, "Key terms: %zu (load took %.2f seconds)\n", keyterm_count,
+          load_seconds);
   fprintf(stderr, "Average Latency: %.0fms\n",
           total_latency_ms / (float)(transcript.lines.size()));
   fprintf(stderr,

@@ -405,6 +405,14 @@ std::string MoonshineStreamingModel::tokens_to_text(
   return tokenizer->tokens_to_text(tokens);
 }
 
+std::vector<int32_t> MoonshineStreamingModel::text_to_tokens(
+    const std::string &text) {
+  if (tokenizer == nullptr) {
+    return {};
+  }
+  return tokenizer->text_to_tokens<int32_t>(text);
+}
+
 /* ============================================================================
  * Streaming Inference Implementation
  * ============================================================================
@@ -1164,7 +1172,8 @@ int MoonshineStreamingModel::decode_tokens(MoonshineStreamingState *state,
 int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
                                          const int *speculative_tokens,
                                          int speculative_len, int **tokens_out,
-                                         int *tokens_len_out) {
+                                         int *tokens_len_out,
+                                         ContextBiaser *biaser) {
   if (state == nullptr) {
     LOG("State is null\n");
     return 1;
@@ -1202,6 +1211,20 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
     return best;
   };
 
+  // Contextual biasing, if the caller supplied key terms. The bonuses go into
+  // the logits row in place, which is safe because every logits buffer here is
+  // local scratch. The walk starts at the root: this function always decodes
+  // from BOS, even when it is verifying a draft.
+  if (biaser != nullptr) {
+    biaser->reset();
+  }
+  auto biased_argmax = [&](float *logits_row) -> int {
+    if (biaser != nullptr) {
+      biaser->apply(logits_row, config.vocab_size);
+    }
+    return argmax(logits_row);
+  };
+
   // Helper to run decoder (requires cross_kv path)
   auto run_decoder = [this, state](const std::vector<int64_t> &tokens,
                                    std::vector<float> &logits) -> int {
@@ -1232,12 +1255,15 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
     while (current_token != config.eos_id &&
            result_tokens.size() < static_cast<size_t>(max_tokens)) {
       result_tokens.push_back(current_token);
+      if (biaser != nullptr) {
+        biaser->advance(current_token);
+      }
 
       std::vector<int64_t> next_input = {static_cast<int64_t>(current_token)};
       int err = run_decoder(next_input, logits);
       if (err != 0) break;
 
-      current_token = argmax(logits.data());
+      current_token = biased_argmax(logits.data());
     }
   };
 
@@ -1255,10 +1281,17 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
       return err;
     }
 
-    // Get predictions from logits
+    // Get predictions from logits. The biaser walks the teacher-forced prefix
+    // rather than the predictions, because that prefix is what position t is
+    // actually conditioned on.
     std::vector<int> predictions;
     for (int t = 0; t < static_cast<int>(tokens_with_bos.size()); ++t) {
-      predictions.push_back(argmax(logits.data() + t * config.vocab_size));
+      predictions.push_back(
+          biased_argmax(logits.data() + t * config.vocab_size));
+      if (biaser != nullptr &&
+          t + 1 < static_cast<int>(tokens_with_bos.size())) {
+        biaser->advance(static_cast<int32_t>(tokens_with_bos.at(t + 1)));
+      }
     }
 
     // Find divergence point
@@ -1298,7 +1331,17 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
         return err;
       }
 
-      int new_pred = argmax(logits2.data() + diverge_point * config.vocab_size);
+      // Rewind the biasing walk to the accepted prefix. It currently reflects
+      // the whole draft, including the tokens we just rejected.
+      if (biaser != nullptr) {
+        biaser->reset();
+        for (int i = 0; i < diverge_point; ++i) {
+          biaser->advance(static_cast<int32_t>(speculative_tokens[i]));
+        }
+      }
+
+      int new_pred =
+          biased_argmax(logits2.data() + diverge_point * config.vocab_size);
       continue_ar_decoding(new_pred);
     }
   } else {
@@ -1311,7 +1354,7 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
       return err;
     }
 
-    int first_pred = argmax(logits.data());
+    int first_pred = biased_argmax(logits.data());
     continue_ar_decoding(first_pred);
   }
 

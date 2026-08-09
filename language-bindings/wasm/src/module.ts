@@ -70,6 +70,7 @@ export interface RawSpeechClip {
 
 export interface RawTranscriber {
   transcribe(audio: Float32Array, sampleRate: number, flags: number): any;
+  setKeyterms(keyterms: string): void;
   close(): void;
 }
 

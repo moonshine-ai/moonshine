@@ -1020,6 +1020,16 @@ a.ms-code__file[href]:hover {
   color: var(--ms-faint);
 }
 
+/* Somewhere to ask a question, at the far end of the row and away from the
+   places to go and fetch the code. Kept as a pair rather than pushed right one
+   at a time, so that a narrow window wraps them together. The gap is the row's
+   own, so the two halves stay evenly spaced. */
+.ms-footer__reach {
+  display: flex;
+  gap: inherit;
+  margin-left: auto;
+}
+
 .ms-footer__links a {
   color: var(--ms-muted);
 }

@@ -45,6 +45,7 @@ BinTokenizer::BinTokenizer(const char *tokenizer_path,
     throw std::runtime_error("No tokens found in tokenizer file '" +
                              std::string(tokenizer_path) + "'");
   }
+  this->build_first_byte_index();
 }
 
 BinTokenizer::BinTokenizer(const uint8_t *tokenizer_data,
@@ -100,6 +101,7 @@ BinTokenizer::BinTokenizer(const uint8_t *tokenizer_data,
         "No tokens found in tokenizer input data of size " +
         std::to_string(tokenizer_data_size));
   }
+  this->build_first_byte_index();
 }
 
 #if defined(ANDROID)
@@ -141,6 +143,7 @@ BinTokenizer::BinTokenizer(const char *tokenizer_path,
     throw std::runtime_error("No data found in tokenizer file at " +
                              std::string(tokenizer_path));
   }
+  this->build_first_byte_index();
 }
 #endif
 
@@ -165,10 +168,26 @@ template int32_t BinTokenizer::text_to_special_token<int32_t>(
 template int64_t BinTokenizer::text_to_special_token<int64_t>(
     const std::string &text);
 
-// Uses a naive algorithm to encode text into tokens.
-// This is not the most efficient way to do it, but it's functional and
-// unlikely to be a performance bottleneck. If it becomes one, we can use
-// all sorts of fun data structures to make it faster.
+void BinTokenizer::build_first_byte_index() {
+  this->tokens_by_first_byte.assign(256, std::vector<int32_t>());
+  for (size_t i = 0; i < this->tokens_to_bytes.size(); i++) {
+    const std::vector<uint8_t> &bytes = this->tokens_to_bytes[i];
+    // An empty entry has no first byte to file it under, and it could never win
+    // the longest match in text_to_tokens anyway.
+    if (bytes.empty()) {
+      continue;
+    }
+    this->tokens_by_first_byte.at(bytes.front())
+        .push_back(static_cast<int32_t>(i));
+  }
+}
+
+// Greedy longest-match encoding. Only the entries starting with the byte we are
+// looking at can match, so we compare against that bucket rather than the whole
+// vocabulary: key-term biasing encodes thousands of terms when a transcriber
+// loads, which made the full scan the dominant cost of setting up a large list.
+// Ties still go to the lowest token id, since buckets hold ascending ids and
+// only a strictly longer match displaces the incumbent.
 template <typename T>
 std::vector<T> BinTokenizer::text_to_tokens(const std::string &text) {
   std::vector<T> result;
@@ -177,19 +196,18 @@ std::vector<T> BinTokenizer::text_to_tokens(const std::string &text) {
                                        replaced_spaces_text.end());
 
   while (!remaining_bytes.empty()) {
-    std::vector<uint8_t> longest_match;
+    size_t longest_match_size = 0;
     T longest_match_token = -1;
-    for (size_t i = 0; i < tokens_to_bytes.size(); i++) {
-      std::vector<uint8_t> bytes = tokens_to_bytes[i];
+    for (const int32_t i :
+         this->tokens_by_first_byte.at(remaining_bytes.front())) {
+      const std::vector<uint8_t> &bytes = this->tokens_to_bytes[i];
       if (remaining_bytes.size() < bytes.size()) {
         continue;
       }
-      if (std::equal(remaining_bytes.begin(),
-                     remaining_bytes.begin() + bytes.size(), bytes.begin())) {
-        if (bytes.size() > longest_match.size()) {
-          longest_match = bytes;
-          longest_match_token = (T)i;
-        }
+      if (bytes.size() > longest_match_size &&
+          std::equal(bytes.begin(), bytes.end(), remaining_bytes.begin())) {
+        longest_match_size = bytes.size();
+        longest_match_token = (T)i;
       }
     }
     if (longest_match_token == -1) {
@@ -207,7 +225,7 @@ std::vector<T> BinTokenizer::text_to_tokens(const std::string &text) {
     }
     result.push_back(longest_match_token);
     remaining_bytes.erase(remaining_bytes.begin(),
-                          remaining_bytes.begin() + longest_match.size());
+                          remaining_bytes.begin() + longest_match_size);
   }
 
   return result;

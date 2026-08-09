@@ -442,6 +442,8 @@ TEST_CASE("moonshine-test-v2") {
         {"log_output_text", "true"},
         {"ort_providers", "CPU"},
         {"coreml_cache_dir", "/tmp/moonshine-coreml-cache"},
+        {"keyterms", "Kubernetes, Anushka Sharma"},
+        {"keyterm_boost", "4.0"},
     };
     const uint64_t options_count = sizeof(options) / sizeof(options[0]);
     std::string root_model_path = "tiny-en";
@@ -450,6 +452,39 @@ TEST_CASE("moonshine-test-v2") {
         root_model_path.c_str(), model_arch, options, options_count,
         MOONSHINE_HEADER_VERSION);
     REQUIRE(transcriber_handle >= 0);
+  }
+  SUBCASE("set-keyterms-at-runtime") {
+    std::string root_model_path = "tiny-streaming-en";
+    REQUIRE(std::filesystem::exists(root_model_path));
+    int32_t transcriber_handle = moonshine_load_transcriber_from_files(
+        root_model_path.c_str(), MOONSHINE_MODEL_ARCH_TINY_STREAMING, nullptr,
+        0, MOONSHINE_HEADER_VERSION);
+    REQUIRE(transcriber_handle >= 0);
+    // Setting, replacing and clearing all succeed on a streaming model.
+    CHECK(moonshine_transcriber_set_keyterms(transcriber_handle,
+                                             "Kubernetes, Anushka Sharma") ==
+          MOONSHINE_ERROR_NONE);
+    CHECK(moonshine_transcriber_set_keyterms(transcriber_handle, "Ceph") ==
+          MOONSHINE_ERROR_NONE);
+    CHECK(moonshine_transcriber_set_keyterms(transcriber_handle, "") ==
+          MOONSHINE_ERROR_NONE);
+    CHECK(moonshine_transcriber_set_keyterms(transcriber_handle, nullptr) ==
+          MOONSHINE_ERROR_NONE);
+    moonshine_free_transcriber(transcriber_handle);
+
+    // An unknown handle is reported rather than crashing.
+    CHECK(moonshine_transcriber_set_keyterms(-1, "Kubernetes") !=
+          MOONSHINE_ERROR_NONE);
+
+    // The non-streaming architectures have no biasable decode path, so asking
+    // for key terms there is an error rather than a silent no-op.
+    int32_t non_streaming_handle = moonshine_load_transcriber_from_files(
+        "tiny-en", MOONSHINE_MODEL_ARCH_TINY, nullptr, 0,
+        MOONSHINE_HEADER_VERSION);
+    REQUIRE(non_streaming_handle >= 0);
+    CHECK(moonshine_transcriber_set_keyterms(
+              non_streaming_handle, "Kubernetes") != MOONSHINE_ERROR_NONE);
+    moonshine_free_transcriber(non_streaming_handle);
   }
   SUBCASE("transcribe-invalid-option") {
     const moonshine_option_t options[] = {

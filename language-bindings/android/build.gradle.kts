@@ -28,6 +28,19 @@ android {
         externalNativeBuild {
             cmake {
                 arguments("-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON")
+                // Gradle compiles the debug variant's native code with no
+                // optimization, which the instrumentation tests then measure as
+                // though it were the shipping library. ONNX Runtime is prebuilt
+                // and unaffected, so the whole cost lands on our own code
+                // around it: on a Pixel 10a that tripled the apparent cost of
+                // key-term biasing and turned a one-second setup for a large
+                // list into half a minute. Optimize both variants, and let
+                // anyone stepping through C++ ask for the old behaviour.
+                if (project.findProperty("moonshineDebugNative") == "true") {
+                    arguments("-DCMAKE_BUILD_TYPE=Debug")
+                } else {
+                    arguments("-DCMAKE_BUILD_TYPE=RelWithDebInfo")
+                }
             }
         }
     }

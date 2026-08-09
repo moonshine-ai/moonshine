@@ -633,6 +633,364 @@ test('Meeting notes follows diarization when it changes its mind', { skip }, asy
   }
 });
 
+test('Meeting notes moves a speaker boundary when its name is dragged', { skip }, async () => {
+  // Diarization gets the join between two speakers slightly wrong far more
+  // often than it gets the words wrong, so the name is a handle: drag it into
+  // the words on either side and the boundary follows, cutting a line in two
+  // if the join falls partway through one.
+  const page = await openPage('/meeting-notes/?local=1&assets=local&nocapture=1');
+  try {
+    await page.waitForFunction(
+      () => window.__meetingNotes && document.body.dataset.state === 'ready',
+      { timeout: 120000 },
+    );
+
+    await page.evaluate(() => {
+      const say = (id, text, speaker, at) =>
+        window.__meetingNotes.appendLine({
+          id,
+          text,
+          source: 'meeting',
+          speaker,
+          startTime: at,
+          endTime: at + 2,
+        });
+      // The second speaker's opening words have landed under the first
+      // speaker's name, which is the mistake this gesture exists for.
+      say('a', 'shall we start yes go ahead', 0, 0);
+      say('b', 'i have the numbers here', 1, 4);
+      say('c', 'thanks for those', 0, 8);
+      document.getElementById('doc').scrollIntoView({ block: 'center' });
+    });
+
+    const shape = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll('#doc .who')].map((who) => ({
+          name: who.textContent,
+          text: who.nextElementSibling.textContent.replace(/\s+/g, ' ').trim(),
+        })),
+      );
+    const ids = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll('#doc .ln')].map((span) => span.dataset.line),
+      );
+
+    // The drop goes through the browser's own drag machinery rather than
+    // through synthesized events, because half of what this feature has to do
+    // is stop that machinery doing what it would otherwise do with a block
+    // element dragged into the middle of a sentence in a contenteditable.
+    // Only the drag's beginning is synthesized: headless Chrome has no
+    // operating-system drag loop to start a real one with.
+    const drags = await page.createCDPSession();
+    const payload = {
+      items: [{ mimeType: 'text/plain', data: 'Speaker' }],
+      dragOperationsMask: 0x7fffffff,
+    };
+
+    /** The mark the page is drawing right now, which is all a reader has. */
+    const markShown = () =>
+      page.evaluate(() => {
+        const mark = document.querySelector('.cut');
+        return mark.hidden ? 'none' : mark.classList.contains('is-adding') ? 'copy' : 'move';
+      });
+
+    /**
+     * Picks up the nth name and drops it on a word, at its near edge or just
+     * past its last letter. Answers with the mark the page offered while the
+     * name was over it, which is 'none' for a drop it will not take.
+     */
+    const dragName = async (nth, word, { alt = false, after = false } = {}) => {
+      const point = await page.evaluate(
+        ({ nth, word, after }) => {
+          const doc = document.getElementById('doc');
+          const walker = document.createTreeWalker(doc, NodeFilter.SHOW_TEXT);
+          let node = null;
+          let at = -1;
+          for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+            if (!text.parentElement?.closest('.ln')) continue;
+            at = text.data.indexOf(word);
+            if (at !== -1) {
+              node = text;
+              break;
+            }
+          }
+          if (!node) throw new Error(`no line contains "${word}"`);
+
+          const range = document.createRange();
+          range.setStart(node, after ? at + word.length - 1 : at);
+          range.setEnd(node, after ? at + word.length : at + 1);
+          const box = range.getBoundingClientRect();
+
+          document.querySelectorAll('#doc .who')[nth].dispatchEvent(
+            new DragEvent('dragstart', {
+              bubbles: true,
+              cancelable: true,
+              dataTransfer: new DataTransfer(),
+            }),
+          );
+          return { x: after ? box.right - 1 : box.left + 1, y: box.top + box.height / 2 };
+        },
+        { nth, word, after },
+      );
+
+      const event = { ...point, data: payload, modifiers: alt ? 1 : 0 };
+      await drags.send('Input.dispatchDragEvent', { type: 'dragEnter', ...event });
+      await drags.send('Input.dispatchDragEvent', { type: 'dragOver', ...event });
+      const offered = await markShown();
+      // A drop the page has refused never arrives: it answers the browser with
+      // "no operation", and the browser cancels the drag rather than falling
+      // back to dropping the name into the words.
+      await drags.send('Input.dispatchDragEvent', { type: 'drop', ...event });
+      await page.evaluate(() =>
+        document.getElementById('doc').dispatchEvent(new DragEvent('dragend', { bubbles: true })),
+      );
+      return offered;
+    };
+
+    const original = await shape();
+    assert.deepEqual(original, [
+      { name: 'Speaker 1', text: 'shall we start yes go ahead' },
+      { name: 'Speaker 2', text: 'i have the numbers here' },
+      { name: 'Speaker 1', text: 'thanks for those' },
+    ]);
+
+    // A join is only ever between the two runs either side of it, so a name
+    // cannot be dropped further than that.
+    assert.equal(await dragName(2, 'shall'), 'none', 'a distant drop should be refused');
+    assert.deepEqual(await shape(), original, 'and should change nothing');
+
+    // Dragged into the words above it, the second name takes them with it,
+    // splitting the line it lands in the middle of.
+    assert.equal(await dragName(1, 'yes'), 'move');
+    assert.deepEqual(await shape(), [
+      { name: 'Speaker 1', text: 'shall we start' },
+      { name: 'Speaker 2', text: 'yes go ahead i have the numbers here' },
+      { name: 'Speaker 1', text: 'thanks for those' },
+    ]);
+
+    const [, moved] = await ids();
+    const halves = await page.evaluate((id) => {
+      const { lines } = window.__meetingNotes;
+      return { head: lines.get('a'), tail: lines.get(id) };
+    }, moved);
+    assert.ok(
+      halves.head.endTime > 0 && halves.head.endTime < 2,
+      'the split should divide the line’s audio between its halves',
+    );
+    assert.equal(halves.tail.startTime, halves.head.endTime, 'with no gap between them');
+    assert.equal(halves.tail.endTime, 2, 'and the second half ending where the line did');
+    assert.equal(halves.tail.speaker, 1, 'the words that moved should have changed hands');
+
+    // Diarization goes on revising the same window for another minute or two
+    // and must not put back what the reader has just corrected.
+    await page.evaluate((id) => window.__meetingNotes.reassignSpeaker(id, 0), moved);
+    assert.equal(
+      (await shape())[1].text,
+      'yes go ahead i have the numbers here',
+      'a hand-placed boundary should survive the recognizer changing its mind',
+    );
+
+    // Holding Alt copies the name instead of moving it, which is how a speaker
+    // who was never noticed at all gets a heading of their own. Here the words
+    // it lands on run into the next turn, which is the same speaker, so the two
+    // become one.
+    assert.equal(await dragName(0, 'numbers', { alt: true }), 'copy');
+    assert.deepEqual(await shape(), [
+      { name: 'Speaker 1', text: 'shall we start' },
+      { name: 'Speaker 2', text: 'yes go ahead i have the' },
+      { name: 'Speaker 1', text: 'numbers here thanks for those' },
+    ]);
+
+    // Dropping a name at the end of its own words empties its turn, and a name
+    // with nothing under it is not a name: the heading goes without being asked
+    // to, by the same path one takes when diarization merges two turns.
+    assert.equal(await dragName(2, 'those', { after: true }), 'move');
+    assert.deepEqual(
+      await shape(),
+      [
+        { name: 'Speaker 1', text: 'shall we start' },
+        { name: 'Speaker 2', text: 'yes go ahead i have the numbers here thanks for those' },
+      ],
+      'a name dragged past its own last word should take its heading with it',
+    );
+
+    // Every one of those moves is a move, not a rewrite: the words are the
+    // reader's, and the page has no business retyping them.
+    assert.equal(
+      await page.evaluate(() => window.__meetingNotes.text().replace(/\s+/g, ' ').trim()),
+      'Speaker 1 shall we start Speaker 2 yes go ahead i have the numbers here thanks for those',
+    );
+  } finally {
+    await page.close();
+  }
+});
+
+test('Meeting notes starts a new speaker where the reader alt-clicks', { skip }, async () => {
+  // Diarization can only tell apart the voices it separated, and it does miss
+  // one outright, so there is no name on the page to drag to where they start.
+  // Alt-clicking the words is how a reader says there was somebody else here.
+  const page = await openPage('/meeting-notes/?local=1&assets=local&nocapture=1');
+  try {
+    await page.waitForFunction(
+      () => window.__meetingNotes && document.body.dataset.state === 'ready',
+      { timeout: 120000 },
+    );
+
+    await page.evaluate(() => {
+      const say = (id, text, speaker, at) =>
+        window.__meetingNotes.appendLine({
+          id,
+          text,
+          source: 'meeting',
+          speaker,
+          startTime: at,
+          endTime: at + 2,
+        });
+      say('a', 'shall we start', 0, 0);
+      say('b', 'actually i had a question', 0, 2);
+      document.getElementById('doc').scrollIntoView({ block: 'center' });
+    });
+
+    const shape = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll('#doc .who')].map((who) => ({
+          name: who.textContent,
+          text: who.nextElementSibling.textContent.replace(/\s+/g, ' ').trim(),
+        })),
+      );
+
+    /** Clicks the first letter of a word, the way a reader would point at it. */
+    const clickWord = async (word, { alt = false } = {}) => {
+      const point = await page.evaluate((word) => {
+        const doc = document.getElementById('doc');
+        const walker = document.createTreeWalker(doc, NodeFilter.SHOW_TEXT);
+        for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+          if (!text.parentElement?.closest('.ln')) continue;
+          const at = text.data.indexOf(word);
+          if (at === -1) continue;
+          const range = document.createRange();
+          range.setStart(text, at);
+          range.setEnd(text, at + 1);
+          const box = range.getBoundingClientRect();
+          return { x: box.left + 1, y: box.top + box.height / 2 };
+        }
+        throw new Error(`no line contains "${word}"`);
+      }, word);
+      if (alt) await page.keyboard.down('Alt');
+      await page.mouse.click(point.x, point.y);
+      if (alt) await page.keyboard.up('Alt');
+    };
+
+    assert.deepEqual(await shape(), [
+      { name: 'Speaker 1', text: 'shall we start actually i had a question' },
+    ]);
+
+    // An ordinary click is how you point at a word to play it from there, and
+    // must stay that way.
+    await clickWord('actually');
+    assert.equal((await shape()).length, 1, 'a plain click should not cut the turn');
+
+    await clickWord('actually', { alt: true });
+    assert.deepEqual(
+      await shape(),
+      [
+        { name: 'Speaker 1', text: 'shall we start' },
+        { name: 'Speaker 2', text: 'actually i had a question' },
+      ],
+      'the words from the click on should belong to somebody new',
+    );
+
+    // Again partway through a line, which has to be cut in two for it.
+    await clickWord('question', { alt: true });
+    assert.deepEqual(await shape(), [
+      { name: 'Speaker 1', text: 'shall we start' },
+      { name: 'Speaker 2', text: 'actually i had a' },
+      { name: 'Speaker 3', text: 'question' },
+    ]);
+
+    // The number is only a placeholder, but it has to be one no other speaker
+    // on the page is answering to, and the name is the reader's from here on.
+    await page.focus('#doc');
+    await page.evaluate(() => {
+      const range = document.createRange();
+      range.selectNodeContents(document.querySelectorAll('#doc .who')[1]);
+      const selection = getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    await page.keyboard.type('Jane');
+    assert.deepEqual(
+      (await shape()).map((turn) => turn.name),
+      ['Speaker 1', 'Jane', 'Speaker 3'],
+    );
+
+    // And a speaker the recognizer has never heard of cannot be argued away by
+    // the recognizer.
+    const ids = await page.evaluate(() =>
+      [...document.querySelectorAll('#doc .ln')].map((span) => span.dataset.line),
+    );
+    await page.evaluate((id) => window.__meetingNotes.reassignSpeaker(id, 0), ids[1]);
+    assert.equal((await shape()).length, 3, 'a hand-made speaker should stay put');
+  } finally {
+    await page.close();
+  }
+});
+
+test('Meeting notes asks before losing notes nobody has taken a copy of', { skip }, async () => {
+  // The transcript is in the tab and nowhere else: nothing is uploaded, so
+  // there is no server holding a copy and closing the tab is final.
+  const page = await openPage('/meeting-notes/?local=1&assets=local&nocapture=1');
+  const downloads = await captureDownloads(page);
+  try {
+    await page.waitForFunction(
+      () => window.__meetingNotes && document.body.dataset.state === 'ready',
+      { timeout: 120000 },
+    );
+
+    /** Whether the page would put the browser's "leave site?" question up. */
+    const wouldAsk = () =>
+      page.evaluate(() => {
+        const event = new Event('beforeunload', { cancelable: true });
+        window.dispatchEvent(event);
+        return event.defaultPrevented;
+      });
+
+    assert.equal(await wouldAsk(), false, 'an empty page has nothing to lose');
+
+    await page.evaluate(() =>
+      window.__meetingNotes.appendLine({
+        id: 'a',
+        text: 'we agreed to ship on friday',
+        source: 'meeting',
+        speaker: 0,
+        startTime: 0,
+        endTime: 2,
+      }),
+    );
+    assert.equal(await wouldAsk(), true, 'a transcript nobody has saved should be asked about');
+
+    await page.click('#markdown');
+    assert.match(await downloads.text(/\.md$/), /ship on friday/);
+    assert.equal(await wouldAsk(), false, 'a copy has been taken away');
+
+    // An edit after that copy makes it a stale copy.
+    await page.focus('#doc');
+    await page.evaluate(() => {
+      const text = document.querySelector('#doc .ln').firstChild;
+      const range = document.createRange();
+      range.setStart(text, text.data.length - 1);
+      range.collapse(true);
+      const selection = getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    await page.keyboard.type(' at the earliest');
+    assert.equal(await wouldAsk(), true, 'an edit since the copy should be asked about');
+  } finally {
+    await page.close();
+  }
+});
+
 test('Meeting notes keeps the reader’s place while diarization revises a window', { skip }, async () => {
   // Re-clustering runs every couple of seconds over the last two minutes and
   // can move many lines at once. That is often enough, over a long enough
@@ -1368,6 +1726,124 @@ test('Meeting notes does not relabel a heading out from under a rename', { skip 
   }
 });
 
+test('Meeting notes joins up two speakers the reader gives one name', { skip }, async () => {
+  // Diarization splits one voice in two far more readily than it runs two
+  // together, and the reader says so by typing the same name over both. Two
+  // turns in a row headed by the same name is the page arguing back.
+  const page = await openPage('/meeting-notes/?local=1&assets=local&nocapture=1');
+  try {
+    await page.waitForFunction(
+      () => window.__meetingNotes && document.body.dataset.state === 'ready',
+      { timeout: 120000 },
+    );
+
+    await page.evaluate(() => {
+      const say = (id, text, speaker, at) =>
+        window.__meetingNotes.appendLine({
+          id,
+          text,
+          source: 'meeting',
+          speaker,
+          startTime: at,
+          endTime: at + 2,
+        });
+      say('a', 'shall we start', 0, 0);
+      say('b', 'yes go ahead', 1, 2);
+      say('c', 'right then', 2, 4);
+    });
+
+    /** Each heading with the lines of the turn beneath it. */
+    const shape = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll('#doc .who')].map((who) => ({
+          name: who.textContent,
+          lines: [...who.nextElementSibling.querySelectorAll('.ln')].map(
+            (span) => span.dataset.line,
+          ),
+        })),
+      );
+
+    /** Types a name over a heading, the way a reader does. */
+    const rename = async (index, name) => {
+      await page.focus('#doc');
+      await page.evaluate((index) => {
+        const range = document.createRange();
+        range.selectNodeContents(document.querySelectorAll('#doc .who')[index]);
+        const selection = getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }, index);
+      await page.keyboard.type(name);
+    };
+
+    /** Puts the caret back in the words, which is what finishes a rename. */
+    const doneRenaming = () =>
+      page.evaluate(() => {
+        const text = document.querySelector('#doc .ln').firstChild;
+        const range = document.createRange();
+        range.setStart(text, 0);
+        range.collapse(true);
+        const selection = getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+      });
+
+    await rename(0, 'Jane');
+    await rename(2, 'Jane');
+    await doneRenaming();
+    assert.deepEqual(
+      await shape(),
+      [
+        { name: 'Jane', lines: ['a'] },
+        { name: 'Speaker 2', lines: ['b'] },
+        { name: 'Jane', lines: ['c'] },
+      ],
+      'two turns with somebody else in between should stay two turns',
+    );
+
+    // The voice in the middle turns out to be the same person too, which is
+    // three ids and one name over three turns in a row.
+    await rename(1, 'Jane');
+    assert.equal(
+      (await shape()).length,
+      3,
+      'a name should not be acted on while it is still being typed',
+    );
+
+    await doneRenaming();
+    await page.waitForFunction(() => document.querySelectorAll('#doc .who').length === 1, {
+      timeout: 5000,
+    });
+    assert.deepEqual(
+      await shape(),
+      [{ name: 'Jane', lines: ['a', 'b', 'c'] }],
+      'one name over the lot should be one turn',
+    );
+
+    // Renaming that turn has to reach all three ids and not just the one its
+    // heading carries, or the next re-cut would split them apart again.
+    await rename(0, 'Jane Doe');
+    await doneRenaming();
+    await page.evaluate(() =>
+      window.__meetingNotes.appendLine({
+        id: 'd',
+        text: 'one more thing',
+        source: 'meeting',
+        speaker: 1,
+        startTime: 6,
+        endTime: 8,
+      }),
+    );
+    assert.deepEqual(
+      await shape(),
+      [{ name: 'Jane Doe', lines: ['a', 'b', 'c', 'd'] }],
+      'a later line from any of them should go on in the same turn',
+    );
+  } finally {
+    await page.close();
+  }
+});
+
 test('Meeting notes transcribes two streams, records them, and plays back', { skip }, async () => {
   // Its own browser, because the microphone is a wav file here. `fakescreen`
   // puts that same microphone where the shared screen's audio would be, which
@@ -1836,29 +2312,43 @@ test('Voice agent highlight follows the reader between languages', { skip }, asy
   try {
     await page.waitForSelector('.ms-code__tabs .ms-lang-tab');
 
-    // Park the flow on a step without running a conversation, which needs
+    // One step of the flow, in every language the panel offers. The same step
+    // lands on a different line in each — an import at the top of one snippet
+    // moves everything below it — which is why each snippet carries a map of
+    // its own, and the map is what this is really checking. Taking the line
+    // numbers from the snippets rather than repeating them here is the point:
+    // a copy of the map in the test is a copy that goes stale silently, since
+    // a wrong line still lights up a line.
+    const languages = await page.evaluate(async () => {
+      const { AGENT_FLOW } = await import('/assets/snippets.js');
+      return AGENT_FLOW.map((pane) => ({ label: pane.label, line: pane.steps.confirmApply }));
+    });
+    assert.ok(languages.length > 1, 'expected the snippet in more than one language');
+
+    // Park the flow on that step without running a conversation, which needs
     // models and a lot of time. The page's own step() is not reachable from
     // here, so drive markCodeStep the way it does.
-    const highlighted = async (tabIndex, lineNumber) => {
-      await page.click(`.ms-code__tabs .ms-lang-tab:nth-child(${tabIndex + 1})`);
-      return page.evaluate(async (line) => {
+    for (const [index, language] of languages.entries()) {
+      await page.click(`.ms-code__tabs .ms-lang-tab:nth-child(${index + 1})`);
+      const lit = await page.evaluate(async (line) => {
         const ui = await import('/assets/moonshine-ui.js');
         ui.markCodeStep(document.getElementById('code'), line);
         const marked = document.querySelectorAll('.ms-line.is-running');
-        return { count: marked.length, text: marked[0]?.textContent ?? '' };
-      }, lineNumber);
-    };
+        return {
+          count: marked.length,
+          text: marked[0]?.textContent ?? '',
+          pane: marked[0]?.closest('.ms-code__pane')?.dataset.pane ?? null,
+        };
+      }, language.line);
 
-    // "confirmApply" is line 7 in JavaScript and Python but line 8 in Swift,
-    // which is the reason each snippet carries its own step map.
-    const js = await highlighted(0, 7);
-    assert.equal(js.count, 1, 'exactly one line should be lit, in the open tab only');
-    assert.match(js.text, /Apply these changes\?/);
-
-    const swift = await highlighted(2, 8);
-    assert.equal(swift.count, 1);
-    assert.match(swift.text, /Apply these changes\?/);
-    assert.match(swift.text, /try await/, 'expected the Swift line, not the JavaScript one');
+      assert.equal(lit.count, 1, `${language.label}: exactly one line should be lit`);
+      assert.equal(lit.pane, String(index), `${language.label}: lit in the open tab only`);
+      assert.match(
+        lit.text,
+        /Apply these changes\?/,
+        `${language.label}: the step should be on the line its own map gives`,
+      );
+    }
   } finally {
     await page.close();
   }

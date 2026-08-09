@@ -111,6 +111,21 @@ OptionVector parse_common_options(const OptionVector &options) {
   return uncommon_options;
 }
 
+// Splits the comma-separated ``keyterms`` option value into individual terms,
+// dropping surrounding whitespace and empty entries. A single delimited string
+// keeps this usable from every binding, since they all pass option values as
+// strings (the same reason ``ort_providers`` works this way).
+std::vector<std::string> parse_keyterms(const std::string &value) {
+  std::vector<std::string> keyterms;
+  for (const std::string &piece : split(value, ",")) {
+    const std::string keyterm = trim(piece);
+    if (!keyterm.empty()) {
+      keyterms.push_back(keyterm);
+    }
+  }
+  return keyterms;
+}
+
 void parse_transcriber_options(const OptionVector &options,
                                TranscriberOptions &out_options) {
   for (const auto &option : options) {
@@ -141,6 +156,10 @@ void parse_transcriber_options(const OptionVector &options,
       out_options.max_tokens_per_second = float_from_string(option_value);
     } else if (option_name == "use_speculative_decoding") {
       out_options.use_speculative_decoding = bool_from_string(option_value);
+    } else if (option_name == "keyterms") {
+      out_options.keyterms = parse_keyterms(option_value);
+    } else if (option_name == "keyterm_boost") {
+      out_options.keyterm_boost = float_from_string(option_value);
     } else if (option_name == "identify_speakers") {
       out_options.identify_speakers = bool_from_string(option_value);
     } else if (option_name == "diarization_cluster_cadence") {
@@ -463,6 +482,27 @@ int32_t moonshine_stop_stream(int32_t transcriber_handle,
     transcriber_map[transcriber_handle]->stop_stream(stream_handle);
   } catch (const std::exception &e) {
     LOGF("Failed to stop stream: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+  return MOONSHINE_ERROR_NONE;
+}
+
+int32_t moonshine_transcriber_set_keyterms(int32_t transcriber_handle,
+                                           const char *keyterms) {
+  if (log_api_calls) {
+    LOGF(
+        "moonshine_transcriber_set_keyterms(transcriber_handle=%d, "
+        "keyterms='%s')",
+        transcriber_handle, keyterms == nullptr ? "" : keyterms);
+  }
+  CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
+  try {
+    const std::vector<std::string> parsed =
+        keyterms == nullptr ? std::vector<std::string>()
+                            : parse_keyterms(std::string(keyterms));
+    transcriber_map[transcriber_handle]->set_keyterms(parsed);
+  } catch (const std::exception &e) {
+    LOGF("Failed to set key terms: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
   return MOONSHINE_ERROR_NONE;

@@ -14,6 +14,11 @@ import Darwin
 ///
 /// Parseable summary for `scripts/test-mobile-latency.sh`:
 /// `MOONSHINE_LATENCY platform=macos|ios device=... model=... avg_ms=...`
+///
+/// Set `MOONSHINE_KEYTERMS` (comma-separated, and optionally
+/// `MOONSHINE_KEYTERM_BOOST`) to measure the same latency with contextual
+/// biasing switched on, so its per-token cost can be compared against a
+/// baseline run on the same machine.
 @available(iOS 15.0, macOS 12.0, *)
 final class StreamingLatencyTests: XCTestCase {
 
@@ -50,10 +55,24 @@ final class StreamingLatencyTests: XCTestCase {
         let platform = "macos"
         #endif
 
+        // Contextual biasing is off unless the environment names key terms, so
+        // the default run stays the plain latency baseline.
+        let environment = ProcessInfo.processInfo.environment
+        let keyterms = environment["MOONSHINE_KEYTERMS"] ?? ""
+        var options: [TranscriberOption] = []
+        if !keyterms.isEmpty {
+            options.append(TranscriberOption(name: "keyterms", value: keyterms))
+            if let boost = environment["MOONSHINE_KEYTERM_BOOST"], !boost.isEmpty {
+                options.append(TranscriberOption(name: "keyterm_boost", value: boost))
+            }
+        }
+        let keytermCount = keyterms.isEmpty ? 0 : keyterms.split(separator: ",").count
+
         for testCase in Self.cases {
             let transcriber = try await Transcriber.load(
                 language: "en",
                 modelArch: testCase.arch,
+                options: options.isEmpty ? nil : options,
                 onProgress: { progress in
                     if progress.bytesTotal > 0 {
                         let pct = 100.0 * Double(progress.bytesDownloaded)
@@ -109,8 +128,9 @@ final class StreamingLatencyTests: XCTestCase {
             let sum = latencies.reduce(0) { $0 + Int($1) }
             let avgMs = Double(sum) / Double(latencies.count)
             let summary = String(
-                format: "MOONSHINE_LATENCY platform=%@ device=%@ model=%@ avg_ms=%.0f lines=%d wall_s=%.2f",
-                platform, device, testCase.modelName, avgMs, latencies.count, wallSeconds)
+                format: "MOONSHINE_LATENCY platform=%@ device=%@ model=%@ avg_ms=%.0f lines=%d wall_s=%.2f keyterms=%d",
+                platform, device, testCase.modelName, avgMs, latencies.count, wallSeconds,
+                keytermCount)
             print(summary)
             fputs(summary + "\n", stderr)
 

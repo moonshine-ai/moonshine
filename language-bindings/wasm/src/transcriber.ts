@@ -7,7 +7,7 @@
 
 import { AssetDownloader } from './asset-downloader.js';
 import { ModelArch, TranscribeFlags, modelArchToString } from './enums.js';
-import { wrapErrors } from './errors.js';
+import { MoonshineInvalidArgumentError, wrapErrors } from './errors.js';
 import {
   loadMoonshineModule,
   type LoadModuleOptions,
@@ -268,6 +268,34 @@ export class Transcriber {
     return wrapErrors(() =>
       normalizeTranscript(this.raw.transcribe(audio, sampleRate, flags)),
     );
+  }
+
+  /**
+   * Biases the decoder towards a list of terms, replacing any previous list.
+   *
+   * Useful for jargon, product names and proper nouns the model would otherwise
+   * be unlikely to produce. No retraining is involved, so the list can follow
+   * whatever the user is looking at and can be changed while a stream is
+   * running; it takes effect on the next transcription and does not rewrite text
+   * already emitted.
+   *
+   * Match the capitalization and spelling you want to see in the output. Pass an
+   * empty array to turn biasing off, and set the strength with the
+   * `keyterm_boost` option at load time. Only the streaming architectures can
+   * apply this; the others throw.
+   *
+   * @param keyterms Terms to bias towards, e.g. `['Kubernetes', 'Ceph']`. Commas
+   *   are the delimiter used internally, so terms must not contain them.
+   */
+  setKeyterms(keyterms: string[]): void {
+    for (const term of keyterms) {
+      if (term.includes(',')) {
+        throw new MoonshineInvalidArgumentError(
+          `Key terms cannot contain commas, which separate them: ${term}`,
+        );
+      }
+    }
+    wrapErrors(() => this.raw.setKeyterms(keyterms.join(',')));
   }
 
   /**

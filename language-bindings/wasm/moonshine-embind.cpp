@@ -230,6 +230,12 @@ class Transcriber {
     return convert_transcript(transcript);
   }
 
+  // Comma-separated, as in the load option; empty turns biasing off. The TS
+  // layer joins arrays and rejects terms containing the delimiter.
+  void setKeyterms(const std::string &keyterms) {
+    check(moonshine_transcriber_set_keyterms(handle_, keyterms.c_str()));
+  }
+
   // Stream lifecycle is exposed as a Stream object (see below).
   int32_t createStreamHandle(uint32_t flags) {
     int32_t s = moonshine_create_stream(handle_, flags);
@@ -713,6 +719,7 @@ EMSCRIPTEN_BINDINGS(moonshine) {
   class_<Transcriber>("Transcriber")
       .constructor<val, val, uint32_t, val, val>()
       .function("transcribe", &Transcriber::transcribe)
+      .function("setKeyterms", &Transcriber::setKeyterms)
       .function("close", &Transcriber::close);
 
   class_<Stream>("Stream")

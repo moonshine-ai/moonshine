@@ -25,7 +25,7 @@
 /* Begin PBXFileReference section */
 		3ED83875DD1A04BE17505B36 /* StreamingLatencyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingLatencyApp.swift; sourceTree = "<group>"; };
 		9D705AD41DF338B332560FFB /* StreamingLatencyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingLatencyTests.swift; sourceTree = "<group>"; };
-		CB9C919FBCAFDDF9971BDE1E /* swift */ = {isa = PBXFileReference; lastKnownFileType = folder; name = swift; path = ../../../language-bindings/swift; sourceTree = SOURCE_ROOT; };
+		CB9C919FBCAFDDF9971BDE1E /* swift */ = {isa = PBXFileReference; lastKnownFileType = folder; name = swift; path = "../../../language-bindings/swift"; sourceTree = SOURCE_ROOT; };
 		F17A62165B3C9D29E81D6EFA /* StreamingLatency.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = StreamingLatency.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F5961EB5A917724E08E9C84F /* StreamingLatencyTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = StreamingLatencyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -155,7 +155,7 @@
 			mainGroup = 8C08B18F56EA44A6E4462150;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				94261F441B64C39E118617A2 /* XCLocalSwiftPackageReference "../../../language-bindings/swift" */,
+				9B2DD5FB21F0DE4CF2A9EB2D /* XCLocalSwiftPackageReference "../../../language-bindings/swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
@@ -425,9 +425,9 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		94261F441B64C39E118617A2 /* XCLocalSwiftPackageReference "../../../language-bindings/swift" */ = {
+		9B2DD5FB21F0DE4CF2A9EB2D /* XCLocalSwiftPackageReference "../../../language-bindings/swift" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../../../language-bindings/swift;
+			relativePath = "../../../language-bindings/swift";
 		};
 /* End XCLocalSwiftPackageReference section */
 

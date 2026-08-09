@@ -198,6 +198,51 @@ Transcriber::Transcriber(const TranscriberOptions &options)
                                std::to_string(load_error));
     }
   }
+  // Compile the contextual-biasing key terms last, since this needs the
+  // tokenizer that the model load above brings up.
+  if (!this->options.keyterms.empty()) {
+    this->set_keyterms(this->options.keyterms);
+  }
+}
+
+void Transcriber::set_keyterms(const std::vector<std::string> &keyterms) {
+  std::lock_guard<std::mutex> lock(this->context_biaser_mutex);
+  this->options.keyterms = keyterms;
+  this->context_biaser.clear();
+  this->context_biaser.set_boost(this->options.keyterm_boost);
+  // Drop the speculative draft. It was decoded under the previous key terms,
+  // so it is no longer a useful prediction of what this configuration would
+  // produce, and letting it stand means a changed list keeps influencing the
+  // next decode through the tokens it verifies. Costs one re-decode from BOS.
+  this->last_streaming_tokens.clear();
+  if (keyterms.empty()) {
+    return;
+  }
+  if (this->streaming_model == nullptr) {
+    if (this->stt_model != nullptr) {
+      throw std::runtime_error(
+          "Key-term biasing requires one of the streaming model "
+          "architectures; the loaded model does not decode through a path "
+          "that can apply it.");
+    }
+    // No model at all (skip_transcription): there is nothing to tokenize
+    // against, and nothing will be decoded either.
+    return;
+  }
+  for (const std::string &term : keyterms) {
+    for (const std::string &variant : ContextBiaser::variants_for_term(term)) {
+      const std::vector<int32_t> tokens =
+          this->streaming_model->text_to_tokens(variant);
+      if (tokens.empty()) {
+        continue;
+      }
+      this->context_biaser.add_token_sequence(tokens);
+    }
+  }
+  if (this->options.log_output_text) {
+    LOGF("Compiled %zu key terms for contextual biasing (boost %.2f)",
+         keyterms.size(), this->context_biaser.get_boost());
+  }
 }
 
 void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
@@ -1260,6 +1305,12 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
                256);
   std::vector<int64_t> tokens;
 
+  // Held across the whole decode so a concurrent set_keyterms cannot swap the
+  // trie out from under it. Always taken before streaming_model_mutex.
+  std::lock_guard<std::mutex> biaser_lock(this->context_biaser_mutex);
+  ContextBiaser *biaser =
+      this->context_biaser.empty() ? nullptr : &this->context_biaser;
+
   {
     std::lock_guard<std::mutex> lock(this->streaming_model_mutex);
 
@@ -1278,7 +1329,7 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
       const int *draft_ptr = draft.empty() ? nullptr : draft.data();
       int err = this->streaming_model->decode_full(
           &this->streaming_state, draft_ptr, static_cast<int>(draft.size()),
-          &out, &out_len);
+          &out, &out_len, biaser);
       if (err != 0) {
         LOGF("Speculative decode_full failed: %d", err);
         throw std::runtime_error("Speculative decode_full failed: " +
@@ -1297,12 +1348,21 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
       tokens.push_back(config.bos_id);
       std::vector<float> logits(config.vocab_size);
       int current_token = config.bos_id;
+      // This pass decodes from BOS, so any partial key-term match left over
+      // from the previous pass is meaningless.
+      if (biaser != nullptr) {
+        biaser->reset();
+      }
 
       for (int step = 0; step < max_tokens; ++step) {
         int err = this->streaming_model->decode_step(
             &this->streaming_state, current_token, logits.data());
         if (err != 0) {
           break;
+        }
+
+        if (biaser != nullptr) {
+          biaser->apply(logits.data(), config.vocab_size);
         }
 
         // Argmax
@@ -1319,6 +1379,9 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
         current_token = next_token;
 
         if (next_token == config.eos_id) break;
+        if (biaser != nullptr) {
+          biaser->advance(next_token);
+        }
       }
     }
   }
