@@ -96,6 +96,10 @@ struct MoonshineStreamingModel {
   size_t encoder_mmapped_data_size = 0;
   const char *adapter_mmapped_data = nullptr;
   size_t adapter_mmapped_data_size = 0;
+  const char *cross_kv_mmapped_data = nullptr;
+  size_t cross_kv_mmapped_data_size = 0;
+  const char *decoder_kv_mmapped_data = nullptr;
+  size_t decoder_kv_mmapped_data_size = 0;
 
   std::string last_result;
 
