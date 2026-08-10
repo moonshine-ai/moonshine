@@ -7,37 +7,84 @@ edit_uri: edit/main/docs/
 
 docs_dir: docs
 
+# Keep these contributor notes in the repo, but do not publish them on the docs site.
+exclude_docs: |
+  requirements.txt
+  diarization-models.md
+  execution-providers.md
+  lfs-purge.md
+  ort-only-models.md
+  release-process.md
+  word-level-timestamps.md
+  design/**
+
 theme:
   name: material
+  logo: images/logo.png
+  favicon: images/logo.png
   features:
     - navigation.sections
     - navigation.top
     - search.suggest
     - content.code.copy
+    # Linked content tabs across the page (for future multi-language code samples)
+    - content.tabs.link
+    - toc.follow
 
 plugins:
   - search
+  # Suffix mode: English files stay as `page.md`; add `page.es.md` (etc.) when translating.
+  # Folder locales (`docs/en/…`, `docs/es/…`) can replace this later if preferred.
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: true
+      reconfigure_material: true
+      languages:
+        - locale: en
+          default: true
+          name: English
+          build: true
 
 markdown_extensions:
   - admonition
   - tables
   - toc:
       permalink: true
+      toc_depth: 3
   - pymdownx.superfences
   - pymdownx.highlight:
       anchor_linenums: true
+  - pymdownx.tabbed:
+      alternate_style: true
 
 nav:
   - Home: index.md
-  - Guides:
-      - Execution providers: execution-providers.md
-      - Word-level timestamps: word-level-timestamps.md
-      - Diarization models: diarization-models.md
-      - ORT-only models: ort-only-models.md
-  - Design:
-      - API principles: design/api-principles.md
-      - API comparison: design/api-comparison.md
-      - API regularization: design/api-regularization.md
-  - Internals:
-      - Release process: release-process.md
-      - LFS purge: lfs-purge.md
+  - Quickstart: quickstart.md
+  - Examples: examples.md
+  - Moonshine vs Whisper: moonshine-vs-whisper.md
+  - Using the Library:
+      - Overview: using/index.md
+      - Transcription: using/transcription.md
+      - Conversational Agent: using/conversational-agent.md
+      - Text to Speech: using/text-to-speech.md
+      - Adding the Library: using/adding-the-library.md
+      - Debugging: using/debugging.md
+      - Building from Source: using/building-from-source.md
+      - Downloading Models: using/downloading-models.md
+      - Benchmarks: using/benchmarks.md
+  - Models:
+      - Overview: models/index.md
+      - Papers: models/papers.md
+      - Available Models: models/available-models.md
+      - Accuracy: models/accuracy.md
+      - Domain Customization: models/domain-customization.md
+      - Quantization: models/quantization.md
+      - HuggingFace: models/huggingface.md
+  - API Reference:
+      - Classes: api/classes.md
+      - Options: api/options.md
+      - C API: api/c-api.md
+  - Support: support.md
+  - Roadmap: roadmap.md
+  - Acknowledgements: acknowledgements.md
+  - License: license.md

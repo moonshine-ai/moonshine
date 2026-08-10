@@ -373,6 +373,21 @@ int32_t moonshine_load_transcriber_from_memory_files(
         return MOONSHINE_ERROR_INVALID_ARGUMENT;
       }
       const std::string key(filenames[i]);
+      if (!is_recognized_transcriber_model_file(key)) {
+        std::string recognized;
+        for (const std::string &name : recognized_transcriber_model_files()) {
+          if (!recognized.empty()) {
+            recognized += ", ";
+          }
+          recognized += name;
+        }
+        LOGF(
+            "moonshine_load_transcriber_from_memory_files(): '%s' is not a "
+            "model asset this loader recognizes. Check it against the "
+            "canonical filenames: %s",
+            key.c_str(), recognized.c_str());
+        return MOONSHINE_ERROR_INVALID_ARGUMENT;
+      }
       if (memory[i] != nullptr && memory_sizes[i] > 0) {
         transcriber_options.model_files.set_memory(
             key, memory[i], static_cast<size_t>(memory_sizes[i]));
@@ -1419,9 +1434,7 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
   }
 }
 
-/* Releases the resources used by a text to speech synthesizer.
- Returns zero on success, or a non-zero error code on failure.
-*/
+/* Releases the resources used by a text to speech synthesizer. */
 void moonshine_free_tts_synthesizer(int32_t tts_synthesizer_handle) {
   if (log_api_calls) {
     LOGF("moonshine_free_tts_synthesizer(handle=%d)", tts_synthesizer_handle);
@@ -2603,9 +2616,7 @@ int32_t moonshine_create_grapheme_to_phonemizer_from_memory(
   }
 }
 
-/* Releases the resources used by a grapheme to phonemizer.
- Returns zero on success, or a non-zero error code on failure.
-*/
+/* Releases the resources used by a grapheme to phonemizer. */
 void moonshine_free_grapheme_to_phonemizer(
     int32_t grapheme_to_phonemizer_handle) {
   if (log_api_calls) {

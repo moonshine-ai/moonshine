@@ -412,6 +412,41 @@ void Transcriber::load_from_memory(const uint8_t *encoder_model_data,
   }
 }
 
+const std::vector<std::string> &recognized_transcriber_model_files() {
+  static const std::vector<std::string> keys = {
+      // Required by the non-streaming architectures.
+      "encoder_model.ort",
+      "decoder_model_merged.ort",
+      // Required by the streaming architectures.
+      "frontend.ort",
+      "encoder.ort",
+      "adapter.ort",
+      "cross_kv.ort",
+      "decoder_kv.ort",
+      "streaming_config.json",
+      // Required by both.
+      "tokenizer.bin",
+      // Optional, and only consulted when the word_timestamps option is on.
+      "decoder_with_attention.ort",
+      "alignment_model.ort",
+      "decoder_kv_with_attention.ort",
+      // Optional spelling fusion. The meta file ships in the same download
+      // group as the model but carries no information the loader needs, so it
+      // is accepted and ignored rather than rejected.
+      "spelling_cnn.ort",
+      "spelling_cnn_meta.json",
+      // Optional, and required when the identify_speakers option is on.
+      "segmentation.ort",
+      "embedding.ort",
+  };
+  return keys;
+}
+
+bool is_recognized_transcriber_model_file(const std::string &key) {
+  const std::vector<std::string> &keys = recognized_transcriber_model_files();
+  return std::find(keys.begin(), keys.end(), key) != keys.end();
+}
+
 void Transcriber::load_from_memory_files(uint32_t model_arch) {
   validate_model_arch(model_arch);
 

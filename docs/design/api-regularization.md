@@ -165,7 +165,7 @@ require that mode and raise without it. `voice()` and `cloning()` clear each
 other. Until a clip is cloned, synthesis uses the ZipVoice preset voice
 built during `load()`.
 
-`VoiceClone` is backed by the same `moonshine_extract_speech_clip` core call
+`VoiceClone` is backed by the same `moonshine_extract_speech_clip()` core call
 that Swift and Java use, so this was binding work rather than new algorithm
 work: `moonshine_api.py` grew a `SpeechClipC` struct and a
 `moonshine_extract_speech_clip()` wrapper returning a `SpeechClip`, and
@@ -208,7 +208,7 @@ model.** Every other language has exactly one model, `BASE` or `TINY`:
 | ko | tiny |
 
 Asking the native catalog for a language and arch it does not have is a hard
-error, not a downgrade: `moonshine_get_stt_dependencies` logs `unknown language
+error, not a downgrade: `moonshine_get_stt_dependencies()` logs `unknown language
 "es" or model_arch` and returns invalid-argument.
 
 So Python now defaults to "the catalog's recommended model for this language",
@@ -618,7 +618,7 @@ pair just as happily as it built the struct.
 
 **There was no voice cloning.** `cloneFrom` and `startCloning` are in all four
 other bindings and were in none of C++, even though the machinery is entirely
-platform-neutral: `moonshine_extract_speech_clip` runs the voice-activity
+platform-neutral: `moonshine_extract_speech_clip()` runs the voice-activity
 detector that is compiled into the library, so finding a reference clip needs no
 models and no network. Added `extractSpeechClip()`, a `VoiceClone` that
 accumulates audio and reports `isReady()`, and `TextToSpeech::cloneFrom` /

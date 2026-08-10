@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - Encoding text to tokens no longer scans the whole vocabulary for every subword, which made installing a large key-term list slow: 10,000 terms took about 55 seconds to compile on an iPad and now takes around a second. Transcription output is unaffected, since it only ever decodes.
+- `moonshine_load_transcriber_from_memory_files()` rejects a filename key it does not recognize, returning `MOONSHINE_ERROR_INVALID_ARGUMENT` and naming the key, instead of ignoring it. A misspelling like `tokenizer.bn` used to be dropped silently and then reported as the required `tokenizer.bin` being missing, which sent you looking at the wrong end of the problem. The recognized set is the union of the canonical names across every architecture, so handing over a whole downloaded model directory still works even when this particular load has no use for some of it.
 
 ### Fixed
 

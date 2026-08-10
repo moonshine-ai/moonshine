@@ -663,7 +663,7 @@ language.
 
 **Speech-clip extraction moves into the C++ core.** `findSpeechWindow` and the
 transcription-suppressed transcriber trick in the web demo become
-`moonshine_extract_speech_clip`, which runs the built-in Silero voice-activity
+`moonshine_extract_speech_clip()`, which runs the built-in Silero voice-activity
 detector over arbitrary PCM and returns the first `max_duration_seconds` of
 detected speech, resampled to 16 kHz mono. It also reports whether it has seen a
 full clip's worth of speech yet, which is what backs `VoiceClone.isReady` in all
@@ -671,12 +671,12 @@ three bindings. The Silero model is compiled into the library, so this needs no
 downloads.
 
 **Clone-clip transcription is already in the core.** When ZipVoice is selected,
-`moonshine_get_tts_dependencies` advertises a `role: "clone_asr"` group (catalog
+`moonshine_get_tts_dependencies()` advertises a `role: "clone_asr"` group (catalog
 default STT with word timestamps). Bindings download those files under
 `g2p_root/clone_asr/` (or as `clone_asr/...` memory keys). Create loads that ASR
 only when a clone clip is present and `zipvoice_clone_transcript` is omitted,
 runs auto-transcribe, then releases it — so preset ZipVoice loads do not keep a
-full STT session. `moonshine_extract_speech_clip` stays VAD-only so capture
+full STT session. `moonshine_extract_speech_clip()` stays VAD-only so capture
 loops stay responsive. The WASM binding additionally transcribes in JS before
 create so the UI thread can yield between download, ASR, and ZipVoice load.
 

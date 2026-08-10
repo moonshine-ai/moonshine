@@ -110,6 +110,21 @@ class TranscriberStream {
 
 typedef std::map<int32_t, TranscriberStream *> TranscriberStreamMap;
 
+// Every canonical asset key the keyed in-memory loader
+// (``ModelSource::MEMORY_FILES``, reached through
+// ``moonshine_load_transcriber_from_memory_files``) knows how to resolve,
+// grouped by the code that consumes each one. The union across architectures
+// is deliberate: a caller that downloaded a manifest and handed over every
+// file it received should not be punished for including an asset this
+// particular architecture or option set has no use for.
+const std::vector<std::string> &recognized_transcriber_model_files();
+
+// Whether ``key`` names an asset the in-memory loader understands. Callers
+// supplying anything else are rejected rather than silently ignored, so a typo
+// like "tokenizer.bn" is reported against the key that was actually passed
+// instead of surfacing later as a confusing "required asset missing" failure.
+bool is_recognized_transcriber_model_file(const std::string &key);
+
 struct TranscriberOptions {
   enum ModelSource {
     FILES,

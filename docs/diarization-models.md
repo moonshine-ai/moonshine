@@ -45,7 +45,7 @@ supply them, and most callers will not have to do anything:
 - **The `diarization_model_dir` option**, for the file-based loaders. Point it
   at a directory holding `segmentation.ort` and `embedding.ort`.
 - **In memory**, by passing `segmentation.ort` and `embedding.ort` as keys to
-  `moonshine_load_transcriber_from_memory_files`. This is how the browser does
+  `moonshine_load_transcriber_from_memory_files()`. This is how the browser does
   it, since it has no filesystem.
 
 ## Getting the models

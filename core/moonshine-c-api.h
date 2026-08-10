@@ -473,8 +473,13 @@ MOONSHINE_EXPORT int32_t moonshine_load_transcriber_from_memory(
        models ``segmentation.ort`` and ``embedding.ort``, which are required
        when the ``identify_speakers`` option is set. Fetch those two with
        moonshine_get_diarization_dependencies.
-   Unrecognized keys are ignored, and missing required keys cause the load to
-   fail.
+   Unrecognized keys are rejected with MOONSHINE_ERROR_INVALID_ARGUMENT, and
+   missing required keys cause the load to fail. The recognized set is the
+   union of the names above across every architecture, so passing an asset
+   this architecture or option set has no use for is fine - handing over a
+   whole downloaded model directory works - but a misspelled name is reported
+   against the key you passed instead of surfacing later as a missing-asset
+   failure.
 
    When ``memory[i]`` is non-NULL and ``memory_sizes[i]`` > 0, that buffer is
    used as the asset bytes. The library does not copy the model buffers (the
@@ -912,9 +917,7 @@ MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_memory(
     const uint64_t *memory_sizes, const struct moonshine_option_t *options,
     uint64_t options_count, int32_t moonshine_version);
 
-/* Releases the resources used by a text to speech synthesizer.
-   Returns zero on success, or a non-zero error code on failure.
-*/
+/* Releases the resources used by a text to speech synthesizer. */
 MOONSHINE_EXPORT void moonshine_free_tts_synthesizer(
     int32_t tts_synthesizer_handle);
 
@@ -1200,9 +1203,7 @@ MOONSHINE_EXPORT int32_t moonshine_create_grapheme_to_phonemizer_from_memory(
     const uint64_t *memory_sizes, const struct moonshine_option_t *options,
     uint64_t options_count, int32_t moonshine_version);
 
-/* Releases the resources used by a grapheme to phonemizer.
-   Returns zero on success, or a non-zero error code on failure.
-*/
+/* Releases the resources used by a grapheme to phonemizer. */
 MOONSHINE_EXPORT void moonshine_free_grapheme_to_phonemizer(
     int32_t grapheme_to_phonemizer_handle);
 

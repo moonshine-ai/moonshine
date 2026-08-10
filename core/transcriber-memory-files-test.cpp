@@ -51,10 +51,17 @@ struct MemoryBundle {
   std::vector<std::vector<uint8_t>> buffers;
 
   void add(const fs::path& dir, const std::string& name) {
-    std::vector<uint8_t> bytes = read_file(dir / name);
-    REQUIRE_MESSAGE(!bytes.empty(),
-                    "missing/empty model asset: " << (dir / name).string());
-    names.push_back(name);
+    add_as(dir, name, name);
+  }
+
+  // Registers real model bytes under a different key, for the cases where the
+  // key itself is what is under test.
+  void add_as(const fs::path& dir, const std::string& source_name,
+              const std::string& key) {
+    std::vector<uint8_t> bytes = read_file(dir / source_name);
+    REQUIRE_MESSAGE(!bytes.empty(), "missing/empty model asset: "
+                                        << (dir / source_name).string());
+    names.push_back(key);
     buffers.push_back(std::move(bytes));
   }
 
@@ -310,6 +317,58 @@ TEST_CASE("stt-memory-files: missing required asset fails to load") {
   const int32_t handle =
       load_from_bundle(bundle, MOONSHINE_MODEL_ARCH_TINY, false);
   CHECK(handle < 0);
+}
+
+TEST_CASE("stt-memory-files: unrecognized filename key is rejected") {
+  const fs::path dir = g_assets_root / "tiny-en";
+  MemoryBundle bundle;
+  bundle.add(dir, "encoder_model.ort");
+  bundle.add(dir, "decoder_model_merged.ort");
+  // A plausible typo for tokenizer.bin. Ignoring it would report the missing
+  // tokenizer rather than the key the caller actually got wrong.
+  bundle.add_as(dir, "tokenizer.bin", "tokenizer.bn");
+
+  SandboxCwd sandbox;
+  const int32_t handle =
+      load_from_bundle(bundle, MOONSHINE_MODEL_ARCH_TINY, false);
+  CHECK(handle == MOONSHINE_ERROR_INVALID_ARGUMENT);
+}
+
+TEST_CASE(
+    "stt-memory-files: unrecognized key is rejected even when the model is "
+    "complete") {
+  const fs::path dir = g_assets_root / "tiny-en";
+  MemoryBundle bundle;
+  bundle.add(dir, "encoder_model.ort");
+  bundle.add(dir, "decoder_model_merged.ort");
+  bundle.add(dir, "tokenizer.bin");
+  // Every required asset is present, so the rejection can only come from the
+  // extra key itself.
+  bundle.add_as(dir, "tokenizer.bin", "not_a_moonshine_asset.ort");
+
+  SandboxCwd sandbox;
+  const int32_t handle =
+      load_from_bundle(bundle, MOONSHINE_MODEL_ARCH_TINY, false);
+  CHECK(handle == MOONSHINE_ERROR_INVALID_ARGUMENT);
+}
+
+TEST_CASE(
+    "stt-memory-files: recognized keys this load does not need are kept") {
+  const fs::path dir = g_assets_root / "tiny-en";
+  MemoryBundle bundle;
+  bundle.add(dir, "encoder_model.ort");
+  bundle.add(dir, "decoder_model_merged.ort");
+  bundle.add(dir, "tokenizer.bin");
+  // Downloaded for word timestamps but loaded without the option. The key
+  // check is a spelling check, not a second pass at the requirements, so
+  // handing over more than this particular load needs still works.
+  bundle.add(dir, "decoder_with_attention.ort");
+
+  SandboxCwd sandbox;
+  const int32_t handle =
+      load_from_bundle(bundle, MOONSHINE_MODEL_ARCH_TINY, false);
+  REQUIRE(handle >= 0);
+  moonshine_free_transcriber(handle);
 }
 
 int main(int argc, char** argv) {
