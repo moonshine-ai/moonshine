@@ -53,6 +53,11 @@ trap 'rm -f "${LOG}" "${FILTER}"' EXIT
 
 # Keep the bucket identical to the publishable tree. Local-only helpers and
 # design drafts stay out of the public site.
+#
+# Marketing/legal pages (license, enterprise, …) are published to this bucket
+# separately and are intentionally not part of the open-source examples/web
+# tree. Excluding them here means rclone sync will neither upload nor delete
+# those remote objects.
 cat >"${FILTER}" <<'EOF'
 - serve.mjs
 - home-cta-final.png
@@ -62,6 +67,12 @@ cat >"${FILTER}" <<'EOF'
 - _headers
 - .DS_Store
 - **/.DS_Store
+- /license/**
+- /enterprise/**
+- /use-policy/**
+- /community-license/**
+- /moonshine_community_license.txt
+- /assets/legacy-site.css
 + /**
 EOF
 
