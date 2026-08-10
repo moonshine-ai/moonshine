@@ -73,6 +73,14 @@ print(json.dumps({"rules": json.loads(os.environ["RULES_JSON"])}))
 REQUEST_TRANSFORM_RULES=$(python3 <<'PY'
 import json
 hosts = '(http.host in {"staging.moonshine.ai" "moonshine.ai" "www.moonshine.ai"})'
+# Extensionless paths need an explicit rewrite (R2 has no directory index).
+# /license, /enterprise, /use-policy, and /community-license are site-only
+# objects (not in examples/web); demos are from this repo. A general
+# "no file extension" matcher needs Cloudflare's `matches` operator (Business).
+bare_pages = ("/license", "/enterprise", "/use-policy", "/community-license",
+              "/stt", "/tts", "/dictation", "/meeting-notes", "/mic-check",
+              "/agent-flow")
+bare_expr = " or ".join(f'http.request.uri.path eq "{p}"' for p in bare_pages)
 print(json.dumps([
   {
     "ref": "webrtc_root_index",
@@ -88,6 +96,20 @@ print(json.dumps([
     "description": "Serve examples/web index.html at site root",
     "action": "rewrite",
     "action_parameters": {"uri": {"path": {"value": "/index.html"}}},
+    "enabled": True,
+  },
+  {
+    "ref": "www_bare_page_index",
+    "expression": f'{hosts} and ({bare_expr})',
+    "description": "Map extensionless /license, /enterprise, demo paths to …/index.html",
+    "action": "rewrite",
+    "action_parameters": {
+      "uri": {
+        "path": {
+          "expression": 'concat(http.request.uri.path, "/index.html")'
+        }
+      }
+    },
     "enabled": True,
   },
   {
