@@ -1025,9 +1025,16 @@ smoke_test_web_demo() {
 	web_assert_isolated "${origin}/assets/snippets.js"
 
 	# The demo HTML must pull shared chrome from /assets/, not a CDN copy we
-	# forgot to ship.
-	curl -fsS "${origin}/${demo}/" | grep -q '/assets/moonshine-ui.js' ||
+	# forgot to ship. Read the page in full before matching it: piping curl into
+	# `grep -q` means grep leaves as soon as it matches, and curl dies of SIGPIPE
+	# on anything left over, which pipefail then reports as a missing reference.
+	# Meeting-notes is the one demo past the pipe buffer, so it "failed" for its
+	# size while the smaller demos passed.
+	local demo_html
+	demo_html="$(curl -fsS "${origin}/${demo}/")"
+	if ! grep -q '/assets/moonshine-ui.js' <<<"${demo_html}"; then
 		die "web ${demo}: index.html does not reference /assets/moonshine-ui.js"
+	fi
 
 	if [[ "${USE_LOCAL_EXAMPLES}" -eq 1 && -f "${REPO_ROOT}/language-bindings/wasm/dist/index.js" ]]; then
 		web_assert_isolated "${origin}/wasm/dist/index.js"
