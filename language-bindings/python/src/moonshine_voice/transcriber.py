@@ -355,6 +355,47 @@ class Transcriber:
                 f"Failed to set key terms: {error_str.decode('utf-8') if error_str else 'Unknown error'}"
             )
 
+    def set_context(self, context: Optional[str], max_terms: int = 0) -> None:
+        """
+        Pick the key terms out of a passage of text and bias towards them,
+        replacing any previous list.
+
+        Where :meth:`set_keyterms` wants a list, this wants context: pass the
+        document on screen, the agenda for the meeting, the last few messages
+        in the thread, and the unusual words in it are found for you. A word
+        counts as unusual when the model's own tokenizer has no single symbol
+        for it, which is the case biasing helps with, so the judgment follows
+        the language of the loaded model with no word lists involved.
+
+        Like :meth:`set_keyterms`, this can be called while a stream is
+        running, takes effect on the next transcription, and does not rewrite
+        text already emitted. The capitalization in the passage is what gets
+        asked for in the transcript.
+
+        Args:
+            context: The passage to read terms out of. Pass ``None`` or an
+                empty string to turn biasing off.
+            max_terms: Most terms to take, 200 by default. Worth keeping
+                modest: a long list costs accuracy on the words you did not
+                ask for, so the terms the passage leans on hardest are kept
+                and its long tail is dropped.
+
+        Raises:
+            MoonshineError: If the transcriber is closed or the loaded model is
+                not a streaming architecture (only those decode through a path
+                that can apply the bias).
+        """
+        if self._handle is None:
+            raise MoonshineError("Transcriber is not initialized")
+        result = self._lib.moonshine_transcriber_set_context(
+            self._handle, (context or "").encode("utf-8"), int(max_terms)
+        )
+        if result != 0:
+            error_str = self._lib.moonshine_error_to_string(result)
+            raise MoonshineError(
+                f"Failed to set context: {error_str.decode('utf-8') if error_str else 'Unknown error'}"
+            )
+
     def get_version(self) -> int:
         """Get the version of the loaded Moonshine library."""
         return self._lib.moonshine_get_version()

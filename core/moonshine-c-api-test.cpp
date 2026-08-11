@@ -444,6 +444,8 @@ TEST_CASE("moonshine-test-v2") {
         {"coreml_cache_dir", "/tmp/moonshine-coreml-cache"},
         {"keyterms", "Kubernetes, Anushka Sharma"},
         {"keyterm_boost", "4.0"},
+        {"context", "Migration notes for the platform team."},
+        {"context_max_terms", "50"},
     };
     const uint64_t options_count = sizeof(options) / sizeof(options[0]);
     std::string root_model_path = "tiny-en";
@@ -485,6 +487,53 @@ TEST_CASE("moonshine-test-v2") {
     CHECK(moonshine_transcriber_set_keyterms(
               non_streaming_handle, "Kubernetes") != MOONSHINE_ERROR_NONE);
     moonshine_free_transcriber(non_streaming_handle);
+  }
+  SUBCASE("set-context-at-runtime") {
+    std::string root_model_path = "tiny-streaming-en";
+    REQUIRE(std::filesystem::exists(root_model_path));
+    int32_t transcriber_handle = moonshine_load_transcriber_from_files(
+        root_model_path.c_str(), MOONSHINE_MODEL_ARCH_TINY_STREAMING, nullptr,
+        0, MOONSHINE_HEADER_VERSION);
+    REQUIRE(transcriber_handle >= 0);
+    const char* context =
+        "We will move the remaining services onto Kubernetes this quarter, "
+        "with Ceph behind the storage classes and etcd holding cluster state.";
+    // A cap of its own, the default asked for with zero, and a passage far
+    // shorter than either cap all succeed.
+    CHECK(moonshine_transcriber_set_context(transcriber_handle, context, 10) ==
+          MOONSHINE_ERROR_NONE);
+    CHECK(moonshine_transcriber_set_context(transcriber_handle, context, 0) ==
+          MOONSHINE_ERROR_NONE);
+    // Clearing, either way of saying it.
+    CHECK(moonshine_transcriber_set_context(transcriber_handle, "", 0) ==
+          MOONSHINE_ERROR_NONE);
+    CHECK(moonshine_transcriber_set_context(transcriber_handle, nullptr, 0) ==
+          MOONSHINE_ERROR_NONE);
+    moonshine_free_transcriber(transcriber_handle);
+
+    // An unknown handle is reported rather than crashing.
+    CHECK(moonshine_transcriber_set_context(-1, context, 0) !=
+          MOONSHINE_ERROR_NONE);
+
+    // Same as key terms: no biasable decode path, so this is an error rather
+    // than a silent no-op, and an empty passage is refused too so that the
+    // caller learns from the call it made.
+    int32_t non_streaming_handle = moonshine_load_transcriber_from_files(
+        "tiny-en", MOONSHINE_MODEL_ARCH_TINY, nullptr, 0,
+        MOONSHINE_HEADER_VERSION);
+    REQUIRE(non_streaming_handle >= 0);
+    CHECK(moonshine_transcriber_set_context(non_streaming_handle, context, 0) !=
+          MOONSHINE_ERROR_NONE);
+    CHECK(moonshine_transcriber_set_context(non_streaming_handle, "", 0) !=
+          MOONSHINE_ERROR_NONE);
+    moonshine_free_transcriber(non_streaming_handle);
+
+    // The load option has to refuse the same architectures the runtime call
+    // does, rather than accepting a passage it can never use.
+    const moonshine_option_t context_options[] = {{"context", context}};
+    CHECK(moonshine_load_transcriber_from_files(
+              "tiny-en", MOONSHINE_MODEL_ARCH_TINY, context_options, 1,
+              MOONSHINE_HEADER_VERSION) < 0);
   }
   SUBCASE("transcribe-invalid-option") {
     const moonshine_option_t options[] = {

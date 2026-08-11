@@ -13,8 +13,4 @@
 - Batteries are included. Its high-level APIs offer complete solutions for common tasks like transcription, text to speech, voice cloning, speaker identification (diarization), command recognition, and [conversational agents](using/conversational-agent.md), so you can build your voice application with a single library.
 - It supports multiple languages, including English, Spanish, Mandarin, Japanese, Korean, Vietnamese, Ukrainian, and Arabic for STT, and English, Spanish, Arabic, German, French, Hindi, Italian, Japanese, Korean, Dutch, Portuguese, Russian, Turkish, Ukrainian, Vietnamese, and Mandarin for TTS.
 
-## Quickstart
-
 [Join our community on Discord to get live support](https://discord.gg/27qp9zSRXF).
-
-Pick your platform in the [Quickstart](quickstart.md), or browse the [Examples](examples.md).

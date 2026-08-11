@@ -8,7 +8,9 @@ CORE_DIR=${REPO_ROOT_DIR}/core
 CORE_BUILD_DIR=${CORE_DIR}/build
 
 cd ${CORE_DIR}
-find . -type d -name build -exec rm -rf {} +
+# The three configures below each own a tree under here, so clearing this one
+# directory is a full clean.
+rm -rf ${CORE_BUILD_DIR}
 
 mkdir -p ${CORE_BUILD_DIR}
 cd ${CORE_BUILD_DIR}

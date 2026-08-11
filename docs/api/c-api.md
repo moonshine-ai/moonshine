@@ -28,6 +28,7 @@ All API calls are thread-safe. Work on a single transcriber is serialized, so co
     - [`moonshine_load_transcriber_from_memory()`](#moonshine_load_transcriber_from_memory)
     - [`moonshine_free_transcriber()`](#moonshine_free_transcriber)
     - [`moonshine_transcriber_set_keyterms()`](#moonshine_transcriber_set_keyterms)
+    - [`moonshine_transcriber_set_context()`](#moonshine_transcriber_set_context)
     - [`moonshine_transcribe_without_streaming()`](#moonshine_transcribe_without_streaming)
 - [Streaming Speech to Text](#streaming-speech-to-text)
     - [`moonshine_create_stream()`](#moonshine_create_stream)
@@ -428,6 +429,30 @@ int32_t moonshine_transcriber_set_keyterms(
 | --- | --- |
 | `transcriber_handle` | Handle returned by a `moonshine_load_transcriber_*` function. |
 | `keyterms` | Comma-separated list using the same syntax as the `keyterms` load option. Pass `NULL` or an empty string to turn biasing off. |
+
+**Returns:** `MOONSHINE_ERROR_NONE` on success, or a non-zero error code if the handle is invalid or the loaded model is not a streaming architecture (only those decode through a path that can apply the bias).
+
+### `moonshine_transcriber_set_context()`
+
+Picks the key terms out of a passage of free-form text and biases towards them, replacing any previous list. Where `moonshine_transcriber_set_keyterms()` wants a list, this wants context: hand over the document on screen, the agenda for the meeting, the last few messages in the thread, and the unusual words in it are found for you.
+
+A word is judged unusual by how the model's own tokenizer spells it. That vocabulary is ordered by frequency, so an everyday word has a token to itself while jargon and proper nouns have to be built out of several subwords, and needing more than one is the signal used here. It follows the language of the loaded model, and the capitalization in the passage is what gets asked for in the transcript.
+
+Safe to call between transcribe calls on a live stream. Takes effect on the next transcribe call: it does not retroactively change text already emitted.
+
+```c
+int32_t moonshine_transcriber_set_context(
+    int32_t transcriber_handle,
+    const char *context,
+    int32_t max_terms
+);
+```
+
+| Argument | Description |
+| --- | --- |
+| `transcriber_handle` | Handle returned by a `moonshine_load_transcriber_*` function. |
+| `context` | The passage to read terms out of. Pass `NULL` or an empty string to turn biasing off. |
+| `max_terms` | Most terms to take; pass `0` for the default of 200. A long list costs accuracy on the words you did not ask for, so the terms the passage leans on hardest are kept and its long tail is dropped. |
 
 **Returns:** `MOONSHINE_ERROR_NONE` on success, or a non-zero error code if the handle is invalid or the loaded model is not a streaming architecture (only those decode through a path that can apply the bias).
 

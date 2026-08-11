@@ -200,9 +200,51 @@ Transcriber::Transcriber(const TranscriberOptions &options)
   }
   // Compile the contextual-biasing key terms last, since this needs the
   // tokenizer that the model load above brings up.
-  if (!this->options.keyterms.empty()) {
+  if (!this->options.context.empty()) {
+    // Terms named outright are kept alongside the ones the passage suggests:
+    // a caller passing both is telling us about two different things it knows.
+    std::vector<std::string> keyterms = this->options.keyterms;
+    for (const std::string &term : this->keyterms_from_context(
+             this->options.context, this->options.context_max_terms)) {
+      keyterms.push_back(term);
+    }
+    this->set_keyterms(keyterms);
+  } else if (!this->options.keyterms.empty()) {
     this->set_keyterms(this->options.keyterms);
   }
+}
+
+std::vector<std::string> Transcriber::keyterms_from_context(
+    const std::string &context, int32_t max_terms) {
+  if (this->streaming_model == nullptr) {
+    if (this->stt_model != nullptr) {
+      // Reported even for an empty passage, and from here rather than from
+      // set_context, so that the load option and the runtime call agree and a
+      // caller finds out from whichever one it made.
+      throw std::runtime_error(
+          "Key-term biasing requires one of the streaming model "
+          "architectures; the loaded model does not decode through a path "
+          "that can apply it.");
+    }
+    // No model at all (skip_transcription): nothing to judge words against,
+    // and nothing will be decoded either.
+    return {};
+  }
+  return ContextExtractor::extract(
+      context, max_terms, [this](const std::string &word) -> size_t {
+        try {
+          return this->streaming_model->text_to_tokens(word).size();
+        } catch (const std::exception &) {
+          // The tokenizer throws on bytes it has no token for. A context
+          // passage is whatever text the application happened to have, so one
+          // unspellable word should cost that word and nothing else.
+          return 0;
+        }
+      });
+}
+
+void Transcriber::set_context(const std::string &context, int32_t max_terms) {
+  this->set_keyterms(this->keyterms_from_context(context, max_terms));
 }
 
 void Transcriber::set_keyterms(const std::vector<std::string> &keyterms) {

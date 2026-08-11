@@ -265,6 +265,20 @@ export class MicTranscriber {
     this.transcriber.setKeyterms(keyterms);
   }
 
+  /**
+   * Picks the key terms out of a passage of text and biases towards them while
+   * listening. See {@link Transcriber.setContext}; this can be called between
+   * phrases to follow the document or thread the user is in. To start listening
+   * with a passage already in place, load a {@link Transcriber} with the
+   * `context` option and hand it to {@link useTranscriber}.
+   */
+  setContext(context: string, maxTerms = 0): void {
+    if (!this.transcriber) {
+      throw new MoonshineError('No model loaded. Call load() before setContext().');
+    }
+    this.transcriber.setContext(context, maxTerms);
+  }
+
   get isRunning(): boolean {
     return this.running;
   }

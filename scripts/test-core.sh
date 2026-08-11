@@ -3,7 +3,7 @@
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR="$(dirname "${SCRIPTS_DIR}")"
 BUILD_DIR="${REPO_ROOT_DIR}/core/build"
-MOONSHINE_TTS_BUILD_DIR="${REPO_ROOT_DIR}/core/moonshine-tts/build"
+MOONSHINE_TTS_BUILD_DIR="${BUILD_DIR}/moonshine-tts"
 
 # Model/TTS binaries are no longer in Git LFS. Always run the fetch script: it
 # is idempotent (skips files whose size already matches the CDN inventory) and
@@ -41,13 +41,13 @@ else
 	export LD_LIBRARY_PATH=${BUILD_DIR}:${ORT_ARCH_DIR}:${LD_LIBRARY_PATH:-}
 fi
 
-${REPO_ROOT_DIR}/core/bin-tokenizer/build/bin-tokenizer-test
-${REPO_ROOT_DIR}/core/third-party/onnxruntime/build/onnxruntime-test
-${REPO_ROOT_DIR}/core/moonshine-utils/build/debug-utils-test
-${REPO_ROOT_DIR}/core/moonshine-utils/build/file-utils-test
-${REPO_ROOT_DIR}/core/moonshine-utils/build/file-information-test
-${REPO_ROOT_DIR}/core/moonshine-utils/build/string-utils-test
-${REPO_ROOT_DIR}/core/ort-utils/build/ort-utils-ep-test
+${BUILD_DIR}/bin-tokenizer/bin-tokenizer-test
+${BUILD_DIR}/onnxruntime/onnxruntime-test
+${BUILD_DIR}/moonshine-utils/debug-utils-test
+${BUILD_DIR}/moonshine-utils/file-utils-test
+${BUILD_DIR}/moonshine-utils/file-information-test
+${BUILD_DIR}/moonshine-utils/string-utils-test
+${BUILD_DIR}/ort-utils/ort-utils-ep-test
 ${REPO_ROOT_DIR}/core/build/resampler-test
 ${REPO_ROOT_DIR}/core/build/voice-activity-detector-test
 ${REPO_ROOT_DIR}/core/build/speech-clip-test
@@ -57,6 +57,8 @@ ${REPO_ROOT_DIR}/core/build/moonshine-c-api-test
 ${REPO_ROOT_DIR}/core/build/moonshine-cpp-test
 ${REPO_ROOT_DIR}/core/build/cosine-distance-test
 ${REPO_ROOT_DIR}/core/build/word-alignment-test
+${REPO_ROOT_DIR}/core/build/context-biaser-test
+${REPO_ROOT_DIR}/core/build/context-extractor-test
 
 # Sweeps every .ort we ship. Run from the repository root, which is where it
 # looks for the bundled data and the downloaded catalog models.
@@ -73,7 +75,7 @@ rm -rf ${TMP_DIR}
 # moonshine-tts tests resolve bundled assets via ``core/moonshine-tts/data`` relative to the monorepo root.
 cd "${REPO_ROOT_DIR}"
 
-# moonshine-tts (core + ONNX); test binaries are produced under core/moonshine-tts/build by the core superbuild.
+# moonshine-tts (core + ONNX); test binaries are produced under moonshine-tts/ in the core build tree.
 if [[ ! -x "${MOONSHINE_TTS_BUILD_DIR}/utf8_utils_test" ]]; then
   echo "error: moonshine-tts tests missing under ${MOONSHINE_TTS_BUILD_DIR}" >&2
   echo "  (The core CMake build should populate this directory; re-run cmake --build from ${BUILD_DIR}.)" >&2

@@ -78,16 +78,13 @@ fi
 # --- Step 2: build the embind module with Emscripten -----------------------
 if [ -z "${SKIP_CORE}" ]; then
     echo "[build-wasm] configuring + building the wasm module..."
+    # Every subproject builds into this tree (see core/CMakeLists.txt), so
+    # clearing it leaves no non-wasm archives for wasm-ld to trip over
+    # ("archive member ... is neither Wasm object file nor LLVM bitcode"). The
+    # vendored ORT-wasm library lives under lib/, not in a build tree, so this
+    # does not force an ONNX Runtime rebuild.
     rm -rf "${BUILD_DIR}"
     mkdir -p "${BUILD_DIR}"
-    # moonshine-tts and other add_subdirectory targets build into fixed dirs
-    # under core/ (e.g. core/moonshine-tts/build; see core/CMakeLists.txt) that
-    # are shared across host/iOS/wasm builds. Remove objects left by a previous
-    # host or iOS build so wasm-ld doesn't try to link non-wasm archives
-    # ("archive member ... is neither Wasm object file nor LLVM bitcode"). The
-    # vendored ORT-wasm library lives under lib/ (not a build dir), so this does
-    # not force an ONNX Runtime rebuild.
-    find "${CORE_DIR}" -type d -name build -prune -exec rm -rf {} +
     (
         cd "${BUILD_DIR}"
         emcmake cmake "${CORE_DIR}" -DCMAKE_BUILD_TYPE=Release "${CMAKE_WASM_FLAGS[@]}"

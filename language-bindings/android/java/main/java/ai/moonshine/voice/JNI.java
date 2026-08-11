@@ -78,6 +78,9 @@ public class JNI {
     public static native int moonshineTranscriberSetKeyterms(int transcriber_handle,
             String keyterms);
 
+    public static native int moonshineTranscriberSetContext(int transcriber_handle,
+            String context, int max_terms);
+
     public static native int moonshineAddAudioToStream(int transcriber_handle,
             int stream_handle,
             float[] audio_data,

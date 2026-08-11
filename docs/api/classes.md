@@ -12,6 +12,7 @@
     - [`remove_listener()`](#transcriber-remove-listener)
     - [`remove_all_listeners()`](#transcriber-remove-all-listeners)
     - [`set_keyterms()`](#transcriber-set-keyterms)
+    - [`set_context()`](#transcriber-set-context)
 - [MicTranscriber](#mictranscriber)
     - [`__init__()`](#mictranscriber-init)
     - [`language()`](#mictranscriber-language)
@@ -32,6 +33,7 @@
     - [`on_progress()`](#mictranscriber-on-progress)
     - [`load()`](#mictranscriber-load)
     - [`set_keyterms()`](#mictranscriber-set-keyterms)
+    - [`set_context()`](#mictranscriber-set-context)
     - [`start()`](#mictranscriber-start)
     - [`mute()`](#mictranscriber-mute)
     - [`stop()`](#mictranscriber-stop)
@@ -146,6 +148,10 @@ Handles the speech to text pipeline.
 - <a id="transcriber-set-keyterms"></a>`set_keyterms()`: Biases the decoder towards a list of jargon, product names, or proper nouns, replacing any previous list. Takes effect on the next transcription and does not rewrite text already emitted. Pass `None` or an empty list to turn biasing off. Strength is set with the `keyterm_boost` option at load time. See [Domain Customization](../models/domain-customization.md). Only streaming architectures support this.
   - `keyterms`: Sequence of terms (for example `["Kubernetes", "Ceph"]`). Terms must not contain commas.
 
+- <a id="transcriber-set-context"></a>`set_context()`: Picks the key terms out of a passage of text and biases towards them, replacing any previous list. For when you have context but not a list: the document on screen, the agenda, the last few messages in a thread. Same semantics as [`set_keyterms()`](#transcriber-set-keyterms) otherwise. See [Domain Customization](../models/domain-customization.md). Only streaming architectures support this.
+  - `context`: The passage to read terms out of. Pass `None` or an empty string to turn biasing off.
+  - `max_terms`: Most terms to take, 200 by default.
+
 ## MicTranscriber
 
 Transcribes speech straight from the system's microphone, so you never call [`add_audio()`](classes.md#transcriber-add-audio) yourself. In Python this uses the [`sounddevice` library](https://python-sounddevice.readthedocs.io/), but in other languages the class uses the native audio API under the hood.
@@ -188,6 +194,7 @@ The callbacks below cover almost everything. For line ids, speaker spans, word t
 
 - <a id="mictranscriber-load"></a>`load()`: Downloads the model if needed, opens it, and returns the transcriber. Blocking, since the first call may have to fetch several hundred megabytes; report progress with [`on_progress()`](#mictranscriber-on-progress). Safe to call twice.
 - <a id="mictranscriber-set-keyterms"></a>`set_keyterms()`: Biases the decoder towards a list of terms while listening. Same semantics as [`Transcriber.set_keyterms()`](#transcriber-set-keyterms); call after `load()`. To start with a list instead, pass `keyterms` through [`options()`](#mictranscriber-options).
+- <a id="mictranscriber-set-context"></a>`set_context()`: Picks the key terms out of a passage of text and biases towards them while listening. Same semantics as [`Transcriber.set_context()`](#transcriber-set-context); call after `load()`. To start with a passage instead, pass `context` through [`options()`](#mictranscriber-options).
 - <a id="mictranscriber-start"></a>`start()`: Opens the microphone and begins transcribing. Raises if you haven't called `load()`.
 - <a id="mictranscriber-mute"></a>`mute()`: Drops incoming audio without closing the microphone, so an assistant doesn't transcribe its own synthesized speech.
 - <a id="mictranscriber-stop"></a>`stop()`: Stops listening and flushes any audio still in flight, so the final line is complete.

@@ -330,6 +330,34 @@ MOONSHINE_EXPORT void moonshine_free_buffer(void *ptr);
 MOONSHINE_EXPORT int32_t moonshine_transcriber_set_keyterms(
     int32_t transcriber_handle, const char *keyterms);
 
+/* Picks the key terms out of a passage of free-form text and biases towards
+   them, replacing any previous list. Where
+   ``moonshine_transcriber_set_keyterms`` wants a list, this wants context: hand
+   over the document on screen, the agenda for the meeting, the last few
+   messages in the thread, and the unusual words in it are found for you.
+
+   A word is judged unusual by how the model's own tokenizer spells it. That
+   vocabulary is ordered by frequency, so an everyday word has a token to itself
+   while jargon and proper nouns have to be built out of several subwords, and
+   needing more than one is the signal used here. It follows the language of the
+   loaded model, and the capitalization in the passage is what gets asked for in
+   the transcript.
+
+   ``max_terms`` caps the list; pass 0 for the default of 200. The cap matters:
+   a long list costs accuracy on the words you did not ask for (see
+   docs/models/domain-customization.md), so the terms the passage leans on
+   hardest are kept and the rest of its long tail is dropped. Pass NULL or an
+   empty string to turn biasing off.
+
+   Safe to call between transcribe calls on a live stream. Takes effect on the
+   next transcribe call: it does not retroactively change text already emitted.
+
+   Returns ``MOONSHINE_ERROR_NONE`` on success, or a non-zero error code if the
+   handle is invalid or the loaded model is not a streaming architecture (only
+   those decode through a path that can apply the bias). */
+MOONSHINE_EXPORT int32_t moonshine_transcriber_set_context(
+    int32_t transcriber_handle, const char *context, int32_t max_terms);
+
 /* Converts a transcript_t struct into a human-readable string for debugging
  * purposes. The string is owned by the library, and is valid until the next
  * call to moonshine_transcript_to_string. */
@@ -375,7 +403,11 @@ MOONSHINE_EXPORT const char *moonshine_transcript_to_string(
    every transcriber and can be replaced mid-stream with
    ``moonshine_transcriber_set_keyterms``. Match the capitalization and
    spelling you want to see in the output. Only the streaming architectures
-   apply this. ``keyterm_boost`` (float, default 2.0) sets the strength. The
+   apply this. Pass ``context`` instead (or as well) to hand over a passage of
+   free-form text and have the terms picked out of it, as
+   ``moonshine_transcriber_set_context`` does, with ``context_max_terms``
+   (int, default 200) capping how many are taken.
+   ``keyterm_boost`` (float, default 2.0) sets the strength. The
    default is where the terms come out most accurately; going higher recovers no
    more of them and starts putting them where they were not said, so lower it if
    general accuracy matters more than the list does, rather than raising it.

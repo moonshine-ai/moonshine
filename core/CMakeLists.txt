@@ -92,25 +92,33 @@ endif()
 
 include(${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/find-ort-library-path.cmake)
 
+# Every subproject builds into this configuration's own binary tree, never into
+# a fixed directory in the source tree. A source-tree path would be shared by
+# every configuration that reads this file -- each Android ABI, iOS, wasm, and
+# the host -- so whichever built last left archives the next one tried to link,
+# with errors like "is incompatible with aarch64linux" or "is neither Wasm
+# object file nor LLVM bitcode". These are absolute rather than relative because
+# some of the source directories below sit outside this one, which is a case
+# where CMake requires the binary directory to be named explicitly.
 add_subdirectory(
     ${CMAKE_CURRENT_LIST_DIR}/ort-utils
-    ${CMAKE_CURRENT_LIST_DIR}/ort-utils/build
+    ${CMAKE_BINARY_DIR}/ort-utils
 )
 
 add_subdirectory(
     ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
-    ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer/build
+    ${CMAKE_BINARY_DIR}/bin-tokenizer
 )
 
 add_subdirectory(
     ${CMAKE_CURRENT_LIST_DIR}/moonshine-tts
-    ${CMAKE_CURRENT_LIST_DIR}/moonshine-tts/build
+    ${CMAKE_BINARY_DIR}/moonshine-tts
 )
 
 if (ANDROID)
     add_subdirectory(
         ${CMAKE_CURRENT_LIST_DIR}/../language-bindings/android/moonshine-jni
-        ${CMAKE_CURRENT_LIST_DIR}/../language-bindings/android/moonshine-jni/build
+        ${CMAKE_BINARY_DIR}/moonshine-jni
     )
 endif()
 
@@ -134,6 +142,7 @@ set(MOONSHINE_SRC_FILES
     spelling-fusion-data.cpp
     spelling-model.cpp
     context-biaser.cpp
+    context-extractor.cpp
     word-alignment.cpp
 )
 
@@ -725,6 +734,29 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
         moonshine-utils
     )
 
+    add_executable(context-extractor-test context-extractor-test.cpp context-extractor.cpp)
+    set_target_properties(context-extractor-test PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(context-extractor-test PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+    )
+    if (IOS OR MOONSHINE_BUILD_SWIFT)
+        set_target_properties(context-extractor-test PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.context-extractor-test"
+            MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        )
+    endif()
+    target_link_libraries(context-extractor-test PRIVATE
+        moonshine-utils
+    )
+
     add_executable(transcriber-test transcriber-test.cpp transcriber.cpp voice-activity-detector.cpp resampler.cpp)
     set_target_properties(transcriber-test PROPERTIES
         CXX_STANDARD 20
@@ -1106,7 +1138,7 @@ endif()
 if (MOONSHINE_RELIABILITY AND MOONSHINE_SANITIZER MATCHES "address")
     add_subdirectory(
         ${CMAKE_CURRENT_LIST_DIR}/reliability
-        ${CMAKE_CURRENT_LIST_DIR}/reliability/build
+        ${CMAKE_BINARY_DIR}/reliability
     )
 endif()
 

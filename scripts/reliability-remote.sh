@@ -45,28 +45,21 @@ REPO_ROOT_DIR="$(dirname "${SCRIPTS_DIR}")"
 CORE_DIR="${REPO_ROOT_DIR}/core"
 BUILD_DIR="${CORE_DIR}/build"
 TSAN_BUILD_DIR="${CORE_DIR}/build-tsan"
-FUZZ_BUILD_DIR="${CORE_DIR}/reliability/build"
+FUZZ_BUILD_DIR="${BUILD_DIR}/reliability"
 ARTIFACTS_DIR="${CORE_DIR}/reliability/artifacts"
 CORPUS_ROOT="${CORE_DIR}/reliability/corpus"
 ORT_LIB_DIR="${CORE_DIR}/third-party/onnxruntime/lib/linux/x86_64"
 TSAN_SUPPRESSIONS="${CORE_DIR}/reliability/tsan-suppressions.txt"
 
-# Every build tree a sanitizer configure owns. The per-module directories are
-# hard-coded absolute paths inside those CMake projects, so only one sanitizer
-# build can own them at a time -- and whatever a previous run left there is
-# reused, which is why they must be wiped before *both* configures rather than
-# only the ThreadSanitizer one. Two ways that bites: a run that dies during the
-# TSan stage leaves thread-instrumented objects for the next run's ASan build to
-# link, and because the sync preserves the dev machine's mtimes a source file can
-# be *older* than a leftover object, so make skips recompiling it and the run
-# silently tests code that is no longer in the tree.
+# Every build tree a sanitizer configure owns. Each holds its own copy of the
+# per-module directories, so the address and thread builds cannot reuse each
+# other's instrumented objects, but both are still wiped before either configure:
+# the sync preserves the dev machine's mtimes, so a source file can be *older*
+# than a leftover object, and make would skip recompiling it and silently test
+# code that is no longer in the tree.
 SANITIZER_BUILD_DIRS=(
   "${BUILD_DIR}"
   "${TSAN_BUILD_DIR}"
-  "${CORE_DIR}/moonshine-utils/build"
-  "${CORE_DIR}/bin-tokenizer/build"
-  "${CORE_DIR}/ort-utils/build"
-  "${CORE_DIR}/moonshine-tts/build"
 )
 
 FUZZ_SECONDS="${FUZZ_SECONDS:-900}"
@@ -160,7 +153,7 @@ mkdir -p "${ARTIFACTS_DIR}"
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- Configuring sanitizer build ---"
-rm -rf "${SANITIZER_BUILD_DIRS[@]}" "${FUZZ_BUILD_DIR}"
+rm -rf "${SANITIZER_BUILD_DIRS[@]}"
 if ! cmake -S "${CORE_DIR}" -B "${BUILD_DIR}" \
       -DMOONSHINE_RELIABILITY=ON \
       -DCMAKE_C_COMPILER="${CC}" \
@@ -221,12 +214,14 @@ run_test() {
   fi
 }
 
-run_test bin-tokenizer   "${CORE_DIR}/bin-tokenizer/build/bin-tokenizer-test"
-run_test string-utils    "${CORE_DIR}/moonshine-utils/build/string-utils-test"
-run_test debug-utils     "${CORE_DIR}/moonshine-utils/build/debug-utils-test"
+run_test bin-tokenizer   "${BUILD_DIR}/bin-tokenizer/bin-tokenizer-test"
+run_test string-utils    "${BUILD_DIR}/moonshine-utils/string-utils-test"
+run_test debug-utils     "${BUILD_DIR}/moonshine-utils/debug-utils-test"
 run_test resampler       "${BUILD_DIR}/resampler-test"
 run_test cosine-distance "${BUILD_DIR}/cosine-distance-test"
 run_test word-alignment  "${BUILD_DIR}/word-alignment-test"
+run_test context-biaser  "${BUILD_DIR}/context-biaser-test"
+run_test context-extractor "${BUILD_DIR}/context-extractor-test"
 run_test spelling-fusion "${BUILD_DIR}/spelling-fusion-test"
 run_test voice-activity  "${BUILD_DIR}/voice-activity-detector-test"
 run_test transcriber     "${BUILD_DIR}/transcriber-test"
@@ -350,11 +345,9 @@ fi
 # 4. ThreadSanitizer (data races), advisory unless TSAN_STRICT=1.
 # ---------------------------------------------------------------------------
 # TSan cannot be combined with ASan, so this is a full, clean rebuild with
-# -DMOONSHINE_SANITIZER=thread. We remove the ASan build dirs first: they are no
-# longer needed (tests ran in step 2, clang-tidy in step 3), and the per-module
-# build directories are hard-coded absolute paths, so only one sanitizer build
-# system can own them at a time. The libFuzzer harnesses in reliability/build are
-# left in place for the fuzzing stage that follows.
+# -DMOONSHINE_SANITIZER=thread into its own tree. Only that tree is cleared: it
+# shares no directory with the ASan build, and the ASan tree still holds the
+# libFuzzer harnesses the fuzzing stage below runs.
 echo ""
 echo "--- ThreadSanitizer ---"
 if [[ "${TSAN}" != "1" ]]; then
@@ -363,7 +356,7 @@ elif [[ "${TEST_WORKDIR}" != "${REPO_ROOT_DIR}/test-assets" ]]; then
   echo "  skip: test-assets missing (threaded tests need fixtures)"
 else
   echo "  full clean rebuild with -fsanitize=thread"
-  rm -rf "${SANITIZER_BUILD_DIRS[@]}"
+  rm -rf "${TSAN_BUILD_DIR}"
   tsan_built=1
   if ! cmake -S "${CORE_DIR}" -B "${TSAN_BUILD_DIR}" \
         -DMOONSHINE_RELIABILITY=ON \

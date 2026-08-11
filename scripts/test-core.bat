@@ -63,13 +63,13 @@ if errorlevel 1 exit /b 1
 
 set "PATH=!REPO_ROOT_DIR!\core\third-party\onnxruntime\lib\windows\x64;%PATH%"
 
-"!REPO_ROOT_DIR!\core\bin-tokenizer\build\!BUILD_TYPE!\bin-tokenizer-test.exe"
+"!BUILD_DIR!\bin-tokenizer\!BUILD_TYPE!\bin-tokenizer-test.exe"
 if errorlevel 1 exit /b 1
-"!REPO_ROOT_DIR!\core\third-party\onnxruntime\build\!BUILD_TYPE!\onnxruntime-test.exe"
+"!BUILD_DIR!\onnxruntime\!BUILD_TYPE!\onnxruntime-test.exe"
 if errorlevel 1 exit /b 1
-"!REPO_ROOT_DIR!\core\moonshine-utils\build\!BUILD_TYPE!\debug-utils-test.exe"
+"!BUILD_DIR!\moonshine-utils\!BUILD_TYPE!\debug-utils-test.exe"
 if errorlevel 1 exit /b 1
-"!REPO_ROOT_DIR!\core\moonshine-utils\build\!BUILD_TYPE!\string-utils-test.exe"
+"!BUILD_DIR!\moonshine-utils\!BUILD_TYPE!\string-utils-test.exe"
 if errorlevel 1 exit /b 1
 "!REPO_ROOT_DIR!\core\build\!BUILD_TYPE!\resampler-test.exe"
 if errorlevel 1 exit /b 1
@@ -78,6 +78,10 @@ if errorlevel 1 exit /b 1
 "!REPO_ROOT_DIR!\core\build\!BUILD_TYPE!\transcriber-test.exe"
 if errorlevel 1 exit /b 1
 "!REPO_ROOT_DIR!\core\build\!BUILD_TYPE!\moonshine-c-api-test.exe"
+if errorlevel 1 exit /b 1
+"!REPO_ROOT_DIR!\core\build\!BUILD_TYPE!\context-biaser-test.exe"
+if errorlevel 1 exit /b 1
+"!REPO_ROOT_DIR!\core\build\!BUILD_TYPE!\context-extractor-test.exe"
 if errorlevel 1 exit /b 1
 
 echo All tests passed

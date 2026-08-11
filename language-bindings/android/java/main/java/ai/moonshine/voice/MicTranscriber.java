@@ -8,6 +8,7 @@ import android.util.Log;
 import androidx.annotation.Nullable;
 
 import java.io.File;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -96,6 +97,33 @@ public class MicTranscriber extends Transcriber {
     public MicTranscriber spelling(boolean enabled) {
         this.includeSpelling = enabled;
         setTranscribeFlags(enabled ? JNI.MOONSHINE_FLAG_SPELLING_MODE : 0);
+        return this;
+    }
+
+    /**
+     * Passes advanced transcriber options through to the model, for anything the
+     * setters don't cover: {@code keyterms} and {@code keyterm_boost},
+     * voice-activity tuning, {@code identify_speakers}. The keys are the same
+     * ones {@link Transcriber#Transcriber(List)} takes, and are listed in the
+     * options reference under docs/api/options.md.
+     *
+     * <p>Call this before {@link #load()}, since options are read as the model
+     * loads. To change key terms while listening, use
+     * {@link Transcriber#setKeyterms} or {@link Transcriber#setContext} instead
+     * of loading again.
+     *
+     * <pre>{@code
+     * mic.options(new TranscriberOption("keyterms", "Kubernetes,Ceph,etcd"));
+     * }</pre>
+     */
+    public MicTranscriber options(TranscriberOption... options) {
+        addOptions(Arrays.asList(options));
+        return this;
+    }
+
+    /** {@link #options(TranscriberOption...)} for options already in a list. */
+    public MicTranscriber options(List<TranscriberOption> options) {
+        addOptions(options);
         return this;
     }
 

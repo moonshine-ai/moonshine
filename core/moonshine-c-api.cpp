@@ -160,6 +160,10 @@ void parse_transcriber_options(const OptionVector &options,
       out_options.keyterms = parse_keyterms(option_value);
     } else if (option_name == "keyterm_boost") {
       out_options.keyterm_boost = float_from_string(option_value);
+    } else if (option_name == "context") {
+      out_options.context = option_value;
+    } else if (option_name == "context_max_terms") {
+      out_options.context_max_terms = int32_from_string(option_value);
     } else if (option_name == "identify_speakers") {
       out_options.identify_speakers = bool_from_string(option_value);
     } else if (option_name == "diarization_cluster_cadence") {
@@ -518,6 +522,29 @@ int32_t moonshine_transcriber_set_keyterms(int32_t transcriber_handle,
     transcriber_map[transcriber_handle]->set_keyterms(parsed);
   } catch (const std::exception &e) {
     LOGF("Failed to set key terms: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+  return MOONSHINE_ERROR_NONE;
+}
+
+int32_t moonshine_transcriber_set_context(int32_t transcriber_handle,
+                                          const char *context,
+                                          int32_t max_terms) {
+  if (log_api_calls) {
+    // Context passages run to whole documents, so log the size rather than the
+    // text, which would otherwise bury every other line in the log.
+    LOGF(
+        "moonshine_transcriber_set_context(transcriber_handle=%d, "
+        "context=%zu bytes, max_terms=%d)",
+        transcriber_handle,
+        context == nullptr ? size_t{0} : std::strlen(context), max_terms);
+  }
+  CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
+  try {
+    transcriber_map[transcriber_handle]->set_context(
+        context == nullptr ? std::string() : std::string(context), max_terms);
+  } catch (const std::exception &e) {
+    LOGF("Failed to set context: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
   return MOONSHINE_ERROR_NONE;

@@ -99,6 +99,43 @@ final class TranscriberTests: XCTestCase {
         XCTAssertThrowsError(try transcriber.setKeyterms(["Kubernetes,Ceph"]))
     }
 
+    func testSetContext() throws {
+        let modelPath = try Self.getTinyStreamingEnModelPath()
+        let transcriber = try Transcriber(
+            modelPath: modelPath,
+            modelArch: .tinyStreaming,
+            options: [TranscriberOption(name: "keyterm_boost", value: "30")]
+        )
+        defer { transcriber.close() }
+
+        let wavData = try loadWAVFile(try Self.getWAVFilePath("two_cities.wav"))
+        func transcribeCurrent() throws -> String {
+            let transcript = try transcriber.transcribeWithoutStreaming(
+                audioData: wavData.audioData,
+                sampleRate: Int32(wavData.sampleRate)
+            )
+            return transcript.lines.map { $0.text }.joined(separator: " ")
+        }
+
+        // Every word here has a token to itself except "Kubernetes", so the
+        // passage yields exactly that one term and the assertions can name it.
+        // The same fixture is used in every binding.
+        let context = "We will move the rest of the work to Kubernetes this year."
+
+        XCTAssertFalse(try transcribeCurrent().contains("Kubernetes"))
+
+        try transcriber.setContext(context)
+        XCTAssertTrue(try transcribeCurrent().contains("Kubernetes"))
+
+        // A cap the passage cannot exceed changes nothing, and an empty passage
+        // turns biasing off the way an empty list does.
+        try transcriber.setContext(context, maxTerms: 5)
+        XCTAssertTrue(try transcribeCurrent().contains("Kubernetes"))
+
+        try transcriber.setContext("")
+        XCTAssertFalse(try transcribeCurrent().contains("Kubernetes"))
+    }
+
     // MARK: - Non-Streaming Tests
 
     func testTranscribeWithoutStreaming_beckett() throws {

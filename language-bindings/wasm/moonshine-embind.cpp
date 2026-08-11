@@ -236,6 +236,13 @@ class Transcriber {
     check(moonshine_transcriber_set_keyterms(handle_, keyterms.c_str()));
   }
 
+  // A passage of free-form text to pick the terms out of; empty turns biasing
+  // off. A `max_terms` of 0 asks for the default cap.
+  void setContext(const std::string &context, int32_t max_terms) {
+    check(
+        moonshine_transcriber_set_context(handle_, context.c_str(), max_terms));
+  }
+
   // Stream lifecycle is exposed as a Stream object (see below).
   int32_t createStreamHandle(uint32_t flags) {
     int32_t s = moonshine_create_stream(handle_, flags);
@@ -720,6 +727,7 @@ EMSCRIPTEN_BINDINGS(moonshine) {
       .constructor<val, val, uint32_t, val, val>()
       .function("transcribe", &Transcriber::transcribe)
       .function("setKeyterms", &Transcriber::setKeyterms)
+      .function("setContext", &Transcriber::setContext)
       .function("close", &Transcriber::close);
 
   class_<Stream>("Stream")

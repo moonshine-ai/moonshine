@@ -619,6 +619,27 @@ Java_ai_moonshine_voice_JNI_moonshineTranscriberSetKeyterms(
 }
 
 extern "C" JNIEXPORT int JNICALL
+Java_ai_moonshine_voice_JNI_moonshineTranscriberSetContext(
+    JNIEnv *env, jobject /* this */, jint transcriber_handle, jstring context,
+    jint max_terms) {
+  try {
+    // A null string turns biasing off, which is what the C API does with NULL.
+    if (context == nullptr) {
+      return moonshine_transcriber_set_context(transcriber_handle, nullptr,
+                                               max_terms);
+    }
+    const char *context_str = env->GetStringUTFChars(context, nullptr);
+    const int32_t error = moonshine_transcriber_set_context(
+        transcriber_handle, context_str, max_terms);
+    env->ReleaseStringUTFChars(context, context_str);
+    return error;
+  } catch (const std::exception &e) {
+    ALOGE("moonshineTranscriberSetContext: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+extern "C" JNIEXPORT int JNICALL
 Java_ai_moonshine_voice_JNI_moonshineAddAudioToStream(
     JNIEnv *env, jobject /* this */, jint transcriber_handle,
     jint stream_handle, jfloatArray audio_data, jint sample_rate, jint flags) {

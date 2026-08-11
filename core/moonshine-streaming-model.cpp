@@ -41,6 +41,23 @@
 #define MOONSHINE_DECODER_START_TOKEN_ID 1
 #define MOONSHINE_EOS_TOKEN_ID 2
 
+namespace {
+
+// The word-boundary marker these vocabularies use, U+2581. Passed explicitly
+// only because the encoding follows it in the argument list.
+const char *kSpaceString = "▁";
+
+// These vocabularies are learned by merges, so text_to_tokens has to replay
+// those merges to arrive at the subwords the decoder was trained to emit.
+// Taking the longest entry at each position instead lands on a different
+// spelling for most words needing more than one subword, which went unnoticed
+// while the tokenizer was only ever used to turn tokens back into text.
+// Contextual biasing was the first caller to encode text, and it was waiting on
+// subwords the decoder never emits.
+const BinTokenizerEncoding kTokenizerEncoding = BinTokenizerEncoding::kBpe;
+
+}  // namespace
+
 /* ============================================================================
  * Helper Functions
  * ============================================================================
@@ -273,7 +290,8 @@ int MoonshineStreamingModel::load(const char *model_dir,
   }
 
   // Load tokenizer
-  tokenizer = new BinTokenizer(tokenizer_path);
+  tokenizer =
+      new BinTokenizer(tokenizer_path, kSpaceString, kTokenizerEncoding);
   RETURN_ON_NULL(tokenizer);
 
   return 0;
@@ -314,7 +332,8 @@ int MoonshineStreamingModel::load_from_memory(
       decoder_kv_model_data_size, &decoder_kv_session));
   RETURN_ON_NULL(decoder_kv_session);
 
-  tokenizer = new BinTokenizer(tokenizer_data, tokenizer_data_size);
+  tokenizer = new BinTokenizer(tokenizer_data, tokenizer_data_size,
+                               kSpaceString, kTokenizerEncoding);
   RETURN_ON_NULL(tokenizer);
 
   return 0;
@@ -387,7 +406,8 @@ int MoonshineStreamingModel::load_from_assets(const char *model_dir,
                                          &decoder_kv_mmap_size));
   RETURN_ON_NULL(decoder_kv_session);
 
-  tokenizer = new BinTokenizer(tokenizer_path, assetManager);
+  tokenizer = new BinTokenizer(tokenizer_path, assetManager, kSpaceString,
+                               kTokenizerEncoding);
   RETURN_ON_NULL(tokenizer);
 
   return 0;

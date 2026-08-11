@@ -22,6 +22,23 @@ namespace {
 // (docs/diarization-models.md), so the tests point at the copies under
 // test-assets, which is where they run from.
 constexpr const char *kDiarizationModelDir = "diarization";
+
+bool contains_term(const std::vector<std::string> &terms,
+                   const std::string &term) {
+  return std::find(terms.begin(), terms.end(), term) != terms.end();
+}
+
+std::string join_strings(const std::vector<std::string> &values,
+                         const std::string &separator) {
+  std::string joined;
+  for (const std::string &value : values) {
+    if (!joined.empty()) {
+      joined += separator;
+    }
+    joined += value;
+  }
+  return joined;
+}
 }  // namespace
 
 TEST_CASE("transcriber-test") {
@@ -1294,6 +1311,60 @@ TEST_CASE("transcriber-test") {
     // Clearing has to actually turn the biasing off, including dropping the
     // speculative draft that was decoded with it.
     transcriber.set_keyterms({});
+    CHECK(transcribe_current().find("Kubernetes") == std::string::npos);
+
+    // Handing over a passage instead of a list has to reach the decoder the
+    // same way. The passage below is the sort of thing an application already
+    // has on screen, and nothing in it names the terms to use.
+    const std::string context =
+        "Migration notes for the platform team. We will move the remaining "
+        "services onto Kubernetes this quarter, with Ceph behind the storage "
+        "classes and etcd holding the cluster state. Ask about the ingress "
+        "before the meeting.";
+    const std::vector<std::string> from_context =
+        transcriber.keyterms_from_context(context, 0);
+    LOGF("Terms chosen from the context passage: %s",
+         join_strings(from_context, ", ").c_str());
+    CHECK_FALSE(from_context.empty());
+    // The unusual words are picked and the everyday ones are left alone. This
+    // is the whole judgment the feature rests on, made against the real
+    // tokenizer rather than the stub in context-extractor-test.cpp.
+    CHECK(contains_term(from_context, "Kubernetes"));
+    CHECK(contains_term(from_context, "Ceph"));
+    CHECK_FALSE(contains_term(from_context, "the"));
+    CHECK_FALSE(contains_term(from_context, "will"));
+    CHECK_FALSE(contains_term(from_context, "team"));
+    CHECK_FALSE(contains_term(from_context, "before"));
+    // The cap is honored, and it keeps terms rather than dropping all of them.
+    const std::vector<std::string> capped =
+        transcriber.keyterms_from_context(context, 2);
+    CHECK(capped.size() == 2);
+
+    // A passage built so that exactly one of its words is unusual enough to
+    // pick. The bindings all share this fixture, because it lets them assert on
+    // the one term by name instead of on whichever of several won.
+    CHECK(transcriber.keyterms_from_context(
+              "We will move the rest of the work to Kubernetes this year.",
+              0) == std::vector<std::string>{"Kubernetes"});
+
+    // End to end: the terms the passage yielded reach the token choice. Which
+    // of them wins is not the point and is not asserted -- at this boost they
+    // compete with each other as well as with the audio -- only that the
+    // transcript is now made of them rather than of what was said.
+    transcriber.set_context(context, 0);
+    const std::string context_biased = transcribe_current();
+    LOGF("Context-biased: %s", context_biased.c_str());
+    CHECK(context_biased != unbiased);
+    bool found_any_term = false;
+    for (const std::string &term : from_context) {
+      if (context_biased.find(term) != std::string::npos) {
+        found_any_term = true;
+        break;
+      }
+    }
+    CHECK(found_any_term);
+    // An empty passage turns biasing off, the same as an empty list.
+    transcriber.set_context("", 0);
     CHECK(transcribe_current().find("Kubernetes") == std::string::npos);
 
     free(wav_data);

@@ -8,14 +8,17 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(${CMAKE_CURRENT_LIST_DIR}/../third-party/onnxruntime/find-ort-library-path.cmake)
 
+# Binary directories go in this configuration's own build tree rather than in
+# the source tree, so that host, iOS, Android and wasm builds cannot overwrite
+# each other's objects. See the same note in core/CMakeLists.txt.
 add_subdirectory(
     ${CMAKE_CURRENT_LIST_DIR}/../third-party/onnxruntime/
-    ${CMAKE_CURRENT_LIST_DIR}/../third-party/onnxruntime/build
+    ${CMAKE_BINARY_DIR}/onnxruntime
 )
 
 add_subdirectory(
     ${CMAKE_CURRENT_LIST_DIR}/../moonshine-utils
-    ${CMAKE_CURRENT_LIST_DIR}/../moonshine-utils/build
+    ${CMAKE_BINARY_DIR}/moonshine-utils
 )
 
 add_library(ort-utils STATIC

@@ -79,6 +79,29 @@ public class Transcriber {
   }
 
   /**
+   * Appends options for the load to come, for subclasses that are configured by
+   * chained setters rather than by the constructor (see
+   * {@link MicTranscriber#options(TranscriberOption...)}).
+   *
+   * <p>Options are read when the model loads and a loaded model's configuration
+   * is fixed, so this throws once that has happened rather than quietly having
+   * no effect. The settings with a life after loading have their own methods:
+   * {@link #setKeyterms} and {@link #setTranscribeFlags}.
+   *
+   * @throws IllegalStateException if the model is already loaded.
+   */
+  protected void addOptions(List<TranscriberOption> extraOptions) {
+    if (isLoaded()) {
+      throw new IllegalStateException(
+          "Options are read when the model loads, so they must be set before it "
+          + "is. To change key terms on a loaded model use setKeyterms().");
+    }
+    if (extraOptions != null) {
+      this.options.addAll(extraOptions);
+    }
+  }
+
+  /**
    * Sets the flags applied to subsequent transcription calls. Callers can
    * {@code OR} {@link JNI#MOONSHINE_FLAG_SPELLING_MODE} to drive the
    * spelling-fusion path on completed lines (provided a spelling model has
@@ -323,6 +346,44 @@ public class Transcriber {
                                 JNI.moonshineErrorToString(error));
     }
   }
+
+  /**
+   * Picks the key terms out of a passage of text and biases towards them,
+   * replacing any previous list.
+   *
+   * <p>Where {@link #setKeyterms} wants a list, this wants context: pass the
+   * document on screen, the agenda for the meeting, the last few messages in the
+   * thread, and the unusual words in it are found for you. A word counts as
+   * unusual when the model's own tokenizer has no single symbol for it, which is
+   * the case biasing helps with, so the judgment follows the language of the
+   * loaded model with no word lists involved.
+   *
+   * <p>Like {@link #setKeyterms}, this can be called while a stream is running,
+   * takes effect on the next transcription, and does not rewrite text already
+   * emitted. The capitalization in the passage is what gets asked for in the
+   * transcript.
+   *
+   * @param context  The passage to read terms out of. Pass {@code null} or an
+   *                 empty string to turn biasing off.
+   * @param maxTerms Most terms to take; pass 0 for the default of 200. Worth
+   *                 keeping modest: a long list costs accuracy on the words you
+   *                 did not ask for, so the terms the passage leans on hardest
+   *                 are kept and its long tail is dropped.
+   * @throws RuntimeException if the loaded model is not a streaming architecture
+   *                          — only those decode through a path that can apply
+   *                          the bias.
+   */
+  public void setContext(String context, int maxTerms) {
+    int error = JNI.moonshineTranscriberSetContext(
+        this.transcriberHandle, context == null ? "" : context, maxTerms);
+    if (error != JNI.MOONSHINE_ERROR_NONE) {
+      throw new RuntimeException("Failed to set context: " +
+                                JNI.moonshineErrorToString(error));
+    }
+  }
+
+  /** Same as {@link #setContext(String, int)} with the default cap of 200. */
+  public void setContext(String context) { this.setContext(context, 0); }
 
   public int createStream() {
     return JNI.moonshineCreateStream(this.transcriberHandle, 0);

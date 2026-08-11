@@ -38,7 +38,9 @@ Passed to `Transcriber(..., options=…)`, MicTranscriber `.options()`, and `moo
 | `max_tokens_per_second` | `6.5` | Truncate decoder loops when token rate looks pathological. Use about `13.0` for many non-Latin languages. |
 | `use_speculative_decoding` | true | Streaming: verify the previous hypothesis and continue from the first mismatch. False falls back to greedy redecode from BOS. |
 | `keyterms` | (none) | Comma-separated bias terms (streaming architectures only). See [Domain Customization](../models/domain-customization.md). Can also be set at runtime with `set_keyterms` / `moonshine_transcriber_set_keyterms()`. |
-| `keyterm_boost` | `2.0` | Strength of key-term biasing. Tune down rather than up if general accuracy matters more than the list. |
+| `keyterm_boost` | `2.0` | Strength of key-term biasing. Raise towards 4.0 to favor the list at the cost of the words around it, lower towards 1.0 for the reverse. Above 4.0 it stops working. |
+| `context` | (none) | A passage of free-form text to pick key terms out of, for when you have context but not a list (streaming architectures only). Added to any `keyterms`. Can also be set at runtime with `set_context` / `moonshine_transcriber_set_context()`. |
+| `context_max_terms` | `200` | Most terms to take from `context`. Worth keeping modest: length is charged against the words you did not ask for. |
 | `transcription_interval` | `0.5` | Seconds between automatic transcription passes (related to Python `update_interval`). |
 | `vad_threshold` | `0.5` | VAD sensitivity. Lower → longer segments; higher → shorter chunks. `0` disables VAD (audio still chunked by `vad_max_segment_duration`). |
 | `vad_window_duration` | `0.5` | Seconds of VAD scores to average when detecting speech. |

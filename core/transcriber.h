@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "context-biaser.h"
+#include "context-extractor.h"
 #include "file-information.h"
 #include "moonshine-model.h"
 #include "moonshine-streaming-model.h"
@@ -197,6 +198,14 @@ struct TranscriberOptions {
   // Strength of the nudge. Higher recovers more key terms but risks hearing
   // them where they were not said; scripts/eval-keyterm-biasing.py sweeps this.
   float keyterm_boost = ContextBiaser::kDefaultBoost;
+  // A passage of free-form text to pick key terms out of, for callers that have
+  // context but not a list — the document on screen, an agenda, a thread. The
+  // terms it yields are added to any in ``keyterms`` (see context-extractor.h
+  // for how they are chosen), and Transcriber::set_context replaces them later.
+  std::string context;
+  // Most terms to take from ``context``. Zero means
+  // ContextExtractor::kDefaultMaxTerms.
+  int32_t context_max_terms = 0;
   // Minimum seconds of new audio between diarization re-clustering passes.
   float diarization_cluster_cadence = 2.0f;
   // Seconds between diarization segmentation/embedding model runs. Zero
@@ -273,6 +282,24 @@ class Transcriber {
   // loaded model is not a streaming architecture, which is the only one whose
   // decode path applies the bias.
   void set_keyterms(const std::vector<std::string> &keyterms);
+
+  // Picks key terms out of a passage of free-form text and biases towards
+  // them, replacing any previous list. For callers who have context rather
+  // than a curated list: hand over the document the user is looking at, the
+  // agenda for the meeting, the last few messages in the thread. ``max_terms``
+  // caps the list, and zero asks for ContextExtractor::kDefaultMaxTerms.
+  // Passing an empty passage turns biasing off. Throws under the same
+  // conditions as set_keyterms.
+  void set_context(const std::string &context, int32_t max_terms = 0);
+
+  // The terms set_context would choose from ``context``, most important first.
+  // Nothing is installed and no state changes, so a caller can show the user
+  // what was picked, and a test can check the choice without decoding audio.
+  // Throws if the loaded model is not a streaming architecture. Returns an
+  // empty list when no model is loaded at all, which is the skip_transcription
+  // case: there is nothing to judge words against and nothing to decode.
+  std::vector<std::string> keyterms_from_context(const std::string &context,
+                                                 int32_t max_terms);
 
   int32_t create_stream();
   void free_stream(int32_t stream_id);

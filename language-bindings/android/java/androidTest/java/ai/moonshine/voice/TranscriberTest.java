@@ -175,6 +175,103 @@ public class TranscriberTest {
         }
     }
 
+    /**
+     * Key terms can be picked out of a passage of text rather than listed, and an
+     * empty passage puts the unbiased behaviour back.
+     */
+    @Test
+    public void testSetContext() {
+        Context testContext = InstrumentationRegistry.getInstrumentation().getContext();
+        Utils.WavData wavData = null;
+        try {
+            wavData = Utils.loadWavFromAssets(testContext, "two_cities.wav");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        for (String file : new String[] {"frontend.ort", "encoder.ort", "adapter.ort",
+                     "cross_kv.ort", "decoder_kv.ort", "decoder_kv_with_attention.ort",
+                     "streaming_config.json", "tokenizer.bin"}) {
+            Utils.copyAssetToTempDir(testContext, tempDir, "tiny-streaming-en/" + file);
+        }
+        final String modelsPath = tempDir.toAbsolutePath().toString() + "/tiny-streaming-en/";
+
+        List<TranscriberOption> options = new ArrayList<>();
+        options.add(new TranscriberOption("keyterm_boost", "30"));
+        Transcriber transcriber = new Transcriber(options);
+        transcriber.loadFromFiles(modelsPath, JNI.MOONSHINE_MODEL_ARCH_TINY_STREAMING);
+
+        final float[] audio = wavData.data;
+        final int sampleRate = wavData.sampleRate;
+
+        // Every word here has a token to itself except "Kubernetes", so the
+        // passage yields exactly that one term and the assertions can name it.
+        // The same fixture is used in every binding.
+        final String context = "We will move the rest of the work to Kubernetes this year.";
+
+        assertTrue(!transcribeAll(transcriber, audio, sampleRate).contains("Kubernetes"));
+
+        transcriber.setContext(context);
+        assertTrue(transcribeAll(transcriber, audio, sampleRate).contains("Kubernetes"));
+
+        // A cap the passage cannot exceed changes nothing.
+        transcriber.setContext(context, 5);
+        assertTrue(transcribeAll(transcriber, audio, sampleRate).contains("Kubernetes"));
+
+        transcriber.setContext(null);
+        assertTrue(!transcribeAll(transcriber, audio, sampleRate).contains("Kubernetes"));
+    }
+
+    /**
+     * Options collected by MicTranscriber's chained setters have to reach the
+     * native load, or an app cannot start listening with key terms already in
+     * place. The mic's own load() downloads a model, so this loads the bundled
+     * one through the inherited path and checks the options arrived by what they
+     * do to the transcript.
+     */
+    @Test
+    public void testMicTranscriberOptions() {
+        Context testContext = InstrumentationRegistry.getInstrumentation().getContext();
+        Context appContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Utils.WavData wavData = null;
+        try {
+            wavData = Utils.loadWavFromAssets(testContext, "two_cities.wav");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        for (String file : new String[] {"frontend.ort", "encoder.ort", "adapter.ort",
+                     "cross_kv.ort", "decoder_kv.ort", "decoder_kv_with_attention.ort",
+                     "streaming_config.json", "tokenizer.bin"}) {
+            Utils.copyAssetToTempDir(testContext, tempDir, "tiny-streaming-en/" + file);
+        }
+        final String modelsPath = tempDir.toAbsolutePath().toString() + "/tiny-streaming-en/";
+
+        // "Kubernetes" is not in the audio, and a boost this large overwhelms the
+        // acoustics, so the term appears only if the options reached the decoder.
+        MicTranscriber mic =
+                new MicTranscriber(appContext)
+                        .modelArch(JNI.MOONSHINE_MODEL_ARCH_TINY_STREAMING)
+                        .options(new TranscriberOption("keyterms", "Kubernetes"))
+                        .options(Arrays.asList(new TranscriberOption("keyterm_boost", "30")));
+        mic.loadFromFiles(modelsPath, JNI.MOONSHINE_MODEL_ARCH_TINY_STREAMING);
+        try {
+            assertTrue(transcribeAll(mic, wavData.data, wavData.sampleRate)
+                           .contains("Kubernetes"));
+
+            // Options are read as the model loads, so a later call cannot do what
+            // it looks like it does and says so instead.
+            try {
+                mic.options(new TranscriberOption("keyterms", "Ceph"));
+                assertTrue("Options set after loading should be refused", false);
+            } catch (IllegalStateException expected) {
+                // setKeyterms() is the way to change terms on a loaded model.
+            }
+        } finally {
+            mic.close();
+        }
+    }
+
     private String transcribeAll(Transcriber transcriber, float[] audio, int sampleRate) {
         Transcript transcript = transcriber.transcribeWithoutStreaming(audio, sampleRate, 0);
         StringBuilder text = new StringBuilder();

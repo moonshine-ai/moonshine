@@ -484,6 +484,21 @@ class MicTranscriber:
             raise MoonshineError("No model loaded. Call load() before set_keyterms().")
         self.transcriber.set_keyterms(keyterms)
 
+    def set_context(self, context: Optional[str], max_terms: int = 0) -> None:
+        """Pick key terms out of a passage of text and bias towards them.
+
+        See :meth:`Transcriber.set_context`. Call this between phrases to
+        follow the document or thread the user is in; to start with a passage
+        instead, pass the ``context`` transcriber option to :meth:`options`.
+
+        Raises:
+            MoonshineError: If no model is loaded yet, or the model is not a
+                streaming architecture.
+        """
+        if self.transcriber is None:
+            raise MoonshineError("No model loaded. Call load() before set_context().")
+        self.transcriber.set_context(context, max_terms)
+
     def stop(self) -> None:
         self._should_listen = False
         # Let the worker finish transcribing any queued audio, then join it

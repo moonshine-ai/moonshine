@@ -299,6 +299,33 @@ export class Transcriber {
   }
 
   /**
+   * Picks the key terms out of a passage of text and biases towards them,
+   * replacing any previous list.
+   *
+   * Where {@link setKeyterms} wants a list, this wants context: pass the
+   * document on screen, the agenda for the meeting, the last few messages in the
+   * thread, and the unusual words in it are found for you. A word counts as
+   * unusual when the model's own tokenizer has no single symbol for it, which is
+   * the case biasing helps with, so the judgment follows the language of the
+   * loaded model with no word lists involved.
+   *
+   * Like {@link setKeyterms}, this can be called while a stream is running,
+   * takes effect on the next transcription, and does not rewrite text already
+   * emitted. The capitalization in the passage is what gets asked for in the
+   * transcript. Only the streaming architectures can apply this; the others
+   * throw.
+   *
+   * @param context The passage to read terms out of. Pass an empty string to
+   *   turn biasing off.
+   * @param maxTerms Most terms to take, 200 by default. Worth keeping modest: a
+   *   long list costs accuracy on the words you did not ask for, so the terms
+   *   the passage leans on hardest are kept and its long tail is dropped.
+   */
+  setContext(context: string, maxTerms = 0): void {
+    wrapErrors(() => this.raw.setContext(context, maxTerms));
+  }
+
+  /**
    * Creates a new streaming session.
    *
    * `updateInterval` is the seconds of new audio the stream collects before
