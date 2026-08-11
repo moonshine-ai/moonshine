@@ -19,6 +19,14 @@ import Darwin
 /// `MOONSHINE_KEYTERM_BOOST`) to measure the same latency with contextual
 /// biasing switched on, so its per-token cost can be compared against a
 /// baseline run on the same machine.
+///
+/// Set `MOONSHINE_LATENCY_OPTIONAL` to report a breached ceiling as a warning
+/// instead of a failure. The ceilings assume an idle, cool machine; a release
+/// build reaches this test after hours of compilation, and the same code has
+/// measured anywhere from 95ms to 124ms for Tiny between runs on one Mac. That
+/// spread is wider than the headroom the ceilings leave, so an unattended
+/// release would otherwise stop on the weather rather than on a regression.
+/// The measurement is still taken and still printed either way.
 @available(iOS 15.0, macOS 12.0, *)
 final class StreamingLatencyTests: XCTestCase {
 
@@ -41,6 +49,11 @@ final class StreamingLatencyTests: XCTestCase {
         Case(modelName: "medium-streaming-en", arch: .mediumStreaming, maxAvgLatencyMs: 300),
     ]
     #endif
+
+    private static var ceilingsAreAdvisory: Bool {
+        let value = ProcessInfo.processInfo.environment["MOONSHINE_LATENCY_OPTIONAL"] ?? ""
+        return !value.isEmpty
+    }
 
     private static let twoCitiesURL = URL(
         string: "https://github.com/moonshine-ai/moonshine/raw/main/test-assets/two_cities.wav")!
@@ -134,11 +147,19 @@ final class StreamingLatencyTests: XCTestCase {
             print(summary)
             fputs(summary + "\n", stderr)
 
-            XCTAssertLessThanOrEqual(
-                avgMs, testCase.maxAvgLatencyMs,
-                String(
-                    format: "%@ avg latency %.0fms exceeds regression ceiling %.0fms",
-                    testCase.modelName, avgMs, testCase.maxAvgLatencyMs))
+            let ceilingMessage = String(
+                format: "%@ avg latency %.0fms exceeds regression ceiling %.0fms",
+                testCase.modelName, avgMs, testCase.maxAvgLatencyMs)
+            if Self.ceilingsAreAdvisory {
+                if avgMs > testCase.maxAvgLatencyMs {
+                    let warning = "MOONSHINE_LATENCY_WARNING " + ceilingMessage
+                        + " (MOONSHINE_LATENCY_OPTIONAL is set)"
+                    print(warning)
+                    fputs(warning + "\n", stderr)
+                }
+            } else {
+                XCTAssertLessThanOrEqual(avgMs, testCase.maxAvgLatencyMs, ceilingMessage)
+            }
         }
     }
 
