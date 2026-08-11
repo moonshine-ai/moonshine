@@ -785,6 +785,17 @@ main() {
         fi
     fi
 
+    # The wasm bundle goes the same way with the worktree, and publish-examples
+    # only checks the demos against it when it happens to be there -- so a
+    # resumed run would drop that coverage without saying anything rather than
+    # fail. There is nothing worth caching, so rebuild it.
+    if [[ -f "${STATE_DIR}/build-wasm.done" \
+        && ! -f "${RELEASE_DIR}/language-bindings/wasm/dist/index.js" ]]; then
+        echo "build-wasm.done but the fresh worktree has no wasm bundle;" \
+             "clearing the breadcrumb so it rebuilds."
+        rm -f "${STATE_DIR}/build-wasm.done"
+    fi
+
     cd "${RELEASE_DIR}"
     run_stage test-core          scripts/test-core.sh
     run_stage test-python        scripts/test-python.sh
