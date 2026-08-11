@@ -2,28 +2,22 @@
 
 All notable user-facing changes to Moonshine Voice are documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Please keep the bullets high level, and no more than about 200 characters.
 
 ## [Unreleased]
 
 ### Added
 
-- Speaker attribution can be corrected by hand in the meeting notes web example. A name marks where its speaker starts: drag it into the words above or below to move that boundary, Alt-drag to start a second speaker partway through a turn, Alt-click to add a speaker diarization never separated out, and drag a name past its own last word to remove it. Corrections are pinned, so the next diarization pass does not undo them.
-- Two speakers given the same name in the meeting notes web example are treated as one person: adjacent turns merge under a single name, and renaming one renames all. Only hand-typed names count, so speakers the page failed to tell apart are never merged on their own.
-- The meeting notes web example asks before closing a tab holding a transcript that has not been copied or exported since it last changed. Nothing is uploaded, so the tab is the only copy.
-- Key terms can be estimated from a passage of text — a document, an agenda, the last few messages in a thread — instead of listed by hand. Pass `context` at load time, or replace it on a running transcriber with `set_context()` in Python, `setContext()` in Swift, Java and JavaScript, or `moonshine_transcriber_set_context()` in C. Candidates are picked with the model's own tokenizer, ranked by frequency and capped at 200 by default; multi-word and alphanumeric terms still need `keyterms`.
-- Runtime key-term biasing for streaming speech-to-text. Pass `keyterms` (a comma-separated list) to steer the decoder towards jargon, product names, or proper nouns with no retraining, tune the strength with `keyterm_boost` (default 2.0), and replace terms mid-stream with `set_keyterms()` in Python, `setKeyterms()` in Swift, Java and JavaScript, or `moonshine_transcriber_set_keyterms` in C. With a hundred terms live the default removes an eighth to a sixth of the errors on those words for a tenth of a point on everything else, and costs about a millisecond of end-of-phrase latency on an iPad (A16). See [Domain Customization](README.md#domain-customization) for the measured accuracy curves at longer list lengths.
-- Android's `MicTranscriber` takes native transcriber options through a chained `options()` setter, so an app can start listening with key terms, VAD tuning or speaker identification already in place. The other bindings already had this; on Android anything the setters did not cover meant building a `Transcriber` by hand and giving up the microphone plumbing. Options are read as the model loads, so calling it afterwards throws instead of quietly doing nothing — use `setKeyterms()` to change terms on a model that is already running.
+- Runtime domain customization for streaming speech-to-text: pass `keyterms` to bias decoding towards jargon, or `context` to find the terms in a passage of text. See [Domain Customization](docs/models/domain-customization.md).
+- Documentation has been reorganized in `mkdocs` style, with one file per section rather than everything in one large README.md. These docs are also available at [moonshine.readthedocs.io](https://moonshine.readthedocs.io).
 
 ### Changed
 
-- Encoding text to tokens no longer scans the whole vocabulary for every subword: a 10,000-term key-term list took about 55 seconds to compile on an iPad and now takes around a second. Transcription output is unaffected, since it only ever decodes.
-- `moonshine_load_transcriber_from_memory_files()` rejects an unrecognized filename key with `MOONSHINE_ERROR_INVALID_ARGUMENT`, naming the key, instead of dropping it silently and then reporting the required file as missing. Keys from every architecture are accepted, so handing over a whole downloaded model directory still works.
+- `moonshine_load_transcriber_from_memory_files()` rejects an unrecognized filename key with `MOONSHINE_ERROR_INVALID_ARGUMENT`, naming it, instead of dropping it silently and reporting the file as missing.
 
 ### Fixed
 
-- Builds of the core library no longer write into the source tree. Each of its subprojects — `ort-utils`, `moonshine-utils`, `bin-tokenizer`, `moonshine-tts` and the rest — used a fixed directory like `core/ort-utils/build`, which every configuration shared: an Android ABI, an iOS slice, a wasm build and the host all wrote the same archives, so whichever ran last left objects the next one tried to link, failing with `is incompatible with aarch64linux` or `is neither Wasm object file nor LLVM bitcode`. They now build inside whichever build tree is configuring them, which makes concurrent builds for different targets safe and means clearing that one directory is a full clean. Anything that reached into the old locations for a built artifact should look under the build directory instead, as in `core/build/bin-tokenizer/bin-tokenizer-test`.
-- The native library is now built optimized everywhere. The pip wheels, published binary archives and Android debug variant were all built with no CMake build type, so everything outside the prebuilt ONNX Runtime ran at debug speed — on a Pixel 10a this made contextual biasing look about three times as expensive as it is. Streaming latency on the Pixel improved by 8-15%, and the README's measured latencies have been refreshed (Linux x86 and Raspberry Pi 5 await hardware to re-measure on).
+- Core library builds no longer write into the source tree, where targets clobbered each other's archives, and the wheels, archives and Android debug variant are now optimized rather than debug builds (8-15% faster streaming on a Pixel 10a).
 
 ## [0.1.1] - August 6th, 2026
 
