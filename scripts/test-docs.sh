@@ -1,7 +1,7 @@
 #!/bin/bash -ex
 
 # Tests that the code in the documentation still works, by executing the
-# fenced code blocks in README.md and language-bindings/python/README.md (see
+# fenced code blocks in the docs/ tree and both READMEs (see
 # language-bindings/python/tests/test_docs.py) and running the getting-started notebook end to
 # end, all against a freshly built wheel.
 #

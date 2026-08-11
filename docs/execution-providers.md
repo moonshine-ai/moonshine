@@ -50,6 +50,7 @@ most latency-sensitive models we run, are cut into 141 and 220 pieces.
 
 Reproduce it with:
 
+<!-- doc-test: skip -->
 ```bash
 python scripts/check-ep-partitioning.py core/moonshine-tts/data/kokoro/model.ort
 ```

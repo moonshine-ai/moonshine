@@ -44,6 +44,7 @@ be converted into one file.
 
 Convert each model once and point at the result:
 
+<!-- doc-test: skip -->
 ```bash
 python scripts/convert-models-to-ort.py path/to/model.onnx
 ```

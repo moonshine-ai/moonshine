@@ -114,6 +114,7 @@ These are the same decoder models with 6 additional outputs that surface the cro
 
 Generate them with the included script:
 
+<!-- doc-test: skip -->
 ```bash
 # Non-streaming model
 python scripts/export-decoder-with-attention.py path/to/tiny-en/

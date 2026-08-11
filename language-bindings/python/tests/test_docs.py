@@ -1,8 +1,8 @@
 """Tests that the code blocks in the documentation actually work.
 
-Extracts fenced code blocks from the markdown files listed in DOC_FILES and
-checks each one, so that stale commands (for example a CLI flag that has been
-renamed) are caught before a release is published.
+Extracts fenced code blocks from every markdown file under docs/, plus the two
+READMEs, and checks each one, so that stale commands (for example a CLI flag
+that has been renamed) are caught before a release is published.
 
 How a block is treated is controlled by an HTML comment placed on the line
 immediately before the opening fence (invisible in rendered markdown):
@@ -32,10 +32,42 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
-DOC_FILES = [
-    REPO_ROOT / "README.md",
-    REPO_ROOT / "language-bindings" / "python" / "README.md",
-]
+DOCS_DIR = REPO_ROOT / "docs"
+
+# Pages that document our own release and repository-maintenance procedures
+# rather than how to use the library. Their blocks are the real commands, so
+# running them would publish a release or rewrite the repository's history.
+EXCLUDED_DOCS = {
+    DOCS_DIR / "release-process.md",
+    DOCS_DIR / "lfs-purge.md",
+}
+EXCLUDED_DOC_DIRS = {
+    DOCS_DIR / "design",
+}
+
+
+def collect_doc_files():
+    """Every page whose snippets a reader could reasonably copy and run.
+
+    The docs tree is walked rather than listed, because a hand-maintained list
+    silently stops covering pages that are added or moved -- which is exactly
+    what happened when the single large README became this hierarchy, and took
+    the snippet tests down to one block without failing anything.
+    """
+    paths = [
+        REPO_ROOT / "README.md",
+        REPO_ROOT / "language-bindings" / "python" / "README.md",
+    ]
+    for path in sorted(DOCS_DIR.rglob("*.md")):
+        if path in EXCLUDED_DOCS:
+            continue
+        if any(parent in EXCLUDED_DOC_DIRS for parent in path.parents):
+            continue
+        paths.append(path)
+    return paths
+
+
+DOC_FILES = collect_doc_files()
 
 ANNOTATION_PREFIX = "<!-- doc-test:"
 

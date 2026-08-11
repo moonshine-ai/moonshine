@@ -15,6 +15,7 @@ Full guides, models, and API reference are at **[moonshine-voice.readthedocs.io]
 
 ## Quickstart
 
+<!-- doc-test: parse-only -->
 ```bash
 pip install moonshine-voice
 moonshine-voice mic --language en
