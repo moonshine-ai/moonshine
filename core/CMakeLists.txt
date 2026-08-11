@@ -22,6 +22,17 @@ elseif (EMSCRIPTEN)
   add_compile_options(-Wall -Wextra)
 endif()
 
+# GCC 12's -Wrestrict misfires on ordinary libstdc++ std::string operations once
+# they inline at -O2, reporting overlaps that cannot exist: it flags a plain
+# `whole = "0";` in chinese-numbers.cpp as copying 9223372036854775810 bytes at
+# offset -3. The Linux wheels and archives are the only optimized GCC build we
+# ship, so this surfaced when they started being compiled with -O2 rather than
+# unoptimized, and no amount of rewriting the source removes it. Keep the
+# diagnostic visible but stop it failing the build. Clang is unaffected.
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  add_compile_options(-Wno-error=restrict)
+endif()
+
 # WebAssembly: build every core target with SIMD + pthreads + C++ exceptions so
 # the whole graph (core, ort-utils, bin-tokenizer, TTS, embind module) matches
 # the vendored ORT-wasm archive's ABI. The SIMD-only fallback drops -pthread.
