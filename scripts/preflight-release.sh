@@ -5,9 +5,14 @@
 # a development cycle to confirm the branch is shippable.
 #
 # Usage:
-#   scripts/preflight-release.sh <branch> [<commit>]
+#   scripts/preflight-release.sh [--dry-run] <branch> [<commit>]
 #
 # <commit> defaults to the branch's pushed tip and may be any commit-ish.
+#
+# With --dry-run, credentials that only the upload stages use are reported as
+# warnings instead of failures, because a dry run never reaches the code that
+# needs them. Blocking a rehearsal on a credential it will not touch just
+# teaches you to skip preflight altogether.
 #
 # These checks exist because the failures they catch are expensive: the publish
 # stages push to PyPI, Maven Central, npm and GitHub Releases, none of which let
@@ -18,6 +23,7 @@
 set -uo pipefail
 
 FAILURES=0
+DRY_RUN=""
 
 fail() {
     echo "  FAIL: $1" >&2
@@ -29,13 +35,35 @@ fail() {
     FAILURES=$((FAILURES + 1))
 }
 
+warn() {
+    echo "  WARN: $1" >&2
+    shift
+    while [ $# -gt 0 ]; do
+        echo "        $1" >&2
+        shift
+    done
+}
+
+# For problems that only matter once something is actually uploaded.
+publish_only_fail() {
+    if [ -n "${DRY_RUN}" ]; then
+        warn "$@" "(not fatal for a dry run, but fix it before publishing)"
+    else
+        fail "$@"
+    fi
+}
+
 pass() {
     echo "  ok: $1"
 }
 
 main() {
+    if [ "${1:-}" = "--dry-run" ]; then
+        DRY_RUN=1
+        shift
+    fi
     if [ $# -lt 1 ] || [ $# -gt 2 ]; then
-        echo "Usage: $0 <branch> [<commit>]" >&2
+        echo "Usage: $0 [--dry-run] <branch> [<commit>]" >&2
         exit 1
     fi
 
@@ -115,7 +143,8 @@ main() {
             if npm whoami >/dev/null 2>&1; then
                 pass "npm is authenticated as $(npm whoami 2>/dev/null)"
             else
-                fail "npm is not authenticated; build-wasm publish-npm will fail" \
+                publish_only_fail \
+                    "npm is not authenticated; build-wasm publish-npm will fail" \
                     "and the web demos' jsDelivr CDN import will 404." \
                     "  npm login"
             fi

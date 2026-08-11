@@ -23,7 +23,9 @@ set -euo pipefail
 
 # Add text files that contain a version string and need to be updated to this list.
 KNOWN_FILES=(
-	./README.md
+	./docs/quickstart.md
+	./docs/examples.md
+	./docs/using/adding-the-library.md
 	./core/CMakeLists.txt
 	./language-bindings/python/pyproject.toml
 	./language-bindings/python/setup.py
@@ -132,6 +134,7 @@ main() {
 		--exclude-dir=lang-specific \
 		--exclude-dir=node_modules \
 		--exclude-dir=.release-state \
+		--exclude-dir=site \
 		--exclude=Package.resolved \
 		--exclude=uv.lock \
 		--exclude=PKG-INFO \

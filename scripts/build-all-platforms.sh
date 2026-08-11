@@ -38,9 +38,11 @@
 # See scripts/start-candidate.sh for the full process.
 #
 # Resumable: each stage drops a breadcrumb under .release-state/<version>/ when
-# it completes, so re-running the script (e.g. after a failure, or after folding
-# in a fix) skips the stages that already finished and picks up where it left
-# off. Set RELEASE_FRESH=1 to discard the breadcrumbs and rebuild every stage.
+# it completes, so re-running the script after a failure skips the stages that
+# already finished and picks up where it left off. The breadcrumbs record the
+# commit they were built from and are discarded when it changes, so folding a
+# late fix into the branch rebuilds everything rather than passing off stages
+# that only ever saw the old code. Set RELEASE_FRESH=1 to discard them anyway.
 #
 # Environment:
 #   RELEASE_REF            - candidate branch (or tag/sha) to build. Defaults to
@@ -284,9 +286,10 @@ cleanup() {
 
 # Per-release resume support: each stage drops a breadcrumb file in STATE_DIR
 # when it finishes, so re-running the script skips any stage that already
-# completed for the same release ref. Because the release is pinned to an
-# immutable ref, a resumed run rebuilds identical code. Set RELEASE_FRESH=1 to
-# clear the breadcrumbs and rebuild every stage from scratch.
+# completed for the same release ref. The breadcrumb set is discarded whenever
+# the build commit changes, so a resumed run only ever skips work that was done
+# against the code being built now. Set RELEASE_FRESH=1 to clear the
+# breadcrumbs and rebuild every stage from scratch.
 run_stage() {
     local name="$1"
     shift
@@ -629,7 +632,13 @@ main() {
     # Skipped for explicit tag/sha rebuilds, which are deliberately reproducing
     # an old state rather than shipping a new one.
     if [ -n "${RELEASE_BRANCH}" ] && [ -z "${RELEASE_SKIP_PREFLIGHT:-}" ]; then
-        "${SCRIPTS_DIR}/preflight-release.sh" "${RELEASE_BRANCH}" "${BUILD_COMMIT}"
+        PREFLIGHT_ARGS=()
+        if [ -z "${PUBLISH}" ]; then
+            PREFLIGHT_ARGS=(--dry-run)
+        fi
+        "${SCRIPTS_DIR}/preflight-release.sh" \
+            ${PREFLIGHT_ARGS[@]+"${PREFLIGHT_ARGS[@]}"} \
+            "${RELEASE_BRANCH}" "${BUILD_COMMIT}"
     fi
 
     # Refresh the v<version> tag to the branch HEAD and push it, so the publish
@@ -680,6 +689,20 @@ main() {
         rm -rf "${STATE_DIR}"
     fi
     mkdir -p "${STATE_DIR}"
+    # Breadcrumbs are keyed by version, but a candidate branch's HEAD moves as
+    # late fixes land, and the two together are what let a resumed run skip a
+    # stage that only ever built the older code -- reporting a pass for
+    # something that was never tested. A changed build commit invalidates the
+    # whole set.
+    COMMIT_STAMP="${STATE_DIR}/build-commit"
+    if [ -f "${COMMIT_STAMP}" ] \
+        && [ "$(cat "${COMMIT_STAMP}")" != "${BUILD_COMMIT}" ]; then
+        echo "Breadcrumbs are from $(cat "${COMMIT_STAMP}") but this run builds" \
+             "${BUILD_COMMIT}; clearing them so every stage rebuilds current code."
+        rm -rf "${STATE_DIR}"
+        mkdir -p "${STATE_DIR}"
+    fi
+    echo "${BUILD_COMMIT}" > "${COMMIT_STAMP}"
     echo "Resume breadcrumbs: ${STATE_DIR}"
     if compgen -G "${STATE_DIR}/*.done" >/dev/null; then
         echo "Already-completed stages that will be skipped:"
