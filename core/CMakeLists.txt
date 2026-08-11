@@ -29,8 +29,13 @@ endif()
 # ship, so this surfaced when they started being compiled with -O2 rather than
 # unoptimized, and no amount of rewriting the source removes it. Keep the
 # diagnostic visible but stop it failing the build. Clang is unaffected.
+#
+# GCC 15's -Warray-bounds gets std::vector::insert wrong the same way: inlining
+# the copy down to a memcpy, it measures the destination against the capacity
+# the vector had before insert grew it, so appending one vector to another in
+# zipvoice-tts-test.cpp reads as writing at offset 96000 of a 96000-byte buffer.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  add_compile_options(-Wno-error=restrict)
+  add_compile_options(-Wno-error=restrict -Wno-error=array-bounds)
 endif()
 
 # WebAssembly: build every core target with SIMD + pthreads + C++ exceptions so
