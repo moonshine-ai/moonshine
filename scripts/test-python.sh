@@ -34,11 +34,14 @@ cleanup() {
 trap cleanup EXIT
 
 # A throwaway venv so the modules are tested against exactly the wheel that
-# will be uploaded, not whatever happens to be installed on this machine.
-python3 -m venv "${WORK_DIR}/venv"
+# will be uploaded, not whatever happens to be installed on this machine. Built
+# with uv, as build-pip.sh does: `python3 -m venv` fails outright when python3 is
+# a uv-managed interpreter, because the venv it writes looks for its standard
+# library under the path that interpreter was built at rather than where it is
+# installed, and cannot even import `encodings`.
+uv venv "${WORK_DIR}/venv"
 source "${WORK_DIR}/venv/bin/activate"
-pip install --upgrade pip
-pip install "${WHEEL}"
-pip install -r "${PYTHON_DIR}/tests/requirements.txt"
+uv pip install "${WHEEL}"
+uv pip install -r "${PYTHON_DIR}/tests/requirements.txt"
 
 pytest -v "${PYTHON_DIR}/tests" --ignore="${PYTHON_DIR}/tests/test_docs.py"
