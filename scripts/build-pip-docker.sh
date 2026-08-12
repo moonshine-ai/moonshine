@@ -34,11 +34,27 @@ docker build --platform linux/amd64 -f "${SCRIPTS_DIR}/Dockerfile" \
 	-t moonshine-ubuntu-amd64 "${REPO_ROOT_DIR}"
 docker build --platform linux/arm64 -f "${SCRIPTS_DIR}/Dockerfile" \
 	-t moonshine-ubuntu-arm64 "${REPO_ROOT_DIR}"
+# An older base for the arm64 wheel only. Raspberry Pi OS bullseye is still
+# widely installed and has glibc 2.31, so a wheel built on bookworm will not
+# install there at all -- and a Pi is exactly where an arm64 Linux wheel gets
+# used. There is no matching x86_64 image because that side has only ever
+# shipped a 2_34 wheel.
+docker build --platform linux/arm64 \
+	--build-arg BASE_IMAGE=python:3.12-slim-bullseye \
+	-f "${SCRIPTS_DIR}/Dockerfile" \
+	-t moonshine-debian-bullseye-arm64 "${REPO_ROOT_DIR}"
 
 docker run --rm -v ${REPO_ROOT_DIR}:/home/user/moonshine moonshine-ubuntu-amd64 \
 	/bin/bash -c "cd /home/user/moonshine && scripts/build-pip.sh ${PIP_ARGS}"
 
 docker run --rm -v ${REPO_ROOT_DIR}:/home/user/moonshine moonshine-ubuntu-arm64 \
+	/bin/bash -c "cd /home/user/moonshine && scripts/build-pip.sh ${PIP_ARGS}"
+
+# Last of the wheel builds, because each one clears dist/ before it starts and
+# the Pi stage tests whatever is left there: the Pi runs bullseye, so this is the
+# only one of these wheels it can install.
+docker run --rm -v ${REPO_ROOT_DIR}:/home/user/moonshine \
+	-e MOONSHINE_MANYLINUX_VERSION=2_31 moonshine-debian-bullseye-arm64 \
 	/bin/bash -c "cd /home/user/moonshine && scripts/build-pip.sh ${PIP_ARGS}"
 
 # Build BOTH Linux C++ library archives (moonshine-voice-linux-x86_64.tar.gz and

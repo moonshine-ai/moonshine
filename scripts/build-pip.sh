@@ -51,7 +51,10 @@ elif grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null || grep -q "BCM2" /proc/cp
 	ORT_LINUX_LIB_DIR=${CORE_DIR}/third-party/onnxruntime/lib/linux/aarch64
 	cp ${ORT_LINUX_LIB_DIR}/libonnxruntime*.so* ${PYTHON_DIR}/src/moonshine_voice/
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    LINUX_VERSION=2_34
+	# The glibc floor to tag the wheel with. It has to match the machine we are
+	# building on, so build-pip-docker.sh sets it when it runs this in a
+	# container older than the bookworm one this default describes.
+	LINUX_VERSION=${MOONSHINE_MANYLINUX_VERSION:-2_34}
 	# Pick the ONNX Runtime build matching the machine we're running on. The Pi
 	# branch above handles Raspberry Pi hardware specifically; this branch covers
 	# generic Linux, including native arm64 (e.g. an aarch64 Docker container on
