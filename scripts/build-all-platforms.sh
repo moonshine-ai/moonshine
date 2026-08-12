@@ -355,15 +355,59 @@ stage_linux() {
       && scripts/test-android.sh --avd '${ANDROID_X86_64_AVD:-moonshine_api26_x86_64}'" || exit 1
 }
 
-# The Raspberry Pi cloud host checks out the release ref and publishes the arm64
-# wheel. The arm64 C++ library archive (moonshine-voice-linux-arm64.tar.gz) is
-# NOT built here anymore -- it moved to the native-arm64 Docker instance in the
-# build-pip-docker stage, which is much faster than the Pi.
+# Where build-pip-docker's arm64 container leaves the wheel, and where we keep a
+# copy of it (see cache_arm64_wheel) so a resumed run can still find one.
+ARM64_WHEEL_GLOB="language-bindings/python/dist/moonshine_voice-*_aarch64.whl"
+
+arm64_wheel() {
+    local wheel
+    wheel="$(ls ${RELEASE_DIR}/${ARM64_WHEEL_GLOB} 2>/dev/null | head -n 1)"
+    if [ -z "${wheel}" ]; then
+        wheel="$(ls "${STATE_DIR}"/moonshine_voice-*_aarch64.whl 2>/dev/null \
+            | head -n 1)"
+    fi
+    echo "${wheel}"
+}
+
+# Keep the arm64 wheel outside the disposable worktree, the way the xcframework
+# is kept, because the Pi stage installs it rather than building its own.
+cache_arm64_wheel() {
+    local wheel
+    wheel="$(ls ${RELEASE_DIR}/${ARM64_WHEEL_GLOB} 2>/dev/null | head -n 1)"
+    if [ -n "${wheel}" ]; then
+        rm -f "${STATE_DIR}"/moonshine_voice-*_aarch64.whl
+        cp "${wheel}" "${STATE_DIR}/"
+    fi
+}
+
+# The Raspberry Pi installs the arm64 wheel that build-pip-docker already built
+# and uploaded, and runs the Python tests against it. It used to compile core and
+# build a wheel of its own, which took hours and produced a duplicate of the
+# container's: same architecture and the same vendored ONNX Runtime, but tagged
+# manylinux_2_39 against the container's 2_34, so it claimed to need a newer
+# glibc than the identical binaries actually did. What no container can tell us
+# is whether the wheel we ship really runs on a Pi, so that is what we check.
+#
+# The arm64 C++ library archive (moonshine-voice-linux-arm64.tar.gz) is likewise
+# built by the native-arm64 Docker instance, not here.
 stage_pi() {
+    local wheel
+    wheel="$(arm64_wheel)"
+    if [ -z "${wheel}" ]; then
+        echo "No arm64 wheel to install on the Pi; run build-pip-docker." >&2
+        exit 1
+    fi
+    echo "Testing $(basename "${wheel}") on the Pi."
+    # dist/ is untracked, so the checkout leaves any older wheel in place and
+    # test-python.sh would install whichever sorted first.
     ssh -p ${RPI_CLOUD_PORT} ${RPI_CLOUD_HOST} "cd moonshine \
       && ${REMOTE_GIT_SYNC} \
-      && scripts/test-core.sh \
-      && scripts/build-pip.sh ${UPLOAD_ARGS[*]}" || exit 1
+      && rm -rf language-bindings/python/dist \
+      && mkdir -p language-bindings/python/dist" || exit 1
+    scp -P ${RPI_CLOUD_PORT} "${wheel}" \
+        "${RPI_CLOUD_HOST}:moonshine/language-bindings/python/dist/" || exit 1
+    ssh -p ${RPI_CLOUD_PORT} ${RPI_CLOUD_HOST} "cd moonshine \
+      && scripts/test-python.sh --skip-build" || exit 1
 }
 
 # The Windows cloud host runs the CI orchestrator over SSH with
@@ -796,6 +840,15 @@ main() {
         rm -f "${STATE_DIR}/build-wasm.done"
     fi
 
+    # The Pi has nothing to install if no run has produced an arm64 wheel since
+    # the worktree it was built in went away, and skipping the stage would mean
+    # never checking the wheel on real hardware.
+    if [[ -f "${STATE_DIR}/build-pip-docker.done" && -z "$(arm64_wheel)" ]]; then
+        echo "build-pip-docker.done but no arm64 wheel in the worktree or cache;" \
+             "clearing the breadcrumb so it rebuilds."
+        rm -f "${STATE_DIR}/build-pip-docker.done"
+    fi
+
     cd "${RELEASE_DIR}"
     run_stage test-core          scripts/test-core.sh
     run_stage test-python        scripts/test-python.sh
@@ -819,6 +872,7 @@ main() {
     run_stage build-android      scripts/build-android.sh "${ANDROID_ARGS[@]}"
     run_stage build-pip          scripts/build-pip.sh "${UPLOAD_ARGS[@]}"
     run_stage build-pip-docker   scripts/build-pip-docker.sh "${UPLOAD_ARGS[@]}"
+    cache_arm64_wheel
     run_stage publish-binary     scripts/publish-binary.sh "${UPLOAD_ARGS[@]}"
     # upload attaches moonshine-voice-wasm.tar.gz to the GitHub release;
     # publish-npm pushes @moonshine-ai/moonshine-wasm so the web demos' default
