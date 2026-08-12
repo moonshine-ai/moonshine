@@ -68,10 +68,19 @@ fi
 git tag "${TAG}"
 git push origin "${TAG}"
 
-gh release create "${TAG}" "${ZIP_NAME}" \
+# Create the release without assets first, then upload with --clobber.
+# `gh release create TAG file.zip` can 422 with "ReleaseAsset.name already
+# exists" when GitHub accepts the upload and a retry tries the same name again,
+# which leaves a tag and no usable release for SPM.
+if ! gh release view "${TAG}" --repo "${REPO}" >/dev/null 2>&1; then
+	gh release create "${TAG}" \
+		--repo "${REPO}" \
+		--title "${TAG}" \
+		--notes "${TAG}"
+fi
+gh release upload "${TAG}" "${ZIP_NAME}" \
 	--repo "${REPO}" \
-	--title "${TAG}" \
-	--notes "${TAG}"
+	--clobber
 
 # SPM records a trust-on-first-use fingerprint per version. Moving/retagging
 # vX.Y.Z to a new commit makes later xcodebuild resolves fail with
