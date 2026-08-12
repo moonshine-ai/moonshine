@@ -999,6 +999,10 @@
         }
 
         lines.set(id, { startTime, endTime, source, speaker, text: words });
+        // A meeting line can arrive after the microphone already heard the same
+        // words; drop any held mic duplicates now rather than waiting out the
+        // grace timer.
+        if (source === 'meeting') dropHeldMicEchoes();
 
         // A turn is one speaker's uninterrupted run of lines. Blocks rather
         // than inline runs, so that each turn exports as its own paragraph with
@@ -1519,6 +1523,10 @@
       const provisional = new Map();
 
       function showProvisional(source, text) {
+        // A background tab cannot be read, and updating the sheet there is
+        // work that piles up with the audio queue. Completed lines still land;
+        // only the in-flight ghost text is skipped until the reader looks back.
+        if (document.hidden) return;
         let span = provisional.get(source);
         if (!text) return discardProvisional(source);
         if (!span) {
@@ -1778,7 +1786,12 @@
       // it rather than deleted from under them.
 
       const ECHO_OVERLAP = 0.3;
-      const ECHO_GRACE_MS = 1200;
+      // Long enough that the slower meeting stream (medium model + diarization)
+      // can finish the same words before a microphone duplicate is written. The
+      // two pumps yield independently, so the meeting side can lag the mic by
+      // more than a second under load; 1.2s was enough only when both streams
+      // advanced in lockstep on every audio quantum.
+      const ECHO_GRACE_MS = 3500;
 
       const heldMicLines = [];
 
@@ -1803,6 +1816,12 @@
           heldMicLines.splice(at, 1);
           if (!overlapsMeeting(line)) appendLine(line);
         }, ECHO_GRACE_MS);
+      }
+
+      function dropHeldMicEchoes() {
+        for (let i = heldMicLines.length - 1; i >= 0; i--) {
+          if (overlapsMeeting(heldMicLines[i])) heldMicLines.splice(i, 1);
+        }
       }
 
       // --- Capture -------------------------------------------------------------
@@ -1830,22 +1849,38 @@
           const buffer = new Float32Array(pending.length + chunk.length);
           buffer.set(pending);
           buffer.set(chunk, pending.length);
-          const out = [];
+          const out = new Float32Array(Math.ceil(buffer.length / ratio) + 2);
+          let written = 0;
           while (position + 1 < buffer.length) {
             const index = Math.floor(position);
             const fraction = position - index;
-            out.push(buffer[index] + (buffer[index + 1] - buffer[index]) * fraction);
+            out[written++] = buffer[index] + (buffer[index + 1] - buffer[index]) * fraction;
             position += ratio;
           }
           const consumed = Math.floor(position);
           pending = buffer.slice(consumed);
           position -= consumed;
-          return Float32Array.from(out);
+          return out.subarray(0, written);
         };
       }
 
+      // An AudioWorklet runs even when the tab is in the background, but the main
+      // thread that receives its posts does not. Posting every render quantum
+      // (~128 frames, hundreds of times a second, on two streams) therefore
+      // builds a queue the moment anyone looks away, and draining that queue is
+      // what leaves the page black for seconds when they look back. Batching
+      // here cuts the posts by an order of magnitude; the main-thread pump in
+      // `tap` coalesces whatever still arrives and yields between bites so the
+      // page can paint while it catches up.
       const CAPTURE_WORKLET = `
 class MoonshineCapture extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this._chunks = [];
+    this._frames = 0;
+    this._target = Math.max(128, Math.round(sampleRate * 0.1));
+    this.port.onmessage = () => this._flush();
+  }
   process(inputs) {
     const input = inputs[0];
     if (input && input.length && input[0]) {
@@ -1855,9 +1890,23 @@ class MoonshineCapture extends AudioWorkletProcessor {
         for (let i = 0; i < frames; i++) mixed[i] += channel[i];
       }
       for (let i = 0; i < frames; i++) mixed[i] /= input.length;
-      this.port.postMessage(mixed);
+      this._chunks.push(mixed);
+      this._frames += frames;
+      if (this._frames >= this._target) this._flush();
     }
     return true;
+  }
+  _flush() {
+    if (!this._frames) return;
+    const out = new Float32Array(this._frames);
+    let offset = 0;
+    for (const chunk of this._chunks) {
+      out.set(chunk, offset);
+      offset += chunk.length;
+    }
+    this._chunks = [];
+    this._frames = 0;
+    this.port.postMessage(out, [out.buffer]);
   }
 }
 registerProcessor('moonshine-capture', MoonshineCapture);
@@ -1877,6 +1926,15 @@ registerProcessor('moonshine-capture', MoonshineCapture);
         const stream = transcriber.createStream();
         const base = recording.sessionStart;
         cursors.set(source, base);
+        // Half a second of capture-rate audio per turn of the pump: enough to
+        // feed one transcription interval, small enough that a backlog drains
+        // as a sequence of short tasks the browser can paint between.
+        const maxFrames = Math.round(audioContext.sampleRate * 0.5);
+        const pending = [];
+        let pumping = false;
+        let closed = false;
+        /** Bumped to cancel an in-flight pump when capture stops. */
+        let epoch = 0;
 
         stream.addListener({
           onLineTextChanged: (event) => showProvisional(source, event.line.text),
@@ -1894,8 +1952,18 @@ registerProcessor('moonshine-capture', MoonshineCapture);
         });
         stream.start();
 
-        worklet.port.onmessage = (event) => {
-          const chunk = resample(event.data);
+        function ingest(parts) {
+          let frames = 0;
+          for (const part of parts) frames += part.length;
+          const merged = parts.length === 1 ? parts[0] : new Float32Array(frames);
+          if (parts.length > 1) {
+            let offset = 0;
+            for (const part of parts) {
+              merged.set(part, offset);
+              offset += part.length;
+            }
+          }
+          const chunk = resample(merged);
           if (!chunk.length) return;
           stream.addAudio(chunk, RATE);
           stream.transcribe();
@@ -1904,13 +1972,78 @@ registerProcessor('moonshine-capture', MoonshineCapture);
             recording.mixAt(at, chunk);
             cursors.set(source, at + chunk.length);
           }
+        }
+
+        worklet.port.onmessage = (event) => {
+          if (closed || !(event.data instanceof Float32Array)) return;
+          pending.push(event.data);
+          if (!pumping) void pump();
         };
+
+        async function pump() {
+          const mine = epoch;
+          pumping = true;
+          try {
+            while (pending.length && mine === epoch) {
+              // Yield first so a backlog of cheap port messages can coalesce,
+              // and so a tab that has just become visible can paint before we
+              // spend hundreds of milliseconds inside the recognizer.
+              await new Promise((resolve) => setTimeout(resolve, 0));
+              if (mine !== epoch || !pending.length) break;
+              const parts = [];
+              let frames = 0;
+              while (pending.length && frames < maxFrames) {
+                const next = pending[0];
+                if (parts.length && frames + next.length > maxFrames) break;
+                parts.push(pending.shift());
+                frames += next.length;
+              }
+              ingest(parts);
+            }
+          } finally {
+            if (mine === epoch) {
+              pumping = false;
+              if (pending.length) void pump();
+            }
+          }
+        }
+
+        /**
+         * Stops the tap: cancels the async pump, flushes any audio still held
+         * in the worklet, and ingests the queue synchronously so stopping the
+         * page cannot hang on a backlog.
+         */
+        function stop() {
+          closed = true;
+          epoch += 1;
+          pumping = false;
+          worklet.port.onmessage = (event) => {
+            if (event.data instanceof Float32Array) pending.push(event.data);
+          };
+          try {
+            worklet.port.postMessage('flush');
+          } catch {
+            // Port may already be gone if the context was closed elsewhere.
+          }
+          node.disconnect();
+          worklet.disconnect();
+          // The flush post is delivered as a distinct task; without a turn
+          // here the last ~100ms of audio would be cut off.
+        }
+
+        async function finish() {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          if (pending.length) ingest(pending.splice(0));
+          worklet.port.onmessage = null;
+          stream.stop();
+          stream.close();
+        }
 
         node.connect(worklet);
         // Keeps the graph pulling without putting the meeting back through the
         // speakers, which would be an echo we created ourselves.
         worklet.connect(audioContext.destination);
-        return { node, worklet, stream, base };
+        return { node, worklet, stream, base, stop, finish };
       }
 
       /**
@@ -2047,15 +2180,11 @@ registerProcessor('moonshine-capture', MoonshineCapture);
       async function stopCapture() {
         for (const source of provisional.keys()) discardProvisional(source);
 
-        for (const tapped of transcribers) {
-          tapped.worklet.port.onmessage = null;
-          tapped.worklet.disconnect();
-          tapped.node.disconnect();
-          // Stopping flushes whatever was still being spoken, so this arrives
-          // as one more completed line and lands on the page like the rest.
-          tapped.stream.stop();
-          tapped.stream.close();
-        }
+        for (const tapped of transcribers) tapped.stop();
+        // One task turn so each worklet's flush post can land, then ingest and
+        // stop the recognizer streams.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        for (const tapped of transcribers) await tapped.finish();
         transcribers = [];
         cursors.clear();
 

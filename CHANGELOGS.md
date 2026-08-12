@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Meeting Notes no longer freezes for seconds when returning to its tab during a long recording: capture audio is batched and the main thread yields while catching up.
 - Core library builds no longer write into the source tree, where targets clobbered each other's archives, and the wheels, archives and Android debug variant are now optimized rather than debug builds (8-15% faster streaming on a Pixel 10a).
 
 ## [0.1.1] - August 6th, 2026
