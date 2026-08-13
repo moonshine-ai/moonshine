@@ -53,14 +53,11 @@
 #                            rebuild every stage.
 #   RELEASE_SKIP_PREFLIGHT - if non-empty, skip scripts/preflight-release.sh.
 #                            Only for deliberately unusual rebuilds.
-#   MOONSHINE_LATENCY_OPTIONAL - if non-empty, the Swift streaming latency
-#                            ceilings in build-swift are reported as warnings
-#                            rather than failures. The numbers are still
-#                            measured and printed. Useful for an unattended
-#                            run, where the machine is hot from hours of
-#                            building and the measurement varies by more than
-#                            the ceilings allow. Grep the log for
-#                            MOONSHINE_LATENCY_WARNING afterwards.
+#   MOONSHINE_LATENCY_OPTIONAL - if non-empty, the iOS streaming latency
+#                            ceilings in StreamingLatencyTests are reported as
+#                            warnings rather than failures. macOS ceilings were
+#                            removed (timings are printed only). Grep the log
+#                            for MOONSHINE_LATENCY_WARNING afterwards.
 #   LINUX_CLOUD_HOST       - SSH host for Linux cloud
 #   LINUX_CLOUD_INSTANCE   - GCP instance name for the Linux VM (optional)
 #   LINUX_CLOUD_ZONE       - GCP zone for the Linux VM (e.g. us-central1-b)

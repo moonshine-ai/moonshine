@@ -20,20 +20,19 @@ import Darwin
 /// biasing switched on, so its per-token cost can be compared against a
 /// baseline run on the same machine.
 ///
-/// Set `MOONSHINE_LATENCY_OPTIONAL` to report a breached ceiling as a warning
-/// instead of a failure. The ceilings assume an idle, cool machine; a release
-/// build reaches this test after hours of compilation, and the same code has
-/// measured anywhere from 95ms to 124ms for Tiny between runs on one Mac. That
-/// spread is wider than the headroom the ceilings leave, so an unattended
-/// release would otherwise stop on the weather rather than on a regression.
-/// The measurement is still taken and still printed either way.
+/// Set `MOONSHINE_LATENCY_OPTIONAL` to report a breached **iOS** ceiling as a
+/// warning instead of a failure. macOS timings are always informational: they
+/// are still measured and printed, but never fail the test. A release Mac is
+/// usually hot from hours of building, and the same code has measured anywhere
+/// from 95ms to 124ms for Tiny between runs on one machine — wider than any
+/// useful ceiling. Grep the log for `MOONSHINE_LATENCY` afterwards.
 @available(iOS 15.0, macOS 12.0, *)
 final class StreamingLatencyTests: XCTestCase {
 
     private struct Case {
         let modelName: String
         let arch: ModelArch
-        let maxAvgLatencyMs: Double
+        let maxAvgLatencyMs: Double?
     }
 
     #if os(iOS)
@@ -44,9 +43,9 @@ final class StreamingLatencyTests: XCTestCase {
     ]
     #else
     private static let cases: [Case] = [
-        Case(modelName: "tiny-streaming-en", arch: .tinyStreaming, maxAvgLatencyMs: 100),
-        Case(modelName: "small-streaming-en", arch: .smallStreaming, maxAvgLatencyMs: 200),
-        Case(modelName: "medium-streaming-en", arch: .mediumStreaming, maxAvgLatencyMs: 300),
+        Case(modelName: "tiny-streaming-en", arch: .tinyStreaming, maxAvgLatencyMs: nil),
+        Case(modelName: "small-streaming-en", arch: .smallStreaming, maxAvgLatencyMs: nil),
+        Case(modelName: "medium-streaming-en", arch: .mediumStreaming, maxAvgLatencyMs: nil),
     ]
     #endif
 
@@ -147,18 +146,19 @@ final class StreamingLatencyTests: XCTestCase {
             print(summary)
             fputs(summary + "\n", stderr)
 
+            guard let ceiling = testCase.maxAvgLatencyMs else { continue }
             let ceilingMessage = String(
                 format: "%@ avg latency %.0fms exceeds regression ceiling %.0fms",
-                testCase.modelName, avgMs, testCase.maxAvgLatencyMs)
+                testCase.modelName, avgMs, ceiling)
             if Self.ceilingsAreAdvisory {
-                if avgMs > testCase.maxAvgLatencyMs {
+                if avgMs > ceiling {
                     let warning = "MOONSHINE_LATENCY_WARNING " + ceilingMessage
                         + " (MOONSHINE_LATENCY_OPTIONAL is set)"
                     print(warning)
                     fputs(warning + "\n", stderr)
                 }
             } else {
-                XCTAssertLessThanOrEqual(avgMs, testCase.maxAvgLatencyMs, ceilingMessage)
+                XCTAssertLessThanOrEqual(avgMs, ceiling, ceilingMessage)
             }
         }
     }
