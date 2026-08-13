@@ -15,7 +15,9 @@ set -o pipefail
 # release, mirroring scripts/publish-binary.sh.
 #
 # Arguments (order-independent):
-#   publish-npm    - run `npm publish` from language-bindings/wasm/ after a successful build.
+#   publish-npm    - run `npm publish` from language-bindings/wasm/ after a successful
+#                    build. Prefer scripts/publish-wasm-npm.sh after a release so
+#                    interactive npm auth cannot stall build-all-platforms.
 #   upload         - attach a language-bindings/wasm/dist tarball to the GitHub release v<VERSION>.
 #   single-thread  - build the SIMD-only (no pthreads) variant for pages that
 #                    can't be cross-origin isolated. Default is SIMD + threads.

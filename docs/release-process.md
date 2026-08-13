@@ -51,8 +51,10 @@ scripts/build-all-platforms.sh publish
 ```
 
 This runs preflight, builds the newest `dev-v*` branch, publishes to PyPI, Maven
-Central, npm, SwiftPM and GitHub Releases, and finishes by fast-forwarding
-`main` to what it just shipped and deleting the candidate branch.
+Central, SwiftPM and GitHub Releases, and finishes by fast-forwarding
+`main` to what it just shipped and deleting the candidate branch. The wasm npm
+package is not uploaded here — after the run finishes, publish it with
+`scripts/publish-wasm-npm.sh` (so npm login cannot stall the multi-hour build).
 
 It is resumable — completed stages are skipped on a re-run, so if something
 fails, fix it, commit to the candidate branch, and run it again. Dry-run

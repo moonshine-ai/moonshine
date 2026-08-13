@@ -871,14 +871,11 @@ main() {
     run_stage build-pip-docker   scripts/build-pip-docker.sh "${UPLOAD_ARGS[@]}"
     cache_arm64_wheel
     run_stage publish-binary     scripts/publish-binary.sh "${UPLOAD_ARGS[@]}"
-    # upload attaches moonshine-voice-wasm.tar.gz to the GitHub release;
-    # publish-npm pushes @moonshine-ai/moonshine-wasm so the web demos' default
-    # jsDelivr import resolves (without it, /stt/ etc. 404 on the CDN).
-    if [ -n "${PUBLISH}" ]; then
-        run_stage build-wasm     scripts/build-wasm.sh publish-npm "${UPLOAD_ARGS[@]}"
-    else
-        run_stage build-wasm     scripts/build-wasm.sh "${UPLOAD_ARGS[@]}"
-    fi
+    # upload attaches moonshine-voice-wasm.tar.gz to the GitHub release.
+    # npm publish is intentionally separate (scripts/publish-wasm-npm.sh): npm
+    # auth is interactive / token-expiry prone and must not stall this run.
+    # Without the npm push, jsDelivr still 404s until you run that script.
+    run_stage build-wasm     scripts/build-wasm.sh "${UPLOAD_ARGS[@]}"
     run_stage publish-examples   scripts/publish-examples.sh "${UPLOAD_ARGS[@]}"
 
     run_stage linux   stage_linux
@@ -901,6 +898,7 @@ main() {
             scripts/finish-release.sh "${RELEASE_BRANCH}" "${BUILD_COMMIT}"
         echo "All stages complete for ${RELEASE_REF} (tag v${VERSION} at ${BUILD_COMMIT})."
         echo "main now points at the released commit."
+        echo "Publish the wasm package when ready: scripts/publish-wasm-npm.sh"
         echo "Start the next cycle with scripts/start-candidate.sh <next_version>."
     else
         echo "All stages complete for ${RELEASE_REF} (${BUILD_COMMIT})."

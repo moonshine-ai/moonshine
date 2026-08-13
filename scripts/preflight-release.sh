@@ -15,10 +15,11 @@
 # teaches you to skip preflight altogether.
 #
 # These checks exist because the failures they catch are expensive: the publish
-# stages push to PyPI, Maven Central, npm and GitHub Releases, none of which let
-# you re-upload a version. A mistake found four hours in, after half the
-# registries have accepted an artifact, costs a burned version number. Every
-# check here is one that can be made cheaply up front.
+# stages push to PyPI, Maven Central and GitHub Releases, none of which let
+# you re-upload a version. npm (@moonshine-ai/moonshine-wasm) is a separate
+# manual step via scripts/publish-wasm-npm.sh. A mistake found four hours in,
+# after half the registries have accepted an artifact, costs a burned version
+# number. Every check here is one that can be made cheaply up front.
 
 set -uo pipefail
 
@@ -143,13 +144,16 @@ main() {
             if npm whoami >/dev/null 2>&1; then
                 pass "npm is authenticated as $(npm whoami 2>/dev/null)"
             else
-                publish_only_fail \
-                    "npm is not authenticated; build-wasm publish-npm will fail" \
-                    "and the web demos' jsDelivr CDN import will 404." \
-                    "  npm login"
+                # npm publish is no longer part of build-all-platforms; it is a
+                # manual follow-up (scripts/publish-wasm-npm.sh) so a missing
+                # login must not block the multi-hour release.
+                warn "npm is not authenticated; run scripts/publish-wasm-npm.sh" \
+                    "after the release (and npm login) so jsDelivr can serve" \
+                    "@moonshine-ai/moonshine-wasm."
             fi
         else
-            fail "npm is not installed; the wasm publish stage needs it."
+            warn "npm is not installed; scripts/publish-wasm-npm.sh will need it" \
+                "after the release to publish @moonshine-ai/moonshine-wasm."
         fi
     else
         fail "gh is not installed; the release upload stages need it."
