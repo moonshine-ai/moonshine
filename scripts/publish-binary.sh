@@ -1,6 +1,6 @@
 #! /bin/bash -ex
 
-VERSION=0.1.2
+VERSION=0.1.3
 REPO="moonshine-ai/moonshine"
 
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"

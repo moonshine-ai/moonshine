@@ -36,7 +36,7 @@ To add the library to your own app rather than starting from a sample, see [Addi
 
 === "Android"
 
-    Open the extracted folder in Android Studio. Samples depend on **`ai.moonshine:moonshine-voice:0.1.2`** from Maven Central.
+    Open the extracted folder in Android Studio. Samples depend on **`ai.moonshine:moonshine-voice:0.1.3`** from Maven Central.
 
     - **[Transcriber](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-Transcriber.tar.gz)** — Live microphone transcription UI with partial and final results.
     - **[TextToSpeech](https://github.com/moonshine-ai/moonshine/releases/latest/download/android-TextToSpeech.tar.gz)** — Speak text with on-device TTS and optional voice cloning.

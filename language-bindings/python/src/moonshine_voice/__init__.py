@@ -68,7 +68,7 @@ from moonshine_voice.utils import (
     load_wav_file,
 )
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 # Lazy imports to avoid RuntimeWarning when running modules as scripts
 # These will be imported on first access via __getattr__

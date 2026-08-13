@@ -66,7 +66,7 @@
 
 === "Android"
 
-    Add `ai.moonshine:moonshine-voice:0.1.2` to your project's `build.gradle.kts` (or equivalent).
+    Add `ai.moonshine:moonshine-voice:0.1.3` to your project's `build.gradle.kts` (or equivalent).
 
     ```java
     import ai.moonshine.voice.MicTranscriber;
