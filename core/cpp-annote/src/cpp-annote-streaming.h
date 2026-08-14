@@ -60,16 +60,22 @@ class StreamingDiarizationSession {
   void start_session();
   /// Append ``num_samples`` mono ``pcm`` at ``sample_rate`` Hz; resamples each
   /// chunk to the engine model rate and concatenates on the session timeline.
+  /// At most one new complete analysis window (segmentation + embedding) runs
+  /// per call, so a backlog cannot turn one transcription pass into several
+  /// overlapping ORT windows. Remaining complete windows stay buffered and
+  /// are analyzed on later calls; ``end_session`` drains them.
   void add_audio_chunk(const float* pcm, std::size_t num_samples,
                        int sample_rate);
   /// Current best snapshot (updated on refresh cadence; ``input_end_sec``
   /// advances every chunk).
   StreamingDiarizationSnapshot snapshot() const;
 
-  /// Force a VBx refresh and return the updated snapshot.
+  /// Force a VBx refresh and return the updated snapshot. Drains any complete
+  /// analysis windows that were deferred by the one-window-per-append cap.
   StreamingDiarizationSnapshot refresh_and_snapshot();
 
-  /// Final refresh (forces VBx pass if possible) and snapshot.
+  /// Drain remaining complete windows, run a final refresh (including the
+  /// padded tail), and return the snapshot.
   StreamingDiarizationSnapshot end_session();
 
   StreamingDiarizationSession(const StreamingDiarizationSession&) = delete;
@@ -77,10 +83,20 @@ class StreamingDiarizationSession {
       delete;
 
  private:
-  void cache_new_chunks();
+  struct CachedChunk {
+    std::vector<float> seg;  // (F * K)
+    std::vector<float> emb;  // (K * dim)
+  };
+
+  /// Analyzes up to ``max_chunks`` new complete windows (``-1`` = all).
+  /// Returns how many were added to the cache.
+  int cache_new_chunks(int max_chunks);
+  CachedChunk analyze_buffer_chunk(int64_t buf_off, int64_t num_samples);
+  int64_t complete_chunk_count(int64_t num_samples) const;
+  int step_samples() const;
   void trim_buffer_if_needed();
   void evict_chunk_cache_if_needed();
-  void maybe_refresh(bool force);
+  void maybe_refresh(bool force, bool allow_tail_ort);
   static void carry_last_updated_times(
       std::vector<StreamingDiarizationTurn>& next,
       const std::vector<StreamingDiarizationTurn>& prev, double input_end_sec);
@@ -99,11 +115,6 @@ class StreamingDiarizationSession {
   double cluster_decode_window_start_sec() const;
   int64_t abs_sample_offset_for_sec(double sec) const;
 
-  struct CachedChunk {
-    std::vector<float> seg;  // (F * K)
-    std::vector<float> emb;  // (K * dim)
-  };
-
   CppAnnoteEngine& engine_;
   StreamingDiarizationConfig cfg_{};
   double effective_step_sec_ = 1.0;  // resolved analyze_cadence
@@ -117,7 +128,8 @@ class StreamingDiarizationSession {
 
   std::unordered_map<int64_t, CachedChunk> chunk_cache_;
 
-  int last_refresh_total_chunks_ = -1;
+  int last_refresh_analyzed_complete_ = -1;
+  int64_t analyzed_complete_chunks_ = 0;
 
   std::vector<StreamingDiarizationTurn> frozen_turns_;
   double freeze_cutoff_sec_ = 0.;

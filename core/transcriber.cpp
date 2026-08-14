@@ -842,9 +842,10 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
     return;
   }
 
-  // Feed the new audio to the diarizer before it's consumed. This runs the
-  // segmentation/embedding models on new analysis chunks and re-clusters on
-  // the configured cadence, which is the main cost of identify_speakers.
+  // Feed the new audio to the diarizer before it's consumed. This runs at
+  // most one segmentation/embedding window per call (further windows wait
+  // for the next call or Stop) and re-clusters on the configured cadence,
+  // which is the main cost of identify_speakers.
   if (diarization_enabled) {
     this->speaker_diarizer->add_audio_to_stream(stream->diarizer_stream_id,
                                                 audio_data, audio_length,
@@ -1070,45 +1071,49 @@ void Transcriber::update_transcript_from_segments(
         this->streaming_model->cross_attn_steps = 0;
       }
     } else if (this->stt_model != nullptr) {
-      // Use non-streaming model for transcription
-      std::lock_guard<std::mutex> lock(this->stt_model_mutex);
-      char *out_text = nullptr;
-      int transcribe_error = this->stt_model->transcribe(
-          segment.audio_data.data(), segment.audio_data.size(), &out_text);
-      if (transcribe_error != 0) {
-        LOGF("Failed to transcribe: %d", transcribe_error);
-        throw std::runtime_error("Failed to transcribe: " +
-                                 std::to_string(transcribe_error));
-      }
-      if (this->options.log_output_text) {
-        LOGF("Transcribed text: '%s'", out_text);
-      }
-      // Ensure the output text is valid UTF-8.
-      line.text = sanitize_text(out_text);
+      if (!segment.is_complete && !this->options.decode_incomplete_lines) {
+        line.text = new std::string();
+      } else {
+        // Use non-streaming model for transcription
+        std::lock_guard<std::mutex> lock(this->stt_model_mutex);
+        char *out_text = nullptr;
+        int transcribe_error = this->stt_model->transcribe(
+            segment.audio_data.data(), segment.audio_data.size(), &out_text);
+        if (transcribe_error != 0) {
+          LOGF("Failed to transcribe: %d", transcribe_error);
+          throw std::runtime_error("Failed to transcribe: " +
+                                   std::to_string(transcribe_error));
+        }
+        if (this->options.log_output_text) {
+          LOGF("Transcribed text: '%s'", out_text);
+        }
+        // Ensure the output text is valid UTF-8.
+        line.text = sanitize_text(out_text);
 
-      // Alignment is a second pass over the segment and costs about a quarter
-      // of a streaming update, while an unfinished segment is re-transcribed
-      // from scratch every time round, so aligning one before it ends is work
-      // that gets thrown away and redone a fraction of a second later. Waiting
-      // for the end loses nothing: the detector always closes a segment with
-      // both is_complete and just_updated set, including when the stream stops
-      // mid-speech, so every line still gets aligned exactly once, against its
-      // final text. Only the non-streaming models pay this, which is why the
-      // streaming branch above aligns unconditionally -- there the timings fall
-      // out of attention the transcription pass already computed.
-      if (this->options.word_timestamps && segment.is_complete) {
-        float seg_duration =
-            segment.audio_data.size() / (float)INTERNAL_SAMPLE_RATE;
-        std::vector<TranscriberWord> words;
-        int align_err =
-            this->stt_model->compute_word_timestamps(seg_duration, words);
-        if (align_err == 0 && !words.empty()) {
-          // Offset word times by the segment's start time
-          for (auto &w : words) {
-            w.start += segment.start_time;
-            w.end += segment.start_time;
+        // Alignment is a second pass over the segment and costs about a quarter
+        // of a streaming update, while an unfinished segment is re-transcribed
+        // from scratch every time round, so aligning one before it ends is work
+        // that gets thrown away and redone a fraction of a second later. Waiting
+        // for the end loses nothing: the detector always closes a segment with
+        // both is_complete and just_updated set, including when the stream stops
+        // mid-speech, so every line still gets aligned exactly once, against its
+        // final text. Only the non-streaming models pay this, which is why the
+        // streaming branch above aligns unconditionally -- there the timings fall
+        // out of attention the transcription pass already computed.
+        if (this->options.word_timestamps && segment.is_complete) {
+          float seg_duration =
+              segment.audio_data.size() / (float)INTERNAL_SAMPLE_RATE;
+          std::vector<TranscriberWord> words;
+          int align_err =
+              this->stt_model->compute_word_timestamps(seg_duration, words);
+          if (align_err == 0 && !words.empty()) {
+            // Offset word times by the segment's start time
+            for (auto &w : words) {
+              w.start += segment.start_time;
+              w.end += segment.start_time;
+            }
+            line.words = std::move(words);
           }
-          line.words = std::move(words);
         }
       }
     } else {
@@ -1367,6 +1372,10 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
 
   // If no memory accumulated, return empty string
   if (this->streaming_state.memory_len == 0) {
+    return new std::string();
+  }
+
+  if (!is_final && !this->options.decode_incomplete_lines) {
     return new std::string();
   }
 

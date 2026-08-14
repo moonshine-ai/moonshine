@@ -689,6 +689,24 @@ std::vector<float> CppAnnoteEngine::run_embedding_ort_single(
         "run_embedding_ort_single: call run_segmentation_ort_single first");
   }
 
+  std::vector<char> class_has_speech(static_cast<size_t>(K), 0);
+  bool any_speech = false;
+  for (int sp = 0; sp < K; ++sp) {
+    for (int f = 0; f < F; ++f) {
+      if (seg_binarized[f * K + sp] > 0.5f) {
+        class_has_speech[static_cast<size_t>(sp)] = 1;
+        any_speech = true;
+        break;
+      }
+    }
+  }
+
+  std::vector<float> result(static_cast<size_t>(K) * static_cast<size_t>(dim),
+                            std::numeric_limits<float>::quiet_NaN());
+  if (!any_speech) {
+    return result;
+  }
+
   std::vector<float> chunk_for_fbank(chunk_mono,
                                      chunk_mono + chunk_num_samples);
   int wav_sr_use = sr_model;
@@ -717,8 +735,10 @@ std::vector<float> CppAnnoteEngine::run_embedding_ort_single(
         "embedding fbank: unexpected frames or mel dimension");
   }
 
-  std::vector<float> result(static_cast<size_t>(K) * static_cast<size_t>(dim));
   for (int sp = 0; sp < K; ++sp) {
+    if (!class_has_speech[static_cast<size_t>(sp)]) {
+      continue;
+    }
     std::vector<float> clean_col(static_cast<size_t>(F), 0.f);
     std::vector<float> full_col(static_cast<size_t>(F), 0.f);
     for (int f = 0; f < F; ++f) {

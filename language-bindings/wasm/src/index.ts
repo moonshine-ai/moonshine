@@ -71,6 +71,12 @@ export {
 } from './transcriber.js';
 export { Stream, DEFAULT_UPDATE_INTERVAL } from './stream.js';
 export { MicTranscriber, type ProgressCallback } from './mic-transcriber.js';
+export {
+  SttWorkerHost,
+  sttWorkerSupported,
+  type SttLoadTranscriberConfig,
+} from './stt-worker-host.js';
+export type { SttLoadSource } from './stt-worker-protocol.js';
 
 // Only usable if the module was built with TTS support.
 export {

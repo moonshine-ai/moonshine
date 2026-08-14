@@ -38,6 +38,7 @@ struct SpeakerDiarizerOptions {
   double cluster_cadence = 2.0;
   // Seconds between segmentation/embedding model runs. Zero means use the
   // model default (1 second for the community-1 models). Must be <= 10.
+  // add_audio_to_stream runs at most one window per call.
   double analyze_cadence = 0.0;
   // Maximum seconds of audio history fed to VBx per refresh. Zero means
   // unlimited (full-history re-clustering). Default 120 for streaming.
@@ -71,9 +72,9 @@ class SpeakerDiarizer {
   void free_stream(int32_t stream_id);
   void start_stream(int32_t stream_id);
 
-  // Appends audio to the stream. Runs the segmentation and embedding models
-  // on every new analysis chunk, and a re-clustering pass on the cluster
-  // cadence, so this call can be expensive.
+  // Appends audio to the stream. Runs at most one new segmentation/embedding
+  // window per call (further windows wait for the next call; finish_stream
+  // drains the rest) and a re-clustering pass on the cluster cadence.
   void add_audio_to_stream(int32_t stream_id, const float *audio_data,
                            uint64_t audio_length, int32_t sample_rate);
 

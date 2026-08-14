@@ -395,6 +395,10 @@ MOONSHINE_EXPORT const char *moonshine_transcript_to_string(
    Pass ``use_speculative_decoding`` (bool, default true) to control
    speculative re-decode of the previous hypothesis on streaming updates
    (set false to fall back to greedy redecode from BOS).
+   Pass ``decode_incomplete_lines`` (bool, default true) to run the
+   decoder on in-progress lines so the transcript can update while someone
+   is still talking. Set false to encode (and diarize) as audio arrives
+   but wait until the line is complete before decoding.
    Pass ``keyterms`` (comma-separated terms, e.g.
    ``Kubernetes,Anushka Sharma,ANSI/ISO``) to bias the decoder towards words it
    would otherwise be unlikely to produce - jargon, product names, contact
@@ -422,8 +426,10 @@ MOONSHINE_EXPORT const char *moonshine_transcript_to_string(
    ``diarization_cluster_cadence`` (float seconds, default 2.0) sets the
    minimum interval between re-clustering passes - raise it to reduce cost on
    long sessions - ``diarization_analyze_cadence`` (float seconds,
-   default 0 = model default of 1.0) sets the interval between
-   segmentation/embedding model runs, and ``diarization_cluster_window_sec``
+   default 0 = model default of 1.0) sets the sliding-window step between
+   segmentation/embedding model runs (live ``add_audio`` / transcribe runs at
+   most one window per call; Stop drains the rest; silent speaker classes skip
+   embedding inference), and ``diarization_cluster_window_sec``
    (float seconds, default 120.0) limits how much audio history VBx
    re-clustering considers on each refresh (0 = unlimited full history).
    Pass ``"spelling_model_path"`` with a path to a

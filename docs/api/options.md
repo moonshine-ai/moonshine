@@ -50,10 +50,12 @@ Passed to `Transcriber(..., options=…)`, MicTranscriber `.options()`, and `moo
 | `save_input_wav_path` | (none) | Folder path: write received audio as 16 kHz mono WAVs for debugging. |
 | `log_ort_run` | false | Log ONNX Runtime inference runs and timings. |
 | `word_timestamps` | false | Fill each line's `words` array. Needs the attention decoder asset. Implied by `identify_speakers`. |
+| `use_speculative_decoding` | true | Streaming re-decode verifies the previous hypothesis instead of restarting from BOS. |
+| `decode_incomplete_lines` | true | Decode in-progress lines so text can update while someone is still talking. Set false to wait until the line is complete. |
 | `identify_speakers` | false | Enable diarization and `speaker_spans`. Needs diarization models ([details](https://github.com/moonshine-ai/moonshine/blob/main/docs/diarization-models.md)). |
 | `diarization_model_dir` | (none) | Directory with `segmentation.ort` and `embedding.ort` when constructing a transcriber directly. |
 | `diarization_cluster_cadence` | `2.0` | Minimum seconds of new audio between re-clustering passes. |
-| `diarization_analyze_cadence` | `0` (= model default `1.0`) | Seconds between segmentation/embedding model runs. |
+| `diarization_analyze_cadence` | `0` (= model default `1.0`) | Sliding-window step for segmentation/embedding. Live `add_audio` / `transcribe()` runs at most one window per call; remaining windows wait until the next call or Stop. Silent speaker classes skip embedding inference. |
 | `diarization_cluster_window_sec` | `120` | Max recent history (seconds) for streaming VBx; `0` = unlimited. Batch/one-shot always uses full history. |
 | `return_audio_data` | true | Include per-line PCM in transcript results. |
 | `log_output_text` | false | Log STT text to the console. |

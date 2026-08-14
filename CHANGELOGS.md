@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.1.3]
 
+### Added
+
+- `decode_incomplete_lines` (default true). Set false to encode as audio arrives but wait until the line is complete before decoding.
+
+### Changed
+
+- Streaming speaker diarization analyzes at most one segmentation window per audio append (Stop still drains the rest) and skips embedding inference on silent speaker classes.
+- Meeting Notes waits until a line is complete before decoding, and writes each finished line on its own line in the document.
+
 ## [0.1.2] - August 13th, 2026
 
 ### Added

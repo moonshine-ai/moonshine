@@ -95,12 +95,13 @@ class CppAnnote {
   DiarizationResults stop_stream(int32_t stream_id);
 
   /// Append PCM audio to a stream.  Resampling to the model rate is handled
-  /// internally; ``sample_rate`` is the rate of the supplied buffer.
+  /// internally; ``sample_rate`` is the rate of the supplied buffer. At most
+  /// one new complete analysis window is processed per call.
   void add_audio_to_stream(int32_t stream_id, const float *audio_data,
                            uint64_t audio_length, int32_t sample_rate);
 
   /// Force a clustering refresh and return the current diarization snapshot
-  /// without stopping the stream.
+  /// without stopping the stream. Drains deferred analysis windows first.
   DiarizationResults diarize_stream(int32_t stream_id);
 
  private:

@@ -75,6 +75,9 @@ class CppAnnoteEngine {
 
   std::vector<float> run_segmentation_ort_single(const float* chunk_buf);
 
+  /// Embedding ORT for one analysis window. Speaker classes with no
+  /// segmentation frame above 0.5 are filled with NaN and skipped; if none
+  /// have speech, fbank is skipped too.
   std::vector<float> run_embedding_ort_single(const float* chunk_mono,
                                               const float* seg_binarized);
 

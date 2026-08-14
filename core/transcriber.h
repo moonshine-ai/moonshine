@@ -189,6 +189,10 @@ struct TranscriberOptions {
   // decode_full and continue from the first mismatch instead of greedy
   // redecode from BOS. On by default for lower end-of-phrase latency.
   bool use_speculative_decoding = true;
+  // When false, skip the decoder until VAD completes the line. Encoder
+  // (and diarization) still run on each update so the final decode has
+  // current memory; there is no live/provisional text.
+  bool decode_incomplete_lines = true;
   // Terms to bias the decoder towards at runtime — jargon, product names,
   // proper nouns. No retraining is involved: each term is compiled into a
   // subword trie and used to nudge the logits during decoding (see
@@ -209,7 +213,8 @@ struct TranscriberOptions {
   // Minimum seconds of new audio between diarization re-clustering passes.
   float diarization_cluster_cadence = 2.0f;
   // Seconds between diarization segmentation/embedding model runs. Zero
-  // means use the model default (1 second).
+  // means use the model default (1 second). Live add_audio processes at most
+  // one window per call; remaining windows wait for the next call or Stop.
   float diarization_analyze_cadence = 0.0f;
   // Maximum seconds of audio history fed to VBx per refresh. Zero means
   // unlimited. Default 120 bounds compute on long streaming sessions.

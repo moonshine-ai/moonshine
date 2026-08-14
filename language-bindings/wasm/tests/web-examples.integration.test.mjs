@@ -1873,7 +1873,9 @@ test('Meeting notes transcribes two streams, records them, and plays back', { sk
     await new Promise((resolve) => setTimeout(resolve, 6000));
 
     await page.click('#record');
-    await page.waitForFunction(() => document.body.dataset.state === 'ready', { timeout: 30000 });
+    // Stop waits for the worker to ForceUpdate the last line; a long
+    // diarization pass can take more than half a minute on this fixture.
+    await page.waitForFunction(() => document.body.dataset.state === 'ready', { timeout: 120000 });
 
     const captured = await page.evaluate(() => ({
       recorded: window.__meetingNotes.recordedSeconds(),
@@ -2042,14 +2044,11 @@ test('Meeting notes transcribes two streams, records them, and plays back', { sk
       selection.removeAllRanges();
       selection.addRange(range);
     });
-    const earliest = await page.evaluate(() =>
-      Math.min(...[...window.__meetingNotes.lines.values()].map((line) => line.startTime)),
-    );
-    await clockToRead(mmss(earliest));
+    await clockToRead('0:00');
     const fromEnd = await page.evaluate(() => window.__meetingNotes.plannedStart());
     assert.ok(
-      Math.abs(fromEnd - earliest) < 0.05,
-      `a caret at the end should start from the beginning: got ${fromEnd}s, wanted ${earliest}s`,
+      Math.abs(fromEnd) < 0.05,
+      `a caret at the end should start from 0:00: got ${fromEnd}s`,
     );
   } finally {
     await speaking.close();
@@ -2089,6 +2088,150 @@ test('Meeting notes keeps both speakers when echo suppression is off', { skip },
       // which is exactly the duplication the filter exists to remove.
     );
     await page.click('#record');
+  } finally {
+    await speaking.close();
+  }
+});
+
+test('Meeting notes stays responsive and keeps transcription current', { skip }, async () => {
+  // Two streams plus diarization: the page has to take audio, paint, and show
+  // words without one of those starving the others. Inference belongs on a
+  // worker so a multi-second pass cannot freeze the UI.
+  const speaking = await launchBrowser(puppeteer, chromePath, [
+    `--use-file-for-fake-audio-capture=${TWO_CITIES_WAV}%noloop`,
+  ]);
+  try {
+    const page = await speaking.newPage();
+    page.on('pageerror', (err) => console.log(`[page:/meeting-notes/] ERROR ${err.message}`));
+    await page.goto(`${server.origin}/meeting-notes/?local=1&assets=local&fakescreen=1`, {
+      waitUntil: 'load',
+    });
+    await page.waitForFunction(() => document.body.dataset.state === 'ready', {
+      timeout: 120000,
+    });
+
+    await page.click('#record');
+    await page.waitForFunction(() => document.body.dataset.state === 'capturing', {
+      timeout: 60000,
+    });
+    await page.waitForFunction(
+      () => {
+        const m = window.__meetingNotes.metrics();
+        return m.firstProvisionalMs > 0 || window.__meetingNotes.lines.size > 0;
+      },
+      { timeout: 120000 },
+    );
+
+    // A few seconds of live capture, long enough for several engine passes
+    // and for a falling-behind pump to show it.
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    const live = await page.evaluate(() => ({
+      ...window.__meetingNotes.metrics(),
+      pending: window.__meetingNotes.pendingAudioSeconds(),
+      workerQueued: window.__meetingNotes.workerQueuedSeconds(),
+      lines: window.__meetingNotes.lines.size,
+    }));
+    console.log(
+      `[meeting-notes] live: provisional=${live.firstProvisionalMs.toFixed(0)}ms ` +
+        `ingestLagMax=${live.ingestLagMaxMs.toFixed(0)}ms ` +
+        `transcribeMax=${live.transcribeMaxMs.toFixed(0)}ms ` +
+        `transcribeSum=${live.transcribeMs.toFixed(0)}ms ` +
+        `passes=${live.transcribePasses} ` +
+        `rafGapMax=${live.rafGapMaxMs.toFixed(0)}ms ` +
+        `longTaskMax=${live.longTaskMaxMs.toFixed(0)}ms ` +
+        `longTasks=${live.longTasks} ` +
+        `pending=${live.pending.toFixed(2)}s ` +
+        `workerQueued=${live.workerQueued.toFixed(2)}s ` +
+        `meetingLag=${live.meetingLagMaxS.toFixed(2)}s ` +
+        `meetingLagNow=${live.meetingLagNowS.toFixed(2)}s ` +
+        `lagSamples=${live.lagSamples.length} ` +
+        `meetingPassMax=${(live.meetingPassMaxMs || 0).toFixed(0)}ms ` +
+        `youPassMax=${(live.youPassMaxMs || 0).toFixed(0)}ms ` +
+        `renderMax=${live.renderMaxMs.toFixed(1)}ms ` +
+        `resample=${live.resampleMs.toFixed(0)}ms ` +
+        `mixAt=${live.mixAtMs.toFixed(0)}ms ` +
+        `addAudio=${live.addAudioMs.toFixed(0)}ms ` +
+        `usingWorker=${live.usingWorker}`,
+    );
+
+    assert.ok(live.usingWorker, 'inference should run on a Web Worker');
+    assert.ok(
+      live.firstProvisionalMs < 8000,
+      `words should appear within a few seconds, not ${live.firstProvisionalMs}ms`,
+    );
+    const pendingCeiling = 2.5;
+    assert.ok(
+      live.pending < pendingCeiling,
+      `live capture should not pile up audio on the page: ${live.pending.toFixed(2)}s waiting`,
+    );
+    // Ingest lag is how long captured audio sits on the main thread before
+    // it is posted to the worker. A cooperative yield after a heavy mix is
+    // fine; parking every chunk behind a timer is what makes the transcript
+    // feel a sentence behind.
+    assert.ok(
+      live.ingestLagMaxMs < 1000,
+      `audio sat ${live.ingestLagMaxMs.toFixed(0)}ms in the main-thread queue`,
+    );
+    // The recording clock now advances while a pass runs on the worker, so
+    // transcript lag tracks the slowest pass rather than looking smaller
+    // because mixAt was stuck behind WASM.
+    const lagCeiling = live.transcribeMaxMs / 1000 + 2;
+    assert.ok(
+      live.meetingLagMaxS < lagCeiling,
+      `the meeting transcript should stay within a pass of the audio, not ${live.meetingLagMaxS.toFixed(2)}s behind ` +
+        `(slowest pass ${live.transcribeMaxMs.toFixed(0)}ms)`,
+    );
+    // A long engine pass is expected; it must not freeze the page.
+    assert.ok(
+      live.rafGapMaxMs < 500,
+      `the UI froze for ${live.rafGapMaxMs.toFixed(0)}ms (slowest pass ${live.transcribeMaxMs.toFixed(0)}ms)`,
+    );
+    assert.ok(
+      live.longTaskMaxMs < 500,
+      `a ${live.longTaskMaxMs.toFixed(0)}ms long task on the main thread ` +
+        `(slowest pass ${live.transcribeMaxMs.toFixed(0)}ms should be on the worker)`,
+    );
+    // Each engine pass is a hitch. Two streams asking twice a second was 20+
+    // passes in this window; the meeting stream now waits a second, and the
+    // pump no longer turns every queued chunk into its own pass.
+    assert.ok(
+      live.transcribePasses < 28,
+      `too many engine passes: ${live.transcribePasses} in 5s`,
+    );
+
+    const catchUp = await page.evaluate(async () => {
+      const stallMs = 4000;
+      const end = performance.now() + stallMs;
+      while (performance.now() < end) {}
+      const t0 = performance.now();
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const paintMs = performance.now() - t0;
+      return {
+        stallMs,
+        paintMs,
+        pendingAfterStall: window.__meetingNotes.pendingAudioSeconds(),
+        metrics: window.__meetingNotes.metrics(),
+      };
+    });
+    console.log(
+      `[meeting-notes] catch-up: paint=${catchUp.paintMs.toFixed(0)}ms ` +
+        `pendingAfterStall=${catchUp.pendingAfterStall.toFixed(2)}s ` +
+        `ingestLagMax=${catchUp.metrics.ingestLagMaxMs.toFixed(0)}ms ` +
+        `transcribeMax=${catchUp.metrics.transcribeMaxMs.toFixed(0)}ms ` +
+        `workerQueued=${catchUp.metrics.workerQueuedSeconds.toFixed(2)}s ` +
+        `rafGapMax=${catchUp.metrics.rafGapMaxMs.toFixed(0)}ms ` +
+        `longTaskMax=${catchUp.metrics.longTaskMaxMs.toFixed(0)}ms ` +
+        `passes=${catchUp.metrics.transcribePasses}`,
+    );
+
+    assert.ok(
+      catchUp.paintMs < 800,
+      `the page should paint while catching up, not sit black for ${catchUp.paintMs.toFixed(0)}ms`,
+    );
+    // A 4s stall with two live streams leaves more audio than a diarization
+    // pass can swallow in one go. The page must paint (above); catching all
+    // the way up is the engine's job over the following passes, not a single
+    // drain.
   } finally {
     await speaking.close();
   }

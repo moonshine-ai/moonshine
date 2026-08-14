@@ -66,7 +66,8 @@ void StreamingDiarizationSession::start_session() {
   window_start_sec_ = 0.;
   buffer_abs_start_samples_ = 0;
   chunk_cache_.clear();
-  last_refresh_total_chunks_ = -1;
+  last_refresh_analyzed_complete_ = -1;
+  analyzed_complete_chunks_ = 0;
   frozen_turns_.clear();
   freeze_cutoff_sec_ = 0.;
   prev_active_turns_.clear();
@@ -134,28 +135,72 @@ void StreamingDiarizationSession::evict_chunk_cache_if_needed() {
   }
 }
 
-void StreamingDiarizationSession::trim_buffer_if_needed() {
+int StreamingDiarizationSession::step_samples() const {
   const int sr = engine_.segmentation_model_sample_rate();
   if (sr <= 0) {
+    return 0;
+  }
+  return static_cast<int>(
+      std::lrint(effective_step_sec_ * static_cast<double>(sr)));
+}
+
+int64_t StreamingDiarizationSession::complete_chunk_count(
+    int64_t num_samples) const {
+  const int chunk_num_samples = engine_.segmentation_chunk_num_samples();
+  const int step = step_samples();
+  if (step <= 0 || chunk_num_samples <= 0 || num_samples < chunk_num_samples) {
+    return 0;
+  }
+  return (num_samples - chunk_num_samples) / step + 1;
+}
+
+StreamingDiarizationSession::CachedChunk
+StreamingDiarizationSession::analyze_buffer_chunk(int64_t buf_off,
+                                                  int64_t num_samples) {
+  const int num_channels = engine_.segmentation_num_channels();
+  const int chunk_num_samples = engine_.segmentation_chunk_num_samples();
+  auto chunk_buf = CppAnnoteEngine::extract_chunk_audio(
+      buffer_.data(), num_samples, buf_off, chunk_num_samples, num_channels);
+  auto seg = engine_.run_segmentation_ort_single(chunk_buf.data());
+  auto mono = CppAnnoteEngine::extract_chunk_audio(
+      buffer_.data(), num_samples, buf_off, chunk_num_samples, 1);
+  auto emb = engine_.run_embedding_ort_single(mono.data(), seg.data());
+  return CachedChunk{std::move(seg), std::move(emb)};
+}
+
+void StreamingDiarizationSession::trim_buffer_if_needed() {
+  const int sr = engine_.segmentation_model_sample_rate();
+  const int step = step_samples();
+  const int chunk_num_samples = engine_.segmentation_chunk_num_samples();
+  if (sr <= 0 || step <= 0 || chunk_num_samples <= 0) {
     return;
   }
-  // Only the tail analysis chunk ever needs raw audio (completed chunks are
-  // fully captured in the seg/emb cache).  Keep the chunk window plus two
-  // steps of margin so the tail always has room to be recomputed.
+  // Completed windows that are not in the cache still need their raw audio.
+  // Keep from the first uncached complete window, and never less than the
+  // tail window the next refresh may recompute.
+  const int64_t num_samples_i = static_cast<int64_t>(buffer_.size());
+  const int64_t n_complete = complete_chunk_count(num_samples_i);
+  int64_t keep_from = num_samples_i;
+  for (int64_t c = 0; c < n_complete; ++c) {
+    const int64_t buf_off = c * step;
+    const int64_t abs_off = buffer_abs_start_samples_ + buf_off;
+    if (!chunk_cache_.count(abs_off)) {
+      keep_from = buf_off;
+      break;
+    }
+  }
   const double keep_sec = engine_.segmentation_chunk_duration_sec() +
                           2.0 * effective_step_sec_;
-  const int step_samples = static_cast<int>(std::lrint(
-      effective_step_sec_ * static_cast<double>(sr)));
-  const std::size_t cap = static_cast<std::size_t>(std::max(1., keep_sec) *
-                                                   static_cast<double>(sr));
-  if (buffer_.size() <= cap) {
+  const int64_t tail_keep = static_cast<int64_t>(
+      std::llround(std::max(1., keep_sec) * static_cast<double>(sr)));
+  const int64_t tail_from = std::max<int64_t>(0, num_samples_i - tail_keep);
+  keep_from = std::min(keep_from, tail_from);
+  if (keep_from <= 0) {
     return;
   }
-  std::size_t drop = buffer_.size() - cap;
-  if (step_samples > 0) {
-    drop = (drop / static_cast<std::size_t>(step_samples)) *
-           static_cast<std::size_t>(step_samples);
-  }
+  std::size_t drop = static_cast<std::size_t>(keep_from);
+  drop = (drop / static_cast<std::size_t>(step)) *
+         static_cast<std::size_t>(step);
   if (drop == 0) {
     return;
   }
@@ -165,36 +210,29 @@ void StreamingDiarizationSession::trim_buffer_if_needed() {
   buffer_abs_start_samples_ += static_cast<int64_t>(drop);
 }
 
-void StreamingDiarizationSession::cache_new_chunks() {
-  const int sr_model = engine_.segmentation_model_sample_rate();
-  const int num_channels = engine_.segmentation_num_channels();
+int StreamingDiarizationSession::cache_new_chunks(int max_chunks) {
+  const int step = step_samples();
   const int chunk_num_samples = engine_.segmentation_chunk_num_samples();
-  const int step_samples = static_cast<int>(std::lrint(
-      effective_step_sec_ * static_cast<double>(sr_model)));
-  if (step_samples <= 0 || chunk_num_samples <= 0) {
-    return;
+  if (step <= 0 || chunk_num_samples <= 0) {
+    return 0;
   }
   const int64_t num_samples_i = static_cast<int64_t>(buffer_.size());
-  int64_t num_complete_chunks = 0;
-  if (num_samples_i >= chunk_num_samples) {
-    num_complete_chunks =
-        (num_samples_i - chunk_num_samples) / step_samples + 1;
-  }
-  for (int64_t c = 0; c < num_complete_chunks; ++c) {
-    const int64_t buf_off = c * step_samples;
+  const int64_t n_complete = complete_chunk_count(num_samples_i);
+  int analyzed = 0;
+  for (int64_t c = 0; c < n_complete; ++c) {
+    const int64_t buf_off = c * step;
     const int64_t abs_off = buffer_abs_start_samples_ + buf_off;
     if (chunk_cache_.count(abs_off)) {
       continue;
     }
-    auto chunk_buf = CppAnnoteEngine::extract_chunk_audio(
-        buffer_.data(), num_samples_i, buf_off, chunk_num_samples,
-        num_channels);
-    auto seg = engine_.run_segmentation_ort_single(chunk_buf.data());
-    auto mono = CppAnnoteEngine::extract_chunk_audio(
-        buffer_.data(), num_samples_i, buf_off, chunk_num_samples, 1);
-    auto emb_chunk = engine_.run_embedding_ort_single(mono.data(), seg.data());
-    chunk_cache_[abs_off] = CachedChunk{std::move(seg), std::move(emb_chunk)};
+    if (max_chunks >= 0 && analyzed >= max_chunks) {
+      break;
+    }
+    chunk_cache_[abs_off] = analyze_buffer_chunk(buf_off, num_samples_i);
+    ++analyzed_complete_chunks_;
+    ++analyzed;
   }
+  return analyzed;
 }
 
 void StreamingDiarizationSession::add_audio_chunk(const float* pcm,
@@ -215,12 +253,14 @@ void StreamingDiarizationSession::add_audio_chunk(const float* pcm,
   buffer_.insert(buffer_.end(), res.begin(), res.end());
   input_end_sec_ +=
       static_cast<double>(num_samples) / static_cast<double>(sample_rate);
-  cache_new_chunks();
+  // One complete window per append so a catch-up dump cannot stack several
+  // overlapping segmentation/embedding runs into a single transcription pass.
+  const int analyzed = cache_new_chunks(1);
   trim_buffer_if_needed();
   evict_chunk_cache_if_needed();
   snapshot_.input_end_sec = input_end_sec_;
   snapshot_.window_start_sec = window_start_sec_;
-  maybe_refresh(false);
+  maybe_refresh(false, analyzed == 0);
 }
 
 void StreamingDiarizationSession::carry_last_updated_times(
@@ -392,45 +432,36 @@ void StreamingDiarizationSession::merge_frozen_and_active_turns(
   snapshot_.turns = std::move(merged);
 }
 
-void StreamingDiarizationSession::maybe_refresh(bool force) {
+void StreamingDiarizationSession::maybe_refresh(bool force,
+                                                bool allow_tail_ort) {
   using Clock = std::chrono::steady_clock;
 
   const int sr_model = engine_.segmentation_model_sample_rate();
   const int num_channels = engine_.segmentation_num_channels();
   const int chunk_num_samples = engine_.segmentation_chunk_num_samples();
-  const int step_samples = static_cast<int>(
-      std::lrint(effective_step_sec_ * static_cast<double>(sr_model)));
-  if (step_samples <= 0 || chunk_num_samples <= 0) {
+  const int step = step_samples();
+  if (step <= 0 || chunk_num_samples <= 0) {
     return;
   }
 
   const int64_t num_samples_i = static_cast<int64_t>(buffer_.size());
-  int64_t num_complete_chunks = 0;
-  if (num_samples_i >= chunk_num_samples) {
-    num_complete_chunks =
-        (num_samples_i - chunk_num_samples) / step_samples + 1;
-  }
+  const int64_t num_complete_chunks = complete_chunk_count(num_samples_i);
   const bool has_last =
       (num_samples_i < chunk_num_samples) ||
-      ((num_samples_i - chunk_num_samples) % step_samples > 0);
+      ((num_samples_i - chunk_num_samples) % step > 0);
   const int64_t total_chunks = num_complete_chunks + (has_last ? 1 : 0);
   if (total_chunks <= 0) {
     return;
   }
 
-  // Use total_chunks_ever (based on absolute stream position) for cadence, not
-  // the buffer's chunk count which saturates once the buffer is full.
-  const int64_t total_chunks_ever =
-      (buffer_abs_start_samples_ + num_samples_i >= chunk_num_samples)
-          ? (buffer_abs_start_samples_ + num_samples_i - chunk_num_samples) /
-                    step_samples +
-                1
-          : 0;
-
+  // Cadence follows windows that have actually been analyzed, not how many
+  // complete windows the buffer could support. A catch-up dump may leave
+  // several windows uncached; clustering must not run as if they were ready.
+  const int analyzed_complete = static_cast<int>(analyzed_complete_chunks_);
   if (!force) {
-    if (last_refresh_total_chunks_ >= 0) {
-      if (total_chunks_ever <
-          last_refresh_total_chunks_ + cluster_every_chunks_) {
+    if (last_refresh_analyzed_complete_ >= 0) {
+      if (analyzed_complete <
+          last_refresh_analyzed_complete_ + cluster_every_chunks_) {
         return;
       }
     }
@@ -438,11 +469,12 @@ void StreamingDiarizationSession::maybe_refresh(bool force) {
 
   const auto t_seg_start = Clock::now();
 
-  // Complete chunks are already cached by cache_new_chunks().
-  // Only the partial tail chunk (zero-padded) needs ORT here.
+  // Complete chunks are already cached by cache_new_chunks(). The padded tail
+  // is a second analyze, so skip it when this call already spent its budget on
+  // a complete window.
   int64_t tail_abs_off = -1;
-  if (has_last) {
-    const int64_t buf_off = num_complete_chunks * step_samples;
+  if (has_last && allow_tail_ort) {
+    const int64_t buf_off = num_complete_chunks * step;
     const int64_t abs_off = buffer_abs_start_samples_ + buf_off;
     tail_abs_off = abs_off;
     auto chunk_buf = CppAnnoteEngine::extract_chunk_audio(
@@ -542,7 +574,7 @@ void StreamingDiarizationSession::maybe_refresh(bool force) {
   snapshot_.window_start_sec = window_start_sec_;
   ++snapshot_.refresh_generation;
 
-  last_refresh_total_chunks_ = static_cast<int>(total_chunks_ever);
+  last_refresh_analyzed_complete_ = analyzed_complete;
   evict_chunk_cache_if_needed();
 }
 
@@ -552,14 +584,20 @@ StreamingDiarizationSnapshot StreamingDiarizationSession::snapshot() const {
 
 StreamingDiarizationSnapshot
 StreamingDiarizationSession::refresh_and_snapshot() {
-  maybe_refresh(true);
+  cache_new_chunks(-1);
+  trim_buffer_if_needed();
+  evict_chunk_cache_if_needed();
+  maybe_refresh(true, true);
   snapshot_.input_end_sec = input_end_sec_;
   snapshot_.window_start_sec = window_start_sec_;
   return snapshot_;
 }
 
 StreamingDiarizationSnapshot StreamingDiarizationSession::end_session() {
-  maybe_refresh(true);
+  cache_new_chunks(-1);
+  trim_buffer_if_needed();
+  evict_chunk_cache_if_needed();
+  maybe_refresh(true, true);
   snapshot_.input_end_sec = input_end_sec_;
   snapshot_.window_start_sec = window_start_sec_;
 
