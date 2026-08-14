@@ -15,6 +15,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Streaming speaker diarization analyzes at most one segmentation window per audio append (Stop still drains the rest) and skips embedding inference on silent speaker classes.
 - Meeting Notes waits until a line is complete before decoding, and writes each finished line on its own line in the document.
 
+### Fixed
+
+- Meeting Notes playback no longer clicks from dropped capture frames, resampler phase jumps, or mixing a second copy of the meeting that the microphone heard.
+
 ## [0.1.2] - August 13th, 2026
 
 ### Added

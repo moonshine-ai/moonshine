@@ -142,3 +142,7 @@
     I've recorded [a screencast on YouTube](https://www.youtube.com/watch?v=NNcqx1wFxl0) to help you get started, and you can also download [github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz](https://github.com/moonshine-ai/moonshine/releases/latest/download/raspberry-pi-my-dalek.tar.gz) for some fun, Pi-specific examples. [The README](https://github.com/moonshine-ai/moonshine/blob/main/examples/raspberry-pi/my-dalek/README.md) has information about using a virtual environment for the Python install if you don't want to use `--break-system-packages`.
 
     You can look at [github.com/moonshine-ai/pi-help-bot](https://github.com/moonshine-ai/pi-help-bot) for a more advanced example.
+
+## Coding agents
+
+If you are using Cursor, Claude Code, Codex, or another Agent Skills client, copy [`.agents/skills/moonshine-voice/`](https://github.com/moonshine-ai/moonshine/tree/main/.agents/skills/moonshine-voice) into your project's `.agents/skills/` folder, or run `npx skills add moonshine-ai/moonshine --skill moonshine-voice`. That skill is the happy path for integrating this library; it is not a substitute for the docs above.

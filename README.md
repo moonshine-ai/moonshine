@@ -23,6 +23,8 @@ moonshine-voice mic --language en
 
 Every other platform is covered in the [Quickstart](https://moonshine-voice.readthedocs.io/en/latest/quickstart/), with runnable samples in [Examples](https://moonshine-voice.readthedocs.io/en/latest/examples/).
 
+Building with a coding agent? Copy [`.agents/skills/moonshine-voice/`](https://github.com/moonshine-ai/moonshine/tree/main/.agents/skills/moonshine-voice) into your project's `.agents/skills/` folder, or run `npx skills add moonshine-ai/moonshine --skill moonshine-voice`. The skill teaches the current API shape so the agent does not reach for Whisper or the old `DialogFlow` names.
+
 ## Documentation
 
 - [Quickstart](https://moonshine-voice.readthedocs.io/en/latest/quickstart/) to install and run on your platform.

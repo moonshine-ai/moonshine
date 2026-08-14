@@ -808,7 +808,7 @@
       // setting rather than a given, and the figure is on screen while it grows.
 
       const recording = {
-        samples: new Int16Array(RATE * 60),
+        samples: new Float32Array(RATE * 60),
         length: 0,
         /** Recording length when the current capture session began. */
         sessionStart: 0,
@@ -817,7 +817,7 @@
           if (needed <= this.samples.length) return;
           let capacity = this.samples.length;
           while (capacity < needed) capacity *= 2;
-          const grown = new Int16Array(capacity);
+          const grown = new Float32Array(capacity);
           grown.set(this.samples.subarray(0, this.length));
           this.samples = grown;
         },
@@ -827,28 +827,88 @@
          * The two sources are written independently, so this is a mix rather
          * than an append: the microphone and the meeting are usually both
          * making noise at the same moment.
+         *
+         * Accumulated as float so two full-scale streams can be converted with
+         * a soft clip at export instead of wrapping into a click on every peak.
          */
         mixAt(offset, chunk) {
           this.ensure(offset + chunk.length);
           for (let i = 0; i < chunk.length; i++) {
-            const at = offset + i;
-            const sum = this.samples[at] + Math.round(chunk[i] * 32767);
-            this.samples[at] = sum > 32767 ? 32767 : sum < -32768 ? -32768 : sum;
+            this.samples[offset + i] += chunk[i];
           }
-          if (offset + chunk.length > this.length) {
-            this.length = offset + chunk.length;
+          this.grewTo(offset + chunk.length);
+        },
+
+        /**
+         * Mixes microphone audio after subtracting an echo of the meeting.
+         *
+         * The microphone often hears the same speech the tab already captured —
+         * YouTube through the speakers, a meeting played out loud — and adding
+         * that copy in is a clicky, comb-filtered double. A short delay search
+         * finds the echo and removes it; leftover mic (the person in the room)
+         * still lands on the recording.
+         */
+        mixMicAt(offset, chunk) {
+          this.ensure(offset + chunk.length);
+          const n = chunk.length;
+          const maxDelay = Math.min(offset, Math.round(RATE * 0.12));
+          const step = Math.max(1, Math.round(RATE * 0.002));
+          let bestCorr = 0;
+          let bestDelay = 0;
+          let bestScale = 0;
+          for (let delay = 0; delay <= maxDelay; delay += step) {
+            let num = 0;
+            let energy = 0;
+            let micEnergy = 0;
+            for (let i = 0; i < n; i++) {
+              const echo = this.samples[offset + i - delay];
+              const mic = chunk[i];
+              num += echo * mic;
+              energy += echo * echo;
+              micEnergy += mic * mic;
+            }
+            const corr = num / (Math.sqrt(energy * micEnergy) || 1e-12);
+            if (corr > bestCorr) {
+              bestCorr = corr;
+              bestDelay = delay;
+              bestScale = energy > 1e-8 ? num / energy : 0;
+            }
+          }
+          const cancel = bestCorr > 0.5 && bestScale > 0;
+          const residual = new Float32Array(n);
+          for (let i = 0; i < n; i++) {
+            const echo = cancel ? this.samples[offset + i - bestDelay] : 0;
+            residual[i] = chunk[i] - (cancel ? bestScale * echo : 0);
+          }
+          for (let i = 0; i < n; i++) {
+            this.samples[offset + i] += residual[i];
+          }
+          this.grewTo(offset + n);
+        },
+
+        grewTo(end) {
+          if (end > this.length) {
+            this.length = end;
             scheduleClock();
           }
         },
 
         reset() {
-          this.samples = new Int16Array(RATE * 60);
+          this.samples = new Float32Array(RATE * 60);
           this.length = 0;
           this.sessionStart = 0;
         },
       };
 
       const seconds = (sampleIndex) => sampleIndex / RATE;
+
+      /** Peak-safe conversion for the playable / downloadable WAV. */
+      function floatToInt16(x) {
+        const y = x < -1 || x > 1 ? Math.tanh(x) : x;
+        if (y >= 1) return 32767;
+        if (y <= -1) return -32768;
+        return Math.round(y * 32767);
+      }
 
       function clockText(at, total) {
         const mmss = (t) => {
@@ -1889,6 +1949,18 @@
       let transcribers = [];
       let sttHost = null;
       const cursors = new Map();
+      /** Mic chunks waiting until the meeting stream has filled the same time. */
+      const micHold = [];
+
+      function flushMicHold({ force = false } = {}) {
+        const meetingAt = cursors.get('meeting') ?? 0;
+        while (micHold.length) {
+          const next = micHold[0];
+          if (!force && next.at + next.chunk.length > meetingAt) break;
+          micHold.shift();
+          recording.mixMicAt(next.at, next.chunk);
+        }
+      }
 
       // Cheap counters for the integration test (and for tuning). They answer
       // the two questions a live transcript can fail at: how far behind the
@@ -2146,7 +2218,11 @@
             out[written++] = buffer[index] + (buffer[index + 1] - buffer[index]) * fraction;
             position += ratio;
           }
-          const consumed = Math.floor(position);
+          // Downsampling can advance `position` past the end of this buffer.
+          // Consume only what we have and keep the overflow as the phase into
+          // the next chunk; using floor(position) as the consume count skips
+          // (or duplicates) a sample at every flush, which is a click.
+          const consumed = Math.min(Math.floor(position), buffer.length);
           pending = buffer.slice(consumed);
           position -= consumed;
           return out.subarray(0, written);
@@ -2161,6 +2237,10 @@
       // here cuts the posts by an order of magnitude; the main-thread pump in
       // `tap` coalesces whatever still arrives and yields between bites so the
       // page can paint while it catches up.
+      //
+      // Empty inputs are recorded as silence, not skipped. Tab capture in
+      // particular sometimes hands the worklet a quantum with no channels;
+      // dropping those frames concatenates across a hole and is a click.
       const CAPTURE_WORKLET = `
 class MoonshineCapture extends AudioWorkletProcessor {
   constructor() {
@@ -2170,19 +2250,23 @@ class MoonshineCapture extends AudioWorkletProcessor {
     this._target = Math.max(128, Math.round(sampleRate * 0.1));
     this.port.onmessage = () => this._flush();
   }
-  process(inputs) {
+  process(inputs, outputs) {
+    const frames = outputs[0]?.[0]?.length || 128;
+    const mixed = new Float32Array(frames);
     const input = inputs[0];
-    if (input && input.length && input[0]) {
-      const frames = input[0].length;
-      const mixed = new Float32Array(frames);
-      for (const channel of input) {
-        for (let i = 0; i < frames; i++) mixed[i] += channel[i];
+    const channels = input && input.length && input[0] && input[0].length ? input : null;
+    if (channels) {
+      const n = Math.min(frames, channels[0].length);
+      for (const channel of channels) {
+        if (!channel) continue;
+        for (let i = 0; i < n; i++) mixed[i] += channel[i];
       }
-      for (let i = 0; i < frames; i++) mixed[i] /= input.length;
-      this._chunks.push(mixed);
-      this._frames += frames;
-      if (this._frames >= this._target) this._flush();
+      const count = channels.length || 1;
+      for (let i = 0; i < n; i++) mixed[i] /= count;
     }
+    this._chunks.push(mixed);
+    this._frames += frames;
+    if (this._frames >= this._target) this._flush();
     return true;
   }
   _flush() {
@@ -2315,8 +2399,14 @@ registerProcessor('moonshine-capture', MoonshineCapture);
           if (els.optAudio.checked) {
             t = performance.now();
             const at = cursors.get(source);
-            recording.mixAt(at, chunk);
             cursors.set(source, at + chunk.length);
+            if (source === 'you') {
+              micHold.push({ at, chunk });
+              flushMicHold();
+            } else {
+              recording.mixAt(at, chunk);
+              flushMicHold();
+            }
             captureMetrics.mixAtMs += performance.now() - t;
           }
           t = performance.now();
@@ -2562,10 +2652,12 @@ registerProcessor('moonshine-capture', MoonshineCapture);
         // stop behind the same hop can deadlock.
         await new Promise((resolve) => setTimeout(resolve, 0));
         for (const tapped of transcribers) await tapped.finish();
+        flushMicHold({ force: true });
         dropHeldMicEchoes();
         if (dropCommittedMicEchoes()) regroupTurns();
         transcribers = [];
         cursors.clear();
+        micHold.length = 0;
 
         // Only now, once that last line is in: a later session opens a fresh
         // turn, so its first line is labelled even if the same person carries
@@ -2722,7 +2814,9 @@ registerProcessor('moonshine-capture', MoonshineCapture);
         header.setUint16(34, 16, true);
         ascii(36, 'data');
         header.setUint32(40, samples.length * 2, true);
-        return new Blob([header, samples], { type: 'audio/wav' });
+        const pcm = new Int16Array(samples.length);
+        for (let i = 0; i < samples.length; i++) pcm[i] = floatToInt16(samples[i]);
+        return new Blob([header, pcm], { type: 'audio/wav' });
       }
 
       /**
@@ -3249,6 +3343,7 @@ registerProcessor('moonshine-capture', MoonshineCapture);
         metrics: snapshotCaptureMetrics,
         pendingAudioSeconds,
         workerQueuedSeconds,
+        pcm: () => recording.samples.slice(0, recording.length),
       };
     </script>
   </body>
