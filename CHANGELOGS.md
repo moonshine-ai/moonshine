@@ -4,7 +4,7 @@ All notable user-facing changes to Moonshine Voice are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Please keep the bullets high level, and no more than about 200 characters.
 
-## [Unreleased]
+## [0.1.2] - August 13th, 2026
 
 ### Added
 
