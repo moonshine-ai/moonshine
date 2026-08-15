@@ -840,13 +840,13 @@
         },
 
         /**
-         * Mixes microphone audio after subtracting an echo of the meeting.
+         * Mixes microphone audio, skipping chunks that are just the meeting
+         * leaking through the speakers.
          *
-         * The microphone often hears the same speech the tab already captured —
-         * YouTube through the speakers, a meeting played out loud — and adding
-         * that copy in is a clicky, comb-filtered double. A short delay search
-         * finds the echo and removes it; leftover mic (the person in the room)
-         * still lands on the recording.
+         * Subtracting a delay-matched echo used to be the way to keep the
+         * person in the room while dropping YouTube-through-speakers. The delay
+         * hops between chunks, though, and the leftover residual is a crackle.
+         * If this slice is clearly the meeting, drop it; otherwise add it as-is.
          */
         mixMicAt(offset, chunk) {
           this.ensure(offset + chunk.length);
@@ -854,8 +854,6 @@
           const maxDelay = Math.min(offset, Math.round(RATE * 0.12));
           const step = Math.max(1, Math.round(RATE * 0.002));
           let bestCorr = 0;
-          let bestDelay = 0;
-          let bestScale = 0;
           for (let delay = 0; delay <= maxDelay; delay += step) {
             let num = 0;
             let energy = 0;
@@ -868,20 +866,14 @@
               micEnergy += mic * mic;
             }
             const corr = num / (Math.sqrt(energy * micEnergy) || 1e-12);
-            if (corr > bestCorr) {
-              bestCorr = corr;
-              bestDelay = delay;
-              bestScale = energy > 1e-8 ? num / energy : 0;
-            }
+            if (corr > bestCorr) bestCorr = corr;
           }
-          const cancel = bestCorr > 0.5 && bestScale > 0;
-          const residual = new Float32Array(n);
-          for (let i = 0; i < n; i++) {
-            const echo = cancel ? this.samples[offset + i - bestDelay] : 0;
-            residual[i] = chunk[i] - (cancel ? bestScale * echo : 0);
+          if (bestCorr > 0.55) {
+            this.grewTo(offset + n);
+            return;
           }
           for (let i = 0; i < n; i++) {
-            this.samples[offset + i] += residual[i];
+            this.samples[offset + i] += chunk[i];
           }
           this.grewTo(offset + n);
         },
@@ -2201,8 +2193,13 @@
        * chunk would drop a fraction of a sample every time. Over an hour that is
        * a drift of seconds, which is exactly the sort of error that makes a
        * highlight sit on the wrong sentence.
+       *
+       * Prefer not to land here: the capture AudioContext is opened at 16 kHz
+       * so the browser's own resampler does this job. This path is for browsers
+       * that ignore that hint.
        */
       function makeResampler(inputRate) {
+        if (!inputRate || inputRate === RATE) return (chunk) => chunk;
         const ratio = inputRate / RATE;
         let position = 0;
         let pending = new Float32Array(0);
@@ -2241,17 +2238,38 @@
       // Empty inputs are recorded as silence, not skipped. Tab capture in
       // particular sometimes hands the worklet a quantum with no channels;
       // dropping those frames concatenates across a hole and is a click.
+      // Skipped callbacks (Chrome not pulling a silent graph, a backgrounded
+      // tab) are the same hole at a larger scale: the next quantum would splice
+      // onto the last and the recording would play back fast. `currentFrame`
+      // says how many frames the renderer advanced without us, so those land
+      // as zeros instead.
       const CAPTURE_WORKLET = `
 class MoonshineCapture extends AudioWorkletProcessor {
   constructor() {
     super();
     this._chunks = [];
     this._frames = 0;
+    this._nextFrame = null;
     this._target = Math.max(128, Math.round(sampleRate * 0.1));
     this.port.onmessage = () => this._flush();
   }
   process(inputs, outputs) {
     const frames = outputs[0]?.[0]?.length || 128;
+    if (this._nextFrame != null) {
+      const missing = currentFrame - this._nextFrame;
+      if (missing > 0) {
+        this._chunks.push(new Float32Array(missing));
+        this._frames += missing;
+      }
+    }
+    this._nextFrame = currentFrame + frames;
+    // A silent output can be skipped by the renderer, which is how callbacks
+    // go missing. Keep a tick on the wire; it is well below audible.
+    for (const channel of outputs[0] || []) {
+      if (!channel) continue;
+      channel.fill(0);
+      channel[0] = 1e-8;
+    }
     const mixed = new Float32Array(frames);
     const input = inputs[0];
     const channels = input && input.length && input[0] && input[0].length ? input : null;
@@ -2318,7 +2336,14 @@ registerProcessor('moonshine-capture', MoonshineCapture);
        */
       async function tap({ source, mediaStream, transcriberId, onLine }) {
         const node = audioContext.createMediaStreamSource(mediaStream);
-        const worklet = new AudioWorkletNode(audioContext, 'moonshine-capture');
+        const worklet = new AudioWorkletNode(audioContext, 'moonshine-capture', {
+          numberOfInputs: 1,
+          numberOfOutputs: 1,
+          outputChannelCount: [1],
+          channelCount: 1,
+          channelCountMode: 'explicit',
+          channelInterpretation: 'speakers',
+        });
         const resample = makeResampler(audioContext.sampleRate);
         const streamId = source;
         const base = recording.sessionStart;
@@ -2563,6 +2588,8 @@ registerProcessor('moonshine-capture', MoonshineCapture);
                   echoCancellation: false,
                   noiseSuppression: false,
                   autoGainControl: false,
+                  sampleRate: RATE,
+                  channelCount: 1,
                 },
                 systemAudio: 'include',
                 surfaceSwitching: 'include',
@@ -2591,7 +2618,15 @@ registerProcessor('moonshine-capture', MoonshineCapture);
             void stopCapture();
           });
 
-          audioContext = new AudioContext();
+          // Open at the model's rate so the browser resamples tab/mic audio
+          // with its own converter. Linear interpolation of 48 kHz down to
+          // 16 kHz is what the clicks on transients were; a 44.1 kHz context
+          // reading a 48 kHz share is a slow speed error on top.
+          try {
+            audioContext = new AudioContext({ sampleRate: RATE, latencyHint: 'interactive' });
+          } catch {
+            audioContext = new AudioContext({ latencyHint: 'interactive' });
+          }
           if (audioContext.state === 'suspended') await audioContext.resume();
           const workletUrl = URL.createObjectURL(
             new Blob([CAPTURE_WORKLET], { type: 'application/javascript' }),
