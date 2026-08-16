@@ -254,17 +254,17 @@ struct transcript_line_t {
    * segment, non-zero means they have. */
   int8_t is_complete;
   /* Streaming-only: Whether the line has been updated since the previous call
-   * to transcribe_stream_chunk. */
+   * to moonshine_transcribe_stream. */
   int8_t is_updated;
   /* Streaming-only: Whether the line was newly added since the previous call to
-   * transcribe_stream_chunk. */
+   * moonshine_transcribe_stream. */
   int8_t is_new;
   /* Streaming-only: Whether the text of the line has changed since the previous
-   * call to transcribe_stream_chunk. */
+   * call to moonshine_transcribe_stream. */
   int8_t has_text_changed;
   /* Whether the speaker spans of the line have changed since the previous
-   * call to transcribe_stream_chunk. Unlike the other change flags, this can
-   * fire for lines that are already complete, since diarization refines
+   * call to moonshine_transcribe_stream. Unlike the other change flags, this
+   * can fire for lines that are already complete, since diarization refines
    * speaker assignments retroactively as more audio arrives. */
   int8_t have_speakers_changed;
   /* Speaker spans covering this line, ordered by start time and clipped to
@@ -600,8 +600,12 @@ MOONSHINE_EXPORT int32_t moonshine_transcribe_without_streaming(
 
    Below is some pseudocode showing an example of how to use streaming. In a
    real application you'll want to check the return value of the functions and
-   handle errors appropriately. You can see a more complete example in the
-   moonshine-test-v2.cpp file.
+   handle errors appropriately. `get_audio_from_microphone` stands in for your
+   capture loop: feed each chunk to
+   moonshine_transcribe_add_audio_to_stream (safe from an audio callback),
+   then call moonshine_transcribe_stream on another thread when you want an
+   updated transcript. A more complete example is the streaming test in
+   core/moonshine-c-api-test.cpp.
 
    ```c
     int32_t transcriber_handle = moonshine_load_transcriber_from_files(
@@ -623,14 +627,14 @@ MOONSHINE_EXPORT int32_t moonshine_transcribe_without_streaming(
       transcript_t *partial_transcript = NULL;
       moonshine_transcribe_stream(transcriber_handle,
         stream_handle, 0, &partial_transcript);
-      print_transcript(out_transcript);
+      printf("%s\n", moonshine_transcript_to_string(partial_transcript));
     }
     moonshine_stop_stream(transcriber_handle, stream_handle);
 
     transcript_t *final_transcript = NULL;
     moonshine_transcribe_stream(transcriber_handle, stream_handle, 0,
       &final_transcript);
-    print_transcript(final_transcript);
+    printf("%s\n", moonshine_transcript_to_string(final_transcript));
 
     moonshine_free_stream(transcriber_handle, stream_handle);
     moonshine_free_transcriber(transcriber_handle);
@@ -666,8 +670,8 @@ MOONSHINE_EXPORT int32_t moonshine_create_stream(int32_t transcriber_handle,
 MOONSHINE_EXPORT int32_t moonshine_free_stream(int32_t transcriber_handle,
                                                int32_t stream_handle);
 
-/* Starts a stream. This should be called before any calls to
-   moonshine_transcribe_stream_chunk. Start/stop are supported because there may
+/* Starts a stream. This should be called before adding audio or calling
+   moonshine_transcribe_stream. Start/stop are supported because there may
    sometimes be a discontinuity in the audio input, for example when the user
    mutes their input, so we need a way to start fresh after a break like this.
    This function returns zero on success, or a non-zero error code on failure.
