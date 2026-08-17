@@ -9,9 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - `decode_incomplete_lines` (default true). Set false to encode as audio arrives but wait until the line is complete before decoding.
+- Optional `moonshine-voice[lora]` extra trains a decoder-only LoRA adapter on your audio (ATCOSIM example included). Default inference installs are unchanged.
 
 ### Changed
 
+- The LoRA Colab notebook calls the same `fit_adapter` and ATCOSIM helpers as `python -m moonshine_voice.lora` instead of inlining the trainer.
 - Streaming speaker diarization analyzes at most one segmentation window per audio append (Stop still drains the rest) and skips embedding inference on silent speaker classes.
 - Meeting Notes waits until a line is complete before decoding, and writes each finished line on its own line in the document.
 

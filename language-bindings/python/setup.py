@@ -65,6 +65,20 @@ setup(
         ],
     },
     install_requires=read_requirements(),
+    extras_require={
+        "lora": [
+            "torch",
+            "transformers>=5.15",
+            "safetensors",
+            "soundfile",
+            "pyarrow",
+            "scipy",
+            "jiwer",
+            "huggingface_hub",
+            "onnx",
+            "onnxscript",
+        ],
+    },
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",

@@ -8,6 +8,8 @@ A fast, accurate, on-device AI library for building interactive voice applicatio
 pip install moonshine-voice
 ```
 
+Training a LoRA domain adapter is an opt-in extra (`pip install 'moonshine-voice[lora]'`) so the inference install does not pull in PyTorch or Transformers. See [Domain Customization](https://moonshine-voice.readthedocs.io/en/latest/models/domain-customization/#retraining).
+
 ## Quick Start
 
 <!-- doc-test: parse-only -->
@@ -19,10 +21,10 @@ moonshine-voice mic
 
 Installing the package adds a `moonshine-voice` command (with a shorter
 `moonshine` alias) that groups the built-in tools as subcommands: `mic`,
-`transcribe`, `tts`, `agent`, `download`, and `g2p`. Run
+`transcribe`, `tts`, `agent`, `download`, `g2p`, and `lora`. Run
 `moonshine-voice --help`, or `moonshine-voice <command> --help` for a specific
 tool. Each subcommand is equivalent to `python -m moonshine_voice.<module>`, so
-either invocation style works.
+either invocation style works. The `lora` subcommand needs the extra above.
 
 ## Example
 

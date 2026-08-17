@@ -37,6 +37,20 @@ classifiers = [
 moonshine-voice = "moonshine_voice.cli:main"
 moonshine = "moonshine_voice.cli:main"
 
+[project.optional-dependencies]
+lora = [
+    "torch",
+    "transformers>=5.15",
+    "safetensors",
+    "soundfile",
+    "pyarrow",
+    "scipy",
+    "jiwer",
+    "huggingface_hub",
+    "onnx",
+    "onnxscript",
+]
+
 [project.urls]
 Homepage = "https://github.com/moonshine-ai/moonshine"
 Documentation = "https://github.com/moonshine-ai/moonshine"

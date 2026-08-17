@@ -12,6 +12,10 @@ Transcription gets easier when you know something about what is about to be said
     - [What it costs in time](#what-it-costs-in-time)
     - [What it can't do](#what-it-cant-do)
 - [Retraining](#retraining)
+    - [Worked example: air traffic control](#worked-example-air-traffic-control)
+    - [Your own data](#your-own-data)
+    - [Shipping the result](#shipping-the-result)
+    - [Pitfalls](#pitfalls)
 
 ## Runtime Context
 
@@ -141,4 +145,100 @@ Key terms only nudge the decoder towards words it can already spell, so they wil
 
 ## Retraining
 
-To teach a model a new accent, dialect or acoustic environment, rather than a new vocabulary, you'll need more comprehensive offline training. This is something we hope to add official support for in the future, but you can find a community project working on fine-tuning at [github.com/pierre-cheneau/finetune-moonshine-asr](https://github.com/pierre-cheneau/finetune-moonshine-asr).
+Runtime context helps with words the model can already spell. Teaching it a new accent, dialect, acoustic environment, or domain convention — air-traffic phraseology, spelled-out digits, and so on — needs a small amount of in-domain audio and a LoRA adapter. The adapter is rank 8 on the decoder's self-attention q/k/v, about 0.11% of Streaming Medium, and is folded back into the base weights so inference is unchanged: no extra layers, no extra latency, and the same `Transcriber` load path.
+
+What it buys is conventions, not vocabulary. Two hours of air traffic audio taught Medium to write `four six five two` instead of `4652` and to keep callsign templates, and left waypoint names it had barely seen exactly where it found them. Those names are still [runtime key-term biasing](#supply-a-key-terms-list), and the two compose: train the adapter, then hand the deployed model the sector's word list.
+
+The trainer is an opt-in extra. A default `pip install moonshine-voice` does not pull in PyTorch or Transformers, and `import moonshine_voice` does not import this path.
+
+<!-- doc-test: skip -->
+```bash
+pip install 'moonshine-voice[lora]'
+```
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/moonshine-ai/moonshine/blob/main/examples/python/lora-training/moonshine_lora_domain_adaptation.ipynb)
+
+The [notebook](https://github.com/moonshine-ai/moonshine/blob/main/examples/python/lora-training/moonshine_lora_domain_adaptation.ipynb) is the measured walkthrough on air traffic control, with the same defaults as the command below. It calls the same helpers (`fit_adapter`, ATCOSIM loaders, export) as the CLI rather than inlining them.
+
+### Worked example: air traffic control
+
+Needs a GPU. On the machine this was developed on (an RTX 5090) the two-hour Medium run finishes in about fifteen minutes and peaks under 3 GB of GPU memory, so it fits a Colab T4.
+
+<!-- doc-test: skip -->
+```bash
+python -m moonshine_voice.lora --dataset atcosim --output-dir ./lora_atc
+```
+
+That downloads the speaker-disjoint split from [`moonshine-ai/atcosim-speaker-disjoint-splits`](https://huggingface.co/datasets/moonshine-ai/atcosim-speaker-disjoint-splits), trains on two hours of ATCOSIM from speakers the test set never contains, mixes in 50% general-domain replay from [`moonshine-ai/yodas-en-replay`](https://huggingface.co/datasets/moonshine-ai/yodas-en-replay), and writes `adapter.safetensors` plus a merged `adapted/` checkpoint.
+
+Measured by the notebook on the full 1,901-utterance test set and all of LibriSpeech test-clean:
+
+| | air traffic control | LibriSpeech |
+| --- | --- | --- |
+| Moonshine Streaming Medium, as published | 50.7% WER | 2.3% WER |
+| **+ LoRA, 2 h in-domain + replay** | **26.3% WER** | 2.8% WER |
+| + LoRA, no replay | 26.0% WER | 3.8% WER |
+
+Replay is on by default because the in-domain column cannot tell adaptation from forgetting. `--no-replay` is there so you can see that for yourself: it buys nothing in-domain at this size and makes ordinary speech worse.
+
+ATCOSIM is free for research and commercial development but **not redistributable**. The Hub mirror this command reads is a convenience; for anything you ship, get the corpus from [TU Graz](https://www.spsc.tugraz.at/databases-and-tools/atcosim-air-traffic-control-simulation-speech-corpus.html). Our contribution is the split definition, which contains no audio.
+
+Index the corpus without training:
+
+<!-- doc-test: skip -->
+```bash
+python -m moonshine_voice.lora --dataset atcosim --prepare-only
+```
+
+### Your own data
+
+A JSONL file, one clip per line:
+
+```json
+{"audio": "clips/001.wav", "text": "lufthansa four six five two"}
+{"audio": "clips/002.wav", "text": "turn right heading two one zero"}
+```
+
+JSON `{"utterances": [...]}` and `path<TAB>text` TSV work too. Audio is any format `soundfile` reads; it is resampled to 16 kHz mono. Match transcript style to the model (cased, punctuated English) unless the domain's convention is what you want to teach — ATCOSIM's spelled-out digits are kept on purpose.
+
+<!-- doc-test: skip -->
+```bash
+python -m moonshine_voice.lora \
+    --train-manifest domain.jsonl \
+    --output-dir ./lora_out
+```
+
+Sensible defaults: rank 8, learning rate `1e-3`, batch 8, 50% replay from yodas-en-replay, early stopping on in-domain plus held-out general loss. `python -m moonshine_voice.lora --help` lists every flag.
+
+Score a held-out set and a LibriSpeech canary after training:
+
+<!-- doc-test: skip -->
+```bash
+python -m moonshine_voice.lora \
+    --train-manifest domain.jsonl \
+    --eval-manifest domain_test.jsonl \
+    --eval --canary \
+    --output-dir ./lora_out
+```
+
+### Shipping the result
+
+<!-- doc-test: skip -->
+```bash
+python -m moonshine_voice.lora --export \
+    --model ./lora_out/adapted --output-dir ./float \
+    --tokenizer-bin /path/to/published/tokenizer.bin
+bash scripts/quantize-streaming-model.sh ./float
+```
+
+A decoder-only adapter changes only `decoder_kv`, so `--graphs decoder_kv` plus the published `.ort` files for the other four graphs is enough. Load the directory with `Transcriber` from the inference wheel — no `[lora]` extra, no adapter code at runtime.
+
+Then add the domain's word list with `set_keyterms` / `set_context`. The adapter has already learned how this domain talks; biasing is what recovers the names the training audio barely said.
+
+### Pitfalls
+
+- **Orthography mismatch silently eats the adapter.** An ALL-CAPS corpus teaches a typography the WER normalizer discards. `--text-mode auto` lowercases a corpus that is more than 90% uppercase.
+- **Hold out whole speakers**, not random utterances, or you measure speaker adaptation and call it domain adaptation. `--dataset atcosim` already does.
+- **Always score a general-domain canary.** In-domain WER alone cannot distinguish adaptation from damage.
+- **`labels=` was double-shifted before Transformers 5.15.** The trainer computes cross-entropy itself against explicit `decoder_input_ids`, which is right on either version. The extra still pins `transformers>=5.15`.
+

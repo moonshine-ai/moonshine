@@ -76,3 +76,5 @@ pico_monitor.log
 /language-bindings/android/java/androidTest/assets/tiny-en/tokenizer.bin
 /language-bindings/python/src/moonshine_voice/assets/tiny-en/*.ort
 /examples/**/tts-data/
+/lora_work/
+/lora_runs/

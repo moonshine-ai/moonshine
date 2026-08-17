@@ -44,6 +44,10 @@ COMMANDS: Dict[str, Tuple[str, str]] = {
         "moonshine_voice.g2p",
         "Convert text to phonemes (IPA) with the G2P engine.",
     ),
+    "lora": (
+        "moonshine_voice.lora",
+        "Train a LoRA domain adapter (requires pip install moonshine-voice[lora]).",
+    ),
 }
 
 

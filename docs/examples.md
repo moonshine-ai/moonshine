@@ -25,6 +25,7 @@ To add the library to your own app rather than starting from a sample, see [Addi
     - **[text_to_speech.py](https://github.com/moonshine-ai/moonshine/blob/main/examples/python/text_to_speech.py)** — Speak text aloud, optionally in a cloned voice.
     - **[agent_flow.py](https://github.com/moonshine-ai/moonshine/blob/main/examples/python/agent_flow.py)** — Generator-based conversational agent that walks through wifi setup by voice or keyboard.
     - **[ollama_voice.py](https://github.com/moonshine-ai/moonshine/blob/main/examples/python/ollama-voice/ollama_voice.py)** — Pipe finalized mic transcripts into a local [Ollama](https://ollama.com/) LLM and stream the reply.
+    - **[lora-training](https://github.com/moonshine-ai/moonshine/blob/main/examples/python/lora-training/)** — Train a LoRA domain adapter (`pip install 'moonshine-voice[lora]'`). Recipe in [Domain Customization](models/domain-customization.md#retraining).
 
 === "iOS"
 
