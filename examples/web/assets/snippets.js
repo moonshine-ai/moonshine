@@ -24,7 +24,7 @@ export const INSTALL = {
   javascript: 'npm i @moonshine-ai/moonshine-wasm',
   python: 'pip install moonshine-voice',
   swift: 'https://github.com/moonshine-ai/moonshine-swift/',
-  java: 'ai.moonshine:moonshine-voice:0.1.3',
+  java: 'ai.moonshine:moonshine-voice:0.1.5',
 };
 
 /** Says where the install line goes, for the tabs where that is not obvious. */

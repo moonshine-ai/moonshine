@@ -24,7 +24,7 @@ set -o pipefail
 #   skip-ort       - assume the ORT-wasm archive is already vendored.
 #   skip-core      - reuse an existing wasm build dir (skip emcmake/cmake build).
 
-VERSION=0.1.3
+VERSION=0.1.5
 REPO="moonshine-ai/moonshine"
 
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
