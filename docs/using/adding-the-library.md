@@ -56,9 +56,9 @@ We distribute the library through the most widely-used package managers for each
 
 === "Android"
 
-    On Android we publish [the package to Maven](https://mvnrepository.com/artifact/ai.moonshine/moonshine-voice). To include it in your project using Android Studio and Gradle, first add the version number you want to the `gradle/libs.versions.toml` file by inserting a line in the `[versions]` section, for example `moonshineVoice = "0.1.3"`. Then in the `[libraries]` part, add a reference to the package: `moonshine-voice = { group = "ai.moonshine", name = "moonshine-voice", version.ref = "moonshineVoice" }`.
+    On Android we publish [the package to Maven](https://mvnrepository.com/artifact/ai.moonshine/moonshine-voice). To include it in your project using Android Studio and Gradle, first add the version number you want to the `gradle/libs.versions.toml` file by inserting a line in the `[versions]` section, for example `moonshineVoice = "0.1.5"`. Then in the `[libraries]` part, add a reference to the package: `moonshine-voice = { group = "ai.moonshine", name = "moonshine-voice", version.ref = "moonshineVoice" }`.
 
-    Finally, in your `app/build.gradle.kts` add the library to the `dependencies` list: `implementation(libs.moonshine.voice)`. The [`examples/android/Transcriber`](https://github.com/moonshine-ai/moonshine/blob/main/examples/android/Transcriber/) and [`examples/android/TextToSpeech`](https://github.com/moonshine-ai/moonshine/blob/main/examples/android/TextToSpeech/) samples use the same coordinates (`moonshineVoice = "0.1.3"` in their catalogs).
+    Finally, in your `app/build.gradle.kts` add the library to the `dependencies` list: `implementation(libs.moonshine.voice)`. The [`examples/android/Transcriber`](https://github.com/moonshine-ai/moonshine/blob/main/examples/android/Transcriber/) and [`examples/android/TextToSpeech`](https://github.com/moonshine-ai/moonshine/blob/main/examples/android/TextToSpeech/) samples use the same coordinates (`moonshineVoice = "0.1.5"` in their catalogs).
 
 === "Linux"
 
