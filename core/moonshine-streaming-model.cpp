@@ -210,6 +210,14 @@ MoonshineStreamingModel::~MoonshineStreamingModel() {
   if (adapter_mmapped_data) {
     munmap(const_cast<char *>(adapter_mmapped_data), adapter_mmapped_data_size);
   }
+  if (cross_kv_mmapped_data) {
+    munmap(const_cast<char *>(cross_kv_mmapped_data),
+           cross_kv_mmapped_data_size);
+  }
+  if (decoder_kv_mmapped_data) {
+    munmap(const_cast<char *>(decoder_kv_mmapped_data),
+           decoder_kv_mmapped_data_size);
+  }
 #endif
 }
 
@@ -270,24 +278,18 @@ int MoonshineStreamingModel::load(const char *model_dir,
       append_path_component(model_dir, "decoder_kv.ort");
 
   // Load cross_kv (required)
-  {
-    const char *cross_kv_mmap = nullptr;
-    size_t cross_kv_mmap_size = 0;
-    RETURN_ON_ERROR(ort_session_from_path(
-        ort_api, ort_env, ort_session_options, cross_kv_path.c_str(),
-        &cross_kv_session, &cross_kv_mmap, &cross_kv_mmap_size));
-    RETURN_ON_NULL(cross_kv_session);
-  }
+  RETURN_ON_ERROR(ort_session_from_path(
+      ort_api, ort_env, ort_session_options, cross_kv_path.c_str(),
+      &cross_kv_session, &cross_kv_mmapped_data, &cross_kv_mmapped_data_size));
+  RETURN_ON_NULL(cross_kv_session);
 
   // Load decoder_kv (required)
-  {
-    const char *decoder_kv_mmap = nullptr;
-    size_t decoder_kv_mmap_size = 0;
-    RETURN_ON_ERROR(ort_session_from_path(
-        ort_api, ort_env, ort_session_options, decoder_kv_path.c_str(),
-        &decoder_kv_session, &decoder_kv_mmap, &decoder_kv_mmap_size));
-    RETURN_ON_NULL(decoder_kv_session);
-  }
+  RETURN_ON_ERROR(
+      ort_session_from_path(ort_api, ort_env, ort_session_options,
+                            decoder_kv_path.c_str(), &decoder_kv_session,
+                            &decoder_kv_mmapped_data,
+                            &decoder_kv_mmapped_data_size));
+  RETURN_ON_NULL(decoder_kv_session);
 
   // Load tokenizer
   tokenizer =
