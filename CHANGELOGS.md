@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Meeting Notes playback no longer clicks from dropped capture frames, resampler phase jumps, or mixing a second copy of the meeting that the microphone heard.
 - C API streaming comments no longer refer to an undeclared `out_transcript`, a missing `moonshine-test-v2.cpp`, or the old `transcribe_stream_chunk` name.
+- `transcribe_stream` after `stop_stream` now transcribes leftover audio, so a final transcript no longer requires earlier partial updates.
 
 ## [0.1.2] - August 13th, 2026
 

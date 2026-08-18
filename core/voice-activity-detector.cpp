@@ -60,10 +60,21 @@ void VoiceActivityDetector::start() {
 }
 
 void VoiceActivityDetector::stop() {
-  _is_active = false;
+  deactivate();
   if (previous_is_voice) {
     on_voice_end();
   }
+}
+
+void VoiceActivityDetector::deactivate() { _is_active = false; }
+
+void VoiceActivityDetector::flush(const float *audio_data,
+                                  size_t audio_data_size, int32_t sample_rate) {
+  _is_active = true;
+  if (audio_data != nullptr && audio_data_size > 0) {
+    process_audio(audio_data, audio_data_size, sample_rate);
+  }
+  stop();
 }
 
 void VoiceActivityDetector::process_audio(const float *audio_data,

@@ -50,6 +50,13 @@ class VoiceActivityDetector {
 
   void start();
   void stop();
+  // Stop accepting new audio without closing the current utterance. Used by
+  // Transcriber::stop_stream so leftover samples can still be flushed.
+  void deactivate();
+  // Process leftover audio after deactivate() and close any open utterance.
+  // `audio_data` may be null or empty.
+  void flush(const float *audio_data, size_t audio_data_size,
+             int32_t sample_rate);
   bool is_active() const { return _is_active; }
   void process_audio(const float *audio_data, size_t audio_data_size,
                      int32_t sample_rate);

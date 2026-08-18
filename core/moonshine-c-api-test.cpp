@@ -240,9 +240,66 @@ TEST_CASE("moonshine-test-v2") {
     }
     int32_t stop_error = moonshine_stop_stream(transcriber_handle, stream_id);
     REQUIRE(stop_error == MOONSHINE_ERROR_NONE);
+    int32_t final_error = moonshine_transcribe_stream(
+        transcriber_handle, stream_id, 0, &transcript);
+    REQUIRE(final_error == MOONSHINE_ERROR_NONE);
+    REQUIRE(transcript != nullptr);
     REQUIRE(transcript->line_count > 0);
+    for (size_t j = 0; j < transcript->line_count; j++) {
+      REQUIRE(transcript->lines[j].is_complete == 1);
+    }
     LOGF("Transcript: %s", moonshine_transcript_to_string(transcript));
     moonshine_free_stream(transcriber_handle, stream_id);
+  }
+  SUBCASE("transcribe-stream-after-stop-without-partials") {
+    std::string wav_path = "two_cities.wav";
+    REQUIRE(std::filesystem::exists(wav_path));
+    float* wav_data = nullptr;
+    size_t wav_data_size = 0;
+    int32_t wav_sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
+                          &wav_sample_rate));
+    REQUIRE(wav_data != nullptr);
+    REQUIRE(wav_data_size > 0);
+    REQUIRE(wav_data_size >= (size_t)(wav_sample_rate * 10));
+    wav_data_size = (size_t)(wav_sample_rate * 10);
+
+    std::string root_model_path = "tiny-en";
+    REQUIRE(std::filesystem::exists(root_model_path));
+    int32_t transcriber_handle = moonshine_load_transcriber_from_files(
+        root_model_path.c_str(), MOONSHINE_MODEL_ARCH_TINY, nullptr, 0,
+        MOONSHINE_HEADER_VERSION);
+    REQUIRE(transcriber_handle >= 0);
+
+    int32_t stream_id = moonshine_create_stream(transcriber_handle, 0);
+    REQUIRE(stream_id >= 0);
+    REQUIRE(moonshine_start_stream(transcriber_handle, stream_id) ==
+            MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_transcribe_add_audio_to_stream(
+                transcriber_handle, stream_id, wav_data, wav_data_size,
+                wav_sample_rate, 0) == MOONSHINE_ERROR_NONE);
+    REQUIRE(moonshine_stop_stream(transcriber_handle, stream_id) ==
+            MOONSHINE_ERROR_NONE);
+
+    struct transcript_t* transcript = nullptr;
+    REQUIRE(moonshine_transcribe_stream(transcriber_handle, stream_id, 0,
+                                        &transcript) == MOONSHINE_ERROR_NONE);
+    REQUIRE(transcript != nullptr);
+    REQUIRE(transcript->line_count > 0);
+    bool any_text = false;
+    for (size_t j = 0; j < transcript->line_count; j++) {
+      const struct transcript_line_t& line = transcript->lines[j];
+      REQUIRE(line.is_complete == 1);
+      if (line.text != nullptr && line.text[0] != '\0') {
+        any_text = true;
+      }
+    }
+    REQUIRE(any_text);
+    LOGF("Transcript after stop: %s",
+         moonshine_transcript_to_string(transcript));
+    moonshine_free_stream(transcriber_handle, stream_id);
+    moonshine_free_transcriber(transcriber_handle);
+    free(wav_data);
   }
   SUBCASE("transcribe-complete-from-memory") {
     std::string wav_path = "two_cities.wav";
