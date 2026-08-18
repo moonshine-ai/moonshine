@@ -119,6 +119,34 @@ TEST_CASE("voice-activity-detector-test") {
     vad.stop();
     REQUIRE(vad.get_segments()->empty());
   }
+  SUBCASE("vad-flush-after-deactivate") {
+    std::string wav_path = "two_cities.wav";
+    REQUIRE(std::filesystem::exists(wav_path));
+    float *wav_data = nullptr;
+    size_t wav_data_size = 0;
+    int32_t wav_sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
+                          &wav_sample_rate));
+    REQUIRE(wav_data != nullptr);
+    REQUIRE(wav_data_size > 1);
+
+    const size_t first_half = wav_data_size / 2;
+    VoiceActivityDetector vad;
+    vad.start();
+    vad.process_audio(wav_data, first_half, wav_sample_rate);
+    vad.deactivate();
+    REQUIRE_FALSE(vad.is_active());
+    vad.flush(wav_data + first_half, wav_data_size - first_half,
+              wav_sample_rate);
+    REQUIRE_FALSE(vad.is_active());
+    const std::vector<VoiceActivitySegment> *segments = vad.get_segments();
+    REQUIRE(segments->size() >= 1);
+    for (const VoiceActivitySegment &segment : *segments) {
+      REQUIRE(segment.is_complete);
+      REQUIRE(segment.audio_data.size() > 0);
+    }
+    free(wav_data);
+  }
   SUBCASE("vad-threshold-0") {
     VoiceActivityDetector vad(0.0f);
     std::string wav_path = "beckett.wav";

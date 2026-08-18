@@ -748,11 +748,22 @@ void Transcriber::start_stream(int32_t stream_id) {
 void Transcriber::stop_stream(int32_t stream_id) {
   std::lock_guard<std::mutex> lock(this->streams_mutex);
   TranscriberStream *stream = this->streams[stream_id];
-  stream->stop();
+  {
+    // Refuse further add_audio_to_stream calls, but keep leftover samples and
+    // the current VAD utterance open so the next transcribe_stream can drain
+    // them into a final transcript.
+    std::lock_guard<std::mutex> vad_lock(stream->vad_mutex);
+    stream->stop();
+  }
   stream->save_audio_data_to_wav(nullptr, 0, 0);
   if (this->speaker_diarizer != nullptr && stream->diarizer_stream_id >= 0) {
-    // Run a final clustering pass so the next transcribe_stream call picks up
-    // the finalized speaker spans.
+    // Hand leftover audio to the diarizer before the final clustering pass.
+    // The transcriber buffer is left intact for the next transcribe_stream.
+    if (!stream->new_audio_buffer.empty()) {
+      this->speaker_diarizer->add_audio_to_stream(
+          stream->diarizer_stream_id, stream->new_audio_buffer.data(),
+          stream->new_audio_buffer.size(), INTERNAL_SAMPLE_RATE);
+    }
     this->speaker_diarizer->finish_stream(stream->diarizer_stream_id);
   }
 }
@@ -810,9 +821,12 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
   const bool long_enough_to_analyze =
       new_audio_duration >= this->options.transcription_interval;
   const bool force_update = flags & MOONSHINE_FLAG_FORCE_UPDATE;
-  const bool should_update =
-      (long_enough_to_analyze || force_update) && has_new_audio;
   const bool is_stopped = !stream->vad->is_active();
+  // After stop_stream the leftover buffer is still valid. Drain it even if it
+  // is shorter than transcription_interval so stop-then-transcribe_stream
+  // produces a final transcript without earlier partial updates.
+  const bool should_update =
+      (long_enough_to_analyze || force_update || is_stopped) && has_new_audio;
   const bool diarization_enabled =
       (this->speaker_diarizer != nullptr && stream->diarizer_stream_id >= 0);
   // Return the cached transcript if it's only been a short time since the
@@ -831,6 +845,10 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
     }
     // Ensure that all lines are marked as complete if the stream is stopped.
     if (is_stopped) {
+      {
+        std::lock_guard<std::mutex> lock(stream->vad_mutex);
+        stream->vad->stop();
+      }
       stream->transcript_output->mark_all_lines_as_complete();
     }
     if (speakers_changed) {
@@ -845,8 +863,9 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
   // Feed the new audio to the diarizer before it's consumed. This runs at
   // most one segmentation/embedding window per call (further windows wait
   // for the next call or Stop) and re-clusters on the configured cadence,
-  // which is the main cost of identify_speakers.
-  if (diarization_enabled) {
+  // which is the main cost of identify_speakers. After stop_stream the
+  // leftover samples were already appended and clustered, so skip the add.
+  if (diarization_enabled && !is_stopped) {
     this->speaker_diarizer->add_audio_to_stream(stream->diarizer_stream_id,
                                                 audio_data, audio_length,
                                                 INTERNAL_SAMPLE_RATE);
@@ -856,8 +875,13 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
   std::vector<VoiceActivitySegment> segments;
   {
     std::lock_guard<std::mutex> lock(stream->vad_mutex);
-    stream->vad->process_audio(audio_data, (int32_t)audio_length,
-                               INTERNAL_SAMPLE_RATE);
+    if (is_stopped) {
+      stream->vad->flush(audio_data, (size_t)audio_length,
+                         INTERNAL_SAMPLE_RATE);
+    } else {
+      stream->vad->process_audio(audio_data, (size_t)audio_length,
+                                 INTERNAL_SAMPLE_RATE);
+    }
     const std::vector<VoiceActivitySegment> *vad_segments =
         stream->vad->get_segments();
     segments.reserve(vad_segments->size());
@@ -1093,13 +1117,14 @@ void Transcriber::update_transcript_from_segments(
         // Alignment is a second pass over the segment and costs about a quarter
         // of a streaming update, while an unfinished segment is re-transcribed
         // from scratch every time round, so aligning one before it ends is work
-        // that gets thrown away and redone a fraction of a second later. Waiting
-        // for the end loses nothing: the detector always closes a segment with
-        // both is_complete and just_updated set, including when the stream stops
-        // mid-speech, so every line still gets aligned exactly once, against its
-        // final text. Only the non-streaming models pay this, which is why the
-        // streaming branch above aligns unconditionally -- there the timings fall
-        // out of attention the transcription pass already computed.
+        // that gets thrown away and redone a fraction of a second later.
+        // Waiting for the end loses nothing: the detector always closes a
+        // segment with both is_complete and just_updated set, including when
+        // the stream stops mid-speech, so every line still gets aligned exactly
+        // once, against its final text. Only the non-streaming models pay this,
+        // which is why the streaming branch above aligns unconditionally --
+        // there the timings fall out of attention the transcription pass
+        // already computed.
         if (this->options.word_timestamps && segment.is_complete) {
           float seg_duration =
               segment.audio_data.size() / (float)INTERNAL_SAMPLE_RATE;
@@ -1778,7 +1803,7 @@ void TranscriberStream::start() {
   this->transcript_output->ordered_internal_line_ids.clear();
 }
 
-void TranscriberStream::stop() { this->vad->stop(); }
+void TranscriberStream::stop() { this->vad->deactivate(); }
 
 std::string TranscriberStream::get_wav_filename() {
   if (this->stream_id == -1) {

@@ -577,7 +577,7 @@ int32_t moonshine_start_stream(
 
 ### `moonshine_stop_stream()`
 
-Stops a stream.
+Stops a stream. Further `moonshine_transcribe_add_audio_to_stream()` calls are rejected, but audio that has not yet been analyzed is kept. Call `moonshine_transcribe_stream()` afterwards to drain that leftover audio and get the final transcript, with all lines marked complete.
 
 ```c
 int32_t moonshine_stop_stream(
@@ -622,6 +622,8 @@ int32_t moonshine_transcribe_add_audio_to_stream(
 ### `moonshine_transcribe_stream()`
 
 Analyzes all the audio data in the stream and returns an updated transcript of all the speech segments found. By default this function will only perform full analysis on the audio data if there has been more than 200ms of new samples since the last complete analysis. This is to ensure that too-frequent calls to this function don't result in poor performance. This can be overridden by setting the MOONSHINE_FLAG_FORCE_UPDATE flag.
+
+After `moonshine_stop_stream()`, leftover audio is analyzed even if it is shorter than that interval, so the stop-then-`moonshine_transcribe_stream()` sequence in the example above produces a complete transcript. You do not need `MOONSHINE_FLAG_FORCE_UPDATE` for that final call, and you do not need to have pulled partial transcripts first.
 
 ```c
 int32_t moonshine_transcribe_stream(

@@ -683,9 +683,12 @@ MOONSHINE_EXPORT int32_t moonshine_free_stream(int32_t transcriber_handle,
 MOONSHINE_EXPORT int32_t moonshine_start_stream(int32_t transcriber_handle,
                                                 int32_t stream_handle);
 
-/* Stops a stream. This function returns zero on success, or a non-zero error
-   code on failure. The error code can be converted to a human-readable string
-   using moonshine_error_to_string.
+/* Stops a stream. Further moonshine_transcribe_add_audio_to_stream calls are
+   rejected, but audio that has not yet been analyzed is kept. Call
+   moonshine_transcribe_stream afterwards to drain that leftover audio and get
+   the final transcript, with all lines marked complete. This function returns
+   zero on success, or a non-zero error code on failure. The error code can be
+   converted to a human-readable string using moonshine_error_to_string.
  */
 MOONSHINE_EXPORT int32_t moonshine_stop_stream(int32_t transcriber_handle,
                                                int32_t stream_handle);
@@ -731,6 +734,12 @@ MOONSHINE_EXPORT int32_t moonshine_transcribe_add_audio_to_stream(
    samples since the last complete analysis. This is to ensure that too-frequent
    calls to this function don't result in poor performance. This can be
    overridden by setting the MOONSHINE_FLAG_FORCE_UPDATE flag.
+
+   After moonshine_stop_stream, leftover audio is analyzed even if it is
+   shorter than that interval, so the stop-then-transcribe_stream sequence in
+   the example above produces a complete transcript. You do not need
+   MOONSHINE_FLAG_FORCE_UPDATE for that final call, and you do not need to
+   have pulled partial transcripts first.
 
    `transcriber_handle` should be a handle to a transcriber returned by
    moonshine_load_transcriber_from_files or

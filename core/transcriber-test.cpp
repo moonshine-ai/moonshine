@@ -786,6 +786,47 @@ TEST_CASE("transcriber-test") {
     transcriber.free_stream(stream_id);
     free(wav_data);
   }
+  SUBCASE("test-transcribe-after-stop-without-partials") {
+    std::string wav_path = "two_cities.wav";
+    REQUIRE(std::filesystem::exists(wav_path));
+    float *wav_data = nullptr;
+    size_t wav_data_size = 0;
+    int32_t wav_sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
+                          &wav_sample_rate));
+    REQUIRE(wav_data != nullptr);
+    REQUIRE(wav_data_size > 0);
+    REQUIRE(wav_data_size >= (size_t)(wav_sample_rate * 10));
+    wav_data_size = (size_t)(wav_sample_rate * 10);
+    std::string root_model_path = "tiny-en";
+    REQUIRE(std::filesystem::exists(root_model_path));
+    TranscriberOptions options;
+    options.model_source = TranscriberOptions::ModelSource::FILES;
+    options.model_path = root_model_path.c_str();
+    options.model_arch = MOONSHINE_MODEL_ARCH_TINY;
+    Transcriber transcriber(options);
+    int32_t stream_id = transcriber.create_stream();
+    transcriber.start_stream(stream_id);
+    REQUIRE(stream_id >= 0);
+    transcriber.add_audio_to_stream(stream_id, wav_data, wav_data_size,
+                                    wav_sample_rate);
+    transcriber.stop_stream(stream_id);
+    struct transcript_t *transcript = nullptr;
+    transcriber.transcribe_stream(stream_id, 0, &transcript);
+    REQUIRE(transcript != nullptr);
+    REQUIRE(transcript->line_count > 0);
+    bool any_text = false;
+    for (size_t i = 0; i < transcript->line_count; i++) {
+      const struct transcript_line_t &line = transcript->lines[i];
+      REQUIRE(line.is_complete == 1);
+      if (line.text != nullptr && line.text[0] != '\0') {
+        any_text = true;
+      }
+    }
+    REQUIRE(any_text);
+    transcriber.free_stream(stream_id);
+    free(wav_data);
+  }
   SUBCASE("test-speaker-spans-absent-by-default") {
     std::string wav_path = "two_cities.wav";
     REQUIRE(std::filesystem::exists(wav_path));
