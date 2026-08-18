@@ -209,7 +209,8 @@ TEST_CASE(
     const char* lang = kokoro_lang_for_voice_stem(voice);
     REQUIRE(lang != nullptr);
     // Match moonshine-c-api-test: optional ONNX G2P bundles may be absent on a
-    // partial CDN tree; skip those languages rather than fail create_from_memory.
+    // partial CDN tree; skip those languages rather than fail
+    // create_from_memory.
     if (std::strcmp(lang, "zh_hans") == 0 && !chinese_onnx_ready) {
       MESSAGE("skip Chinese Kokoro voice (ONNX G2P bundle missing): ", voice);
       continue;
