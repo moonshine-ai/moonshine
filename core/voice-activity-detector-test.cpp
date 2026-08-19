@@ -1,6 +1,8 @@
 #include "voice-activity-detector.h"
 
+#include <cstdlib>
 #include <filesystem>
+#include <memory>
 #include <string>
 
 #include "debug-utils.h"
@@ -129,6 +131,10 @@ TEST_CASE("voice-activity-detector-test") {
                           &wav_sample_rate));
     REQUIRE(wav_data != nullptr);
     REQUIRE(wav_data_size > 1);
+    // load_wav_data hands back a raw C-allocated buffer; adopt it in a
+    // unique_ptr with a std::free deleter so it is released on every path
+    // without a bare deallocation call (see STYLE_GUIDE.md).
+    std::unique_ptr<float, decltype(&std::free)> owned(wav_data, &std::free);
 
     const size_t first_half = wav_data_size / 2;
     VoiceActivityDetector vad;
@@ -145,7 +151,6 @@ TEST_CASE("voice-activity-detector-test") {
       REQUIRE(segment.is_complete);
       REQUIRE(segment.audio_data.size() > 0);
     }
-    free(wav_data);
   }
   SUBCASE("vad-threshold-0") {
     VoiceActivityDetector vad(0.0f);

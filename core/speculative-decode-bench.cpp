@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <numeric>
 #include <stdexcept>
 #include <string>
@@ -235,7 +236,7 @@ FileResult run_file(MoonshineStreamingModel &model, const std::string &wav_path,
     return result;
   }
 
-  MoonshineStreamingState *state = model.create_state();
+  std::unique_ptr<MoonshineStreamingState> state(model.create_state());
   const auto &cfg = model.config;
   std::vector<int> prev_content;
 
@@ -245,7 +246,7 @@ FileResult run_file(MoonshineStreamingModel &model, const std::string &wav_path,
         processed + static_cast<size_t>(samples_per_update), audio.size());
     // Feed new audio chunks for this update.
     while (processed + kChunkSamples <= update_end) {
-      if (model.process_audio_chunk(state, audio.data() + processed,
+      if (model.process_audio_chunk(state.get(), audio.data() + processed,
                                     kChunkSamples, nullptr) != 0) {
         throw std::runtime_error("process_audio_chunk failed");
       }
@@ -254,7 +255,7 @@ FileResult run_file(MoonshineStreamingModel &model, const std::string &wav_path,
 
     const bool is_final = (processed >= audio.size());
     int new_frames = 0;
-    if (model.encode(state, is_final, &new_frames) != 0) {
+    if (model.encode(state.get(), is_final, &new_frames) != 0) {
       throw std::runtime_error("encode failed");
     }
     if (state->memory_len == 0) {
@@ -283,7 +284,7 @@ FileResult run_file(MoonshineStreamingModel &model, const std::string &wav_path,
       // Greedy AR (current live path).
       {
         auto t0 = std::chrono::high_resolution_clock::now();
-        greedy_tokens = greedy_decode(model, state, max_tokens);
+        greedy_tokens = greedy_decode(model, state.get(), max_tokens);
         auto t1 = std::chrono::high_resolution_clock::now();
         greedy_times.push_back(
             std::chrono::duration<double, std::milli>(t1 - t0).count());
@@ -293,36 +294,39 @@ FileResult run_file(MoonshineStreamingModel &model, const std::string &wav_path,
       {
         const int *draft = prev_content.empty() ? nullptr : prev_content.data();
         const int draft_len = static_cast<int>(prev_content.size());
-        model.decoder_reset(state);
+        model.decoder_reset(state.get());
         int *out = nullptr;
         int out_len = 0;
         auto t0 = std::chrono::high_resolution_clock::now();
         const int err =
-            model.decode_full(state, draft, draft_len, &out, &out_len);
+            model.decode_full(state.get(), draft, draft_len, &out, &out_len);
         auto t1 = std::chrono::high_resolution_clock::now();
         speculative_times.push_back(
             std::chrono::duration<double, std::milli>(t1 - t0).count());
         if (err != 0) {
           throw std::runtime_error("decode_full speculative failed");
         }
+        // decode_full allocates with malloc; adopt it so the buffer is released
+        // without a bare free() (see STYLE_GUIDE.md).
+        std::unique_ptr<int, decltype(&std::free)> owned(out, &std::free);
         speculative_tokens.assign(out, out + out_len);
-        std::free(out);
       }
 
       // decode_full with no draft (same codepath, no speculation).
       {
-        model.decoder_reset(state);
+        model.decoder_reset(state.get());
         int *out = nullptr;
         int out_len = 0;
         auto t0 = std::chrono::high_resolution_clock::now();
-        const int err = model.decode_full(state, nullptr, 0, &out, &out_len);
+        const int err =
+            model.decode_full(state.get(), nullptr, 0, &out, &out_len);
         auto t1 = std::chrono::high_resolution_clock::now();
         nospec_times.push_back(
             std::chrono::duration<double, std::milli>(t1 - t0).count());
         if (err != 0) {
           throw std::runtime_error("decode_full nospec failed");
         }
-        std::free(out);
+        std::unique_ptr<int, decltype(&std::free)> owned(out, &std::free);
       }
     }
 
@@ -344,7 +348,6 @@ FileResult run_file(MoonshineStreamingModel &model, const std::string &wav_path,
     if (is_final) break;
   }
 
-  delete state;
   return result;
 }
 

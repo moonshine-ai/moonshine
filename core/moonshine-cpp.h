@@ -2121,8 +2121,10 @@ inline void TextToSpeech::cloneFrom(const std::vector<float> &samples,
                                     int32_t sampleRate,
                                     const std::string &transcript) {
   const std::vector<float> clip = clipForCloning(samples, sampleRate);
-  const uint8_t *bytes = reinterpret_cast<const uint8_t *>(clip.data());
-  cloneBytes_.assign(bytes, bytes + clip.size() * sizeof(float));
+  cloneBytes_.resize(clip.size() * sizeof(float));
+  if (!cloneBytes_.empty()) {
+    std::memcpy(cloneBytes_.data(), clip.data(), cloneBytes_.size());
+  }
   // extractSpeechClip always resamples to 16 kHz, whatever went in.
   rebuildForClone(VoiceClone::CLIP_SAMPLE_RATE, transcript);
 }
@@ -2135,8 +2137,10 @@ inline void TextToSpeech::cloneFrom(const VoiceClone &clone,
         "That VoiceClone has not captured enough speech yet; wait for "
         "isReady(), or call finish() to take the best window so far.");
   }
-  const uint8_t *bytes = reinterpret_cast<const uint8_t *>(clip.data());
-  cloneBytes_.assign(bytes, bytes + clip.size() * sizeof(float));
+  cloneBytes_.resize(clip.size() * sizeof(float));
+  if (!cloneBytes_.empty()) {
+    std::memcpy(cloneBytes_.data(), clip.data(), cloneBytes_.size());
+  }
   std::string resolved = transcript;
   if (resolved.empty()) {
     resolved = clone.transcript();
