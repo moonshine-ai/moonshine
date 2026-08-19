@@ -1099,7 +1099,7 @@ int32_t refine_clip_with_asr(const std::vector<float> &audio,
   CloneClipBounds bounds;
   if (!words.empty()) {
     bounds = refine_clone_clip_bounds(0.0f, requested_duration, words,
-                                      max_extension, /*end_pad=*/0.05f);
+                                      max_extension, /*end_pad_seconds=*/0.05f);
   } else {
     // No word timings: keep the VAD/requested window and use line text.
     bounds.start_seconds = 0.0f;
