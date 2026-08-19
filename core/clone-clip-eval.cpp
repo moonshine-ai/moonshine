@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -148,11 +149,14 @@ bool load_fixture(const char *path, const char *name, float forced_start,
     std::fprintf(stderr, "Failed to load %s\n", path);
     return false;
   }
+  // load_wav_data hands back a raw C-allocated buffer; adopt it in a unique_ptr
+  // with a std::free deleter so it is released on every path without a bare
+  // deallocation call (see STYLE_GUIDE.md).
+  std::unique_ptr<float, decltype(&std::free)> owned(data, &std::free);
   out->name = name;
   out->pcm.assign(data, data + n);
   out->sample_rate = sr;
   out->forced_start = forced_start;
-  std::free(data);
   return true;
 }
 

@@ -4,8 +4,10 @@
 #include <cassert>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <string>
 
 #include "debug-utils.h"
@@ -1446,6 +1448,9 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
         throw std::runtime_error("Speculative decode_full failed: " +
                                  std::to_string(err));
       }
+      // decode_full allocates with malloc; adopt it so the buffer is released
+      // without a bare free() (see STYLE_GUIDE.md).
+      std::unique_ptr<int, decltype(&std::free)> owned(out, &std::free);
       tokens.push_back(config.bos_id);
       for (int i = 0; i < out_len; ++i) {
         tokens.push_back(out[i]);
@@ -1454,7 +1459,6 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
       if (tokens.empty() || tokens.back() != config.eos_id) {
         // decode_full omits EOS; leave as-is for text conversion.
       }
-      std::free(out);
     } else {
       tokens.push_back(config.bos_id);
       std::vector<float> logits(config.vocab_size);
