@@ -378,6 +378,8 @@ capability.
 
 `fit_adapter` is that loop. Both arms below reuse the caches from section 3; the
 no-replay run only changes `replay_ratio`.
+
+This cell usually takes around 10 minutes to run.
 """)
 
 code(r'''
@@ -419,7 +421,7 @@ md(r"""
 ## 6. What happens without replay
 
 The same arm again with `replay_ratio=0`: nothing changes except that every batch is
-in-domain. This is the version most people write, and it is worth seeing what it costs
+in-domain. This is the version most people write, and if you don't mind another 30 minutes to run, it is worth seeing what it costs
 before you trust an in-domain number on its own.
 """)
 
