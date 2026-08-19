@@ -85,6 +85,5 @@ nav:
       - Options: api/options.md
       - C API: api/c-api.md
   - Support: support.md
-  - Roadmap: roadmap.md
   - Acknowledgements: acknowledgements.md
   - License: license.md
