@@ -263,7 +263,7 @@ void compare_multitoken_vs_step(MoonshineStreamingModel &model,
 
 }  // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv) try {
   std::string model_dir =
       "/Users/petewarden/projects/moonshine/test-assets/tiny-streaming-en";
   std::string wav_path =
@@ -416,4 +416,7 @@ int main(int argc, char **argv) {
   printf("greedy vs decode_full(prev draft) mismatches: %d\n", counts_spec);
   printf("greedy vs decode_full(self draft) mismatches: %d\n", counts_self);
   return (counts_nospec + counts_spec + counts_self) == 0 ? 0 : 2;
+} catch (const std::exception &e) {
+  fprintf(stderr, "%s\n", e.what());
+  return 1;
 }

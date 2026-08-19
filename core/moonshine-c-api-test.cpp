@@ -261,8 +261,8 @@ TEST_CASE("moonshine-test-v2") {
                           &wav_sample_rate));
     REQUIRE(wav_data != nullptr);
     REQUIRE(wav_data_size > 0);
-    REQUIRE(wav_data_size >= (size_t)(wav_sample_rate * 10));
-    wav_data_size = (size_t)(wav_sample_rate * 10);
+    REQUIRE(wav_data_size >= static_cast<size_t>(wav_sample_rate) * 10);
+    wav_data_size = static_cast<size_t>(wav_sample_rate) * 10;
 
     std::string root_model_path = "tiny-en";
     REQUIRE(std::filesystem::exists(root_model_path));

@@ -15,8 +15,8 @@ TEST_CASE("clone-clip-refine") {
         {"failed", 1.35f, 3.90f},  // ends after the 3.5s window
     };
     const CloneClipBounds bounds = refine_clone_clip_bounds(
-        /*window_start=*/0.0f, /*duration=*/3.5f, words, /*max_extension=*/1.5f,
-        /*end_pad=*/0.05f);
+        /*window_start_seconds=*/0.0f, /*requested_duration_seconds=*/3.5f,
+        words, /*max_extension_seconds=*/1.5f, /*end_pad_seconds=*/0.05f);
     CHECK(bounds.start_seconds == doctest::Approx(0.10f));
     CHECK(bounds.end_seconds == doctest::Approx(3.95f));
     CHECK(bounds.transcript == "Ever tried Ever failed");
