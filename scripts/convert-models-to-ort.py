@@ -9,13 +9,13 @@ and ORT will not re-apply them at load time. That makes the optimization level
 used here a permanent property of the file, and it splits our models into two
 groups:
 
-* Models with float weights (Kokoro, the English OOV model) convert at full
+* Models with float weights (the English OOV model) convert at full
   optimization for about the same size as the ``.onnx``, and load faster
   because there is no protobuf parse. Straight win.
-* Models that store int8 weights and cast them to float at inference (every
-  Piper voice, the Chinese and Arabic G2P models) get those weights folded to
-  float32 during optimization, so the ``.ort`` lands roughly 4x larger.
-  Converting them without optimization keeps the size but costs 3-5x on
+* Models that store int8 weights and cast them to float at inference (Kokoro,
+  every Piper voice, the Chinese and Arabic G2P models) get those weights
+  folded to float32 during optimization, so the ``.ort`` lands roughly 4x
+  larger. Converting them without optimization keeps the size but costs 3-5x on
   inference, since the folding is exactly what makes them fast.
 
 A model that fits ``--max-growth`` at full optimization is simply converted.
@@ -28,6 +28,13 @@ for a graph input, which costs about 2.2x on inference for the transformer G2P
 models. ``Conv`` has no such step, so the Piper voices split for free. We pick
 between them by looking at which ops consume the dequantized weights, and any
 model that would lose is left as ``.onnx``.
+
+That test counts weight *bytes*, which stands in for time only when the two
+track each other. Kokoro is where they part: most of its parameters sit in the
+PL-BERT encoder and duration predictor, so the test reads 215% and predicts a
+loss, while its runtime is dominated by the iSTFTNet decoder's convolutions and
+splitting measures 1.00-1.07x faster on a Pi 4 and loads in 2.1 s rather than
+7.9 s. ``--force-split`` is for a model measured to behave that way.
 
 Full optimization is also what rules out CoreML and NNAPI, since it fuses whole
 regions into ``com.microsoft`` operators that no compiling execution provider
@@ -143,10 +150,10 @@ def _convert_at_level(src: Path, dst: Path, level: str) -> None:
     ort.InferenceSession(str(src), opts, providers=["CPUExecutionProvider"])
 
 
-def _split_one(onnx: Path, onnx_size: int, budget: float) -> Result:
+def _split_one(onnx: Path, onnx_size: int, budget: float, force: bool) -> Result:
     """Emit the split pair for a model whose optimized ``.ort`` busts the budget."""
     share = prepacking_share(onnx)
-    if share > PREPACK_SHARE_LIMIT:
+    if share > PREPACK_SHARE_LIMIT and not force:
         return Result(
             onnx,
             TOO_LARGE,
@@ -170,8 +177,8 @@ def _split_one(onnx: Path, onnx_size: int, budget: float) -> Result:
     return Result(onnx, SPLIT, level="split", onnx_size=onnx_size, ort_size=size)
 
 
-def convert_one(args: tuple[str, float, bool]) -> Result:
-    path_str, max_growth, allow_split = args
+def convert_one(args: tuple[str, float, bool, bool]) -> Result:
+    path_str, max_growth, allow_split, force_split = args
     onnx = Path(path_str)
     target = onnx.with_suffix(".ort")
     onnx_size = onnx.stat().st_size
@@ -196,7 +203,7 @@ def convert_one(args: tuple[str, float, bool]) -> Result:
                     detail="optimized model exceeds the size budget",
                 )
             try:
-                return _split_one(onnx, onnx_size, budget)
+                return _split_one(onnx, onnx_size, budget, force_split)
             except Exception as exc:  # noqa: BLE001
                 return Result(onnx, FAILED, onnx_size=onnx_size, detail=str(exc)[:200])
 
@@ -258,6 +265,12 @@ def main() -> int:
         "emitting the split .model.ort/.weights.ort pair for them",
     )
     parser.add_argument(
+        "--force-split",
+        action="store_true",
+        help="Split even when the pre-packing test says not to, for a model "
+        "measured to be faster split anyway (Kokoro; see the module docstring)",
+    )
+    parser.add_argument(
         "--force", action="store_true", help="Reconvert even if a .ort exists"
     )
     parser.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) // 2))
@@ -279,7 +292,9 @@ def main() -> int:
         return 0
 
     started = time.time()
-    payload = [(str(p), args.max_growth, not args.no_split) for p in todo]
+    payload = [
+        (str(p), args.max_growth, not args.no_split, args.force_split) for p in todo
+    ]
     results: list[Result] = []
     with multiprocessing.Pool(args.jobs) as pool:
         for i, result in enumerate(pool.imap_unordered(convert_one, payload), 1):

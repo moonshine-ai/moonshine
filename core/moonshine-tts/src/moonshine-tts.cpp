@@ -10,6 +10,7 @@
 #include "ort-session-options.h"
 #include "ort-utils-cxx.h"
 #include "piper-tts.h"
+#include "split-weights.h"
 #include "string-utils.h"
 #include "utf8-utils.h"
 #include "zipvoice-tts.h"
@@ -782,7 +783,9 @@ std::vector<std::string> kokoro_vocoder_dependency_keys_with_options(
     vid = select_voice_id(profile.kokoro_lang, opt.voice, profile.default_voice,
                           voices_dir, &opt.files, g2p.g2p_root);
   }
-  return {std::string(kTtsKokoroModelKey), std::string(kTtsKokoroConfigJsonKey),
+  return {std::string(kTtsKokoroSplitModelKey),
+          std::string(kTtsKokoroSplitWeightsKey),
+          std::string(kTtsKokoroConfigJsonKey),
           std::string("kokoro/voices/") + vid + ".kokorovoice"};
 }
 
@@ -963,6 +966,9 @@ struct KokoroTtsEngine {
   Ort::Session session_{nullptr};
   Ort::MemoryInfo mem_{
       Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)};
+  /// Float32 weights supplied to the graph on every inference, empty when the
+  /// model was loaded in its single-file form. See split-weights.h.
+  std::vector<SplitWeight> split_weights_{};
 
   std::unordered_map<std::string, int> vocab_{};
   std::unordered_set<std::string> vocab_keys_{};
@@ -1006,20 +1012,127 @@ struct KokoroTtsEngine {
   }
 
   void detect_speed_input_element_type() {
-    // Kokoro ONNX convention: inputs [0]=input_ids, [1]=ref_s|style, [2]=speed.
-    // Community HF models use float32 speed [1]; local torch exports use double
-    // scalar.
-    const size_t n_in = session_.GetInputCount();
-    if (n_in < 3) {
+    // Community HF models take speed as a float32 [1]; local torch exports use
+    // a double scalar. The split form declares its weights as inputs too, so
+    // the name is looked up rather than the usual third position trusted.
+    const std::vector<std::string> names = session_.GetInputNames();
+    for (size_t i = 0; i < names.size(); ++i) {
+      if (names[i] != "speed") {
+        continue;
+      }
+      Ort::TypeInfo ti = session_.GetInputTypeInfo(i);
+      if (ti.GetONNXType() != ONNX_TYPE_TENSOR) {
+        return;
+      }
+      speed_elem_type_ = static_cast<ONNXTensorElementDataType>(
+          ti.GetTensorTypeAndShapeInfo().GetElementType());
       return;
     }
-    Ort::TypeInfo ti = session_.GetInputTypeInfo(2);
-    if (ti.GetONNXType() != ONNX_TYPE_TENSOR) {
-      return;
+  }
+
+  /// Bytes for *key*, or false when neither the file map nor disk has it.
+  ///
+  /// A caller-supplied buffer wins, then the path the file map gives, then
+  /// *shipped_path*, where the asset sits in the layout Moonshine ships.
+  bool load_asset_if_present(std::string_view key,
+                             const std::filesystem::path& shipped_path,
+                             const uint8_t** out, size_t* out_len) {
+    const std::string k(key);
+    std::filesystem::path path = shipped_path;
+    const auto it = tts_files_.entries.find(k);
+    if (it != tts_files_.entries.end()) {
+      if (it->second.has_memory()) {
+        it->second.load(out, out_len);
+        return *out_len > 0;
+      }
+      if (!it->second.path.empty()) {
+        const std::filesystem::path mapped =
+            resolve_path_under_root(g2p_opt_.g2p_root, it->second.path);
+        if (std::filesystem::is_regular_file(mapped)) {
+          path = mapped;
+        }
+      }
     }
-    const auto tinfo = ti.GetTensorTypeAndShapeInfo();
-    speed_elem_type_ =
-        static_cast<ONNXTensorElementDataType>(tinfo.GetElementType());
+    if (!std::filesystem::is_regular_file(path)) {
+      return false;
+    }
+    FileInformation& fi = tts_files_.entries[k];
+    fi.path = path;
+    fi.load(out, out_len);
+    return *out_len > 0;
+  }
+
+  void free_asset(std::string_view key) {
+    const auto it = tts_files_.entries.find(std::string(key));
+    if (it != tts_files_.entries.end()) {
+      it->second.free();
+    }
+  }
+
+  bool asset_in_memory(std::string_view key) const {
+    const auto it = tts_files_.entries.find(std::string(key));
+    return it != tts_files_.entries.end() && it->second.has_memory();
+  }
+
+  /// Opens the Kokoro graph, preferring the split pair.
+  ///
+  /// Kokoro ships as ``model.model.ort`` plus ``model.weights.ort``, the same
+  /// graph with its weights lifted out, which is what keeps those weights int8
+  /// through conversion to ORT format. See split-weights.h. A single
+  /// ``model.ort`` at the anchor path is still loaded, which is what a caller
+  /// pointing ``kokoro_model`` at a model of their own gets.
+  void load_model(const Ort::SessionOptions& session_opts) {
+    std::filesystem::path graph_path = model_path_;
+    graph_path.replace_extension(".model.ort");
+    std::filesystem::path weights_path = model_path_;
+    weights_path.replace_extension(".weights.ort");
+
+    // Bytes handed to us under the anchor key mean that model, so only look
+    // for a split pair beside it when the caller supplied no anchor bytes.
+    const bool prefer_split = asset_in_memory(kTtsKokoroSplitModelKey) ||
+                              !asset_in_memory(kTtsKokoroModelKey);
+
+    const uint8_t* graph_buf = nullptr;
+    size_t graph_len = 0;
+    const uint8_t* weights_buf = nullptr;
+    size_t weights_len = 0;
+    if (prefer_split &&
+        load_asset_if_present(kTtsKokoroSplitModelKey, graph_path, &graph_buf,
+                              &graph_len)) {
+      if (load_asset_if_present(kTtsKokoroSplitWeightsKey, weights_path,
+                                &weights_buf, &weights_len)) {
+        require_ort_model_bytes(graph_buf, graph_len, "Kokoro model");
+        require_ort_model_bytes(weights_buf, weights_len, "Kokoro weights");
+        // The weights session holds the int8 data and is released as soon as
+        // it has produced the float32 tensors, so only those stay resident.
+        split_weights_ = run_split_weights_model(env_, weights_buf, weights_len,
+                                                 session_opts);
+        free_asset(kTtsKokoroSplitWeightsKey);
+        session_ = Ort::Session(env_, graph_buf, graph_len, session_opts);
+        free_asset(kTtsKokoroSplitModelKey);
+        LOGF_IF(log_profiling_,
+                "KokoroTtsEngine: split model loaded (%zu + %zu bytes, %zu "
+                "weight tensors)",
+                graph_len, weights_len, split_weights_.size());
+        return;
+      }
+      free_asset(kTtsKokoroSplitModelKey);
+    }
+
+    const uint8_t* model_buf = nullptr;
+    size_t model_len = 0;
+    if (!load_asset_if_present(kTtsKokoroModelKey, model_path_, &model_buf,
+                               &model_len)) {
+      throw std::runtime_error(
+          "MoonshineTTS: no Kokoro model found. Looked for the split pair " +
+          graph_path.string() + " plus " + weights_path.filename().string() +
+          ", and for " + model_path_.string() + ".");
+    }
+    require_ort_model_bytes(model_buf, model_len, "Kokoro model");
+    session_ = Ort::Session(env_, model_buf, model_len, session_opts);
+    free_asset(kTtsKokoroModelKey);
+    LOGF_IF(log_profiling_, "KokoroTtsEngine: model loaded (%zu bytes)",
+            model_len);
   }
 
   double speed() const { return speed_; }
@@ -1060,16 +1173,13 @@ struct KokoroTtsEngine {
     LOGF_IF(log_profiling_, "KokoroTtsEngine: model='%s', config='%s'",
             model_path_.c_str(), config_path_.c_str());
 
-    const auto mit = tts_files_.entries.find(std::string(kTtsKokoroModelKey));
     const auto cit =
         tts_files_.entries.find(std::string(kTtsKokoroConfigJsonKey));
-    if (mit == tts_files_.entries.end() || cit == tts_files_.entries.end()) {
+    if (cit == tts_files_.entries.end()) {
       throw std::runtime_error(
-          "MoonshineTTS: missing Kokoro file map entries (model/config keys)");
+          "MoonshineTTS: missing Kokoro file map entry (config key)");
     }
-    FileInformation& model_fi = mit->second;
     FileInformation& cfg_fi = cit->second;
-    model_fi.path = model_path_;
     cfg_fi.path = config_path_;
 
     TIMER_START_IF(log_profiling_, kokoro_load_config);
@@ -1102,21 +1212,8 @@ struct KokoroTtsEngine {
     TIMER_END_IF(log_profiling_, kokoro_load_config);
 
     TIMER_START_IF(log_profiling_, kokoro_load_model);
-    const uint8_t* model_buf = nullptr;
-    size_t model_len = 0;
-    model_fi.load(&model_buf, &model_len);
-    if (model_len == 0) {
-      model_fi.free();
-      throw std::runtime_error("MoonshineTTS: empty Kokoro model (" +
-                               model_path_.string() + ")");
-    }
-    require_ort_model_bytes(model_buf, model_len, "Kokoro model");
-    Ort::SessionOptions session_opts =
-        make_ort_session_options(opt.ort_provider_names, opt.coreml_cache_dir);
-    session_ = Ort::Session(env_, model_buf, model_len, session_opts);
-    model_fi.free();
-    LOGF_IF(log_profiling_, "KokoroTtsEngine: model loaded (%zu bytes)",
-            model_len);
+    load_model(
+        make_ort_session_options(opt.ort_provider_names, opt.coreml_cache_dir));
     TIMER_END_IF(log_profiling_, kokoro_load_model);
 
     detect_kokoro_style_input_name();
@@ -1229,7 +1326,6 @@ struct KokoroTtsEngine {
     std::vector<float> wave_all;
     wave_all.reserve(chunks.size() * 8192);
 
-    const char* in_names[3] = {"input_ids", style_input_name_.c_str(), "speed"};
     static const char* out_names[] = {"waveform"};
 
     for (size_t ci = 0; ci < chunks.size(); ++ci) {
@@ -1265,26 +1361,29 @@ struct KokoroTtsEngine {
       const std::array<int64_t, 2> shape_ref{1,
                                              static_cast<int64_t>(voice_cols_)};
 
+      std::vector<const char*> in_names{"input_ids", style_input_name_.c_str(),
+                                        "speed"};
       std::vector<Ort::Value> inputs;
       inputs.push_back(Ort::Value::CreateTensor<int64_t>(
           mem_, ids.data(), ids.size(), shape_ids.data(), shape_ids.size()));
       inputs.push_back(
           Ort::Value::CreateTensor<float>(mem_, ref_row.data(), ref_row.size(),
                                           shape_ref.data(), shape_ref.size()));
+      float speed_f = static_cast<float>(speed_);
+      double speed_val = speed_;
       if (speed_elem_type_ == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
-        float speed_f = static_cast<float>(speed_);
         const std::array<int64_t, 1> shape_speed{1};
         inputs.push_back(Ort::Value::CreateTensor<float>(
             mem_, &speed_f, 1, shape_speed.data(), 1));
       } else {
-        double speed_val = speed_;
         inputs.push_back(
             Ort::Value::CreateTensor<double>(mem_, &speed_val, 1, nullptr, 0));
       }
+      append_split_weight_inputs(split_weights_, mem_, inputs, in_names);
 
       TIMER_START_IF(log_profiling_, kokoro_onnx_run);
       Ort::RunOptions run_opts{nullptr};
-      auto outputs = session_.Run(run_opts, in_names, inputs.data(),
+      auto outputs = session_.Run(run_opts, in_names.data(), inputs.data(),
                                   inputs.size(), out_names, 1);
       TIMER_END_IF(log_profiling_, kokoro_onnx_run);
 

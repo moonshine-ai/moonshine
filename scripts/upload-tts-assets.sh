@@ -41,11 +41,11 @@ SRC="${ROOT}/core/moonshine-tts/data"
 EXTRA="${MOONSHINE_RCLONE_EXTRA:-}"
 CACHE_CONTROL="${MOONSHINE_TTS_CACHE_CONTROL:-public, max-age=2592000}"
 
-if [[ ! -f "${SRC}/kokoro/model.ort" ]]; then
+if [[ ! -f "${SRC}/kokoro/model.model.ort" ]]; then
   echo "TTS binaries missing under ${SRC}; fetching via scripts/fetch-voice-assets.sh..." >&2
   "${ROOT}/scripts/fetch-voice-assets.sh" tts
 fi
-if [[ ! -d "${SRC}" || ! -f "${SRC}/kokoro/model.ort" ]]; then
+if [[ ! -d "${SRC}" || ! -f "${SRC}/kokoro/model.model.ort" ]]; then
   echo "Source directory not ready: ${SRC}" >&2
   echo "Run: scripts/fetch-voice-assets.sh tts" >&2
   exit 1
@@ -58,6 +58,14 @@ DEST="r2:${CDN_R2_BUCKET}/tts"
 LOG=$(mktemp)
 trap 'rm -f "${LOG}"' EXIT
 
+# Under --dry-run rclone logs "Skipped copy ..." rather than "Copied", so the parser below
+# has to look for a different message and the purge has to be suppressed. Without this a
+# dry run reports that nothing needs uploading no matter how much does.
+DRY_RUN=""
+for flag in ${EXTRA}; do
+  [[ "${flag}" == "--dry-run" || "${flag}" == "-n" ]] && DRY_RUN=1
+done
+
 echo "Copy ${SRC} -> ${DEST} (Cache-Control: ${CACHE_CONTROL})" >&2
 # --checksum compares hashes rather than mtime/size, matching what gsutil rsync -c did.
 # --header-upload is how the caching header reaches R2; without it objects are served with
@@ -67,8 +75,11 @@ rclone copy "${SRC}" "${DEST}" --checksum \
   --header-upload "Cache-Control: ${CACHE_CONTROL}" \
   --use-json-log --log-level INFO --log-file "${LOG}" ${EXTRA}
 
-TRANSFERRED=$(python3 - "${LOG}" <<'PY'
+TRANSFERRED=$(python3 - "${LOG}" "${DRY_RUN}" <<'PY'
 import json, sys
+# rclone logs "Copied (new)", "Copied (replaced existing)", "Updated" and similar, but
+# "Skipped copy as --dry-run is set" when it is only reporting what it would do.
+wanted = ("Skipped copy",) if sys.argv[2] else ("Copied", "Updated")
 objects = []
 for line in open(sys.argv[1], errors="replace"):
     line = line.strip()
@@ -78,20 +89,27 @@ for line in open(sys.argv[1], errors="replace"):
         entry = json.loads(line)
     except ValueError:
         continue
-    # rclone logs "Copied (new)", "Copied (replaced existing)", "Updated" and similar.
-    if entry.get("object") and entry.get("msg", "").startswith(("Copied", "Updated")):
+    if entry.get("object") and entry.get("msg", "").startswith(wanted):
         objects.append(entry["object"])
 print("\n".join(sorted(set(objects))))
 PY
 )
 
 if [[ -n "${TRANSFERRED}" ]]; then
-  echo "Uploaded $(printf '%s\n' "${TRANSFERRED}" | grep -c .) object(s)." >&2
+  COUNT=$(printf '%s\n' "${TRANSFERRED}" | grep -c .)
+  if [[ -n "${DRY_RUN}" ]]; then
+    echo "Would upload ${COUNT} object(s):" >&2
+    while IFS= read -r object; do
+      [[ -n "${object}" ]] && echo "  ${object}" >&2
+    done <<<"${TRANSFERRED}"
+  else
+    echo "Uploaded ${COUNT} object(s)." >&2
+  fi
 else
   echo "Nothing changed; every object already matched." >&2
 fi
 
-if [[ -n "${MOONSHINE_INVALIDATE_CDN:-}" && -n "${TRANSFERRED}" ]]; then
+if [[ -n "${MOONSHINE_INVALIDATE_CDN:-}" && -n "${TRANSFERRED}" && -z "${DRY_RUN}" ]]; then
   echo "Purging the Cloudflare cache for the objects this run replaced..." >&2
   urls=()
   while IFS= read -r object; do

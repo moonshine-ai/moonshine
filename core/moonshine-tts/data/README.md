@@ -42,8 +42,8 @@ model; in short there are three layouts:
 
 | Layout | Used by | Why |
 |--------|---------|-----|
-| `<stem>.model.ort` + `<stem>.weights.ort` | every Piper voice with int8 weights | Keeping the weights in a second model runs their dequantize once at load instead of on every inference, without the ~4x file growth that folding them to float32 would cause. See `scripts/split-model-weights.py`. |
-| `<stem>.ort` | Kokoro, the English OOV model, `en_US-saikat` | Float weights, so full optimization costs almost nothing in size. |
+| `<stem>.model.ort` + `<stem>.weights.ort` | Kokoro, every Piper voice with int8 weights | Keeping the weights in a second model runs their dequantize once at load instead of on every inference, without the ~4x file growth that folding them to float32 would cause. See `scripts/split-model-weights.py`. |
+| `<stem>.ort` | the English OOV model, `en_US-saikat` | Float weights, so full optimization costs almost nothing in size. |
 | `<stem>.onnx` | the Chinese and Arabic G2P transformers | Their weights feed `MatMul`, which ORT pre-packs at load only for a constant operand, so moving the weights out of the graph would cost about 2.2x on inference. |
 
 Piper voices keep their `<stem>.onnx.json` config under that name whatever form

@@ -1206,7 +1206,10 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     const std::string json(out);
     CHECK(json.size() >= 2);
     CHECK(json.find("\"groups\"") != std::string::npos);
-    CHECK(json.find("\"kokoro/model.ort\"") != std::string::npos);
+    // Kokoro ships as a split ORT pair, so both halves have to be fetched.
+    CHECK(json.find("\"kokoro/model.model.ort\"") != std::string::npos);
+    CHECK(json.find("\"kokoro/model.weights.ort\"") != std::string::npos);
+    CHECK(json.find("\"kokoro/model.ort\"") == std::string::npos);
     CHECK(json.find("\"en_us/dict_filtered_heteronyms.tsv\"") !=
           std::string::npos);
     std::free(out);
@@ -1219,7 +1222,8 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.find("\"groups\"") != std::string::npos);
-    CHECK(json.find("\"kokoro/model.ort\"") != std::string::npos);
+    CHECK(json.find("\"kokoro/model.model.ort\"") != std::string::npos);
+    CHECK(json.find("\"kokoro/model.weights.ort\"") != std::string::npos);
     std::free(out);
   }
 
@@ -1254,7 +1258,7 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.find("piper-voices") != std::string::npos);
-    CHECK(json.find("kokoro/model.ort") == std::string::npos);
+    CHECK(json.find("kokoro/model") == std::string::npos);
     std::free(out);
   }
 
@@ -1267,7 +1271,8 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
             MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
-    CHECK(json.find("\"kokoro/model.ort\"") != std::string::npos);
+    CHECK(json.find("\"kokoro/model.model.ort\"") != std::string::npos);
+    CHECK(json.find("\"kokoro/model.weights.ort\"") != std::string::npos);
     CHECK(json.find("piper-voices") == std::string::npos);
     std::free(out);
   }
@@ -1416,7 +1421,7 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     CHECK(json.find("\"zipvoice/fm_decoder.ort\"") != std::string::npos);
     CHECK(json.find("\"zipvoice/vocoder.ort\"") != std::string::npos);
     CHECK(json.find("\"zipvoice/tokens.txt\"") != std::string::npos);
-    CHECK(json.find("\"kokoro/model.ort\"") == std::string::npos);
+    CHECK(json.find("kokoro/model") == std::string::npos);
     CHECK(json.find("piper-voices") == std::string::npos);
     CHECK(json.find("\"role\":\"clone_asr\"") != std::string::npos);
     CHECK(json.find("\"clone_asr/") != std::string::npos);

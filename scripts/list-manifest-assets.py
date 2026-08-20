@@ -36,11 +36,7 @@ PYTHON_SRC = REPO_ROOT / "language-bindings" / "python" / "src"
 
 sys.path.insert(0, str(PYTHON_SRC))
 
-from moonshine_voice.download import (  # noqa: E402
-    cdn_url_for_tts_asset_key,
-    get_tts_voice_catalog,
-    is_downloadable_tts_asset_key,
-)
+from moonshine_voice.download import get_tts_voice_catalog  # noqa: E402
 from moonshine_voice.moonshine_api import (  # noqa: E402
     moonshine_get_diarization_dependencies_string,
     moonshine_get_embedding_catalog_string,
@@ -92,21 +88,19 @@ def collect():
     for url in manifest_urls(moonshine_get_diarization_dependencies_string()):
         add(url, "diarization")
 
-    # TTS returns flat canonical asset keys rather than a group manifest, and the
-    # keys depend on the voice, so ask once per voice. Each language is asked only
-    # about its own voices; the full cross product invents rejected combinations.
+    # TTS dependencies vary by voice, so ask once per voice. Each language is asked
+    # only about its own voices; the full cross product invents rejected combinations.
     for language, entries in sorted(get_tts_voice_catalog().items()):
         voices = sorted({getattr(e, "id", None) or e["id"] for e in entries})
         for voice in voices or [None]:
             options = {"voice": voice} if voice else None
             try:
-                keys = json.loads(moonshine_get_tts_dependencies_string(language, options))
+                manifest = moonshine_get_tts_dependencies_string(language, options)
             except Exception as err:
                 print(f"warning: tts {language}/{voice}: {err}", file=sys.stderr)
                 continue
-            for key in keys:
-                if is_downloadable_tts_asset_key(key):
-                    add(cdn_url_for_tts_asset_key(key), f"tts {language} {voice or 'default'}")
+            for url in manifest_urls(manifest):
+                add(url, f"tts {language} {voice or 'default'}")
 
     return refs
 

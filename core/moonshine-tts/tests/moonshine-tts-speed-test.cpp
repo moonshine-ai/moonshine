@@ -18,8 +18,13 @@ bool bundled_tts_data_present(const std::filesystem::path& root) {
   const bool have_lessac =
       fs::is_regular_file(voices / "en_US-lessac-medium.model.ort") ||
       fs::is_regular_file(voices / "en_US-lessac-medium.ort");
-  return fs::is_regular_file(root / "kokoro" / "model.ort") &&
-         fs::is_regular_file(root / "kokoro" / "config.json") && have_lessac;
+  // Kokoro ships as a split ORT pair, and a single .ort is still accepted.
+  const bool have_kokoro =
+      (fs::is_regular_file(root / "kokoro" / "model.model.ort") &&
+       fs::is_regular_file(root / "kokoro" / "model.weights.ort")) ||
+      fs::is_regular_file(root / "kokoro" / "model.ort");
+  return have_kokoro && fs::is_regular_file(root / "kokoro" / "config.json") &&
+         have_lessac;
 }
 
 }  // namespace

@@ -176,11 +176,16 @@ TEST_CASE(
   const fs::path voices_dir = g_data_root / "kokoro" / "voices";
   REQUIRE(std::filesystem::is_directory(voices_dir));
 
-  const auto model_key_it = std::find_if(
-      bundle.begin(), bundle.end(),
-      [](const auto& pr) { return pr.first == "kokoro/model.ort"; });
-  REQUIRE(model_key_it != bundle.end());
-  REQUIRE_FALSE(model_key_it->second.empty());
+  // Kokoro ships as a split ORT pair, and both halves have to reach the
+  // library as buffers for this to be a real in-memory load.
+  for (const char* key :
+       {"kokoro/model.model.ort", "kokoro/model.weights.ort"}) {
+    const auto it =
+        std::find_if(bundle.begin(), bundle.end(),
+                     [key](const auto& pr) { return pr.first == key; });
+    REQUIRE_MESSAGE(it != bundle.end(), "missing from bundle: " << key);
+    REQUIRE_FALSE(it->second.empty());
+  }
 
   std::vector<std::string> voice_stems;
   for (const auto& ent : std::filesystem::directory_iterator(voices_dir)) {
