@@ -101,7 +101,7 @@ Call `cloning()` before `load()`, then `clone_from()` (file or PCM) or `start_cl
 
 ## Domain customization
 
-`set_keyterms([...])` biases toward jargon; `set_context(passage)` extracts terms from a document. Streaming architectures only — Tiny/Base raise. Takes effect on the next transcription; does not rewrite text already emitted. Keep the list curated; thousands of terms hurt accuracy. See the domain-customization doc for `keyterm_boost`. Teaching conventions or a new acoustic environment is `pip install 'moonshine-voice[lora]'` then `python -m moonshine_voice.lora` in a training environment — do not add PyTorch or Transformers to an inference app.
+`set_keyterms([...])` biases toward jargon; `set_context(passage)` extracts terms from a document. Streaming architectures only — Tiny/Base raise. Takes effect on the next transcription; does not rewrite text already emitted. Keep the list curated; thousands of terms hurt accuracy. See the domain-customization doc for `keyterm_boost`. Teaching conventions or a new acoustic environment is `pip install 'moonshine-voice[finetune]'` then `python -m moonshine_voice.lora` (or `moonshine-voice finetune`) in a training environment — do not add PyTorch or Transformers to an inference app. ATCOSIM is phraseology, not VHF; real radio is `--dataset uwb_atcc` or `--train-manifest`.
 
 ## Anti-patterns
 
@@ -112,7 +112,7 @@ Call `cloning()` before `load()`, then `clone_from()` (file or PCM) or `start_cl
 - Do not use `keyterms` / `context` on Tiny or Base.
 - Do not treat `on_text` as a finished line.
 - Do not copy Python `yield` flow bodies into JavaScript/Swift/Java.
-- Do not add torch/transformers to an inference install; LoRA training is `moonshine-voice[lora]`.
+- Do not add torch/transformers to an inference install; training is `moonshine-voice[finetune]` (same extra as `[lora]`).
 
 ## Debugging
 

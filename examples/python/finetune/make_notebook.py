@@ -19,26 +19,29 @@ def code(text):
 md(r"""
 # Adapt Moonshine Streaming Medium to a new domain with LoRA
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/moonshine-ai/moonshine/blob/main/examples/python/lora-training/moonshine_lora_domain_adaptation.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/moonshine-ai/moonshine/blob/main/examples/python/finetune/moonshine_lora_domain_adaptation.ipynb)
 
 This notebook takes the public **Moonshine Streaming Medium** speech-to-text model and
-teaches it a domain it is bad at (air traffic control radio) by training a
+teaches it a domain it is bad at — air traffic control **phraseology**, recorded as
+close-talk headset in a quiet simulator, not VHF radio — by training a
 **286,720-parameter LoRA adapter**, about 0.11% of the model, on two hours of audio.
 Everything it uses is public: the model, both datasets, and the same helpers as
 `python -m moonshine_voice.lora`. The cells below call into that package rather than
 reimplementing the trainer.
 
 The same recipe ships in the Python package as an opt-in extra, so inference installs
-do not pull in PyTorch or Transformers:
+do not pull in PyTorch or Transformers. `[finetune]` and `[lora]` install the same
+packages:
 
 ```bash
-pip install 'moonshine-voice[lora]'
+pip install 'moonshine-voice[finetune]'
 python -m moonshine_voice.lora --dataset atcosim --output-dir ./lora_atc
 ```
 
-`moonshine-voice lora --help` is the full flag list. Use `--train-manifest` for your
-own JSONL of `{audio, text}` rows. This notebook is the worked example that measures
-the claim; the extra is what you run locally.
+`moonshine-voice finetune --help` is the full flag list. Use `--train-manifest` for your
+own JSONL of `{audio, text}` rows. This notebook is the measured phraseology example;
+`--dataset uwb_atcc` is the real-VHF research example (CC BY-NC-SA 4.0). Neither is a
+band-limit of the other.
 
 Everything below is measured by the notebook itself, on the full 1,901-utterance
 in-domain test set and all 2,620 utterances of LibriSpeech test-clean.
@@ -94,8 +97,8 @@ which contains no audio.
 
 code(r'''
 # From a clone of this repo, install the local extra so the notebook matches the trainer:
-#   pip install -e "language-bindings/python[lora]"
-!pip install -q "moonshine-voice[lora]"
+#   pip install -e "language-bindings/python[finetune]"
+!pip install -q "moonshine-voice[finetune]"
 
 import torch
 print("torch", torch.__version__, "| GPU:", torch.cuda.get_device_name(0)
@@ -144,10 +147,13 @@ print("device", DEVICE, "| sample rate", SAMPLE_RATE)
 md(r"""
 ## 1. The data, and one trap worth knowing about
 
-ATCOSIM is ten hours of air traffic controller speech: clipped, fast, full of
-callsigns and numbers. Its transcripts follow air traffic convention: lowercase,
-unpunctuated, and **digits spelled out as words** (`lufthansa four six five two`).
-That last detail turns out to matter enormously, and we will come back to it.
+ATCOSIM is ten hours of air traffic controller speech recorded on a close-talk
+headset in a quiet simulator — **not VHF radio**. Clipped, fast, full of callsigns
+and numbers. Its transcripts follow air traffic convention: lowercase, unpunctuated,
+and **digits spelled out as words** (`lufthansa four six five two`). That last detail
+turns out to matter enormously, and we will come back to it. Real tower radio is a
+different corpus (`--dataset uwb_atcc`); do not treat a filtered copy of ATCOSIM as a
+substitute.
 
 The trap is in the splits. The widely-used Hub mirror ships a `train`/`test` split
 that is **utterance-random, not speaker-disjoint**: there are only ten speakers, and
@@ -827,22 +833,37 @@ proven.
 Outside Colab, skip rewriting the cells and pass a JSONL manifest to the package:
 
 ```bash
-pip install 'moonshine-voice[lora]'
+pip install 'moonshine-voice[finetune]'
 python -m moonshine_voice.lora --train-manifest domain.jsonl --output-dir ./lora_out
 ```
 
 Each line of the manifest is `{"audio": "clips/001.wav", "text": "the transcript"}`.
-`--dataset atcosim` is this notebook's ATC run with the speaker-disjoint split, replay,
-and the defaults above. Quantize the exported graphs with
-`scripts/quantize-streaming-model.sh` and load the resulting directory with
-`Transcriber` as usual; the inference wheel does not need the extra.
+`--dataset atcosim` is this notebook's ATC phraseology run with the speaker-disjoint
+split, replay, and the defaults above. Real VHF is a different command. On published
+Medium, two hours of UWB-ATCC decoder LoRA moved held-out ATCO2 from 82.2% to 59.6%
+WER (the ATCOSIM phraseology adapter only reached 74.5%) and in-domain UWB from
+107.8% to 73.1%, with LibriSpeech at 2.7%. UWB-ATCC is CC BY-NC-SA 4.0 (research
+only) — for a product radio SKU use your own hours:
+
+```bash
+python -m moonshine_voice.lora --dataset uwb_atcc --sites both \
+    --eval --eval-dataset atco2 --canary --output-dir ./lora_vhf
+python -m moonshine_voice.lora --dataset uwb_atcc --adapt full \
+    --eval --eval-dataset atco2 --canary --output-dir ./ft_vhf
+```
+
+`--adapt full` and `--sites encoder|both` need `--graphs all` at export time.
+Quantize the exported graphs with `scripts/quantize-streaming-model.sh` and load the
+resulting directory with `Transcriber` as usual; the inference wheel does not need
+the extra.
 
 ### More
 
 - Model: [`moonshine-ai/moonshine-streaming-medium`](https://huggingface.co/moonshine-ai/moonshine-streaming-medium)
 - Replay corpus: [`moonshine-ai/yodas-en-replay`](https://huggingface.co/datasets/moonshine-ai/yodas-en-replay)
-- Split definition: [`moonshine-ai/atcosim-speaker-disjoint-splits`](https://huggingface.co/datasets/moonshine-ai/atcosim-speaker-disjoint-splits)
-- Package extra: `pip install 'moonshine-voice[lora]'`, then `python -m moonshine_voice.lora --help`
+- ATCOSIM split: [`moonshine-ai/atcosim-speaker-disjoint-splits`](https://huggingface.co/datasets/moonshine-ai/atcosim-speaker-disjoint-splits)
+- UWB-ATCC (real VHF, NC): [`Jzuluaga/uwb_atcc`](https://huggingface.co/datasets/Jzuluaga/uwb_atcc)
+- Package extra: `pip install 'moonshine-voice[finetune]'`, then `python -m moonshine_voice.lora --help`
 - Deployment runtime: [github.com/moonshine-ai/moonshine](https://github.com/moonshine-ai/moonshine)
 """)
 

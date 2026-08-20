@@ -40,5 +40,5 @@ User-facing changes go in [CHANGELOGS.md](CHANGELOGS.md): Keep a Changelog, high
 - `core/` — C++ engine and C API (`moonshine-c-api.h`)
 - `language-bindings/` — Python, WASM, Swift, Android
 - `docs/` — mkdocs source, published at https://moonshine-voice.readthedocs.io
-- `examples/` — per-platform sample apps (the LoRA notebook is `examples/python/lora-training/`; the trainer is `moonshine_voice.lora`)
+- `examples/` — per-platform sample apps (the fine-tune notebook is `examples/python/finetune/`; the trainer is `moonshine_voice.lora` / `moonshine-voice finetune`)
 - `micro/` — tiny on-device models, separate from the main library

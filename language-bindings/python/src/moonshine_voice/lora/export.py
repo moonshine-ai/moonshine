@@ -7,9 +7,10 @@ them from a `MoonshineStreamingForConditionalGeneration` checkpoint, which is wh
 have after fine-tuning with Transformers, using nothing but public code.
 
 A LoRA adapter on the decoder's self-attention changes only `decoder_kv`, so
-`--graphs decoder_kv,cross_kv` is enough to re-export a fine-tune: the other three
-graphs are bit-identical to the published ones and can be copied. `--graphs all`
-exports everything, which is what you want if you touched the encoder.
+`--graphs decoder_kv,cross_kv` is enough to re-export a decoder-only adapter: the
+other three graphs are bit-identical to the published ones and can be copied.
+`--graphs all` exports everything, which is required for `--sites encoder|both`
+or `--adapt full`.
 
     python -m moonshine_voice.lora --export \
         --model moonshine-ai/moonshine-streaming-medium --output-dir float/

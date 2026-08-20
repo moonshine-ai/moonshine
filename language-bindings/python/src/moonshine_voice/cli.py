@@ -48,6 +48,11 @@ COMMANDS: Dict[str, Tuple[str, str]] = {
         "moonshine_voice.lora",
         "Train a LoRA domain adapter (requires pip install moonshine-voice[lora]).",
     ),
+    "finetune": (
+        "moonshine_voice.lora",
+        "Train a domain adapter or full fine-tune "
+        "(requires pip install moonshine-voice[finetune]).",
+    ),
 }
 
 

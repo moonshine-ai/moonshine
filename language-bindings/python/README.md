@@ -8,7 +8,7 @@ A fast, accurate, on-device AI library for building interactive voice applicatio
 pip install moonshine-voice
 ```
 
-Training a LoRA domain adapter is an opt-in extra (`pip install 'moonshine-voice[lora]'`) so the inference install does not pull in PyTorch or Transformers. See [Domain Customization](https://moonshine-voice.readthedocs.io/en/latest/models/domain-customization/#retraining).
+Training a domain adapter is an opt-in extra (`pip install 'moonshine-voice[finetune]'`, also available as `[lora]`) so the inference install does not pull in PyTorch or Transformers. See [Domain Customization](https://moonshine-voice.readthedocs.io/en/latest/models/domain-customization/#retraining).
 
 ## Quick Start
 

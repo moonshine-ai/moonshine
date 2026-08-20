@@ -13,6 +13,7 @@ Transcription gets easier when you know something about what is about to be said
     - [What it can't do](#what-it-cant-do)
 - [Retraining](#retraining)
     - [Worked example: air traffic control](#worked-example-air-traffic-control)
+    - [Worked example: real VHF](#worked-example-real-vhf)
     - [Your own data](#your-own-data)
     - [Shipping the result](#shipping-the-result)
     - [Pitfalls](#pitfalls)
@@ -145,20 +146,20 @@ Key terms only nudge the decoder towards words it can already spell, so they wil
 
 ## Retraining
 
-Runtime context helps with words the model can already spell. Teaching it a new accent, dialect, acoustic environment, or domain convention — air-traffic phraseology, spelled-out digits, and so on — needs a small amount of in-domain audio and a LoRA adapter. The adapter is rank 8 on the decoder's self-attention q/k/v, about 0.11% of Streaming Medium, and is folded back into the base weights so inference is unchanged: no extra layers, no extra latency, and the same `Transcriber` load path.
+Runtime context helps with words the model can already spell. Teaching it a new accent, dialect, acoustic environment, or domain convention — air-traffic phraseology, spelled-out digits, and so on — needs a small amount of in-domain audio and a trained adapter. The default is a rank-8 LoRA on the decoder's self-attention q/k/v, about 0.11% of Streaming Medium, folded back into the base weights so inference is unchanged: no extra layers, no extra latency, and the same `Transcriber` load path.
 
-What it buys is conventions, not vocabulary. Two hours of air traffic audio taught Medium to write `four six five two` instead of `4652` and to keep callsign templates, and left waypoint names it had barely seen exactly where it found them. Those names are still [runtime key-term biasing](#supply-a-key-terms-list), and the two compose: train the adapter, then hand the deployed model the sector's word list.
+What decoder LoRA buys is conventions, not vocabulary, and not a new microphone. Two hours of ATCOSIM taught Medium to write `four six five two` instead of `4652` and to keep callsign templates, and left waypoint names it had barely seen exactly where it found them. Those names are still [runtime key-term biasing](#supply-a-key-terms-list), and the two compose. ATCOSIM is close-talk headset in a quiet simulator, **not VHF radio**. Real radio is a second axis: see [Worked example: real VHF](#worked-example-real-vhf).
 
-The trainer is an opt-in extra. A default `pip install moonshine-voice` does not pull in PyTorch or Transformers, and `import moonshine_voice` does not import this path.
+The trainer is an opt-in extra. A default `pip install moonshine-voice` does not pull in PyTorch or Transformers, and `import moonshine_voice` does not import this path. `[finetune]` and `[lora]` install the same packages.
 
 <!-- doc-test: skip -->
 ```bash
-pip install 'moonshine-voice[lora]'
+pip install 'moonshine-voice[finetune]'
 ```
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/moonshine-ai/moonshine/blob/main/examples/python/lora-training/moonshine_lora_domain_adaptation.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/moonshine-ai/moonshine/blob/main/examples/python/finetune/moonshine_lora_domain_adaptation.ipynb)
 
-The [notebook](https://github.com/moonshine-ai/moonshine/blob/main/examples/python/lora-training/moonshine_lora_domain_adaptation.ipynb) is the measured walkthrough on air traffic control, with the same defaults as the command below. It calls the same helpers (`fit_adapter`, ATCOSIM loaders, export) as the CLI rather than inlining them.
+The [notebook](https://github.com/moonshine-ai/moonshine/blob/main/examples/python/finetune/moonshine_lora_domain_adaptation.ipynb) is the measured walkthrough on ATCOSIM phraseology, with the same defaults as the command below. It calls the same helpers (`fit_adapter`, ATCOSIM loaders, export) as the CLI rather than inlining them. `moonshine-voice finetune` is an alias of `python -m moonshine_voice.lora`.
 
 ### Worked example: air traffic control
 
@@ -190,6 +191,36 @@ Index the corpus without training:
 python -m moonshine_voice.lora --dataset atcosim --prepare-only
 ```
 
+### Worked example: real VHF
+
+ATCOSIM is not radio. A Butterworth band-limit of it does not transfer to held-out VHF; training on real VHF does. The public built-in corpus for that is [`Jzuluaga/uwb_atcc`](https://huggingface.co/datasets/Jzuluaga/uwb_atcc) (UWB-ATCC, Czech tower radio). `--dataset uwb_atcc` drops the one session the published train split shares with its test set (`TWR-34720N`). ATCO2-test-set-1h is a different airport's radio and is eval-only transfer — never a training source.
+
+UWB-ATCC is **CC BY-NC-SA 4.0**. It is a research example. Do not train a commercial radio SKU on it. For a product adapter, pass your own VHF hours with `--train-manifest`.
+
+<!-- doc-test: skip -->
+```bash
+python -m moonshine_voice.lora --dataset uwb_atcc --sites both \
+    --eval --eval-dataset atco2 --canary --output-dir ./lora_vhf
+```
+
+`--sites decoder` is still the default and is the right first bet for phraseology. `--sites both` is the cheap radio adapter: it also wraps encoder self-attention (default LR `1e-4`; decoder-only stays at `1e-3`). `--adapt full` unfreezes the backbone (default LR `1e-5`), writes no `adapter.safetensors`, and is the ceiling on real radio. Full fine-tune of Medium is not a Colab T4 job; re-export with `--graphs all`.
+
+<!-- doc-test: skip -->
+```bash
+python -m moonshine_voice.lora --dataset uwb_atcc --adapt full \
+    --eval --eval-dataset atco2 --canary --output-dir ./ft_vhf
+```
+
+Measured on published Streaming Medium, two hours, 50% replay, session-disjoint UWB train, ATCO2-test-set-1h never in train:
+
+| | UWB-ATCC (in-domain VHF) | ATCO2 (held-out VHF) | LibriSpeech |
+| --- | --- | --- | --- |
+| Moonshine Streaming Medium, as published | 107.8% WER | 82.2% WER | 2.3% WER |
+| + ATCOSIM decoder LoRA (phraseology, not radio) | — | 74.5% WER | 3.0% WER |
+| **+ UWB decoder LoRA** | **73.1% WER** | **59.6% WER** | **2.7% WER** |
+
+Phraseology still transfers without radio (ATCOSIM adapter: ATCO2 82→75). Real VHF adds a second cut (ATCO2 75→60, in-domain 108→73) and the canary stays healthy. `--sites encoder|both` and `--adapt full` are in the CLI; on Medium they need a lower `--lr` than decoder-only and can NaN if you leave the decoder default of `1e-3`. The defaults above (`1e-4` / `1e-5`) are the starting point. A shippable radio SKU uses `--train-manifest` on hours you can use commercially, not this NC corpus.
+
 ### Your own data
 
 A JSONL file, one clip per line:
@@ -208,7 +239,7 @@ python -m moonshine_voice.lora \
     --output-dir ./lora_out
 ```
 
-Sensible defaults: rank 8, learning rate `1e-3`, batch 8, 50% replay from yodas-en-replay, early stopping on in-domain plus held-out general loss. `python -m moonshine_voice.lora --help` lists every flag.
+Sensible defaults: rank 8, `--sites decoder`, learning rate `1e-3` (or `1e-4` when `--sites` includes the encoder, `1e-5` for `--adapt full`), batch 8, 50% replay from yodas-en-replay, early stopping on in-domain plus held-out general loss. `python -m moonshine_voice.lora --help` lists every flag. For real radio of your own, start with `--sites both`; reach for `--adapt full` when LoRA leaves accuracy on the table.
 
 Score a held-out set and a LibriSpeech canary after training:
 
@@ -231,14 +262,18 @@ python -m moonshine_voice.lora --export \
 bash scripts/quantize-streaming-model.sh ./float
 ```
 
-A decoder-only adapter changes only `decoder_kv`, so `--graphs decoder_kv` plus the published `.ort` files for the other four graphs is enough. Load the directory with `Transcriber` from the inference wheel — no `[lora]` extra, no adapter code at runtime.
+A decoder-only adapter changes only `decoder_kv`, so `--graphs decoder_kv` plus the published `.ort` files for the other four graphs is enough. `--sites encoder|both` or `--adapt full` changes the encoder, so use `--graphs all`. Load the directory with `Transcriber` from the inference wheel — no `[finetune]` extra, no adapter code at runtime.
 
 Then add the domain's word list with `set_keyterms` / `set_context`. The adapter has already learned how this domain talks; biasing is what recovers the names the training audio barely said.
 
 ### Pitfalls
 
 - **Orthography mismatch silently eats the adapter.** An ALL-CAPS corpus teaches a typography the WER normalizer discards. `--text-mode auto` lowercases a corpus that is more than 90% uppercase.
-- **Hold out whole speakers**, not random utterances, or you measure speaker adaptation and call it domain adaptation. `--dataset atcosim` already does.
+- **ATCOSIM is not radio.** It is close-talk headset in a quiet simulator. Decoder LoRA on it teaches phraseology. A filtered copy of it does not become VHF. Real radio is `--dataset uwb_atcc` or your own `--train-manifest`.
+- **UWB-ATCC is CC BY-NC-SA 4.0.** Research example only. A shippable radio SKU trains on hours you have a right to use commercially.
+- **Do not train on ATCO2 mixes.** `jlvdoorn/atco2-asr` and similar overlap ATCO2-test-set-1h. `--eval-dataset atco2` scores that hour; it never trains on it.
+- **Hold out whole speakers or sessions**, not random utterances, or you measure speaker adaptation and call it domain adaptation. `--dataset atcosim` and `--dataset uwb_atcc` already do.
 - **Always score a general-domain canary.** In-domain WER alone cannot distinguish adaptation from damage.
+- **Do not use the decoder LoRA learning rate on the encoder or a full fine-tune.** `--sites encoder|both` defaults to `1e-4` and `--adapt full` to `1e-5` because `1e-3` NaNs on Medium. If loss goes non-finite the trainer skips the step and keeps the last finite checkpoint.
 - **`labels=` was double-shifted before Transformers 5.15.** The trainer computes cross-entropy itself against explicit `decoder_input_ids`, which is right on either version. The extra still pins `transformers>=5.15`.
 

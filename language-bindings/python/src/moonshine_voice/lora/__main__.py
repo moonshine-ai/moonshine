@@ -11,21 +11,26 @@ import sys
 from typing import List, Optional
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_parser(prog: Optional[str] = None) -> argparse.ArgumentParser:
+    if prog is None:
+        argv0 = sys.argv[0] if sys.argv else ""
+        prog = argv0 if argv0.startswith("moonshine-voice") else "moonshine-voice lora"
     parser = argparse.ArgumentParser(
-        prog="moonshine-voice lora",
+        prog=prog,
         description=(
-            "Train a decoder-only LoRA adapter for Moonshine Streaming. "
-            "Requires pip install 'moonshine-voice[lora]'."
+            "Train a LoRA adapter or full fine-tune for Moonshine Streaming. "
+            "Requires pip install 'moonshine-voice[finetune]' "
+            "(or the equivalent 'moonshine-voice[lora]')."
         )
     )
     data = parser.add_argument_group("data")
     data.add_argument(
         "--dataset",
-        choices=["atcosim"],
+        choices=["atcosim", "uwb_atcc"],
         default=None,
-        help="built-in corpus. atcosim uses the speaker-disjoint split "
-        "(moonshine-ai/atcosim-speaker-disjoint-splits)",
+        help="built-in corpus. atcosim is speaker-disjoint headset ATC "
+        "(phraseology). uwb_atcc is session-disjoint real VHF "
+        "(CC BY-NC-SA 4.0, research only)",
     )
     data.add_argument(
         "--train-manifest",
@@ -36,6 +41,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--eval-manifest",
         default=None,
         help="held-out manifest scored when --eval is set",
+    )
+    data.add_argument(
+        "--eval-dataset",
+        choices=["atco2"],
+        default=None,
+        help="optional transfer canary. atco2 is ATCO2-test-set-1h and is "
+        "never used for training",
     )
     data.add_argument(
         "--data-root",
@@ -66,8 +78,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--train-hours",
         type=float,
         default=None,
-        help="in-domain hours to train on (default: 2.0 for atcosim, all "
-        "of a custom manifest except the dev slice)",
+        help="in-domain hours to train on (default: 2.0 for built-in "
+        "datasets, all of a custom manifest except the dev slice)",
     )
     hours.add_argument("--dev-hours", type=float, default=0.25)
     hours.add_argument("--replay-hours", type=float, default=6.0)
@@ -80,9 +92,28 @@ def build_parser() -> argparse.ArgumentParser:
         default="moonshine-ai/moonshine-streaming-medium",
         help="HF hub id or local save_pretrained directory",
     )
+    model.add_argument(
+        "--adapt",
+        default="lora",
+        choices=["lora", "full"],
+        help="lora freezes the backbone (default). full unfreezes it; "
+        "use for real radio, not a Colab T4",
+    )
+    model.add_argument(
+        "--sites",
+        default="decoder",
+        choices=["decoder", "encoder", "both"],
+        help="which self-attention stacks get LoRA (ignored when --adapt full)",
+    )
     model.add_argument("--rank", type=int, default=8)
     model.add_argument("--alpha", type=float, default=None)
-    model.add_argument("--lr", type=float, default=1e-3)
+    model.add_argument(
+        "--lr",
+        type=float,
+        default=None,
+        help="default 1e-3 for decoder LoRA, 1e-4 when --sites "
+        "includes the encoder, 1e-5 for --adapt full",
+    )
     model.add_argument("--batch-size", type=int, default=8)
     model.add_argument("--max-steps", type=int, default=3000)
     model.add_argument("--eval-every", type=int, default=100)
@@ -106,8 +137,8 @@ def build_parser() -> argparse.ArgumentParser:
     io.add_argument(
         "--eval",
         action="store_true",
-        help="score in-domain WER after training (ATCOSIM scored speakers, "
-        "or --eval-manifest)",
+        help="score in-domain WER after training (ATCOSIM/UWB scored "
+        "split, or --eval-manifest)",
     )
     io.add_argument("--eval-limit", type=int, default=None)
     io.add_argument(
@@ -128,7 +159,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--graphs",
         default="all",
         help="'all' or a comma-separated subset of "
-        "frontend,encoder,adapter,cross_kv,decoder_kv",
+        "frontend,encoder,adapter,cross_kv,decoder_kv. decoder-only LoRA "
+        "only needs decoder_kv; --sites encoder|both and --adapt full "
+        "need all",
     )
     export.add_argument(
         "--tokenizer-bin",

@@ -50,6 +50,19 @@ lora = [
     "onnx",
     "onnxscript",
 ]
+# Same extra as [lora]; the user-facing name for domain fine-tuning.
+finetune = [
+    "torch",
+    "transformers>=5.15",
+    "safetensors",
+    "soundfile",
+    "pyarrow",
+    "scipy",
+    "jiwer",
+    "huggingface_hub",
+    "onnx",
+    "onnxscript",
+]
 
 [project.urls]
 Homepage = "https://github.com/moonshine-ai/moonshine"
