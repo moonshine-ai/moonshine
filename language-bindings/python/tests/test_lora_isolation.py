@@ -38,6 +38,7 @@ def test_inference_import_does_not_load_training_stack():
 def test_lora_deps_error_points_at_the_extra():
     error = lora_deps_error(["torch", "transformers>=5.15"])
     message = str(error)
+    assert "moonshine-voice[finetune]" in message
     assert "moonshine-voice[lora]" in message
     assert "torch" in message
     assert "inference wheel" in message
@@ -53,3 +54,5 @@ def test_help_does_not_need_the_extra():
     assert result.returncode == 0, result.stdout + result.stderr
     assert "--dataset" in result.stdout
     assert "--train-manifest" in result.stdout
+    assert "--sites" in result.stdout
+    assert "--adapt" in result.stdout

@@ -19,7 +19,8 @@ LORA_PACKAGES = (
     ("huggingface_hub", "huggingface_hub"),
 )
 
-INSTALL_HINT = "pip install 'moonshine-voice[lora]'"
+INSTALL_HINT = "pip install 'moonshine-voice[finetune]'"
+INSTALL_HINT_ALIASES = "pip install 'moonshine-voice[finetune]'  (or 'moonshine-voice[lora]')"
 
 
 def missing_lora_packages():
@@ -36,9 +37,9 @@ def missing_lora_packages():
 def lora_deps_error(missing):
     names = ", ".join(missing)
     return ImportError(
-        "LoRA training needs extra packages that are not installed with the "
+        "Fine-tuning needs extra packages that are not installed with the "
         "default moonshine-voice inference wheel.\n"
-        f"  {INSTALL_HINT}\n"
+        f"  {INSTALL_HINT_ALIASES}\n"
         f"Missing: {names}"
     )
 

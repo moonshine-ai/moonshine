@@ -1,4 +1,4 @@
-"""Rank-r LoRA on decoder self-attention q/k/v, with a shared down-projection.
+"""Rank-r LoRA on self-attention q/k/v, with a shared down-projection.
 
 Imported only after ``require_lora_deps()``: this module loads PyTorch.
 """
@@ -9,6 +9,8 @@ import torch
 import torch.nn as nn
 
 QKV = ("q_proj", "k_proj", "v_proj")
+VALID_SITES = ("decoder", "encoder", "both")
+VALID_ADAPT = ("lora", "full")
 
 
 class LoRALinear(nn.Module):
@@ -45,17 +47,9 @@ class LoRALinear(nn.Module):
             self.merged = True
 
 
-def add_lora(model, rank=8, alpha=None, seed=0):
-    """Replace each decoder self-attention q/k/v with a ``LoRALinear``.
-
-    Cross-attention is left alone: those projections run over the whole audio
-    memory span and are the expensive site. Encoder self-attention is left
-    alone for the same reason the runtime recipe ships a decoder-only adapter.
-    """
-    alpha = float(rank if alpha is None else alpha)
-    gen = torch.Generator(device="cpu").manual_seed(seed)
-    sites = {}
-    for i, layer in enumerate(model.model.decoder.layers):
+def _wrap_stack(layers, prefix, rank, scale, gen, sites):
+    """Replace each layer's self-attention q/k/v. Keys are ``{prefix}.{i}``."""
+    for i, layer in enumerate(layers):
         attn = layer.self_attn
         bases = [getattr(attn, role) for role in QKV]
         down = nn.Linear(
@@ -71,11 +65,30 @@ def add_lora(model, rank=8, alpha=None, seed=0):
             down.weight.copy_(weight.to(down.weight.device, down.weight.dtype))
         group = []
         for role, base in zip(QKV, bases):
-            wrapped = LoRALinear(base, down, rank, alpha / rank)
+            wrapped = LoRALinear(base, down, rank, scale)
             setattr(attn, role, wrapped)
             group.append(wrapped)
-        sites[i] = group
-    return sites
+        sites[f"{prefix}.{i}"] = group
+
+
+def add_lora(model, rank=8, alpha=None, seed=0, sites="decoder"):
+    """Replace self-attention q/k/v with a ``LoRALinear`` on the chosen stacks.
+
+    ``sites`` is ``decoder`` (default), ``encoder``, or ``both``. Cross-attention
+    is never wrapped: those projections run over the whole audio memory span
+    and are the expensive site.
+    """
+    if sites not in VALID_SITES:
+        raise ValueError(f"sites must be one of {VALID_SITES}, got {sites!r}")
+    alpha = float(rank if alpha is None else alpha)
+    scale = alpha / rank
+    gen = torch.Generator(device="cpu").manual_seed(seed)
+    wrapped = {}
+    if sites in ("decoder", "both"):
+        _wrap_stack(model.model.decoder.layers, "decoder", rank, scale, gen, wrapped)
+    if sites in ("encoder", "both"):
+        _wrap_stack(model.model.encoder.layers, "encoder", rank, scale, gen, wrapped)
+    return wrapped
 
 
 def adapter_parameters(sites):
@@ -97,21 +110,41 @@ def freeze_backbone(model, sites):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
+def prepare_adaptation(model, adapt="lora", sites="decoder", rank=8, alpha=None, seed=0):
+    """Either attach LoRA or unfreeze the whole backbone.
+
+    Returns ``(lora_sites, trainable_count)``. ``lora_sites`` is ``None`` for
+    a full fine-tune, so callers skip adapter save / merge.
+    """
+    if adapt not in VALID_ADAPT:
+        raise ValueError(f"adapt must be one of {VALID_ADAPT}, got {adapt!r}")
+    if adapt == "full":
+        for param in model.parameters():
+            param.requires_grad_(True)
+        return None, sum(p.numel() for p in model.parameters() if p.requires_grad)
+    lora_sites = add_lora(model, rank=rank, alpha=alpha, seed=seed, sites=sites)
+    return lora_sites, freeze_backbone(model, lora_sites)
+
+
 def adapter_state(sites):
     state = {}
-    for i, group in sites.items():
-        state[f"decoder.{i}.down"] = group[0].down.weight.detach().cpu().clone()
+    for key, group in sites.items():
+        state[f"{key}.down"] = group[0].down.weight.detach().cpu().clone()
         for role, module in zip(QKV, group):
-            state[f"decoder.{i}.{role}.up"] = module.up.weight.detach().cpu().clone()
+            state[f"{key}.{role}.up"] = module.up.weight.detach().cpu().clone()
     return state
 
 
 def load_adapter_state(sites, state, device):
     with torch.no_grad():
-        for i, group in sites.items():
-            group[0].down.weight.copy_(state[f"decoder.{i}.down"].to(device))
+        for key, group in sites.items():
+            group[0].down.weight.copy_(state[f"{key}.down"].to(device))
             for role, module in zip(QKV, group):
-                module.up.weight.copy_(state[f"decoder.{i}.{role}.up"].to(device))
+                module.up.weight.copy_(state[f"{key}.{role}.up"].to(device))
+
+
+def _stack_layers(model, prefix):
+    return getattr(model.model, prefix).layers
 
 
 def merge_and_restore(model, sites):
@@ -120,8 +153,9 @@ def merge_and_restore(model, sites):
     Skip this and ``save_pretrained`` sees ``q_proj.base.weight`` keys plus
     three tensors sharing one ``down.weight``, which safetensors rejects.
     """
-    for i, group in sites.items():
-        attn = model.model.decoder.layers[i].self_attn
+    for key, group in sites.items():
+        prefix, index = key.split(".")
+        attn = _stack_layers(model, prefix)[int(index)].self_attn
         for role, module in zip(QKV, group):
             module.merge_()
             setattr(attn, role, module.base)

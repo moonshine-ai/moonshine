@@ -1,4 +1,4 @@
-"""Train a decoder-only LoRA adapter on a Moonshine Streaming checkpoint.
+"""Train a LoRA adapter or full fine-tune on a Moonshine Streaming checkpoint.
 
 Imported only after ``require_lora_deps()``. The CLI lives in ``__main__.py``
 so ``--help`` does not load PyTorch.
@@ -22,22 +22,26 @@ from transformers import AutoProcessor, MoonshineStreamingForConditionalGenerati
 from moonshine_voice.lora.adapter import (
     adapter_parameters,
     adapter_state,
-    add_lora,
-    freeze_backbone,
     load_adapter_state,
     merge_and_restore,
+    prepare_adaptation,
 )
 from moonshine_voice.lora.data import (
     SAMPLE_RATE,
     atcosim_source,
     build_cache,
+    decode_atco2,
     decode_atcosim,
+    decode_uwb_atcc,
     file_source,
     hours_of,
+    index_atco2,
     index_atcosim,
+    index_uwb_atcc,
     librispeech_eval,
     open_blob,
     replay_source,
+    uwb_atcc_source,
 )
 from moonshine_voice.lora.manifest import (
     Utterance,
@@ -48,6 +52,15 @@ from moonshine_voice.lora.manifest import (
 
 BOS, EOS, PAD = 1, 2, 0
 FRONTEND_STRIDE = 80
+
+
+def default_lr(adapt: str = "lora", sites: str = "decoder") -> float:
+    """Decoder-only LoRA is stable at 1e-3; encoder sites and full FT are not."""
+    if adapt == "full":
+        return 1e-5
+    if sites in ("encoder", "both"):
+        return 1e-4
+    return 1e-3
 
 
 def _device(requested: str) -> str:
@@ -204,8 +217,30 @@ def _load_train_rows(args) -> tuple:
 
         return train_pool, scored, "atcosim", source, text_mode, train_hours
 
+    if args.dataset == "uwb_atcc":
+        indexed = index_uwb_atcc()
+        train_pool, scored = indexed.train, indexed.scored
+        print(
+            f"UWB-ATCC session-disjoint train: {len(train_pool)} utts / "
+            f"{hours_of(train_pool):.2f} h over "
+            f"{len({r.speaker for r in train_pool})} sessions"
+        )
+        print(
+            f"UWB-ATCC test: {len(scored)} utts / {hours_of(scored):.2f} h "
+            f"(CC BY-NC-SA 4.0; research example, not a commercial SKU corpus)"
+        )
+        text_mode = choose_text_mode([r.text for r in train_pool], args.text_mode)
+        train_hours = args.train_hours if args.train_hours is not None else 2.0
+
+        def source(hours, pool=train_pool, mode=text_mode):
+            return uwb_atcc_source(pool, hours, mode)
+
+        return train_pool, scored, "uwb_atcc", source, text_mode, train_hours
+
     if not args.train_manifest:
-        raise SystemExit("pass --train-manifest PATH or --dataset atcosim")
+        raise SystemExit(
+            "pass --train-manifest PATH or --dataset atcosim|uwb_atcc"
+        )
     rows = load_manifest(args.train_manifest, args.data_root)
     missing = [r for r in rows if not r.audio]
     if missing:
@@ -263,11 +298,14 @@ def fit_adapter(
     output_dir: Optional[Path] = None,
     adapter_path: Optional[Path] = None,
     extra_summary: Optional[dict] = None,
+    sites: str = "decoder",
+    adapt: str = "lora",
 ):
-    """Train LoRA on already-built caches and return the merged model.
+    """Train LoRA or a full fine-tune on already-built caches.
 
     ``replay_ratio=0`` skips replay mixing and general-domain stopping, even
     if a replay cache is passed. That is the notebook's no-replay ablation.
+    ``adapt='full'`` unfreezes the backbone; ``sites`` is ignored then.
     """
     device = _device(device)
     amp_dtype = _amp_dtype(device)
@@ -280,13 +318,15 @@ def fit_adapter(
         ).to(device)
     model.train()
     base_keys = set(model.state_dict())
-    sites = add_lora(model, rank=rank, alpha=alpha, seed=seed)
-    trainable = freeze_backbone(model, sites)
+    lora_sites, trainable = prepare_adaptation(
+        model, adapt=adapt, sites=sites, rank=rank, alpha=alpha, seed=seed
+    )
     total = sum(p.numel() for p in model.parameters())
     use_replay = replay_ratio > 0 and replay_index is not None
+    kind = "full fine-tune" if lora_sites is None else f"LoRA sites={sites}"
     print(
-        f"{prefix}{trainable:,} trainable of {total:,} "
-        f"({trainable / total * 100:.3f}%), replay {replay_ratio:.0%}"
+        f"{prefix}{kind}: {trainable:,} trainable of {total:,} "
+        f"({trainable / total * 100:.3f}%), lr {lr:g}, replay {replay_ratio:.0%}"
     )
 
     entries = domain_index["entries"]
@@ -325,7 +365,17 @@ def fit_adapter(
         )
     )
 
-    opt = torch.optim.AdamW(list(adapter_parameters(sites)), lr=lr, weight_decay=0.0)
+    def _trainable_params():
+        if lora_sites is None:
+            return [p for p in model.parameters() if p.requires_grad]
+        return list(adapter_parameters(lora_sites))
+
+    def _snapshot():
+        if lora_sites is None:
+            return {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+        return adapter_state(lora_sites)
+
+    opt = torch.optim.AdamW(_trainable_params(), lr=lr, weight_decay=0.0)
     try:
         scaler = torch.amp.GradScaler("cuda", enabled=amp_dtype == torch.float16)
     except (TypeError, AttributeError):
@@ -366,7 +416,7 @@ def fit_adapter(
         "dev": first_dev,
         "gen": first_gen,
         "step": 0,
-        "state": adapter_state(sites),
+        "state": _snapshot(),
     }
     rng = np.random.default_rng(seed)
     step, stale, stop, started = 0, 0, False, time.time()
@@ -398,10 +448,14 @@ def fit_adapter(
             for pg in opt.param_groups:
                 pg["lr"] = lr * min(1.0, (step + 1) / max(warmup, 1))
             loss = batch_loss(model, src, mask, dst, amp_dtype)
+            if not torch.isfinite(loss):
+                opt.zero_grad(set_to_none=True)
+                step += 1
+                continue
             opt.zero_grad(set_to_none=True)
             scaler.scale(loss).backward()
             scaler.unscale_(opt)
-            torch.nn.utils.clip_grad_norm_(list(adapter_parameters(sites)), 1.0)
+            torch.nn.utils.clip_grad_norm_(_trainable_params(), 1.0)
             scaler.step(opt)
             scaler.update()
             step += 1
@@ -415,7 +469,7 @@ def fit_adapter(
                         "dev": d,
                         "gen": g,
                         "step": step,
-                        "state": adapter_state(sites),
+                        "state": _snapshot(),
                     }
                     stale, mark = 0, "  *best"
                 else:
@@ -442,33 +496,39 @@ def fit_adapter(
             else ""
         )
     )
-    load_adapter_state(sites, best["state"], device)
-    merge_and_restore(model, sites)
+    if lora_sites is None:
+        model.load_state_dict(best["state"])
+    else:
+        load_adapter_state(lora_sites, best["state"], device)
+        merge_and_restore(model, lora_sites)
     if set(model.state_dict()) != base_keys:
         raise SystemExit(
             "refusing to save: merged state dict does not match the base architecture"
         )
 
-    adapter_file = Path(adapter_path) if adapter_path else None
+    adapter_file = None
     out = Path(output_dir) if output_dir else None
     if out is not None:
         out.mkdir(parents=True, exist_ok=True)
-        if adapter_file is None:
-            adapter_file = out / "adapter.safetensors"
-    if adapter_file is not None:
-        adapter_file.parent.mkdir(parents=True, exist_ok=True)
-        save_file(best["state"], str(adapter_file))
+    if lora_sites is not None:
+        adapter_file = Path(adapter_path) if adapter_path else (
+            (out / "adapter.safetensors") if out is not None else None
+        )
+        if adapter_file is not None:
+            adapter_file.parent.mkdir(parents=True, exist_ok=True)
+            save_file(best["state"], str(adapter_file))
     if out is not None:
         model.save_pretrained(out / "adapted")
         processor.save_pretrained(out / "adapted")
-    if adapter_file is not None:
-        size = adapter_file.stat().st_size / 1024
-        extra = f" and {out / 'adapted'}" if out is not None else ""
-        print(f"{prefix}wrote {adapter_file} ({size:.0f} KB){extra}")
+        if adapter_file is not None:
+            size = adapter_file.stat().st_size / 1024
+            print(f"{prefix}wrote {adapter_file} ({size:.0f} KB) and {out / 'adapted'}")
+        else:
+            print(f"{prefix}wrote full fine-tune {out / 'adapted'}")
 
     summary = {
         "model": model_id,
-        "rank": rank,
+        "rank": rank if lora_sites is not None else 0,
         "lr": lr,
         "batch_size": batch_size,
         "trainable_parameters": trainable,
@@ -481,6 +541,8 @@ def fit_adapter(
         "steps_run": step,
         "replay_ratio": replay_ratio if use_replay else 0.0,
         "adapter_bytes": adapter_file.stat().st_size if adapter_file else 0,
+        "adapt": adapt,
+        "sites": sites if lora_sites is not None else "all",
     }
     if extra_summary:
         summary.update(extra_summary)
@@ -517,6 +579,12 @@ def train_adapter(
                 "for anything beyond this Hub mirror. Split definition: "
                 "moonshine-ai/atcosim-speaker-disjoint-splits"
             )
+        if args.dataset == "uwb_atcc":
+            print(
+                "UWB-ATCC is CC BY-NC-SA 4.0: a research example, not a "
+                "corpus for a commercial radio SKU. For a product adapter "
+                "use --train-manifest on your own VHF hours."
+            )
         return out
 
     device = _device(args.device)
@@ -549,6 +617,11 @@ def train_adapter(
     )
 
     replay_ratio = 0.0 if args.no_replay else args.replay_ratio
+    adapt = getattr(args, "adapt", "lora")
+    sites = getattr(args, "sites", "decoder")
+    lr = args.lr
+    if lr is None:
+        lr = default_lr(adapt, sites)
     model = fit_adapter(
         args.model,
         processor,
@@ -562,7 +635,7 @@ def train_adapter(
         replay_ratio=replay_ratio,
         rank=args.rank,
         alpha=args.alpha,
-        lr=args.lr,
+        lr=lr,
         batch_size=args.batch_size,
         max_steps=args.max_steps,
         eval_every=args.eval_every,
@@ -576,9 +649,13 @@ def train_adapter(
             "domain": domain,
             "model": args.model,
             "text_mode": text_mode,
+            "adapt": adapt,
+            "sites": sites,
         },
+        sites=sites,
+        adapt=adapt,
     )
-    if args.eval:
+    if args.eval or args.canary or getattr(args, "eval_dataset", None):
         summary = json.loads((out / "summary.json").read_text())
         _run_eval(args, model, processor, device, eval_rows, domain, out, summary)
     return out
@@ -592,6 +669,8 @@ def _run_eval(args, model, processor, device, eval_rows, domain, out, summary):
         chosen = [eval_rows[i] for i in idx]
         if args.dataset == "atcosim":
             waves = decode_atcosim(chosen)
+        elif args.dataset == "uwb_atcc":
+            waves = decode_uwb_atcc(chosen)
         else:
             waves = [load_wave(r.audio) for r in chosen]
         refs = [r.text for r in chosen]
@@ -599,6 +678,17 @@ def _run_eval(args, model, processor, device, eval_rows, domain, out, summary):
         hyps = transcribe(model, processor, waves, device, batch_size=args.batch_size)
         summary["eval_wer"] = corpus_wer(refs, hyps)
         print(f"in-domain WER {summary['eval_wer']:.2f}%")
+    eval_dataset = getattr(args, "eval_dataset", None)
+    if eval_dataset == "atco2":
+        atco2_rows = index_atco2()
+        idx = sample_indices(len(atco2_rows), args.eval_limit, args.seed)
+        chosen = [atco2_rows[i] for i in idx]
+        waves = decode_atco2(chosen)
+        refs = [r.text for r in chosen]
+        print(f"scoring {len(chosen)} ATCO2-test-set-1h utterances (transfer, not train)")
+        hyps = transcribe(model, processor, waves, device, batch_size=args.batch_size)
+        summary["atco2_wer"] = corpus_wer(refs, hyps)
+        print(f"ATCO2 WER {summary['atco2_wer']:.2f}%")
     if args.canary:
         print("scoring LibriSpeech test-clean canary")
         refs, waves = librispeech_eval(args.canary_limit, args.seed)

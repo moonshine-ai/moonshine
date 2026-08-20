@@ -4,6 +4,17 @@ All notable user-facing changes to Moonshine Voice are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Please keep the bullets high level, and no more than about 200 characters.
 
+## [0.1.5]
+
+### Added
+
+- `moonshine-voice[finetune]` is an alias of `[lora]`; `moonshine-voice finetune` runs the same trainer.
+- Built-in `--dataset uwb_atcc` (real VHF, research/NC), `--sites encoder|both`, `--adapt full`, and `--eval-dataset atco2`.
+
+### Changed
+
+- Domain customization docs and the fine-tune Colab no longer call ATCOSIM radio. Phraseology stays the default walkthrough; VHF is a separate command. The example lives under `examples/python/finetune/`.
+
 ## [0.1.3]
 
 ### Added

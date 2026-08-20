@@ -11,6 +11,7 @@ from moonshine_voice.lora.adapter import (  # noqa: E402
     add_lora,
     freeze_backbone,
     merge_and_restore,
+    prepare_adaptation,
 )
 
 
@@ -34,13 +35,19 @@ class _Decoder(nn.Module):
         self.layers = nn.ModuleList([_Layer(dim) for _ in range(depth)])
 
 
+class _Encoder(_Decoder):
+    pass
+
+
 class _Dummy(nn.Module):
     """Enough of MoonshineStreamingForConditionalGeneration for add_lora."""
 
-    def __init__(self, depth=2, dim=32):
+    def __init__(self, depth=2, dim=32, encoder=False):
         super().__init__()
         self.model = nn.Module()
         self.model.decoder = _Decoder(depth, dim)
+        if encoder:
+            self.model.encoder = _Encoder(depth, dim)
 
 
 def test_untrained_adapter_is_a_noop():
@@ -74,6 +81,43 @@ def test_merge_restores_plain_linears():
     merge_and_restore(model, sites)
     assert set(model.state_dict()) == base_keys
     assert not isinstance(model.model.decoder.layers[0].self_attn.q_proj, LoRALinear)
+
+
+def test_encoder_and_both_sites():
+    model = _Dummy(encoder=True)
+    sites = add_lora(model, rank=4, seed=3, sites="encoder")
+    assert all(key.startswith("encoder.") for key in sites)
+    assert isinstance(model.model.encoder.layers[0].self_attn.q_proj, LoRALinear)
+    assert not isinstance(model.model.decoder.layers[0].self_attn.q_proj, LoRALinear)
+
+    model = _Dummy(encoder=True)
+    sites = add_lora(model, rank=4, seed=4, sites="both")
+    assert any(key.startswith("encoder.") for key in sites)
+    assert any(key.startswith("decoder.") for key in sites)
+    merge_and_restore(model, sites)
+    assert not isinstance(model.model.encoder.layers[0].self_attn.q_proj, LoRALinear)
+    assert not isinstance(model.model.decoder.layers[0].self_attn.q_proj, LoRALinear)
+
+
+def test_full_adapt_leaves_plain_linears():
+    model = _Dummy(encoder=True)
+    base_keys = set(model.state_dict())
+    sites, trainable = prepare_adaptation(model, adapt="full")
+    assert sites is None
+    assert trainable == sum(p.numel() for p in model.parameters())
+    assert set(model.state_dict()) == base_keys
+    assert not isinstance(model.model.decoder.layers[0].self_attn.q_proj, LoRALinear)
+    assert all(p.requires_grad for p in model.parameters())
+
+
+def test_default_lr_depends_on_adapt_and_sites():
+    pytest.importorskip("transformers")
+    from moonshine_voice.lora.train import default_lr
+
+    assert default_lr("lora", "decoder") == 1e-3
+    assert default_lr("lora", "both") == 1e-4
+    assert default_lr("lora", "encoder") == 1e-4
+    assert default_lr("full", "decoder") == 1e-5
 
 
 def test_sample_indices_and_tail_split():
