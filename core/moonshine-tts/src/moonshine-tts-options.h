@@ -22,7 +22,18 @@ using MoonshineTTSFileInformation = FileInformation;
 /// Every model key below names a ``.ort``. Moonshine loads ORT-format models
 /// only: the wasm and mobile runtimes are minimal ONNX Runtime builds with no
 /// ONNX parser compiled in, so a ``.onnx`` cannot be read there at all.
+/// Anchor for the Kokoro model, naming the voice rather than a file that has
+/// to exist. Kokoro ships as the split pair below, and this key still selects
+/// it: the engine derives both halves from whatever path or directory the
+/// caller points this at. A single ``.ort`` at this exact path is also loaded,
+/// which is what a caller passing their own model gets.
 inline constexpr std::string_view kTtsKokoroModelKey = "kokoro/model.ort";
+/// The fused Kokoro graph, carrying no weight data. See split-weights.h.
+inline constexpr std::string_view kTtsKokoroSplitModelKey =
+    "kokoro/model.model.ort";
+/// The int8 Kokoro weights plus their dequantize chains, run once at load.
+inline constexpr std::string_view kTtsKokoroSplitWeightsKey =
+    "kokoro/model.weights.ort";
 inline constexpr std::string_view kTtsKokoroConfigJsonKey =
     "kokoro/config.json";
 /// Optional explicit Piper model, in ORT format.

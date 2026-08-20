@@ -52,7 +52,7 @@ Reproduce it with:
 
 <!-- doc-test: skip -->
 ```bash
-python scripts/check-ep-partitioning.py core/moonshine-tts/data/kokoro/model.ort
+python scripts/check-ep-partitioning.py core/moonshine-tts/data/kokoro/model.model.ort
 ```
 
 CoreML stands in for NNAPI in that script because both accept `ai.onnx`

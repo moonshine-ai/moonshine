@@ -344,7 +344,10 @@ bool file_present(const fs::path &p) {
 
 std::optional<EngineSpec> kokoro_spec() {
   const fs::path kokoro = g_data_root / "kokoro";
-  const bool model = file_present(kokoro / "model.ort");
+  // Kokoro ships as a split ORT pair, and a single .ort is still accepted.
+  const bool model = (file_present(kokoro / "model.model.ort") &&
+                      file_present(kokoro / "model.weights.ort")) ||
+                     file_present(kokoro / "model.ort");
   const bool voice = file_present(kokoro / "voices" / "af_heart.kokorovoice");
   if (!model || !voice) {
     return std::nullopt;

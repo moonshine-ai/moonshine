@@ -5,8 +5,48 @@ This directory is a **Kokoro ONNX bundle** layout (`kokoro/` under your asset ro
 | Path | Role |
 |------|------|
 | `config.json` | Model config (includes phoneme `vocab` for ONNX). |
-| `model.onnx` | Kokoro-82M acoustic ONNX (this repo often ships the **8-bit–quantized** build from [onnx-community/Kokoro-82M-ONNX](https://huggingface.co/onnx-community/Kokoro-82M-ONNX) `onnx/model_quantized.onnx`, patched for C++; or a **local FP32** export from `scripts/download_kokoro_onnx.py`). |
+| `model.model.ort` + `model.weights.ort` | Kokoro-82M acoustic model as a split ORT pair (see [What ships](#what-ships)). A single `model.ort` at the same path is still loaded if the pair is absent, which is what a caller pointing `kokoro_model` at their own export gets. |
 | `voices/*.kokorovoice` | Style tensors for ONNX inference (C++ cannot load Hugging Face `voices/*.pt` pickles). |
+
+## What ships
+
+The bundled model is the upstream **`model_uint8`** build with its remaining
+float32 weights packed to int8 and then split into a graph/weights pair:
+
+1. [onnx-community/Kokoro-82M-v1.0-ONNX](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX)
+   `onnx/model_uint8.onnx` (177 MB). Mixed precision: the convolutions stay
+   float, which is what keeps it intelligible.
+2. `onnx-shrink-ray` `integer_weights`, **per-channel**, over the 72% of that
+   file that is still float32 → 83 MB `.onnx`.
+3. `python scripts/convert-models-to-ort.py --force-split core/moonshine-tts/data/kokoro`
+   → `model.model.ort` + `model.weights.ort`, 83 MB together. Splitting is what
+   makes the size win survive conversion to ORT format, which otherwise folds
+   the dequantize chain back into float32 weights. See
+   `core/moonshine-tts/src/split-weights.h`. `--force-split` is required
+   because the automatic test reads Kokoro's weight-byte mix and predicts a
+   loss; measurement says otherwise, and the flag's help text says why.
+
+Against the dynamically quantized 93 MB `model.ort` this replaces, on a
+Raspberry Pi 4 at 4 threads: 4.0x faster on a 7-token sentence, 2.1x on a
+130-token passage, quicker to load, the same 2.2% word error rate, and mel
+distance against the float32 reference of 2.77/2.69 rather than 10.99/5.80.
+It costs about 85 MB more peak resident memory (506 MB against 422 MB),
+because the weights are dequantized to float32 once at load and stay that way.
+
+Per-channel scaling is what buys that fidelity, and it is not optional:
+per-tensor measures the same 83 MB at the same speed but is 3.4x worse on mel
+distance (0.3622 against 0.1055 measured on the float32 base). Kokoro's
+iSTFTNet generator uses weight normalization throughout, which spreads channel
+magnitudes by construction — the same condition that made per-channel
+load-bearing for the STT frontend.
+
+> **`onnx-shrink-ray` needs a fix first.** Its per-channel path divides by a
+> channel's value range, and Kokoro's PL-BERT word embeddings contain a
+> channel whose range is zero. That yields a NaN zero point, and one NaN
+> weight makes every output of the model NaN — audibly silence, and 36% word
+> error if you measure it. Substituting a range of 1 leaves such a channel
+> exactly reconstructible. Not yet fixed upstream in
+> [usefulsensors/onnx_shrink_ray](https://github.com/usefulsensors/onnx_shrink_ray).
 
 Optional in a **build tree** (not required under `data` if you only ship C++): `kokoro-v1_0.pth` (PyTorch weights, for re-exporting ONNX), `voices/*.pt` (source for `.kokorovoice`), `onnx_export_meta.json` (written by the download/export script).
 
@@ -22,12 +62,25 @@ Optional in a **build tree** (not required under `data` if you only ship C++): `
 
 Python TTS in the parent monorepo (`speak.py`) can use the same HF bundle or PyTorch weights; the C++ path is **ONNX + `.kokorovoice` only**.
 
-### Optional: onnx-shrink-ray weight packing
+### Judging a quantized Kokoro build
 
 The same **onnx-shrink-ray** `quantize_weights` path used for Arabic BERT (int8 weight storage + dequant,
-`float_quantization=False`) **does not preserve numeric parity** for Kokoro: `download_kokoro_onnx.py --verify`
-drops from correlation ~0.997 (FP32) to ~0.1 after shrink, so **the bundled `data/kokoro/model.onnx`
-stays FP32**. For experiments you can run:
+`float_quantization=False`) is what the shipped build uses, but judging it needs care.
+
+Correlation and mel distance against the FP32 output rank these builds
+differently from how a listener does, and the disagreement is not small.
+Restricting static quantization to convolutions improves mel distance from
+0.841 to 0.725 and drives duration drift to zero, while taking word error rate
+from 18.3% to 24.0%. Round-trip the synthesized audio through `Transcriber`
+and count words before believing a spectral metric.
+
+Measure on the runtime you ship, too. Under the ONNX Runtime this library
+bundles, the dynamically quantized build this replaced scores mel 10.99/5.80
+on a Pi, while a newer pip `onnxruntime` on a Mac makes the same file look
+close to the reference. Quantized operators are exactly where releases differ,
+so a Mac reading can rank two builds the opposite way from the target.
+
+For experiments you can run:
 
 ```bash
 python scripts/download_kokoro_onnx.py --out-dir data/kokoro --only-shrink
@@ -35,7 +88,9 @@ python scripts/download_kokoro_onnx.py --out-dir data/kokoro --only-shrink
 ```
 
 Expect a smaller file (~80 MiB vs ~310 MiB) but **validate audio** before shipping; ORT dynamic MatMul/Gemm
-quantization (`--experimental-int8`) is also known to break prosody (see script docstring).
+quantization (`--experimental-int8`) is a separate trap: it puts a convolution-heavy graph on
+`ConvInteger`, which has no optimized kernel, so the result is slower than FP32 on Arm as well as
+less accurate.
 
 ## Dependencies (rebuild)
 
@@ -86,7 +141,8 @@ From the **repository root**:
 
    ```bash
    mkdir -p data/kokoro/voices
-   cp -a models/kokoro/config.json models/kokoro/model.onnx data/kokoro/
+   cp -a models/kokoro/config.json models/kokoro/model.model.ort \
+     models/kokoro/model.weights.ort data/kokoro/
    cp -a models/kokoro/voices/*.kokorovoice data/kokoro/voices/
    ```
 

@@ -941,8 +941,8 @@ MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_files(
    moonshine_error_to_string.
 
    ``filenames[i]`` is the canonical ``MoonshineTTSOptions::files`` key (e.g.
-   ``kokoro/model.ort``, ``kokoro/config.json``,
-   ``kokoro/voices/af_heart.kokorovoice``,
+   ``kokoro/model.model.ort``, ``kokoro/model.weights.ort``,
+   ``kokoro/config.json``, ``kokoro/voices/af_heart.kokorovoice``,
    ``piper/onnx``, ``piper/onnx.json``, ``zipvoice/text_encoder.ort``,
    ``zipvoice/fm_decoder.ort``, ``zipvoice/vocoder.ort``,
    ``zipvoice/tokens.txt``, ``zipvoice/model.json``). For ZipVoice a

@@ -72,8 +72,8 @@ Passed to `TextToSpeech.options()`, AgentFlow `.speech_options()`, and `moonshin
 | `voice` | Catalog voice id. Prefix with `kokoro_`, `piper_`, or `zipvoice_` to select the vocoder (for example `kokoro_af_heart`). |
 | `speed` | Speaking-rate multiplier. Also the only per-call override honored by `say()` / `synthesize()` / `moonshine_text_to_speech()` / `moonshine_phonemes_to_speech()`. |
 | `lang` / `language` | Language tag when supplied via options (usually set by the constructor/`language()` setter instead). |
-| `kokoro_dir` | Override Kokoro directory (`model.ort` + `config.json` under it). |
-| `kokoro_model` / `kokoro_model_onnx` | Override Kokoro model path. |
+| `kokoro_dir` | Override Kokoro directory (`model.model.ort` + `model.weights.ort` + `config.json` under it). |
+| `kokoro_model` / `kokoro_model_onnx` | Override Kokoro model path. Names the model rather than a file that has to exist: the split pair beside it is preferred, and a single `.ort` at this exact path is loaded otherwise. |
 | `kokoro_config` / `kokoro_config_json` | Override Kokoro config JSON path. |
 | `piper_onnx` / `piper_model_onnx` / `piper_model` | Override Piper model path (must be `.ort`). |
 | `piper_onnx_json` / `piper_model_json` / `piper_onnx_config` | Override Piper JSON sidecar. |
@@ -95,7 +95,7 @@ Passed to `TextToSpeech.options()`, AgentFlow `.speech_options()`, and `moonshin
 
 Also accepts [shared](#shared-options) root aliases and ORT keys. Unknown TTS keys are forwarded to the [G2P](#grapheme-to-phonemes) parser.
 
-In-memory create uses file map keys (for example `kokoro/model.ort`, `zipvoice/clone_audio`, `clone_asr/...`) rather than option names — see the [C API](c-api.md#moonshine_create_tts_synthesizer_from_memory).
+In-memory create uses file map keys (for example `kokoro/model.model.ort`, `zipvoice/clone_audio`, `clone_asr/...`) rather than option names — see the [C API](c-api.md#moonshine_create_tts_synthesizer_from_memory).
 
 ## Grapheme to Phonemes
 

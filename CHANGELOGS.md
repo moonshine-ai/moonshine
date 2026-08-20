@@ -13,6 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Kokoro text to speech is 4x faster on short sentences and 2x on long ones on a Raspberry Pi 4, a closer match to the reference voice, and a 10 MB smaller download. It uses about 85 MB more memory.
+- Kokoro now ships as `kokoro/model.model.ort` plus `kokoro/model.weights.ort`. In-memory callers should pass both keys; `kokoro/model.ort` still loads if you supply your own.
 - Domain customization docs and the fine-tune Colab no longer call ATCOSIM radio. Phraseology stays the default walkthrough; VHF is a separate command. The example lives under `examples/python/finetune/`.
 
 ## [0.1.3]
