@@ -199,14 +199,9 @@ std::vector<std::string> stt_component_files(const std::string& language_code,
   const bool is_english = (language_code == "en");
   if (is_streaming_arch(model_arch)) {
     std::vector<std::string> files = {
-        "adapter.ort",
-        "cross_kv.ort",
-        "decoder_kv.ort",
-        "encoder.ort",
-        "frontend.model.ort",
-        "frontend.weights.ort",
-        "streaming_config.json",
-        "tokenizer.bin",
+        "adapter.ort",           "cross_kv.ort",       "decoder_kv.ort",
+        "encoder.ort",           "frontend.model.ort", "frontend.weights.ort",
+        "streaming_config.json", "tokenizer.bin",
     };
     if (is_english && include_word_timestamps) {
       files.push_back("decoder_kv_with_attention.ort");
