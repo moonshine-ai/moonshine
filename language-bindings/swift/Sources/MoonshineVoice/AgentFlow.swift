@@ -423,6 +423,89 @@ public final class AgentFlow: @unchecked Sendable {
         try await speak(text)
     }
 
+    /// Speaks a reply that is still being written, a piece at a time.
+    ///
+    /// Each complete sentence starts playing while the rest is still arriving,
+    /// so an LLM's answer can be forwarded token by token rather than waited
+    /// for in full:
+    ///
+    /// ```swift
+    /// try await flow.sayStream { push in
+    ///     for try await token in llm.stream(question) {
+    ///         push(token)
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// The microphone stays muted and self-capture stays suppressed for the
+    /// whole passage, exactly as in ``say(_:)``, and this does not return until
+    /// playback has finished. Falls back to collecting the text and speaking it
+    /// in one go when there is no built-in synthesizer.
+    public func sayStream(
+        _ produce: (@escaping @Sendable (String) -> Void) async throws -> Void
+    ) async throws {
+        guard let tts else {
+            let collected = Collected()
+            try await produce { collected.append($0) }
+            try await speak(collected.text)
+            return
+        }
+
+        let collected = Collected()
+        lock.withLock { speaking = true }
+        mic?.mute(true)
+        defer {
+            // A no-op once the reply has drained; drops it if we left early.
+            try? tts.cancelStream()
+            // Leaving early also tore the reader down, and a cancellation is
+            // held for whoever pulls next, so take it here rather than let the
+            // next reply open with an interruption that was not its own.
+            _ = try? tts.nextChunk()
+            mic?.mute(false)
+            lock.withLock { speaking = false }
+            let text = collected.text
+            if !text.isEmpty {
+                for handler in saidHandlers { handler(text) }
+            }
+        }
+
+        // Play chunks as they are produced while `produce` keeps pushing.
+        let playback = Task.detached {
+            for try await chunk in tts.chunks {
+                try await tts.play(chunk)
+            }
+        }
+        do {
+            try await produce { piece in
+                collected.append(piece)
+                try? tts.pushText(piece)
+            }
+            try tts.endInput()
+        } catch {
+            playback.cancel()
+            throw error
+        }
+        try await playback.value
+    }
+
+    /// Thread-safe accumulator for text pushed from a caller's producer.
+    private final class Collected: @unchecked Sendable {
+        private let lock = NSLock()
+        private var pieces: [String] = []
+
+        func append(_ piece: String) {
+            lock.lock()
+            pieces.append(piece)
+            lock.unlock()
+        }
+
+        var text: String {
+            lock.lock()
+            defer { lock.unlock() }
+            return pieces.joined().trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
     /// Feeds in an utterance the agent didn't hear itself. Useful for text
     /// input and for tests. Returns once the flow has advanced as far as it can.
     public func handleUtterance(_ text: String) async {

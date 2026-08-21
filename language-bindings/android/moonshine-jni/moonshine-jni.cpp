@@ -1214,6 +1214,162 @@ Java_ai_moonshine_voice_JNI_moonshinePhonemesToSpeech(JNIEnv *env,
   }
 }
 
+extern "C" JNIEXPORT jstring JNICALL
+Java_ai_moonshine_voice_JNI_moonshineTtsSplitUtterances(
+    JNIEnv *env, jobject /* this */, jstring language, jstring text,
+    jobjectArray joptions) {
+  try {
+    std::vector<moonshine_option_t> copts;
+    std::vector<std::pair<jstring, jstring>> jhold;
+    if (!fill_moonshine_options(env, joptions, &copts, &jhold)) {
+      return nullptr;
+    }
+    if (text == nullptr) {
+      release_moonshine_options(env, copts, jhold);
+      return nullptr;
+    }
+    const char *lang_ptr =
+        language != nullptr ? env->GetStringUTFChars(language, nullptr)
+                            : nullptr;
+    const char *text_ptr = env->GetStringUTFChars(text, nullptr);
+    char *out_json = nullptr;
+    const int32_t err = moonshine_tts_split_utterances(
+        lang_ptr, text_ptr, copts.data(), copts.size(), &out_json);
+    env->ReleaseStringUTFChars(text, text_ptr);
+    if (language != nullptr) {
+      env->ReleaseStringUTFChars(language, lang_ptr);
+    }
+    release_moonshine_options(env, copts, jhold);
+    if (err != MOONSHINE_ERROR_NONE || out_json == nullptr) {
+      moonshine_free_buffer(out_json);
+      return nullptr;
+    }
+    const std::string sanitized = utf8::replace_invalid(std::string(out_json));
+    moonshine_free_buffer(out_json);
+    return env->NewStringUTF(sanitized.c_str());
+  } catch (const std::exception &e) {
+    ALOGE("moonshineTtsSplitUtterances: %s\n", e.what());
+    return nullptr;
+  }
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_ai_moonshine_voice_JNI_moonshineTtsPushText(JNIEnv *env,
+                                                 jobject /* this */,
+                                                 jint tts_handle,
+                                                 jstring text) {
+  try {
+    if (text == nullptr) {
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
+    }
+    const char *text_ptr = env->GetStringUTFChars(text, nullptr);
+    const int32_t err = moonshine_tts_push_text(tts_handle, text_ptr);
+    env->ReleaseStringUTFChars(text, text_ptr);
+    return err;
+  } catch (const std::exception &e) {
+    ALOGE("moonshineTtsPushText: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+extern "C" JNIEXPORT jint JNICALL Java_ai_moonshine_voice_JNI_moonshineTtsFlush(
+    JNIEnv * /* env */, jobject /* this */, jint tts_handle) {
+  try {
+    return moonshine_tts_flush(tts_handle);
+  } catch (const std::exception &e) {
+    ALOGE("moonshineTtsFlush: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_ai_moonshine_voice_JNI_moonshineTtsEndInput(JNIEnv * /* env */,
+                                                 jobject /* this */,
+                                                 jint tts_handle) {
+  try {
+    return moonshine_tts_end_input(tts_handle);
+  } catch (const std::exception &e) {
+    ALOGE("moonshineTtsEndInput: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_ai_moonshine_voice_JNI_moonshineTtsCancel(JNIEnv * /* env */,
+                                               jobject /* this */,
+                                               jint tts_handle) {
+  try {
+    return moonshine_tts_cancel(tts_handle);
+  } catch (const std::exception &e) {
+    ALOGE("moonshineTtsCancel: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_ai_moonshine_voice_JNI_moonshineTtsIsStreaming(JNIEnv * /* env */,
+                                                    jobject /* this */,
+                                                    jint tts_handle) {
+  try {
+    return moonshine_tts_is_streaming(tts_handle);
+  } catch (const std::exception &e) {
+    ALOGE("moonshineTtsIsStreaming: %s\n", e.what());
+    // Non-zero here would read as "streaming", so a failure has to say zero
+    // rather than an error code.
+    return 0;
+  }
+}
+
+// Returns a TtsChunk whose `status` field carries the native status, so Java
+// can tell "needs text" from "end of stream" without a second call.
+extern "C" JNIEXPORT jobject JNICALL
+Java_ai_moonshine_voice_JNI_moonshineTtsNextChunk(JNIEnv *env,
+                                                  jobject /* this */,
+                                                  jint tts_handle) {
+  try {
+    const tts_chunk_t *chunk = nullptr;
+    const int32_t status = moonshine_tts_next_chunk(tts_handle, 0, &chunk);
+
+    jclass chunkClass = get_class(env, "ai/moonshine/voice/TtsChunk");
+    jmethodID ctor = get_method(env, chunkClass, "<init>", "()V");
+    jobject res = env->NewObject(chunkClass, ctor);
+    env->SetIntField(res, get_field(env, chunkClass, "status", "I"), status);
+    if (status != MOONSHINE_ERROR_NONE || chunk == nullptr) {
+      env->SetObjectField(res, get_field(env, chunkClass, "samples", "[F"),
+                          env->NewFloatArray(0));
+      env->DeleteLocalRef(chunkClass);
+      return res;
+    }
+
+    jfloatArray jsamples =
+        env->NewFloatArray(static_cast<jsize>(chunk->audio_data_count));
+    if (chunk->audio_data != nullptr && chunk->audio_data_count > 0) {
+      env->SetFloatArrayRegion(jsamples, 0,
+                               static_cast<jsize>(chunk->audio_data_count),
+                               chunk->audio_data);
+    }
+    env->SetObjectField(res, get_field(env, chunkClass, "samples", "[F"),
+                        jsamples);
+    env->SetIntField(res, get_field(env, chunkClass, "sampleRateHz", "I"),
+                     chunk->sample_rate);
+    const std::string text =
+        utf8::replace_invalid(chunk->text != nullptr ? std::string(chunk->text)
+                                                     : std::string());
+    env->SetObjectField(
+        res, get_field(env, chunkClass, "text", "Ljava/lang/String;"),
+        env->NewStringUTF(text.c_str()));
+    env->SetLongField(res, get_field(env, chunkClass, "utteranceId", "J"),
+                      static_cast<jlong>(chunk->utterance_id));
+    env->SetBooleanField(res, get_field(env, chunkClass, "isFinal", "Z"),
+                         chunk->is_final != 0 ? JNI_TRUE : JNI_FALSE);
+    env->DeleteLocalRef(chunkClass);
+    return res;
+  } catch (const std::exception &e) {
+    ALOGE("moonshineTtsNextChunk: %s\n", e.what());
+    return nullptr;
+  }
+}
+
 extern "C" JNIEXPORT jint JNICALL
 Java_ai_moonshine_voice_JNI_moonshineCreateGraphemeToPhonemizerFromFiles(
     JNIEnv *env, jobject /* this */, jstring language, jobjectArray jfilenames,

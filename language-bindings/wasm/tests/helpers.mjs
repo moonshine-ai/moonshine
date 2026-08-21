@@ -61,7 +61,12 @@ export function importInternal(file) {
 /** Loads the raw embind module directly (for low-level surface checks). */
 export async function loadRawModule() {
   const factory = (await import(path.join(DIST, 'moonshine.mjs'))).default;
-  return factory({ locateFile });
+  const mod = await factory({ locateFile });
+  // Tests that build engines through the TS classes still want readable
+  // messages when the native side throws.
+  const { registerErrorModule } = await import(path.join(DIST, 'errors.js'));
+  registerErrorModule(mod);
+  return mod;
 }
 
 /**

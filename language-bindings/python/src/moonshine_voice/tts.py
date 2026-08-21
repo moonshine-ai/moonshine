@@ -9,7 +9,17 @@ import traceback
 import wave
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Tuple,
+    Union,
+)
 
 from moonshine_voice.download import (
     ProgressCallback,
@@ -23,46 +33,144 @@ from moonshine_voice.download import (
 from moonshine_voice.errors import MoonshineAudioOutputError, MoonshineError
 from moonshine_voice.moonshine_api import (
     MOONSHINE_HEADER_VERSION,
+    MOONSHINE_TTS_CANCELLED,
+    MOONSHINE_TTS_END_OF_STREAM,
+    MOONSHINE_TTS_NEED_TEXT,
     _MoonshineLib,
     moonshine_options_array,
     moonshine_phonemes_to_speech_samples,
     moonshine_text_to_speech_samples,
+    moonshine_tts_cancel,
+    moonshine_tts_end_input,
+    moonshine_tts_flush,
+    moonshine_tts_is_streaming,
+    moonshine_tts_next_chunk,
+    moonshine_tts_push_text,
+    moonshine_tts_split_utterances_list,
 )
 from moonshine_voice.voice_clone import VoiceClone
 
 
-def split_say_utterances(text: str) -> List[str]:
-    """Approximate sentence split so :meth:`TextToSpeech.say` can speak sooner.
+def split_say_utterances(text: str, language: Optional[str] = None) -> List[str]:
+    """Split a passage into the utterances :meth:`TextToSpeech.say` speaks one at a time.
 
-    Splits on ``.``, ``!``, ``?``, or ``:`` followed by whitespace. Not a full
-    sentence segmenter — good enough to start playback of the first clause
-    while later ones synthesize.
+    Breaks on sentence terminators so the first clause can start playing while
+    the rest synthesizes. Titles ("Dr. Smith") and initials ("J. R. R. Tolkien")
+    do not end a sentence, and ``。！？؟।`` count as terminators without needing a
+    following space. Pass ``language`` to pick up its abbreviation list; the
+    language-neutral rules apply otherwise.
     """
-    stripped = (text or "").strip()
-    if not stripped:
+    if not (text or "").strip():
         return []
-    parts: List[str] = []
-    start = 0
-    i = 0
-    n = len(stripped)
-    while i < n:
-        ch = stripped[i]
-        if ch in ".!?:" and i + 1 < n and stripped[i + 1].isspace():
-            end = i + 1
-            j = i + 1
-            while j < n and stripped[j].isspace():
-                j += 1
-            piece = stripped[start:end].strip()
-            if piece:
-                parts.append(piece)
-            start = j
-            i = j
-            continue
-        i += 1
-    tail = stripped[start:].strip()
-    if tail:
-        parts.append(tail)
-    return parts
+    return moonshine_tts_split_utterances_list(text, language)
+
+
+@dataclass
+class TtsChunk:
+    """One piece of streamed audio, small enough to start playing right away."""
+
+    samples: List[float]
+    sample_rate: int
+    #: Text this chunk covers, or ``""`` when the engine cut on acoustic frames
+    #: rather than a knowable span of characters.
+    text: str
+    #: Counts from 1, so a consumer can tell where one reply ends and the next
+    #: begins.
+    utterance_id: int
+    #: ``True`` on the last chunk of an utterance.
+    is_final: bool
+
+
+class _ChunkPump:
+    """Worker that delivers chunks to a callback as the native layer makes them.
+
+    Used by :meth:`TextToSpeech.stream` and :meth:`TextToSpeech.say_stream`.
+    Polls rather than blocking, because ``next_chunk`` returns immediately when
+    no complete sentence has arrived yet and the text is coming from another
+    thread.
+    """
+
+    def __init__(self, synthesizer: "TextToSpeech", handle: int, on_chunk: Any) -> None:
+        self._synthesizer = synthesizer
+        self._handle = handle
+        self._on_chunk = on_chunk
+        self._stop_event = threading.Event()
+        self._done_event = threading.Event()
+        #: Extra work :meth:`wait` does once the worker drains, so
+        #: :meth:`TextToSpeech.say_stream` can also wait out playback.
+        self.drain_hook: Optional[Any] = None
+        self._thread = threading.Thread(target=self._pump, daemon=True)
+        self._thread.start()
+
+    def wait(self, timeout: Optional[float] = None) -> bool:
+        """Block until the worker has drained the stream."""
+        drained = self._done_event.wait(timeout)
+        if drained and self.drain_hook is not None:
+            self.drain_hook()
+        return drained
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        if self._thread.is_alive() and self._thread is not threading.current_thread():
+            self._thread.join(timeout=2.0)
+
+    def _pump(self) -> None:
+        while not self._stop_event.is_set():
+            try:
+                status, chunk = moonshine_tts_next_chunk(self._handle)
+            except Exception:
+                print("TextToSpeech: streaming worker failed:", file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
+                break
+            # Cancelling from anywhere ends the worker, so a caller who barges
+            # in with cancel_stream() alone does not leave it polling.
+            if status in (MOONSHINE_TTS_END_OF_STREAM, MOONSHINE_TTS_CANCELLED):
+                break
+            if status == MOONSHINE_TTS_NEED_TEXT or chunk is None:
+                self._stop_event.wait(timeout=0.005)
+                continue
+            samples, sample_rate, text, utterance_id, is_final = chunk
+            try:
+                self._on_chunk(
+                    TtsChunk(
+                        samples=samples,
+                        sample_rate=sample_rate,
+                        text=text,
+                        utterance_id=utterance_id,
+                        is_final=is_final,
+                    )
+                )
+            except Exception:
+                print("TextToSpeech: on_chunk callback raised:", file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
+        self._done_event.set()
+
+
+class SpeechInProgress:
+    """Handle on the reply :meth:`TextToSpeech.say_stream` is speaking.
+
+    Only a way to wait for or stop that reply; the text still goes in through
+    the synthesizer's own :meth:`TextToSpeech.push_text`.
+    """
+
+    def __init__(self, synthesizer: "TextToSpeech", pump: "_ChunkPump") -> None:
+        self._synthesizer = synthesizer
+        self._pump = pump
+
+    def wait(self, timeout: Optional[float] = None) -> bool:
+        """Block until everything pushed has been spoken."""
+        return self._pump.wait(timeout)
+
+    def stop(self) -> None:
+        """Stop the reply and drop anything still queued."""
+        self._pump.stop()
+        self._synthesizer.cancel_stream()
+
+    def __enter__(self) -> "SpeechInProgress":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self._pump.stop()
 
 
 @dataclass
@@ -101,6 +209,11 @@ class _BeepRequest:
 
 
 _SHUTDOWN_SENTINEL = object()
+
+# How long the persistent output stream stays open after the last utterance.
+# Long enough that a reply arriving sentence by sentence plays through one
+# stream, short enough not to hold an exclusive ALSA device from an idle app.
+_OUTPUT_STREAM_IDLE_SECONDS = 1.0
 
 # Beep WAVs shipped with the package.  The bundled clips are short,
 # pre-recorded cues that already include any lead-in / fade
@@ -820,6 +933,15 @@ class TextToSpeech:
         # it's the resample target chosen by _select_output_sample_rate.
         self._say_settings_ok: Optional[Tuple[Tuple[Tuple[Any, ...], int], int]] = None
 
+        # Kept open across queued utterances so a multi-sentence reply plays as
+        # one continuous piece; see _acquire_output_stream.
+        self._output_stream: Any = None
+        self._output_stream_key: Optional[Tuple[Optional[int], int]] = None
+        # When the audio handed to PortAudio should have finished coming out of
+        # the speaker. Everything written is buffered, so this is what
+        # ``is_talking`` and ``wait`` go by.
+        self._playback_tail_until: float = 0.0
+
         self._say_queue: queue.Queue = queue.Queue()
         self._play_queue: queue.Queue = queue.Queue(maxsize=1)
         self._say_stop_event = threading.Event()
@@ -1041,6 +1163,155 @@ class TextToSpeech:
         handle = self._require_loaded("synthesize_from_phonemes()")
         return moonshine_phonemes_to_speech_samples(handle, phonemes, options)
 
+    # ---------------------------------------------------------------- streaming
+    #
+    # Text goes in as it is written and audio comes out in pieces, so the first
+    # clause of a reply can play while the rest is still being generated. For
+    # text you already have in full, :meth:`say` and :meth:`synthesize` are
+    # simpler.
+    #
+    # A synthesizer speaks one thing at a time: :meth:`push_text` starts a
+    # generation, :meth:`end_input` finishes it, :meth:`cancel_stream` abandons
+    # it, and :meth:`synthesize` raises while one is in flight. There is no
+    # session object to create or close.
+
+    def push_text(self, text: str) -> None:
+        """Append text to the reply being spoken, starting one if needed.
+
+        Pieces are concatenated verbatim, so feeding an LLM's output token by
+        token reassembles the words correctly. Text is held back until it forms
+        a complete sentence, because synthesizing half a clause gets the
+        prosody wrong.
+        """
+        if not text:
+            return
+        handle = self._require_loaded("push_text()")
+        moonshine_tts_push_text(handle, text)
+
+    def flush(self) -> None:
+        """Queue the buffered fragment even though it has no terminator."""
+        moonshine_tts_flush(self._require_loaded("flush()"))
+
+    def end_input(self) -> None:
+        """Declare that no more text is coming, letting the reply finish."""
+        moonshine_tts_end_input(self._require_loaded("end_input()"))
+
+    def cancel_stream(self) -> None:
+        """Drop queued text and abandon the reply in progress.
+
+        This is the barge-in path: when someone interrupts the assistant, stop
+        the reply.
+        """
+        moonshine_tts_cancel(self._require_loaded("cancel_stream()"))
+
+    @property
+    def is_streaming(self) -> bool:
+        """Whether a reply is part-spoken."""
+        if self._handle is None:
+            return False
+        return moonshine_tts_is_streaming(self._handle)
+
+    def next_chunk(self) -> Optional[TtsChunk]:
+        """Synthesize and return the next chunk on the calling thread.
+
+        Returns ``None`` when no complete sentence is buffered yet, when input
+        has ended and everything queued has been spoken, or when a cancel
+        discarded the reply. Use :meth:`stream` to tell those apart.
+        """
+        handle = self._require_loaded("next_chunk()")
+        status, chunk = moonshine_tts_next_chunk(handle)
+        if status != 0 or chunk is None:
+            return None
+        samples, sample_rate, text, utterance_id, is_final = chunk
+        return TtsChunk(
+            samples=samples,
+            sample_rate=sample_rate,
+            text=text,
+            utterance_id=utterance_id,
+            is_final=is_final,
+        )
+
+    def stream(self, text: Optional[Union[str, Iterable[str]]] = None) -> Iterator[TtsChunk]:
+        """Iterate the chunks of a reply, synthesizing on the calling thread::
+
+            for chunk in tts.stream(llm_reply_tokens()):
+                play(chunk.samples)
+
+        With ``text``, that whole reply is pushed and ended for you: pass a
+        string, or an iterable of pieces to consume as they arrive. Without it,
+        drive :meth:`push_text` from another thread and iterate here.
+        """
+        if isinstance(text, str):
+            self.push_text(text)
+            self.end_input()
+            text = None
+        handle = self._require_loaded("stream()")
+        pieces = iter(text) if text is not None else None
+        while True:
+            if pieces is not None:
+                # Keep the synthesizer fed from the same thread that drains it,
+                # so a generator of tokens needs no threading from the caller.
+                try:
+                    self.push_text(next(pieces))
+                except StopIteration:
+                    pieces = None
+                    self.end_input()
+            status, raw = moonshine_tts_next_chunk(handle)
+            # A cancel from another thread ends the iteration even mid-reply,
+            # and even while there is still text left to push.
+            if status == MOONSHINE_TTS_CANCELLED:
+                return
+            if status == 0 and raw is not None:
+                samples, sample_rate, chunk_text, utterance_id, is_final = raw
+                yield TtsChunk(
+                    samples=samples,
+                    sample_rate=sample_rate,
+                    text=chunk_text,
+                    utterance_id=utterance_id,
+                    is_final=is_final,
+                )
+            elif pieces is None and not self.is_streaming:
+                return
+
+    def say_stream(
+        self,
+        *,
+        device: Optional[Union[int, str]] = None,
+    ) -> SpeechInProgress:
+        """Speak text that is still being written, a piece at a time.
+
+        The streaming counterpart to :meth:`say`: push text as it arrives with
+        :meth:`push_text` and each chunk plays as soon as it is synthesized,
+        through the same persistent output stream, so a reply written token by
+        token comes out as continuous speech.
+
+            with tts.say_stream() as speech:
+                for token in llm_reply():
+                    tts.push_text(token)
+                tts.end_input()
+                speech.wait()
+
+        :meth:`is_talking` and :meth:`wait` cover streamed audio too.
+        """
+        handle = self._require_loaded("say_stream()")
+        np, _ = _import_say_audio_deps()
+        if self._output_device is not None:
+            device = self._output_device
+
+        def enqueue(chunk: TtsChunk) -> None:
+            if not chunk.samples:
+                return
+            self._play_queue.put(_PlayItem(
+                data=np.asarray(chunk.samples, dtype=np.float32),
+                sample_rate=int(chunk.sample_rate),
+                device=device,
+            ))
+
+        self._ensure_say_workers()
+        pump = _ChunkPump(self, handle, enqueue)
+        pump.drain_hook = self.wait
+        return SpeechInProgress(self, pump)
+
     def say(
         self,
         text: Union[str, List[str]],
@@ -1080,7 +1351,7 @@ class TextToSpeech:
 
         chunks = text if isinstance(text, list) else [text]
         for chunk in chunks:
-            for sentence in split_say_utterances(chunk):
+            for sentence in split_say_utterances(chunk, self._language):
                 self._say_queue.put(_SayRequest(
                     text=sentence,
                     speed=speed,
@@ -1234,11 +1505,23 @@ class TextToSpeech:
     def _play_worker(self) -> None:
         np, sd = _import_say_audio_deps()
 
+        idle_since: Optional[float] = None
         while not self._say_stop_event.is_set():
             try:
                 item = self._play_queue.get(timeout=0.1)
             except queue.Empty:
+                # Nothing queued: let the device go after a short grace period,
+                # long enough that a reply arriving sentence by sentence still
+                # plays through one stream.
+                if self._output_stream is not None:
+                    now = time.perf_counter()
+                    if idle_since is None:
+                        idle_since = now
+                    elif now - idle_since >= _OUTPUT_STREAM_IDLE_SECONDS:
+                        self._release_output_stream()
+                        idle_since = None
                 continue
+            idle_since = None
 
             if item is _SHUTDOWN_SENTINEL:
                 self._play_queue.task_done()
@@ -1258,6 +1541,7 @@ class TextToSpeech:
                 traceback.print_exc(file=sys.stderr)
             finally:
                 self._play_queue.task_done()
+        self._release_output_stream(abort=self._say_stop_event.is_set())
 
     def _play_one(self, item: _PlayItem, sd: Any, np: Any) -> None:
         """Resolve the device and play a single synthesized utterance (runs on playback thread)."""
@@ -1332,95 +1616,98 @@ class TextToSpeech:
 
         expected_duration_s = (len(data) / float(target_sr)) if target_sr else 0.0
         self._log(
-            f"play_one: starting sd.play "
+            f"play_one: writing to output stream "
             f"({len(data)} samples @ {target_sr} Hz, "
             f"~{expected_duration_s * 1000.0:.1f} ms expected, "
             f"device={resolved!r})"
         )
         t_start = time.perf_counter()
         try:
-            sd.play(data, target_sr, device=resolved)
-            t_after_play = time.perf_counter()
-            # Snapshot ``stream.active`` immediately after sd.play() so
-            # we can tell, after the fact, whether the playback ever
-            # actually started.  ``sd.play`` returns once the stream
-            # has been opened and ``start()`` has been called, but on
-            # some backends the driver takes a few ms to ramp up — for
-            # very short clips (like the ~160 ms success beep) the
-            # stream can transition False → True → False entirely
-            # between two polls of ``get_stream().active``, which
-            # makes the worker think the item was played even though
-            # nothing reached the speakers.  Logging the initial /
-            # final state plus elapsed time vs. expected duration
-            # makes that race visible.
+            stream = self._acquire_output_stream(sd, resolved, target_sr)
+            # ``write`` blocks until PortAudio has taken the samples, which
+            # keeps the queue paced without ever stopping the stream, so
+            # consecutive utterances run together instead of being separated by
+            # a device teardown and reopen.
+            stream.write(data)
             try:
-                initial_active = bool(sd.get_stream().active)
-            except Exception:
-                initial_active = False
+                self._playback_tail_until = time.perf_counter() + float(stream.latency)
+            except Exception:  # pragma: no cover - backend without a latency
+                self._playback_tail_until = time.perf_counter()
+            if self._say_stop_event.is_set():
+                self._release_output_stream(abort=True)
+                self._playback_tail_until = 0.0
+                self._log("play_one: stop_event set during write")
+                return
             self._log(
-                f"play_one: sd.play returned in "
-                f"{(t_after_play - t_start) * 1000.0:.1f} ms; "
-                f"stream.active={initial_active}"
+                f"play_one: handed {len(data)} samples to the device in "
+                f"{(time.perf_counter() - t_start) * 1000.0:.1f} ms"
             )
-            poll_count = 0
-            while sd.get_stream().active:
-                poll_count += 1
-                if self._say_stop_event.is_set():
-                    sd.stop()
-                    self._log(
-                        f"play_one: stop_event set after "
-                        f"{(time.perf_counter() - t_start) * 1000.0:.1f} ms; "
-                        f"calling sd.stop"
-                    )
-                    return
-                self._say_stop_event.wait(timeout=0.05)
-            elapsed_ms = (time.perf_counter() - t_start) * 1000.0
-            self._log(
-                f"play_one: playback done after {elapsed_ms:.1f} ms "
-                f"(expected ~{expected_duration_s * 1000.0:.1f} ms, "
-                f"polls={poll_count})"
-            )
-            # Explicitly tear down the global play stream once the
-            # buffer is exhausted.  ``sd.play()`` leaves the stream
-            # *inactive but open* by default, which on Linux/ALSA
-            # exclusive-access devices (e.g. plain ``hw:`` USB DACs)
-            # means PortAudio keeps the device claimed.  The next
-            # ``sd.check_output_settings()`` then fails with
-            # ``paDeviceUnavailable`` for every probed rate, even
-            # rates the device just played at — and the play worker
-            # raises and drops the next utterance.  Calling
-            # ``sd.stop()`` here (with ``ignore_errors=True``)
-            # releases the device promptly.  ``sd.play()`` will
-            # transparently re-open it for the next item.
-            try:
-                sd.stop(ignore_errors=True)
-                self._log("play_one: sd.stop after natural completion")
-            except Exception as stop_err:  # pragma: no cover - defensive
-                self._log(f"play_one: sd.stop after completion raised: {stop_err!r}")
         except (sd.PortAudioError, OSError, ValueError) as e:
+            self._release_output_stream(abort=True)
             outs = _say_enumerate_output_devices(sd)
             raise MoonshineAudioOutputError(
                 f"Failed to play audio: {e}",
                 available_outputs=_say_device_lines(outs),
             ) from e
 
+    def _acquire_output_stream(self, sd: Any, device: Optional[int], sample_rate: int) -> Any:
+        """The open output stream for this device and rate, opening one if needed.
+
+        Held open across utterances so a queued reply plays as one continuous
+        piece of audio. It is closed once the queue goes idle
+        (``_OUTPUT_STREAM_IDLE_SECONDS``) rather than kept forever, because on
+        Linux/ALSA exclusive-access devices an open stream keeps the card
+        claimed and everything else on the machine goes silent.
+        """
+        key = (device, sample_rate)
+        if self._output_stream is not None and self._output_stream_key == key:
+            return self._output_stream
+        self._release_output_stream()
+        stream = sd.OutputStream(
+            samplerate=sample_rate,
+            channels=1,
+            dtype="float32",
+            device=device,
+        )
+        stream.start()
+        self._output_stream = stream
+        self._output_stream_key = key
+        self._log(f"acquire_output_stream: opened {device!r} @ {sample_rate} Hz")
+        return stream
+
+    def _release_output_stream(self, *, abort: bool = False) -> None:
+        """Close the persistent output stream, dropping buffered audio if ``abort``."""
+        stream = self._output_stream
+        self._output_stream = None
+        self._output_stream_key = None
+        if stream is None:
+            return
+        try:
+            if abort:
+                stream.abort(ignore_errors=True)
+            else:
+                stream.stop(ignore_errors=True)
+            stream.close(ignore_errors=True)
+            self._log(f"release_output_stream: closed (abort={abort})")
+        except Exception as err:  # pragma: no cover - defensive
+            self._log(f"release_output_stream: close raised: {err!r}")
+
     def is_talking(self) -> bool:
         """Return ``True`` if utterances are queued, being synthesized, or currently playing."""
         if not self._say_queue.empty() or not self._play_queue.empty():
             return True
-        try:
-            _, sd = _import_say_audio_deps()
-            stream = sd.get_stream()
-            if stream is not None and stream.active:
-                return True
-        except Exception:
-            pass
-        return False
+        # ``write`` returns once PortAudio has taken the samples, with up to a
+        # buffer's worth still to come out of the speaker. The stream itself
+        # stays open and active between utterances, so it cannot answer this.
+        return time.perf_counter() < self._playback_tail_until
 
     def wait(self) -> None:
         """Block until all queued utterances have been synthesized and played."""
         self._say_queue.join()
         self._play_queue.join()
+        remaining = self._playback_tail_until - time.perf_counter()
+        if remaining > 0:
+            time.sleep(remaining)
 
     def stop(self) -> None:
         """Clear the utterance queue and stop any audio currently playing.
@@ -1438,11 +1725,8 @@ class TextToSpeech:
                 except queue.Empty:
                     break
 
-        _, sd = _import_say_audio_deps()
-        try:
-            sd.stop()
-        except Exception:
-            pass
+        self._release_output_stream(abort=True)
+        self._playback_tail_until = 0.0
 
         for thread in (self._synth_thread, self._play_thread):
             if thread is not None and thread.is_alive():
@@ -1465,17 +1749,15 @@ class TextToSpeech:
                     except queue.Empty:
                         break
 
-            try:
-                _, sd = _import_say_audio_deps()
-                sd.stop()
-            except Exception:
-                pass
+            self._release_output_stream(abort=True)
+            self._playback_tail_until = 0.0
 
             for thread in (self._synth_thread, self._play_thread):
                 if thread is not None and thread.is_alive():
                     thread.join(timeout=2.0)
             self._synth_thread = None
             self._play_thread = None
+        self._release_output_stream(abort=True)
         self._say_device_cache = None
         self._say_settings_ok = None
         if getattr(self, "_handle", None) is not None:

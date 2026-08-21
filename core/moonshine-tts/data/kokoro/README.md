@@ -8,6 +8,15 @@ This directory is a **Kokoro ONNX bundle** layout (`kokoro/` under your asset ro
 | `model.model.ort` + `model.weights.ort` | Kokoro-82M acoustic model as a split ORT pair (see [What ships](#what-ships)). A single `model.ort` at the same path is still loaded if the pair is absent, which is what a caller pointing `kokoro_model` at their own export gets. |
 | `voices/*.kokorovoice` | Style tensors for ONNX inference (C++ cannot load Hugging Face `voices/*.pt` pickles). |
 
+and may also contain:
+
+| Path | Role |
+|------|------|
+| `prosody.model.ort` + `prosody.weights.ort` | The same graph cut in two, first half: phonemes to frame-rate features, run once per utterance. |
+| `decoder.model.ort` + `decoder.weights.ort` | Second half: a range of those frames to audio, run once per streamed chunk. |
+
+The stages are what let streaming cut below a sentence, so the first audio of a long sentence arrives before all of it has been decoded. Together they are the same size as the whole-utterance pair and render the same audio; when they are absent, streaming still works but chunks are whole utterances. Generate them with `python scripts/split-kokoro-stages.py`.
+
 ## What ships
 
 The bundled model is the upstream **`model_uint8`** build with its remaining

@@ -633,6 +633,20 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
         ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
     )
 
+    # Regenerates the static per-voice level table; not part of any test run.
+    add_executable(tts-voice-level-calibrate tts-voice-level-calibrate.cpp)
+    set_target_properties(tts-voice-level-calibrate PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(tts-voice-level-calibrate PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
+    )
+    target_link_libraries(tts-voice-level-calibrate PRIVATE moonshine)
+    copy_onnxruntime_dll(tts-voice-level-calibrate)
+
     add_executable(clone-clip-eval clone-clip-eval.cpp)
     set_target_properties(clone-clip-eval PROPERTIES
         CXX_STANDARD 20

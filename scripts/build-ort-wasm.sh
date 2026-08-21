@@ -163,6 +163,10 @@ build_variant() {
     local tag="$1"; local dest="$2"; shift 2
     local build_dir="${ORT_WASM_BUILD_DIR}/build-${tag}"
     echo "[build-ort-wasm] building variant '${tag}' -> ${build_dir}"
+    # The bundling step that produces the archive does not re-run when only the
+    # operator config changed, so an incremental build reports success and then
+    # vendors the previous archive. Deleting it makes the step run again.
+    rm -f "${build_dir}/Release/libonnxruntime_webassembly.a"
     (
         cd "${ORT_SRC}"
         ./build.sh \

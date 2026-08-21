@@ -99,6 +99,8 @@ fi
 "${MOONSHINE_TTS_BUILD_DIR}/ukrainian_rule_g2p_test"
 "${MOONSHINE_TTS_BUILD_DIR}/hindi_rule_g2p_test"
 "${MOONSHINE_TTS_BUILD_DIR}/text_normalize_test"
+"${MOONSHINE_TTS_BUILD_DIR}/sentence_splitter_test"
+"${MOONSHINE_TTS_BUILD_DIR}/tts_stream_test"
 "${MOONSHINE_TTS_BUILD_DIR}/heteronym_context_test"
 "${MOONSHINE_TTS_BUILD_DIR}/ipa_postprocess_test"
 "${MOONSHINE_TTS_BUILD_DIR}/cmudict_tsv_test"

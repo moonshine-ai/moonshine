@@ -145,6 +145,28 @@ Password input is tricky, because they consist of arbitrary letters, digits, and
 
 The flow also works with other control structures like exception handlers, so you can specify your conversations using idiomatic code, even for error recovery.
 
+## Speaking a Reply as It Is Written
+
+When the answer comes from a language model, waiting for the whole reply before saying anything wastes the seconds the model spends writing it. `say_stream()` speaks the reply as it arrives:
+
+```python
+    with flow.say_stream() as push:
+        for token in llm.stream(question):
+            push(token)
+```
+
+Playback starts as soon as the first sentence is complete, and with Kokoro before that sentence has finished decoding, so the agent begins answering while the model is still working on the rest. The microphone stays muted and self-capture stays suppressed for the whole passage, just as with `say()`, and the block does not exit until playback has finished.
+
+Inside a flow, yield the fragments instead of pushing them:
+
+```python
+    def answer_question(d):
+        question = yield d.ask("What would you like to know?")
+        yield d.say_stream(llm.stream(question))
+```
+
+The flow resumes once the last piece has been spoken, exactly as it would after a `d.say()`. If the text source raises part way through, the agent speaks what it received and reports the error to `on_error()` rather than killing the flow.
+
 ## Agent Setup
 
 Once your flows are written, the only setup left is to register them and go live. `AgentFlow` opens everything it needs itself — the speech recognition model, the microphone, and the speech synthesizer — so there's nothing to wire together:

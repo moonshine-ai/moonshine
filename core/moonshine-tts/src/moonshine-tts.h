@@ -11,6 +11,7 @@
 
 #include "moonshine-g2p-options.h"
 #include "moonshine-tts-options.h"
+#include "tts-stream.h"
 
 namespace moonshine_tts {
 
@@ -55,6 +56,53 @@ class MoonshineTTS {
   std::vector<float> synthesize_from_phonemes(
       std::string_view phonemes,
       const std::vector<std::pair<std::string, std::string>>& option_overrides);
+
+  /// Streaming synthesis: push text in as it becomes available, pull audio out
+  /// a chunk at a time.
+  ///
+  /// A synthesizer runs one generation at a time. `push_text` starts one if
+  /// none is running, `end_input` finishes it, and `cancel_stream` abandons it;
+  /// `synthesize` throws while one is in flight rather than quietly competing
+  /// for the model. There is no session object to own or outlive anything.
+  ///
+  /// Pull-based and synchronous. `next_chunk` blocks while it computes and
+  /// never waits on anyone else, so a binding can drive it from whatever worker
+  /// suits its platform without the core owning a thread policy.
+  ///
+  /// Chunk sizing follows the ``stream_*`` fields of the options this was
+  /// constructed with. Engines that can decode part of an utterance cut inside
+  /// a sentence; the rest fall back to one chunk per sentence, which still
+  /// starts playback on the first clause rather than the last.
+
+  /// Append text. Pieces are concatenated verbatim, so a token-by-token feed
+  /// from a language model reassembles correctly. Any complete sentence this
+  /// reveals is queued; a trailing fragment waits for more text.
+  void push_text(std::string_view text);
+
+  /// Queue whatever is buffered even if it does not look like a complete
+  /// sentence, for when the caller knows the thought is finished but the
+  /// punctuation does not say so.
+  void flush();
+
+  /// No more text is coming. Flushes, then makes `next_chunk` report
+  /// `kEndOfStream` once the queue drains.
+  void end_input();
+
+  /// Produce the next chunk, synthesizing during the call.
+  TtsStreamStatus next_chunk(TtsChunk& out);
+
+  /// Drop queued text and abandon the generation in progress, returning the
+  /// synthesizer to idle. Used when a conversation is interrupted and the
+  /// pending reply is no longer wanted.
+  void cancel_stream();
+
+  /// Whether a streaming generation is in flight.
+  bool is_streaming() const;
+
+  /// Split text the way streaming does, for callers that want to queue
+  /// utterances themselves. Uses the synthesizer's language for its
+  /// abbreviation and terminator rules.
+  std::vector<std::string> split_utterances(std::string_view text) const;
 
  private:
   struct Impl;

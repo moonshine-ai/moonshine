@@ -460,6 +460,21 @@ struct JsTtsResult {
   int32_t sampleRate = 0;
 };
 
+// One chunk of a streaming generation. `status` is MOONSHINE_ERROR_NONE when
+// `audio` holds a chunk, MOONSHINE_TTS_NEED_TEXT when no complete sentence is
+// buffered, MOONSHINE_TTS_END_OF_STREAM once input ended and the queue
+// drained, or MOONSHINE_TTS_CANCELLED once a cancel discarded the reply.
+struct JsTtsChunk {
+  val audio = val::undefined();  // Float32Array, undefined unless status is 0
+  int32_t sampleRate = 0;
+  std::string text{};
+  // Doubles because Embind has no uint64; utterance counts stay well inside
+  // exact integer range.
+  double utteranceId = 0;
+  bool isFinal = false;
+  int32_t status = 0;
+};
+
 class TextToSpeech {
  public:
   // Assets are supplied in memory keyed by canonical filename (see
@@ -521,6 +536,56 @@ class TextToSpeech {
   }
 
   int32_t handle() const { return handle_; }
+
+  // Streaming: text goes in a piece at a time, audio comes out a chunk at a
+  // time. Everything here is synchronous, so the caller decides whether to run
+  // it on the main thread or a Web Worker. One generation at a time, driven
+  // straight off the synthesizer: `say` reports MOONSHINE_ERROR_BUSY while one
+  // is in flight.
+  void pushText(const std::string &text) {
+    check(moonshine_tts_push_text(handle_, text.c_str()));
+  }
+
+  void flush() { check(moonshine_tts_flush(handle_)); }
+
+  void endInput() { check(moonshine_tts_end_input(handle_)); }
+
+  void cancel() { check(moonshine_tts_cancel(handle_)); }
+
+  bool isStreaming() {
+    const int32_t status = moonshine_tts_is_streaming(handle_);
+    if (status < 0) {
+      throw_moonshine_error(status);
+    }
+    return status != 0;
+  }
+
+  // Returns a chunk, or `undefined` audio when there is nothing to synthesize
+  // yet. `status` distinguishes the non-chunk cases so JS can tell "push me
+  // more text" from "we are done" from "someone cancelled".
+  JsTtsChunk nextChunk() {
+    const tts_chunk_t *chunk = nullptr;
+    const int32_t status = moonshine_tts_next_chunk(handle_, 0, &chunk);
+    if (status < 0) {
+      throw_moonshine_error(status);
+    }
+    JsTtsChunk out;
+    out.status = status;
+    if (status != MOONSHINE_ERROR_NONE || chunk == nullptr) {
+      return out;
+    }
+    val audio = val::global("Float32Array")
+                    .new_(static_cast<double>(chunk->audio_data_count));
+    val heap = val(emscripten::typed_memory_view(chunk->audio_data_count,
+                                                 chunk->audio_data));
+    audio.call<void>("set", heap);
+    out.audio = audio;
+    out.sampleRate = chunk->sample_rate;
+    out.text = chunk->text != nullptr ? std::string(chunk->text) : std::string();
+    out.utteranceId = static_cast<double>(chunk->utterance_id);
+    out.isFinal = chunk->is_final != 0;
+    return out;
+  }
 
   void close() {
     if (handle_ >= 0) {
@@ -674,6 +739,20 @@ std::string g2p_dependencies(const std::string &languages) {
   free(json);
   return out;
 }
+
+// Returns a JSON array of the utterances a streaming synthesizer would speak
+// one at a time. JSON rather than a vector<string> so the caller can hand it
+// straight to JSON.parse without another Embind type.
+std::string tts_split_utterances(const std::string &language,
+                                 const std::string &text) {
+  char *json = nullptr;
+  check(moonshine_tts_split_utterances(
+      language.empty() ? nullptr : language.c_str(), text.c_str(), nullptr, 0,
+      &json));
+  std::string out = json ? json : "[]";
+  free(json);
+  return out;
+}
 #endif
 
 }  // namespace
@@ -749,10 +828,24 @@ EMSCRIPTEN_BINDINGS(moonshine) {
       .field("audio", &JsTtsResult::audio)
       .field("sampleRate", &JsTtsResult::sampleRate);
 
+  value_object<JsTtsChunk>("MoonshineTtsChunk")
+      .field("audio", &JsTtsChunk::audio)
+      .field("sampleRate", &JsTtsChunk::sampleRate)
+      .field("text", &JsTtsChunk::text)
+      .field("utteranceId", &JsTtsChunk::utteranceId)
+      .field("isFinal", &JsTtsChunk::isFinal)
+      .field("status", &JsTtsChunk::status);
+
   class_<TextToSpeech>("TextToSpeech")
       .constructor<std::string, val, val, val, val>()
       .function("say", &TextToSpeech::say)
       .function("handle", &TextToSpeech::handle)
+      .function("pushText", &TextToSpeech::pushText)
+      .function("flush", &TextToSpeech::flush)
+      .function("endInput", &TextToSpeech::endInput)
+      .function("cancel", &TextToSpeech::cancel)
+      .function("isStreaming", &TextToSpeech::isStreaming)
+      .function("nextChunk", &TextToSpeech::nextChunk)
       .function("close", &TextToSpeech::close);
 
   class_<GraphemeToPhonemizer>("GraphemeToPhonemizer")
@@ -762,6 +855,7 @@ EMSCRIPTEN_BINDINGS(moonshine) {
 
   function("ttsDependencies", &tts_dependencies);
   function("ttsVoices", &tts_voices);
+  function("ttsSplitUtterances", &tts_split_utterances);
   function("g2pDependencies", &g2p_dependencies);
 #endif
 

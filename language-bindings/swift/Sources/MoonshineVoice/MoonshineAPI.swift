@@ -11,6 +11,20 @@ public struct TranscribeStreamFlags {
     public static let flagSpellingMode: UInt32 = 1 << 1
 }
 
+/// What a pull from a streaming generation found, mirroring the positive
+/// statuses of ``moonshine_tts_next_chunk``.
+internal enum TtsChunkResult {
+    case chunk(TtsChunk)
+    /// No complete sentence is buffered yet. Push more text, or flush.
+    case needText
+    /// Input ended and everything queued has been synthesized.
+    case endOfStream
+    /// A cancel discarded the reply being generated. Reported once, and only
+    /// when there was something to discard, so a reader can tell an
+    /// interruption from having run out of text.
+    case cancelled
+}
+
 /// Internal wrapper for the Moonshine C API.
 internal final class MoonshineAPI: @unchecked Sendable {
     static nonisolated let shared = MoonshineAPI()
@@ -630,6 +644,101 @@ internal final class MoonshineAPI: @unchecked Sendable {
     /// Free a TTS synthesizer handle.
     func freeTtsSynthesizer(_ handle: Int32) {
         moonshine_free_tts_synthesizer(handle)
+    }
+
+    // MARK: - Streaming TTS
+
+    /// Split `text` into the utterances a streaming synthesizer speaks one at a time.
+    func ttsSplitUtterances(
+        language: String,
+        text: String,
+        options: [TranscriberOption]? = nil
+    ) throws -> [String] {
+        let langCString = language.isEmpty ? nil : language.cString(using: .utf8)
+        let textCString = text.cString(using: .utf8)!
+        var outJson: UnsafeMutablePointer<CChar>? = nil
+
+        let error: Int32
+        if let options, !options.isEmpty {
+            let nameCStrings = options.map { $0.name.cString(using: .utf8)! }
+            let valueCStrings = options.map { $0.value.cString(using: .utf8)! }
+            let optionStructs = (0..<options.count).map { i -> moonshine_option_t in
+                moonshine_option_t(
+                    name: nameCStrings[i].withUnsafeBufferPointer { $0.baseAddress },
+                    value: valueCStrings[i].withUnsafeBufferPointer { $0.baseAddress }
+                )
+            }
+            error = withExtendedLifetime((nameCStrings, valueCStrings, optionStructs)) {
+                optionStructs.withUnsafeBufferPointer { buffer in
+                    moonshine_tts_split_utterances(
+                        langCString, textCString, buffer.baseAddress,
+                        UInt64(options.count), &outJson)
+                }
+            }
+        } else {
+            error = moonshine_tts_split_utterances(langCString, textCString, nil, 0, &outJson)
+        }
+
+        try checkError(error)
+
+        guard let jsonPtr = outJson else { return [] }
+        let json = String(cString: jsonPtr)
+        free(outJson)
+        guard let data = json.data(using: .utf8),
+            let units = try? JSONSerialization.jsonObject(with: data) as? [String]
+        else {
+            return []
+        }
+        return units
+    }
+
+    func ttsPushText(ttsHandle: Int32, text: String) throws {
+        try checkError(moonshine_tts_push_text(ttsHandle, text.cString(using: .utf8)!))
+    }
+
+    func ttsFlush(ttsHandle: Int32) throws {
+        try checkError(moonshine_tts_flush(ttsHandle))
+    }
+
+    func ttsEndInput(ttsHandle: Int32) throws {
+        try checkError(moonshine_tts_end_input(ttsHandle))
+    }
+
+    func ttsCancel(ttsHandle: Int32) throws {
+        try checkError(moonshine_tts_cancel(ttsHandle))
+    }
+
+    /// Whether a streaming generation is in flight on this synthesizer.
+    func ttsIsStreaming(ttsHandle: Int32) -> Bool {
+        return moonshine_tts_is_streaming(ttsHandle) > 0
+    }
+
+    /// Synthesize the next chunk.
+    func ttsNextChunk(ttsHandle: Int32) throws -> TtsChunkResult {
+        var out: UnsafePointer<tts_chunk_t>? = nil
+        let status = moonshine_tts_next_chunk(ttsHandle, 0, &out)
+        if status == MOONSHINE_TTS_END_OF_STREAM {
+            return .endOfStream
+        }
+        if status == MOONSHINE_TTS_CANCELLED {
+            return .cancelled
+        }
+        if status == MOONSHINE_TTS_NEED_TEXT {
+            return .needText
+        }
+        try checkError(status)
+        guard let raw = out?.pointee else { return .needText }
+        var samples: [Float] = []
+        if let audio = raw.audio_data, raw.audio_data_count > 0 {
+            samples = Array(UnsafeBufferPointer(start: audio, count: Int(raw.audio_data_count)))
+        }
+        let chunk = TtsChunk(
+            samples: samples,
+            sampleRateHz: raw.sample_rate,
+            text: raw.text.map { String(cString: $0) } ?? "",
+            utteranceId: raw.utterance_id,
+            isFinal: raw.is_final != 0)
+        return .chunk(chunk)
     }
 
     /// Get TTS voices JSON for the given languages.

@@ -50,6 +50,10 @@ add_library(moonshine_tts_core STATIC
   src/lang-specific/english-numbers.cpp
   src/lang-specific/french-oov.cpp
   src/text-normalize.cpp
+  src/sentence-splitter.cpp
+  src/tts-stream.cpp
+  src/chunk-policy.cpp
+  src/kokoro-voice-levels.cpp
   src/lang-specific/arabic-ipa.cpp
   src/lang-specific/cmudict-tsv.cpp
   src/lang-specific/heteronym-context.cpp
@@ -134,6 +138,10 @@ moonshine_tts_add_test(turkish_rule_g2p_test moonshine_tts_core)
 moonshine_tts_add_test(ukrainian_rule_g2p_test moonshine_tts_core)
 moonshine_tts_add_test(hindi_rule_g2p_test moonshine_tts_core)
 moonshine_tts_add_test(text_normalize_test moonshine_tts_core)
+moonshine_tts_add_test(sentence_splitter_test moonshine_tts_core)
+moonshine_tts_add_test(tts_stream_test moonshine_tts_core)
+moonshine_tts_add_test(chunk_policy_test moonshine_tts_core)
+moonshine_tts_add_test(kokoro_voice_levels_test moonshine_tts_core)
 moonshine_tts_add_test(heteronym_context_test moonshine_tts_core)
 moonshine_tts_add_test(ipa_postprocess_test moonshine_tts_core)
 moonshine_tts_add_test(cmudict_tsv_test moonshine_tts_core)

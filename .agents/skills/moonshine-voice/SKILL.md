@@ -99,6 +99,18 @@ tts.wait()
 
 Call `cloning()` before `load()`, then `clone_from()` (file or PCM) or `start_cloning()` (microphone). Catalog `voice()` and `cloning()` are mutually exclusive.
 
+When the text comes from a language model, stream it instead of waiting for the whole reply:
+
+```python
+with tts.say_stream() as speech:
+    for token in llm.stream(prompt):
+        tts.push_text(token)
+    tts.end_input()
+    speech.wait()
+```
+
+The streaming calls live on the synthesizer itself; there is no stream object to open or close, and a synthesizer speaks one reply at a time, so `say()` and `synthesize()` refuse while one is in flight. `AgentFlow` has the same `say_stream()`. Use `for chunk in tts.stream(pieces)` when you want the `TtsChunk` objects rather than playback. Text is buffered until a sentence completes, because a synthesizer fed one word at a time produces a list, not a sentence — call `flush()` to force what is buffered, `end_input()` when done, and `cancel_stream()` to drop a reply the user talked over. The same names (`pushText`, `flush`, `endInput`, `cancelStream`, `onChunk`) exist in TypeScript, Swift and Java.
+
 ## Domain customization
 
 `set_keyterms([...])` biases toward jargon; `set_context(passage)` extracts terms from a document. Streaming architectures only — Tiny/Base raise. Takes effect on the next transcription; does not rewrite text already emitted. Keep the list curated; thousands of terms hurt accuracy. See the domain-customization doc for `keyterm_boost`. Teaching conventions or a new acoustic environment is `pip install 'moonshine-voice[finetune]'` then `python -m moonshine_voice.lora` (or `moonshine-voice finetune`) in a training environment — do not add PyTorch or Transformers to an inference app. ATCOSIM is phraseology, not VHF; real radio is `--dataset uwb_atcc` or `--train-manifest`.

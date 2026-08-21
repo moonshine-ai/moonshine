@@ -236,6 +236,18 @@ extern "C" const char *moonshine_error_to_string(int32_t error) {
   if (error == MOONSHINE_ERROR_INVALID_ARGUMENT) {
     return "Invalid argument";
   }
+  if (error == MOONSHINE_ERROR_BUSY) {
+    return "A streaming generation is in progress";
+  }
+  if (error == MOONSHINE_TTS_NEED_TEXT) {
+    return "No complete sentence is buffered yet";
+  }
+  if (error == MOONSHINE_TTS_END_OF_STREAM) {
+    return "End of stream";
+  }
+  if (error == MOONSHINE_TTS_CANCELLED) {
+    return "Streaming generation was cancelled";
+  }
   return "Unknown error";
 }
 
@@ -841,6 +853,34 @@ int32_t allocate_text_to_speech_synthesizer_handle(
     text_to_speech_clone_asr_map[handle] = clone_asr_handle;
   }
   return handle;
+}
+
+/* The chunk a synthesizer last handed out. `chunk` owns the audio and text the
+   caller sees through `view`, which is why it lives here rather than on the
+   stack of moonshine_tts_next_chunk: the documented contract is that a chunk
+   stays valid until the next call on the same synthesizer.
+
+   The streaming state itself is inside MoonshineTTS, so this is all the C
+   layer has to keep. */
+struct TtsChunkHolder {
+  moonshine_tts::TtsChunk chunk;
+  tts_chunk_t view{};
+};
+
+/* Guarded by text_to_speech_synthesizer_map_mutex, which every streaming entry
+   point already holds. */
+std::map<int32_t, std::unique_ptr<TtsChunkHolder>> tts_chunk_map;
+
+TtsChunkHolder &tts_chunk_holder(int32_t tts_synthesizer_handle) {
+  std::unique_ptr<TtsChunkHolder> &slot = tts_chunk_map[tts_synthesizer_handle];
+  if (!slot) {
+    slot = std::make_unique<TtsChunkHolder>();
+  }
+  return *slot;
+}
+
+void free_tts_streams_for_synthesizer(int32_t tts_synthesizer_handle) {
+  tts_chunk_map.erase(tts_synthesizer_handle);
 }
 
 void parse_tts_options(const OptionVector &options,
@@ -1471,6 +1511,7 @@ void moonshine_free_tts_synthesizer(int32_t tts_synthesizer_handle) {
   int32_t clone_asr = -1;
   {
     std::lock_guard<std::mutex> lock(text_to_speech_synthesizer_map_mutex);
+    free_tts_streams_for_synthesizer(tts_synthesizer_handle);
     if (text_to_speech_synthesizer_map.contains(tts_synthesizer_handle)) {
       delete text_to_speech_synthesizer_map[tts_synthesizer_handle];
       text_to_speech_synthesizer_map[tts_synthesizer_handle] = nullptr;
@@ -1544,6 +1585,11 @@ int32_t moonshine_text_to_speech(int32_t tts_synthesizer_handle,
         text_to_speech_synthesizer_map[tts_synthesizer_handle];
     const std::vector<std::pair<std::string, std::string>> tts_pairs =
         tts_option_pairs_from_c(options, options_count);
+    // Refused rather than interleaved: the model is single and the streaming
+    // caller is mid-reply. See moonshine_tts_cancel.
+    if (synth->is_streaming()) {
+      return MOONSHINE_ERROR_BUSY;
+    }
     const std::vector<float> wave = tts_pairs.empty()
                                         ? synth->synthesize(text)
                                         : synth->synthesize(text, tts_pairs);
@@ -2188,6 +2234,161 @@ int32_t moonshine_get_tts_voices(const char *languages,
     LOGF("moonshine_get_tts_voices failed: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
+}
+
+/* --------------------------- STREAMING TEXT TO SPEECH -------------------- */
+
+int32_t moonshine_tts_split_utterances(const char *language, const char *text,
+                                       const moonshine_option_t *options,
+                                       uint64_t options_count,
+                                       char **out_units_json) {
+  if (out_units_json == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  if (options_count > 0 && options == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  *out_units_json = nullptr;
+  try {
+    moonshine_tts::SentenceSplitOptions split_options;
+    split_options.language =
+        language != nullptr ? std::string(language) : std::string();
+    for (uint64_t i = 0; i < options_count; ++i) {
+      const std::string key =
+          options[i].name != nullptr
+              ? replace_all(to_lowercase(std::string(options[i].name)), "-",
+                            "_")
+              : std::string();
+      const std::string value = options[i].value != nullptr
+                                    ? std::string(options[i].value)
+                                    : std::string();
+      if (key == "split_on_colon") {
+        split_options.split_on_colon = bool_from_string(value.c_str());
+      } else if (key == "min_codepoints") {
+        split_options.min_codepoints =
+            static_cast<int>(float_from_string(trim(value).c_str()));
+      }
+    }
+    const std::vector<std::string> units = moonshine_tts::split_sentences(
+        text != nullptr ? std::string_view(text) : std::string_view(),
+        split_options);
+    char *buf = malloc_string_copy(json_flat_string_array(units));
+    if (buf == nullptr) {
+      return MOONSHINE_ERROR_UNKNOWN;
+    }
+    *out_units_json = buf;
+    return MOONSHINE_ERROR_NONE;
+  } catch (const std::exception &e) {
+    LOGF("moonshine_tts_split_utterances failed: %s\n", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+/* Runs *op* on a checked synthesizer, mapping a C++ throw to an error code.
+   Every streaming entry point has this same shape. */
+template <typename Op>
+int32_t with_tts_synthesizer(int32_t tts_synthesizer_handle, const char *name,
+                             Op &&op) {
+  std::lock_guard<std::mutex> lock(text_to_speech_synthesizer_map_mutex);
+  CHECK_TTS_SYNTHESIZER_HANDLE(tts_synthesizer_handle);
+  try {
+    return op(text_to_speech_synthesizer_map[tts_synthesizer_handle]);
+  } catch (const std::exception &e) {
+    LOGF("%s failed: %s\n", name, e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
+}
+
+int32_t moonshine_tts_push_text(int32_t tts_synthesizer_handle,
+                                const char *text) {
+  if (log_api_calls) {
+    LOGF("moonshine_tts_push_text(handle=%d, text=%s)", tts_synthesizer_handle,
+         text != nullptr ? text : "(null)");
+  }
+  if (text == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  return with_tts_synthesizer(tts_synthesizer_handle, "moonshine_tts_push_text",
+                              [text](moonshine_tts::MoonshineTTS *synth) {
+                                synth->push_text(text);
+                                return MOONSHINE_ERROR_NONE;
+                              });
+}
+
+int32_t moonshine_tts_flush(int32_t tts_synthesizer_handle) {
+  if (log_api_calls) {
+    LOGF("moonshine_tts_flush(handle=%d)", tts_synthesizer_handle);
+  }
+  return with_tts_synthesizer(tts_synthesizer_handle, "moonshine_tts_flush",
+                              [](moonshine_tts::MoonshineTTS *synth) {
+                                synth->flush();
+                                return MOONSHINE_ERROR_NONE;
+                              });
+}
+
+int32_t moonshine_tts_end_input(int32_t tts_synthesizer_handle) {
+  if (log_api_calls) {
+    LOGF("moonshine_tts_end_input(handle=%d)", tts_synthesizer_handle);
+  }
+  return with_tts_synthesizer(tts_synthesizer_handle, "moonshine_tts_end_input",
+                              [](moonshine_tts::MoonshineTTS *synth) {
+                                synth->end_input();
+                                return MOONSHINE_ERROR_NONE;
+                              });
+}
+
+int32_t moonshine_tts_cancel(int32_t tts_synthesizer_handle) {
+  if (log_api_calls) {
+    LOGF("moonshine_tts_cancel(handle=%d)", tts_synthesizer_handle);
+  }
+  return with_tts_synthesizer(tts_synthesizer_handle, "moonshine_tts_cancel",
+                              [](moonshine_tts::MoonshineTTS *synth) {
+                                synth->cancel_stream();
+                                return MOONSHINE_ERROR_NONE;
+                              });
+}
+
+int32_t moonshine_tts_is_streaming(int32_t tts_synthesizer_handle) {
+  return with_tts_synthesizer(tts_synthesizer_handle,
+                              "moonshine_tts_is_streaming",
+                              [](moonshine_tts::MoonshineTTS *synth) {
+                                return synth->is_streaming() ? 1 : 0;
+                              });
+}
+
+int32_t moonshine_tts_next_chunk(int32_t tts_synthesizer_handle, uint32_t flags,
+                                 const tts_chunk_t **out_chunk) {
+  if (out_chunk == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  *out_chunk = nullptr;
+  if (flags != 0) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  return with_tts_synthesizer(
+      tts_synthesizer_handle, "moonshine_tts_next_chunk",
+      [tts_synthesizer_handle,
+       out_chunk](moonshine_tts::MoonshineTTS *synth) -> int32_t {
+        TtsChunkHolder &held = tts_chunk_holder(tts_synthesizer_handle);
+        switch (synth->next_chunk(held.chunk)) {
+          case moonshine_tts::TtsStreamStatus::kNeedText:
+            return MOONSHINE_TTS_NEED_TEXT;
+          case moonshine_tts::TtsStreamStatus::kEndOfStream:
+            return MOONSHINE_TTS_END_OF_STREAM;
+          case moonshine_tts::TtsStreamStatus::kCancelled:
+            return MOONSHINE_TTS_CANCELLED;
+          case moonshine_tts::TtsStreamStatus::kChunk:
+            break;
+        }
+        held.view.audio_data = held.chunk.audio.data();
+        held.view.audio_data_count = held.chunk.audio.size();
+        held.view.sample_rate = held.chunk.sample_rate;
+        held.view.text = held.chunk.text.c_str();
+        held.view.utterance_id = held.chunk.utterance_id;
+        held.view.is_final = held.chunk.is_final ? 1 : 0;
+        *out_chunk = &held.view;
+        return MOONSHINE_ERROR_NONE;
+      });
 }
 
 /* ------------------------------ MODEL CATALOG --------------------------- */

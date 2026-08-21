@@ -51,6 +51,17 @@ const CLONE_ENGINE = 'zipvoice';
 /** Built-in ZipVoice voice used by {@link TextToSpeech.cloning} before a clip exists. */
 const CLONE_PRESET_VOICE = 'zipvoice_american_female';
 
+/** No complete utterance is buffered yet; push more text or flush. */
+const TTS_NEED_TEXT = 1;
+/** Input ended and everything queued has been synthesized. */
+const TTS_END_OF_STREAM = 2;
+/**
+ * A cancel discarded the reply being generated. Reported once, and only when
+ * there was something to discard, so a consumer can tell an interruption from
+ * having run out of text.
+ */
+const TTS_CANCELLED = 3;
+
 /** Anything {@link TextToSpeech.cloneFrom} can take a reference voice from. */
 export type CloneSource =
   | string
@@ -61,6 +72,21 @@ export type CloneSource =
   | Float32Array
   | VoiceClone
   | { audio: Float32Array; sampleRate: number };
+
+/** Anything {@link TextToSpeech.stream} can take its text from. */
+export type TtsTextSource = string | Iterable<string> | AsyncIterable<string>;
+
+/** One piece of streamed audio from {@link TextToSpeech.stream}. */
+export interface TtsChunk {
+  audio: Float32Array;
+  sampleRate: number;
+  /** The text this chunk covers, or `''` when the engine cannot attribute it. */
+  text: string;
+  /** Which queued utterance this chunk belongs to, counting from one. */
+  utteranceId: number;
+  /** True for the last chunk of an utterance. */
+  isFinal: boolean;
+}
 
 /** A single voice row returned by {@link TextToSpeech.voices}. */
 export interface TtsVoiceEntry {
@@ -99,12 +125,22 @@ export class TextToSpeech {
   private ownsContext = false;
   private cloningWanted = false;
 
+  /** End of already-scheduled playback, on the AudioContext clock. */
+  private playbackTail = 0;
+  /** Scheduled-but-unfinished sources, so {@link stop} can silence them. */
+  private readonly scheduledSources = new Set<AudioBufferSourceNode>();
+
   /** The clip the current voice was cloned from, if any. */
   private cloneAudio?: Float32Array;
   private cloneTranscript?: string;
 
   /** Last {@link say} output, keyed by the spoken text, for instant replay. */
   private sayCache?: { text: string; chunks: TtsSynthesisResult[] };
+
+  /** True once the streaming reply in flight has drained or been abandoned. */
+  private streamEnded = false;
+  /** Resolved when text arrives or the reply ends, so a waiting pull retries. */
+  private streamWaiter?: () => void;
 
   /**
    * Browser worker that owns a synthesizer for {@link say}. Absent in Node
@@ -317,7 +353,7 @@ export class TextToSpeech {
     if (!this.isEngineReady()) {
       throw new Error('Call load() before say().');
     }
-    const sentences = splitSayUtterances(text);
+    const sentences = this.splitUtterances(text);
     if (!sentences.length) return;
 
     if (this.sayCache?.text === text && this.sayCache.chunks.length > 0) {
@@ -357,6 +393,12 @@ export class TextToSpeech {
     }
   }
 
+  /**
+   * Queues `result` immediately after whatever is already scheduled and
+   * resolves when it has finished playing. Scheduling against the running
+   * clock rather than waiting for `onended` means consecutive chunks join
+   * without an audible gap.
+   */
   private playOne(result: TtsSynthesisResult): Promise<void> {
     if (result.audio.length === 0) return Promise.resolve();
     const ctx = this.ensureContext();
@@ -365,10 +407,56 @@ export class TextToSpeech {
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.connect(ctx.destination);
+    const startAt = Math.max(ctx.currentTime, this.playbackTail);
+    this.playbackTail = startAt + buffer.duration;
+    this.scheduledSources.add(source);
     return new Promise((resolve) => {
-      source.onended = () => resolve();
-      source.start();
+      source.onended = () => {
+        this.scheduledSources.delete(source);
+        resolve();
+      };
+      source.start(startAt);
     });
+  }
+
+  /**
+   * Queues already-synthesized audio — a {@link TtsChunk} from
+   * {@link stream}, say — after whatever is already scheduled, so successive
+   * chunks join without a gap. Resolves once this piece has played.
+   */
+  playChunk(chunk: { audio: Float32Array; sampleRate: number }): Promise<void> {
+    return this.playOne({ audio: chunk.audio, sampleRate: chunk.sampleRate });
+  }
+
+  /** Resolves when everything scheduled has finished playing. */
+  waitForPlayback(): Promise<void> {
+    if (!this.context) return Promise.resolve();
+    const remaining = this.playbackTail - this.context.currentTime;
+    if (remaining <= 0) return Promise.resolve();
+    return new Promise((resolve) => {
+      setTimeout(resolve, remaining * 1000);
+    });
+  }
+
+  /** Drops anything queued and silences playback immediately. */
+  stop(): void {
+    for (const source of this.scheduledSources) {
+      source.onended = null;
+      try {
+        source.stop();
+      } catch {
+        // Already stopped, or never started; nothing to undo.
+      }
+      source.disconnect();
+    }
+    this.scheduledSources.clear();
+    this.playbackTail = 0;
+  }
+
+  /** True while scheduled audio is still playing. */
+  get isTalking(): boolean {
+    if (!this.context) return false;
+    return this.context.currentTime < this.playbackTail;
   }
 
   /**
@@ -398,7 +486,159 @@ export class TextToSpeech {
     return [...seen.values()];
   }
 
+  /**
+   * Splits `text` into the utterances {@link say} would speak one at a time,
+   * using the shared native splitter.
+   */
+  splitUtterances(text: string): string[] {
+    if (!this.mod) {
+      throw new Error('Call load() before splitting text.');
+    }
+    return splitSayUtterancesWith(this.mod, text, this.languageCode);
+  }
+
+  // --- Streaming ---
+  //
+  // Text goes in as it is written and audio comes out in pieces, so the first
+  // clause of a reply can play while the rest is still being generated. For
+  // text you already have in full, `say` and `synthesize` are simpler.
+  //
+  // A synthesizer speaks one thing at a time: `pushText` starts a reply,
+  // `endInput` finishes it, `cancelStream` abandons it, and `synthesize`
+  // throws a `MoonshineBusyError` while one is in flight. There is no session
+  // object to create or close.
+
+  /**
+   * Appends text to the reply being spoken, starting one if needed.
+   *
+   * Pieces are concatenated verbatim, so a model's output can go in token by
+   * token. Text is held back until it forms a complete sentence, because
+   * synthesizing half a clause gets the prosody wrong.
+   */
+  pushText(text: string): void {
+    if (!text) return;
+    this.ensureMainThreadEngine();
+    wrapErrors(() => this.raw!.pushText(text));
+    this.streamEnded = false;
+    this.wakeStream();
+  }
+
+  /** Queues the buffered fragment even though it has no terminator. */
+  flush(): void {
+    this.ensureMainThreadEngine();
+    wrapErrors(() => this.raw!.flush());
+    this.wakeStream();
+  }
+
+  /** Declares that no more text is coming, letting the reply finish. */
+  endInput(): void {
+    this.ensureMainThreadEngine();
+    wrapErrors(() => this.raw!.endInput());
+    this.wakeStream();
+  }
+
+  /**
+   * Drops queued text and abandons the reply in progress. This is the barge-in
+   * path: when someone interrupts the assistant, stop the reply.
+   */
+  cancelStream(): void {
+    this.ensureMainThreadEngine();
+    wrapErrors(() => this.raw!.cancel());
+    // An iteration in flight learns the reply was abandoned from its next
+    // pull, not from here, so only wake one that is waiting for text. Ending
+    // it without that pull would leave the cancellation to be reported
+    // against whatever reply came next.
+    this.wakeStream();
+  }
+
+  /** True while a reply is part-spoken. */
+  get isStreaming(): boolean {
+    if (!this.raw) return false;
+    return wrapErrors(() => this.raw!.isStreaming());
+  }
+
+  /**
+   * Synthesizes and returns the next chunk, blocking while it computes.
+   *
+   * `undefined` means there is nothing to hand back: either no complete
+   * sentence is buffered yet, or the reply is over — drained, or discarded by
+   * a {@link cancelStream}. {@link isStreaming} tells those apart. Prefer
+   * {@link stream}, which yields between chunks so playback and the page get a
+   * turn.
+   */
+  nextChunk(): TtsChunk | undefined {
+    this.ensureMainThreadEngine();
+    const chunk = wrapErrors(() => this.raw!.nextChunk());
+    if (chunk.status === TTS_END_OF_STREAM || chunk.status === TTS_CANCELLED) {
+      this.streamEnded = true;
+      return undefined;
+    }
+    if (chunk.status === TTS_NEED_TEXT || !chunk.audio) return undefined;
+    return {
+      audio: chunk.audio,
+      sampleRate: chunk.sampleRate,
+      text: chunk.text,
+      utteranceId: chunk.utteranceId,
+      isFinal: chunk.isFinal,
+    };
+  }
+
+  /**
+   * The chunks of a reply, in order:
+   *
+   * ```ts
+   * for await (const chunk of tts.stream(llm.tokens(question))) {
+   *   await tts.playChunk(chunk);
+   * }
+   * ```
+   *
+   * With `text`, that whole reply is pushed and ended for you: pass a string,
+   * or an iterable of pieces to forward as they arrive. Without it, call
+   * {@link pushText} from elsewhere and iterate here. Iteration ends once
+   * {@link endInput} lets the queue drain, or as soon as a
+   * {@link cancelStream} elsewhere abandons the reply; leaving the loop early
+   * abandons the rest of it.
+   */
+  async *stream(text?: TtsTextSource): AsyncGenerator<TtsChunk> {
+    this.ensureMainThreadEngine();
+    this.streamEnded = false;
+    // The source runs alongside the pull loop rather than between chunks, so a
+    // model that pauses mid-reply cannot hold back audio that is already due.
+    let stopped = false;
+    const feeding =
+      text === undefined ? undefined : this.feedStream(text, () => stopped);
+    // Nothing awaits `feeding` until the loop ends, so let a failing source
+    // unwind the loop now; it is rethrown below.
+    feeding?.catch(() => this.endStreamIteration());
+
+    try {
+      while (!this.streamEnded) {
+        const chunk = this.nextChunk();
+        if (chunk) {
+          yield chunk;
+          // Give playback, the page, and the text producer a turn.
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+          continue;
+        }
+        if (this.streamEnded) break;
+        await this.waitForStream();
+      }
+    } finally {
+      stopped = true;
+      // A consumer that walked away, or a source that failed, leaves a
+      // half-spoken reply the synthesizer would otherwise still be busy with.
+      if (this.isStreaming) this.cancelStream();
+      // A cancellation is held for the next pull, and nothing will pull on
+      // this iteration's behalf again, so take it here rather than let it
+      // land at the head of the reply after this one.
+      if (!this.streamEnded) this.nextChunk();
+    }
+    await feeding;
+  }
+
   close(): void {
+    this.stop();
+    this.endStreamIteration();
     this.workerHost?.close();
     this.workerHost = undefined;
     if (this.raw) wrapErrors(() => this.raw!.close());
@@ -415,6 +655,40 @@ export class TextToSpeech {
   }
 
   // --- Internals ---
+
+  /** Pushes every piece of `text`, giving up if the consumer walked away. */
+  private async feedStream(
+    text: TtsTextSource,
+    stopped: () => boolean,
+  ): Promise<void> {
+    if (typeof text === 'string') {
+      this.pushText(text);
+    } else {
+      for await (const piece of text) {
+        if (stopped()) return;
+        this.pushText(piece);
+      }
+    }
+    if (!stopped()) this.endInput();
+  }
+
+  private waitForStream(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this.streamWaiter = resolve;
+    });
+  }
+
+  private wakeStream(): void {
+    const waiter = this.streamWaiter;
+    this.streamWaiter = undefined;
+    waiter?.();
+  }
+
+  /** Ends any iteration in flight, for when the engine is about to go away. */
+  private endStreamIteration(): void {
+    this.streamEnded = true;
+    this.wakeStream();
+  }
 
   private requireCloningMode(what: string): void {
     if (!this.cloningWanted) {
@@ -514,6 +788,7 @@ export class TextToSpeech {
     this.raw?.close();
     this.raw = undefined;
     this.sayCache = undefined;
+    this.streamEnded = false;
 
     if (ttsWorkerSupported()) {
       this.workerHost ??= new TtsWorkerHost();
@@ -687,36 +962,32 @@ function isAudioBuffer(value: unknown): value is AudioBuffer {
 }
 
 /**
- * Approximate sentence split for {@link TextToSpeech.say}: break on `.` / `!`
- * / `?` / `:` followed by whitespace so the first clause can start sooner.
+ * Splits `text` the way {@link TextToSpeech.say} does, into the utterances a
+ * synthesizer speaks one at a time. Uses the shared native splitter, so it
+ * knows about abbreviations like `Dr.`, initials, quotes, and non-Latin
+ * terminators such as `。` and `؟`.
  */
-export function splitSayUtterances(text: string): string[] {
-  const stripped = text.trim();
-  if (!stripped) return [];
-  const parts: string[] = [];
-  let start = 0;
-  let i = 0;
-  while (i < stripped.length) {
-    const ch = stripped[i];
-    if (
-      (ch === '.' || ch === '!' || ch === '?' || ch === ':') &&
-      i + 1 < stripped.length &&
-      /\s/.test(stripped[i + 1]!)
-    ) {
-      const end = i + 1;
-      let j = i + 1;
-      while (j < stripped.length && /\s/.test(stripped[j]!)) j += 1;
-      const piece = stripped.slice(start, end).trim();
-      if (piece) parts.push(piece);
-      start = j;
-      i = j;
-      continue;
-    }
-    i += 1;
+export async function splitSayUtterances(
+  text: string,
+  options: { language?: string; module?: MoonshineModule } = {},
+): Promise<string[]> {
+  const module = options.module ?? (await loadMoonshineModule());
+  return splitSayUtterancesWith(module, text, options.language);
+}
+
+/** Synchronous split for callers that already hold a module. */
+function splitSayUtterancesWith(
+  module: MoonshineModule,
+  text: string,
+  language?: string,
+): string[] {
+  if (!module.ttsSplitUtterances) {
+    throw new Error('TTS sentence splitting is unavailable in this build.');
   }
-  const tail = stripped.slice(start).trim();
-  if (tail) parts.push(tail);
-  return parts;
+  const json = wrapErrors(() =>
+    module.ttsSplitUtterances!(language ?? '', text),
+  );
+  return JSON.parse(json) as string[];
 }
 
 /** Views a mono Float32 PCM buffer as little-endian raw bytes (no copy). */

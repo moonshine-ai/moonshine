@@ -137,14 +137,30 @@ def __getattr__(name):
         return globals()[name]
 
     # Lazy import TTS / G2P
-    if name in ("TextToSpeech", "VoiceClone", "list_output_devices"):
+    if name in (
+        "TextToSpeech",
+        "TtsChunk",
+        "SpeechInProgress",
+        "VoiceClone",
+        "list_output_devices",
+        "split_say_utterances",
+    ):
         if not _tts_imported:
-            from moonshine_voice.tts import TextToSpeech, list_output_devices
+            from moonshine_voice.tts import (
+                TextToSpeech,
+                SpeechInProgress,
+                TtsChunk,
+                list_output_devices,
+                split_say_utterances,
+            )
             from moonshine_voice.voice_clone import VoiceClone
 
             globals()["TextToSpeech"] = TextToSpeech
+            globals()["TtsChunk"] = TtsChunk
+            globals()["SpeechInProgress"] = SpeechInProgress
             globals()["VoiceClone"] = VoiceClone
             globals()["list_output_devices"] = list_output_devices
+            globals()["split_say_utterances"] = split_say_utterances
             _tts_imported = True
         return globals()[name]
 
@@ -204,6 +220,7 @@ def __getattr__(name):
         "Dialog",
         "Prompt",
         "Say",
+        "SayStream",
         "Ask",
         "Confirm",
         "Choose",
@@ -226,6 +243,7 @@ def __getattr__(name):
                 Dialog,
                 Prompt,
                 Say,
+                SayStream,
                 Ask,
                 Confirm,
                 Choose,
@@ -247,6 +265,7 @@ def __getattr__(name):
             globals()["Dialog"] = Dialog
             globals()["Prompt"] = Prompt
             globals()["Say"] = Say
+            globals()["SayStream"] = SayStream
             globals()["Ask"] = Ask
             globals()["Confirm"] = Confirm
             globals()["Choose"] = Choose
@@ -313,8 +332,11 @@ __all__ = [
     "get_diarization_model",
     # TTS / G2P
     "TextToSpeech",
+    "TtsChunk",
+    "SpeechInProgress",
     "VoiceClone",
     "list_output_devices",
+    "split_say_utterances",
     "GraphemeToPhonemizer",
     "TTS_CDN_BASE_URL",
     "tts_asset_cache_path",
@@ -347,6 +369,7 @@ __all__ = [
     "Dialog",
     "Prompt",
     "Say",
+    "SayStream",
     "Ask",
     "Confirm",
     "Choose",

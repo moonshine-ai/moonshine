@@ -5,11 +5,13 @@
 
 #include "debug-utils.h"
 #include "g2p-path.h"
+#include "kokoro-voice-levels.h"
 #include "moonshine-asset-catalog.h"
 #include "moonshine-g2p.h"
 #include "ort-session-options.h"
 #include "ort-utils-cxx.h"
 #include "piper-tts.h"
+#include "sentence-splitter.h"
 #include "split-weights.h"
 #include "string-utils.h"
 #include "utf8-utils.h"
@@ -783,8 +785,16 @@ std::vector<std::string> kokoro_vocoder_dependency_keys_with_options(
     vid = select_voice_id(profile.kokoro_lang, opt.voice, profile.default_voice,
                           voices_dir, &opt.files, g2p.g2p_root);
   }
+  // The stages are listed alongside the whole-utterance pair rather than
+  // instead of it. They are what lets streaming cut below a sentence, and a
+  // caller who fetches dependencies and then streams would otherwise silently
+  // get sentence-sized chunks with no indication of why.
   return {std::string(kTtsKokoroSplitModelKey),
           std::string(kTtsKokoroSplitWeightsKey),
+          std::string(kTtsKokoroProsodyModelKey),
+          std::string(kTtsKokoroProsodyWeightsKey),
+          std::string(kTtsKokoroDecoderModelKey),
+          std::string(kTtsKokoroDecoderWeightsKey),
           std::string(kTtsKokoroConfigJsonKey),
           std::string("kokoro/voices/") + vid + ".kokorovoice"};
 }
@@ -957,6 +967,10 @@ list_zipvoice_voices_with_availability(const MoonshineTTSOptions& opt) {
   return out;
 }
 
+/// Audio samples one Kokoro prosody frame is worth: 24 kHz at 40 frames per
+/// second, fixed by the decoder's upsampling ratio.
+inline constexpr int kKokoroSamplesPerFrame = 600;
+
 struct KokoroTtsEngine {
   std::filesystem::path model_path_;
   std::filesystem::path config_path_;
@@ -969,6 +983,28 @@ struct KokoroTtsEngine {
   /// Float32 weights supplied to the graph on every inference, empty when the
   /// model was loaded in its single-file form. See split-weights.h.
   std::vector<SplitWeight> split_weights_{};
+
+  /// Frame-rate features for one utterance, held between the prosody run and
+  /// the decoder runs that consume slices of it.
+  struct Prosody {
+    std::vector<float> asr{};  ///< [1, channels, frames], row-major
+    int64_t channels = 0;
+    int frames = 0;
+    std::vector<float> f0{};      ///< 2 per frame
+    std::vector<float> energy{};  ///< 2 per frame
+    std::vector<float> style{};
+  };
+
+  /// The same graph cut in two, so a chunk of an utterance can be decoded on
+  /// its own. Present only when the stage files were shipped; see load_stages.
+  Ort::Session prosody_session_{nullptr};
+  Ort::Session decoder_session_{nullptr};
+  std::vector<SplitWeight> prosody_weights_{};
+  std::vector<SplitWeight> decoder_weights_{};
+  bool stages_loaded_ = false;
+  /// The utterance currently being decoded a slice at a time. Safe as engine
+  /// state because a synthesizer runs one generation at a time.
+  Prosody analyzed_{};
 
   std::unordered_map<std::string, int> vocab_{};
   std::unordered_set<std::string> vocab_keys_{};
@@ -1135,6 +1171,226 @@ struct KokoroTtsEngine {
             model_len);
   }
 
+  /// Opens the prosody/decoder pair, if it was shipped alongside the model.
+  ///
+  /// Optional on purpose: a caller who pointed ``kokoro_model`` at a model of
+  /// their own, or an install predating these files, keeps working and simply
+  /// streams a sentence at a time. Nothing here throws for that reason.
+  void load_stages(const Ort::SessionOptions& session_opts) {
+    const std::filesystem::path dir = model_path_.parent_path();
+    if (!open_stage(session_opts, dir / "prosody.model.ort",
+                    dir / "prosody.weights.ort", kTtsKokoroProsodyModelKey,
+                    kTtsKokoroProsodyWeightsKey, prosody_session_,
+                    prosody_weights_)) {
+      return;
+    }
+    if (!open_stage(session_opts, dir / "decoder.model.ort",
+                    dir / "decoder.weights.ort", kTtsKokoroDecoderModelKey,
+                    kTtsKokoroDecoderWeightsKey, decoder_session_,
+                    decoder_weights_)) {
+      prosody_session_ = Ort::Session(nullptr);
+      prosody_weights_.clear();
+      return;
+    }
+    stages_loaded_ = true;
+    LOGF_IF(log_profiling_,
+            "KokoroTtsEngine: prosody/decoder stages loaded (%zu + %zu weight "
+            "tensors), sub-sentence streaming available",
+            prosody_weights_.size(), decoder_weights_.size());
+  }
+
+  bool open_stage(const Ort::SessionOptions& session_opts,
+                  const std::filesystem::path& graph_path,
+                  const std::filesystem::path& weights_path,
+                  std::string_view graph_key, std::string_view weights_key,
+                  Ort::Session& out_session,
+                  std::vector<SplitWeight>& out_weights) {
+    const uint8_t* graph_buf = nullptr;
+    size_t graph_len = 0;
+    if (!load_asset_if_present(graph_key, graph_path, &graph_buf, &graph_len)) {
+      return false;
+    }
+    const uint8_t* weights_buf = nullptr;
+    size_t weights_len = 0;
+    if (!load_asset_if_present(weights_key, weights_path, &weights_buf,
+                               &weights_len)) {
+      free_asset(graph_key);
+      return false;
+    }
+    require_ort_model_bytes(graph_buf, graph_len, "Kokoro stage");
+    require_ort_model_bytes(weights_buf, weights_len, "Kokoro stage weights");
+    out_weights =
+        run_split_weights_model(env_, weights_buf, weights_len, session_opts);
+    free_asset(weights_key);
+    out_session = Ort::Session(env_, graph_buf, graph_len, session_opts);
+    free_asset(graph_key);
+    return true;
+  }
+
+  /// Whether the decoder can be asked for a range of frames.
+  bool supports_slicing() const { return stages_loaded_; }
+
+  /// Run the prosody stage over a whole utterance and keep the result for the
+  /// decoder runs that will consume slices of it.
+  ///
+  /// Reporting zero frames means this utterance cannot be sliced, and the
+  /// caller should synthesize it whole instead.
+  const Prosody& analyze(std::string_view text) {
+    analyzed_ = run_prosody(text);
+    return analyzed_;
+  }
+
+  /// Decode frames ``[first, last)`` of the utterance `analyze` last saw.
+  std::vector<float> decode_analyzed(int first, int last) {
+    return run_decoder(analyzed_, first, last);
+  }
+
+  Prosody run_prosody(std::string_view text) {
+    Prosody out;
+    if (!stages_loaded_) {
+      return out;
+    }
+    const std::string ipa = g2p_->text_to_ipa(text, nullptr);
+    if (trim_ascii_ws_copy(ipa).empty()) {
+      return out;
+    }
+    const std::string phonemes =
+        normalize_ipa_to_kokoro(ipa, kokoro_lang_, vocab_keys_);
+    if (phonemes.empty()) {
+      return out;
+    }
+    std::vector<int64_t> ids = phoneme_str_to_input_ids(phonemes, vocab_);
+    // Slicing gains nothing on an utterance the model cannot take in one go,
+    // and the caller has a whole-utterance path that handles it.
+    if (ids.empty() || ids.size() > 512) {
+      return out;
+    }
+
+    const std::u32string points = utf8_str_to_u32(phonemes);
+    const size_t count = std::max<size_t>(points.size(), 1);
+    const size_t row = std::min(
+        count - 1, static_cast<size_t>(voice_rows_ > 0 ? voice_rows_ - 1 : 0));
+    const size_t offset = row * static_cast<size_t>(voice_cols_);
+    if (offset + static_cast<size_t>(voice_cols_) > voice_.size()) {
+      return out;
+    }
+    out.style.assign(
+        voice_.begin() + static_cast<std::ptrdiff_t>(offset),
+        voice_.begin() + static_cast<std::ptrdiff_t>(offset + voice_cols_));
+
+    const int64_t token_count = static_cast<int64_t>(ids.size());
+    const std::array<int64_t, 2> shape_ids{1, token_count};
+    const std::array<int64_t, 2> shape_style{1,
+                                             static_cast<int64_t>(voice_cols_)};
+    std::vector<const char*> in_names{"input_ids", "style", "speed"};
+    std::vector<Ort::Value> inputs;
+    inputs.push_back(Ort::Value::CreateTensor<int64_t>(
+        mem_, ids.data(), ids.size(), shape_ids.data(), shape_ids.size()));
+    inputs.push_back(Ort::Value::CreateTensor<float>(
+        mem_, out.style.data(), out.style.size(), shape_style.data(),
+        shape_style.size()));
+    float speed_value = static_cast<float>(speed_);
+    const std::array<int64_t, 1> shape_speed{1};
+    inputs.push_back(Ort::Value::CreateTensor<float>(mem_, &speed_value, 1,
+                                                     shape_speed.data(), 1));
+    append_split_weight_inputs(prosody_weights_, mem_, inputs, in_names);
+
+    static const char* stage_out[] = {"asr", "f0", "n"};
+    Ort::RunOptions run_opts{nullptr};
+    auto outputs = prosody_session_.Run(
+        run_opts, in_names.data(), inputs.data(), inputs.size(), stage_out, 3);
+
+    const auto asr_info = outputs[0].GetTensorTypeAndShapeInfo();
+    const std::vector<int64_t> asr_shape = asr_info.GetShape();
+    if (asr_shape.size() != 3) {
+      return {};
+    }
+    out.channels = asr_shape[1];
+    out.frames = static_cast<int>(asr_shape[2]);
+    const float* asr_data = outputs[0].GetTensorData<float>();
+    out.asr.assign(asr_data, asr_data + asr_info.GetElementCount());
+    for (int index = 1; index <= 2; ++index) {
+      const auto info = outputs[index].GetTensorTypeAndShapeInfo();
+      const float* data = outputs[index].GetTensorData<float>();
+      std::vector<float>& target = index == 1 ? out.f0 : out.energy;
+      target.assign(data, data + info.GetElementCount());
+    }
+    return out;
+  }
+
+  /// Decode frames ``[first, last)`` of an analyzed utterance.
+  std::vector<float> run_decoder(const Prosody& prosody, int first, int last) {
+    if (!stages_loaded_ || prosody.frames <= 0) {
+      return {};
+    }
+    first = std::clamp(first, 0, prosody.frames);
+    last = std::clamp(last, first, prosody.frames);
+    if (last == first) {
+      return {};
+    }
+    const int64_t span = last - first;
+
+    // asr is [1, channels, frames]; a frame range is a column range, so the
+    // slice has to be gathered rather than pointed at.
+    std::vector<float> asr(static_cast<size_t>(prosody.channels * span));
+    for (int64_t channel = 0; channel < prosody.channels; ++channel) {
+      const float* source = prosody.asr.data() +
+                            channel * static_cast<int64_t>(prosody.frames) +
+                            first;
+      std::copy(source, source + span,
+                asr.begin() + static_cast<std::ptrdiff_t>(channel * span));
+    }
+    // f0 and n run at twice the frame rate.
+    const size_t fine_first = static_cast<size_t>(first) * 2;
+    const size_t fine_count = static_cast<size_t>(span) * 2;
+    if (prosody.f0.size() < fine_first + fine_count ||
+        prosody.energy.size() < fine_first + fine_count) {
+      return {};
+    }
+    std::vector<float> f0(
+        prosody.f0.begin() + static_cast<std::ptrdiff_t>(fine_first),
+        prosody.f0.begin() +
+            static_cast<std::ptrdiff_t>(fine_first + fine_count));
+    std::vector<float> energy(
+        prosody.energy.begin() + static_cast<std::ptrdiff_t>(fine_first),
+        prosody.energy.begin() +
+            static_cast<std::ptrdiff_t>(fine_first + fine_count));
+
+    const std::array<int64_t, 3> shape_asr{1, prosody.channels, span};
+    const std::array<int64_t, 2> shape_fine{1,
+                                            static_cast<int64_t>(fine_count)};
+    const std::array<int64_t, 2> shape_style{
+        1, static_cast<int64_t>(prosody.style.size())};
+    std::vector<float> style = prosody.style;
+
+    std::vector<const char*> in_names{"asr", "f0", "n", "style"};
+    std::vector<Ort::Value> inputs;
+    inputs.push_back(Ort::Value::CreateTensor<float>(
+        mem_, asr.data(), asr.size(), shape_asr.data(), shape_asr.size()));
+    inputs.push_back(Ort::Value::CreateTensor<float>(
+        mem_, f0.data(), f0.size(), shape_fine.data(), shape_fine.size()));
+    inputs.push_back(
+        Ort::Value::CreateTensor<float>(mem_, energy.data(), energy.size(),
+                                        shape_fine.data(), shape_fine.size()));
+    inputs.push_back(Ort::Value::CreateTensor<float>(
+        mem_, style.data(), style.size(), shape_style.data(),
+        shape_style.size()));
+    append_split_weight_inputs(decoder_weights_, mem_, inputs, in_names);
+
+    static const char* stage_out[] = {"waveform"};
+    Ort::RunOptions run_opts{nullptr};
+    auto outputs = decoder_session_.Run(
+        run_opts, in_names.data(), inputs.data(), inputs.size(), stage_out, 1);
+    const auto info = outputs[0].GetTensorTypeAndShapeInfo();
+    const float* data = outputs[0].GetTensorData<float>();
+    return std::vector<float>(data, data + info.GetElementCount());
+  }
+
+  /// The per-utterance effects the whole-utterance path applies on the way out.
+  void apply_output_effects(std::vector<float>& audio) const {
+    apply_synthesis_output_effects(audio, normalize_audio_, output_volume_);
+  }
+
   double speed() const { return speed_; }
 
   void set_speed(double s) {
@@ -1212,8 +1468,10 @@ struct KokoroTtsEngine {
     TIMER_END_IF(log_profiling_, kokoro_load_config);
 
     TIMER_START_IF(log_profiling_, kokoro_load_model);
-    load_model(
-        make_ort_session_options(opt.ort_provider_names, opt.coreml_cache_dir));
+    const Ort::SessionOptions kokoro_session_options =
+        make_ort_session_options(opt.ort_provider_names, opt.coreml_cache_dir);
+    load_model(kokoro_session_options);
+    load_stages(kokoro_session_options);
     TIMER_END_IF(log_profiling_, kokoro_load_model);
 
     detect_kokoro_style_input_name();
@@ -1420,10 +1678,22 @@ struct MoonshineTTS::Impl {
   std::unique_ptr<ZipVoiceTTS> zipvoice_;
   std::mutex synth_mu_;
   bool log_profiling_ = false;
+  std::string language_{};
+  ChunkPolicyOptions chunk_policy_{};
+  /// The generation in flight, if any. One at a time: a synthesizer has one
+  /// model and speaking two things at once is not a thing a caller wants.
+  std::unique_ptr<TtsStream> session_{};
+  /// Set by `stream_cancel`, cleared by the pull that reports it.
+  bool cancel_pending_ = false;
 
   explicit Impl(std::string_view language, const MoonshineTTSOptions& opt_in) {
     MoonshineTTSOptions opt = opt_in;
     log_profiling_ = opt.log_profiling;
+    language_ = std::string(language);
+    chunk_policy_.first_chunk_seconds = opt.stream_first_chunk_seconds;
+    chunk_policy_.tolerance_seconds = opt.stream_tolerance_seconds;
+    chunk_policy_.crossfade_seconds = opt.stream_crossfade_seconds;
+    chunk_policy_.growth = opt.stream_growth;
     TIMER_START_IF(log_profiling_, tts_init);
     for (const FileInformation& fi : opt.file_information) {
       const std::string map_key = fi.path.generic_string();
@@ -1486,6 +1756,127 @@ struct MoonshineTTS::Impl {
     TIMER_END_IF(log_profiling_, tts_init);
   }
 
+  /// Kokoro cuts inside a sentence when its stage models are installed;
+  /// everything else streams a sentence at a time.
+  ///
+  /// An earlier version of this comment said sub-sentence chunking had been
+  /// measured and rejected. That rested on a weighted log-mel distance, which
+  /// disagrees with how the audio sounds. Judged by word error and by
+  /// listening: chunks of about a second are intelligibility-neutral, and
+  /// growing each chunk from the one before holds the level steady while
+  /// costing less decoder work than a uniform grid, because the padding every
+  /// chunk pays for is charged fewer times. See
+  /// scripts/kokoro-stream-prototype.py for the measurements.
+  ///
+  /// Piper does split cleanly, but its whole-sentence time to first audio is
+  /// already about 110 ms, which is not worth re-publishing 88 voices to halve.
+  std::unique_ptr<ChunkSource> make_chunk_source(
+      const ChunkPolicyOptions& policy) {
+    if (kokoro_ && kokoro_->supports_slicing()) {
+      // Only one generation runs at a time, so the utterance being decoded can
+      // sit on the engine between the prosody run and the decoder runs that
+      // consume it.
+      auto analyze = [this](std::string_view text) {
+        SlicedDecodeChunkSource::Prosody out;
+        const KokoroTtsEngine::Prosody& prosody = kokoro_->analyze(text);
+        out.frames = prosody.frames;
+        out.f0 = prosody.f0;
+        out.energy = prosody.energy;
+        return out;
+      };
+      // The one-shot path normalizes to the finished waveform's peak, which
+      // streaming never gets to see. Standing in for it is a gain measured
+      // offline for this voice, fixed for the whole utterance so the level
+      // cannot lurch between chunks.
+      const float gain = kokoro_->normalize_audio()
+                             ? kokoro_streaming_gain(kokoro_->voice_id_) *
+                                   kokoro_->output_volume()
+                             : kokoro_->output_volume();
+      auto decode = [this, gain](int first, int last) {
+        std::vector<float> audio = kokoro_->decode_analyzed(first, last);
+        apply_synthesis_output_effects(audio, /*normalize_audio=*/false, gain);
+        return audio;
+      };
+      auto fallback = [this](std::string_view text) {
+        return synthesize_unlocked(text);
+      };
+      return std::make_unique<SlicedDecodeChunkSource>(
+          std::move(analyze), std::move(decode), std::move(fallback), policy,
+          kKokoroSamplesPerFrame, MoonshineTTS::kSampleRateHz);
+    }
+    return std::make_unique<WholeUtteranceChunkSource>(
+        [this](std::string_view text) { return synthesize_unlocked(text); },
+        MoonshineTTS::kSampleRateHz);
+  }
+
+  /// The streaming operations `MoonshineTTS` exposes as its own methods.
+  ///
+  /// The lock is held for the whole of each one, so a binding driving the
+  /// stream from a worker thread cannot race a caller on the main thread. The
+  /// chunk sources call `synthesize_unlocked` for the same reason.
+  void stream_push_text(std::string_view text) {
+    std::lock_guard<std::mutex> lock(synth_mu_);
+    ensure_session();
+    session_->push_text(text);
+  }
+
+  void stream_flush() {
+    std::lock_guard<std::mutex> lock(synth_mu_);
+    ensure_session();
+    session_->flush();
+  }
+
+  void stream_end_input() {
+    std::lock_guard<std::mutex> lock(synth_mu_);
+    ensure_session();
+    session_->end_input();
+  }
+
+  TtsStreamStatus stream_next_chunk(TtsChunk& out) {
+    std::lock_guard<std::mutex> lock(synth_mu_);
+    if (cancel_pending_) {
+      cancel_pending_ = false;
+      out = TtsChunk{};
+      return TtsStreamStatus::kCancelled;
+    }
+    if (!session_) {
+      return TtsStreamStatus::kNeedText;
+    }
+    const TtsStreamStatus status = session_->next_chunk(out);
+    if (status == TtsStreamStatus::kEndOfStream) {
+      session_.reset();
+    }
+    return status;
+  }
+
+  void stream_cancel() {
+    std::lock_guard<std::mutex> lock(synth_mu_);
+    if (!session_) {
+      return;
+    }
+    session_->cancel();
+    session_.reset();
+    // Held for the next pull rather than reported here, because whoever
+    // cancels is rarely the thread pulling chunks, and that thread has to
+    // learn the audio stopped on purpose rather than for want of text.
+    cancel_pending_ = true;
+  }
+
+  bool is_streaming() {
+    std::lock_guard<std::mutex> lock(synth_mu_);
+    return session_ != nullptr;
+  }
+
+  void ensure_session() {
+    if (session_) {
+      return;
+    }
+    SentenceSplitOptions split;
+    split.language = language_;
+    session_ = std::make_unique<TtsStream>(make_chunk_source(chunk_policy_),
+                                           std::move(split));
+  }
+
   std::vector<float> synthesize_unlocked(std::string_view text) {
     if (zipvoice_) {
       return zipvoice_->synthesize(text);
@@ -1514,13 +1905,26 @@ struct MoonshineTTS::Impl {
     return piper_->synthesize_from_ipa(phonemes);
   }
 
+  /// A one-shot call while a generation is streaming would either interleave
+  /// model runs with it or silently throw its audio away, so it is refused
+  /// instead. Call `cancel_stream` first if the reply is no longer wanted.
+  void require_not_streaming() const {
+    if (session_) {
+      throw std::runtime_error(
+          "MoonshineTTS: a streaming generation is in progress. Finish it, or "
+          "call cancel_stream(), before synthesizing directly.");
+    }
+  }
+
   std::vector<float> synthesize(std::string_view text) {
     std::lock_guard<std::mutex> lock(synth_mu_);
+    require_not_streaming();
     return synthesize_unlocked(text);
   }
 
   std::vector<float> synthesize_from_phonemes(std::string_view phonemes) {
     std::lock_guard<std::mutex> lock(synth_mu_);
+    require_not_streaming();
     return synthesize_from_phonemes_unlocked(phonemes);
   }
 
@@ -1637,6 +2041,29 @@ std::vector<float> MoonshineTTS::synthesize_from_phonemes(
     return synthesize_from_phonemes(phonemes);
   }
   return impl_->synthesize_from_phonemes_with_overrides(phonemes, ov);
+}
+
+void MoonshineTTS::push_text(std::string_view text) {
+  impl_->stream_push_text(text);
+}
+
+void MoonshineTTS::flush() { impl_->stream_flush(); }
+
+void MoonshineTTS::end_input() { impl_->stream_end_input(); }
+
+TtsStreamStatus MoonshineTTS::next_chunk(TtsChunk& out) {
+  return impl_->stream_next_chunk(out);
+}
+
+void MoonshineTTS::cancel_stream() { impl_->stream_cancel(); }
+
+bool MoonshineTTS::is_streaming() const { return impl_->is_streaming(); }
+
+std::vector<std::string> MoonshineTTS::split_utterances(
+    std::string_view text) const {
+  SentenceSplitOptions split;
+  split.language = impl_->language_;
+  return split_sentences(text, split);
 }
 
 void write_wav_mono_pcm16(const std::filesystem::path& path,

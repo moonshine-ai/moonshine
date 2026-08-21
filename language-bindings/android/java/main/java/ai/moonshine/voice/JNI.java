@@ -5,6 +5,8 @@ public class JNI {
     public static final int MOONSHINE_ERROR_UNKNOWN = -1;
     public static final int MOONSHINE_ERROR_INVALID_HANDLE = -2;
     public static final int MOONSHINE_ERROR_INVALID_ARGUMENT = -3;
+    /** A streaming generation is in flight; finish it or cancel it first. */
+    public static final int MOONSHINE_ERROR_BUSY = -4;
 
     public static final int MOONSHINE_MODEL_ARCH_TINY = 0;
     public static final int MOONSHINE_MODEL_ARCH_BASE = 1;
@@ -174,6 +176,24 @@ public class JNI {
 
     public static native TtsSynthesisResult moonshinePhonemesToSpeech(int tts_synthesizer_handle,
             String phonemes, TranscriberOption[] options);
+
+    /** JSON array of the utterances a streaming synthesizer would speak one at a time. */
+    public static native String moonshineTtsSplitUtterances(String language, String text,
+            TranscriberOption[] options);
+
+    public static native int moonshineTtsPushText(int tts_synthesizer_handle, String text);
+
+    public static native int moonshineTtsFlush(int tts_synthesizer_handle);
+
+    public static native int moonshineTtsEndInput(int tts_synthesizer_handle);
+
+    public static native int moonshineTtsCancel(int tts_synthesizer_handle);
+
+    /** Non-zero while a streaming generation is in flight. */
+    public static native int moonshineTtsIsStreaming(int tts_synthesizer_handle);
+
+    /** Never null on success; check {@link TtsChunk#status} for the native status code. */
+    public static native TtsChunk moonshineTtsNextChunk(int tts_synthesizer_handle);
 
     public static native int moonshineCreateGraphemeToPhonemizerFromFiles(String language,
             String[] filenames, TranscriberOption[] options);
