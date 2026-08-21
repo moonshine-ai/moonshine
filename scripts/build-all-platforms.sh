@@ -786,9 +786,9 @@ main() {
     # an empty test-assets tree. Prefer a fast copy from the main checkout when
     # those files are already present; otherwise fetch into the worktree.
     if [[ ! -f "${RELEASE_DIR}/test-assets/tiny-en/encoder_model.ort" ]] || \
-       [[ ! -f "${RELEASE_DIR}/core/moonshine-tts/data/kokoro/model.model.ort" ]]; then
+       [[ ! -f "${RELEASE_DIR}/core/moonshine-tts/data/kokoro/prosody.model.ort" ]]; then
         if [[ -f "${REPO_ROOT_DIR}/test-assets/tiny-en/encoder_model.ort" ]] && \
-           [[ -f "${REPO_ROOT_DIR}/core/moonshine-tts/data/kokoro/model.model.ort" ]]; then
+           [[ -f "${REPO_ROOT_DIR}/core/moonshine-tts/data/kokoro/prosody.model.ort" ]]; then
             echo "Copying voice assets from main checkout into release worktree..."
             # test-assets: copy gitignored model blobs the tracked tree lacks.
             mkdir -p "${RELEASE_DIR}/test-assets"

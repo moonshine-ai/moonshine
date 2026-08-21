@@ -1558,9 +1558,15 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     const std::string json(out);
     CHECK(json.size() >= 2);
     CHECK(json.find("\"groups\"") != std::string::npos);
-    // Kokoro ships as a split ORT pair, so both halves have to be fetched.
-    CHECK(json.find("\"kokoro/model.model.ort\"") != std::string::npos);
-    CHECK(json.find("\"kokoro/model.weights.ort\"") != std::string::npos);
+    // Kokoro ships as two stages, each a split ORT pair, and no
+    // whole-utterance model: running the stages back to back is what serves
+    // that path now, so fetching one as well would double the download.
+    CHECK(json.find("\"kokoro/prosody.model.ort\"") != std::string::npos);
+    CHECK(json.find("\"kokoro/prosody.weights.ort\"") != std::string::npos);
+    CHECK(json.find("\"kokoro/decoder.model.ort\"") != std::string::npos);
+    CHECK(json.find("\"kokoro/decoder.weights.ort\"") != std::string::npos);
+    CHECK(json.find("\"kokoro/model.model.ort\"") == std::string::npos);
+    CHECK(json.find("\"kokoro/model.weights.ort\"") == std::string::npos);
     CHECK(json.find("\"kokoro/model.ort\"") == std::string::npos);
     CHECK(json.find("\"en_us/dict_filtered_heteronyms.tsv\"") !=
           std::string::npos);
@@ -1574,8 +1580,8 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     REQUIRE(out != nullptr);
     const std::string json(out);
     CHECK(json.find("\"groups\"") != std::string::npos);
-    CHECK(json.find("\"kokoro/model.model.ort\"") != std::string::npos);
-    CHECK(json.find("\"kokoro/model.weights.ort\"") != std::string::npos);
+    CHECK(json.find("\"kokoro/prosody.model.ort\"") != std::string::npos);
+    CHECK(json.find("\"kokoro/decoder.model.ort\"") != std::string::npos);
     std::free(out);
   }
 
@@ -1623,8 +1629,8 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
             MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
-    CHECK(json.find("\"kokoro/model.model.ort\"") != std::string::npos);
-    CHECK(json.find("\"kokoro/model.weights.ort\"") != std::string::npos);
+    CHECK(json.find("\"kokoro/prosody.model.ort\"") != std::string::npos);
+    CHECK(json.find("\"kokoro/decoder.model.ort\"") != std::string::npos);
     CHECK(json.find("piper-voices") == std::string::npos);
     std::free(out);
   }
@@ -1653,10 +1659,19 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
             MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
-    // A quantized voice ships as a split ORT pair; the config keeps the
-    // ``.onnx.json`` name whatever form the model takes.
-    CHECK(json.find("de_DE-thorsten-medium.model.ort") != std::string::npos);
-    CHECK(json.find("de_DE-thorsten-medium.weights.ort") != std::string::npos);
+    // A voice ships as two stages, and a quantized one has each of those as a
+    // split ORT pair. The config keeps the ``.onnx.json`` name whatever form
+    // the model takes.
+    CHECK(json.find("de_DE-thorsten-medium.upstream.model.ort") !=
+          std::string::npos);
+    CHECK(json.find("de_DE-thorsten-medium.upstream.weights.ort") !=
+          std::string::npos);
+    CHECK(json.find("de_DE-thorsten-medium.generator.model.ort") !=
+          std::string::npos);
+    CHECK(json.find("de_DE-thorsten-medium.generator.weights.ort") !=
+          std::string::npos);
+    CHECK(json.find("\"de_DE-thorsten-medium.model.ort\"") ==
+          std::string::npos);
     CHECK(json.find("de_DE-thorsten-medium.onnx.json") != std::string::npos);
     std::free(out);
   }
@@ -1670,8 +1685,9 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
             MOONSHINE_ERROR_NONE);
     REQUIRE(out != nullptr);
     const std::string json(out);
-    CHECK(json.find("en_US-saikat.ort") != std::string::npos);
-    CHECK(json.find("en_US-saikat.model.ort") == std::string::npos);
+    CHECK(json.find("en_US-saikat.upstream.ort") != std::string::npos);
+    CHECK(json.find("en_US-saikat.generator.ort") != std::string::npos);
+    CHECK(json.find("en_US-saikat.upstream.model.ort") == std::string::npos);
     std::free(out);
   }
 

@@ -8,7 +8,7 @@ MOONSHINE_TTS_BUILD_DIR="${BUILD_DIR}/moonshine-tts"
 # Model/TTS binaries are no longer in Git LFS. Always run the fetch script: it
 # is idempotent (skips files whose size already matches the CDN inventory) and
 # repairs partial trees left by an interrupted earlier download. Gating on a
-# single sentinel (kokoro/model.model.ort) let incomplete trees skip the repair and
+# single sentinel (kokoro/prosody.model.ort) let incomplete trees skip the repair and
 # fail later (e.g. Chinese Kokoro voices without zh_hans ONNX on the Pi).
 echo "Fetching voice assets from CDN/HF (scripts/fetch-voice-assets.sh)..."
 "${SCRIPTS_DIR}/fetch-voice-assets.sh" all
@@ -101,6 +101,9 @@ fi
 "${MOONSHINE_TTS_BUILD_DIR}/text_normalize_test"
 "${MOONSHINE_TTS_BUILD_DIR}/sentence_splitter_test"
 "${MOONSHINE_TTS_BUILD_DIR}/tts_stream_test"
+"${MOONSHINE_TTS_BUILD_DIR}/piper_stream_test"
+"${MOONSHINE_TTS_BUILD_DIR}/kokoro_voice_levels_test"
+"${MOONSHINE_TTS_BUILD_DIR}/piper_voice_levels_test"
 "${MOONSHINE_TTS_BUILD_DIR}/heteronym_context_test"
 "${MOONSHINE_TTS_BUILD_DIR}/ipa_postprocess_test"
 "${MOONSHINE_TTS_BUILD_DIR}/cmudict_tsv_test"

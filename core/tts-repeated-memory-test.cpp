@@ -344,8 +344,11 @@ bool file_present(const fs::path &p) {
 
 std::optional<EngineSpec> kokoro_spec() {
   const fs::path kokoro = g_data_root / "kokoro";
-  // Kokoro ships as a split ORT pair, and a single .ort is still accepted.
-  const bool model = (file_present(kokoro / "model.model.ort") &&
+  // Kokoro ships as two stages, each a split ORT pair. A whole-utterance
+  // model, in either of its forms, is still accepted.
+  const bool model = (file_present(kokoro / "prosody.model.ort") &&
+                      file_present(kokoro / "decoder.model.ort")) ||
+                     (file_present(kokoro / "model.model.ort") &&
                       file_present(kokoro / "model.weights.ort")) ||
                      file_present(kokoro / "model.ort");
   const bool voice = file_present(kokoro / "voices" / "af_heart.kokorovoice");

@@ -1,9 +1,7 @@
 // Bundled Piper voice stems, kept in sync with
 // ``moonshine-tts/data/*/piper-voices/``. Regenerate the initializer from that
-// tree when adding voices (see repo ``data`` layout). Voices are stored in ORT
-// format, so a stem's files are ``<stem>.model.ort`` + ``<stem>.weights.ort``
-// or
-// ``<stem>.ort``, always beside a ``<stem>.onnx.json`` config;
+// tree when adding voices (see repo ``data`` layout). A voice ships as two
+// stages, each in ORT format, always beside a ``<stem>.onnx.json`` config;
 // ``piper_voice_form_test`` checks this file against what is actually there.
 
 #include "piper-voice-catalog.h"
@@ -139,10 +137,18 @@ bool piper_voice_ships_split(const std::string& stem) {
 }
 
 std::vector<std::string> piper_voice_model_filenames(const std::string& stem) {
-  if (!piper_voice_ships_split(stem)) {
-    return {stem + ".ort"};
+  // The body first: it runs before anything can be heard, and on a slow
+  // connection a client can start it while the generator is still arriving.
+  std::vector<std::string> names;
+  for (const std::string stage : {".upstream", ".generator"}) {
+    if (piper_voice_ships_split(stem)) {
+      names.push_back(stem + stage + ".model.ort");
+      names.push_back(stem + stage + ".weights.ort");
+    } else {
+      names.push_back(stem + stage + ".ort");
+    }
   }
-  return {stem + ".model.ort", stem + ".weights.ort"};
+  return names;
 }
 
 }  // namespace moonshine_tts

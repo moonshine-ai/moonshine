@@ -175,7 +175,7 @@ export class TextToSpeech {
 
   /**
    * Fetches the voice and G2P assets from a base URL you host instead of the
-   * Moonshine CDN. Canonical names (e.g. `kokoro/model.model.ort`) are
+   * Moonshine CDN. Canonical names (e.g. `kokoro/prosody.model.ort`) are
    * appended.
    */
   modelsFrom(baseUrl: string): this {
@@ -185,7 +185,7 @@ export class TextToSpeech {
 
   /**
    * Supplies voice assets directly, keyed by canonical name (e.g.
-   * `kokoro/model.model.ort`). Nothing is downloaded when this is set.
+   * `kokoro/prosody.model.ort`). Nothing is downloaded when this is set.
    */
   assets(assets: Map<string, Uint8Array>): this {
     this.suppliedAssets = assets;

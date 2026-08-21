@@ -125,6 +125,56 @@ class SlicedDecodeChunkSource : public ChunkSource {
   std::vector<float> carry_{};
 };
 
+/// A source for engines whose stages reproduce the whole render exactly, so
+/// chunks can be played back to back with nothing done at the joins.
+///
+/// Piper is one. Given the same latent frames with padding either side, its
+/// generator returns the samples the whole utterance would have held, to about
+/// a millionth. That removes both of the things the Kokoro path needs: the
+/// crossfade that hides the step at a join, and choosing cut points where the
+/// audio is quiet enough for that step to be missed. What is left is the
+/// growing chunk schedule, which is here for latency rather than for artifacts.
+///
+/// Asking the engine for a frame range, rather than working out where that
+/// range starts in samples, is also what lets a voice stream whose frames are
+/// not a whole number of output samples. Piper's are not: a 22.05 kHz voice
+/// resampled to 24 kHz puts 278.6 samples in a frame.
+///
+/// `ChunkPolicyOptions::crossfade_seconds` and `tolerance_seconds` are unused.
+class ExactSliceChunkSource : public ChunkSource {
+ public:
+  /// Prepare `text` and report how many frames long it is. Reporting zero
+  /// means this utterance cannot be sliced, and the fallback is used instead.
+  using AnalyzeFn = std::function<int(std::string_view)>;
+  /// The audio for frames `[first, last)` of the utterance most recently
+  /// analyzed, already at `sample_rate`.
+  using DecodeFn = std::function<std::vector<float>(int first, int last)>;
+  /// Synthesize a whole utterance, for input the stages cannot take.
+  using FallbackFn = std::function<std::vector<float>(std::string_view)>;
+
+  ExactSliceChunkSource(AnalyzeFn analyze, DecodeFn decode, FallbackFn fallback,
+                        ChunkPolicyOptions policy, int frames_per_second,
+                        int sample_rate);
+
+  void begin(std::string_view text) override;
+  std::vector<float> next() override;
+  bool has_more() const override;
+  int sample_rate() const override;
+
+ private:
+  AnalyzeFn analyze_;
+  DecodeFn decode_;
+  FallbackFn fallback_;
+  ChunkPolicyOptions policy_;
+  int frames_per_second_;
+  int sample_rate_;
+  /// Frame indices, one more than the number of chunks.
+  std::vector<int> boundaries_{};
+  size_t next_chunk_ = 0;
+  /// Text held for the fallback path, non-empty only when slicing was declined.
+  std::string whole_text_{};
+};
+
 /// The fallback source: synthesize the whole utterance and hand it back as a
 /// single chunk.
 class WholeUtteranceChunkSource : public ChunkSource {

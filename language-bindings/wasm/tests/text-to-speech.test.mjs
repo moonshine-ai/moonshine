@@ -27,8 +27,11 @@ test('the en_us dependency manifest lists the kokoro model + voice', { skip: ski
   const deps = JSON.parse(mod.ttsDependencies('en_us', ''));
   assert.ok(deps && Array.isArray(deps.groups) && deps.groups.length > 0);
   const keys = flattenTtsDependencyKeys(deps);
-  assert.ok(keys.includes('kokoro/model.model.ort'));
-  assert.ok(keys.includes('kokoro/model.weights.ort'));
+  assert.ok(keys.includes('kokoro/prosody.model.ort'));
+  assert.ok(keys.includes('kokoro/prosody.weights.ort'));
+  assert.ok(keys.includes('kokoro/decoder.model.ort'));
+  assert.ok(keys.includes('kokoro/decoder.weights.ort'));
+  assert.ok(!keys.includes('kokoro/model.model.ort'));
   assert.ok(keys.includes('kokoro/config.json'));
   assert.ok(keys.some((k) => k.startsWith('kokoro/voices/')));
 });

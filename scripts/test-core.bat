@@ -36,7 +36,7 @@ if defined BASH_EXE (
         echo error: missing test-assets and no bash to fetch them >&2
         exit /b 1
     )
-    if not exist "!REPO_ROOT_DIR!\core\moonshine-tts\data\kokoro\model.model.ort" (
+    if not exist "!REPO_ROOT_DIR!\core\moonshine-tts\data\kokoro\prosody.model.ort" (
         echo error: missing kokoro TTS assets and no bash to fetch them >&2
         exit /b 1
     )

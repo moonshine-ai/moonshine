@@ -11,6 +11,7 @@
 #include "ort-session-options.h"
 #include "ort-utils-cxx.h"
 #include "piper-voice-catalog.h"
+#include "piper-voice-levels.h"
 #include "split-weights.h"
 #include "utf8-utils.h"
 
@@ -33,6 +34,15 @@ extern "C" {
 namespace moonshine_tts {
 
 namespace {
+
+/// Latent frames decoded either side of a chunk and then discarded.
+///
+/// The generator's receptive field reaches back a little way, so a slice
+/// decoded on its own starts from the wrong state. Measured against the whole
+/// render, 8 frames leaves 3.9e-4 relative error at the join and 16 leaves
+/// 1.1e-6, which is inaudible; the cost is a fixed 32 frames of extra decode
+/// per chunk, well under a millisecond of work.
+constexpr int kSlicePadFrames = 16;
 
 std::string normalize_lang_key(std::string_view raw) {
   std::string s = trim_ascii_ws_copy(raw);
@@ -183,14 +193,18 @@ void resolve_piper_lang(const std::string& lk, const MoonshineG2POptions& opt,
 /// ``foo.onnx``, and now also name the ORT files directly.
 std::string piper_voice_stem(std::string_view name) {
   std::string s(trim_ascii_ws_copy(name));
-  for (const std::string_view suffix :
-       {".weights.ort", ".model.ort", ".onnx", ".ort"}) {
-    if (s.size() > suffix.size() &&
-        s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0) {
-      s.resize(s.size() - suffix.size());
-      break;
+  const auto strip = [&s](std::initializer_list<std::string_view> suffixes) {
+    for (const std::string_view suffix : suffixes) {
+      if (s.size() > suffix.size() &&
+          s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0) {
+        s.resize(s.size() - suffix.size());
+        return;
+      }
     }
-  }
+  };
+  strip({".weights.ort", ".model.ort", ".onnx", ".ort"});
+  // A voice ships as two stages, so both of those names lead back to it.
+  strip({".upstream", ".generator"});
   return s;
 }
 
@@ -214,9 +228,26 @@ std::filesystem::path piper_voice_model_path(
   return {};
 }
 
+/// Whether both stages of a voice are on disk, in either ORT form.
+bool piper_voice_stages_present(const std::filesystem::path& voices_dir,
+                                const std::string& stem) {
+  for (const std::string_view stage : {".upstream", ".generator"}) {
+    const std::string base = stem + std::string(stage);
+    const bool split =
+        std::filesystem::is_regular_file(voices_dir / (base + ".model.ort")) &&
+        std::filesystem::is_regular_file(voices_dir / (base + ".weights.ort"));
+    if (!split &&
+        !std::filesystem::is_regular_file(voices_dir / (base + ".ort"))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool piper_voice_model_present(const std::filesystem::path& voices_dir,
                                const std::string& stem) {
-  return !piper_voice_model_path(voices_dir, stem).empty();
+  return piper_voice_stages_present(voices_dir, stem) ||
+         !piper_voice_model_path(voices_dir, stem).empty();
 }
 
 /// Voice stems present in a directory, in any of the three model forms.
@@ -476,6 +507,39 @@ struct PiperTTS::Impl {
   /// ship as a split ORT pair. See split-weights.h.
   std::vector<SplitWeight> split_weights_{};
 
+  /// The same voice cut in two, when those files are present: a body that runs
+  /// once per utterance and a generator that can be asked for a range of
+  /// frames. This is what lets streaming cut below a sentence.
+  Ort::Session upstream_session_{nullptr};
+  Ort::Session generator_session_{nullptr};
+  std::vector<SplitWeight> upstream_weights_{};
+  std::vector<SplitWeight> generator_weights_{};
+  bool stages_loaded_ = false;
+  /// Whether `session_` holds a whole-utterance model. False for a voice that
+  /// ships only its stages, which is every voice we publish.
+  bool monolith_loaded_ = false;
+  /// Audio samples one latent frame is worth, at the voice's native rate.
+  int hop_ = 0;
+
+  /// A tensor the body hands the generator.
+  struct SeamTensor {
+    std::string name;
+    std::vector<int64_t> shape;
+    std::vector<float> data;
+  };
+  /// The latent, at one column per frame, and its name in both graphs.
+  std::string latent_name_{};
+  std::vector<int64_t> latent_shape_{};
+  std::vector<float> latent_{};
+  /// Whatever else crosses, which for a multi-speaker voice is the speaker
+  /// embedding: one column for the utterance, handed to every chunk unchanged.
+  std::vector<SeamTensor> conditioning_{};
+  /// Where the utterance's samples land after resampling, worked out once so
+  /// every chunk places itself on the grid a whole render would have used.
+  size_t total_native_ = 0;
+  size_t total_out_ = 0;
+  double resample_step_ = 0.0;
+
   std::unordered_map<std::string, std::vector<int64_t>> phoneme_id_map_{};
   std::unordered_set<std::string> phoneme_map_keys_{};
   std::string piper_ipa_lang_key_{};
@@ -512,6 +576,18 @@ struct PiperTTS::Impl {
     if (ids.size() < 3) {
       throw std::runtime_error("PiperTTS: phoneme id sequence too short");
     }
+    std::vector<float> wave =
+        monolith_loaded_ ? run_whole_model(ids) : run_stages_whole(ids);
+    apply_synthesis_output_effects(wave, normalize_audio_, output_volume_);
+    if (native_sample_rate_ != PiperTTS::kSampleRateHz) {
+      wave =
+          resample_linear(wave, native_sample_rate_, PiperTTS::kSampleRateHz);
+    }
+    return wave;
+  }
+
+  /// Native-rate audio for a whole utterance, from the single-file model.
+  std::vector<float> run_whole_model(const std::vector<int64_t>& ids) {
     const int64_t ntok = static_cast<int64_t>(ids.size());
     int64_t input_len = ntok;
     const std::array<int64_t, 2> shape_in{1, ntok};
@@ -568,13 +644,19 @@ struct PiperTTS::Impl {
     }
     const size_t n_el = ti.GetElementCount();
     const float* ptr = outv.GetTensorData<float>();
-    std::vector<float> wave(ptr, ptr + n_el);
-    apply_synthesis_output_effects(wave, normalize_audio_, output_volume_);
-    if (native_sample_rate_ != PiperTTS::kSampleRateHz) {
-      wave =
-          resample_linear(wave, native_sample_rate_, PiperTTS::kSampleRateHz);
+    return std::vector<float>(ptr, ptr + n_el);
+  }
+
+  /// Native-rate audio for a whole utterance, from the two stages.
+  ///
+  /// The same two runs the monolith did internally, so the samples are the
+  /// ones it would have produced and the cost is within a percent or two.
+  std::vector<float> run_stages_whole(const std::vector<int64_t>& ids) {
+    const int frames = run_upstream(ids);
+    if (frames <= 0) {
+      return {};
     }
-    return wave;
+    return run_generator(0, frames);
   }
 
   /// Loads the split-weights form of a voice if it is present on disk.
@@ -605,6 +687,168 @@ struct PiperTTS::Impl {
 #endif
     split_weights_ = std::move(weights);
     return true;
+  }
+
+  /// Opens one stage, in whichever of the two ORT forms it was published as.
+  bool open_stage(const Ort::SessionOptions& session_opts,
+                  const std::string& suffix, Ort::Session& out_session,
+                  std::vector<SplitWeight>& out_weights) {
+    const std::filesystem::path dir = onnx_path_.parent_path();
+    const std::string stem = piper_voice_stem(onnx_path_.filename().string());
+    const std::filesystem::path graph = dir / (stem + suffix + ".model.ort");
+    const std::filesystem::path weights =
+        dir / (stem + suffix + ".weights.ort");
+    if (std::filesystem::is_regular_file(graph) &&
+        std::filesystem::is_regular_file(weights)) {
+      out_weights = run_split_weights_model(env_, weights, session_opts);
+#ifdef _WIN32
+      const std::wstring wide = graph.wstring();
+      out_session = Ort::Session(env_, wide.c_str(), session_opts);
+#else
+      const std::string utf8 = graph.string();
+      out_session = Ort::Session(env_, utf8.c_str(), session_opts);
+#endif
+      return true;
+    }
+    const std::filesystem::path single = dir / (stem + suffix + ".ort");
+    if (!std::filesystem::is_regular_file(single)) {
+      return false;
+    }
+    out_weights.clear();
+#ifdef _WIN32
+    const std::wstring wide = single.wstring();
+    out_session = Ort::Session(env_, wide.c_str(), session_opts);
+#else
+    const std::string utf8 = single.string();
+    out_session = Ort::Session(env_, utf8.c_str(), session_opts);
+#endif
+    return true;
+  }
+
+  /// Measures what one latent frame is worth in audio samples.
+  ///
+  /// The generator is a fixed stack of transposed convolutions, so the ratio
+  /// is a property of the voice rather than of the utterance, and running a
+  /// few frames of silence through it is the cheapest way to read it off. No
+  /// Piper config records it.
+  int probe_hop(const std::vector<int64_t>& latent_shape) {
+    if (latent_shape.size() != 3 || latent_shape[1] <= 0) {
+      return 0;
+    }
+    constexpr int64_t k_probe_frames = 8;
+    const std::array<int64_t, 3> probe_shape{1, latent_shape[1],
+                                             k_probe_frames};
+    std::vector<float> silence(
+        static_cast<size_t>(latent_shape[1] * k_probe_frames), 0.F);
+    std::vector<Ort::Value> inputs;
+    std::vector<const char*> names;
+    inputs.push_back(Ort::Value::CreateTensor<float>(
+        mem_, silence.data(), silence.size(), probe_shape.data(),
+        probe_shape.size()));
+    names.push_back(latent_name_.c_str());
+    std::vector<std::vector<float>> held;
+    held.reserve(conditioning_.size());
+    for (SeamTensor& tensor : conditioning_) {
+      held.push_back(std::vector<float>(tensor.data.size(), 0.F));
+      inputs.push_back(Ort::Value::CreateTensor<float>(
+          mem_, held.back().data(), held.back().size(), tensor.shape.data(),
+          tensor.shape.size()));
+      names.push_back(tensor.name.c_str());
+    }
+    append_split_weight_inputs(generator_weights_, mem_, inputs, names);
+    Ort::RunOptions run_opts{nullptr};
+    const char* out_names[] = {"output"};
+    auto outputs = generator_session_.Run(run_opts, names.data(), inputs.data(),
+                                          inputs.size(), out_names, 1);
+    const size_t produced =
+        outputs[0].GetTensorTypeAndShapeInfo().GetElementCount();
+    return static_cast<int>(produced / static_cast<size_t>(k_probe_frames));
+  }
+
+  /// Opens the body/generator pair, if this voice was published with one.
+  ///
+  /// Optional on purpose: without it the voice still speaks, a sentence at a
+  /// time, so nothing here throws.
+  void load_stages(const Ort::SessionOptions& session_opts) {
+    stages_loaded_ = false;
+    latent_name_.clear();
+    conditioning_.clear();
+    if (onnx_path_.empty()) {
+      return;
+    }
+    if (!open_stage(session_opts, ".upstream", upstream_session_,
+                    upstream_weights_)) {
+      return;
+    }
+    if (!open_stage(session_opts, ".generator", generator_session_,
+                    generator_weights_)) {
+      upstream_session_ = Ort::Session(nullptr);
+      upstream_weights_.clear();
+      return;
+    }
+
+    // Whatever the generator takes that is not one of its weights is what the
+    // body hands it. The widest of those is the latent; the rest are constant
+    // for the utterance.
+    std::unordered_set<std::string> weight_names;
+    for (const SplitWeight& weight : generator_weights_) {
+      weight_names.insert(weight.name);
+    }
+    Ort::AllocatorWithDefaultOptions allocator;
+    std::vector<SeamTensor> seam;
+    for (size_t i = 0; i < generator_session_.GetInputCount(); ++i) {
+      Ort::AllocatedStringPtr held =
+          generator_session_.GetInputNameAllocated(i, allocator);
+      std::string name(held.get());
+      if (weight_names.count(name) != 0) {
+        continue;
+      }
+      const Ort::TypeInfo type_info = generator_session_.GetInputTypeInfo(i);
+      SeamTensor tensor;
+      tensor.name = std::move(name);
+      tensor.shape = type_info.GetTensorTypeAndShapeInfo().GetShape();
+      seam.push_back(std::move(tensor));
+    }
+    if (seam.empty()) {
+      upstream_session_ = Ort::Session(nullptr);
+      generator_session_ = Ort::Session(nullptr);
+      return;
+    }
+    // The latent is the one that grows with the utterance, so it is the one
+    // whose last axis is dynamic. A speaker embedding is one column wide
+    // however long the utterance is, and so is fully fixed.
+    size_t latent = seam.size();
+    for (size_t i = 0; i < seam.size(); ++i) {
+      if (seam[i].shape.size() == 3 && seam[i].shape[2] < 0) {
+        latent = i;
+        break;
+      }
+    }
+    if (latent == seam.size()) {
+      upstream_session_ = Ort::Session(nullptr);
+      generator_session_ = Ort::Session(nullptr);
+      return;
+    }
+    latent_name_ = seam[latent].name;
+    for (size_t i = 0; i < seam.size(); ++i) {
+      if (i != latent) {
+        SeamTensor tensor = seam[i];
+        size_t count = 1;
+        for (int64_t dim : tensor.shape) {
+          count *= static_cast<size_t>(dim > 0 ? dim : 1);
+        }
+        tensor.data.assign(count, 0.F);
+        conditioning_.push_back(std::move(tensor));
+      }
+    }
+    hop_ = probe_hop(seam[latent].shape);
+    if (hop_ <= 0) {
+      upstream_session_ = Ort::Session(nullptr);
+      generator_session_ = Ort::Session(nullptr);
+      conditioning_.clear();
+      return;
+    }
+    stages_loaded_ = true;
   }
 
   void reload_session() {
@@ -642,10 +886,21 @@ struct PiperTTS::Impl {
     Ort::SessionOptions session_opts =
         make_ort_session_options(ort_provider_names_, coreml_cache_dir_);
     split_weights_.clear();
+    monolith_loaded_ = false;
     const auto oit = tts_asset_files_.entries.find(k_piper_onnx);
-    if (oit == tts_asset_files_.entries.end() &&
-        load_split_weight_sessions(session_opts)) {
-      return;
+    if (oit == tts_asset_files_.entries.end()) {
+      load_stages(session_opts);
+      if (stages_loaded_) {
+        // The two stages render a whole utterance as readily as a slice of
+        // one, and cost the same to run, so a voice published in this form
+        // ships no monolithic model for the one-shot path to use.
+        session_ = Ort::Session(nullptr);
+        return;
+      }
+      if (load_split_weight_sessions(session_opts)) {
+        monolith_loaded_ = true;
+        return;
+      }
     }
     if (oit != tts_asset_files_.entries.end()) {
       FileInformation& of = oit->second;
@@ -675,6 +930,7 @@ struct PiperTTS::Impl {
       session_ = Ort::Session(env_, u8.c_str(), session_opts);
 #endif
     }
+    monolith_loaded_ = true;
   }
 
   explicit Impl(const PiperTTSOptions& opt)
@@ -760,11 +1016,12 @@ struct PiperTTS::Impl {
     return synthesize_from_ipa(ipa);
   }
 
-  std::vector<float> synthesize_from_ipa(std::string_view ipa_in) {
-    if (trim_ascii_ws_copy(ipa_in).empty()) {
+  /// This model's phoneme ids for an IPA string, or empty if none survive.
+  std::vector<int64_t> ids_from_ipa(std::string_view ipa_in) const {
+    const std::string trimmed_ipa = trim_ascii_ws_copy(ipa_in);
+    if (trimmed_ipa.empty()) {
       return {};
     }
-    const std::string trimmed_ipa = trim_ascii_ws_copy(ipa_in);
     const std::string ipa_for_piper =
         coerce_unknown_ipa_chars_to_piper_inventory(
             normalize_g2p_ipa_for_piper(trimmed_ipa, piper_ipa_lang_key_),
@@ -772,12 +1029,266 @@ struct PiperTTS::Impl {
     if (trim_ascii_ws_copy(ipa_for_piper).empty()) {
       return {};
     }
-    std::vector<int64_t> ids =
-        ipa_utf8_to_piper_ids(ipa_for_piper, phoneme_id_map_);
+    return ipa_utf8_to_piper_ids(ipa_for_piper, phoneme_id_map_);
+  }
+
+  std::vector<float> synthesize_from_ipa(std::string_view ipa_in) {
+    const std::vector<int64_t> ids = ids_from_ipa(ipa_in);
     if (ids.size() < 3) {
       return {};
     }
     return run_ort_from_phoneme_ids(ids);
+  }
+
+  /// The scales row the model expects, honouring speed and any overrides.
+  std::array<float, 3> inference_scales() const {
+    double sp = speed_;
+    if (sp < 0.25) {
+      sp = 0.25;
+    }
+    if (sp > 4.0) {
+      sp = 4.0;
+    }
+    const float length_scale = length_scale_default_ / static_cast<float>(sp);
+    const float ns = noise_scale_override_.has_value()
+                         ? noise_scale_override_.value()
+                         : noise_scale_;
+    const float nw =
+        noise_w_override_.has_value() ? noise_w_override_.value() : noise_w_;
+    return {ns, length_scale, nw};
+  }
+
+  int analyze(std::string_view text) {
+    if (!stages_loaded_ || !g2p_) {
+      return 0;
+    }
+    const std::string ipa = g2p_->text_to_ipa(text, nullptr);
+    const std::vector<int64_t> ids = ids_from_ipa(ipa);
+    if (ids.size() < 3) {
+      latent_.clear();
+      latent_shape_.clear();
+      return 0;
+    }
+    return run_upstream(ids);
+  }
+
+  /// Runs the body over `ids` and keeps what it hands the generator.
+  ///
+  /// Returns the utterance's length in latent frames. Only one generation runs
+  /// at a time, so the latent can live on the engine between this and the
+  /// decodes that consume it.
+  int run_upstream(const std::vector<int64_t>& ids) {
+    latent_.clear();
+    latent_shape_.clear();
+    const int64_t ntok = static_cast<int64_t>(ids.size());
+    const std::array<int64_t, 2> shape_in{1, ntok};
+    const std::array<int64_t, 1> shape_one{1};
+    const std::array<int64_t, 1> shape_scales{3};
+    int64_t input_len = ntok;
+    int64_t sid = 0;
+    std::array<float, 3> scales = inference_scales();
+
+    std::vector<Ort::Value> inputs;
+    std::vector<const char*> names{"input", "input_lengths", "scales"};
+    inputs.push_back(Ort::Value::CreateTensor<int64_t>(
+        mem_, const_cast<int64_t*>(ids.data()), ids.size(), shape_in.data(),
+        shape_in.size()));
+    inputs.push_back(Ort::Value::CreateTensor<int64_t>(
+        mem_, &input_len, 1, shape_one.data(), shape_one.size()));
+    inputs.push_back(Ort::Value::CreateTensor<float>(
+        mem_, scales.data(), scales.size(), shape_scales.data(),
+        shape_scales.size()));
+    if (num_speakers_ > 1) {
+      inputs.push_back(Ort::Value::CreateTensor<int64_t>(
+          mem_, &sid, 1, shape_one.data(), shape_one.size()));
+      names.push_back("sid");
+    }
+    append_split_weight_inputs(upstream_weights_, mem_, inputs, names);
+
+    std::vector<const char*> out_names;
+    out_names.push_back(latent_name_.c_str());
+    for (const SeamTensor& tensor : conditioning_) {
+      out_names.push_back(tensor.name.c_str());
+    }
+
+    Ort::RunOptions run_opts{nullptr};
+    auto outputs = upstream_session_.Run(run_opts, names.data(), inputs.data(),
+                                         inputs.size(), out_names.data(),
+                                         out_names.size());
+    const auto info = outputs[0].GetTensorTypeAndShapeInfo();
+    if (info.GetElementType() != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT ||
+        info.GetShape().size() != 3) {
+      return 0;
+    }
+    latent_shape_ = info.GetShape();
+    const float* values = outputs[0].GetTensorData<float>();
+    latent_.assign(values, values + info.GetElementCount());
+    for (size_t i = 0; i < conditioning_.size(); ++i) {
+      const auto held = outputs[i + 1].GetTensorTypeAndShapeInfo();
+      conditioning_[i].shape = held.GetShape();
+      const float* data = outputs[i + 1].GetTensorData<float>();
+      conditioning_[i].data.assign(data, data + held.GetElementCount());
+    }
+
+    const int frames = static_cast<int>(latent_shape_[2]);
+    total_native_ = static_cast<size_t>(frames) * static_cast<size_t>(hop_);
+    total_out_ = resampled_count(total_native_);
+    resample_step_ = total_out_ > 1 ? static_cast<double>(total_native_ - 1) /
+                                          static_cast<double>(total_out_ - 1)
+                                    : 0.0;
+    return frames;
+  }
+
+  /// Output samples `resample_linear` would produce from `count` native ones.
+  size_t resampled_count(size_t count) const {
+    if (native_sample_rate_ == PiperTTS::kSampleRateHz || count < 2) {
+      return count;
+    }
+    const double duration = static_cast<double>(count - 1) /
+                            static_cast<double>(native_sample_rate_);
+    return std::max<size_t>(
+        2, static_cast<size_t>(std::llround(
+               duration * static_cast<double>(PiperTTS::kSampleRateHz))) +
+               1);
+  }
+
+  /// Output samples ``[first_out, last_out)`` of the utterance being decoded.
+  ///
+  /// The grid is the whole utterance's, not the chunk's: `resample_step_` is
+  /// what the one-shot path would use for a render of this length, and every
+  /// chunk reads off the same one. Doing it per chunk instead would restart the
+  /// interpolation at each join, which both steps the waveform there and lets
+  /// the chunks drift out of step with the render they are supposed to
+  /// reproduce. `native` starts at sample `offset` of the utterance and, having
+  /// been decoded with padding, reaches past both ends of what is asked for.
+  std::vector<float> resample_span(const std::vector<float>& native,
+                                   size_t offset, size_t first_out,
+                                   size_t last_out) const {
+    if (last_out <= first_out) {
+      return {};
+    }
+    if (native_sample_rate_ == PiperTTS::kSampleRateHz) {
+      const size_t begin = std::min(first_out - offset, native.size());
+      const size_t end = std::min(last_out - offset, native.size());
+      return std::vector<float>(native.begin() + static_cast<long>(begin),
+                                native.begin() + static_cast<long>(end));
+    }
+    std::vector<float> out;
+    out.reserve(last_out - first_out);
+    const auto available = static_cast<int64_t>(native.size());
+    const auto last_native = static_cast<int64_t>(total_native_) - 1;
+    for (size_t j = first_out; j < last_out; ++j) {
+      const double position = static_cast<double>(j) * resample_step_;
+      const auto whole = static_cast<int64_t>(std::floor(position));
+      const double frac = position - static_cast<double>(whole);
+      const int64_t left = whole - static_cast<int64_t>(offset);
+      // The last output sample lands exactly on the last input one, which has
+      // no successor to interpolate towards.
+      const int64_t right =
+          std::min(whole + 1, last_native) - static_cast<int64_t>(offset);
+      const float a = (left >= 0 && left < available)
+                          ? native[static_cast<size_t>(left)]
+                          : 0.F;
+      const float b = (right >= 0 && right < available)
+                          ? native[static_cast<size_t>(right)]
+                          : a;
+      out.push_back(static_cast<float>(static_cast<double>(a) * (1.0 - frac) +
+                                       static_cast<double>(b) * frac));
+    }
+    return out;
+  }
+
+  /// The first output sample at or after native position `native_position`.
+  size_t first_output_at(size_t native_position) const {
+    if (native_sample_rate_ == PiperTTS::kSampleRateHz) {
+      return native_position;
+    }
+    if (resample_step_ <= 0.0) {
+      return 0;
+    }
+    return static_cast<size_t>(
+        std::ceil(static_cast<double>(native_position) / resample_step_));
+  }
+
+  /// Native-rate audio for latent frames ``[low, high)``, with nothing
+  /// trimmed. Padding is the caller's business.
+  std::vector<float> run_generator(int low, int high) {
+    const int frames = static_cast<int>(latent_shape_[2]);
+    const int64_t channels = latent_shape_[1];
+    const int span = high - low;
+
+    std::vector<float> slice(static_cast<size_t>(channels) *
+                             static_cast<size_t>(span));
+    for (int64_t channel = 0; channel < channels; ++channel) {
+      const float* source =
+          latent_.data() +
+          static_cast<size_t>(channel) * static_cast<size_t>(frames) +
+          static_cast<size_t>(low);
+      std::copy(source, source + span,
+                slice.data() +
+                    static_cast<size_t>(channel) * static_cast<size_t>(span));
+    }
+    const std::array<int64_t, 3> slice_shape{1, channels, span};
+
+    std::vector<Ort::Value> inputs;
+    std::vector<const char*> names;
+    inputs.push_back(Ort::Value::CreateTensor<float>(
+        mem_, slice.data(), slice.size(), slice_shape.data(),
+        slice_shape.size()));
+    names.push_back(latent_name_.c_str());
+    for (SeamTensor& tensor : conditioning_) {
+      inputs.push_back(Ort::Value::CreateTensor<float>(
+          mem_, tensor.data.data(), tensor.data.size(), tensor.shape.data(),
+          tensor.shape.size()));
+      names.push_back(tensor.name.c_str());
+    }
+    append_split_weight_inputs(generator_weights_, mem_, inputs, names);
+
+    Ort::RunOptions run_opts{nullptr};
+    const char* out_names[] = {"output"};
+    auto outputs = generator_session_.Run(run_opts, names.data(), inputs.data(),
+                                          inputs.size(), out_names, 1);
+    const auto info = outputs[0].GetTensorTypeAndShapeInfo();
+    if (info.GetElementType() != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+      throw std::runtime_error("PiperTTS: ONNX output is not float32");
+    }
+    const float* data = outputs[0].GetTensorData<float>();
+    return std::vector<float>(data, data + info.GetElementCount());
+  }
+
+  std::vector<float> decode_analyzed(int first, int last) {
+    if (!stages_loaded_ || latent_shape_.size() != 3 || hop_ <= 0) {
+      return {};
+    }
+    const int frames = static_cast<int>(latent_shape_[2]);
+    first = std::clamp(first, 0, frames);
+    last = std::clamp(last, first, frames);
+    if (last <= first) {
+      return {};
+    }
+    const int low = std::max(0, first - kSlicePadFrames);
+    const int high = std::min(frames, last + kSlicePadFrames);
+    const std::vector<float> native = run_generator(low, high);
+
+    const size_t offset = static_cast<size_t>(low) * static_cast<size_t>(hop_);
+    const size_t first_out =
+        first_output_at(static_cast<size_t>(first) * static_cast<size_t>(hop_));
+    // The final chunk runs to the end of the grid, so no sample is left behind
+    // by the rounding that places the boundaries.
+    const size_t last_out = last == frames
+                                ? total_out_
+                                : first_output_at(static_cast<size_t>(last) *
+                                                  static_cast<size_t>(hop_));
+    std::vector<float> wave =
+        resample_span(native, offset, first_out, last_out);
+    // Peak normalization needs the whole utterance, which streaming does not
+    // have, so the level comes from what this voice measured offline instead.
+    const float gain = normalize_audio_ ? piper_streaming_gain(piper_voice_stem(
+                                              onnx_path_.filename().string())) *
+                                              output_volume_
+                                        : output_volume_;
+    apply_synthesis_output_effects(wave, /*normalize_audio=*/false, gain);
+    return wave;
   }
 
   std::vector<float> synthesize_phoneme_ids(
@@ -822,6 +1333,21 @@ std::vector<float> PiperTTS::synthesize(std::string_view text) {
 
 std::vector<float> PiperTTS::synthesize_from_ipa(std::string_view ipa) {
   return impl_->synthesize_from_ipa(ipa);
+}
+
+bool PiperTTS::supports_slicing() const { return impl_->stages_loaded_; }
+
+int PiperTTS::frames_per_second() const {
+  if (impl_->hop_ <= 0) {
+    return 0;
+  }
+  return impl_->native_sample_rate_ / impl_->hop_;
+}
+
+int PiperTTS::analyze(std::string_view text) { return impl_->analyze(text); }
+
+std::vector<float> PiperTTS::decode_analyzed(int first, int last) {
+  return impl_->decode_analyzed(first, last);
 }
 
 std::vector<float> PiperTTS::synthesize_phoneme_ids(

@@ -104,6 +104,32 @@ class PiperTTS {
   std::vector<float> synthesize_phoneme_ids(
       const std::vector<int64_t>& phoneme_ids);
 
+  /// Whether this voice ships the two stages streaming needs, so the generator
+  /// can be asked for a range of frames instead of a whole utterance.
+  ///
+  /// False for a voice that only has its whole-utterance model, which is what
+  /// a caller pointing at their own export gets; they stream a sentence at a
+  /// time instead. See ``scripts/split-piper-stages.py``.
+  bool supports_slicing() const;
+
+  /// Latent frames per second, for turning a chunk length into a frame count.
+  int frames_per_second() const;
+
+  /// Run the body over ``text`` and keep the latent for the decodes that will
+  /// consume slices of it.
+  ///
+  /// Returns the number of frames, or 0 when this utterance cannot be sliced
+  /// and the caller should synthesize it whole instead.
+  int analyze(std::string_view text);
+
+  /// Decode frames ``[first, last)`` of the utterance ``analyze`` last saw,
+  /// resampled to ``kSampleRateHz``.
+  ///
+  /// Padding either side is decoded and dropped, so the result is what the
+  /// same range of a whole render holds and successive chunks join without a
+  /// crossfade.
+  std::vector<float> decode_analyzed(int first, int last);
+
  private:
   struct Impl;
   std::unique_ptr<Impl> impl_;
