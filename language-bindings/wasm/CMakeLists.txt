@@ -41,6 +41,9 @@ target_link_libraries(moonshine_wasm PRIVATE moonshine ${ONNXRUNTIME_LIB_PATH})
 set(_MOONSHINE_WASM_LINK_FLAGS
     "-lembind"
     "-fexceptions"
+    # Without this a C++ throw reaches JavaScript as a bare heap pointer, so
+    # every native failure reads as an unexplained integer.
+    "-sEXPORT_EXCEPTION_HANDLING_HELPERS=1"
     "-sMODULARIZE=1"
     "-sEXPORT_ES6=1"
     "-sEXPORT_NAME=createMoonshineModule"

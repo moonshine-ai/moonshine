@@ -74,9 +74,11 @@
     - [`handle_utterance()`](#agentflow-handle-utterance)
     - [`cancel()`](#agentflow-cancel)
     - [`say()`](#agentflow-say)
+    - [`say_stream()`](#agentflow-say-stream)
     - [`close()`](#agentflow-close)
 - [Dialog](#dialog)
     - [`say()`](#dialog-say)
+    - [`say_stream()`](#dialog-say-stream)
     - [`ask()`](#dialog-ask)
     - [`confirm()`](#dialog-confirm)
     - [`choose()`](#dialog-choose)
@@ -99,6 +101,14 @@
     - [`start_cloning()`](#texttospeech-start-cloning)
     - [`synthesize()`](#texttospeech-synthesize)
     - [`say()`](#texttospeech-say)
+    - [`say_stream()`](#texttospeech-say-stream)
+    - [`stream()`](#texttospeech-stream)
+    - [`push_text()`](#texttospeech-push-text)
+    - [`flush()`](#texttospeech-flush)
+    - [`end_input()`](#texttospeech-end-input)
+    - [`cancel_stream()`](#texttospeech-cancel-stream)
+    - [`is_streaming`](#texttospeech-is-streaming)
+    - [`next_chunk()`](#texttospeech-next-chunk)
     - [`stop()`](#texttospeech-stop)
     - [`wait()`](#texttospeech-wait)
     - [`is_talking()`](#texttospeech-is-talking)
@@ -271,6 +281,8 @@ The runner won't close a synthesizer or transcriber it didn't create.
 - <a id="agentflow-say"></a>`say()`: Speaks `text` outside any flow. Useful for welcome messages, status announcements, and error notifications that don't need a full flow registration. Blocks until playback finishes, and shares the same playback path as in-flow prompts, so mic muting and self-capture suppression still apply.
   - `text`: The string to speak.
 
+- <a id="agentflow-say-stream"></a>`say_stream()`: A context manager for speaking a reply that is still being written, such as a language model's token stream. It yields a `push(text)` callable; each sentence starts playing as it completes, and the block exits once playback has finished. Mic muting and self-capture suppression cover the whole passage, as for [`say()`](#agentflow-say). See [Speaking a reply as it is written](../using/conversational-agent.md#speaking-a-reply-as-it-is-written).
+
 - <a id="agentflow-close"></a>`close()`: Stops listening and releases everything the runner opened. Only closes what it created itself: a synthesizer or transcriber you passed in stays yours to close. Safe to call more than once, and safe on a runner that never loaded anything.
 
 - `is_active`: A read-only boolean property that's `True` when a flow is currently in progress.
@@ -287,6 +299,10 @@ The context object passed as the first argument to every flow function. Each met
 - <a id="dialog-say"></a>`say()`: Returns a prompt that, when yielded, speaks `text` and resumes the flow once playback has finished. The flow receives `None` from the `yield`.
   - `text`: The string for the assistant to speak.
   - `barge_in`: Reserved for future use; when supported, will allow the user to interrupt playback by speaking.
+
+- <a id="dialog-say-stream"></a>`say_stream()`: Returns a prompt that speaks text which is still being produced, and resumes the flow once the last piece has been spoken. Each sentence starts playing as it completes, so a language model's answer begins out loud while the model is still writing it. If the source raises part way through, what arrived is spoken and the error goes to `on_error()` rather than aborting the flow.
+  - `pieces`: Any iterable of text fragments, down to one token at a time.
+  - `barge_in`: Reserved for future use, as for [`say()`](#dialog-say).
 
 - <a id="dialog-ask"></a>`ask()`: Returns a prompt that speaks a question and resumes the flow with the user's next utterance as a string.
   - `prompt`: The string for the assistant to speak before listening.
@@ -367,6 +383,25 @@ Every setter returns the synthesizer, so one can be built in a single expression
   - `text`: A string or a list of strings to speak. A list is equivalent to calling `say()` once per element in order.
   - `device`: (Python/Swift-macOS) `None` for the host default output, an integer PortAudio output device index, a decimal string index, or a case-insensitive substring of a device name. On Android, pass a `Context` (required) and optionally an `AudioDeviceInfo`.
   - `options`: Optional per-call native options (see [TTS options](options.md#text-to-speech); only `speed` is honored per call).
+
+- <a id="texttospeech-say-stream"></a>`say_stream()`: Speaks text that is still being produced — an LLM reply, say — playing each chunk as it is synthesized. Push the text with [`push_text()`](#texttospeech-push-text). Named `sayStream()` on Swift and Android. See [Streaming text in](../using/text-to-speech.md#streaming-text-in).
+  - `device`, `options`: As for [`say()`](#texttospeech-say).
+
+- <a id="texttospeech-stream"></a>`stream()`: Iterates the chunks of a reply instead of playing them. Each chunk carries its samples, sample rate, the text it covers, an utterance id, and whether it ends that utterance. Given text, that whole reply is pushed and ended for you; given nothing, drive [`push_text()`](#texttospeech-push-text) from another thread.
+  - `text`: Optional string, or an iterable of pieces to consume as they arrive.
+
+- <a id="texttospeech-push-text"></a>`push_text()`: Appends text to the reply being spoken, starting one if none is in flight. Whatever completes a sentence is synthesized; the rest waits for more, because a synthesizer fed one word at a time produces a list rather than a sentence. Named `pushText()` everywhere but Python.
+  - `text`: A fragment of any length, down to a single token.
+
+- <a id="texttospeech-flush"></a>`flush()`: Queues the buffered fragment even though it has no terminator, for a caller who knows the thought is finished but the punctuation does not say so.
+
+- <a id="texttospeech-end-input"></a>`end_input()`: Says no more text is coming. Buffered text is synthesized and the reply ends once the remaining chunks are delivered. Named `endInput()` everywhere but Python.
+
+- <a id="texttospeech-cancel-stream"></a>`cancel_stream()`: Drops queued text and abandons the reply in progress — the barge-in path, for when someone interrupts the assistant. Safe to call when nothing is streaming. Named `cancelStream()` everywhere but Python.
+
+- <a id="texttospeech-is-streaming"></a>`is_streaming`: Whether a reply is part-spoken. A synthesizer speaks one thing at a time, so [`synthesize()`](#texttospeech-synthesize) and [`say()`](#texttospeech-say) refuse while this is true. Named `isStreaming` everywhere but Python.
+
+- <a id="texttospeech-next-chunk"></a>`next_chunk()`: Synthesizes and returns the next chunk on the calling thread, or nothing when no complete sentence is buffered yet, input has ended, or a cancel discarded the reply. Named `nextChunk()` everywhere but Python.
 
 - <a id="texttospeech-stop"></a>`stop()`: Clears the utterance queue and stops any audio currently playing. Returns once all pending utterances are discarded and active playback has been halted. It is safe to call `say()` again afterwards.
 

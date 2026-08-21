@@ -25,6 +25,7 @@ export {
   MoonshineUnknownError,
   MoonshineInvalidHandleError,
   MoonshineInvalidArgumentError,
+  MoonshineBusyError,
   MoonshineDownloadError,
   MoonshineErrorCode,
 } from './errors.js';
@@ -83,6 +84,8 @@ export {
   TextToSpeech,
   splitSayUtterances,
   type CloneSource,
+  type TtsChunk,
+  type TtsTextSource,
   type TtsVoiceEntry,
   type TtsVoicesOptions,
 } from './text-to-speech.js';

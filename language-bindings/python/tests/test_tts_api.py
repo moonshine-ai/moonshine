@@ -257,6 +257,29 @@ def test_split_say_utterances_breaks_on_punct_plus_space(tts_module):
     ]
 
 
+def test_split_say_utterances_keeps_abbreviations_whole(tts_module):
+    split = tts_module.split_say_utterances
+    assert split("Dr. Smith is here.") == ["Dr. Smith is here."]
+    assert split("J. R. R. Tolkien wrote it.") == ["J. R. R. Tolkien wrote it."]
+    assert split("Bring milk, eggs, etc. Then come home.") == [
+        "Bring milk, eggs, etc. Then come home.",
+    ]
+    assert split("It is 3 p.m. now.") == ["It is 3 p.m. now."]
+
+
+def test_split_say_utterances_handles_other_scripts(tts_module):
+    split = tts_module.split_say_utterances
+    assert split("やめて。そこまでだ。") == ["やめて。", "そこまでだ。"]
+    assert split("नमस्ते। आप कैसे हैं।") == ["नमस्ते।", "आप कैसे हैं।"]
+    assert split("مرحبا؟ كيف حالك؟") == ["مرحبا؟", "كيف حالك؟"]
+
+
+def test_split_say_utterances_uses_the_language_abbreviations(tts_module):
+    split = tts_module.split_say_utterances
+    # "z.B." only ends a sentence in languages that don't use it as "e.g.".
+    assert split("Nimm z.B. den Zug.", "de") == ["Nimm z.B. den Zug."]
+
+
 def test_synthesizing_before_load_says_what_to_do(tts_module, fake_native):
     from moonshine_voice.errors import MoonshineError
 
@@ -269,6 +292,140 @@ def test_asset_root_before_load_says_what_to_do(tts_module, fake_native):
 
     with pytest.raises(MoonshineError, match=r"load\(\)"):
         tts_module.TextToSpeech().asset_root
+
+
+# ---------------------------------------------------------------------------
+# Streaming
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def fake_stream(tts_module, monkeypatch):
+    """Stands in for the native streaming calls with a one-chunk-per-unit engine."""
+
+    class FakeStream:
+        NEED_TEXT = 1
+        END_OF_STREAM = 2
+
+        def __init__(self):
+            self.buffer = ""
+            self.units = []
+            self.ended = False
+            self.utterance_id = 0
+            self.streaming = False
+
+        def push_text(self, _handle, text):
+            self.streaming = True
+            self.buffer += text
+            # Anything up to and including a full stop is a complete unit.
+            while "." in self.buffer:
+                head, _, self.buffer = self.buffer.partition(".")
+                self.units.append(head.strip() + ".")
+
+        def flush(self, _handle):
+            if self.buffer.strip():
+                self.units.append(self.buffer.strip())
+            self.buffer = ""
+
+        def end_input(self, handle):
+            self.flush(handle)
+            self.ended = True
+
+        def cancel(self, _handle):
+            self.buffer = ""
+            self.units.clear()
+            self.ended = False
+            self.streaming = False
+
+        def is_streaming(self, _handle):
+            return self.streaming
+
+        def next_chunk(self, _handle):
+            if self.units:
+                text = self.units.pop(0)
+                self.utterance_id += 1
+                chunk = ([0.5] * len(text), 24000, text, self.utterance_id, True)
+                return 0, chunk
+            if self.ended:
+                self.streaming = False
+                return self.END_OF_STREAM, None
+            return self.NEED_TEXT, None
+
+    fake = FakeStream()
+    monkeypatch.setattr(tts_module, "moonshine_tts_push_text", fake.push_text)
+    monkeypatch.setattr(tts_module, "moonshine_tts_flush", fake.flush)
+    monkeypatch.setattr(tts_module, "moonshine_tts_end_input", fake.end_input)
+    monkeypatch.setattr(tts_module, "moonshine_tts_cancel", fake.cancel)
+    monkeypatch.setattr(tts_module, "moonshine_tts_is_streaming", fake.is_streaming)
+    monkeypatch.setattr(tts_module, "moonshine_tts_next_chunk", fake.next_chunk)
+    return fake
+
+
+def test_streaming_before_load_says_what_to_do(tts_module, fake_native):
+    from moonshine_voice.errors import MoonshineError
+
+    with pytest.raises(MoonshineError, match=r"load\(\)"):
+        tts_module.TextToSpeech().push_text("Hello.")
+
+
+def test_pushed_text_is_held_until_a_sentence_is_complete(
+    tts_module, fake_native, fake_stream
+):
+    tts = tts_module.TextToSpeech()
+    tts.load()
+
+    tts.push_text("Hello ")
+    assert tts.next_chunk() is None
+
+    tts.push_text("there. And then")
+    chunk = tts.next_chunk()
+    assert chunk.text == "Hello there."
+    assert chunk.is_final
+    assert chunk.sample_rate == 24000
+    assert chunk.utterance_id == 1
+
+    # The tail is still incomplete, so nothing more comes out yet.
+    assert tts.next_chunk() is None
+    tts.flush()
+    assert tts.next_chunk().text == "And then"
+
+
+def test_streaming_ends_once_input_ends_and_the_queue_drains(
+    tts_module, fake_native, fake_stream
+):
+    tts = tts_module.TextToSpeech()
+    tts.load()
+
+    tts.push_text("One. Two.")
+    tts.end_input()
+    assert [chunk.text for chunk in tts.stream()] == ["One.", "Two."]
+    assert not tts.is_streaming
+
+
+def test_stream_can_be_given_the_whole_reply(tts_module, fake_native, fake_stream):
+    tts = tts_module.TextToSpeech()
+    tts.load()
+
+    assert [chunk.text for chunk in tts.stream("One. Two.")] == ["One.", "Two."]
+
+
+def test_stream_consumes_an_iterable_of_pieces(tts_module, fake_native, fake_stream):
+    tts = tts_module.TextToSpeech()
+    tts.load()
+
+    tokens = iter(["One", ". ", "Two", "."])
+    assert [chunk.text for chunk in tts.stream(tokens)] == ["One.", "Two."]
+
+
+def test_cancel_drops_what_was_queued(tts_module, fake_native, fake_stream):
+    tts = tts_module.TextToSpeech()
+    tts.load()
+
+    tts.push_text("Forget this. And this.")
+    assert tts.is_streaming
+    tts.cancel_stream()
+    assert not tts.is_streaming
+    assert tts.next_chunk() is None
 
 
 # ---------------------------------------------------------------------------

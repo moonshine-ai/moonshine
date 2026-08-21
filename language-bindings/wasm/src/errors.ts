@@ -12,6 +12,7 @@ export const MoonshineErrorCode = {
   UNKNOWN: -1,
   INVALID_HANDLE: -2,
   INVALID_ARGUMENT: -3,
+  BUSY: -4,
 } as const;
 
 /** Base class for all errors thrown by the Moonshine binding. */
@@ -48,11 +49,47 @@ export class MoonshineInvalidArgumentError extends MoonshineError {
   }
 }
 
+/**
+ * Raised when a call would have competed with a streaming reply for the
+ * synthesizer, e.g. {@link TextToSpeech.synthesize} part-way through a
+ * {@link TextToSpeech.stream}.
+ */
+export class MoonshineBusyError extends MoonshineError {
+  constructor(
+    message = 'A streaming reply is in progress. Let it finish with endInput(), or drop it with cancelStream().',
+  ) {
+    super(message, MoonshineErrorCode.BUSY);
+    this.name = 'MoonshineBusyError';
+  }
+}
+
 /** Raised when a network/asset download fails. */
 export class MoonshineDownloadError extends MoonshineError {
   constructor(message: string) {
     super(message, MoonshineErrorCode.UNKNOWN);
     this.name = 'MoonshineDownloadError';
+  }
+}
+
+/**
+ * The Emscripten module, once loaded, so a thrown C++ exception pointer can be
+ * turned back into its message. Set by {@link registerErrorModule}.
+ */
+let exceptionModule: NativeExceptionReader | undefined;
+
+/** Emscripten's decoder, which reports `[type, message]` for a C++ throw. */
+interface NativeExceptionReader {
+  getExceptionMessage?: (ptr: number) => string | [string, string];
+}
+
+/**
+ * Lets {@link toMoonshineError} decode native exceptions. Called with the
+ * Emscripten module as soon as it is instantiated.
+ */
+export function registerErrorModule(mod: unknown): void {
+  const candidate = mod as NativeExceptionReader;
+  if (candidate && typeof candidate.getExceptionMessage === 'function') {
+    exceptionModule = candidate;
   }
 }
 
@@ -63,6 +100,16 @@ export class MoonshineDownloadError extends MoonshineError {
  */
 export function toMoonshineError(err: unknown): MoonshineError {
   if (err instanceof MoonshineError) return err;
+
+  // A C++ throw arrives as a heap pointer unless we ask Emscripten to read it.
+  if (typeof err === 'number' && exceptionModule?.getExceptionMessage) {
+    try {
+      const decoded = exceptionModule.getExceptionMessage(err);
+      return toMoonshineError(Array.isArray(decoded) ? decoded[1] : decoded);
+    } catch {
+      return new MoonshineUnknownError(`native exception at ${err}`);
+    }
+  }
 
   const message =
     typeof err === 'string'
@@ -80,6 +127,10 @@ export function toMoonshineError(err: unknown): MoonshineError {
         return new MoonshineInvalidHandleError(text);
       case MoonshineErrorCode.INVALID_ARGUMENT:
         return new MoonshineInvalidArgumentError(text);
+      // The core's error_to_string has no entry for this code, so `text` reads
+      // "Unknown error"; the class default says what to do about it instead.
+      case MoonshineErrorCode.BUSY:
+        return new MoonshineBusyError();
       default:
         return new MoonshineError(text, code);
     }

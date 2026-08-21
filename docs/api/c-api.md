@@ -96,8 +96,17 @@ All API calls are thread-safe. Work on a single transcriber is serialized, so co
 | `MOONSHINE_ERROR_UNKNOWN` | `-1` |
 | `MOONSHINE_ERROR_INVALID_HANDLE` | `-2` |
 | `MOONSHINE_ERROR_INVALID_ARGUMENT` | `-3` |
+| `MOONSHINE_ERROR_BUSY` | `-4` |
 
 Loader functions that return a handle also use negative values as errors; convert any non-success code with `moonshine_error_to_string()`.
+
+[Streaming synthesis](#streaming-synthesis) adds three more, all positive so the usual "negative means failure" test still separates them from real errors. They convert with `moonshine_error_to_string()` too.
+
+| Constant | Value |
+| --- | --- |
+| `MOONSHINE_TTS_NEED_TEXT` | `1` |
+| `MOONSHINE_TTS_END_OF_STREAM` | `2` |
+| `MOONSHINE_TTS_CANCELLED` | `3` |
 
 ### Flags
 
@@ -962,6 +971,78 @@ int32_t moonshine_phonemes_to_speech(
 | `out_sample_rate` | Receives the sample rate of the synthesized audio, in Hz. |
 
 **Returns:** Zero on success, or a non-zero error code on failure.
+
+### Streaming synthesis
+
+The functions above return a whole utterance at once, which means nothing is audible until all of it exists. A stream turns that around: text goes in as it becomes available, and audio comes out in chunks.
+
+The design is deliberately synchronous and pull-based. `moonshine_tts_next_chunk()` never waits on another thread; it blocks only while it is computing, and returns immediately when there is nothing to do. Threading, callbacks and events belong to the bindings, which is where the platform's conventions live.
+
+There is no stream object. A synthesizer has one model and speaks one thing at a time, so the streaming calls act on the synthesizer itself: pushing text starts a generation, ending input finishes it, and there is nothing to create or free.
+
+```c
+struct tts_chunk_t {
+  const float *audio_data;
+  uint64_t     audio_data_count;
+  int32_t      sample_rate;
+  const char  *text;
+  uint64_t     utterance_id;
+  int8_t       is_final;
+};
+
+int32_t moonshine_tts_push_text(int32_t tts_synthesizer_handle, const char *text);
+int32_t moonshine_tts_flush(int32_t tts_synthesizer_handle);
+int32_t moonshine_tts_end_input(int32_t tts_synthesizer_handle);
+int32_t moonshine_tts_cancel(int32_t tts_synthesizer_handle);
+int32_t moonshine_tts_is_streaming(int32_t tts_synthesizer_handle);
+int32_t moonshine_tts_next_chunk(int32_t tts_synthesizer_handle, uint32_t flags,
+                                 const struct tts_chunk_t **out_chunk);
+```
+
+`moonshine_tts_push_text()` appends text. It is buffered rather than synthesized, because prosody depends on knowing where a clause ends; a synthesizer fed one word at a time produces a list, not a sentence. Buffered text becomes synthesizable when it forms a complete unit under the same rules as `moonshine_tts_split_utterances()`.
+
+`moonshine_tts_flush()` makes whatever is buffered synthesizable even if it is not a complete sentence, for a caller who knows no more text is coming for now. `moonshine_tts_end_input()` flushes and marks the generation closed to further text, after which `moonshine_tts_next_chunk()` reports end of stream once the queue drains. `moonshine_tts_cancel()` throws away both buffered text and pending audio; it is safe to call when nothing is streaming.
+
+Because one generation occupies the model, `moonshine_text_to_speech()` returns `MOONSHINE_ERROR_BUSY` while one is in flight. Finish it or cancel it first. `moonshine_tts_is_streaming()` reports whether one is running.
+
+`moonshine_tts_next_chunk()` returns one of four things:
+
+| Return | Meaning |
+| --- | --- |
+| `MOONSHINE_ERROR_NONE` | `*out_chunk` points at a chunk of audio. |
+| `MOONSHINE_TTS_NEED_TEXT` | Nothing complete is buffered. Push more text, or flush. |
+| `MOONSHINE_TTS_END_OF_STREAM` | Input ended and everything buffered has been returned. |
+| `MOONSHINE_TTS_CANCELLED` | A cancel discarded the reply. Sent once, and only when there was something to discard, so a caller that cancels defensively never sees a phantom interruption. |
+
+The cancelled status exists because whoever cancels is usually not the thread pulling chunks: without it, an interrupted reply is indistinguishable from one that merely ran out of text.
+
+Chunk memory is owned by the synthesizer and stays valid until the next call on it, the same convention `transcript_t` uses rather than the malloc-and-free convention of batch synthesis. Do not free it. `utterance_id` numbers utterances from one, and `is_final` marks the last chunk of each.
+
+Chunks are at most one utterance, as `moonshine_tts_split_utterances()` would divide the text. Kokoro cuts within an utterance as well, so a long sentence starts playing before all of it has been decoded; chunks grow as the utterance goes on, since a short first chunk buys a fast start while later ones give the decoder enough context to keep the level and prosody steady.
+
+### `moonshine_tts_split_utterances()`
+
+Splits text into the units a synthesizer would speak separately, which is also what a stream buffers towards. Exposed because callers doing their own queueing need the same rules the streaming path uses, rather than a private reimplementation that disagrees about `Dr.` or `。`.
+
+```c
+int32_t moonshine_tts_split_utterances(
+    const char *text,
+    const struct moonshine_option_t *options,
+    uint64_t options_count,
+    char **out_utterances_json
+);
+```
+
+| Argument | Description |
+| --- | --- |
+| `text` | UTF-8 text to split. |
+| `options` | Accepts `language` (for language-specific abbreviations), `split_on_colon` and `min_codepoints`. |
+| `options_count` | Number of entries in `options`. |
+| `out_utterances_json` | Receives a NUL-terminated JSON array of strings. Release with `moonshine_free_buffer()`. |
+
+The splitter keeps abbreviations and initials whole (`Dr. Smith`, `J. R. R. Tolkien`, `3.14`), recognizes the terminators of scripts that do not use a full stop (`。！？؟۔।॥;·`) without requiring whitespace after them, and does not split inside quotes or brackets. It biases towards fewer, longer units, because a synthesizer given more context produces better prosody.
+
+**Returns:** `MOONSHINE_ERROR_NONE` on success, or a non-zero error code on failure.
 
 ### `moonshine_get_tts_dependencies()`
 

@@ -1,4 +1,5 @@
 import ctypes
+import json
 import platform
 from dataclasses import dataclass
 from enum import IntEnum
@@ -17,6 +18,14 @@ MOONSHINE_ERROR_NONE = 0
 MOONSHINE_ERROR_UNKNOWN = -1
 MOONSHINE_ERROR_INVALID_HANDLE = -2
 MOONSHINE_ERROR_INVALID_ARGUMENT = -3
+
+# Statuses from ``moonshine_tts_next_chunk``. Positive, so the usual
+# "negative means failure" test still separates them from real errors.
+MOONSHINE_TTS_NEED_TEXT = 1
+MOONSHINE_TTS_END_OF_STREAM = 2
+# Sent once after a cancel discarded a reply, so a consumer pulling chunks can
+# tell an interruption from having run out of text.
+MOONSHINE_TTS_CANCELLED = 3
 
 MOONSHINE_FLAG_FORCE_UPDATE = 1 << 0
 # Mirror of ``MOONSHINE_FLAG_SPELLING_MODE`` from
@@ -62,6 +71,19 @@ class TranscriptWordC(ctypes.Structure):
         ("start", ctypes.c_float),
         ("end", ctypes.c_float),
         ("confidence", ctypes.c_float),
+    ]
+
+
+class TtsChunkC(ctypes.Structure):
+    """C structure for tts_chunk_t."""
+
+    _fields_ = [
+        ("audio_data", ctypes.POINTER(ctypes.c_float)),
+        ("audio_data_count", ctypes.c_uint64),
+        ("sample_rate", ctypes.c_int32),
+        ("text", ctypes.c_char_p),
+        ("utterance_id", ctypes.c_uint64),
+        ("is_final", ctypes.c_int8),
     ]
 
 
@@ -755,6 +777,123 @@ def moonshine_phonemes_to_speech_samples(
         moonshine_free(ctypes.cast(out_audio, ctypes.c_void_p).value)
 
 
+def moonshine_tts_split_utterances_list(
+    text: str,
+    language: Optional[str] = None,
+    options: Optional[Dict[str, Union[str, int, float, bool]]] = None,
+) -> List[str]:
+    """Call ``moonshine_tts_split_utterances``; returns the units as a list of strings."""
+    lib = _MoonshineLib().lib
+    opt_arr, opt_n, opt_keep = moonshine_options_array(options)
+    lang_b = language.encode("utf-8") if language else None
+    out_p = ctypes.c_void_p()
+    err = int(
+        lib.moonshine_tts_split_utterances(
+            lang_b, text.encode("utf-8"), opt_arr, opt_n, ctypes.byref(out_p)
+        )
+    )
+    addr = out_p.value
+    if err != MOONSHINE_ERROR_NONE:
+        if addr:
+            moonshine_free(addr)
+        raise MoonshineError(f"moonshine_tts_split_utterances failed ({err})")
+    if not addr:
+        return []
+    try:
+        raw = _decode_utf8_from_c(ctypes.string_at(addr))
+    finally:
+        moonshine_free(addr)
+    parsed = json.loads(raw) if raw else []
+    return [str(item) for item in parsed]
+
+
+def _check_tts_stream_call(err: int, name: str) -> None:
+    if err != MOONSHINE_ERROR_NONE:
+        raise MoonshineError(f"{name} failed ({err})")
+
+
+def moonshine_tts_push_text(tts_synthesizer_handle: int, text: str) -> None:
+    """Append text, starting a generation if none is running."""
+    lib = _MoonshineLib().lib
+    _check_tts_stream_call(
+        int(
+            lib.moonshine_tts_push_text(
+                ctypes.c_int32(tts_synthesizer_handle),
+                text.encode("utf-8"),
+            )
+        ),
+        "moonshine_tts_push_text",
+    )
+
+
+def moonshine_tts_flush(tts_synthesizer_handle: int) -> None:
+    """Queue the buffered fragment even though it has no terminator."""
+    lib = _MoonshineLib().lib
+    _check_tts_stream_call(
+        int(lib.moonshine_tts_flush(ctypes.c_int32(tts_synthesizer_handle))),
+        "moonshine_tts_flush",
+    )
+
+
+def moonshine_tts_end_input(tts_synthesizer_handle: int) -> None:
+    """Declare that no more text is coming."""
+    lib = _MoonshineLib().lib
+    _check_tts_stream_call(
+        int(lib.moonshine_tts_end_input(ctypes.c_int32(tts_synthesizer_handle))),
+        "moonshine_tts_end_input",
+    )
+
+
+def moonshine_tts_cancel(tts_synthesizer_handle: int) -> None:
+    """Drop queued text and abandon the generation in progress."""
+    lib = _MoonshineLib().lib
+    _check_tts_stream_call(
+        int(lib.moonshine_tts_cancel(ctypes.c_int32(tts_synthesizer_handle))),
+        "moonshine_tts_cancel",
+    )
+
+
+def moonshine_tts_is_streaming(tts_synthesizer_handle: int) -> bool:
+    """Whether a streaming generation is in flight."""
+    lib = _MoonshineLib().lib
+    return int(lib.moonshine_tts_is_streaming(ctypes.c_int32(tts_synthesizer_handle))) == 1
+
+
+def moonshine_tts_next_chunk(
+    tts_synthesizer_handle: int,
+) -> Tuple[int, Optional[Tuple[List[float], int, str, int, bool]]]:
+    """Call ``moonshine_tts_next_chunk``, copying the chunk out of native memory.
+
+    Returns ``(status, chunk)`` where ``chunk`` is
+    ``(samples, sample_rate_hz, text, utterance_id, is_final)``, or ``None`` when
+    the status is ``MOONSHINE_TTS_NEED_TEXT`` / ``MOONSHINE_TTS_END_OF_STREAM``.
+    The native buffer is only valid until the next call on this synthesizer, so
+    the samples are copied before returning.
+    """
+    lib = _MoonshineLib().lib
+    out_chunk = ctypes.POINTER(TtsChunkC)()
+    status = int(
+        lib.moonshine_tts_next_chunk(
+            ctypes.c_int32(tts_synthesizer_handle),
+            0,
+            ctypes.byref(out_chunk),
+        )
+    )
+    if status < 0:
+        raise MoonshineError(f"moonshine_tts_next_chunk failed ({status})")
+    if status != MOONSHINE_ERROR_NONE or not out_chunk:
+        return status, None
+    c = out_chunk.contents
+    n = int(c.audio_data_count)
+    samples: List[float] = []
+    if n > 0 and c.audio_data:
+        samples = list(
+            ctypes.cast(c.audio_data, ctypes.POINTER(ctypes.c_float * n)).contents
+        )
+    text = c.text.decode("utf-8", errors="replace") if c.text else ""
+    return status, (samples, int(c.sample_rate), text, int(c.utterance_id), bool(c.is_final))
+
+
 def moonshine_text_to_phonemes_string(
     grapheme_to_phonemizer_handle: int,
     text: str,
@@ -1090,6 +1229,40 @@ class _MoonshineLib:
             ctypes.POINTER(ctypes.POINTER(ctypes.c_float)),
             ctypes.POINTER(ctypes.c_uint64),
             ctypes.POINTER(ctypes.c_int32),
+        ]
+
+        lib.moonshine_tts_split_utterances.restype = ctypes.c_int32
+        lib.moonshine_tts_split_utterances.argtypes = [
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.POINTER(TranscriberOptionC),
+            ctypes.c_uint64,
+            ctypes.POINTER(ctypes.c_void_p),
+        ]
+
+        lib.moonshine_tts_push_text.restype = ctypes.c_int32
+        lib.moonshine_tts_push_text.argtypes = [
+            ctypes.c_int32,
+            ctypes.c_char_p,
+        ]
+
+        lib.moonshine_tts_flush.restype = ctypes.c_int32
+        lib.moonshine_tts_flush.argtypes = [ctypes.c_int32]
+
+        lib.moonshine_tts_end_input.restype = ctypes.c_int32
+        lib.moonshine_tts_end_input.argtypes = [ctypes.c_int32]
+
+        lib.moonshine_tts_cancel.restype = ctypes.c_int32
+        lib.moonshine_tts_cancel.argtypes = [ctypes.c_int32]
+
+        lib.moonshine_tts_is_streaming.restype = ctypes.c_int32
+        lib.moonshine_tts_is_streaming.argtypes = [ctypes.c_int32]
+
+        lib.moonshine_tts_next_chunk.restype = ctypes.c_int32
+        lib.moonshine_tts_next_chunk.argtypes = [
+            ctypes.c_int32,
+            ctypes.c_uint32,
+            ctypes.POINTER(ctypes.POINTER(TtsChunkC)),
         ]
 
         lib.moonshine_create_grapheme_to_phonemizer_from_files.restype = ctypes.c_int32

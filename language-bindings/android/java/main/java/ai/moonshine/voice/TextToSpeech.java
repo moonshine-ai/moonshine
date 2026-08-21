@@ -10,6 +10,9 @@ import android.util.Log;
 
 import androidx.annotation.Nullable;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -20,6 +23,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 /**
  * On-device text-to-speech.
@@ -75,7 +79,11 @@ public class TextToSpeech {
     /** {@code Integer.MIN_VALUE} means no track has been built yet. */
     private int sayCachedDeviceId = Integer.MIN_VALUE;
     private int sayCachedSampleRateHz;
-    @Nullable private AudioTrack sayCachedTrack;
+    @Nullable private volatile AudioTrack sayCachedTrack;
+    /** Frames written to {@link #sayCachedTrack} since it last started from silence. */
+    private volatile long sayTrackFrames;
+    /** How long a drained track stays open before the device is released. */
+    private static final long TRACK_IDLE_NANOS = 2_000_000_000L;
 
     /**
      * Creates a synthesizer that has not loaded any assets yet. Configure it
@@ -279,6 +287,11 @@ public class TextToSpeech {
         checkLoaded();
         TtsSynthesisResult result = JNI.moonshineTextToSpeech(handle, text, toArray(options));
         if (result == null) {
+            if (isStreaming()) {
+                throw new IllegalStateException(
+                        "A streamed reply is in flight. Call endInput() or cancelStream()"
+                                + " before synthesizing something else.");
+            }
             throw new RuntimeException("moonshineTextToSpeech failed");
         }
         return result;
@@ -366,8 +379,13 @@ public class TextToSpeech {
         }
     }
 
-    /** Blocks until all queued utterances have been synthesized and played. */
+    /**
+     * Blocks until all queued utterances have been synthesized and played. A
+     * streamed reply counts as queued until its input ends, so call
+     * {@link #endInput()} first or this waits for text that never comes.
+     */
     public void waitUntilDone() {
+        joinChunkWorker(0);
         synchronized (pendingLock) {
             while (pendingCount.get() > 0) {
                 try {
@@ -378,29 +396,39 @@ public class TextToSpeech {
                 }
             }
         }
+        // The queue empties as soon as the last samples are handed to the
+        // track, so wait out whatever is still buffered in it.
+        while (isPlaybackPending() && !stopRequested) {
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
     }
 
     /**
      * Clears the utterance queue and stops any audio currently playing.
      *
      * <p>Returns once all pending utterances are discarded and the active playback (if any)
-     * has been halted. It is safe to call {@link #say} again afterwards.
+     * has been halted, including a reply that was still being streamed in. It is safe to
+     * call {@link #say} again afterwards.
      */
     public void stop() {
         stopRequested = true;
+        if (handle >= 0) {
+            cancelStream();
+        }
+        // Normally already gone, having seen the cancellation. This is for a
+        // worker wedged somewhere it cannot pull from: stop() promises the
+        // synthesizer is idle when it returns.
+        stopChunkWorker();
 
         drainQueue(sayQueue);
         drainQueue(playQueue);
 
-        synchronized (sayLock) {
-            if (sayCachedTrack != null) {
-                try {
-                    sayCachedTrack.stop();
-                    sayCachedTrack.flush();
-                } catch (Exception ignored) {
-                }
-            }
-        }
+        haltTrack();
 
         joinWorkers();
         pendingCount.set(0);
@@ -411,7 +439,303 @@ public class TextToSpeech {
 
     /** True if utterances are queued, being synthesized, or currently playing. */
     public boolean isTalking() {
-        return pendingCount.get() > 0;
+        return streamPlaying || pendingCount.get() > 0 || isPlaybackPending();
+    }
+
+    // -- Streaming -----------------------------------------------------------
+    //
+    // Text goes in as it is written and audio comes out in pieces, so the first
+    // clause of a reply can play while the rest is still arriving. A
+    // synthesizer speaks one thing at a time: pushText starts a reply, endInput
+    // finishes it, cancelStream abandons it, and synthesize() fails while one
+    // is in flight. There is no session object to open or close.
+
+    /** No complete utterance is buffered yet; push more text or flush. */
+    private static final int NEED_TEXT = 1;
+    /** Input ended and everything queued has been synthesized. */
+    private static final int END_OF_STREAM = 2;
+    /**
+     * A cancel discarded the reply being generated. Reported once, and only
+     * when there was something to discard, so the puller can tell an
+     * interruption from having run out of text.
+     */
+    private static final int CANCELLED = 3;
+    /**
+     * How long the chunk worker is given to finish. Long enough for a chunk
+     * that was already being synthesized, short enough that a worker wedged
+     * behind playback does not hold up a barge-in.
+     */
+    private static final long WORKER_JOIN_MILLIS = 2000;
+
+    /**
+     * Adds text to the reply being spoken, starting one if nothing is streaming
+     * yet. Pieces are concatenated verbatim, so an LLM's output can go in token
+     * by token. Nothing is synthesized until a complete utterance forms.
+     */
+    public void pushText(String text) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+        checkLoaded();
+        check(JNI.moonshineTtsPushText(handle, text));
+        wakeChunkWorker();
+    }
+
+    /** Treats whatever is buffered as a complete utterance, punctuation or not. */
+    public void flush() {
+        checkLoaded();
+        check(JNI.moonshineTtsFlush(handle));
+        wakeChunkWorker();
+    }
+
+    /**
+     * Signals that no more text is coming. Chunks keep arriving until the queue
+     * drains, after which {@link #isStreaming()} is false.
+     */
+    public void endInput() {
+        checkLoaded();
+        check(JNI.moonshineTtsEndInput(handle));
+        wakeChunkWorker();
+    }
+
+    /**
+     * Drops queued text, abandons the reply in progress and stops delivering
+     * chunks. This is the barge-in path; audio already handed to the speaker
+     * keeps playing until {@link #stop()}.
+     */
+    public void cancelStream() {
+        checkLoaded();
+        check(JNI.moonshineTtsCancel(handle));
+        // The worker stops itself once a pull reports the cancellation, so all
+        // there is to do here is wake it if it is parked and wait it out.
+        // Taking it down without that pull would leave the cancellation to be
+        // reported against whatever reply came next.
+        wakeChunkWorker();
+        joinChunkWorker(WORKER_JOIN_MILLIS);
+    }
+
+    /** True while a reply is part-spoken. */
+    public boolean isStreaming() {
+        return handle >= 0 && JNI.moonshineTtsIsStreaming(handle) != 0;
+    }
+
+    /**
+     * Synthesizes and returns the next chunk, blocking the calling thread while
+     * it computes. Returns {@code null} when no complete utterance is buffered
+     * yet, when input has ended and everything queued has been delivered, and
+     * when a {@link #cancelStream()} discarded the reply; {@link #isStreaming()}
+     * tells the first from the rest.
+     *
+     * <p>{@link #stream} and {@link #sayStream()} do this on a worker thread
+     * instead. Use one of them or this, not both.
+     */
+    @Nullable
+    public TtsChunk nextChunk() {
+        TtsChunk chunk = pollChunk();
+        if (chunk.status == NEED_TEXT || chunk.status == END_OF_STREAM
+                || chunk.status == CANCELLED) {
+            return null;
+        }
+        check(chunk.status);
+        return chunk;
+    }
+
+    /**
+     * Hands each chunk to {@code consumer} on a background thread as it is
+     * synthesized, until input ends or {@link #cancelStream()} abandons the
+     * reply.
+     *
+     * <pre>{@code
+     * tts.stream(chunk -> play(chunk.samples, chunk.sampleRateHz));
+     * for (String token : llmReply()) {
+     *     tts.pushText(token);
+     * }
+     * tts.endInput();
+     * tts.waitUntilDone();
+     * }</pre>
+     *
+     * <p>Use {@link #sayStream()} instead to have the library play the chunks.
+     */
+    public void stream(Consumer<TtsChunk> consumer) {
+        if (consumer == null) {
+            throw new IllegalArgumentException("consumer is required");
+        }
+        checkLoaded();
+        startChunkWorker(consumer, false);
+    }
+
+    /**
+     * Speaks text that is still being written, a piece at a time.
+     *
+     * <p>The streaming counterpart to {@link #say}: push text as it arrives and
+     * each chunk plays as soon as it is synthesized, through the same track, so
+     * a reply written token by token comes out as continuous speech.
+     *
+     * <pre>{@code
+     * tts.sayStream();
+     * for (String token : llmReply()) {
+     *     tts.pushText(token);
+     * }
+     * tts.endInput();
+     * tts.waitUntilDone();
+     * }</pre>
+     *
+     * <p>{@link #isTalking()}, {@link #waitUntilDone()} and {@link #stop()}
+     * cover streamed audio too.
+     */
+    public void sayStream() {
+        checkLoaded();
+        ensureWorkers();
+        startChunkWorker(this::enqueueChunkForPlayback, true);
+    }
+
+    // -- Streaming internals -------------------------------------------------
+
+    private final Object chunkLock = new Object();
+    @Nullable private Thread chunkThread;
+    /** True while the chunk worker is feeding playback rather than a caller. */
+    private volatile boolean streamPlaying;
+
+    private TtsChunk pollChunk() {
+        checkLoaded();
+        TtsChunk chunk = JNI.moonshineTtsNextChunk(handle);
+        if (chunk == null) {
+            throw new RuntimeException("moonshineTtsNextChunk failed");
+        }
+        return chunk;
+    }
+
+    private void startChunkWorker(Consumer<TtsChunk> consumer, boolean plays) {
+        synchronized (chunkLock) {
+            if (chunkThread != null) {
+                throw new IllegalStateException(
+                        "A reply is already streaming. Call endInput() or cancelStream()"
+                                + " before starting another.");
+            }
+            streamPlaying = plays;
+            Thread thread = new Thread(() -> pumpChunks(consumer), "moonshine-tts-stream");
+            thread.setDaemon(true);
+            chunkThread = thread;
+            thread.start();
+        }
+    }
+
+    private void pumpChunks(Consumer<TtsChunk> consumer) {
+        try {
+            while (isCurrentChunkWorker()) {
+                TtsChunk chunk = pollChunk();
+                // A cancel ends the reply as surely as running out of text
+                // does; it just came from somewhere other than this thread.
+                if (chunk.status == END_OF_STREAM || chunk.status == CANCELLED) {
+                    return;
+                }
+                if (chunk.status == NEED_TEXT) {
+                    awaitText();
+                    continue;
+                }
+                check(chunk.status);
+                consumer.accept(chunk);
+            }
+        } catch (RuntimeException e) {
+            Log.w("MoonshineTTS", "Streaming synthesis failed", e);
+        } finally {
+            synchronized (chunkLock) {
+                if (chunkThread == Thread.currentThread()) {
+                    chunkThread = null;
+                    streamPlaying = false;
+                }
+            }
+        }
+    }
+
+    private void enqueueChunkForPlayback(TtsChunk chunk) {
+        if (chunk.samples == null || chunk.samples.length == 0) {
+            return;
+        }
+        pendingCount.incrementAndGet();
+        PlayItem item = new PlayItem(chunk.samples, chunk.sampleRateHz);
+        try {
+            while (!stopRequested && !playQueue.offer(item, 100, TimeUnit.MILLISECONDS)) {
+                // The play worker is still writing; wait for room.
+            }
+            if (stopRequested) {
+                decrementPending();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            decrementPending();
+        }
+    }
+
+    /** Sleeps until pushText / flush / endInput has something to offer. */
+    private void awaitText() {
+        synchronized (chunkLock) {
+            if (chunkThread != Thread.currentThread()) {
+                return;
+            }
+            try {
+                // A timeout rather than a pure wait, so a chunk that became
+                // available between pollChunk() and here is not missed.
+                chunkLock.wait(20);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private void wakeChunkWorker() {
+        synchronized (chunkLock) {
+            chunkLock.notifyAll();
+        }
+    }
+
+    private boolean isCurrentChunkWorker() {
+        synchronized (chunkLock) {
+            return chunkThread == Thread.currentThread();
+        }
+    }
+
+    /**
+     * Takes the worker down without waiting for it to agree, for teardown paths
+     * where there may be no cancellation for it to read — {@link #close()} is
+     * about to free the synthesizer it would pull from.
+     */
+    private void stopChunkWorker() {
+        Thread thread;
+        synchronized (chunkLock) {
+            thread = chunkThread;
+            chunkThread = null;
+            streamPlaying = false;
+            chunkLock.notifyAll();
+        }
+        if (thread != null && thread != Thread.currentThread()) {
+            try {
+                thread.join(WORKER_JOIN_MILLIS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    /** Waits for the chunk worker to finish. {@code timeoutMillis} 0 waits forever. */
+    private void joinChunkWorker(long timeoutMillis) {
+        Thread thread;
+        synchronized (chunkLock) {
+            thread = chunkThread;
+        }
+        if (thread != null && thread != Thread.currentThread()) {
+            try {
+                thread.join(timeoutMillis);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private static void check(int status) {
+        if (status < 0) {
+            throw new RuntimeException(JNI.moonshineErrorToString(status));
+        }
     }
 
     // -- Load internals ------------------------------------------------------
@@ -507,43 +831,34 @@ public class TextToSpeech {
     }
 
     /**
-     * Approximate sentence split for {@link #say}: break on {@code .} / {@code !}
-     * / {@code ?} / {@code :} followed by whitespace so the first clause can
-     * start sooner.
+     * Splits {@code text} into the utterances {@link #say} speaks one at a
+     * time, using the shared native splitter. It knows about abbreviations like
+     * {@code Dr.}, initials, quotes, and non-Latin terminators such as
+     * {@code 。} and {@code ؟}.
      */
-    static List<String> splitSayUtterances(String text) {
-        String stripped = text == null ? "" : text.trim();
-        if (stripped.isEmpty()) {
+    public static List<String> splitUtterances(String language, String text) {
+        JNI.ensureLibraryLoaded();
+        if (text == null || text.trim().isEmpty()) {
             return java.util.Collections.emptyList();
         }
-        List<String> parts = new ArrayList<>();
-        int start = 0;
-        int i = 0;
-        final int n = stripped.length();
-        while (i < n) {
-            char ch = stripped.charAt(i);
-            if ((ch == '.' || ch == '!' || ch == '?' || ch == ':') && i + 1 < n
-                    && Character.isWhitespace(stripped.charAt(i + 1))) {
-                int end = i + 1;
-                int j = i + 1;
-                while (j < n && Character.isWhitespace(stripped.charAt(j))) {
-                    j++;
-                }
-                String piece = stripped.substring(start, end).trim();
-                if (!piece.isEmpty()) {
-                    parts.add(piece);
-                }
-                start = j;
-                i = j;
-                continue;
+        String json = JNI.moonshineTtsSplitUtterances(language, text, null);
+        if (json == null) {
+            throw new RuntimeException("moonshineTtsSplitUtterances failed");
+        }
+        try {
+            JSONArray array = new JSONArray(json);
+            List<String> units = new ArrayList<>(array.length());
+            for (int i = 0; i < array.length(); i++) {
+                units.add(array.getString(i));
             }
-            i++;
+            return units;
+        } catch (JSONException e) {
+            throw new RuntimeException("Couldn't read the split utterances: " + json, e);
         }
-        String tail = stripped.substring(start).trim();
-        if (!tail.isEmpty()) {
-            parts.add(tail);
-        }
-        return parts;
+    }
+
+    List<String> splitSayUtterances(String text) {
+        return splitUtterances(languageTag, text);
     }
 
     private void requireCloningMode(String what) {
@@ -698,6 +1013,7 @@ public class TextToSpeech {
     }
 
     private void playWorker() {
+        long idleSince = 0;
         while (!stopRequested) {
             PlayItem item;
             try {
@@ -705,7 +1021,20 @@ public class TextToSpeech {
             } catch (InterruptedException e) {
                 break;
             }
-            if (item == null) continue;
+            if (item == null) {
+                // Nothing left to write. Once what is buffered has played out,
+                // release the device rather than idling a playing track.
+                if (!isPlaybackPending()) {
+                    if (idleSince == 0) {
+                        idleSince = System.nanoTime();
+                    } else if (System.nanoTime() - idleSince > TRACK_IDLE_NANOS) {
+                        haltTrack();
+                        idleSince = 0;
+                    }
+                }
+                continue;
+            }
+            idleSince = 0;
             if (stopRequested) {
                 decrementPending();
                 break;
@@ -731,43 +1060,79 @@ public class TextToSpeech {
         }
     }
 
+    /**
+     * Writes {@code samples} to a track that stays playing across utterances,
+     * so consecutive ones join without a gap. The write blocks while the track
+     * buffer is full, which paces this thread against playback; it returns once
+     * the samples are queued, not once they have been heard.
+     */
     private void playPcmFloat(AudioTrack track, float[] samples) {
         if (track.getState() != AudioTrack.STATE_INITIALIZED) {
             throw new RuntimeException("AudioTrack is not initialized");
         }
-        track.stop();
-        track.flush();
         if (samples.length == 0) return;
 
-        track.play();
+        if (track.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+            track.play();
+        }
         int offset = 0;
         while (offset < samples.length && !stopRequested) {
             int wrote = track.write(samples, offset, samples.length - offset,
                     AudioTrack.WRITE_BLOCKING);
             if (wrote <= 0) {
-                track.stop();
+                haltTrackLocked();
                 throw new RuntimeException("AudioTrack.write failed: " + wrote);
             }
             offset += wrote;
+            sayTrackFrames += wrote;
         }
         if (stopRequested) {
-            track.stop();
-            return;
+            haltTrackLocked();
         }
-        final int totalFrames = samples.length;
-        final long deadline = System.nanoTime() + 60_000_000_000L;
-        while (System.nanoTime() < deadline && !stopRequested) {
-            int head = track.getPlaybackHeadPosition();
-            if (head >= totalFrames - 1) break;
+    }
+
+    /**
+     * True while the track still has audio to play. Deliberately lock-free: it
+     * is polled by {@link #isTalking()} while the play worker holds
+     * {@code sayLock} for a blocking write.
+     */
+    private boolean isPlaybackPending() {
+        AudioTrack track = sayCachedTrack;
+        long written = sayTrackFrames;
+        if (track == null || written == 0) {
+            return false;
+        }
+        try {
+            if (track.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+                return false;
+            }
+            // getPlaybackHeadPosition counts frames since the track last
+            // started from silence, as an unsigned 32-bit value.
+            long head = track.getPlaybackHeadPosition() & 0xFFFF_FFFFL;
+            return head < written;
+        } catch (IllegalStateException released) {
+            return false;
+        }
+    }
+
+    private void haltTrack() {
+        synchronized (sayLock) {
+            haltTrackLocked();
+        }
+    }
+
+    /** Stops the track and resets the frame count its playback head is measured against. */
+    private void haltTrackLocked() {
+        AudioTrack track = sayCachedTrack;
+        if (track != null) {
             try {
-                Thread.sleep(5);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+                track.pause();
+                track.flush();
                 track.stop();
-                return;
+            } catch (Exception ignored) {
             }
         }
-        track.stop();
+        sayTrackFrames = 0;
     }
 
     private void decrementPending() {
@@ -910,14 +1275,16 @@ public class TextToSpeech {
     }
 
     private void releaseSayTrackLocked() {
-        if (sayCachedTrack != null) {
+        AudioTrack track = sayCachedTrack;
+        if (track != null) {
+            sayCachedTrack = null;
             try {
-                sayCachedTrack.stop();
+                track.stop();
             } catch (Exception ignored) {
             }
-            sayCachedTrack.release();
-            sayCachedTrack = null;
+            track.release();
         }
+        sayTrackFrames = 0;
         sayCachedDeviceId = Integer.MIN_VALUE;
         sayCachedSampleRateHz = 0;
     }
@@ -925,6 +1292,7 @@ public class TextToSpeech {
     /** Releases the synthesizer, its playback resources, and any clone-clip model. */
     public void close() {
         stopRequested = true;
+        stopChunkWorker();
         drainQueue(sayQueue);
         drainQueue(playQueue);
         joinWorkers();

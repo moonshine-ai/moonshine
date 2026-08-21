@@ -57,6 +57,7 @@ without any audio, TTS, or event loop.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import sys
 import threading
 import time
@@ -66,6 +67,7 @@ from typing import (
     Any,
     Callable,
     Dict,
+    Iterable,
     Iterator,
     List,
     Mapping,
@@ -127,6 +129,18 @@ class Say(Prompt):
     """Speak ``text`` and resume the generator once playback has finished."""
 
     text: str
+    barge_in: bool = False
+
+
+@dataclass
+class SayStream(Prompt):
+    """Speak text that is still being produced, then resume the generator.
+
+    ``pieces`` is consumed by the runner as playback proceeds, so the
+    first sentence is spoken while the rest is still being written.
+    """
+
+    pieces: Iterable[str]
     barge_in: bool = False
 
 
@@ -428,6 +442,19 @@ class Dialog:
     def say(self, text: str, *, barge_in: bool = False) -> Say:
         self._last_spoken_prompt = text
         return Say(text=text, barge_in=barge_in)
+
+    def say_stream(
+        self, pieces: Iterable[str], *, barge_in: bool = False
+    ) -> SayStream:
+        """Speak an answer that is still being written, a piece at a time.
+
+        Hand it any iterable of text fragments — most usefully a language
+        model's token stream — and the first sentence starts playing while
+        the rest is still arriving::
+
+            yield d.say_stream(llm.stream(question))
+        """
+        return SayStream(pieces=pieces, barge_in=barge_in)
 
     def ask(
         self,
@@ -1556,6 +1583,11 @@ class AgentFlow:
                 value = None
                 continue
 
+            if isinstance(prompt, SayStream):
+                self._speak_stream(prompt.pieces)
+                value = None
+                continue
+
             if isinstance(prompt, (Ask, Confirm, Choose)):
                 active.current_prompt = prompt
                 active.retry_count = 0
@@ -1604,6 +1636,9 @@ class AgentFlow:
 
         if isinstance(prompt, Say):
             self._speak(prompt.text)
+            self._advance(active, value=None)
+        elif isinstance(prompt, SayStream):
+            self._speak_stream(prompt.pieces)
             self._advance(active, value=None)
         elif isinstance(prompt, (Ask, Confirm, Choose)):
             active.current_prompt = prompt
@@ -1720,6 +1755,76 @@ class AgentFlow:
             return
         self._speak(text)
 
+    @contextlib.contextmanager
+    def say_stream(self) -> Iterator[Callable[[str], None]]:
+        """Speak a reply that is still being written, a piece at a time.
+
+        Yields a ``push(text)`` callable; each complete sentence starts
+        playing while the rest is still arriving, so an LLM's answer can be
+        forwarded token by token instead of waiting for the whole reply::
+
+            with flow.say_stream() as push:
+                for token in llm.stream(question):
+                    push(token)
+
+        The microphone stays muted and self-capture stays suppressed for the
+        whole passage, exactly as in :meth:`say`, and the block does not exit
+        until playback has finished. Falls back to buffering the text and
+        speaking it in one go when no built-in synthesizer is configured
+        (:meth:`speak_with`, or no TTS at all).
+        """
+        if self._tts is None:
+            buffered: List[str] = []
+            yield buffered.append
+            self._speak("".join(buffered))
+            return
+
+        spoken: List[str] = []
+        muted = self._mute_for_speech()
+        self._speaking = True
+        stream = self._tts.say_stream()
+        try:
+            def push(text: str) -> None:
+                if not text:
+                    return
+                spoken.append(text)
+                stream.push_text(text)
+
+            yield push
+            stream.close_input()
+            stream.wait()
+        finally:
+            stream.close()
+            self._speaking = False
+            self._unmute_after_speech(muted)
+            joined = "".join(spoken).strip()
+            if joined:
+                self._log(f"speak: streamed text={_summarise(joined)!r}")
+                if self._log_io:
+                    print(f"assistant: {joined}", file=sys.stderr, flush=True)
+                if self._said_fn is not None:
+                    try:
+                        self._said_fn(joined)
+                    except Exception as e:
+                        self._log(f"on_said handler failed: {e!r}")
+
+    def _speak_stream(self, pieces: Iterable[str]) -> None:
+        """Speak an iterable of text fragments as they arrive.
+
+        Backs ``yield d.say_stream(...)``. An exception from the producer
+        is reported rather than raised, so a language model that dies
+        mid-sentence does not take the flow down with it.
+        """
+        with self.say_stream() as push:
+            try:
+                for piece in pieces:
+                    if piece:
+                        push(piece)
+            except Exception as e:
+                self._report_error(
+                    MoonshineError(f"say_stream text source raised {e!r}")
+                )
+
     # -- global handler invocation ------------------------------------------
 
     def _invoke_global(self, trigger_phrase: str) -> None:
@@ -1749,6 +1854,8 @@ class AgentFlow:
 
         if isinstance(prompt, Say):
             self._speak(prompt.text)
+        elif isinstance(prompt, SayStream):
+            self._speak_stream(prompt.pieces)
         elif isinstance(prompt, (Ask, Confirm, Choose)) and active is not None:
             active.current_prompt = prompt
             self._set_spelling_mode(self._spelling_mode_for_prompt(prompt))
@@ -1973,15 +2080,7 @@ class AgentFlow:
                 self._said_fn(text)
             except Exception as e:
                 self._log(f"on_said handler failed: {e!r}")
-        muted = False
-        if self._mute_fn is not None:
-            try:
-                self._mute_fn(True)
-                muted = True
-                self._log("speak: mic muted")
-            except Exception as e:
-                self._log(f"speak: mute_fn failed: {e!r}")
-                muted = False
+        muted = self._mute_for_speech()
         # Flip the software-side speaking flag before we hand off to
         # the TTS so any utterance that races in from the STT
         # listener thread is dropped by ``handle_utterance``.  The
@@ -2004,13 +2103,29 @@ class AgentFlow:
                 print(f"[AgentFlow say] {text}")
         finally:
             self._speaking = False
-            if muted and self._mute_fn is not None:
-                try:
-                    self._mute_fn(False)
-                    self._log("speak: mic unmuted")
-                except Exception as e:
-                    self._log(f"speak: unmute failed: {e!r}")
+            self._unmute_after_speech(muted)
         self._log("speak: done")
+
+    def _mute_for_speech(self) -> bool:
+        """Mute the mic for the duration of an utterance; ``True`` if it took."""
+        if self._mute_fn is None:
+            return False
+        try:
+            self._mute_fn(True)
+            self._log("speak: mic muted")
+            return True
+        except Exception as e:
+            self._log(f"speak: mute_fn failed: {e!r}")
+            return False
+
+    def _unmute_after_speech(self, muted: bool) -> None:
+        if not muted or self._mute_fn is None:
+            return
+        try:
+            self._mute_fn(False)
+            self._log("speak: mic unmuted")
+        except Exception as e:
+            self._log(f"speak: unmute failed: {e!r}")
 
     def _speak_character_feedback(self, character: str) -> None:
         """Speak ``spoken_form(character)`` as mid-prompt spell-back.

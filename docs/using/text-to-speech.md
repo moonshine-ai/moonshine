@@ -3,6 +3,7 @@
 Voice interfaces often need to talk back, and Moonshine's `TextToSpeech` is designed to make that easy, across multiple languages. It's also self-contained, so you can use it independently from the transcription and agent modules.
 
 - [Getting Started](#getting-started)
+- [Streaming Text In](#streaming-text-in)
 - [Voice Cloning](#voice-cloning)
 - [Voice Samples](#voice-samples)
 - [Converting Graphemes to Phonemes](#converting-graphemes-to-phonemes)
@@ -67,6 +68,48 @@ list_tts_voices("ru")
 ```
 
 If a voice is marked as `downloadable` that means if you pass it to `voice()` then Moonshine will download it to a cache automatically, and it will be available on your machine with no internet access required for subsequent calls.
+
+## Streaming Text In
+
+When the text comes from a language model, waiting for the whole reply before speaking any of it wastes the time the model spent generating. Push text as it arrives and get audio back as soon as there is enough to say:
+
+```python
+tts = TextToSpeech().language("en-us")
+tts.load()
+
+for chunk in tts.stream(llm_tokens()):
+    print(f"{len(chunk.samples) / chunk.sample_rate:.2f}s: {chunk.text}")
+```
+
+There is no stream object to open or close. A synthesizer has one model and speaks one thing at a time, so pushing text starts a reply and ending input finishes it. Passing the text to `stream()` pushes and ends it for you; to drive it yourself, call `push_text()` from another thread and iterate `stream()` with no argument.
+
+Text is held until a complete sentence or phrase arrives, because prosody depends on knowing where a clause ends — a synthesizer given one word at a time produces a list, not a sentence. Call `flush()` to synthesize what is buffered anyway, `end_input()` when no more text is coming, and `cancel_stream()` to abandon a reply someone has interrupted. Because a reply occupies the model while it plays, `say()` and `synthesize()` refuse until it finishes or is cancelled.
+
+To speak the chunks rather than handle them yourself, use `say_stream()`, which feeds them into the same playback queue as `say()`:
+
+```python
+with tts.say_stream() as speech:
+    for token in llm_tokens():
+        tts.push_text(token)
+    tts.end_input()
+    speech.wait()
+```
+
+`AgentFlow` has the same method, so a reply can be spoken as the model writes it:
+
+```python
+with agent.say_stream() as push:
+    for token in llm.stream(prompt):
+        push(token)
+```
+
+Each chunk carries the samples, their sample rate, the text it covers, an utterance id, and whether it is the last chunk of that utterance. Utterances are numbered from one, so ids stay comparable across a reply that is flushed and refilled. A chunk that covers acoustic frames rather than a knowable span of characters has empty text.
+
+The same surface exists in every binding: `pushText`/`flush`/`endInput`/`cancelStream` with an `onChunk` consumer in TypeScript, Swift and Java, plus an async iterator in TypeScript and an `AsyncThrowingStream` in Swift.
+
+Most of the latency win comes from not waiting on the model: speaking a four-sentence reply written at fifty tokens a second, first audio arrives in well under a second streamed against a little over two seconds if you wait for the whole reply, and almost all of that gap is the model writing rather than the synthesizer synthesizing. With Kokoro the first chunk is also cut below a sentence, so a long opening sentence starts playing before all of it has been decoded. Chunks grow as the reply goes on: a short first chunk buys the fast start, and longer later ones give the decoder the context it needs to hold the level and prosody steady.
+
+Streamed audio is levelled from a measurement taken per voice, because the peak normalization `say()` applies needs a finished waveform and streaming never has one. Loudness therefore lands close to `say()` rather than matching it exactly — expect a decibel or two, and a little more on an unusually quiet phrase.
 
 ## Voice Cloning
 

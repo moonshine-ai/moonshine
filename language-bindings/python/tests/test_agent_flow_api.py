@@ -135,3 +135,46 @@ def test_a_failing_otherwise_handler_is_reported_not_raised(agent):
     assert agent.handle_utterance("boom") is True
     assert len(errors) == 1
     assert "ZeroDivisionError" in str(errors[0])
+
+
+def test_say_stream_speaks_the_pieces_a_flow_yields(agent):
+    spoken = []
+    agent.speak_with(spoken.append)
+
+    def answer(d):
+        yield d.say_stream(iter(["The answer ", "is forty two."]))
+
+    agent.listen_for("ask the oracle", answer)
+    agent.handle_utterance("ask the oracle")
+
+    assert spoken == ["The answer is forty two."]
+
+
+def test_a_failing_say_stream_source_is_reported_not_raised(agent):
+    errors = []
+    agent.on_error(errors.append)
+    agent.speak_with([].append)
+
+    def half_written():
+        yield "This much arrived"
+        raise RuntimeError("the model hung up")
+
+    def answer(d):
+        yield d.say_stream(half_written())
+
+    agent.listen_for("ask the oracle", answer)
+    agent.handle_utterance("ask the oracle")
+
+    assert len(errors) == 1
+    assert "the model hung up" in str(errors[0])
+
+
+def test_say_stream_outside_a_flow_speaks_as_one_utterance(agent):
+    spoken = []
+    agent.speak_with(spoken.append)
+
+    with agent.say_stream() as push:
+        push("Downloading ")
+        push("the model.")
+
+    assert spoken == ["Downloading the model."]

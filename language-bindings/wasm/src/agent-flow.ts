@@ -474,6 +474,60 @@ export class AgentFlow {
   }
 
   /**
+   * Speaks a reply that is still being written, a piece at a time.
+   *
+   * Each complete sentence starts playing while the rest is still arriving, so
+   * an LLM's answer can be forwarded token by token rather than waited for in
+   * full:
+   *
+   * ```ts
+   * await flow.sayStream(async (push) => {
+   *   for await (const token of llm.stream(question)) push(token);
+   * });
+   * ```
+   *
+   * The microphone stays muted and self-capture stays suppressed for the whole
+   * passage, exactly as in {@link say}, and this does not resolve until
+   * playback has finished. Falls back to collecting the text and speaking it in
+   * one go when there is no built-in synthesizer.
+   */
+  async sayStream(
+    produce: (push: (text: string) => void) => void | Promise<void>,
+  ): Promise<void> {
+    if (!this.tts) {
+      const pieces: string[] = [];
+      await produce((text) => pieces.push(text));
+      await this.speak(pieces.join(''));
+      return;
+    }
+
+    const tts = this.tts;
+    const pieces: string[] = [];
+    this.speaking = true;
+    this.mic?.mute(true);
+    // Play chunks as they arrive while `produce` keeps pushing text.
+    const playback = (async () => {
+      for await (const chunk of tts.stream()) await tts.playChunk(chunk);
+    })();
+    try {
+      await produce((text) => {
+        if (!text) return;
+        pieces.push(text);
+        tts.pushText(text);
+      });
+      tts.endInput();
+      await playback;
+      await tts.waitForPlayback();
+    } finally {
+      tts.cancelStream();
+      this.mic?.mute(false);
+      this.speaking = false;
+      const said = pieces.join('').trim();
+      if (said) for (const cb of this.saidCallbacks) cb(said);
+    }
+  }
+
+  /**
    * Feeds in an utterance the agent didn't hear itself. Useful for text input
    * and for tests. Resolves once the flow has advanced as far as it can.
    */

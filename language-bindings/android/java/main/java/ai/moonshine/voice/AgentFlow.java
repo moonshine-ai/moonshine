@@ -505,6 +505,76 @@ public final class AgentFlow {
     }
 
     /**
+     * Speaks a reply that is still being written, a piece at a time.
+     *
+     * <p>Each complete sentence starts playing while the rest is still
+     * arriving, so an LLM's answer can be forwarded token by token rather than
+     * waited for in full:
+     *
+     * <pre>{@code
+     * flow.sayStream(push -> {
+     *     for (String token : llm.stream(question)) {
+     *         push.accept(token);
+     *     }
+     * });
+     * }</pre>
+     *
+     * <p>The microphone stays muted and self-capture stays suppressed for the
+     * whole passage, exactly as in {@link #say}, and this does not return until
+     * playback has finished. Falls back to collecting the text and speaking it
+     * in one go when there is no built-in synthesizer. Blocks; call from a
+     * background thread.
+     */
+    public void sayStream(Consumer<Consumer<String>> produce) {
+        if (produce == null) {
+            return;
+        }
+        if (tts == null) {
+            StringBuilder collected = new StringBuilder();
+            produce.accept(collected::append);
+            speak(collected.toString());
+            return;
+        }
+
+        throwPendingInterrupt();
+        StringBuilder collected = new StringBuilder();
+        speaking = true;
+        if (mic != null) {
+            mic.mute(true);
+        }
+        try {
+            tts.sayStream();
+            produce.accept(piece -> {
+                if (piece == null || piece.isEmpty()) {
+                    return;
+                }
+                synchronized (collected) {
+                    collected.append(piece);
+                }
+                tts.pushText(piece);
+            });
+            tts.endInput();
+            tts.waitUntilDone();
+        } finally {
+            // A producer that threw leaves a half-spoken reply in flight.
+            tts.cancelStream();
+            if (mic != null) {
+                mic.mute(false);
+            }
+            speaking = false;
+            final String said;
+            synchronized (collected) {
+                said = collected.toString().trim();
+            }
+            if (!said.isEmpty()) {
+                for (Consumer<String> handler : saidHandlers) {
+                    MAIN.post(() -> handler.accept(said));
+                }
+            }
+        }
+    }
+
+    /**
      * Feeds in an utterance the agent didn't hear itself. Useful for text input
      * and for tests. Returns immediately; the flow advances on its own thread.
      */

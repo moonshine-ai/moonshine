@@ -27,6 +27,8 @@ public typealias AudioDeviceID = UInt32
 ///
 /// ``say(_:)`` plays audio and returns when playback finishes; ``synthesize(_:)``
 /// returns the raw PCM instead, for callers doing their own mixing or encoding.
+/// For a reply that is still being written, ``stream(_:)`` and ``pushText(_:)``
+/// hand back audio a chunk at a time.
 public class TextToSpeech: @unchecked Sendable {
     private let api: MoonshineAPI
     private var handle: Int32 = -1
@@ -62,6 +64,11 @@ public class TextToSpeech: @unchecked Sendable {
     private var stopGeneration: UInt64 = 0
     private let pendingCondition = NSCondition()
     private var pendingCount = 0
+
+    // Streaming state, all guarded by streamCondition.
+    private let streamCondition = NSCondition()
+    private var streamTextGeneration: UInt64 = 0
+    private var streamDrained = false
 
     private struct PlayItem {
         let samples: [Float]
@@ -360,7 +367,8 @@ public class TextToSpeech: @unchecked Sendable {
     ///   - text: The text to synthesize.
     ///   - options: Optional per-call options (e.g. `speed`).
     /// - Returns: A ``TtsSynthesisResult`` with PCM samples and sample rate.
-    /// - Throws: `MoonshineError` if synthesis fails.
+    /// - Throws: `MoonshineError` if synthesis fails, or
+    ///   ``MoonshineError/busy(message:)`` while a streamed reply is in flight.
     public func synthesize(
         _ text: String,
         options: [TranscriberOption]? = nil
@@ -398,6 +406,206 @@ public class TextToSpeech: @unchecked Sendable {
         )
     }
 
+    // MARK: - Streaming synthesis
+    //
+    // Text goes in as it is written and audio comes out in pieces, so the first
+    // clause of a reply can play while the rest is still being generated. For
+    // text you already have in full, ``say(_:options:)`` and
+    // ``synthesize(_:options:)`` are simpler.
+    //
+    // A synthesizer speaks one reply at a time: ``pushText(_:)`` starts one,
+    // ``endInput()`` finishes it, ``cancelStream()`` abandons it, and
+    // ``synthesize(_:options:)`` fails with ``MoonshineError/busy(message:)``
+    // while one is in flight. There is no session object to open or close.
+
+    /// Appends text to the reply being spoken, starting one if none is running.
+    ///
+    /// Pieces are concatenated verbatim, so an LLM's output can go in token by
+    /// token. Text is held back until it forms a complete sentence, because
+    /// synthesizing half a clause gets the prosody wrong.
+    public func pushText(_ text: String) throws {
+        guard !text.isEmpty else { return }
+        try api.ttsPushText(ttsHandle: try loadedHandle("pushText()"), text: text)
+        signalStream(drained: false)
+    }
+
+    /// Queues the buffered fragment even though it has no terminator, for when
+    /// the caller knows the thought is finished but the punctuation doesn't say so.
+    public func flush() throws {
+        try api.ttsFlush(ttsHandle: try loadedHandle("flush()"))
+        signalStream()
+    }
+
+    /// Declares that no more text is coming. Chunks keep arriving until the
+    /// queue drains, then ``chunks`` finishes.
+    public func endInput() throws {
+        try api.ttsEndInput(ttsHandle: try loadedHandle("endInput()"))
+        signalStream()
+    }
+
+    /// Drops queued text and abandons the reply in progress. This is the
+    /// barge-in path: when someone interrupts the assistant, stop the reply.
+    /// Safe to call when nothing is streaming.
+    public func cancelStream() throws {
+        try api.ttsCancel(ttsHandle: try loadedHandle("cancelStream()"))
+        // A reader learns the reply was abandoned from the next pull, not from
+        // here, so only wake one that is parked waiting for text. Ending the
+        // read without that pull would leave the cancellation to be reported
+        // against whatever reply came next.
+        signalStream()
+    }
+
+    /// True while a reply is part-spoken.
+    public var isStreaming: Bool {
+        guard handle >= 0 else { return false }
+        return api.ttsIsStreaming(ttsHandle: handle)
+    }
+
+    /// Synthesizes and returns the next chunk, blocking the calling thread
+    /// while it computes.
+    ///
+    /// Returns `nil` when no complete sentence is buffered yet, when input has
+    /// ended and everything queued has been spoken, or when a
+    /// ``cancelStream()`` discarded the reply; ``isStreaming`` tells the first
+    /// from the rest.
+    public func nextChunk() throws -> TtsChunk? {
+        switch try api.ttsNextChunk(ttsHandle: try loadedHandle("nextChunk()")) {
+        case .chunk(let chunk):
+            return chunk
+        case .needText:
+            return nil
+        case .endOfStream, .cancelled:
+            signalStream(drained: true)
+            return nil
+        }
+    }
+
+    /// Speaks `text` as chunks of audio, the first arriving once the opening
+    /// clause is synthesized rather than once the whole passage is.
+    ///
+    /// ```swift
+    /// for try await chunk in tts.stream("Hello there. How are you?") {
+    ///     try await tts.play(chunk)
+    /// }
+    /// ```
+    public func stream(_ text: String) -> AsyncThrowingStream<TtsChunk, Error> {
+        return chunkStream { [self] in
+            try pushText(text)
+            try endInput()
+        }
+    }
+
+    /// Every chunk of the reply being streamed, in order, ending when input
+    /// ends and the queue drains or ``cancelStream()`` abandons it.
+    ///
+    /// Use this when the text is pushed from elsewhere — an LLM's tokens, say;
+    /// ``stream(_:)`` is the form for text you already have. Synthesis runs on
+    /// a detached task, so iterating from the main actor does not block the UI.
+    ///
+    /// ```swift
+    /// Task {
+    ///     for try await chunk in tts.chunks {
+    ///         try await tts.play(chunk)
+    ///     }
+    /// }
+    /// for token in llmTokens { try tts.pushText(token) }
+    /// try tts.endInput()
+    /// ```
+    public var chunks: AsyncThrowingStream<TtsChunk, Error> {
+        return chunkStream {}
+    }
+
+    /// Runs `start` and then pulls chunks, both on a detached task, so a push
+    /// that fails is reported to whoever is iterating rather than at the call
+    /// site that built the sequence.
+    private func chunkStream(
+        _ start: @escaping @Sendable () throws -> Void
+    ) -> AsyncThrowingStream<TtsChunk, Error> {
+        return AsyncThrowingStream { continuation in
+            let task = Task.detached { [self] in
+                await withTaskCancellationHandler {
+                    // Whatever the last reader saw, this one has not reached
+                    // the end of anything yet.
+                    signalStream(drained: false)
+                    do {
+                        try start()
+                    } catch {
+                        continuation.finish(throwing: error)
+                        return
+                    }
+                    drainChunks(into: continuation)
+                } onCancel: {
+                    signalStream()
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    private func drainChunks(
+        into continuation: AsyncThrowingStream<TtsChunk, Error>.Continuation
+    ) {
+        while !Task.isCancelled {
+            let generation = currentStreamGeneration()
+            if isStreamDrained { break }
+            do {
+                if let chunk = try nextChunk() {
+                    continuation.yield(chunk)
+                    continue
+                }
+            } catch {
+                continuation.finish(throwing: error)
+                return
+            }
+            // Nothing buffered yet: sleep until more text arrives.
+            waitForStreamText(after: generation)
+        }
+        continuation.finish()
+    }
+
+    /// Wakes a reader blocked in ``waitForStreamText(after:)``. `drained`
+    /// records that the reply is over, whether it ran out or was abandoned,
+    /// which nothing else can tell a reader: an idle synthesizer looks the
+    /// same before a reply as after one.
+    private func signalStream(drained: Bool? = nil) {
+        streamCondition.lock()
+        if let drained {
+            streamDrained = drained
+        }
+        streamTextGeneration &+= 1
+        streamCondition.broadcast()
+        streamCondition.unlock()
+    }
+
+    private var isStreamDrained: Bool {
+        streamCondition.lock()
+        defer { streamCondition.unlock() }
+        return streamDrained
+    }
+
+    private func currentStreamGeneration() -> UInt64 {
+        streamCondition.lock()
+        defer { streamCondition.unlock() }
+        return streamTextGeneration
+    }
+
+    /// Blocks until text arrives after `generation`, so a reader that raced a
+    /// ``pushText(_:)`` does not miss the wakeup and stall.
+    private func waitForStreamText(after generation: UInt64) {
+        streamCondition.lock()
+        while streamTextGeneration == generation {
+            streamCondition.wait()
+        }
+        streamCondition.unlock()
+    }
+
+    private func loadedHandle(_ what: String) throws -> Int32 {
+        guard handle >= 0 else {
+            throw MoonshineError.custom(message: "Call load() before \(what).", code: -1)
+        }
+        return handle
+    }
+
     // MARK: - say / stop / wait / isTalking
 
     /// Speaks `text` out loud, returning once playback finishes.
@@ -430,13 +638,32 @@ public class TextToSpeech: @unchecked Sendable {
         }
     }
 
+    /// Plays already-synthesized audio — a ``TtsChunk`` from ``stream(_:)``, say —
+    /// on the same output as ``say(_:options:)``, joining whatever is already
+    /// sounding. Returns once this piece has played.
+    public func play(_ chunk: TtsChunk) async throws {
+        guard !chunk.samples.isEmpty, chunk.sampleRateHz > 0 else { return }
+        let item = PlayItem(
+            samples: chunk.samples, sampleRate: chunk.sampleRateHz, deviceID: nil)
+        try await withCheckedThrowingContinuation {
+            (continuation: CheckedContinuation<Void, Error>) in
+            enqueuePlayItem(item) { error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+            }
+        }
+    }
+
     /// Queues `text` without waiting for it, for callers that just want the
     /// audio to start and have somewhere else to be.
     public func sayInBackground(
         _ text: String,
         options: [TranscriberOption]? = nil
     ) {
-        for sentence in Self.splitSayUtterances(text) {
+        for sentence in splitSayUtterances(text) {
             enqueueSay(text: sentence, deviceID: nil, options: options)
         }
     }
@@ -472,7 +699,7 @@ public class TextToSpeech: @unchecked Sendable {
     private func speak(
         _ text: String, deviceID: AudioDeviceID?, options: [TranscriberOption]?
     ) async throws {
-        let sentences = Self.splitSayUtterances(text)
+        let sentences = splitSayUtterances(text)
         guard !sentences.isEmpty else { return }
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             final class SpeakState: @unchecked Sendable {
@@ -504,41 +731,16 @@ public class TextToSpeech: @unchecked Sendable {
         }
     }
 
-    /// Approximate sentence split for ``say``: break on `.` / `!` / `?` / `:`
-    /// followed by whitespace so the first clause can start sooner.
-    static func splitSayUtterances(_ text: String) -> [String] {
-        let stripped = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !stripped.isEmpty else { return [] }
-        var parts: [String] = []
-        var start = stripped.startIndex
-        var i = stripped.startIndex
-        while i < stripped.endIndex {
-            let ch = stripped[i]
-            let next = stripped.index(after: i)
-            if (ch == "." || ch == "!" || ch == "?" || ch == ":"),
-                next < stripped.endIndex,
-                stripped[next].isWhitespace
-            {
-                let end = next
-                var j = next
-                while j < stripped.endIndex, stripped[j].isWhitespace {
-                    j = stripped.index(after: j)
-                }
-                let piece = stripped[start..<end].trimmingCharacters(in: .whitespacesAndNewlines)
-                if !piece.isEmpty {
-                    parts.append(String(piece))
-                }
-                start = j
-                i = j
-                continue
-            }
-            i = next
-        }
-        let tail = stripped[start...].trimmingCharacters(in: .whitespacesAndNewlines)
-        if !tail.isEmpty {
-            parts.append(String(tail))
-        }
-        return parts
+    /// Splits `text` into the utterances ``say(_:options:)`` speaks one at a
+    /// time, using the shared native splitter. It knows about abbreviations
+    /// like `Dr.`, initials, quotes, and non-Latin terminators such as `。`
+    /// and `؟`.
+    public static func splitUtterances(_ text: String, language: String = "") -> [String] {
+        return (try? MoonshineAPI.shared.ttsSplitUtterances(language: language, text: text)) ?? []
+    }
+
+    func splitSayUtterances(_ text: String) -> [String] {
+        return Self.splitUtterances(text, language: _language)
     }
 
     /// Block until all queued utterances have been synthesized and played.
@@ -744,6 +946,32 @@ public class TextToSpeech: @unchecked Sendable {
         }
     }
 
+    /// Queues audio that is already synthesized, skipping the synthesis stage.
+    private func enqueuePlayItem(
+        _ item: PlayItem, completion: (@Sendable (Error?) -> Void)? = nil
+    ) {
+        pendingCondition.lock()
+        pendingCount += 1
+        pendingCondition.unlock()
+
+        stateLock.lock()
+        let gen = stopGeneration
+        stateLock.unlock()
+
+        playbackQueue.async { [self] in
+            guard self.isGenerationCurrent(gen) else {
+                self.finish(completion, error: nil)
+                return
+            }
+            do {
+                try self.playOneItem(item, generation: gen)
+                self.finish(completion, error: nil)
+            } catch {
+                self.finish(completion, error: error)
+            }
+        }
+    }
+
     private func finish(_ completion: (@Sendable (Error?) -> Void)?, error: Error?) {
         decrementPending()
         completion?(error)
@@ -802,12 +1030,16 @@ public class TextToSpeech: @unchecked Sendable {
             channelData[0].update(from: src.baseAddress!, count: item.samples.count)
         }
 
+        // No stop() first: the node keeps playing across utterances so
+        // scheduleBuffer queues this one straight after whatever is already
+        // sounding, instead of leaving a gap while it restarts.
         semaphore = DispatchSemaphore(value: 0)
-        playerNode.stop()
         playerNode.scheduleBuffer(buffer) {
             semaphore.signal()
         }
-        playerNode.play()
+        if !playerNode.isPlaying {
+            playerNode.play()
+        }
         sayLock.unlock()
 
         while true {
@@ -864,6 +1096,9 @@ public class TextToSpeech: @unchecked Sendable {
         stateLock.lock()
         stopGeneration += 1
         stateLock.unlock()
+
+        // Readers blocked waiting for text have nothing left to wait for.
+        signalStream(drained: true)
 
         sayLock.lock()
         releaseEngine()

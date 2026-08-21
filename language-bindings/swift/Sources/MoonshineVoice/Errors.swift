@@ -5,6 +5,10 @@ public enum MoonshineError: Error {
     case unknown(message: String = "Unknown error")
     case invalidHandle(message: String = "Invalid handle")
     case invalidArgument(message: String = "Invalid argument")
+    case busy(
+        message: String =
+            "A streaming reply is in flight. Finish it with endInput(), or drop it with cancelStream()."
+    )
     case custom(message: String, code: Int32)
     
     /// Error code associated with the error
@@ -16,6 +20,8 @@ public enum MoonshineError: Error {
             return -2
         case .invalidArgument:
             return -3
+        case .busy:
+            return -4
         case .custom(_, let code):
             return code
         }
@@ -29,6 +35,8 @@ public enum MoonshineError: Error {
         case .invalidHandle(let message):
             return message
         case .invalidArgument(let message):
+            return message
+        case .busy(let message):
             return message
         case .custom(let message, _):
             return message
@@ -46,6 +54,8 @@ internal func checkError(_ errorCode: Int32) throws {
             throw MoonshineError.invalidHandle()
         case -3:
             throw MoonshineError.invalidArgument()
+        case -4:
+            throw MoonshineError.busy()
         default:
             throw MoonshineError.custom(message: "Unknown error code: \(errorCode)", code: errorCode)
         }

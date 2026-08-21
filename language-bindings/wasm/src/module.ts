@@ -4,7 +4,7 @@
  * through the singleton returned by {@link loadMoonshineModule}.
  */
 
-import { toMoonshineError } from './errors.js';
+import { registerErrorModule, toMoonshineError } from './errors.js';
 
 /** Raw embind class/function surface exported by moonshine.mjs. */
 export interface MoonshineModule {
@@ -48,6 +48,8 @@ export interface MoonshineModule {
     optionNames: string[],
     optionValues: string[],
   ): string;
+  /** JSON array of utterances; see {@link splitSayUtterances}. */
+  ttsSplitUtterances?(language: string, text: string): string;
   g2pDependencies?(languages: string): string;
   extractSpeechClip?(
     audio: Float32Array,
@@ -92,7 +94,28 @@ export interface RawEmbeddingModel {
 export interface RawTextToSpeech {
   say(text: string): { audio: Float32Array; sampleRate: number };
   handle(): number;
+  pushText(text: string): void;
+  flush(): void;
+  endInput(): void;
+  cancel(): void;
+  isStreaming(): boolean;
+  nextChunk(): RawTtsChunk;
   close(): void;
+}
+
+/**
+ * One chunk from {@link RawTextToSpeech.nextChunk}. `status` is 0 when `audio`
+ * holds a chunk, 1 when no complete sentence is buffered yet, 2 once input
+ * ended and everything queued has been synthesized, and 3 once a cancel
+ * discarded the reply that was being generated.
+ */
+export interface RawTtsChunk {
+  audio?: Float32Array;
+  sampleRate: number;
+  text: string;
+  utteranceId: number;
+  isFinal: boolean;
+  status: number;
 }
 
 export interface RawGraphemeToPhonemizer {
@@ -210,7 +233,9 @@ export function loadMoonshineModule(
     cached = (async () => {
       try {
         const factory = await resolveFactory(options);
-        return await factory(await emscriptenModuleArgs(options));
+        const mod = await factory(await emscriptenModuleArgs(options));
+        registerErrorModule(mod);
+        return mod;
       } catch (err) {
         cached = undefined; // allow retry on failure
         throw toMoonshineError(err);
