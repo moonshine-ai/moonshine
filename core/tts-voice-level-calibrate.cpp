@@ -54,24 +54,26 @@ struct PhraseSet {
 };
 
 const std::vector<PhraseSet>& calibration_phrases() {
+  // Wrapped phrases sit in parentheses so clang-tidy does not treat the
+  // adjacent literals as a missing comma (bugprone-suspicious-missing-comma).
   static const std::vector<PhraseSet> sets = {
       {"en",
        {"Yes.", "I can do that for you.",
-        "The old lighthouse stood alone against the crashing waves of the "
-        "north sea.",
+        ("The old lighthouse stood alone against the crashing waves of the "
+         "north sea."),
         "Let me check that for you, it should only take a moment.",
-        "Your appointment is confirmed for Tuesday the fourteenth at half "
-        "past two.",
+        ("Your appointment is confirmed for Tuesday the fourteenth at half "
+         "past two."),
         "I'm sorry, I didn't catch that. Could you say it again?",
-        "According to the latest figures, revenue grew by twelve percent "
-        "this quarter.",
+        ("According to the latest figures, revenue grew by twelve percent "
+         "this quarter."),
         "Turn left at the next junction, then continue for about two miles.",
-        "It is a truth universally acknowledged that a single man in "
-        "possession of a good fortune must be in want of a wife.",
-        "That's a great question, and the answer depends on what you're "
-        "trying to do.",
-        "Rain is expected later this afternoon, so you may want to take an "
-        "umbrella.",
+        ("It is a truth universally acknowledged that a single man in "
+         "possession of a good fortune must be in want of a wife."),
+        ("That's a great question, and the answer depends on what you're "
+         "trying to do."),
+        ("Rain is expected later this afternoon, so you may want to take an "
+         "umbrella."),
         "There were three of them waiting by the door, and none said a word.",
         "Wait! Stop right there!",
         "The quick brown fox jumps over the lazy dog."}},
@@ -89,24 +91,24 @@ const std::vector<PhraseSet>& calibration_phrases() {
        {"Oui.", "Je peux faire cela pour vous.",
         "Le vieux phare se dressait seul face aux vagues de la mer du nord.",
         "Laissez-moi vérifier, cela ne prendra qu'un instant.",
-        "Votre rendez-vous est confirmé pour mardi quatorze à quatorze "
-        "heures trente.",
+        ("Votre rendez-vous est confirmé pour mardi quatorze à quatorze "
+         "heures trente."),
         "Je suis désolé, je n'ai pas compris. Pouvez-vous répéter ?",
-        "Selon les derniers chiffres, les revenus ont augmenté de douze pour "
-        "cent.",
-        "Tournez à gauche au prochain carrefour, puis continuez trois "
-        "kilomètres.",
+        ("Selon les derniers chiffres, les revenus ont augmenté de douze pour "
+         "cent."),
+        ("Tournez à gauche au prochain carrefour, puis continuez trois "
+         "kilomètres."),
         "Attends ! Arrête-toi tout de suite !",
         "De la pluie est prévue cet après-midi, prenez un parapluie."}},
       {"it",
        {"Sì.", "Posso farlo per lei.",
         "Il vecchio faro si ergeva solo contro le onde del mare del nord.",
         "Lasci che controlli, ci vorrà solo un momento.",
-        "Il suo appuntamento è confermato per martedì quattordici alle due e "
-        "mezza.",
+        ("Il suo appuntamento è confermato per martedì quattordici alle due e "
+         "mezza."),
         "Mi scusi, non ho capito. Può ripetere?",
-        "Secondo gli ultimi dati, i ricavi sono cresciuti del dodici per "
-        "cento.",
+        ("Secondo gli ultimi dati, i ricavi sono cresciuti del dodici per "
+         "cento."),
         "Giri a sinistra al prossimo incrocio e prosegua per tre chilometri.",
         "Aspetta! Fermati subito!",
         "Nel pomeriggio è prevista pioggia, quindi prenda un ombrello."}},
@@ -114,8 +116,8 @@ const std::vector<PhraseSet>& calibration_phrases() {
        {"Sim.", "Posso fazer isso para você.",
         "O velho farol erguia-se sozinho diante das ondas do mar do norte.",
         "Deixe-me verificar, vai levar apenas um momento.",
-        "Sua consulta está confirmada para terça-feira, dia catorze, às duas "
-        "e meia.",
+        ("Sua consulta está confirmada para terça-feira, dia catorze, às duas "
+         "e meia."),
         "Desculpe, não entendi. Pode repetir?",
         "Segundo os últimos números, a receita cresceu doze por cento.",
         "Vire à esquerda no próximo cruzamento e siga por três quilômetros.",
@@ -152,34 +154,34 @@ const std::vector<PhraseSet>& calibration_phrases() {
        {"Ja.", "Das kann ich für Sie erledigen.",
         "Der alte Leuchtturm stand allein gegen die Wellen der Nordsee.",
         "Lassen Sie mich das kurz prüfen, es dauert nur einen Moment.",
-        "Ihr Termin ist für Dienstag, den vierzehnten, um halb drei "
-        "bestätigt.",
-        "Entschuldigung, das habe ich nicht verstanden. Können Sie das "
-        "wiederholen?",
+        ("Ihr Termin ist für Dienstag, den vierzehnten, um halb drei "
+         "bestätigt."),
+        ("Entschuldigung, das habe ich nicht verstanden. Können Sie das "
+         "wiederholen?"),
         "Den neuesten Zahlen zufolge stiegen die Einnahmen um zwölf Prozent.",
-        "Biegen Sie an der nächsten Kreuzung links ab und fahren Sie drei "
-        "Kilometer weiter.",
+        ("Biegen Sie an der nächsten Kreuzung links ab und fahren Sie drei "
+         "Kilometer weiter."),
         "Warten Sie! Halten Sie sofort an!",
-        "Am Nachmittag wird Regen erwartet, nehmen Sie also einen Schirm "
-        "mit."}},
+        ("Am Nachmittag wird Regen erwartet, nehmen Sie also einen Schirm "
+         "mit.")}},
       {"nl",
        {"Ja.", "Dat kan ik voor u doen.",
         "De oude vuurtoren stond alleen tegen de golven van de noordzee.",
         "Laat me dat even controleren, het duurt maar een moment.",
         "Uw afspraak is bevestigd voor dinsdag de veertiende om half drie.",
         "Sorry, dat heb ik niet verstaan. Kunt u het herhalen?",
-        "Volgens de laatste cijfers zijn de inkomsten met twaalf procent "
-        "gestegen.",
-        "Sla bij de volgende kruising linksaf en rijd nog drie kilometer "
-        "door.",
+        ("Volgens de laatste cijfers zijn de inkomsten met twaalf procent "
+         "gestegen."),
+        ("Sla bij de volgende kruising linksaf en rijd nog drie kilometer "
+         "door."),
         "Wacht! Stop onmiddellijk!",
         "Vanmiddag wordt regen verwacht, neem dus een paraplu mee."}},
       {"ru",
        {"Да.", "Я могу это сделать для вас.",
         "Старый маяк одиноко стоял перед волнами северного моря.",
         "Позвольте мне проверить, это займёт всего минуту.",
-        "Ваша встреча подтверждена на вторник, четырнадцатое, в половине "
-        "третьего.",
+        ("Ваша встреча подтверждена на вторник, четырнадцатое, в половине "
+         "третьего."),
         "Извините, я не расслышал. Не могли бы вы повторить?",
         "По последним данным, доходы выросли на двенадцать процентов.",
         "На следующем перекрёстке поверните налево и проедьте три километра.",
@@ -189,18 +191,18 @@ const std::vector<PhraseSet>& calibration_phrases() {
        {"Так.", "Я можу це зробити для вас.",
         "Старий маяк самотньо стояв перед хвилями північного моря.",
         "Дозвольте мені перевірити, це займе лише хвилину.",
-        "Вашу зустріч підтверджено на вівторок, чотирнадцяте, о пів на "
-        "третю.",
+        ("Вашу зустріч підтверджено на вівторок, чотирнадцяте, о пів на "
+         "третю."),
         "Вибачте, я не розчув. Не могли б ви повторити?",
         "За останніми даними, доходи зросли на дванадцять відсотків.",
-        "На наступному перехресті поверніть ліворуч і проїдьте три "
-        "кілометри.",
+        ("На наступному перехресті поверніть ліворуч і проїдьте три "
+         "кілометри."),
         "Зачекайте! Негайно зупиніться!",
         "У другій половині дня очікується дощ, візьміть парасольку."}},
       {"tr",
        {"Evet.", "Bunu sizin için yapabilirim.",
-        "Eski deniz feneri kuzey denizinin dalgalarına karşı tek başına "
-        "duruyordu.",
+        ("Eski deniz feneri kuzey denizinin dalgalarına karşı tek başına "
+         "duruyordu."),
         "Bir kontrol edeyim, sadece bir dakika sürecek.",
         "Randevunuz on dört salı günü saat iki buçuk için onaylandı.",
         "Üzgünüm, anlayamadım. Tekrar eder misiniz?",
@@ -212,8 +214,8 @@ const std::vector<PhraseSet>& calibration_phrases() {
        {"Vâng.", "Tôi có thể làm việc đó cho bạn.",
         "Ngọn hải đăng cũ đứng một mình trước những con sóng của biển bắc.",
         "Để tôi kiểm tra, việc này chỉ mất một lát thôi.",
-        "Cuộc hẹn của bạn đã được xác nhận vào thứ ba ngày mười bốn lúc hai "
-        "giờ rưỡi.",
+        ("Cuộc hẹn của bạn đã được xác nhận vào thứ ba ngày mười bốn lúc hai "
+         "giờ rưỡi."),
         "Xin lỗi, tôi chưa nghe rõ. Bạn có thể nhắc lại không?",
         "Theo số liệu mới nhất, doanh thu đã tăng mười hai phần trăm.",
         "Rẽ trái ở ngã tư tiếp theo rồi đi thêm ba ki lô mét.",
