@@ -144,7 +144,8 @@ struct TranscriberOptions {
   // Keyed model assets for the MEMORY_FILES source. Canonical filenames match
   // the FILES layout (e.g. "encoder_model.ort", "decoder_model_merged.ort",
   // "tokenizer.bin", "decoder_with_attention.ort" for non-streaming; or
-  // "frontend.ort", "encoder.ort", "adapter.ort", "cross_kv.ort",
+  // "frontend.ort" (or ``frontend.model.ort`` + ``frontend.weights.ort``),
+  // "encoder.ort", "adapter.ort", "cross_kv.ort",
   // "decoder_kv.ort", "streaming_config.json", "decoder_kv_with_attention.ort"
   // for streaming). Entries may carry a client buffer, a path, or both; the
   // transcriber owns this copy so any disk-loaded bytes outlive the ORT

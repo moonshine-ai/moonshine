@@ -14,6 +14,16 @@
 #include "onnxruntime_c_api.h"
 #include "word-alignment.h"
 
+/// A float32 weight tensor dequantized once at load and supplied as a graph
+/// input on every frontend run. Used when the frontend ships as
+/// ``frontend.model.ort`` + ``frontend.weights.ort``; see
+/// ``scripts/split-model-weights.py``.
+struct FrontendSplitWeight {
+  std::string name;
+  std::vector<int64_t> shape;
+  std::vector<float> data;
+};
+
 /* Streaming model configuration (matches streaming_config.json) */
 struct MoonshineStreamingConfig {
   int encoder_dim;      /* Encoder hidden dimension (320) */
@@ -141,7 +151,9 @@ struct MoonshineStreamingModel {
       const uint8_t *cross_kv_model_data, size_t cross_kv_model_data_size,
       const uint8_t *decoder_kv_model_data, size_t decoder_kv_model_data_size,
       const uint8_t *tokenizer_data, size_t tokenizer_data_size,
-      const MoonshineStreamingConfig &config, int32_t model_type);
+      const MoonshineStreamingConfig &config, int32_t model_type,
+      const uint8_t *frontend_weights_data = nullptr,
+      size_t frontend_weights_data_size = 0);
 
 #if defined(ANDROID)
   int load_from_assets(const char *model_dir, const char *tokenizer_path,
@@ -209,6 +221,14 @@ struct MoonshineStreamingModel {
 
   /* Compute cross-attention K/V from current memory state */
   int compute_cross_kv(MoonshineStreamingState *state);
+
+  // Populated when the frontend ships as a split ORT pair. Empty means the
+  // frontend session already has its weights baked in (``frontend.ort``).
+  std::vector<FrontendSplitWeight> frontend_split_weights;
+
+  int load_frontend_split_weights_from_memory(const uint8_t *data, size_t size);
+  int load_frontend_split_weights_from_path(const char *path);
+  int collect_frontend_split_weights(OrtSession *weights_session);
 };
 
 #endif

@@ -179,15 +179,16 @@ adapter.ort: 100%|████████████████████�
 cross_kv.ort: 100%|█████████████████████████████████████████████████████████████| 11.0M/11.0M [00:00<00:00, 39.4MB/s]
 decoder_kv.ort: 100%|███████████████████████████████████████████████████████████████| 139M/139M [00:01<00:00, 100MB/s]
 encoder.ort: 100%|██████████████████████████████████████████████████████████████| 89.8M/89.8M [00:01<00:00, 83.1MB/s]
-frontend.ort: 100%|█████████████████████████████████████████████████████████████| 45.3M/45.3M [00:00<00:00, 65.7MB/s]
+frontend.weights.ort: 100%|█████████████████████████████████████████████████████| 11.3M/11.3M [00:00<00:00, 65.7MB/s]
+frontend.model.ort: 100%|█████████████████████████████████████████████████████████| 28.0k/28.0k [00:00<00:00, 1.88MB/s]
 streaming_config.json: 100%|██████████████████████████████████████████████████████| 513/513 [00:00<00:00, 1.88MB/s]
 tokenizer.bin: 100%|█████████████████████████████████████████████████████████████| 244k/244k [00:00<00:00, 3.06MB/s]
 spelling_cnn.ort: 100%|█████████████████████████████████████████████████████████| 1.59M/1.59M [00:00<00:00, 10.2MB/s]
 spelling_cnn_meta.json: 100%|█████████████████████████████████████████████████████| 622/622 [00:00<00:00, 1.72MB/s]
-Model download url: https://download.moonshine.ai/model/medium-streaming-en/quantized_26_07_30
-Model components: ['adapter.ort', 'cross_kv.ort', 'decoder_kv.ort', 'encoder.ort', 'frontend.ort', 'streaming_config.json', 'tokenizer.bin']
+Model download url: https://download.moonshine.ai/model/medium-streaming-en/quantized_26_08_21
+Model components: ['adapter.ort', 'cross_kv.ort', 'decoder_kv.ort', 'encoder.ort', 'frontend.model.ort', 'frontend.weights.ort', 'streaming_config.json', 'tokenizer.bin']
 Model arch: 5
-Downloaded model path: /Users/petewarden/Library/Caches/moonshine_voice/download.moonshine.ai/model/medium-streaming-en/quantized_26_07_30
+Downloaded model path: /Users/petewarden/Library/Caches/moonshine_voice/download.moonshine.ai/model/medium-streaming-en/quantized_26_08_21
 ```
 
 Since no architecture was requested here, this downloaded Medium Streaming (architecture 5), the highest-quality English model. The two `spelling_cnn` files at the end are the alphanumeric spelling model, which the downloader fetches alongside the main model when one is published for the language.

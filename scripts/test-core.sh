@@ -12,6 +12,7 @@ MOONSHINE_TTS_BUILD_DIR="${BUILD_DIR}/moonshine-tts"
 # fail later (e.g. Chinese Kokoro voices without zh_hans ONNX on the Pi).
 echo "Fetching voice assets from CDN/HF (scripts/fetch-voice-assets.sh)..."
 "${SCRIPTS_DIR}/fetch-voice-assets.sh" all
+"${SCRIPTS_DIR}/prepare-ort-weight-storage.sh"
 
 rm -rf ${BUILD_DIR}
 mkdir -p ${BUILD_DIR}

@@ -42,6 +42,12 @@ if defined BASH_EXE (
     )
 )
 
+if defined BASH_EXE (
+    echo Checking .ort weight storage...
+    "!BASH_EXE!" "!SCRIPTS_DIR!\prepare-ort-weight-storage.sh"
+    if errorlevel 1 exit /b 1
+)
+
 if exist "!BUILD_DIR!" (
     rmdir /s /q "!BUILD_DIR!"
 )

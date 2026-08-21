@@ -41,7 +41,7 @@ constexpr const char* kCdnModelBase = "https://download.moonshine.ai/model";
 // against and a rollback is a one-line change. Clients key their download cache
 // off this URL, so a new directory also guarantees a clean re-fetch instead of
 // silently reusing stale files.
-constexpr const char* kStreamingQuantizedDir = "/quantized_26_07_30";
+constexpr const char* kStreamingQuantizedDir = "/quantized_26_08_21";
 
 struct SttModelEntry {
   int32_t model_arch;
@@ -199,8 +199,13 @@ std::vector<std::string> stt_component_files(const std::string& language_code,
   const bool is_english = (language_code == "en");
   if (is_streaming_arch(model_arch)) {
     std::vector<std::string> files = {
-        "adapter.ort",   "cross_kv.ort", "decoder_kv.ort",
-        "encoder.ort",   "frontend.ort", "streaming_config.json",
+        "adapter.ort",
+        "cross_kv.ort",
+        "decoder_kv.ort",
+        "encoder.ort",
+        "frontend.model.ort",
+        "frontend.weights.ort",
+        "streaming_config.json",
         "tokenizer.bin",
     };
     if (is_english && include_word_timestamps) {

@@ -833,9 +833,10 @@ export class TextToSpeech {
     }
     if (asrFiles.size === 0) return undefined;
 
-    const arch = asrFiles.has('frontend.ort')
-      ? ModelArch.MediumStreaming
-      : ModelArch.Base;
+    const arch =
+      asrFiles.has('frontend.ort') || asrFiles.has('frontend.model.ort')
+        ? ModelArch.MediumStreaming
+        : ModelArch.Base;
     const transcriber = await Transcriber.load({
       files: asrFiles,
       modelArch: arch,

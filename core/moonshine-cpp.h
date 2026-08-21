@@ -573,7 +573,8 @@ class Transcriber {
   /// Initialize a transcriber from in-memory model buffers keyed by their
   /// canonical filename (matching the download manifest, e.g.
   /// ``encoder_model.ort`` / ``decoder_model_merged.ort`` / ``tokenizer.bin``
-  /// for non-streaming models, or ``frontend.ort`` / ``encoder.ort`` /
+  /// for non-streaming models, or ``frontend.ort`` (or
+  /// ``frontend.model.ort`` + ``frontend.weights.ort``) / ``encoder.ort`` /
   /// ``adapter.ort`` / ``cross_kv.ort`` / ``decoder_kv.ort`` /
   /// ``streaming_config.json`` / ``tokenizer.bin`` for streaming models). This
   /// is the general in-memory loader: unlike the fixed encoder/decoder overload

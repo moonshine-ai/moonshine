@@ -442,6 +442,8 @@ const std::vector<std::string> &recognized_transcriber_model_files() {
       "decoder_model_merged.ort",
       // Required by the streaming architectures.
       "frontend.ort",
+      "frontend.model.ort",
+      "frontend.weights.ort",
       "encoder.ort",
       "adapter.ort",
       "cross_kv.ort",
@@ -512,6 +514,8 @@ void Transcriber::load_from_memory_files(uint32_t model_arch) {
   if (is_streaming_model_arch(model_arch)) {
     const uint8_t *frontend_data = nullptr;
     size_t frontend_size = 0;
+    const uint8_t *frontend_weights_data = nullptr;
+    size_t frontend_weights_size = 0;
     const uint8_t *encoder_data = nullptr;
     size_t encoder_size = 0;
     const uint8_t *adapter_data = nullptr;
@@ -522,7 +526,14 @@ void Transcriber::load_from_memory_files(uint32_t model_arch) {
     size_t decoder_kv_size = 0;
     const uint8_t *config_data = nullptr;
     size_t config_size = 0;
-    require_bytes("frontend.ort", &frontend_data, &frontend_size);
+    if (this->options.model_files.contains("frontend.model.ort") &&
+        this->options.model_files.contains("frontend.weights.ort")) {
+      require_bytes("frontend.model.ort", &frontend_data, &frontend_size);
+      require_bytes("frontend.weights.ort", &frontend_weights_data,
+                    &frontend_weights_size);
+    } else {
+      require_bytes("frontend.ort", &frontend_data, &frontend_size);
+    }
     require_bytes("encoder.ort", &encoder_data, &encoder_size);
     require_bytes("adapter.ort", &adapter_data, &adapter_size);
     require_bytes("cross_kv.ort", &cross_kv_data, &cross_kv_size);
@@ -546,7 +557,8 @@ void Transcriber::load_from_memory_files(uint32_t model_arch) {
         frontend_data, frontend_size, encoder_data, encoder_size, adapter_data,
         adapter_size, cross_kv_data, cross_kv_size, decoder_kv_data,
         decoder_kv_size, tokenizer_data, tokenizer_data_size,
-        this->streaming_model->config, model_arch);
+        this->streaming_model->config, model_arch, frontend_weights_data,
+        frontend_weights_size);
     if (load_error != 0) {
       throw std::runtime_error(
           "Failed to load Moonshine streaming models from memory. Error "

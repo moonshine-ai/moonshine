@@ -35,7 +35,8 @@ export interface TranscriberFromBytes {
 /**
  * Load a transcriber from in-memory model buffers keyed by their canonical
  * manifest filename (e.g. `encoder_model.ort`, `decoder_model_merged.ort`,
- * `tokenizer.bin` for non-streaming; `frontend.ort`, `encoder.ort`,
+ * `tokenizer.bin` for non-streaming; `frontend.ort` (or `frontend.model.ort`
+ * plus `frontend.weights.ort`), `encoder.ort`,
  * `adapter.ort`, `cross_kv.ort`, `decoder_kv.ort`, `streaming_config.json`,
  * `tokenizer.bin` for streaming; plus optional `decoder_with_attention.ort` /
  * `decoder_kv_with_attention.ort` and `spelling_cnn.ort`). This is the general
