@@ -57,6 +57,16 @@
 #define MOONSHINE_EOS_TOKEN_ID 2
 
 namespace {
+#ifndef _WIN32
+void unmap_model(const char **data, size_t *size) {
+  if (*data != nullptr) {
+    munmap(const_cast<char *>(*data), *size);
+    *data = nullptr;
+    *size = 0;
+  }
+}
+#endif
+
 int set_model_options_from_arch(MoonshineModel *model, int32_t model_arch) {
   if (model_arch == MOONSHINE_MODEL_ARCH_TINY) {
     model->num_layers = MOONSHINE_TINY_NUM_LAYERS;
@@ -129,16 +139,16 @@ MoonshineModel::~MoonshineModel() {
   ort_api->ReleaseSessionOptions(ort_session_options);
   ort_api->ReleaseSession(encoder_session);
   ort_api->ReleaseSession(decoder_session);
+  if (alignment_session != nullptr) {
+    ort_api->ReleaseSession(alignment_session);
+  }
   delete ort_session_allocator;
   delete ort_string_allocator;
   delete tokenizer;
 #ifndef _WIN32
-  if (encoder_mmapped_data) {
-    munmap(const_cast<char *>(encoder_mmapped_data), encoder_mmapped_data_size);
-  }
-  if (decoder_mmapped_data) {
-    munmap(const_cast<char *>(decoder_mmapped_data), decoder_mmapped_data_size);
-  }
+  unmap_model(&encoder_mmapped_data, &encoder_mmapped_data_size);
+  unmap_model(&decoder_mmapped_data, &decoder_mmapped_data_size);
+  unmap_model(&alignment_mmapped_data, &alignment_mmapped_data_size);
 #endif
 }
 
@@ -157,6 +167,21 @@ int MoonshineModel::load(const char *encoder_model_path,
   RETURN_ON_NULL(decoder_session);
   tokenizer = new BinTokenizer(tokenizer_path);
   RETURN_ON_NULL(tokenizer);
+  return 0;
+}
+
+int MoonshineModel::replace_decoder_from_path(const char *path) {
+  if (decoder_session != nullptr) {
+    ort_api->ReleaseSession(decoder_session);
+    decoder_session = nullptr;
+  }
+#ifndef _WIN32
+  unmap_model(&decoder_mmapped_data, &decoder_mmapped_data_size);
+#endif
+  RETURN_ON_ERROR(ort_session_from_path(
+      ort_api, ort_env, ort_session_options, path, &decoder_session,
+      &decoder_mmapped_data, &decoder_mmapped_data_size));
+  RETURN_ON_NULL(decoder_session);
   return 0;
 }
 
@@ -578,8 +603,13 @@ int MoonshineModel::transcribe_wav(const char *wav_path, char **out_text) {
 }
 
 int MoonshineModel::load_alignment_model(const char *alignment_model_path) {
-  const char *alignment_mmapped_data = nullptr;
-  size_t alignment_mmapped_data_size = 0;
+  if (alignment_session != nullptr) {
+    ort_api->ReleaseSession(alignment_session);
+    alignment_session = nullptr;
+  }
+#ifndef _WIN32
+  unmap_model(&alignment_mmapped_data, &alignment_mmapped_data_size);
+#endif
   RETURN_ON_ERROR(ort_session_from_path(
       ort_api, ort_env, ort_session_options, alignment_model_path,
       &alignment_session, &alignment_mmapped_data,

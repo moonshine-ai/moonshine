@@ -90,13 +90,19 @@ struct MoonshineStreamingModel {
 
   MoonshineStreamingConfig config;
 
-  // Memory-mapped data (if loaded from files)
+  // Memory-mapped data (if loaded from files). These must outlive the matching
+  // OrtSession: CreateSessionFromArray reads the bytes in place. Locals that
+  // go out of scope after load leak the mapping (see GitHub issue #216).
   const char *frontend_mmapped_data = nullptr;
   size_t frontend_mmapped_data_size = 0;
   const char *encoder_mmapped_data = nullptr;
   size_t encoder_mmapped_data_size = 0;
   const char *adapter_mmapped_data = nullptr;
   size_t adapter_mmapped_data_size = 0;
+  const char *cross_kv_mmapped_data = nullptr;
+  size_t cross_kv_mmapped_data_size = 0;
+  const char *decoder_kv_mmapped_data = nullptr;
+  size_t decoder_kv_mmapped_data_size = 0;
 
   std::string last_result;
 
@@ -117,6 +123,11 @@ struct MoonshineStreamingModel {
 
   int load(const char *model_dir, const char *tokenizer_path,
            int32_t model_type);
+
+  // Releases the current decoder_kv session (and its file mapping, if any) and
+  // loads a replacement from ``path``. Used to swap in
+  // decoder_kv_with_attention.ort when word timestamps are requested.
+  int replace_decoder_kv_from_path(const char *path);
 
   // Parses a streaming_config.json payload (from disk or an in-memory buffer)
   // into ``this->config``. Exposed so the transcriber's in-memory load path can

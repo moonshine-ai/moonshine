@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Destroying a file-backed Transcriber now unmaps every `.ort` it opened, so creating and closing one in a loop no longer retains tens of megabytes per instance.
 - Kokoro text to speech failed to load in WebAssembly after the faster model landed, because the runtime was built without the quantized operators it needs.
 - A native error in WebAssembly now reports its message instead of a heap address.
 

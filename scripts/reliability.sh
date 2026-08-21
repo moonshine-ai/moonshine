@@ -9,7 +9,8 @@
 #      accumulated fuzzing corpora.
 #   3. Runs scripts/reliability-remote.sh there (ASan/UBSan build + test suite,
 #      clang-tidy, a ThreadSanitizer rebuild + threaded tests, a long-stream
-#      memory regression test, and time-boxed per-module fuzzing).
+#      memory regression test, a Transcriber create/destroy mapping leak test,
+#      and time-boxed per-module fuzzing).
 #   4. Copies logs and any crash reproducers back to core/reliability/artifacts.
 #
 # The whole run is designed to finish within a few hours (tune FUZZ_SECONDS).
