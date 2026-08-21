@@ -35,6 +35,14 @@ test('constructing with no model buffer throws', () => {
   assert.throws(() => new mod.EmbeddingModel([], [], 0, 'q4'));
 });
 
+test('removed embedding variants are no longer supported', () => {
+  for (const variant of ['fp32', 'fp16', 'q4f16']) {
+    assert.throws(
+      () => new mod.EmbeddingModel(['model.ort'], [new Uint8Array(8)], 0, variant),
+    );
+  }
+});
+
 test('the phrase matcher falls back to substrings without a model', async () => {
   const { PhraseMatcher } = await importInternal('embedding-model.js');
   const matcher = new PhraseMatcher();

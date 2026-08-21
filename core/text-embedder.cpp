@@ -3,11 +3,17 @@
 #include <stdexcept>
 
 #include "gemma-embedding-model.h"
+#include "moonshine-model-catalog.h"
 
 namespace {
 
 std::unique_ptr<EmbeddingModel> load_embedding_model(
     const TextEmbedderOptions &options) {
+  const std::string unsupported =
+      moonshine::embedding_variant_unsupported_message(options.model_variant);
+  if (!unsupported.empty()) {
+    throw std::runtime_error(unsupported);
+  }
   switch (options.model_arch) {
     case EmbeddingModelArch::GEMMA_300M: {
       auto model = std::make_unique<GemmaEmbeddingModel>();

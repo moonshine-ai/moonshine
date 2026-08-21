@@ -660,7 +660,7 @@ Load a text embedding model, embed sentences, compare vectors, and free results.
 
 Creates an embedding model from files on disk.
 
-`model_variant` specifies which model variant to load: "fp32", "fp16", "q8", "q4", or "q4f16". Pass NULL to use the default "q4" variant.
+`model_variant` specifies which model variant to load: "q4" or "q8". Pass NULL to use the default "q4" variant. `"fp32"`, `"fp16"`, and `"q4f16"` are no longer supported.
 
 ```c
 int32_t moonshine_create_embedding_model(
@@ -674,7 +674,7 @@ int32_t moonshine_create_embedding_model(
 | --- | --- |
 | `model_path` | Path to the directory containing the embedding model files (the `.ort` model and `tokenizer.bin`). |
 | `model_arch` | One of the `MOONSHINE_EMBEDDING_MODEL_ARCH_*` constants. Currently only `MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M` is supported. |
-| `model_variant` | Which variant to load: `"fp32"`, `"fp16"`, `"q8"`, `"q4"`, or `"q4f16"`. Pass `NULL` for the default `"q4"`. |
+| `model_variant` | Which variant to load: `"q4"` or `"q8"`. Pass `NULL` for the default `"q4"`. `"fp32"`, `"fp16"`, and `"q4f16"` are no longer supported. |
 
 **Returns:** A non-negative embedding model handle on success, or a negative error code on failure. Convert the code with `moonshine_error_to_string()`.
 
@@ -701,7 +701,7 @@ int32_t moonshine_create_embedding_model_from_memory(
 | Argument | Description |
 | --- | --- |
 | `model_arch` | One of the `MOONSHINE_EMBEDDING_MODEL_ARCH_*` constants. |
-| `model_variant` | Which variant to load (`"fp32"`, `"fp16"`, `"q8"`, `"q4"`, `"q4f16"`; `NULL` defaults to `"q4"`). Only used to pick the model file when the filename keys leave it ambiguous. |
+| `model_variant` | Which variant to load (`"q4"`, `"q8"`; `NULL` defaults to `"q4"`). `"fp32"`, `"fp16"`, and `"q4f16"` are no longer supported. Only used to pick the model file when the filename keys leave it ambiguous. |
 | `filenames` | Canonical asset filenames, as listed by `moonshine_get_embedding_dependencies()` (for example `model_q4.ort` and `tokenizer.bin`). |
 | `filenames_count` | Number of entries in `filenames`, `memory`, and `memory_sizes`. |
 | `memory` | Asset bytes for each filename. Copied by the library, so the buffers only need to stay valid for this call. |

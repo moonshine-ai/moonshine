@@ -159,4 +159,13 @@ TEST_CASE("gemma-embedding-model error handling") {
     int result = model.load(model_dir.c_str(), "invalid_variant");
     CHECK(result != 0);
   }
+
+  SUBCASE("removed variants are no longer supported") {
+    for (const char *variant : {"fp32", "fp16", "q4f16"}) {
+      GemmaEmbeddingModel model;
+      int result = model.load("/unused", variant);
+      CHECK(result != 0);
+      CHECK(model.is_loaded() == false);
+    }
+  }
 }

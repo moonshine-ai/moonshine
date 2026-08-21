@@ -159,7 +159,7 @@ const std::vector<EmbeddingModelEntry>& embedding_catalog() {
       {"embeddinggemma-300m",
        "Embedding Gemma 300M",
        std::string(kCdnModelBase) + "/embeddinggemma-300m",
-       {"q4", "q8", "fp16", "fp32", "q4f16"},
+       {"q4", "q8"},
        "q4"},
   };
   return catalog;
@@ -246,16 +246,10 @@ const EmbeddingModelEntry* find_embedding_model(const std::string& model_name) {
 // ``.ort`` files are produced from the published ``.onnx`` + ``.onnx_data``.
 std::vector<std::string> embedding_component_files(const std::string& variant) {
   std::string stem;
-  if (variant == "fp32") {
-    stem = "model";
-  } else if (variant == "fp16") {
-    stem = "model_fp16";
-  } else if (variant == "q8") {
+  if (variant == "q8") {
     stem = "model_quantized";
   } else if (variant == "q4") {
     stem = "model_q4";
-  } else if (variant == "q4f16") {
-    stem = "model_q4f16";
   } else {
     return {};
   }
@@ -358,6 +352,15 @@ std::vector<std::string> embedding_supported_variants(
     return {};
   }
   return model->variants;
+}
+
+std::string embedding_variant_unsupported_message(const std::string& variant) {
+  if (variant == "fp32" || variant == "fp16" || variant == "q4f16") {
+    return "The \"" + variant +
+           "\" embedding model variant is no longer supported. "
+           "Use \"q4\" (the default) or \"q8\".";
+  }
+  return {};
 }
 
 std::vector<SttCatalogLanguage> stt_catalog_listing() {

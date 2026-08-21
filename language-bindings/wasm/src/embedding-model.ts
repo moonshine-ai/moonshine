@@ -25,7 +25,7 @@ export interface EmbeddingFromCatalog {
   /** Embedding model id (e.g. `"embeddinggemma-300m"`). Empty = default. */
   modelName?: string;
   modelArch?: EmbeddingModelArch;
-  /** One of "q4", "q8", "fp16", "fp32", "q4f16". Empty = model default. */
+  /** One of "q4" or "q8". Empty = model default. "fp32", "fp16", and "q4f16" are no longer supported. */
   variant?: string;
   downloader?: AssetDownloader;
   onProgress?: (loaded: number, total: number | undefined, file: string) => void;
@@ -39,7 +39,7 @@ export type EmbeddingModelOptions = EmbeddingFromCatalog & {
 /** Options for {@link EmbeddingModel.loadFromUrls} (self-hosted model files). */
 export interface EmbeddingFromUrlsOptions {
   modelArch?: EmbeddingModelArch;
-  /** One of "q4", "q8", "fp16", "fp32", "q4f16". Empty = "q4". */
+  /** One of "q4" or "q8". Empty = "q4". "fp32", "fp16", and "q4f16" are no longer supported. */
   variant?: string;
   downloader?: AssetDownloader;
   onProgress?: (loaded: number, total: number | undefined, file: string) => void;
@@ -92,6 +92,11 @@ export class EmbeddingModel {
   ): EmbeddingModel {
     const keys = [...files.keys()];
     const buffers = keys.map((k) => files.get(k)!);
+    if (variant === 'fp32' || variant === 'fp16' || variant === 'q4f16') {
+      throw new Error(
+        `The "${variant}" embedding model variant is no longer supported. Use "q4" (the default) or "q8".`,
+      );
+    }
     const raw = wrapErrors(
       () => new module.EmbeddingModel(keys, buffers, arch, variant),
     );

@@ -435,6 +435,14 @@ TEST_CASE("moonshine-cpp-test") {
         (void)moonshine::Transcriber::getDependencies("not-a-language"),
         moonshine::MoonshineException);
   }
+  SUBCASE("removed embedding variants are no longer supported") {
+    for (const char *variant : {"fp32", "fp16", "q4f16"}) {
+      REQUIRE_THROWS_AS(
+          moonshine::EmbeddingModel(
+              "/unused", moonshine::EmbeddingModelArch::GEMMA_300M, variant),
+          moonshine::MoonshineException);
+    }
+  }
   SUBCASE("speech clip extraction finds speech and rejects silence") {
     // The voice-activity detector is compiled in, so this needs no models.
     const std::string wav_path = "beckett.wav";

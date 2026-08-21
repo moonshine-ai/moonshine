@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - Text to speech now splits sentences with one shared implementation that keeps `Dr. Smith` and `J. R. R. Tolkien` whole and understands `。！？؟।` terminators, replacing four different naive rules.
+- The `fp32`, `fp16`, and `q4f16` embedding model variants are no longer supported. Passing them fails with a "no longer supported" error; use `q4` (the default) or `q8`.
 - Text to speech holds the audio device open across queued utterances, so consecutive `say()` calls no longer leave a gap or a click between them.
 - Kokoro text to speech is 4x faster on short sentences and 2x on long ones on a Raspberry Pi 4, a closer match to the reference voice, and a 10 MB smaller download. It uses about 85 MB more memory.
 - Kokoro now ships as two stages, `kokoro/prosody.*` and `kokoro/decoder.*`, and no whole-utterance model. They render the same audio, so the download halves. In-memory callers should pass all four keys.
@@ -30,6 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - Streaming no longer logs `Memory is empty` or drops hypotheses when short chunks arrive faster than encoder lookahead, including on medium-streaming (GitHub issue #218).
+- AgentFlow no longer downloads the q4 embedding model and then tries to open the fp32 file, which crashed `load()` (GitHub issue #210).
 - Destroying a file-backed Transcriber now unmaps every `.ort` it opened, so creating and closing one in a loop no longer retains tens of megabytes per instance.
 - Kokoro text to speech failed to load in WebAssembly after the faster model landed, because the runtime was built without the quantized operators it needs.
 - A native error in WebAssembly now reports its message instead of a heap address.

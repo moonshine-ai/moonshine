@@ -157,7 +157,7 @@ TTS-only keys (`voice`, Piper/Kokoro paths, and so on) are ignored when listing 
 
 ## Embeddings
 
-`moonshine_create_embedding_model()` takes `model_variant` as a dedicated argument (`fp32`, `fp16`, `q8`, `q4` default, `q4f16`), not an options map. Create-from-memory accepts an options array but currently ignores it.
+`moonshine_create_embedding_model()` takes `model_variant` as a dedicated argument (`q4` default, `q8`), not an options map. `"fp32"`, `"fp16"`, and `"q4f16"` are no longer supported. Create-from-memory accepts an options array but currently ignores it.
 
 For `moonshine_get_embedding_dependencies()`:
 

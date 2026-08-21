@@ -7,6 +7,8 @@ declare a size per file) and the file-counted fallback (TTS and G2P dependency
 lists are bare keys), and that the plumbing underneath actually reports bytes.
 """
 
+import pytest
+
 import moonshine_voice.download as download
 import moonshine_voice.download_file as download_file_mod
 from moonshine_voice.download import _ProgressTracker, _download_manifest_group
@@ -295,3 +297,15 @@ def test_cached_files_still_reach_full_progress(monkeypatch, tmp_path):
     _download_manifest_group(group, tmp_path, _ProgressTracker.for_groups(callback, [group]))
 
     _assert_well_formed(calls)
+
+
+@pytest.mark.parametrize("variant", ("fp32", "fp16", "q4f16"))
+def test_removed_embedding_variants_are_no_longer_supported(variant):
+    from moonshine_voice.embedding_model import EmbeddingModel
+    from moonshine_voice.errors import MoonshineError
+
+    with pytest.raises(ValueError, match="no longer supported"):
+        download.get_embedding_model(variant=variant)
+
+    with pytest.raises(MoonshineError, match="no longer supported"):
+        EmbeddingModel("/unused", model_variant=variant)

@@ -1540,6 +1540,15 @@ inline MemoryFiles flattenFiles(
   return out;
 }
 
+inline void rejectRemovedEmbeddingVariant(const std::string &variant) {
+  if (variant == "fp32" || variant == "fp16" || variant == "q4f16") {
+    throw MoonshineException(
+        "The \"" + variant +
+        "\" embedding model variant is no longer supported. "
+        "Use \"q4\" (the default) or \"q8\".");
+  }
+}
+
 }  // namespace detail
 
 inline Transcriber::Transcriber(const std::string &modelPath,
@@ -2287,6 +2296,7 @@ inline EmbeddingModel::EmbeddingModel(const std::string &model_path,
                                       EmbeddingModelArch arch,
                                       const std::string &model_variant)
     : handle_(-1) {
+  detail::rejectRemovedEmbeddingVariant(model_variant);
   handle_ = moonshine_create_embedding_model(
       model_path.c_str(), static_cast<uint32_t>(arch), model_variant.c_str());
   checkError(handle_);
@@ -2295,6 +2305,7 @@ inline EmbeddingModel::EmbeddingModel(const std::string &model_path,
 inline EmbeddingModel EmbeddingModel::loadFromMemory(
     const std::map<std::string, std::pair<const uint8_t *, size_t>> &modelFiles,
     EmbeddingModelArch arch, const std::string &model_variant) {
+  detail::rejectRemovedEmbeddingVariant(model_variant);
   detail::MemoryFiles files = detail::flattenFiles(modelFiles);
   int32_t handle = moonshine_create_embedding_model_from_memory(
       static_cast<uint32_t>(arch),

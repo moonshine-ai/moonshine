@@ -46,8 +46,9 @@ class GemmaEmbeddingModel : public EmbeddingModel {
    *                  (``model_<variant>.ort``, preferred) or the legacy
    *                  ``model_<variant>.onnx`` + ``.onnx_data`` pair, plus
    *                  ``tokenizer.bin``.
-   * @param model_variant Optional variant name: "fp32", "fp16", "q8", "q4",
-   *                      "q4f16". Default is "q4" for efficiency.
+   * @param model_variant Optional variant name: "q4" or "q8". Default is
+   *                      "q4" for efficiency. "fp32", "fp16", and "q4f16"
+   *                      are no longer supported.
    * @return 0 on success, non-zero on failure.
    */
   int load(const char *model_dir, const char *model_variant = "q4");
