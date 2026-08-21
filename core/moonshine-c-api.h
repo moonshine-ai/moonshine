@@ -518,7 +518,8 @@ MOONSHINE_EXPORT int32_t moonshine_load_transcriber_from_memory(
        optional word-timestamp decoder ``decoder_with_attention.ort`` (or the
        two-pass ``alignment_model.ort``) when the ``word_timestamps`` option is
        set.
-     - Streaming (``*_STREAMING``): ``frontend.ort``, ``encoder.ort``,
+     - Streaming (``*_STREAMING``): ``frontend.ort`` (or the split pair
+       ``frontend.model.ort`` + ``frontend.weights.ort``), ``encoder.ort``,
        ``adapter.ort``, ``cross_kv.ort``, ``decoder_kv.ort``,
        ``streaming_config.json``, ``tokenizer.bin`` (all required), plus the
        optional ``decoder_kv_with_attention.ort`` when ``word_timestamps`` is

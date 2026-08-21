@@ -16,6 +16,7 @@
 #define DOCTEST_CONFIG_IMPLEMENT
 #include <doctest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -265,6 +266,56 @@ TEST_CASE("stt-memory-files: streaming loads full buffer set and transcribes") {
           MOONSHINE_ERROR_NONE);
   const std::string text = join_transcript_text(final_transcript);
   MESSAGE("streaming transcript: " << text);
+  CHECK_FALSE(text.empty());
+
+  moonshine_free_stream(handle, stream);
+  moonshine_free_transcriber(handle);
+}
+
+TEST_CASE("stt-memory-files: streaming split frontend pair loads") {
+  const fs::path dir = g_assets_root / "tiny-streaming-en";
+  if (!fs::exists(dir / "frontend.model.ort") ||
+      !fs::exists(dir / "frontend.weights.ort")) {
+    MESSAGE("skipping: frontend.model.ort + frontend.weights.ort not present");
+    return;
+  }
+  MemoryBundle bundle;
+  bundle.add(dir, "frontend.model.ort");
+  bundle.add(dir, "frontend.weights.ort");
+  bundle.add(dir, "encoder.ort");
+  bundle.add(dir, "adapter.ort");
+  bundle.add(dir, "cross_kv.ort");
+  bundle.add(dir, "decoder_kv.ort");
+  bundle.add(dir, "streaming_config.json");
+  bundle.add(dir, "tokenizer.bin");
+  const std::vector<float> audio = load_audio_clip(10.0f);
+
+  SandboxCwd sandbox;
+  const int32_t handle =
+      load_from_bundle(bundle, MOONSHINE_MODEL_ARCH_TINY_STREAMING, false);
+  REQUIRE(handle >= 0);
+
+  const int32_t stream = moonshine_create_stream(handle, 0);
+  REQUIRE(stream >= 0);
+  REQUIRE(moonshine_start_stream(handle, stream) == MOONSHINE_ERROR_NONE);
+
+  const size_t chunk = 16000;  // 1s chunks
+  for (size_t off = 0; off < audio.size(); off += chunk) {
+    const size_t n = std::min(chunk, audio.size() - off);
+    REQUIRE(moonshine_transcribe_add_audio_to_stream(
+                handle, stream, const_cast<float*>(audio.data() + off), n,
+                16000, 0) == MOONSHINE_ERROR_NONE);
+    transcript_t* partial = nullptr;
+    moonshine_transcribe_stream(handle, stream, 0, &partial);
+  }
+  REQUIRE(moonshine_stop_stream(handle, stream) == MOONSHINE_ERROR_NONE);
+
+  transcript_t* final_transcript = nullptr;
+  REQUIRE(moonshine_transcribe_stream(
+              handle, stream, MOONSHINE_FLAG_FORCE_UPDATE, &final_transcript) ==
+          MOONSHINE_ERROR_NONE);
+  const std::string text = join_transcript_text(final_transcript);
+  MESSAGE("split-frontend streaming transcript: " << text);
   CHECK_FALSE(text.empty());
 
   moonshine_free_stream(handle, stream);

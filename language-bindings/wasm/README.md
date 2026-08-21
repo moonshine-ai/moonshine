@@ -182,11 +182,11 @@ const transcriber = await Transcriber.loadFromUrls(
 ```
 
 The keys are the canonical manifest filenames (the same ones returned by the CDN
-manifest), so streaming models just list their own files (`frontend.ort`,
-`encoder.ort`, `adapter.ort`, `cross_kv.ort`, `decoder_kv.ort`,
-`streaming_config.json`, `tokenizer.bin`). Everything is loaded purely in memory
-— the browser has no natural filesystem — so the same code path serves every
-architecture.
+manifest), so streaming models just list their own files (`frontend.ort` or
+`frontend.model.ort` + `frontend.weights.ort`, `encoder.ort`, `adapter.ort`,
+`cross_kv.ort`, `decoder_kv.ort`, `streaming_config.json`, `tokenizer.bin`).
+Everything is loaded purely in memory — the browser has no natural filesystem —
+so the same code path serves every architecture.
 
 ## Cross-origin isolation (required for the default build)
 

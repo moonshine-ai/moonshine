@@ -40,20 +40,32 @@ QUANT_SUFFIX = "_quantized"
 DEQUANT_OUTPUT_SUFFIX = "_add_tensor"
 
 
-def _load_shrink_ray():
+def _load_shrink_ray(*, need_per_channel: bool = False):
+    # Per-channel lives in onnx_shrink_ray >= 0.0.11. Prefer a local clone
+    # when we need it, because a stale pip install of 0.0.9 is common.
+    if need_per_channel and SHRINK_RAY_SRC.is_dir():
+        sys.path.insert(0, str(SHRINK_RAY_SRC))
     try:
         import onnx_shrink_ray.shrink as shrink  # noqa: PLC0415
-        return shrink
     except ImportError:
-        pass
-    if SHRINK_RAY_SRC.is_dir():
-        sys.path.insert(0, str(SHRINK_RAY_SRC))
-        import onnx_shrink_ray.shrink as shrink  # noqa: PLC0415
-        return shrink
-    raise SystemExit(
-        "onnx_shrink_ray not found; pip install onnx_shrink_ray or clone it to "
-        f"{SHRINK_RAY_SRC}"
-    )
+        if SHRINK_RAY_SRC.is_dir():
+            sys.path.insert(0, str(SHRINK_RAY_SRC))
+            import onnx_shrink_ray.shrink as shrink  # noqa: PLC0415
+        else:
+            raise SystemExit(
+                "onnx_shrink_ray not found; pip install onnx_shrink_ray or "
+                f"clone it to {SHRINK_RAY_SRC}"
+            ) from None
+    if need_per_channel:
+        import inspect  # noqa: PLC0415
+
+        params = inspect.signature(shrink.quantize_weights).parameters
+        if "per_channel" not in params:
+            raise SystemExit(
+                "onnx_shrink_ray >= 0.0.11 is required for --per-channel "
+                "(pip install -U onnx_shrink_ray)"
+            )
+    return shrink
 
 
 def _save_via_ort(src: str, dst: str, optimize: bool, as_ort: bool) -> str:
@@ -161,20 +173,31 @@ def _build_graph_model(src_onnx: str, dst_onnx: str) -> None:
     onnx.save(model, dst_onnx)
 
 
-def split_model(src: Path, force: bool) -> tuple[int, int, int]:
+def split_model(
+    src: Path, force: bool, per_channel: bool = False
+) -> tuple[int, int, int]:
     model_out = src.with_suffix(".model.ort")
     weights_out = src.with_suffix(".weights.ort")
     if model_out.exists() and weights_out.exists() and not force:
         return (0, model_out.stat().st_size, weights_out.stat().st_size)
 
-    shrink = _load_shrink_ray()
+    shrink = _load_shrink_ray(need_per_channel=per_channel)
     with tempfile.TemporaryDirectory() as tmp:
         # Optimize first so the fusions are baked in, then re-quantize the
         # optimized graph. shrink-ray's per-tensor quantization is idempotent,
-        # so re-quantizing already-quantized weights is lossless.
+        # so re-quantizing already-quantized weights is lossless. Per-channel
+        # is not optional for the STT frontend: after fusion the weight-norm
+        # magnitudes are even more extreme, and a single scale per tensor
+        # is what took Tiny Streaming to 7.57% WER.
         optimized = _save_via_ort(str(src), f"{tmp}/optimized.onnx", True, False)
         requantized = f"{tmp}/requantized.onnx"
-        onnx.save(shrink.quantize_weights(onnx.load(optimized)), requantized)
+        optimized_model = onnx.load(optimized)
+        if not optimized_model.graph.name:
+            optimized_model.graph.name = src.stem
+        onnx.save(
+            shrink.quantize_weights(optimized_model, per_channel=per_channel),
+            requantized,
+        )
 
         weights_onnx = f"{tmp}/weights.onnx"
         graph_onnx = f"{tmp}/graph.onnx"
@@ -191,13 +214,21 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("models", nargs="+", type=Path)
     parser.add_argument("--force", action="store_true")
+    parser.add_argument(
+        "--per-channel",
+        action="store_true",
+        help="Re-quantize with a scale per output channel. Required for the "
+        "STT frontend (weight-norm); see scripts/quantize-streaming-model.sh.",
+    )
     args = parser.parse_args()
 
     for src in args.models:
         if not src.is_file():
             print(f"skip {src}: not a file")
             continue
-        count, model_size, weights_size = split_model(src, args.force)
+        count, model_size, weights_size = split_model(
+            src, args.force, per_channel=args.per_channel
+        )
         original = src.stat().st_size
         total = model_size + weights_size
         print(f"{src.name}")

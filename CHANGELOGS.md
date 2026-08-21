@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Streaming frontend graphs can load as `frontend.model.ort` plus `frontend.weights.ort`, keeping int8 weights on disk. English streaming models on `quantized_26_08_21` cut the frontend download by about 75%.
 - `moonshine-voice[finetune]` is an alias of `[lora]`; `moonshine-voice finetune` runs the same trainer.
 - Built-in `--dataset uwb_atcc` (real VHF, research/NC), `--sites encoder|both`, `--adapt full`, and `--eval-dataset atco2`.
 - Streaming text to speech: push text as it arrives with `stream()` / `push_text` / `flush`, and take audio back chunk by chunk or through an `on_chunk` handler.

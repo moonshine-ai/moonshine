@@ -30,7 +30,7 @@ HF_REPO="${MOONSHINE_HF_REPO:-moonshine-ai/moonshine-voice-assets}"
 FORCE="${MOONSHINE_FETCH_FORCE:-}"
 
 # Catalog pin for streaming fixtures (must match core/moonshine-model-catalog.cpp).
-STREAMING_PIN="tiny-streaming-en/quantized_26_07_30"
+STREAMING_PIN="tiny-streaming-en/quantized_26_08_21"
 
 usage() {
   sed -n '2,22p' "$0" | sed 's/^# \?//'
@@ -96,7 +96,8 @@ fetch_test_assets() {
     "${ta}/tiny-en/tokenizer.bin"
 
   for f in adapter.ort cross_kv.ort decoder_kv.ort decoder_kv_with_attention.ort \
-           encoder.ort frontend.ort streaming_config.json tokenizer.bin; do
+           encoder.ort frontend.model.ort frontend.weights.ort \
+           streaming_config.json tokenizer.bin; do
     fetch_cdn "model/${STREAMING_PIN}/${f}" "${ta}/tiny-streaming-en/${f}"
   done
 

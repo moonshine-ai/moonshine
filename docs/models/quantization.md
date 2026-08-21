@@ -8,4 +8,8 @@ If you quantize your own Moonshine-style model, this is the first thing to check
 
 You can see the options we use for the conversions in [scripts/quantize-streaming-model.sh](https://github.com/moonshine-ai/moonshine/blob/main/scripts/quantize-streaming-model.sh).
 
-Re-quantized models are published to a new dated directory on our CDN (currently `quantized_26_07_30`) instead of overwriting the previous files. That way a given version of this library always resolves the exact weights it was tested against, and your local model cache never mixes old and new files.
+The frontend is the one graph that cannot keep those int8 weights inside a single optimized `.ort`. ORT's full-graph optimizer constant-folds Shrink Ray's `Cast → Mul → Add` dequant chain back into float32 initializers, inflating the file about 4× with no runtime win: the frontend is ~2 million weights and tiny activations, so dequantizing on every `process_audio_chunk` would be the wrong trade. The conversion script therefore splits it the same way TTS voices already do: `frontend.model.ort` holds the fused float compute graph (weights as inputs) and `frontend.weights.ort` holds the int8 tensors plus dequant. The runtime dequantizes once at load and feeds the reconstructed floats in on every run. Encoder, adapter, and decoder stay on `integer_activations` and already keep UINT8 storage in a single `.ort`.
+
+A leftover single-file `frontend.ort` still loads, which is how pins published before the split keep working. `scripts/check-ort-weight-storage.py` walks every shipped `.ort` and fails if that fold comes back.
+
+Re-quantized models are published to a new dated directory on our CDN (currently `quantized_26_08_21`) instead of overwriting the previous files. That way a given version of this library always resolves the exact weights it was tested against, and your local model cache never mixes old and new files.
