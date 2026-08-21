@@ -519,6 +519,32 @@ target_link_libraries(tts-repeated-memory-test PRIVATE
     moonshine
 )
 
+# Repeated create/destroy mapping leak (GitHub issue #216). File-backed
+# Transcribers must munmap every .ort they opened; this test watches
+# /proc/self/maps across reload cycles. Driven from
+# scripts/reliability-remote.sh.
+add_executable(transcriber-reload-memory-test transcriber-reload-memory-test.cpp)
+set_target_properties(transcriber-reload-memory-test PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED YES
+    CXX_EXTENSIONS NO
+)
+target_include_directories(transcriber-reload-memory-test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}
+    ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+)
+if (IOS OR MOONSHINE_BUILD_SWIFT)
+    set_target_properties(transcriber-reload-memory-test PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.transcriber-reload-memory-test"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+    )
+endif()
+target_link_libraries(transcriber-reload-memory-test PRIVATE
+    moonshine
+)
+
 # Make this test C++11 to ensure our API is backwards compatible, even
 # though the internal implementation is C++20.
 add_executable(moonshine-cpp-test moonshine-cpp-test.cpp)

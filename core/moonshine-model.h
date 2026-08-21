@@ -41,6 +41,9 @@ struct MoonshineModel {
   const char *decoder_mmapped_data = nullptr;
   size_t decoder_mmapped_data_size = 0;
 
+  const char *alignment_mmapped_data = nullptr;
+  size_t alignment_mmapped_data_size = 0;
+
   std::vector<float> stream_audio_data;
   bool stream_active = false;
 
@@ -71,6 +74,11 @@ struct MoonshineModel {
 
   int load(const char *encoder_model_path, const char *decoder_model_path,
            const char *tokenizer_path, int32_t model_type);
+
+  // Releases the current decoder session (and its file mapping, if any) and
+  // loads a replacement from ``path``. Used to swap in
+  // decoder_with_attention.ort when word timestamps are requested.
+  int replace_decoder_from_path(const char *path);
 
   int load_alignment_model(const char *alignment_model_path);
 

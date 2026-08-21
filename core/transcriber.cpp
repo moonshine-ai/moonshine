@@ -330,20 +330,8 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
       std::string decoder_attn_path =
           append_path_component(model_path, "decoder_kv_with_attention.ort");
       if (std::filesystem::exists(decoder_attn_path)) {
-        // Replace the streaming decoder with the attention-enabled version
-        if (this->streaming_model->decoder_kv_session) {
-          this->streaming_model->ort_api->ReleaseSession(
-              this->streaming_model->decoder_kv_session);
-        }
-        this->streaming_model->decoder_kv_session = nullptr;
-        const char *dec_mmapped = nullptr;
-        size_t dec_mmapped_size = 0;
-        int32_t dec_err = ort_session_from_path(
-            this->streaming_model->ort_api, this->streaming_model->ort_env,
-            this->streaming_model->ort_session_options,
-            decoder_attn_path.c_str(),
-            &this->streaming_model->decoder_kv_session, &dec_mmapped,
-            &dec_mmapped_size);
+        int32_t dec_err = this->streaming_model->replace_decoder_kv_from_path(
+            decoder_attn_path.c_str());
         if (dec_err != 0) {
           LOGF("Warning: Failed to load decoder_kv_with_attention from %s\n",
                decoder_attn_path.c_str());
@@ -396,17 +384,8 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
 
       if (std::filesystem::exists(decoder_attn_path)) {
         // Single-pass: replace decoder with attention-enabled version
-        if (this->stt_model->decoder_session) {
-          this->stt_model->ort_api->ReleaseSession(
-              this->stt_model->decoder_session);
-        }
-        this->stt_model->decoder_session = nullptr;
-        const char *dec_mmapped = nullptr;
-        size_t dec_mmapped_size = 0;
-        int32_t dec_err = ort_session_from_path(
-            this->stt_model->ort_api, this->stt_model->ort_env,
-            this->stt_model->ort_session_options, decoder_attn_path.c_str(),
-            &this->stt_model->decoder_session, &dec_mmapped, &dec_mmapped_size);
+        int32_t dec_err = this->stt_model->replace_decoder_from_path(
+            decoder_attn_path.c_str());
         if (dec_err != 0) {
           LOGF("Warning: Failed to load decoder_with_attention from %s\n",
                decoder_attn_path.c_str());

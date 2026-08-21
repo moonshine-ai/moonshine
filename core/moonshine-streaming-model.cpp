@@ -25,6 +25,18 @@
 #include "debug-utils.h"
 #include "ort-utils.h"
 
+#ifndef _WIN32
+namespace {
+void unmap_model(const char **data, size_t *size) {
+  if (*data != nullptr) {
+    munmap(const_cast<char *>(*data), *size);
+    *data = nullptr;
+    *size = 0;
+  }
+}
+}  // namespace
+#endif
+
 // Streaming model constants
 #define MOONSHINE_STREAMING_TINY_ENCODER_DIM 288
 #define MOONSHINE_STREAMING_TINY_DECODER_DIM 288
@@ -200,16 +212,11 @@ MoonshineStreamingModel::~MoonshineStreamingModel() {
   delete ort_allocator;
   delete tokenizer;
 #ifndef _WIN32
-  if (frontend_mmapped_data) {
-    munmap(const_cast<char *>(frontend_mmapped_data),
-           frontend_mmapped_data_size);
-  }
-  if (encoder_mmapped_data) {
-    munmap(const_cast<char *>(encoder_mmapped_data), encoder_mmapped_data_size);
-  }
-  if (adapter_mmapped_data) {
-    munmap(const_cast<char *>(adapter_mmapped_data), adapter_mmapped_data_size);
-  }
+  unmap_model(&frontend_mmapped_data, &frontend_mmapped_data_size);
+  unmap_model(&encoder_mmapped_data, &encoder_mmapped_data_size);
+  unmap_model(&adapter_mmapped_data, &adapter_mmapped_data_size);
+  unmap_model(&cross_kv_mmapped_data, &cross_kv_mmapped_data_size);
+  unmap_model(&decoder_kv_mmapped_data, &decoder_kv_mmapped_data_size);
 #endif
 }
 
@@ -269,31 +276,40 @@ int MoonshineStreamingModel::load(const char *model_dir,
   std::string decoder_kv_path =
       append_path_component(model_dir, "decoder_kv.ort");
 
-  // Load cross_kv (required)
-  {
-    const char *cross_kv_mmap = nullptr;
-    size_t cross_kv_mmap_size = 0;
-    RETURN_ON_ERROR(ort_session_from_path(
-        ort_api, ort_env, ort_session_options, cross_kv_path.c_str(),
-        &cross_kv_session, &cross_kv_mmap, &cross_kv_mmap_size));
-    RETURN_ON_NULL(cross_kv_session);
-  }
+  // Load cross_kv (required). Keep the mapping on the model so the destructor
+  // can munmap it; a local pointer here is how issue #216 leaked ~83 MB per
+  // Transcriber.
+  RETURN_ON_ERROR(ort_session_from_path(
+      ort_api, ort_env, ort_session_options, cross_kv_path.c_str(),
+      &cross_kv_session, &cross_kv_mmapped_data, &cross_kv_mmapped_data_size));
+  RETURN_ON_NULL(cross_kv_session);
 
-  // Load decoder_kv (required)
-  {
-    const char *decoder_kv_mmap = nullptr;
-    size_t decoder_kv_mmap_size = 0;
-    RETURN_ON_ERROR(ort_session_from_path(
-        ort_api, ort_env, ort_session_options, decoder_kv_path.c_str(),
-        &decoder_kv_session, &decoder_kv_mmap, &decoder_kv_mmap_size));
-    RETURN_ON_NULL(decoder_kv_session);
-  }
+  RETURN_ON_ERROR(ort_session_from_path(
+      ort_api, ort_env, ort_session_options, decoder_kv_path.c_str(),
+      &decoder_kv_session, &decoder_kv_mmapped_data,
+      &decoder_kv_mmapped_data_size));
+  RETURN_ON_NULL(decoder_kv_session);
 
   // Load tokenizer
   tokenizer =
       new BinTokenizer(tokenizer_path, kSpaceString, kTokenizerEncoding);
   RETURN_ON_NULL(tokenizer);
 
+  return 0;
+}
+
+int MoonshineStreamingModel::replace_decoder_kv_from_path(const char *path) {
+  if (decoder_kv_session != nullptr) {
+    ort_api->ReleaseSession(decoder_kv_session);
+    decoder_kv_session = nullptr;
+  }
+#ifndef _WIN32
+  unmap_model(&decoder_kv_mmapped_data, &decoder_kv_mmapped_data_size);
+#endif
+  RETURN_ON_ERROR(ort_session_from_path(
+      ort_api, ort_env, ort_session_options, path, &decoder_kv_session,
+      &decoder_kv_mmapped_data, &decoder_kv_mmapped_data_size));
+  RETURN_ON_NULL(decoder_kv_session);
   return 0;
 }
 
@@ -390,20 +406,16 @@ int MoonshineStreamingModel::load_from_assets(const char *model_dir,
   RETURN_ON_NULL(adapter_session);
 
   // Load cross_kv and decoder_kv sessions (required for decoding)
-  const char *cross_kv_mmap = nullptr;
-  size_t cross_kv_mmap_size = 0;
-  RETURN_ON_ERROR(ort_session_from_asset(ort_api, ort_env, ort_session_options,
-                                         assetManager, cross_kv_path.c_str(),
-                                         &cross_kv_session, &cross_kv_mmap,
-                                         &cross_kv_mmap_size));
+  RETURN_ON_ERROR(ort_session_from_asset(
+      ort_api, ort_env, ort_session_options, assetManager,
+      cross_kv_path.c_str(), &cross_kv_session, &cross_kv_mmapped_data,
+      &cross_kv_mmapped_data_size));
   RETURN_ON_NULL(cross_kv_session);
 
-  const char *decoder_kv_mmap = nullptr;
-  size_t decoder_kv_mmap_size = 0;
-  RETURN_ON_ERROR(ort_session_from_asset(ort_api, ort_env, ort_session_options,
-                                         assetManager, decoder_kv_path.c_str(),
-                                         &decoder_kv_session, &decoder_kv_mmap,
-                                         &decoder_kv_mmap_size));
+  RETURN_ON_ERROR(ort_session_from_asset(
+      ort_api, ort_env, ort_session_options, assetManager,
+      decoder_kv_path.c_str(), &decoder_kv_session, &decoder_kv_mmapped_data,
+      &decoder_kv_mmapped_data_size));
   RETURN_ON_NULL(decoder_kv_session);
 
   tokenizer = new BinTokenizer(tokenizer_path, assetManager, kSpaceString,
