@@ -102,6 +102,80 @@ class FakeSlicedEngine {
   int whole_count_ = 0;
 };
 
+/// A stand-in for an engine whose stages are exact, and whose frames are not a
+/// whole number of output samples.
+///
+/// Modelled on Piper: 256 native samples a frame at 22.05 kHz, handed back at
+/// 24 kHz, so a frame is worth 278.6 output samples. `decode` returns the
+/// samples of the whole render that belong to the frames asked for, each
+/// carrying its own index, so a test can see whether anything was dropped,
+/// duplicated or shifted.
+class FakeExactEngine {
+ public:
+  static constexpr int kNativeHop = 256;
+  static constexpr int kNativeRate = 22050;
+  static constexpr int kOutputRate = 24000;
+
+  explicit FakeExactEngine(int frames) : frames_(frames) {}
+
+  int analyze(std::string_view text) {
+    ++analyze_count_;
+    return text.empty() ? 0 : frames_;
+  }
+
+  std::vector<float> decode(int first, int last) {
+    ++decode_count_;
+    std::vector<float> out;
+    const long begin = output_at(first);
+    const long end = last >= frames_ ? total() : output_at(last);
+    for (long index = begin; index < end; ++index) {
+      out.push_back(static_cast<float>(index));
+    }
+    return out;
+  }
+
+  std::vector<float> whole(std::string_view text) {
+    ++whole_count_;
+    return std::vector<float>(text.size(), 1.0f);
+  }
+
+  void refuse_to_slice() { frames_ = 0; }
+
+  /// Output samples in the whole utterance.
+  long total() const { return output_at(frames_); }
+
+  int analyze_count() const { return analyze_count_; }
+  int decode_count() const { return decode_count_; }
+  int whole_count() const { return whole_count_; }
+
+ private:
+  /// The first output sample at or after a frame boundary.
+  long output_at(int frame) const {
+    const double native = static_cast<double>(frame) * kNativeHop;
+    return static_cast<long>(
+        std::ceil(native * kOutputRate / static_cast<double>(kNativeRate)));
+  }
+
+  int frames_;
+  int analyze_count_ = 0;
+  int decode_count_ = 0;
+  int whole_count_ = 0;
+};
+
+std::unique_ptr<ExactSliceChunkSource> make_exact(FakeExactEngine* engine,
+                                                  float growth = 2.0f) {
+  ChunkPolicyOptions policy;
+  policy.first_chunk_seconds = 0.5f;
+  policy.crossfade_seconds = 0.0f;
+  policy.growth = growth;
+  return std::make_unique<ExactSliceChunkSource>(
+      [engine](std::string_view text) { return engine->analyze(text); },
+      [engine](int first, int last) { return engine->decode(first, last); },
+      [engine](std::string_view text) { return engine->whole(text); }, policy,
+      FakeExactEngine::kNativeRate / FakeExactEngine::kNativeHop,
+      FakeExactEngine::kOutputRate);
+}
+
 std::unique_ptr<SlicedDecodeChunkSource> make_sliced(FakeSlicedEngine* engine,
                                                      float growth = 2.0f) {
   ChunkPolicyOptions policy;
@@ -238,6 +312,68 @@ TEST_CASE("an utterance the stages decline is spoken whole, not dropped") {
 TEST_CASE("empty text produces no chunks") {
   FakeSlicedEngine engine(400);
   std::unique_ptr<SlicedDecodeChunkSource> source = make_sliced(&engine);
+  source->begin("");
+  CHECK_FALSE(source->has_more());
+  CHECK(source->next().empty());
+}
+
+// The exact source hands back what the engine returns, untouched. That is the
+// whole of its contract, and it is what lets an engine whose frames are worth
+// a fractional number of output samples stream at all: nothing here converts
+// between frames and samples, so there is nothing to round.
+TEST_CASE("exact chunks join up with every sample in place") {
+  const int frames = 500;
+  FakeExactEngine engine(frames);
+  std::unique_ptr<ExactSliceChunkSource> source = make_exact(&engine);
+  source->begin("anything");
+
+  std::vector<float> joined;
+  int chunks = 0;
+  while (source->has_more()) {
+    const std::vector<float> chunk = source->next();
+    joined.insert(joined.end(), chunk.begin(), chunk.end());
+    ++chunks;
+  }
+
+  CHECK(chunks > 1);
+  REQUIRE(joined.size() == static_cast<size_t>(engine.total()));
+  for (size_t index = 0; index < joined.size(); ++index) {
+    REQUIRE(joined[index] == doctest::Approx(static_cast<float>(index)));
+  }
+  CHECK(engine.analyze_count() == 1);
+  CHECK(engine.decode_count() == chunks);
+}
+
+TEST_CASE("exact chunks grow, and the first is the shortest") {
+  FakeExactEngine engine(500);
+  std::unique_ptr<ExactSliceChunkSource> source = make_exact(&engine);
+  source->begin("anything");
+  std::vector<size_t> sizes;
+  while (source->has_more()) {
+    sizes.push_back(source->next().size());
+  }
+  REQUIRE(sizes.size() > 2);
+  for (size_t i = 1; i + 1 < sizes.size(); ++i) {
+    CHECK(sizes[i] > sizes[i - 1]);
+  }
+}
+
+TEST_CASE("an utterance the exact stages decline is spoken whole") {
+  FakeExactEngine engine(500);
+  std::unique_ptr<ExactSliceChunkSource> source = make_exact(&engine);
+  engine.refuse_to_slice();
+  source->begin("cannot be sliced");
+
+  REQUIRE(source->has_more());
+  CHECK(source->next().size() == std::string_view("cannot be sliced").size());
+  CHECK(engine.whole_count() == 1);
+  CHECK(engine.decode_count() == 0);
+  CHECK_FALSE(source->has_more());
+}
+
+TEST_CASE("empty text produces no exact chunks") {
+  FakeExactEngine engine(500);
+  std::unique_ptr<ExactSliceChunkSource> source = make_exact(&engine);
   source->begin("");
   CHECK_FALSE(source->has_more());
   CHECK(source->next().empty());

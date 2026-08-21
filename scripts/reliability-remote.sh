@@ -94,7 +94,7 @@ echo "=============================================================="
 # Model/TTS binaries are gitignored; bootstrap from CDN/HF on the box so tests
 # and the TTS memory regression see the same bytes clients download.
 if [[ ! -f "${REPO_ROOT_DIR}/test-assets/tiny-en/encoder_model.ort" ]] || \
-   [[ ! -f "${REPO_ROOT_DIR}/core/moonshine-tts/data/kokoro/model.model.ort" ]]; then
+   [[ ! -f "${REPO_ROOT_DIR}/core/moonshine-tts/data/kokoro/prosody.model.ort" ]]; then
   echo "=== Fetching voice assets (scripts/fetch-voice-assets.sh) ==="
   "${SCRIPTS_DIR}/fetch-voice-assets.sh" all
 fi

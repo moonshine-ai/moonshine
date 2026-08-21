@@ -785,13 +785,10 @@ std::vector<std::string> kokoro_vocoder_dependency_keys_with_options(
     vid = select_voice_id(profile.kokoro_lang, opt.voice, profile.default_voice,
                           voices_dir, &opt.files, g2p.g2p_root);
   }
-  // The stages are listed alongside the whole-utterance pair rather than
-  // instead of it. They are what lets streaming cut below a sentence, and a
-  // caller who fetches dependencies and then streams would otherwise silently
-  // get sentence-sized chunks with no indication of why.
-  return {std::string(kTtsKokoroSplitModelKey),
-          std::string(kTtsKokoroSplitWeightsKey),
-          std::string(kTtsKokoroProsodyModelKey),
+  // The two stages and no whole-utterance model. Running them back to back
+  // produces the same samples that model does, so carrying it as well would
+  // double the download for nothing.
+  return {std::string(kTtsKokoroProsodyModelKey),
           std::string(kTtsKokoroProsodyWeightsKey),
           std::string(kTtsKokoroDecoderModelKey),
           std::string(kTtsKokoroDecoderWeightsKey),
@@ -1002,6 +999,9 @@ struct KokoroTtsEngine {
   std::vector<SplitWeight> prosody_weights_{};
   std::vector<SplitWeight> decoder_weights_{};
   bool stages_loaded_ = false;
+  /// Whether `session_` holds a whole-utterance model. False for what we
+  /// publish, which is the stages and nothing else.
+  bool monolith_loaded_ = false;
   /// The utterance currently being decoded a slice at a time. Safe as engine
   /// state because a synthesizer runs one generation at a time.
   Prosody analyzed_{};
@@ -1110,14 +1110,16 @@ struct KokoroTtsEngine {
     return it != tts_files_.entries.end() && it->second.has_memory();
   }
 
-  /// Opens the Kokoro graph, preferring the split pair.
+  /// Opens the whole-utterance Kokoro graph, preferring the split pair.
   ///
-  /// Kokoro ships as ``model.model.ort`` plus ``model.weights.ort``, the same
-  /// graph with its weights lifted out, which is what keeps those weights int8
-  /// through conversion to ORT format. See split-weights.h. A single
-  /// ``model.ort`` at the anchor path is still loaded, which is what a caller
-  /// pointing ``kokoro_model`` at a model of their own gets.
-  void load_model(const Ort::SessionOptions& session_opts) {
+  /// What we publish is the two stages, not this, so the usual outcome is that
+  /// nothing is found and the caller falls back to running the stages back to
+  /// back. It stays because a caller can point ``kokoro_model`` at a model of
+  /// their own, which arrives as one graph, and because installs predating the
+  /// stages still have the pair on disk.
+  ///
+  /// Returns whether a model was opened.
+  bool load_model(const Ort::SessionOptions& session_opts) {
     std::filesystem::path graph_path = model_path_;
     graph_path.replace_extension(".model.ort");
     std::filesystem::path weights_path = model_path_;
@@ -1150,7 +1152,7 @@ struct KokoroTtsEngine {
                 "KokoroTtsEngine: split model loaded (%zu + %zu bytes, %zu "
                 "weight tensors)",
                 graph_len, weights_len, split_weights_.size());
-        return;
+        return true;
       }
       free_asset(kTtsKokoroSplitModelKey);
     }
@@ -1159,23 +1161,23 @@ struct KokoroTtsEngine {
     size_t model_len = 0;
     if (!load_asset_if_present(kTtsKokoroModelKey, model_path_, &model_buf,
                                &model_len)) {
-      throw std::runtime_error(
-          "MoonshineTTS: no Kokoro model found. Looked for the split pair " +
-          graph_path.string() + " plus " + weights_path.filename().string() +
-          ", and for " + model_path_.string() + ".");
+      return false;
     }
     require_ort_model_bytes(model_buf, model_len, "Kokoro model");
     session_ = Ort::Session(env_, model_buf, model_len, session_opts);
     free_asset(kTtsKokoroModelKey);
     LOGF_IF(log_profiling_, "KokoroTtsEngine: model loaded (%zu bytes)",
             model_len);
+    return true;
   }
 
-  /// Opens the prosody/decoder pair, if it was shipped alongside the model.
+  /// Opens the prosody/decoder pair, which is the form Kokoro is published in.
   ///
-  /// Optional on purpose: a caller who pointed ``kokoro_model`` at a model of
-  /// their own, or an install predating these files, keeps working and simply
-  /// streams a sentence at a time. Nothing here throws for that reason.
+  /// Still optional: a caller who pointed ``kokoro_model`` at a model of their
+  /// own, or an install predating these files, keeps working from the
+  /// whole-utterance graph and simply streams a sentence at a time. Nothing
+  /// here throws for that reason; the constructor is what insists on finding
+  /// one form or the other.
   void load_stages(const Ort::SessionOptions& session_opts) {
     const std::filesystem::path dir = model_path_.parent_path();
     if (!open_stage(session_opts, dir / "prosody.model.ort",
@@ -1246,37 +1248,53 @@ struct KokoroTtsEngine {
   }
 
   Prosody run_prosody(std::string_view text) {
-    Prosody out;
     if (!stages_loaded_) {
-      return out;
+      return {};
     }
     const std::string ipa = g2p_->text_to_ipa(text, nullptr);
     if (trim_ascii_ws_copy(ipa).empty()) {
-      return out;
+      return {};
     }
     const std::string phonemes =
         normalize_ipa_to_kokoro(ipa, kokoro_lang_, vocab_keys_);
     if (phonemes.empty()) {
-      return out;
+      return {};
     }
     std::vector<int64_t> ids = phoneme_str_to_input_ids(phonemes, vocab_);
     // Slicing gains nothing on an utterance the model cannot take in one go,
     // and the caller has a whole-utterance path that handles it.
-    if (ids.empty() || ids.size() > 512) {
-      return out;
+    if (ids.size() > 512) {
+      return {};
     }
+    return run_prosody_ids(ids, style_row_for(phonemes));
+  }
 
+  /// The row of the voice tensor a phoneme string of this length asks for.
+  ///
+  /// Kokoro's voices are a table rather than a vector: the style it speaks a
+  /// long sentence with is not the one it speaks a short one with. Empty when
+  /// the row is past the end of the tensor.
+  std::vector<float> style_row_for(const std::string& phonemes) const {
     const std::u32string points = utf8_str_to_u32(phonemes);
     const size_t count = std::max<size_t>(points.size(), 1);
     const size_t row = std::min(
         count - 1, static_cast<size_t>(voice_rows_ > 0 ? voice_rows_ - 1 : 0));
     const size_t offset = row * static_cast<size_t>(voice_cols_);
     if (offset + static_cast<size_t>(voice_cols_) > voice_.size()) {
-      return out;
+      return {};
     }
-    out.style.assign(
+    return std::vector<float>(
         voice_.begin() + static_cast<std::ptrdiff_t>(offset),
         voice_.begin() + static_cast<std::ptrdiff_t>(offset + voice_cols_));
+  }
+
+  /// The prosody stage over one run of tokens, whatever produced them.
+  Prosody run_prosody_ids(std::vector<int64_t>& ids, std::vector<float> style) {
+    Prosody out;
+    if (!stages_loaded_ || ids.empty() || style.empty()) {
+      return out;
+    }
+    out.style = std::move(style);
 
     const int64_t token_count = static_cast<int64_t>(ids.size());
     const std::array<int64_t, 2> shape_ids{1, token_count};
@@ -1470,12 +1488,23 @@ struct KokoroTtsEngine {
     TIMER_START_IF(log_profiling_, kokoro_load_model);
     const Ort::SessionOptions kokoro_session_options =
         make_ort_session_options(opt.ort_provider_names, opt.coreml_cache_dir);
-    load_model(kokoro_session_options);
+    monolith_loaded_ = load_model(kokoro_session_options);
     load_stages(kokoro_session_options);
+    if (!monolith_loaded_ && !stages_loaded_) {
+      const std::filesystem::path dir = model_path_.parent_path();
+      throw std::runtime_error(
+          "MoonshineTTS: no Kokoro model found. Looked for the stages " +
+          (dir / "prosody.model.ort").string() +
+          " plus decoder.model.ort and "
+          "their weights, and for a whole-utterance model at " +
+          model_path_.string() + ".");
+    }
     TIMER_END_IF(log_profiling_, kokoro_load_model);
 
-    detect_kokoro_style_input_name();
-    detect_speed_input_element_type();
+    if (monolith_loaded_) {
+      detect_kokoro_style_input_name();
+      detect_speed_input_element_type();
+    }
     const std::string lk = normalize_lang_key(language);
     resolve_lang_for_kokoro(lk, g2p_opt_, profile_, g2p_dialect_, opt.voice);
     maybe_align_en_profile_for_kokoro_voice(opt.voice, profile_, g2p_dialect_);
@@ -1584,8 +1613,6 @@ struct KokoroTtsEngine {
     std::vector<float> wave_all;
     wave_all.reserve(chunks.size() * 8192);
 
-    static const char* out_names[] = {"waveform"};
-
     for (size_t ci = 0; ci < chunks.size(); ++ci) {
       const std::string& piece = chunks[ci];
       if (trim_ascii_ws_copy(piece).empty()) {
@@ -1600,64 +1627,21 @@ struct KokoroTtsEngine {
               "KokoroTtsEngine::synthesize: chunk %zu/%zu, %zu tokens", ci + 1,
               chunks.size(), ids.size());
 
-      const int64_t ntok = static_cast<int64_t>(ids.size());
-      const std::array<int64_t, 2> shape_ids{1, ntok};
-
-      const std::u32string pu = utf8_str_to_u32(piece);
-      const size_t ncp = std::max<size_t>(pu.size(), 1);
-      const size_t idx = std::min(
-          ncp - 1, static_cast<size_t>(voice_rows_ > 0 ? voice_rows_ - 1 : 0));
-      const size_t off = idx * static_cast<size_t>(voice_cols_);
-      std::vector<float> ref_row(voice_cols_);
-      if (off + voice_cols_ > voice_.size()) {
+      std::vector<float> ref_row = style_row_for(piece);
+      if (ref_row.empty()) {
         throw std::runtime_error(
             "MoonshineTTS: voice tensor index out of range");
       }
-      std::copy(voice_.begin() + static_cast<std::ptrdiff_t>(off),
-                voice_.begin() + static_cast<std::ptrdiff_t>(off + voice_cols_),
-                ref_row.begin());
-      const std::array<int64_t, 2> shape_ref{1,
-                                             static_cast<int64_t>(voice_cols_)};
-
-      std::vector<const char*> in_names{"input_ids", style_input_name_.c_str(),
-                                        "speed"};
-      std::vector<Ort::Value> inputs;
-      inputs.push_back(Ort::Value::CreateTensor<int64_t>(
-          mem_, ids.data(), ids.size(), shape_ids.data(), shape_ids.size()));
-      inputs.push_back(
-          Ort::Value::CreateTensor<float>(mem_, ref_row.data(), ref_row.size(),
-                                          shape_ref.data(), shape_ref.size()));
-      float speed_f = static_cast<float>(speed_);
-      double speed_val = speed_;
-      if (speed_elem_type_ == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
-        const std::array<int64_t, 1> shape_speed{1};
-        inputs.push_back(Ort::Value::CreateTensor<float>(
-            mem_, &speed_f, 1, shape_speed.data(), 1));
-      } else {
-        inputs.push_back(
-            Ort::Value::CreateTensor<double>(mem_, &speed_val, 1, nullptr, 0));
-      }
-      append_split_weight_inputs(split_weights_, mem_, inputs, in_names);
 
       TIMER_START_IF(log_profiling_, kokoro_onnx_run);
-      Ort::RunOptions run_opts{nullptr};
-      auto outputs = session_.Run(run_opts, in_names.data(), inputs.data(),
-                                  inputs.size(), out_names, 1);
+      const std::vector<float> wave =
+          monolith_loaded_ ? run_whole_model(ids, ref_row)
+                           : run_stages_whole(ids, std::move(ref_row));
       TIMER_END_IF(log_profiling_, kokoro_onnx_run);
-
-      const Ort::Value& wav = outputs[0];
-      const auto ti = wav.GetTensorTypeAndShapeInfo();
-      const size_t n_el = ti.GetElementCount();
-      if (ti.GetElementType() != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
-        throw std::runtime_error("MoonshineTTS: ONNX output is not float32");
-      }
-      const float* wptr = wav.GetTensorData<float>();
-      for (size_t i = 0; i < n_el; ++i) {
-        wave_all.push_back(wptr[i]);
-      }
+      wave_all.insert(wave_all.end(), wave.begin(), wave.end());
       LOGF_IF(log_profiling_,
               "KokoroTtsEngine::synthesize: chunk %zu produced %zu samples",
-              ci + 1, n_el);
+              ci + 1, wave.size());
     }
 
     apply_synthesis_output_effects(wave_all, normalize_audio_, output_volume_);
@@ -1669,6 +1653,60 @@ struct KokoroTtsEngine {
             MoonshineTTS::kSampleRateHz);
     TIMER_END_IF(log_profiling_, kokoro_synthesize);
     return wave_all;
+  }
+
+  /// One phoneme chunk through the whole-utterance graph.
+  std::vector<float> run_whole_model(std::vector<int64_t>& ids,
+                                     std::vector<float>& style) {
+    const std::array<int64_t, 2> shape_ids{1, static_cast<int64_t>(ids.size())};
+    const std::array<int64_t, 2> shape_style{
+        1, static_cast<int64_t>(style.size())};
+    std::vector<const char*> in_names{"input_ids", style_input_name_.c_str(),
+                                      "speed"};
+    std::vector<Ort::Value> inputs;
+    inputs.push_back(Ort::Value::CreateTensor<int64_t>(
+        mem_, ids.data(), ids.size(), shape_ids.data(), shape_ids.size()));
+    inputs.push_back(Ort::Value::CreateTensor<float>(
+        mem_, style.data(), style.size(), shape_style.data(),
+        shape_style.size()));
+    float speed_f = static_cast<float>(speed_);
+    double speed_val = speed_;
+    if (speed_elem_type_ == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+      const std::array<int64_t, 1> shape_speed{1};
+      inputs.push_back(Ort::Value::CreateTensor<float>(mem_, &speed_f, 1,
+                                                       shape_speed.data(), 1));
+    } else {
+      inputs.push_back(
+          Ort::Value::CreateTensor<double>(mem_, &speed_val, 1, nullptr, 0));
+    }
+    append_split_weight_inputs(split_weights_, mem_, inputs, in_names);
+
+    static const char* out_names[] = {"waveform"};
+    Ort::RunOptions run_opts{nullptr};
+    auto outputs = session_.Run(run_opts, in_names.data(), inputs.data(),
+                                inputs.size(), out_names, 1);
+    const Ort::Value& wav = outputs[0];
+    const auto info = wav.GetTensorTypeAndShapeInfo();
+    if (info.GetElementType() != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+      throw std::runtime_error("MoonshineTTS: ONNX output is not float32");
+    }
+    const float* data = wav.GetTensorData<float>();
+    return std::vector<float>(data, data + info.GetElementCount());
+  }
+
+  /// One phoneme chunk through the two stages, asking the decoder for every
+  /// frame at once.
+  ///
+  /// This is what the whole-utterance graph does internally, so it returns the
+  /// same samples, and it is why that graph no longer has to be downloaded.
+  std::vector<float> run_stages_whole(std::vector<int64_t>& ids,
+                                      std::vector<float> style) {
+    const Prosody prosody = run_prosody_ids(ids, std::move(style));
+    if (prosody.frames <= 0) {
+      throw std::runtime_error(
+          "MoonshineTTS: Kokoro prosody stage produced no frames");
+    }
+    return run_decoder(prosody, 0, prosody.frames);
   }
 };
 
@@ -1756,8 +1794,8 @@ struct MoonshineTTS::Impl {
     TIMER_END_IF(log_profiling_, tts_init);
   }
 
-  /// Kokoro cuts inside a sentence when its stage models are installed;
-  /// everything else streams a sentence at a time.
+  /// Kokoro and Piper cut inside a sentence when their stage models are
+  /// installed; everything else streams a sentence at a time.
   ///
   /// An earlier version of this comment said sub-sentence chunking had been
   /// measured and rejected. That rested on a weighted log-mel distance, which
@@ -1768,8 +1806,10 @@ struct MoonshineTTS::Impl {
   /// chunk pays for is charged fewer times. See
   /// scripts/kokoro-stream-prototype.py for the measurements.
   ///
-  /// Piper does split cleanly, but its whole-sentence time to first audio is
-  /// already about 110 ms, which is not worth re-publishing 88 voices to halve.
+  /// Piper splits more cleanly still. Its generator reproduces the whole
+  /// render from a padded slice, so its chunks need no crossfade and no
+  /// searching for a quiet frame to cut on, and its own `decode_analyzed`
+  /// handles the level and the resample to the output rate.
   std::unique_ptr<ChunkSource> make_chunk_source(
       const ChunkPolicyOptions& policy) {
     if (kokoro_ && kokoro_->supports_slicing()) {
@@ -1803,6 +1843,22 @@ struct MoonshineTTS::Impl {
       return std::make_unique<SlicedDecodeChunkSource>(
           std::move(analyze), std::move(decode), std::move(fallback), policy,
           kKokoroSamplesPerFrame, MoonshineTTS::kSampleRateHz);
+    }
+    if (piper_ && piper_->supports_slicing()) {
+      ChunkPolicyOptions exact = policy;
+      exact.crossfade_seconds = 0.f;
+      auto analyze = [this](std::string_view text) {
+        return piper_->analyze(text);
+      };
+      auto decode = [this](int first, int last) {
+        return piper_->decode_analyzed(first, last);
+      };
+      auto fallback = [this](std::string_view text) {
+        return synthesize_unlocked(text);
+      };
+      return std::make_unique<ExactSliceChunkSource>(
+          std::move(analyze), std::move(decode), std::move(fallback), exact,
+          piper_->frames_per_second(), MoonshineTTS::kSampleRateHz);
     }
     return std::make_unique<WholeUtteranceChunkSource>(
         [this](std::string_view text) { return synthesize_unlocked(text); },

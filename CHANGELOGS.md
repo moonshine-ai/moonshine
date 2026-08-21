@@ -11,7 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `moonshine-voice[finetune]` is an alias of `[lora]`; `moonshine-voice finetune` runs the same trainer.
 - Built-in `--dataset uwb_atcc` (real VHF, research/NC), `--sites encoder|both`, `--adapt full`, and `--eval-dataset atco2`.
 - Streaming text to speech: push text as it arrives with `stream()` / `push_text` / `flush`, and take audio back chunk by chunk or through an `on_chunk` handler.
-- Streaming Kokoro starts speaking part way through a sentence rather than waiting for the whole one, so the first audio arrives sooner on long replies.
+- Streaming starts speaking part way through a sentence rather than waiting for the whole one, so the first audio arrives sooner on long replies. Piper's sub-sentence chunks are sample-exact.
 - Cancelling a streamed reply now reports a cancelled status to whoever is pulling chunks, so an interrupted reply is distinguishable from one that ran out of text.
 - `AgentFlow.say_stream()` and `Dialog.say_stream()` speak a language model's reply as it is generated, instead of waiting for the whole thing.
 - `moonshine_tts_split_utterances()` exposes the sentence splitter that streaming and `say()` share.
@@ -21,7 +21,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Text to speech now splits sentences with one shared implementation that keeps `Dr. Smith` and `J. R. R. Tolkien` whole and understands `。！？؟।` terminators, replacing four different naive rules.
 - Text to speech holds the audio device open across queued utterances, so consecutive `say()` calls no longer leave a gap or a click between them.
 - Kokoro text to speech is 4x faster on short sentences and 2x on long ones on a Raspberry Pi 4, a closer match to the reference voice, and a 10 MB smaller download. It uses about 85 MB more memory.
-- Kokoro now ships as `kokoro/model.model.ort` plus `kokoro/model.weights.ort`. In-memory callers should pass both keys; `kokoro/model.ort` still loads if you supply your own.
+- Kokoro now ships as two stages, `kokoro/prosody.*` and `kokoro/decoder.*`, and no whole-utterance model. They render the same audio, so the download halves. In-memory callers should pass all four keys.
+- Every Piper voice now ships as `<stem>.upstream.*` plus `<stem>.generator.*`, the same total size and the same audio, which is what lets a reply start playing before it is synthesized.
 - Streamed speech is levelled from a per-voice measurement instead of being left unnormalized, so it no longer arrives several decibels quieter than `say()` and the same across voices.
 - Domain customization docs and the fine-tune Colab no longer call ATCOSIM radio. Phraseology stays the default walkthrough; VHF is a separate command. The example lives under `examples/python/finetune/`.
 

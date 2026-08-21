@@ -176,10 +176,11 @@ TEST_CASE(
   const fs::path voices_dir = g_data_root / "kokoro" / "voices";
   REQUIRE(std::filesystem::is_directory(voices_dir));
 
-  // Kokoro ships as a split ORT pair, and both halves have to reach the
-  // library as buffers for this to be a real in-memory load.
+  // Kokoro ships as two stages, each a split ORT pair, and all four files have
+  // to reach the library as buffers for this to be a real in-memory load.
   for (const char* key :
-       {"kokoro/model.model.ort", "kokoro/model.weights.ort"}) {
+       {"kokoro/prosody.model.ort", "kokoro/prosody.weights.ort",
+        "kokoro/decoder.model.ort", "kokoro/decoder.weights.ort"}) {
     const auto it =
         std::find_if(bundle.begin(), bundle.end(),
                      [key](const auto& pr) { return pr.first == key; });

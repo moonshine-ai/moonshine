@@ -1,4 +1,4 @@
-// Measures the reference peak of every installed Kokoro voice, offline.
+// Measures the reference peak of every installed voice, offline.
 //
 // One-shot synthesis peak-normalizes, which needs the finished waveform.
 // Streaming cannot wait for that, so it needs a gain chosen before the decoder
@@ -13,11 +13,15 @@
 // speaking, which accounts for most of the variation and is known before any
 // text arrives. Hence a static table, measured here and read at synthesis time.
 //
-// Writes the generated header that kokoro-voice-levels.h declares. Run it after
-// changing the Kokoro model or the shipped voice set:
+// Both streaming engines need this, and for the same reason, so one tool
+// measures either. Writes the generated header that kokoro-voice-levels.h or
+// piper-voice-levels.h declares. Run it after changing a model or the shipped
+// voice set:
 //
 //   tts-voice-level-calibrate --model-root core/moonshine-tts/data \
 //       --out core/moonshine-tts/src/kokoro-voice-levels-data.h
+//   tts-voice-level-calibrate --model-root core/moonshine-tts/data \
+//       --engine piper --out core/moonshine-tts/src/piper-voice-levels-data.h
 //
 // Without --out it prints the measurements and the accuracy they imply, which
 // is the useful mode when checking whether a change moved the levels.
@@ -144,6 +148,97 @@ const std::vector<PhraseSet>& calibration_phrases() {
         "根据最新数据，收入增长了百分之十二。",
         "在下一个路口左转，然后继续走三公里。", "等一下！马上停下！",
         "下午预计有雨，请带上雨伞。"}},
+      {"de",
+       {"Ja.", "Das kann ich für Sie erledigen.",
+        "Der alte Leuchtturm stand allein gegen die Wellen der Nordsee.",
+        "Lassen Sie mich das kurz prüfen, es dauert nur einen Moment.",
+        "Ihr Termin ist für Dienstag, den vierzehnten, um halb drei "
+        "bestätigt.",
+        "Entschuldigung, das habe ich nicht verstanden. Können Sie das "
+        "wiederholen?",
+        "Den neuesten Zahlen zufolge stiegen die Einnahmen um zwölf Prozent.",
+        "Biegen Sie an der nächsten Kreuzung links ab und fahren Sie drei "
+        "Kilometer weiter.",
+        "Warten Sie! Halten Sie sofort an!",
+        "Am Nachmittag wird Regen erwartet, nehmen Sie also einen Schirm "
+        "mit."}},
+      {"nl",
+       {"Ja.", "Dat kan ik voor u doen.",
+        "De oude vuurtoren stond alleen tegen de golven van de noordzee.",
+        "Laat me dat even controleren, het duurt maar een moment.",
+        "Uw afspraak is bevestigd voor dinsdag de veertiende om half drie.",
+        "Sorry, dat heb ik niet verstaan. Kunt u het herhalen?",
+        "Volgens de laatste cijfers zijn de inkomsten met twaalf procent "
+        "gestegen.",
+        "Sla bij de volgende kruising linksaf en rijd nog drie kilometer "
+        "door.",
+        "Wacht! Stop onmiddellijk!",
+        "Vanmiddag wordt regen verwacht, neem dus een paraplu mee."}},
+      {"ru",
+       {"Да.", "Я могу это сделать для вас.",
+        "Старый маяк одиноко стоял перед волнами северного моря.",
+        "Позвольте мне проверить, это займёт всего минуту.",
+        "Ваша встреча подтверждена на вторник, четырнадцатое, в половине "
+        "третьего.",
+        "Извините, я не расслышал. Не могли бы вы повторить?",
+        "По последним данным, доходы выросли на двенадцать процентов.",
+        "На следующем перекрёстке поверните налево и проедьте три километра.",
+        "Подождите! Остановитесь немедленно!",
+        "Во второй половине дня ожидается дождь, возьмите зонт."}},
+      {"uk",
+       {"Так.", "Я можу це зробити для вас.",
+        "Старий маяк самотньо стояв перед хвилями північного моря.",
+        "Дозвольте мені перевірити, це займе лише хвилину.",
+        "Вашу зустріч підтверджено на вівторок, чотирнадцяте, о пів на "
+        "третю.",
+        "Вибачте, я не розчув. Не могли б ви повторити?",
+        "За останніми даними, доходи зросли на дванадцять відсотків.",
+        "На наступному перехресті поверніть ліворуч і проїдьте три "
+        "кілометри.",
+        "Зачекайте! Негайно зупиніться!",
+        "У другій половині дня очікується дощ, візьміть парасольку."}},
+      {"tr",
+       {"Evet.", "Bunu sizin için yapabilirim.",
+        "Eski deniz feneri kuzey denizinin dalgalarına karşı tek başına "
+        "duruyordu.",
+        "Bir kontrol edeyim, sadece bir dakika sürecek.",
+        "Randevunuz on dört salı günü saat iki buçuk için onaylandı.",
+        "Üzgünüm, anlayamadım. Tekrar eder misiniz?",
+        "Son rakamlara göre gelirler yüzde on iki arttı.",
+        "Bir sonraki kavşaktan sola dönün ve üç kilometre devam edin.",
+        "Bekleyin! Hemen durun!",
+        "Öğleden sonra yağmur bekleniyor, yanınıza şemsiye alın."}},
+      {"vi",
+       {"Vâng.", "Tôi có thể làm việc đó cho bạn.",
+        "Ngọn hải đăng cũ đứng một mình trước những con sóng của biển bắc.",
+        "Để tôi kiểm tra, việc này chỉ mất một lát thôi.",
+        "Cuộc hẹn của bạn đã được xác nhận vào thứ ba ngày mười bốn lúc hai "
+        "giờ rưỡi.",
+        "Xin lỗi, tôi chưa nghe rõ. Bạn có thể nhắc lại không?",
+        "Theo số liệu mới nhất, doanh thu đã tăng mười hai phần trăm.",
+        "Rẽ trái ở ngã tư tiếp theo rồi đi thêm ba ki lô mét.",
+        "Khoan đã! Dừng lại ngay!",
+        "Chiều nay dự báo có mưa, bạn nhớ mang theo ô."}},
+      {"ko",
+       {"네.", "그 일은 제가 처리해 드릴 수 있습니다.",
+        "오래된 등대가 북쪽 바다의 파도 앞에 홀로 서 있었다.",
+        "잠시 확인해 보겠습니다, 금방 끝납니다.",
+        "예약은 십사일 화요일 두 시 반으로 확정되었습니다.",
+        "죄송합니다, 잘 듣지 못했습니다. 다시 말씀해 주시겠어요?",
+        "최신 수치에 따르면 수익이 십이 퍼센트 증가했습니다.",
+        "다음 사거리에서 좌회전한 뒤 삼 킬로미터를 더 가세요.",
+        "기다리세요! 지금 멈추세요!",
+        "오후에 비가 올 예정이니 우산을 챙기세요."}},
+      {"ar_msa",
+       {"نعم.", "يمكنني القيام بذلك من أجلك.",
+        "وقفت المنارة القديمة وحدها في مواجهة أمواج بحر الشمال.",
+        "دعني أتحقق من ذلك، لن يستغرق الأمر سوى لحظة.",
+        "تم تأكيد موعدك يوم الثلاثاء الرابع عشر في الثانية والنصف.",
+        "عذرا، لم أفهم ذلك. هل يمكنك تكراره؟",
+        "وفقا لأحدث الأرقام، ارتفعت الإيرادات بنسبة اثني عشر بالمئة.",
+        "انعطف يسارا عند التقاطع التالي وتابع لمسافة ثلاثة كيلومترات.",
+        "انتظر! توقف الآن!",
+        "من المتوقع هطول المطر بعد الظهر، لذا خذ مظلة معك."}},
   };
   return sets;
 }
@@ -185,18 +280,48 @@ float reference_peak(std::vector<float> peaks) {
   return peaks[index];
 }
 
-std::vector<std::string> installed_voices(
+/// One voice to measure.
+///
+/// The three names differ: `voice` is what the synthesizer is asked for, `key`
+/// is what the generated table is looked up by, and `language` is what the
+/// synthesizer has to be built for before it will accept the voice at all.
+struct VoiceRequest {
+  std::string voice;
+  std::string key;
+  std::string language;
+};
+
+/// Every Piper voice in the tree, found by its config rather than its model,
+/// because the model's file names depend on which ORT form it ships in.
+std::vector<VoiceRequest> piper_voices(
     const std::filesystem::path& model_root) {
-  std::vector<std::string> ids;
-  const std::filesystem::path dir = model_root / "kokoro" / "voices";
+  std::vector<VoiceRequest> voices;
   std::error_code ec;
-  for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
-    if (entry.path().extension() == ".kokorovoice") {
-      ids.push_back(entry.path().stem().string());
+  for (const auto& language :
+       std::filesystem::directory_iterator(model_root, ec)) {
+    const std::filesystem::path dir = language.path() / "piper-voices";
+    if (!std::filesystem::is_directory(dir)) {
+      continue;
+    }
+    std::error_code inner;
+    for (const auto& entry : std::filesystem::directory_iterator(dir, inner)) {
+      const std::string name = entry.path().filename().string();
+      static constexpr std::string_view kSuffix = ".onnx.json";
+      if (name.size() <= kSuffix.size() ||
+          name.compare(name.size() - kSuffix.size(), kSuffix.size(), kSuffix) !=
+              0) {
+        continue;
+      }
+      const std::string stem = name.substr(0, name.size() - kSuffix.size());
+      voices.push_back(
+          {"piper_" + stem, stem, language.path().filename().string()});
     }
   }
-  std::sort(ids.begin(), ids.end());
-  return ids;
+  std::sort(voices.begin(), voices.end(),
+            [](const VoiceRequest& a, const VoiceRequest& b) {
+              return a.key < b.key;
+            });
+  return voices;
 }
 
 /// Kokoro voice ids start with a language and gender code, and a synthesizer
@@ -227,13 +352,51 @@ std::string_view language_for_voice(std::string_view id) {
   }
 }
 
-bool measure_voice(const std::string& id, const std::string& model_root,
+std::vector<VoiceRequest> kokoro_voices(
+    const std::filesystem::path& model_root) {
+  std::vector<VoiceRequest> voices;
+  const std::filesystem::path dir = model_root / "kokoro" / "voices";
+  std::error_code ec;
+  for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+    if (entry.path().extension() == ".kokorovoice") {
+      const std::string id = entry.path().stem().string();
+      voices.push_back({id, id, std::string(language_for_voice(id))});
+    }
+  }
+  std::sort(voices.begin(), voices.end(),
+            [](const VoiceRequest& a, const VoiceRequest& b) {
+              return a.key < b.key;
+            });
+  return voices;
+}
+
+/// Which phrase set to speak in. The tree's language directories are finer
+/// grained than the phrase sets need to be: one set of Portuguese phrases is
+/// close enough to measure a European voice's level as well as a Brazilian
+/// one, and the same goes for the Spanish and Chinese variants.
+std::string_view phrase_key_for(std::string_view language) {
+  if (language.rfind("en", 0) == 0) {
+    return "en";
+  }
+  if (language.rfind("es", 0) == 0) {
+    return "es";
+  }
+  if (language.rfind("pt", 0) == 0) {
+    return "pt_br";
+  }
+  if (language.rfind("zh", 0) == 0) {
+    return "zh";
+  }
+  return language;
+}
+
+bool measure_voice(const VoiceRequest& request, const std::string& model_root,
                    VoiceLevels& out) {
-  const std::string language(language_for_voice(id));
+  const std::string& language = request.language;
   const moonshine_option_t options[] = {
       {"model_root", model_root.c_str()},
       {"lang", language.c_str()},
-      {"voice", id.c_str()},
+      {"voice", request.voice.c_str()},
       // The whole point is to measure what the decoder produces, before any
       // level shaping is applied on top.
       {"normalize_audio", "false"},
@@ -247,10 +410,8 @@ bool measure_voice(const std::string& id, const std::string& model_root,
                  moonshine_error_to_string(handle));
     return false;
   }
-  out.id = id;
-  // en_us and en_gb share one set; the rest match the synthesizer's language.
-  for (const std::string_view phrase :
-       phrases_for(language.rfind("en", 0) == 0 ? "en" : language)) {
+  out.id = request.key;
+  for (const std::string_view phrase : phrases_for(phrase_key_for(language))) {
     float* audio = nullptr;
     uint64_t count = 0;
     int32_t rate = 0;
@@ -377,36 +538,48 @@ void write_measurements(const std::filesystem::path& path,
   }
 }
 
-bool write_header(const std::filesystem::path& path,
+bool write_header(const std::filesystem::path& path, bool piper,
                   const std::vector<VoiceLevels>& measured) {
   std::ofstream out(path);
   if (!out) {
     return false;
   }
+  const char* engine = piper ? "PIPER" : "KOKORO";
+  const char* type = piper ? "PiperVoiceLevel" : "KokoroVoiceLevel";
+  const char* table = piper ? "kPiperVoiceLevels" : "kKokoroVoiceLevels";
+  const char* declared = piper ? "piper" : "kokoro";
   out << "// Generated by tts-voice-level-calibrate. Do not edit.\n"
       << "//\n"
       << "// The peak each voice reaches when it speaks, measured without\n"
       << "// normalization, so streaming can pick a gain before it has any\n"
-      << "// audio to measure. See kokoro-voice-levels.h.\n"
+      << "// audio to measure. See " << declared << "-voice-levels.h.\n"
       << "\n"
-      << "#ifndef MOONSHINE_TTS_KOKORO_VOICE_LEVELS_DATA_H\n"
-      << "#define MOONSHINE_TTS_KOKORO_VOICE_LEVELS_DATA_H\n"
+      << "#ifndef MOONSHINE_TTS_" << engine << "_VOICE_LEVELS_DATA_H\n"
+      << "#define MOONSHINE_TTS_" << engine << "_VOICE_LEVELS_DATA_H\n"
+      << "\n";
+  if (piper) {
+    out << "#include <array>\n\n";
+  }
+  out << "namespace moonshine_tts {\n"
       << "\n"
-      << "namespace moonshine_tts {\n"
-      << "\n"
-      << "// Sorted by id so lookup can binary search.\n"
-      << "inline constexpr KokoroVoiceLevel kKokoroVoiceLevels[] = {\n";
+      << "// Sorted by " << (piper ? "stem" : "id")
+      << " so lookup can binary search.\n";
+  if (piper) {
+    out << "inline constexpr std::array<" << type << ", " << measured.size()
+        << "> " << table << "{{\n";
+  } else {
+    out << "inline constexpr " << type << " " << table << "[] = {\n";
+  }
   for (const VoiceLevels& voice : measured) {
     char line[128];
     std::snprintf(line, sizeof(line), "    {\"%s\", %.4ff},\n",
                   voice.id.c_str(), reference_peak(voice.peaks));
     out << line;
   }
-  out << "};\n"
-      << "\n"
+  out << (piper ? "}};\n" : "};\n") << "\n"
       << "}  // namespace moonshine_tts\n"
       << "\n"
-      << "#endif  // MOONSHINE_TTS_KOKORO_VOICE_LEVELS_DATA_H\n";
+      << "#endif  // MOONSHINE_TTS_" << engine << "_VOICE_LEVELS_DATA_H\n";
   return out.good();
 }
 
@@ -416,6 +589,7 @@ int main(int argc, char** argv) {
   std::string model_root = "core/moonshine-tts/data";
   std::filesystem::path out_path;
   std::string only_voice;
+  bool piper = false;
   for (int i = 1; i < argc; ++i) {
     const std::string_view arg = argv[i];
     if (arg == "--model-root" && i + 1 < argc) {
@@ -424,10 +598,18 @@ int main(int argc, char** argv) {
       out_path = argv[++i];
     } else if (arg == "--voice" && i + 1 < argc) {
       only_voice = argv[++i];
+    } else if (arg == "--engine" && i + 1 < argc) {
+      const std::string_view engine = argv[++i];
+      if (engine != "kokoro" && engine != "piper") {
+        std::fprintf(stderr, "unknown engine %s\n", argv[i]);
+        return 2;
+      }
+      piper = engine == "piper";
     } else {
       std::fprintf(
           stderr,
-          "usage: %s [--model-root DIR] [--out HEADER] [--voice ID]\n"
+          "usage: %s [--model-root DIR] [--engine kokoro|piper]\n"
+          "          [--out HEADER] [--voice ID]\n"
           "  Without --out, prints the measurements instead of\n"
           "  writing the generated table. --voice measures one voice,\n"
           "  for checking why a voice was skipped.\n",
@@ -436,28 +618,29 @@ int main(int argc, char** argv) {
     }
   }
 
-  std::vector<std::string> ids = installed_voices(model_root);
+  std::vector<VoiceRequest> voices =
+      piper ? piper_voices(model_root) : kokoro_voices(model_root);
   if (!only_voice.empty()) {
-    ids.erase(std::remove_if(ids.begin(), ids.end(),
-                             [&only_voice](const std::string& id) {
-                               return id != only_voice;
-                             }),
-              ids.end());
+    voices.erase(std::remove_if(voices.begin(), voices.end(),
+                                [&only_voice](const VoiceRequest& request) {
+                                  return request.key != only_voice;
+                                }),
+                 voices.end());
   }
-  if (ids.empty()) {
-    std::fprintf(stderr, "no .kokorovoice files under %s/kokoro/voices\n",
+  if (voices.empty()) {
+    std::fprintf(stderr, "no %s voices under %s\n", piper ? "piper" : "kokoro",
                  model_root.c_str());
     return 1;
   }
 
   std::vector<VoiceLevels> measured;
-  for (const std::string& id : ids) {
+  for (const VoiceRequest& request : voices) {
     VoiceLevels levels;
-    if (measure_voice(id, model_root, levels)) {
+    if (measure_voice(request, model_root, levels)) {
       measured.push_back(std::move(levels));
-      std::fprintf(stderr, "  %s\n", id.c_str());
+      std::fprintf(stderr, "  %s\n", request.key.c_str());
     } else {
-      std::fprintf(stderr, "  %s: skipped\n", id.c_str());
+      std::fprintf(stderr, "  %s: skipped\n", request.key.c_str());
     }
   }
   if (measured.empty()) {
@@ -465,13 +648,15 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  write_measurements("/tmp/kokoro-voice-peaks.tsv", measured);
+  write_measurements(
+      piper ? "/tmp/piper-voice-peaks.tsv" : "/tmp/kokoro-voice-peaks.tsv",
+      measured);
 
   if (out_path.empty()) {
     report(measured);
     return 0;
   }
-  if (!write_header(out_path, measured)) {
+  if (!write_header(out_path, piper, measured)) {
     std::fprintf(stderr, "could not write %s\n", out_path.string().c_str());
     return 1;
   }

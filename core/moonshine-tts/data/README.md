@@ -51,6 +51,16 @@ the model takes. The original `.onnx` files are no longer in the tree but remain
 on the CDN under `https://download.moonshine.ai/tts/`, which is where to get one
 if you need to re-run a conversion or compare against upstream `piper-tts`.
 
+Each Piper voice is cut in two before that conversion, so what ships is
+`<stem>.upstream.*`, which turns phonemes into acoustic frames, and
+`<stem>.generator.*`, which turns frames into audio. Each half takes whichever
+layout above suits it. The pair costs the same total bytes and renders a whole
+utterance about as fast as the single model, so nothing is given up by carrying
+only the stages, and asking the generator for a range of frames is what lets a
+reply start playing before it has been synthesized. `scripts/split-piper-stages.py`
+makes the cut and `scripts/build-piper-stages.py` drives it over every voice,
+installing a pair only once it reproduces the shipped model sample for sample.
+
 ## Regeneration verification (2026-03-30)
 
 Commands below were run from a clean temp output directory and compared to the parent monorepo’s `data/` / `models/` and this `moonshine-tts/data/` tree unless noted.

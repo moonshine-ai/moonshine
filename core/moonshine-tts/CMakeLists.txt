@@ -54,6 +54,7 @@ add_library(moonshine_tts_core STATIC
   src/tts-stream.cpp
   src/chunk-policy.cpp
   src/kokoro-voice-levels.cpp
+  src/piper-voice-levels.cpp
   src/lang-specific/arabic-ipa.cpp
   src/lang-specific/cmudict-tsv.cpp
   src/lang-specific/heteronym-context.cpp
@@ -142,6 +143,7 @@ moonshine_tts_add_test(sentence_splitter_test moonshine_tts_core)
 moonshine_tts_add_test(tts_stream_test moonshine_tts_core)
 moonshine_tts_add_test(chunk_policy_test moonshine_tts_core)
 moonshine_tts_add_test(kokoro_voice_levels_test moonshine_tts_core)
+moonshine_tts_add_test(piper_voice_levels_test moonshine_tts_core)
 moonshine_tts_add_test(heteronym_context_test moonshine_tts_core)
 moonshine_tts_add_test(ipa_postprocess_test moonshine_tts_core)
 moonshine_tts_add_test(cmudict_tsv_test moonshine_tts_core)
@@ -247,6 +249,12 @@ if(MOONSHINE_TTS_BUILD_ONNX)
   moonshine_tts_set_ort_rpath(piper_voice_form_test)
   if(WIN32)
     copy_onnxruntime_dll(piper_voice_form_test)
+  endif()
+
+  moonshine_tts_add_test(piper_stream_test moonshine_tts_ort)
+  moonshine_tts_set_ort_rpath(piper_stream_test)
+  if(WIN32)
+    copy_onnxruntime_dll(piper_stream_test)
   endif()
 
   moonshine_tts_add_test(moonshine_tts_speed_test moonshine_tts_ort)

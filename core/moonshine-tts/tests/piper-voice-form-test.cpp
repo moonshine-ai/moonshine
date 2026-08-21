@@ -32,11 +32,11 @@ std::vector<std::filesystem::path> voice_dirs(
 
 }  // namespace
 
-// The catalog records whether a voice ships as a split ORT pair or a single
-// ``.ort``, because a client with no files yet has to know what to download and
-// cannot look at its own disk. That makes the catalog a duplicate of the data
-// tree, so this test fails when the two drift apart -- for instance after
-// ``scripts/convert-models-to-ort.py`` picks a different form for a new voice.
+// The catalog records what a voice ships as, because a client with no files
+// yet has to know what to download and cannot look at its own disk. That makes
+// the catalog a duplicate of the data tree, so this test fails when the two
+// drift apart -- for instance after ``scripts/convert-models-to-ort.py`` picks
+// a different form for a new voice.
 TEST_CASE("catalog voice form matches the shipped files") {
   const auto data_root = piper_data_root();
   if (data_root.empty()) {
@@ -46,38 +46,54 @@ TEST_CASE("catalog voice form matches the shipped files") {
 
   size_t checked = 0;
   for (const auto& voices : voice_dirs(data_root)) {
-    std::set<std::string> stems;
+    // A voice is named by its config, which keeps the same name whatever form
+    // the models take.
     for (const auto& ent : std::filesystem::directory_iterator(voices)) {
       const std::string name = ent.path().filename().string();
-      // Longest first: ".ort" would otherwise swallow the ".weights" in
-      // "<stem>.weights.ort" and invent a voice named "<stem>.weights".
-      for (const std::string suffix : {".weights.ort", ".model.ort", ".ort"}) {
-        if (name.size() > suffix.size() &&
-            name.compare(name.size() - suffix.size(), suffix.size(), suffix) ==
-                0) {
-          stems.insert(name.substr(0, name.size() - suffix.size()));
-          break;
-        }
+      static constexpr std::string_view kConfig = ".onnx.json";
+      if (name.size() <= kConfig.size() ||
+          name.compare(name.size() - kConfig.size(), kConfig.size(), kConfig) !=
+              0) {
+        continue;
       }
-    }
-    for (const std::string& stem : stems) {
-      const bool split_on_disk =
-          std::filesystem::is_regular_file(voices / (stem + ".model.ort")) &&
-          std::filesystem::is_regular_file(voices / (stem + ".weights.ort"));
+      const std::string stem = name.substr(0, name.size() - kConfig.size());
+      const bool split_on_disk = std::filesystem::is_regular_file(
+          voices / (stem + ".upstream.model.ort"));
       const bool single_on_disk =
-          std::filesystem::is_regular_file(voices / (stem + ".ort"));
+          std::filesystem::is_regular_file(voices / (stem + ".upstream.ort"));
       if (!split_on_disk && !single_on_disk) {
-        // Still ONNX-only; the catalog says nothing useful about it yet.
+        // Not built yet; the catalog says nothing useful about it.
         continue;
       }
       INFO("voice " << stem << " in " << voices.string());
       CHECK(piper_voice_ships_split(stem) == split_on_disk);
-      for (const std::string& name : piper_voice_model_filenames(stem)) {
-        INFO("expected file " << name);
-        CHECK(std::filesystem::is_regular_file(voices / name));
+      for (const std::string& filename : piper_voice_model_filenames(stem)) {
+        INFO("expected file " << filename);
+        CHECK(std::filesystem::is_regular_file(voices / filename));
       }
       ++checked;
     }
   }
   CHECK(checked > 0);
+}
+
+// A voice used to ship as one model, and clients cache what they download. The
+// stages replace it rather than joining it, so nothing should still be asking
+// for the old files.
+TEST_CASE("no voice still asks for a whole-utterance model") {
+  const auto data_root = piper_data_root();
+  if (data_root.empty()) {
+    return;
+  }
+  for (const auto& voices : voice_dirs(data_root)) {
+    for (const auto& ent : std::filesystem::directory_iterator(voices)) {
+      const std::string name = ent.path().filename().string();
+      const bool belongs_to_a_stage =
+          name.find(".upstream.") != std::string::npos ||
+          name.find(".generator.") != std::string::npos ||
+          name.find(".onnx.json") != std::string::npos;
+      INFO("file " << name);
+      CHECK(belongs_to_a_stage);
+    }
+  }
 }

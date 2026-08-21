@@ -41,11 +41,11 @@ SRC="${ROOT}/core/moonshine-tts/data"
 EXTRA="${MOONSHINE_RCLONE_EXTRA:-}"
 CACHE_CONTROL="${MOONSHINE_TTS_CACHE_CONTROL:-public, max-age=2592000}"
 
-if [[ ! -f "${SRC}/kokoro/model.model.ort" ]]; then
+if [[ ! -f "${SRC}/kokoro/prosody.model.ort" ]]; then
   echo "TTS binaries missing under ${SRC}; fetching via scripts/fetch-voice-assets.sh..." >&2
   "${ROOT}/scripts/fetch-voice-assets.sh" tts
 fi
-if [[ ! -d "${SRC}" || ! -f "${SRC}/kokoro/model.model.ort" ]]; then
+if [[ ! -d "${SRC}" || ! -f "${SRC}/kokoro/prosody.model.ort" ]]; then
   echo "Source directory not ready: ${SRC}" >&2
   echo "Run: scripts/fetch-voice-assets.sh tts" >&2
   exit 1

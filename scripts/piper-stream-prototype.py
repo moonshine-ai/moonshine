@@ -2,11 +2,13 @@
 """Checks whether Piper's vocoder can be run a chunk at a time.
 
 Piper is a VITS model: everything up to the latent `z` is one graph, and a
-HiFi-GAN generator turns `z` into audio. Exactly one tensor crosses that
+HiFi-GAN generator turns `z` into audio. One time-varying tensor crosses that
 boundary, and the generator is a stack of transposed convolutions with weight
 normalization rather than the instance normalization Kokoro's decoder uses, so
 a slice of `z` should decode to the matching slice of audio given enough
-context either side.
+context either side. Multi-speaker voices send a second tensor across, the
+speaker embedding, but it is one column for the whole utterance rather than
+one per frame, so every slice reuses it unchanged.
 
 That "enough context" is the number this measures. It decodes a fixed target
 window with growing amounts of padding and reports how close the result gets
@@ -14,13 +16,21 @@ to the same window from an unchunked render. Once the error stops falling, the
 padding has covered the generator's receptive field, and the ratio of decoded
 frames to emitted frames is what streaming would cost.
 
-The answer for en_US-amy-medium: the split is bit-exact, and 16 frames of
-padding either side reproduces the unchunked audio to 0.000 error and ±0.00 dB.
 Piper genuinely can be streamed a chunk at a time — unlike Kokoro, see
-scripts/kokoro-stream-prototype.py. We still do not, because it would only move
-time to first audio from about 109 ms to 36 ms, and buying those 73 ms means
-splitting and re-publishing all 88 catalog voices. Revisit if Piper ever grows
-long enough utterances for the whole-sentence latency to matter.
+scripts/kokoro-stream-prototype.py, which needs crossfades and an offline gain
+table to hide what its decoder does to a short chunk. Measured over all four
+quality tiers and a multi-speaker voice: the stages reproduce the whole graph
+exactly, 16 frames of padding either side puts the seam at 1e-6 of the signal,
+the two stages weigh what the whole model weighs, and they convert to ORT at
+full optimization unchanged. Nothing here needs a crossfade or a level fix.
+
+What it costs is assets, not code. The chunk policy, the stream and the C API
+are already engine-agnostic, but the stages have to be built and published for
+all 96 catalog voices before any of it engages. What it buys is 66-84% of time
+to first audio, and the generator's share of the work *rises* as the machine
+gets slower (76% to 97% for the high tier, going from all cores to one), so
+the saving is largest exactly where synthesis is slow enough to notice: on a
+single core here, en_US-lessac-high drops from 3.07 s to 479 ms.
 
 Usage:
     python scripts/piper-stream-prototype.py --model en_US-amy-medium.onnx
@@ -36,9 +46,12 @@ import numpy as np
 import onnx
 import onnxruntime as ort
 
-# The single tensor between the VITS body and the HiFi-GAN generator.
-LATENT = "/Mul_7_output_0"
-UPSTREAM_INPUTS = ["input", "input_lengths", "scales"]
+# Scales are [noise, length, noise_w]. Piper ships 0.667/1.0/0.8, but both
+# noise terms are drawn per session, so a whole render and a staged one would
+# not be comparing the same utterance. Zeroing them is what the repository's
+# other parity tools do; it changes the audio, not the receptive field being
+# measured.
+SCALES = [0.0, 1.0, 0.0]
 
 
 def session(path: Path) -> ort.InferenceSession:
@@ -61,9 +74,28 @@ def best_of(runs: int, call) -> float:
     return min(timings)
 
 
-def find_latent(model: onnx.ModelProto) -> str:
-    """The lone tensor produced outside /dec and consumed inside it."""
+def depends_on_inputs(model: onnx.ModelProto) -> set[str]:
+    """Tensors whose value depends on what the caller passed in.
+
+    Everything else is folded from initializers, which matters on a quantized
+    voice: its weights are dequantized by chains that sit outside the generator
+    in the graph but belong to it, and telling the two apart is what keeps the
+    weights inside the stage that uses them instead of crossing the seam on
+    every utterance.
+    """
+    live = {value.name for value in model.graph.input}
+    # A single pass in topological order is enough; ONNX requires nodes be
+    # sorted so that producers precede consumers.
+    for node in model.graph.node:
+        if any(name in live for name in node.input):
+            live.update(node.output)
+    return live
+
+
+def find_boundary(model: onnx.ModelProto) -> list[str]:
+    """The tensors carrying the utterance from the VITS body into /dec."""
     producer = {output: node for node in model.graph.node for output in node.output}
+    live = depends_on_inputs(model)
     crossing = []
     for node in model.graph.node:
         if not node.name.startswith("/dec"):
@@ -72,32 +104,33 @@ def find_latent(model: onnx.ModelProto) -> str:
             source = producer.get(name)
             if source is None or source.name.startswith("/dec"):
                 continue
-            if name not in crossing:
+            if name in live and name not in crossing:
                 crossing.append(name)
-    if len(crossing) != 1:
-        raise SystemExit(
-            f"Expected one tensor entering the generator, found {crossing}."
-        )
-    return crossing[0]
+    if not crossing:
+        raise SystemExit("Found no tensor entering the generator.")
+    return crossing
 
 
-def split(model_path: Path, out_dir: Path) -> tuple[Path, Path, str]:
+def split(model_path: Path, out_dir: Path) -> tuple[Path, Path, list[str], list[str]]:
     model = onnx.load(str(model_path), load_external_data=False)
-    latent = find_latent(model)
+    crossing = find_boundary(model)
+    # Multi-speaker voices add a `sid` input, so take the inputs off the graph
+    # rather than assuming the single-speaker three.
+    inputs = [value.name for value in model.graph.input]
     out_dir.mkdir(parents=True, exist_ok=True)
     upstream = out_dir / "upstream.onnx"
     generator = out_dir / "generator.onnx"
     onnx.utils.extract_model(
-        str(model_path), str(upstream), UPSTREAM_INPUTS, [latent], check_model=False
+        str(model_path), str(upstream), inputs, crossing, check_model=False
     )
     onnx.utils.extract_model(
-        str(model_path), str(generator), [latent], ["output"], check_model=False
+        str(model_path), str(generator), crossing, ["output"], check_model=False
     )
     for path in (upstream, generator):
         stage = onnx.load(str(path), load_external_data=False)
         print(f"{path.name}: {len(stage.graph.node)} nodes, "
               f"{path.stat().st_size / 1e6:.1f} MB")
-    return upstream, generator, latent
+    return upstream, generator, crossing, inputs
 
 
 def phoneme_ids(text: str, config_path: Path) -> np.ndarray:
@@ -126,10 +159,13 @@ def main() -> int:
         "moment before carrying on to the end of a rather longer sentence."
     ))
     parser.add_argument("--target-frames", type=int, default=20)
+    parser.add_argument("--speaker", type=int, default=0,
+                        help="Speaker id, for multi-speaker voices")
     args = parser.parse_args()
 
     config_path = args.config or args.model.with_suffix(".onnx.json")
-    upstream_path, generator_path, latent = split(args.model, args.out_dir)
+    upstream_path, generator_path, crossing, inputs = split(
+        args.model, args.out_dir)
     whole = session(args.model)
     upstream = session(upstream_path)
     generator = session(generator_path)
@@ -139,23 +175,32 @@ def main() -> int:
     feed = {
         "input": ids,
         "input_lengths": np.array([ids.shape[1]], dtype=np.int64),
-        "scales": np.array([0.667, 1.0, 0.8], dtype=np.float32),
+        "scales": np.array(SCALES, dtype=np.float32),
     }
+    if "sid" in inputs:
+        feed["sid"] = np.array([args.speaker], dtype=np.int64)
     reference = whole.run(["output"], feed)[0].reshape(-1)
-    latent_values = upstream.run([latent], feed)[0]
+    crossed = dict(zip(crossing, upstream.run(crossing, feed)))
+    # The frame axis is the one that grows with the text. Anything else is a
+    # per-utterance conditioning vector that every slice reuses unchanged.
+    latent = max(crossed, key=lambda name: crossed[name].shape[-1])
+    conditioning = {n: v for n, v in crossed.items() if n != latent}
+    if conditioning:
+        print(f"carried whole into every chunk: {', '.join(conditioning)}")
+    latent_values = crossed[latent]
     frames = latent_values.shape[-1]
     samples_per_frame = reference.size // frames
     print(f"{ids.shape[1]} phoneme ids -> {frames} latent frames, "
           f"{reference.size} samples ({samples_per_frame} per frame)")
 
-    joined = generator.run(["output"], {latent: latent_values})[0].reshape(-1)
+    joined = generator.run(["output"], dict(crossed))[0].reshape(-1)
     print(f"split reproduces the whole graph to "
           f"{float(np.max(np.abs(joined - reference))):.3e}")
 
     sample_rate = json.loads(config_path.read_text())["audio"]["sample_rate"]
-    upstream_seconds = best_of(3, lambda: upstream.run([latent], feed))
+    upstream_seconds = best_of(3, lambda: upstream.run(crossing, feed))
     generator_seconds = best_of(
-        3, lambda: generator.run(["output"], {latent: latent_values})
+        3, lambda: generator.run(["output"], dict(crossed))
     )
     audio_seconds = reference.size / sample_rate
     total = upstream_seconds + generator_seconds
@@ -172,9 +217,9 @@ def main() -> int:
     for pad in (0, 1, 2, 4, 8, 16, 32):
         low = max(0, start - pad)
         high = min(frames, end + pad)
-        piece = generator.run(
-            ["output"], {latent: latent_values[:, :, low:high]}
-        )[0].reshape(-1)
+        sliced = dict(conditioning)
+        sliced[latent] = latent_values[:, :, low:high]
+        piece = generator.run(["output"], sliced)[0].reshape(-1)
         offset = (start - low) * samples_per_frame
         window = piece[offset: offset + target.size]
         length = min(window.size, target.size)

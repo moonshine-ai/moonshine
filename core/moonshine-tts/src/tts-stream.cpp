@@ -130,6 +130,61 @@ bool SlicedDecodeChunkSource::has_more() const {
 
 int SlicedDecodeChunkSource::sample_rate() const { return sample_rate_; }
 
+ExactSliceChunkSource::ExactSliceChunkSource(AnalyzeFn analyze, DecodeFn decode,
+                                             FallbackFn fallback,
+                                             ChunkPolicyOptions policy,
+                                             int frames_per_second,
+                                             int sample_rate)
+    : analyze_(std::move(analyze)),
+      decode_(std::move(decode)),
+      fallback_(std::move(fallback)),
+      policy_(policy),
+      frames_per_second_(frames_per_second),
+      sample_rate_(sample_rate) {}
+
+void ExactSliceChunkSource::begin(std::string_view text) {
+  boundaries_.clear();
+  next_chunk_ = 0;
+  whole_text_.clear();
+  if (!analyze_ || !decode_ || text.empty()) {
+    return;
+  }
+  const int frames = analyze_(text);
+  if (frames <= 0) {
+    // The stages declined this utterance. Speak it in one piece rather than
+    // dropping it; the caller loses the latency win, not the words.
+    if (fallback_) {
+      whole_text_ = std::string(text);
+    }
+    return;
+  }
+  // No cost curve: with the joins exact there is nothing to hide, so the
+  // boundaries stay on the nominal grid. Passing an empty one is how
+  // plan_boundaries is told to skip snapping.
+  boundaries_ = plan_boundaries({}, frames, frames_per_second_, policy_);
+}
+
+std::vector<float> ExactSliceChunkSource::next() {
+  if (!whole_text_.empty()) {
+    const std::string text = std::move(whole_text_);
+    whole_text_.clear();
+    return fallback_(text);
+  }
+  if (next_chunk_ + 1 >= boundaries_.size()) {
+    return {};
+  }
+  const int first = boundaries_[next_chunk_];
+  const int last = boundaries_[next_chunk_ + 1];
+  ++next_chunk_;
+  return decode_(first, last);
+}
+
+bool ExactSliceChunkSource::has_more() const {
+  return !whole_text_.empty() || next_chunk_ + 1 < boundaries_.size();
+}
+
+int ExactSliceChunkSource::sample_rate() const { return sample_rate_; }
+
 TtsStream::TtsStream(std::unique_ptr<ChunkSource> source,
                      SentenceSplitOptions split_options)
     : source_(std::move(source)), split_options_(std::move(split_options)) {}

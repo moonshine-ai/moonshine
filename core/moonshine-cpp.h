@@ -917,7 +917,8 @@ class TextToSpeech {
   TextToSpeech(const std::string &language, const Options &options = {});
 
   /// Create a TTS synthesizer from in-memory assets keyed by their canonical
-  /// filename (``kokoro/model.model.ort``, ``kokoro/model.weights.ort``,
+  /// filename (``kokoro/prosody.model.ort``, ``kokoro/prosody.weights.ort``,
+  /// ``kokoro/decoder.model.ort``, ``kokoro/decoder.weights.ort``,
   /// ``kokoro/config.json``, ``piper/onnx``,
   /// ``zipvoice/text_encoder.ort`` and so on; see
   /// ``moonshine_create_tts_synthesizer_from_memory``). Keys with no buffer
