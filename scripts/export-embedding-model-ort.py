@@ -35,11 +35,8 @@ CDN_BASE = "https://download.moonshine.ai/model/embeddinggemma-300m"
 # Variant -> ONNX filename stem (mirrors GemmaEmbeddingModel::load and the model
 # catalog). Note "q8" maps to model_quantized, not model_q8.
 VARIANT_TO_STEM = {
-    "fp32": "model",
-    "fp16": "model_fp16",
     "q8": "model_quantized",
     "q4": "model_q4",
-    "q4f16": "model_q4f16",
 }
 
 

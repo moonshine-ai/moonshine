@@ -72,9 +72,9 @@ std::optional<ModelDependencies> stt_model_dependencies(
 // Returns the download manifest for a text embedding model.
 //
 // `model_name` is an embedding model id (e.g. "embeddinggemma-300m").
-// `variant` is one of the published variants ("q4", "q8", "fp16", "fp32",
-// "q4f16"); an empty string selects the model's default variant. Returns
-// std::nullopt if the model or variant is unknown.
+// `variant` is one of the published variants ("q4", "q8"); an empty string
+// selects the model's default variant. Returns std::nullopt if the model or
+// variant is unknown. "fp32", "fp16", and "q4f16" are no longer supported.
 std::optional<ModelDependencies> embedding_model_dependencies(
     const std::string& model_name, const std::string& variant);
 
@@ -104,6 +104,11 @@ std::vector<std::string> embedding_supported_models();
 // Published variants for an embedding model (empty if the model is unknown).
 std::vector<std::string> embedding_supported_variants(
     const std::string& model_name);
+
+// Non-empty when `variant` names a removed embedding variant ("fp32",
+// "fp16", or "q4f16"). Callers should surface this as the error rather than
+// treating it as an unknown name.
+std::string embedding_variant_unsupported_message(const std::string& variant);
 
 // --- Full catalog listings ------------------------------------------------
 // These expose the catalog tables themselves (languages, friendly names,

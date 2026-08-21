@@ -11,7 +11,7 @@ from typing import List, Optional
 
 from moonshine_voice.moonshine_api import _MoonshineLib
 from moonshine_voice.errors import MoonshineError, check_error
-from moonshine_voice.download import EmbeddingModelArch
+from moonshine_voice.download import EmbeddingModelArch, embedding_variant_unsupported_message
 
 
 class EmbeddingModel:
@@ -31,19 +31,24 @@ class EmbeddingModel:
         self,
         model_path: str | Path,
         model_arch: EmbeddingModelArch = EmbeddingModelArch.GEMMA_300M,
-        model_variant: str = "fp32",
+        model_variant: str = "q4",
     ):
         """
         Initialize an embedding model.
 
         Args:
             model_path: Path to the directory containing the embedding model files
-                       (ONNX model and tokenizer.bin).
+                       (ORT model and tokenizer.bin).
             model_arch: The embedding model architecture to use.
                        Currently only GEMMA_300M is supported.
-            model_variant: Model variant to load: "fp32", "fp16", "q8", "q4",
-                          or "q4f16". Default is "q4" for efficiency.
+            model_variant: Model variant to load: "q4" or "q8". Default is
+                          "q4" for efficiency. "fp32", "fp16", and "q4f16"
+                          are no longer supported.
         """
+        unsupported = embedding_variant_unsupported_message(model_variant)
+        if unsupported is not None:
+            raise MoonshineError(unsupported)
+
         self._lib_wrapper = _MoonshineLib()
         self._lib = self._lib_wrapper.lib
         self._handle = None

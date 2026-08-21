@@ -337,6 +337,18 @@ def download_model_from_info(
 # Embedding Model Functions
 # ============================================================================
 
+_REMOVED_EMBEDDING_VARIANTS = frozenset({"fp32", "fp16", "q4f16"})
+
+
+def embedding_variant_unsupported_message(variant: str) -> Optional[str]:
+    """Return a 'no longer supported' message for a removed embedding variant."""
+    if variant not in _REMOVED_EMBEDDING_VARIANTS:
+        return None
+    return (
+        f'The "{variant}" embedding model variant is no longer supported. '
+        'Use "q4" (the default) or "q8".'
+    )
+
 
 def supported_embedding_models() -> list[str]:
     """Return list of supported embedding model names."""
@@ -372,8 +384,9 @@ def get_embedding_model(
 
     Args:
         model_name: Name of the embedding model (e.g., "embeddinggemma-300m")
-        variant: Model variant - one of "q4", "q8", "fp16", "fp32", "q4f16".
-                 If None, uses the default variant (q4).
+        variant: Model variant - one of "q4" or "q8".
+                 If None, uses the default variant (q4). "fp32", "fp16", and
+                 "q4f16" are no longer supported.
 
     Returns:
         Tuple of (model_path, model_arch).
@@ -395,6 +408,10 @@ def get_embedding_model(
 
     if variant is None:
         variant = model_info["default_variant"]
+
+    unsupported = embedding_variant_unsupported_message(variant)
+    if unsupported is not None:
+        raise ValueError(unsupported)
 
     if variant not in model_info["variants"]:
         raise ValueError(

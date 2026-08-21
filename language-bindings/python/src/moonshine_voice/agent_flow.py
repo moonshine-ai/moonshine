@@ -956,7 +956,7 @@ class AgentFlow:
                 cache_root=self._model_root
             )
             self._owned_model = EmbeddingModel(
-                model_path=model_path, model_arch=model_arch
+                model_path=model_path, model_arch=model_arch, model_variant="q4"
             )
             self._backend = CachedEmbeddings(fallback=self._owned_model)
             self._report_progress(1.0, "embedding model")

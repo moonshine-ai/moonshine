@@ -73,18 +73,20 @@ int GemmaEmbeddingModel::load(const char *model_dir,
 
   // Build model path based on variant
   std::string variant = model_variant ? model_variant : "q4";
+  if (variant == "fp32" || variant == "fp16" || variant == "q4f16") {
+    const std::string message =
+        "The \"" + variant +
+        "\" embedding model variant is no longer supported. "
+        "Use \"q4\" (the default) or \"q8\".";
+    LOG(message.c_str());
+    return 1;
+  }
   std::string stem;
 
-  if (variant == "fp32") {
-    stem = "model";
-  } else if (variant == "fp16") {
-    stem = "model_fp16";
-  } else if (variant == "q8" || variant == "quantized") {
+  if (variant == "q8" || variant == "quantized") {
     stem = "model_quantized";
   } else if (variant == "q4") {
     stem = "model_q4";
-  } else if (variant == "q4f16") {
-    stem = "model_q4f16";
   } else {
     LOGF("Unknown model variant: %s\n", variant.c_str());
     return 1;

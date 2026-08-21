@@ -650,6 +650,16 @@ void free_embedding_model_handle(int32_t handle) {
     }                                                                         \
   } while (0)
 
+bool reject_removed_embedding_variant(const char *model_variant) {
+  const std::string message = moonshine::embedding_variant_unsupported_message(
+      model_variant != nullptr ? model_variant : "");
+  if (message.empty()) {
+    return false;
+  }
+  LOGF("%s", message.c_str());
+  return true;
+}
+
 }  // namespace
 
 int32_t moonshine_create_embedding_model(const char *model_path,
@@ -664,6 +674,9 @@ int32_t moonshine_create_embedding_model(const char *model_path,
 
   if (model_path == nullptr) {
     LOGF("%s", "Invalid model_path: nullptr");
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  if (reject_removed_embedding_variant(model_variant)) {
     return MOONSHINE_ERROR_INVALID_ARGUMENT;
   }
 
@@ -693,6 +706,9 @@ int32_t moonshine_create_embedding_model_from_memory(
   (void)options_count;
   if (filenames_count == 0 || filenames == nullptr || memory == nullptr ||
       memory_sizes == nullptr) {
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
+  }
+  if (reject_removed_embedding_variant(model_variant)) {
     return MOONSHINE_ERROR_INVALID_ARGUMENT;
   }
   if (log_api_calls) {
@@ -2518,6 +2534,13 @@ int32_t moonshine_get_embedding_dependencies(const char *model_name,
       if (key == "variant" || key == "model_variant") {
         variant = trim(value);
       }
+    }
+
+    const std::string unsupported =
+        moonshine::embedding_variant_unsupported_message(variant);
+    if (!unsupported.empty()) {
+      LOGF("%s", unsupported.c_str());
+      return MOONSHINE_ERROR_INVALID_ARGUMENT;
     }
 
     const std::optional<moonshine::ModelDependencies> deps =

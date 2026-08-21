@@ -2067,17 +2067,31 @@ TEST_CASE("moonshine-stt-embedding-dependency-api") {
     std::free(out);
   }
 
-  SUBCASE("embedding-fp32-uses-bare-model-ort") {
-    const moonshine_option_t opts[] = {
-        {"variant", "fp32"},
-    };
-    char* out = nullptr;
-    REQUIRE(moonshine_get_embedding_dependencies("embeddinggemma-300m", opts, 1,
-                                                 &out) == MOONSHINE_ERROR_NONE);
-    REQUIRE(out != nullptr);
-    const std::string json(out);
-    CHECK(json.find("\"model.ort\"") != std::string::npos);
-    std::free(out);
+  SUBCASE("embedding-removed-variants-are-no-longer-supported") {
+    const char* removed[] = {"fp32", "fp16", "q4f16"};
+    for (const char* variant : removed) {
+      const moonshine_option_t opts[] = {
+          {"variant", variant},
+      };
+      char* out = nullptr;
+      CHECK(moonshine_get_embedding_dependencies("embeddinggemma-300m", opts, 1,
+                                                 &out) ==
+            MOONSHINE_ERROR_INVALID_ARGUMENT);
+      CHECK(out == nullptr);
+
+      CHECK(moonshine_create_embedding_model(
+                "/unused", MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M,
+                variant) == MOONSHINE_ERROR_INVALID_ARGUMENT);
+
+      const char* names[] = {"model.ort"};
+      const uint8_t dummy = 0;
+      const uint8_t* memory[] = {&dummy};
+      const uint64_t sizes[] = {1};
+      CHECK(moonshine_create_embedding_model_from_memory(
+                MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M, variant, names, 1,
+                memory, sizes, nullptr, 0,
+                MOONSHINE_HEADER_VERSION) == MOONSHINE_ERROR_INVALID_ARGUMENT);
+    }
   }
 
   SUBCASE("embedding-unknown-model") {
@@ -2136,6 +2150,9 @@ TEST_CASE("moonshine-catalog-listing-api") {
           std::string::npos);
     CHECK(json.find("\"variants\":") != std::string::npos);
     CHECK(json.find("\"default_variant\":\"q4\"") != std::string::npos);
+    CHECK(json.find("\"fp32\"") == std::string::npos);
+    CHECK(json.find("\"fp16\"") == std::string::npos);
+    CHECK(json.find("\"q4f16\"") == std::string::npos);
     std::free(out);
   }
 }

@@ -794,8 +794,9 @@ MOONSHINE_EXPORT int32_t moonshine_transcribe_stream(
    `model_arch` should be one of the MOONSHINE_EMBEDDING_MODEL_ARCH_* constants.
    Currently only MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M is supported.
 
-   `model_variant` specifies which model variant to load: "fp32", "fp16", "q8",
-   "q4", or "q4f16". Pass NULL to use the default "q4" variant.
+   `model_variant` specifies which model variant to load: "q4" or "q8".
+   Pass NULL to use the default "q4" variant. "fp32", "fp16", and "q4f16"
+   are no longer supported and return an error.
 
    Returns a non-negative handle on success, or a negative error code on
    failure. The error code can be converted to a human-readable string using
@@ -816,9 +817,10 @@ MOONSHINE_EXPORT int32_t moonshine_create_embedding_model(
    need to remain valid for the duration of this call.
 
    `model_arch` should be one of the MOONSHINE_EMBEDDING_MODEL_ARCH_* constants.
-   `model_variant` selects the variant ("fp32", "fp16", "q8", "q4", "q4f16";
+   `model_variant` selects the variant ("q4", "q8";
    NULL defaults to "q4") and is only used to pick the model file when the
-   filename keys do not make it unambiguous.
+   filename keys do not make it unambiguous. "fp32", "fp16", and "q4f16" are
+   no longer supported.
 
    Returns a non-negative handle on success, or a negative error code on
    failure.
@@ -1121,8 +1123,9 @@ MOONSHINE_EXPORT int32_t moonshine_get_stt_dependencies(
    model.
 
    ``options`` / ``options_count`` recognize ``variant`` (aliases:
-   ``model_variant``): one of ``"q4"``, ``"q8"``, ``"fp16"``, ``"fp32"``, or
-   ``"q4f16"``. When omitted, the model's default variant is used. Other
+   ``model_variant``): one of ``"q4"`` or ``"q8"``. ``"fp32"``, ``"fp16"``,
+   and ``"q4f16"`` are no longer supported. When omitted, the model's
+   default variant is used. Other
    options are ignored. The manifest lists the single all-in-one model file
    (``model_<variant>.ort``) and ``tokenizer.bin``.
 

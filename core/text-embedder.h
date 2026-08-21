@@ -27,7 +27,8 @@ struct TextEmbedderOptions {
   // Embedding model architecture
   EmbeddingModelArch model_arch = EmbeddingModelArch::GEMMA_300M;
 
-  // Model variant: "fp32", "fp16", "q8", "q4", or "q4f16"
+  // Model variant: "q4" or "q8". "fp32", "fp16", and "q4f16" are no longer
+  // supported.
   std::string model_variant = "q4";
 
   // Optional in-memory model source. When ``model_data`` is non-null the
