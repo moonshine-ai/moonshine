@@ -842,8 +842,10 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
             "-framework Foundation"
         )
     else()
+        find_package(Threads REQUIRED)
         target_link_libraries(transcriber-test PRIVATE
             moonshine
+            Threads::Threads
         )
     endif()
 

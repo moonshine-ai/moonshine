@@ -1,11 +1,15 @@
 #include "transcriber.h"
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <memory>
 #include <set>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "debug-utils.h"
@@ -1409,5 +1413,175 @@ TEST_CASE("transcriber-test") {
     CHECK(transcribe_current().find("Kubernetes") == std::string::npos);
 
     free(wav_data);
+  }
+}
+
+namespace {
+
+int argmax_logit(const std::vector<float> &logits) {
+  REQUIRE_FALSE(logits.empty());
+  int best = 0;
+  for (size_t i = 1; i < logits.size(); ++i) {
+    if (logits[i] > logits[static_cast<size_t>(best)]) {
+      best = static_cast<int>(i);
+    }
+  }
+  return best;
+}
+
+std::string join_transcript_text(const struct transcript_t *transcript) {
+  std::string text;
+  if (transcript == nullptr) {
+    return text;
+  }
+  for (uint64_t i = 0; i < transcript->line_count; ++i) {
+    const char *line_text = transcript->lines[i].text;
+    if (line_text == nullptr || line_text[0] == '\0') {
+      continue;
+    }
+    if (!text.empty()) {
+      text.push_back(' ');
+    }
+    text += line_text;
+  }
+  return text;
+}
+
+// GitHub issue #218: medium-streaming failed to emit hypotheses when 100ms
+// chunks were ingested rapidly while transcribe_stream was polled on another
+// thread. The same race exists on every streaming architecture because they
+// share one encoder state; tiny-streaming is the CI fixture, medium is used
+// when present.
+void run_short_chunk_streaming_case(const char *model_path,
+                                    uint32_t model_arch) {
+  REQUIRE(std::filesystem::exists(model_path));
+  const std::string wav_path = "two_cities_16k.wav";
+  REQUIRE(std::filesystem::exists(wav_path));
+
+  float *wav_data = nullptr;
+  size_t wav_data_size = 0;
+  int32_t wav_sample_rate = 0;
+  REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
+                        &wav_sample_rate));
+  REQUIRE(wav_data != nullptr);
+  std::unique_ptr<float, decltype(&std::free)> owned(wav_data, &std::free);
+  REQUIRE(wav_sample_rate == 16000);
+
+  const size_t clip_samples =
+      std::min(wav_data_size, static_cast<size_t>(6 * wav_sample_rate));
+  const size_t chunk_samples = static_cast<size_t>(0.1f * wav_sample_rate);
+
+  TranscriberOptions options;
+  options.model_source = TranscriberOptions::ModelSource::FILES;
+  options.model_path = model_path;
+  options.model_arch = model_arch;
+  options.identify_speakers = false;
+  options.return_audio_data = false;
+  options.log_output_text = false;
+  options.transcription_interval = 0.1f;
+
+  Transcriber transcriber(options);
+  const int32_t stream_id = transcriber.create_stream();
+  REQUIRE(stream_id >= 0);
+  transcriber.start_stream(stream_id);
+
+  auto add_range = [&](size_t begin, size_t end) {
+    for (size_t offset = begin; offset < end; offset += chunk_samples) {
+      const size_t n = std::min(chunk_samples, end - offset);
+      transcriber.add_audio_to_stream(stream_id, wav_data + offset, n,
+                                      wav_sample_rate);
+    }
+  };
+
+  // Prime the buffer with a second of 100ms frames, then overlap two
+  // transcribe_stream calls the way a feeder thread plus a 250ms poller
+  // (or two pollers) can. That used to decode against empty encoder memory.
+  const size_t prime_samples =
+      std::min(clip_samples, static_cast<size_t>(wav_sample_rate));
+  add_range(0, prime_samples);
+
+  std::thread poller_a([&]() {
+    struct transcript_t *transcript = nullptr;
+    transcriber.transcribe_stream(stream_id, 0, &transcript);
+  });
+  std::thread poller_b([&]() {
+    struct transcript_t *transcript = nullptr;
+    transcriber.transcribe_stream(stream_id, 0, &transcript);
+  });
+  poller_a.join();
+  poller_b.join();
+
+  std::atomic<bool> stop_polling{false};
+  std::thread live_poller([&]() {
+    while (!stop_polling.load()) {
+      struct transcript_t *transcript = nullptr;
+      transcriber.transcribe_stream(stream_id, 0, &transcript);
+      std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
+  });
+  add_range(prime_samples, clip_samples);
+  stop_polling.store(true);
+  live_poller.join();
+
+  transcriber.stop_stream(stream_id);
+  struct transcript_t *final_transcript = nullptr;
+  transcriber.transcribe_stream(stream_id, MOONSHINE_FLAG_FORCE_UPDATE,
+                                &final_transcript);
+  REQUIRE(final_transcript != nullptr);
+  const std::string text = join_transcript_text(final_transcript);
+  transcriber.free_stream(stream_id);
+
+  LOGF("short-chunk streaming transcript (%s): %s", model_path, text.c_str());
+  CHECK_FALSE(text.empty());
+}
+
+}  // namespace
+
+TEST_CASE("streaming-empty-memory-decode") {
+  // GitHub issue #218: decode/cross-KV before the encoder has emitted any
+  // memory must succeed as a no-op (not an error). Early 100ms chunks on
+  // medium-streaming hit this because of encoder lookahead; the Transcriber
+  // path can also race a decode against a segment reset. decode_step writes
+  // an EOS-only logit row so a greedy loop stops instead of reading junk.
+  const std::string model_dir = "tiny-streaming-en";
+  REQUIRE(std::filesystem::exists(model_dir));
+  MoonshineStreamingModel model;
+  const std::string tokenizer_path = model_dir + "/tokenizer.bin";
+  REQUIRE(model.load(model_dir.c_str(), tokenizer_path.c_str(),
+                     MOONSHINE_MODEL_ARCH_TINY_STREAMING) == 0);
+  std::unique_ptr<MoonshineStreamingState> state(model.create_state());
+  REQUIRE(state != nullptr);
+  REQUIRE(state->memory_len == 0);
+
+  std::vector<float> logits(static_cast<size_t>(model.config.vocab_size),
+                            -99.0f);
+  const int step_err =
+      model.decode_step(state.get(), model.config.bos_id, logits.data());
+  CHECK(step_err == 0);
+  CHECK(argmax_logit(logits) == model.config.eos_id);
+
+  int *tokens = nullptr;
+  int tokens_len = -1;
+  const int full_err =
+      model.decode_full(state.get(), nullptr, 0, &tokens, &tokens_len);
+  std::unique_ptr<int, decltype(&std::free)> owned_tokens(tokens, &std::free);
+  CHECK(full_err == 0);
+  CHECK(tokens_len == 0);
+  CHECK(tokens == nullptr);
+}
+
+TEST_CASE("streaming-short-chunk-ingestion") {
+  SUBCASE("tiny-streaming") {
+    run_short_chunk_streaming_case("tiny-streaming-en",
+                                   MOONSHINE_MODEL_ARCH_TINY_STREAMING);
+  }
+  SUBCASE("medium-streaming") {
+    if (!std::filesystem::exists(std::filesystem::path("medium-streaming-en") /
+                                 "streaming_config.json")) {
+      MESSAGE("medium-streaming-en is not in test-assets, skipping");
+      return;
+    }
+    run_short_chunk_streaming_case("medium-streaming-en",
+                                   MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING);
   }
 }

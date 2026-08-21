@@ -779,11 +779,19 @@ void Transcriber::add_audio_to_stream(int32_t stream_id,
 void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
                                     struct transcript_t **out_transcript) {
   TranscriberStream *stream = nullptr;
+  std::vector<float> audio_snapshot;
+  bool should_update = false;
+  bool is_stopped = false;
+  bool diarization_enabled = false;
   {
     // Resolve the stream pointer entirely under streams_mutex. Reading the map
     // outside the lock (as an earlier version did on a second streams[] lookup)
     // races with create_stream()/free_stream() mutating the map on another
     // thread, which ThreadSanitizer flags and can corrupt the red-black tree.
+    // Swap the pending audio out in the same critical section so add_audio on
+    // another thread cannot reallocate the vector while we transcribe, and so
+    // overlapping transcribe_stream calls cannot both consume the same buffer
+    // (GitHub issue #218).
     std::lock_guard<std::mutex> lock(this->streams_mutex);
     auto it = this->streams.find(stream_id);
     if (it == this->streams.end()) {
@@ -799,29 +807,34 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
       throw std::runtime_error(error_message);
     }
     stream = it->second;
+    if (stream == nullptr) {
+      std::string error_message =
+          "Stream with ID " + std::to_string(stream_id) + " is null";
+      throw std::runtime_error(error_message);
+    }
+
+    is_stopped = !stream->vad->is_active();
+    diarization_enabled =
+        (this->speaker_diarizer != nullptr && stream->diarizer_stream_id >= 0);
+    const uint64_t audio_length = stream->new_audio_buffer.size();
+    const bool has_new_audio = (audio_length > 0);
+    const float new_audio_duration =
+        audio_length / (float)(INTERNAL_SAMPLE_RATE);
+    const bool long_enough_to_analyze =
+        new_audio_duration >= this->options.transcription_interval;
+    const bool force_update = flags & MOONSHINE_FLAG_FORCE_UPDATE;
+    // After stop_stream the leftover buffer is still valid. Drain it even if
+    // it is shorter than transcription_interval so stop-then-transcribe_stream
+    // produces a final transcript without earlier partial updates.
+    should_update =
+        (long_enough_to_analyze || force_update || is_stopped) && has_new_audio;
+    if (should_update) {
+      audio_snapshot.swap(stream->new_audio_buffer);
+    }
   }
 
-  if (stream == nullptr) {
-    std::string error_message =
-        "Stream with ID " + std::to_string(stream_id) + " is null";
-    throw std::runtime_error(error_message);
-  }
-
-  const float *audio_data = stream->new_audio_buffer.data();
-  const uint64_t audio_length = stream->new_audio_buffer.size();
-  const bool has_new_audio = (audio_length > 0);
-  const float new_audio_duration = audio_length / (float)(INTERNAL_SAMPLE_RATE);
-  const bool long_enough_to_analyze =
-      new_audio_duration >= this->options.transcription_interval;
-  const bool force_update = flags & MOONSHINE_FLAG_FORCE_UPDATE;
-  const bool is_stopped = !stream->vad->is_active();
-  // After stop_stream the leftover buffer is still valid. Drain it even if it
-  // is shorter than transcription_interval so stop-then-transcribe_stream
-  // produces a final transcript without earlier partial updates.
-  const bool should_update =
-      (long_enough_to_analyze || force_update || is_stopped) && has_new_audio;
-  const bool diarization_enabled =
-      (this->speaker_diarizer != nullptr && stream->diarizer_stream_id >= 0);
+  const float *audio_data = audio_snapshot.data();
+  const uint64_t audio_length = audio_snapshot.size();
   // Return the cached transcript if it's only been a short time since the
   // last transcription.
   if (!should_update) {
@@ -890,7 +903,6 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
       segments.push_back(std::move(segment_copy));
     }
   }
-  stream->clear_new_audio_buffer();
   this->update_transcript_from_segments(segments, stream, flags,
                                         out_transcript);
   if (!this->options.return_audio_data) {
@@ -1335,7 +1347,13 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
 
   const MoonshineStreamingConfig &config = this->streaming_model->config;
 
-  // Check if this is a new segment - if so, reset state
+  // Biaser first, then the streaming model: set_keyterms only takes the
+  // biaser lock, and decode below needs both. Hold the model lock across
+  // reset/encode/decode so a concurrent transcribe_stream cannot wipe
+  // memory while cross-KV is running (GitHub issue #218).
+  std::lock_guard<std::mutex> biaser_lock(this->context_biaser_mutex);
+  std::lock_guard<std::mutex> lock(this->streaming_model_mutex);
+
   bool is_new_segment = (segment_id != this->current_streaming_segment_id);
   if (is_new_segment) {
     this->streaming_state.reset(config);
@@ -1344,51 +1362,37 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
     this->last_streaming_tokens.clear();
   }
 
-  // Calculate how many new samples we need to process
   size_t new_samples_start = this->streaming_samples_processed;
 
-  if (new_samples_start >= audio_length) {
-    // No new audio to process, but we may still need to decode
-    // (e.g., if is_final changed from false to true)
-  } else {
-    // Process only the NEW audio samples
+  if (new_samples_start < audio_length) {
     const float *new_audio_data = audio_data + new_samples_start;
     size_t new_audio_length = audio_length - new_samples_start;
 
     const int chunk_size = 1280;  // 80ms at 16kHz
     const size_t chunk_count = new_audio_length / chunk_size;
-    {
-      std::lock_guard<std::mutex> lock(this->streaming_model_mutex);
 
-      for (size_t chunk_index = 0; chunk_index < chunk_count; chunk_index++) {
-        size_t offset = chunk_index * chunk_size;
-        int err = this->streaming_model->process_audio_chunk(
-            &this->streaming_state, new_audio_data + offset, chunk_size,
-            nullptr);
-        if (err != 0) {
-          LOGF("Failed to process audio chunk: %d", err);
-          throw std::runtime_error("Failed to process audio chunk: " +
-                                   std::to_string(err));
-        }
-      }
-
-      // Run encoder - is_final determines if we emit all frames or keep
-      // lookahead
-      int new_frames = 0;
-      int err = this->streaming_model->encode(&this->streaming_state, is_final,
-                                              &new_frames);
+    for (size_t chunk_index = 0; chunk_index < chunk_count; chunk_index++) {
+      size_t offset = chunk_index * chunk_size;
+      int err = this->streaming_model->process_audio_chunk(
+          &this->streaming_state, new_audio_data + offset, chunk_size, nullptr);
       if (err != 0) {
-        LOGF("Failed to encode: %d", err);
-        throw std::runtime_error("Failed to encode: " + std::to_string(err));
+        LOGF("Failed to process audio chunk: %d", err);
+        throw std::runtime_error("Failed to process audio chunk: " +
+                                 std::to_string(err));
       }
     }
 
-    // Update the count of processed samples with the chunks we've actually
-    // processed.
+    int new_frames = 0;
+    int err = this->streaming_model->encode(&this->streaming_state, is_final,
+                                            &new_frames);
+    if (err != 0) {
+      LOGF("Failed to encode: %d", err);
+      throw std::runtime_error("Failed to encode: " + std::to_string(err));
+    }
+
     this->streaming_samples_processed += chunk_count * chunk_size;
   }
 
-  // If no memory accumulated, return empty string
   if (this->streaming_state.memory_len == 0) {
     return new std::string();
   }
@@ -1397,11 +1401,8 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
     return new std::string();
   }
 
-  // Reset decoder state before decoding (we decode from scratch each time
-  // since memory may have changed)
   this->streaming_model->decoder_reset(&this->streaming_state);
 
-  // Decode to get transcription
   const float duration_sec = audio_length / (float)INTERNAL_SAMPLE_RATE;
   const int max_tokens =
       std::min(static_cast<int>(std::ceil(duration_sec *
@@ -1409,96 +1410,80 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
                256);
   std::vector<int64_t> tokens;
 
-  // Held across the whole decode so a concurrent set_keyterms cannot swap the
-  // trie out from under it. Always taken before streaming_model_mutex.
-  std::lock_guard<std::mutex> biaser_lock(this->context_biaser_mutex);
   ContextBiaser *biaser =
       this->context_biaser.empty() ? nullptr : &this->context_biaser;
 
-  {
-    std::lock_guard<std::mutex> lock(this->streaming_model_mutex);
+  if (this->options.use_speculative_decoding && !is_new_segment &&
+      !this->last_streaming_tokens.empty()) {
+    std::vector<int> draft;
+    draft.reserve(this->last_streaming_tokens.size());
+    for (int t : this->last_streaming_tokens) {
+      if (t == config.bos_id || t == config.eos_id) continue;
+      draft.push_back(t);
+    }
 
-    if (this->options.use_speculative_decoding && !is_new_segment &&
-        !this->last_streaming_tokens.empty()) {
-      // Previous content tokens as draft (strip BOS/EOS).
-      std::vector<int> draft;
-      draft.reserve(this->last_streaming_tokens.size());
-      for (int t : this->last_streaming_tokens) {
-        if (t == config.bos_id || t == config.eos_id) continue;
-        draft.push_back(t);
-      }
+    int *out = nullptr;
+    int out_len = 0;
+    const int *draft_ptr = draft.empty() ? nullptr : draft.data();
+    int err = this->streaming_model->decode_full(
+        &this->streaming_state, draft_ptr, static_cast<int>(draft.size()), &out,
+        &out_len, biaser);
+    if (err != 0) {
+      LOGF("Speculative decode_full failed: %d", err);
+      throw std::runtime_error("Speculative decode_full failed: " +
+                               std::to_string(err));
+    }
+    std::unique_ptr<int, decltype(&std::free)> owned(out, &std::free);
+    tokens.push_back(config.bos_id);
+    for (int i = 0; i < out_len; ++i) {
+      tokens.push_back(out[i]);
+    }
+    if (tokens.empty() || tokens.back() != config.eos_id) {
+      // decode_full omits EOS; leave as-is for text conversion.
+    }
+  } else {
+    tokens.push_back(config.bos_id);
+    std::vector<float> logits(config.vocab_size);
+    int current_token = config.bos_id;
+    if (biaser != nullptr) {
+      biaser->reset();
+    }
 
-      int *out = nullptr;
-      int out_len = 0;
-      const int *draft_ptr = draft.empty() ? nullptr : draft.data();
-      int err = this->streaming_model->decode_full(
-          &this->streaming_state, draft_ptr, static_cast<int>(draft.size()),
-          &out, &out_len, biaser);
+    for (int step = 0; step < max_tokens; ++step) {
+      int err = this->streaming_model->decode_step(
+          &this->streaming_state, current_token, logits.data());
       if (err != 0) {
-        LOGF("Speculative decode_full failed: %d", err);
-        throw std::runtime_error("Speculative decode_full failed: " +
-                                 std::to_string(err));
+        break;
       }
-      // decode_full allocates with malloc; adopt it so the buffer is released
-      // without a bare free() (see STYLE_GUIDE.md).
-      std::unique_ptr<int, decltype(&std::free)> owned(out, &std::free);
-      tokens.push_back(config.bos_id);
-      for (int i = 0; i < out_len; ++i) {
-        tokens.push_back(out[i]);
-      }
-      // Match greedy path: append EOS when decode_full stopped without it.
-      if (tokens.empty() || tokens.back() != config.eos_id) {
-        // decode_full omits EOS; leave as-is for text conversion.
-      }
-    } else {
-      tokens.push_back(config.bos_id);
-      std::vector<float> logits(config.vocab_size);
-      int current_token = config.bos_id;
-      // This pass decodes from BOS, so any partial key-term match left over
-      // from the previous pass is meaningless.
+
       if (biaser != nullptr) {
-        biaser->reset();
+        biaser->apply(logits.data(), config.vocab_size);
       }
 
-      for (int step = 0; step < max_tokens; ++step) {
-        int err = this->streaming_model->decode_step(
-            &this->streaming_state, current_token, logits.data());
-        if (err != 0) {
-          break;
+      int next_token = 0;
+      float max_logit = logits[0];
+      for (int i = 1; i < config.vocab_size; ++i) {
+        if (logits[i] > max_logit) {
+          max_logit = logits[i];
+          next_token = i;
         }
+      }
 
-        if (biaser != nullptr) {
-          biaser->apply(logits.data(), config.vocab_size);
-        }
+      tokens.push_back(next_token);
+      current_token = next_token;
 
-        // Argmax
-        int next_token = 0;
-        float max_logit = logits[0];
-        for (int i = 1; i < config.vocab_size; ++i) {
-          if (logits[i] > max_logit) {
-            max_logit = logits[i];
-            next_token = i;
-          }
-        }
-
-        tokens.push_back(next_token);
-        current_token = next_token;
-
-        if (next_token == config.eos_id) break;
-        if (biaser != nullptr) {
-          biaser->advance(next_token);
-        }
+      if (next_token == config.eos_id) break;
+      if (biaser != nullptr) {
+        biaser->advance(next_token);
       }
     }
   }
 
-  // Save tokens for word timestamp alignment / next speculative draft
   this->last_streaming_tokens.clear();
   for (auto t : tokens) {
     this->last_streaming_tokens.push_back(static_cast<int>(t));
   }
 
-  // Convert tokens to text
   std::string text = this->streaming_model->tokens_to_text(tokens);
   if (this->options.log_output_text) {
     LOGF("Streaming model transcribed text: '%s'", text.c_str());
