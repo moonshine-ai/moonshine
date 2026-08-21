@@ -70,6 +70,21 @@ const char *kSpaceString = "▁";
 // subwords the decoder never emits.
 const BinTokenizerEncoding kTokenizerEncoding = BinTokenizerEncoding::kBpe;
 
+// When the encoder has not emitted memory yet (lookahead still filling, or a
+// new segment just reset), decoding is a no-op. Point argmax at EOS so a
+// caller that ignores the empty-memory case still stops instead of reading
+// uninitialized logits.
+void write_empty_decode_logits(const MoonshineStreamingConfig &config,
+                               float *logits_out) {
+  if (logits_out == nullptr || config.vocab_size <= 0) {
+    return;
+  }
+  std::fill(logits_out, logits_out + config.vocab_size, 0.0f);
+  if (config.eos_id >= 0 && config.eos_id < config.vocab_size) {
+    logits_out[config.eos_id] = 1.0f;
+  }
+}
+
 }  // namespace
 
 /* ============================================================================
@@ -981,7 +996,6 @@ int MoonshineStreamingModel::compute_cross_kv(MoonshineStreamingState *state) {
     return 1;
   }
   if (state->memory_len == 0) {
-    LOG("Memory is empty, cannot compute cross K/V\n");
     return 1;
   }
 
@@ -1297,8 +1311,8 @@ int MoonshineStreamingModel::decode_step(MoonshineStreamingState *state,
     return 1;
   }
   if (state->memory_len == 0) {
-    LOG("Memory is empty\n");
-    return 1;
+    write_empty_decode_logits(config, logits_out);
+    return 0;
   }
 
   std::lock_guard<std::mutex> lock(processing_mutex);
@@ -1349,8 +1363,10 @@ int MoonshineStreamingModel::decode_tokens(MoonshineStreamingState *state,
     return 1;
   }
   if (state->memory_len == 0) {
-    LOG("Memory is empty\n");
-    return 1;
+    for (int i = 0; i < tokens_len; ++i) {
+      write_empty_decode_logits(config, logits_out + i * config.vocab_size);
+    }
+    return 0;
   }
 
   std::lock_guard<std::mutex> lock(processing_mutex);
@@ -1403,7 +1419,6 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
     return 1;
   }
   if (state->memory_len == 0) {
-    LOG("Memory is empty\n");
     *tokens_out = nullptr;
     *tokens_len_out = 0;
     return 0;

@@ -29,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Streaming no longer logs `Memory is empty` or drops hypotheses when short chunks arrive faster than encoder lookahead, including on medium-streaming (GitHub issue #218).
 - Destroying a file-backed Transcriber now unmaps every `.ort` it opened, so creating and closing one in a loop no longer retains tens of megabytes per instance.
 - Kokoro text to speech failed to load in WebAssembly after the faster model landed, because the runtime was built without the quantized operators it needs.
 - A native error in WebAssembly now reports its message instead of a heap address.
