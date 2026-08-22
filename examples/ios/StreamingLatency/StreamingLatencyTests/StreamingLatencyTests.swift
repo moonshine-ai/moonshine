@@ -46,9 +46,15 @@ final class StreamingLatencyTests: XCTestCase {
         let keytermCount = keyterms.isEmpty ? 0 : keyterms.split(separator: ",").count
 
         for testCase in Self.cases {
-            let transcriber = try await Transcriber.load(
-                language: "en", modelArch: testCase.arch,
+            let spec = ModelSpec.stt(language: "en", modelArch: testCase.arch)
+            let directory = try ModelCache.directory(for: spec)
+            _ = try await AssetDownloader().ensureModelPresent(
+                root: directory, spec: spec)
+            let loadStart = Date()
+            let transcriber = try Transcriber(
+                modelPath: directory.path, modelArch: testCase.arch,
                 options: options.isEmpty ? nil : options)
+            let loadMs = Date().timeIntervalSince(loadStart) * 1000
             defer { transcriber.close() }
 
             var latencies: [UInt32] = []
@@ -90,8 +96,8 @@ final class StreamingLatencyTests: XCTestCase {
             let sum = latencies.reduce(0) { $0 + Int($1) }
             let avgMs = Double(sum) / Double(latencies.count)
             let summary = String(
-                format: "MOONSHINE_LATENCY platform=ios device=%@ model=%@ avg_ms=%.0f lines=%d wall_s=%.2f keyterms=%d",
-                device, testCase.modelName, avgMs, latencies.count, wallSeconds,
+                format: "MOONSHINE_LATENCY platform=ios device=%@ model=%@ avg_ms=%.0f load_ms=%.0f lines=%d wall_s=%.2f keyterms=%d",
+                device, testCase.modelName, avgMs, loadMs, latencies.count, wallSeconds,
                 keytermCount)
             print(summary)
             fputs(summary + "\n", stderr)

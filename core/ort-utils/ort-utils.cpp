@@ -122,6 +122,25 @@ void ort_maybe_force_single_thread(const OrtApi *ort_api,
                                                           ORT_SEQUENTIAL));
 }
 
+void ort_configure_ort_file_session(const OrtApi *ort_api,
+                                    OrtSessionOptions *session_options) {
+  LOG_ORT_ERROR(ort_api, ort_api->SetSessionGraphOptimizationLevel(
+                             session_options, ORT_ENABLE_EXTENDED));
+  LOG_ORT_ERROR(ort_api,
+                ort_api->AddSessionConfigEntry(
+                    session_options, "session.load_model_format", "ORT"));
+  LOG_ORT_ERROR(ort_api, ort_api->AddSessionConfigEntry(
+                             session_options,
+                             "session.use_ort_model_bytes_directly", "1"));
+  LOG_ORT_ERROR(ort_api,
+                ort_api->AddSessionConfigEntry(
+                    session_options, "session.use_env_allocators", "1"));
+  LOG_ORT_ERROR(ort_api,
+                ort_api->AddSessionConfigEntry(
+                    session_options, "session.disable_prepacking", "1"));
+  LOG_ORT_ERROR(ort_api, ort_api->DisableCpuMemArena(session_options));
+}
+
 #if defined(ANDROID)
 int ort_session_from_asset(const OrtApi *ort_api, OrtEnv *env,
                            OrtSessionOptions *session_options,

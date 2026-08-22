@@ -286,6 +286,24 @@ def test_download_file_stays_quiet_for_a_cached_file(monkeypatch, tmp_path):
     assert requests.calls == 0
 
 
+def test_cached_download_does_not_import_requests(tmp_path):
+    """A present file must not pull in urllib3 just to notice it is cached."""
+    dest = tmp_path / "a.bin"
+    dest.write_bytes(b"x" * 100)
+    before_requests = download_file_mod.requests
+    before_lock = download_file_mod.FileLock
+
+    download_file_mod.download_file(
+        "https://example.test/a.bin",
+        dest,
+        expected_size=100,
+        show_progress=False,
+    )
+
+    assert download_file_mod.requests is before_requests
+    assert download_file_mod.FileLock is before_lock
+
+
 def test_cached_files_still_reach_full_progress(monkeypatch, tmp_path):
     """The everything-already-downloaded case still has to end at 1."""
     monkeypatch.setattr(

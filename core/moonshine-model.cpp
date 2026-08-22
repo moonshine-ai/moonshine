@@ -114,21 +114,7 @@ MoonshineModel::MoonshineModel(
 
   LOG_ORT_ERROR(ort_api, ort_api->CreateSessionOptions(&ort_session_options));
   ort_maybe_force_single_thread(ort_api, ort_session_options);
-  LOG_ORT_ERROR(ort_api, ort_api->SetSessionGraphOptimizationLevel(
-                             ort_session_options, ORT_ENABLE_EXTENDED));
-  LOG_ORT_ERROR(ort_api,
-                ort_api->AddSessionConfigEntry(
-                    ort_session_options, "session.load_model_format", "ORT"));
-  LOG_ORT_ERROR(ort_api, ort_api->AddSessionConfigEntry(
-                             ort_session_options,
-                             "session.use_ort_model_bytes_directly", "1"));
-  LOG_ORT_ERROR(ort_api,
-                ort_api->AddSessionConfigEntry(
-                    ort_session_options, "session.use_env_allocators", "1"));
-  LOG_ORT_ERROR(ort_api,
-                ort_api->AddSessionConfigEntry(
-                    ort_session_options, "session.disable_prepacking", "1"));
-  LOG_ORT_ERROR(ort_api, ort_api->DisableCpuMemArena(ort_session_options));
+  ort_configure_ort_file_session(ort_api, ort_session_options);
   ort_configure_execution_providers(ort_api, ort_session_options,
                                     ort_provider_names, coreml_cache_dir);
 }
