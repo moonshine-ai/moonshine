@@ -39,8 +39,6 @@ export function stringToModelArch(name: string): ModelArch {
 
 /**
  * Embedding-model architectures.
- *
- * @internal Phrase matching is reached through {@link AgentFlow}.
  */
 export enum EmbeddingModelArch {
   Gemma300M = 0,

@@ -1,9 +1,9 @@
 /**
  * Text embeddings: turns text into vectors and scores them against each other.
  *
- * This is internal to the binding. {@link AgentFlow} is the supported way to
- * match spoken phrases; it owns a model and compares utterances to phrases
- * itself, so nothing here is exported from the package entry point.
+ * A low-level type, like {@link Transcriber}. {@link AgentFlow} is the
+ * supported way to match spoken phrases in an app; it owns a model and
+ * compares utterances to phrases itself.
  *
  * The embedding model ships as a single all-in-one `.ort` file (plus
  * `tokenizer.bin`) and is loaded entirely from in-memory buffers via the

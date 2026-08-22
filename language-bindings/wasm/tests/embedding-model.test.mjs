@@ -1,14 +1,14 @@
-// Text-embedding tests. EmbeddingModel is internal — AgentFlow is the public
-// way to match phrases — so these import the module directly rather than
-// through the package entry point. The dependency-manifest check and the
-// invalid-buffer error mirror Swift's EmbeddingModelTests / Android's
-// EmbeddingModelTest (testCreateEmbeddingModel_invalidPath_throws). The full
-// embed/match path needs the embedding model, which is download-only, so it is
-// opt-in via MOONSHINE_DOWNLOAD_TESTS=1 (matching AssetDownloaderNetworkTests).
+// Text-embedding tests. EmbeddingModel is a public low-level type; PhraseMatcher
+// stays internal to AgentFlow, so matcher tests import it from the module file.
+// The dependency-manifest check and the invalid-buffer error mirror Swift's
+// EmbeddingModelTests / Android's EmbeddingModelTest
+// (testCreateEmbeddingModel_invalidPath_throws). The full embed/match path
+// needs the embedding model, which is download-only, so it is opt-in via
+// MOONSHINE_DOWNLOAD_TESTS=1 (matching AssetDownloaderNetworkTests).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { importInternal, loadRawModule } from './helpers.mjs';
+import { importApi, importInternal, loadRawModule } from './helpers.mjs';
 
 const mod = await loadRawModule();
 
@@ -51,13 +51,21 @@ test('the phrase matcher falls back to substrings without a model', async () => 
   assert.equal(matcher.match('play some music', groups, 0.7), undefined);
 });
 
+test('package entry exports EmbeddingModel', async () => {
+  const api = await importApi();
+  assert.equal(typeof api.EmbeddingModel, 'function');
+  assert.equal(typeof api.EmbeddingModelArch, 'object');
+  assert.equal(api.EmbeddingModelArch.Gemma300M, 0);
+});
+
 const downloadTests = process.env.MOONSHINE_DOWNLOAD_TESTS === '1';
 const matchSkip = downloadTests
   ? false
   : 'set MOONSHINE_DOWNLOAD_TESTS=1 to download the embedding model and run';
 
 test('embeds text and scores the closest phrase', { skip: matchSkip }, async () => {
-  const { EmbeddingModel, PhraseMatcher } = await importInternal('embedding-model.js');
+  const { EmbeddingModel } = await importApi();
+  const { PhraseMatcher } = await importInternal('embedding-model.js');
   const model = await EmbeddingModel.load({ variant: 'q4', module: mod });
   try {
     const lights = model.calculateEmbedding('turn on the lights');

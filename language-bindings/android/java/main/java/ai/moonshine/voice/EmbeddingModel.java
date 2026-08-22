@@ -5,10 +5,11 @@ import java.util.List;
 /**
  * Turns text into embedding vectors and scores them against each other.
  *
- * <p>Internal to the library. {@link AgentFlow} is the supported way to match
- * spoken phrases; it owns a model and compares utterances to phrases itself.
+ * <p>A low-level type, like {@link Transcriber}. {@link AgentFlow} is the
+ * supported way to match spoken phrases in an app; it owns a model and
+ * compares utterances to phrases itself.
  */
-class EmbeddingModel {
+public class EmbeddingModel {
   private int handle = -1;
 
   /**
@@ -16,7 +17,7 @@ class EmbeddingModel {
    * @param embeddingModelArch e.g. {@link JNI#MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M}
    * @param modelVariant e.g. {@code "q4"}; pass null for native default
    */
-  EmbeddingModel(String modelRootDir, int embeddingModelArch, String modelVariant) {
+  public EmbeddingModel(String modelRootDir, int embeddingModelArch, String modelVariant) {
     JNI.ensureLibraryLoaded();
     String variant = modelVariant != null ? modelVariant : "q4";
     this.handle = JNI.moonshineCreateEmbeddingModel(modelRootDir, embeddingModelArch, variant);
@@ -25,7 +26,7 @@ class EmbeddingModel {
     }
   }
 
-  EmbeddingModel(String modelRootDir, int embeddingModelArch) {
+  public EmbeddingModel(String modelRootDir, int embeddingModelArch) {
     this(modelRootDir, embeddingModelArch, "q4");
   }
 
@@ -40,7 +41,7 @@ class EmbeddingModel {
    *                  {@code null} for the default model.
    * @param options   Optional options; recognizes {@code variant}.
    */
-  static String getEmbeddingDependencies(String modelName, List<TranscriberOption> options) {
+  public static String getEmbeddingDependencies(String modelName, List<TranscriberOption> options) {
     JNI.ensureLibraryLoaded();
     TranscriberOption[] optionsArray =
         (options == null || options.isEmpty())
@@ -62,7 +63,7 @@ class EmbeddingModel {
     }
   }
 
-  void close() {
+  public void close() {
     if (handle >= 0) {
       JNI.moonshineFreeEmbeddingModel(handle);
       handle = -1;
@@ -70,7 +71,7 @@ class EmbeddingModel {
   }
 
   /** The embedding vector for {@code sentence}. */
-  float[] calculateEmbedding(String sentence) {
+  public float[] calculateEmbedding(String sentence) {
     checkHandle();
     float[] embedding = JNI.moonshineCalculateEmbedding(handle, sentence);
     if (embedding == null) {
@@ -80,7 +81,7 @@ class EmbeddingModel {
   }
 
   /** Cosine similarity between two embeddings of equal length, in {@code [-1, 1]}. */
-  float distance(float[] embeddingA, float[] embeddingB) {
+  public float distance(float[] embeddingA, float[] embeddingB) {
     checkHandle();
     if (embeddingA == null || embeddingB == null || embeddingA.length != embeddingB.length) {
       throw new IllegalArgumentException("Embeddings must be non-null and the same length");

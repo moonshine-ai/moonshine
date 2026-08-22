@@ -1,8 +1,9 @@
 """Embedding model access via the native embedding C API.
 
-Internal to the binding: :class:`~moonshine_voice.agent_flow.AgentFlow` is
-the supported way to match spoken phrases, and it owns an embedding model on
-the application's behalf.  Nothing here is exported from ``moonshine_voice``.
+A low-level type, like :class:`~moonshine_voice.transcriber.Transcriber`.
+:class:`~moonshine_voice.agent_flow.AgentFlow` is the supported way to match
+spoken phrases in an app; it owns a model and compares utterances to phrases
+itself.
 """
 
 import ctypes

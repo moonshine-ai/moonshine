@@ -77,6 +77,7 @@ _mic_transcriber_imported = False
 _alphanumeric_listener_imported = False
 _tts_imported = False
 _g2p_imported = False
+_embedding_imported = False
 _agent_flow_imported = False
 
 
@@ -84,7 +85,7 @@ def __getattr__(name):
     """Lazy import for the transcriber, mic_transcriber, and TTS modules."""
     global _transcriber_imported, _mic_transcriber_imported
     global _alphanumeric_listener_imported, _tts_imported, _g2p_imported
-    global _agent_flow_imported
+    global _embedding_imported, _agent_flow_imported
 
     # Lazy import transcriber module
     if name in (
@@ -125,6 +126,14 @@ def __getattr__(name):
             globals()["LineCompleted"] = LineCompleted
             globals()["Error"] = Error
             _transcriber_imported = True
+        return globals()[name]
+
+    if name == "EmbeddingModel":
+        if not _embedding_imported:
+            from moonshine_voice.embedding_model import EmbeddingModel
+
+            globals()["EmbeddingModel"] = EmbeddingModel
+            _embedding_imported = True
         return globals()[name]
 
     # Lazy import mic_transcriber module
@@ -303,6 +312,7 @@ __all__ = [
     "LineSpeakersChanged",
     "LineCompleted",
     "Error",
+    "EmbeddingModel",
     "EmbeddingModelArch",
     "MoonshineError",
     "MoonshineUnknownError",

@@ -117,6 +117,12 @@
     - [`__init__()`](#graphemetophonemizer-init)
     - [`to_ipa()`](#graphemetophonemizer-to-ipa)
     - [`close()`](#graphemetophonemizer-close)
+- [EmbeddingModel](#embeddingmodel)
+    - [`__init__()`](#embeddingmodel-init)
+    - [`load()`](#embeddingmodel-load)
+    - [`calculate_embedding()`](#embeddingmodel-calculate-embedding)
+    - [`distance()`](#embeddingmodel-distance)
+    - [`close()`](#embeddingmodel-close)
 
 
 ## Transcriber
@@ -430,3 +436,22 @@ IPA string generation without speech synthesis. Dependencies are the same CDN le
   - `options`: Optional per-call native [G2P options](options.md#grapheme-to-phonemes).
 
 - <a id="graphemetophonemizer-close"></a>`close()`: Frees the native handle; also invoked by context manager exit and `__del__`.
+
+## EmbeddingModel
+
+Turns text into embedding vectors and scores them against each other. A low-level type, like [`Transcriber`](#transcriber). [`AgentFlow`](#agentflow) is the supported way to match spoken phrases in an app; it owns a model and compares utterances to phrases itself. Use `EmbeddingModel` when you need the vectors, for example in a language binding that does its own phrase matching.
+
+- <a id="embeddingmodel-init"></a>`__init__()`: Opens an embedding model from a directory of files (Python, Swift, Java). JavaScript has no filesystem, so it uses [`load()`](#embeddingmodel-load) instead.
+  - `model_path`: Directory containing the embedding `.ort` and `tokenizer.bin`. Python apps typically get this from `get_embedding_model()`; see [Downloading Models](../using/downloading-models.md#embedding-models).
+  - `model_arch`: Architecture, from `EmbeddingModelArch`. Currently only Gemma 300M.
+  - `model_variant`: `"q4"` (default) or `"q8"`.
+
+- <a id="embeddingmodel-load"></a>`load()`: Downloads the model if needed and returns a ready instance. Named `load()` on JavaScript and Swift. Java uses `getEmbeddingDependencies()` plus the Android `AssetDownloader`, then the constructor.
+  - `model_name`: Embedding model id (for example `embeddinggemma-300m`). Empty or omitted uses the default.
+  - `variant`: `"q4"` (default) or `"q8"`.
+
+- <a id="embeddingmodel-calculate-embedding"></a>`calculate_embedding()`: Returns the embedding vector for a sentence. Named `calculateEmbedding()` everywhere but Python.
+
+- <a id="embeddingmodel-distance"></a>`distance()`: Cosine similarity of two equal-length embeddings, in `[-1, 1]`. `1` is identical, `0` is orthogonal, `-1` is opposite.
+
+- <a id="embeddingmodel-close"></a>`close()`: Frees the native handle. Also invoked by context manager exit and garbage collection.
