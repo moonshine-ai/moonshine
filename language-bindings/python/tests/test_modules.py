@@ -147,11 +147,10 @@ def test_g2p_prints_ipa():
 
 
 def test_embedding_backend_matches_transcribed_command():
-    """The embedding model is internal (AgentFlow owns one), so this drives
-    the module directly rather than through a CLI demo. It scores phrases the
-    way AgentFlow does, through calculate_embedding and distance."""
+    """Scores phrases the way AgentFlow does, through calculate_embedding
+    and distance."""
     moonshine_voice = pytest.importorskip("moonshine_voice")
-    from moonshine_voice.embedding_model import EmbeddingModel
+    EmbeddingModel = moonshine_voice.EmbeddingModel
 
     wav_path = REPO_ROOT / "test-assets" / "intent.wav"
     audio, sample_rate = moonshine_voice.load_wav_file(str(wav_path))

@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Cancelling a streamed reply now reports a cancelled status to whoever is pulling chunks, so an interrupted reply is distinguishable from one that ran out of text.
 - `AgentFlow.say_stream()` and `Dialog.say_stream()` speak a language model's reply as it is generated, instead of waiting for the whole thing.
 - `moonshine_tts_split_utterances()` exposes the sentence splitter that streaming and `say()` share.
+- `EmbeddingModel` is a public low-level type in Python, JavaScript, Swift, and Java, for embedding text and scoring similarity without adopting AgentFlow.
 
 ### Changed
 

@@ -64,8 +64,7 @@ export function importApi() {
 }
 
 /**
- * Imports a built module that the package deliberately does not re-export, e.g.
- * `'embedding-model.js'`, which AgentFlow owns on the caller's behalf.
+ * Imports a built module that the package deliberately does not re-export.
  */
 export function importInternal(file) {
   return import(path.join(DIST, file));

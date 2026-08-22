@@ -29,7 +29,7 @@ C++ policy lives in [core/STYLE_GUIDE.md](core/STYLE_GUIDE.md): C++20, RAII, no 
 
 ## Public API
 
-Language bindings follow construct → chainable setters → `load()`. Constructors are cheap and cannot fail. Do not put downloads or model opens in a constructor. The high-level types are `MicTranscriber`, `AgentFlow`, and `TextToSpeech`; `Transcriber` is the low-level PCM path. `DialogFlow` and the Intent API are gone.
+Language bindings follow construct → chainable setters → `load()`. Constructors are cheap and cannot fail. Do not put downloads or model opens in a constructor. The high-level types are `MicTranscriber`, `AgentFlow`, and `TextToSpeech`; `Transcriber` is the low-level PCM path and `EmbeddingModel` is the low-level text-embedding path. `DialogFlow` and the Intent API are gone.
 
 Only OnnxRuntime flatbuffer models (`.ort`) are accepted. Do not add `.onnx` loading paths.
 

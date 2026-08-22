@@ -26,7 +26,7 @@ public class JNI {
     public static final int MOONSHINE_FLAG_SPELLING_MODE = 1 << 1;
 
     /** Embedding model architecture (Gemma 300M). */
-    static final int MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M = 0;
+    public static final int MOONSHINE_EMBEDDING_MODEL_ARCH_GEMMA_300M = 0;
 
     /** Pass to TTS/G2P create calls; must match native {@code moonshine-c-api.h}. */
     public static final int MOONSHINE_HEADER_VERSION = 30000;
@@ -92,23 +92,20 @@ public class JNI {
     public static native Transcript moonshineTranscribeStream(int transcriber_handle,
             int stream_handle, int flags);
 
-    // Text embeddings back AgentFlow's phrase matching and are not part of the
-    // library's public surface, so these stay package-private.
-
-    static native int moonshineCreateEmbeddingModel(String model_path,
+    public static native int moonshineCreateEmbeddingModel(String model_path,
             int embedding_model_arch, String model_variant);
 
-    static native void moonshineFreeEmbeddingModel(int embedding_model_handle);
+    public static native void moonshineFreeEmbeddingModel(int embedding_model_handle);
 
     /** Returns null on failure. */
-    static native float[] moonshineCalculateEmbedding(int embedding_model_handle,
+    public static native float[] moonshineCalculateEmbedding(int embedding_model_handle,
             String sentence);
 
     /**
      * Cosine similarity of two equal-length embeddings, in {@code [-1, 1]}.
      * Returns 0 when the arrays are null, empty, or of differing lengths.
      */
-    static native float moonshineCalculateEmbeddingDistance(int embedding_model_handle,
+    public static native float moonshineCalculateEmbeddingDistance(int embedding_model_handle,
             float[] embedding_a, float[] embedding_b);
 
     public static native int moonshineCreateTtsSynthesizerFromFiles(String language,
@@ -149,7 +146,7 @@ public class JNI {
      *                  {@code null} for the default model.
      * @param options   Optional options; recognizes {@code variant}.
      */
-    static native String moonshineGetEmbeddingDependencies(String modelName,
+    public static native String moonshineGetEmbeddingDependencies(String modelName,
             TranscriberOption[] options);
 
     /**

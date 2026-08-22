@@ -197,7 +197,7 @@ The last two lines tell you which model architecture is being used, and where th
 
 ## Embedding Models
 
-The download module also helps you obtain the assets needed to match spoken phrases, primarily a sentence embedding model. `AgentFlow` fetches this for you on first use, so you only need this command to warm the cache ahead of time — before shipping a device that will be offline, for example.
+The download module also helps you obtain the assets needed to match spoken phrases, primarily a sentence embedding model. `AgentFlow` fetches this for you on first use. To use the vectors yourself, pass the downloaded directory to [`EmbeddingModel`](../api/classes.md#embeddingmodel). You only need this command to warm the cache ahead of time — before shipping a device that will be offline, for example.
 
 ```bash
 moonshine-voice download --embedding

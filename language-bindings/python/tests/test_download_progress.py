@@ -301,7 +301,7 @@ def test_cached_files_still_reach_full_progress(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("variant", ("fp32", "fp16", "q4f16"))
 def test_removed_embedding_variants_are_no_longer_supported(variant):
-    from moonshine_voice.embedding_model import EmbeddingModel
+    from moonshine_voice import EmbeddingModel
     from moonshine_voice.errors import MoonshineError
 
     with pytest.raises(ValueError, match="no longer supported"):

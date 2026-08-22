@@ -79,7 +79,7 @@ func withDiarizationModels(
 extension EmbeddingModel {
     /// Downloads the embedding model (if not already present) and returns a
     /// ready ``EmbeddingModel``.
-    static func load(
+    public static func load(
         modelName: String = "embeddinggemma-300m",
         modelArch: EmbeddingModelArch = .gemma300m,
         variant: String = "q4",

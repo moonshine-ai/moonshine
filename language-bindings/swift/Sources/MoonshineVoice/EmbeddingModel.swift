@@ -2,14 +2,15 @@ import Foundation
 
 /// Turns text into embedding vectors and scores them against each other.
 ///
-/// Internal to the binding. ``AgentFlow`` is the supported way to match spoken
-/// phrases; it owns a model and compares utterances to phrases itself.
-final class EmbeddingModel: @unchecked Sendable {
+/// A low-level type, like ``Transcriber``. ``AgentFlow`` is the supported way
+/// to match spoken phrases in an app; it owns a model and compares utterances
+/// to phrases itself.
+public final class EmbeddingModel: @unchecked Sendable {
     private let api = MoonshineAPI.shared
     private var handle: Int32
 
     /// Create an embedding model from a model directory on disk.
-    init(
+    public init(
         modelPath: String,
         modelArch: EmbeddingModelArch = .gemma300m,
         modelVariant: String = "q4"
@@ -25,7 +26,7 @@ final class EmbeddingModel: @unchecked Sendable {
         close()
     }
 
-    func close() {
+    public func close() {
         if handle >= 0 {
             api.freeEmbeddingModel(handle)
             handle = -1
@@ -33,12 +34,12 @@ final class EmbeddingModel: @unchecked Sendable {
     }
 
     /// The embedding vector for `sentence`.
-    func calculateEmbedding(_ sentence: String) throws -> [Float] {
+    public func calculateEmbedding(_ sentence: String) throws -> [Float] {
         return try api.calculateEmbedding(handle: handle, sentence: sentence)
     }
 
     /// Cosine similarity between two embeddings of equal length, in `-1...1`.
-    func distance(_ embeddingA: [Float], _ embeddingB: [Float]) throws -> Float {
+    public func distance(_ embeddingA: [Float], _ embeddingB: [Float]) throws -> Float {
         return try api.calculateEmbeddingDistance(
             handle: handle, embeddingA: embeddingA, embeddingB: embeddingB)
     }
