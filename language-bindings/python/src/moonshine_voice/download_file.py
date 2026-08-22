@@ -5,9 +5,6 @@ import struct
 from pathlib import Path
 from typing import Callable, Optional
 
-import requests
-from tqdm import tqdm
-from filelock import FileLock
 from platformdirs import user_cache_dir
 import platform
 
@@ -18,6 +15,28 @@ try:  # Fast C implementation (small wheel, standard for GCS checksums).
 except Exception:  # pragma: no cover - optional acceleration only
     google_crc32c = None  # type: ignore
     _HAVE_CRC32C = False
+
+# Populated on first download. A cache-hit CLI must not pay for urllib3.
+requests = None
+tqdm = None
+FileLock = None
+
+
+def _ensure_download_deps() -> None:
+    """Import requests / tqdm / filelock the first time a download is needed."""
+    global requests, tqdm, FileLock
+    if requests is None:
+        import requests as requests_mod
+
+        requests = requests_mod
+    if tqdm is None:
+        from tqdm import tqdm as tqdm_cls
+
+        tqdm = tqdm_cls
+    if FileLock is None:
+        from filelock import FileLock as file_lock_cls
+
+        FileLock = file_lock_cls
 
 
 def get_cache_dir(app_name: str = "moonshine_voice") -> Path:
@@ -116,15 +135,20 @@ def download_file(
     temp_file = dest.with_suffix(dest.suffix + ".partial")
     lock_file = dest.with_suffix(dest.suffix + ".lock")
 
+    # Unlocked fast path: dest is only ever replaced by an atomic rename of a
+    # completed download, so a present, matching file is already the final
+    # artifact. Skip filelock/requests/tqdm so a cached transcribe does not
+    # load urllib3.
+    if dest.exists() and _file_matches(dest, expected_sha256, expected_size, None):
+        return dest
+
+    _ensure_download_deps()
     with FileLock(lock_file):
-        # Check if already downloaded and valid. For cached files we only verify
-        # the (cheap) size and any SHA256, deliberately skipping CRC32C so we
-        # don't rehash large multi-hundred-MB models on every load; CRC32C is
-        # fully verified on the fresh download below.
+        # Recheck under the lock: another process may have finished the
+        # download while we waited, or dest may be a stale mismatch.
         if dest.exists():
             if _file_matches(dest, expected_sha256, expected_size, None):
                 return dest
-            # Integrity mismatch (or stale file), re-download.
             dest.unlink()
 
         # Check for partial download

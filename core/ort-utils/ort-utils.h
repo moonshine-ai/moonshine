@@ -115,6 +115,14 @@ OrtStatus *ort_run(const OrtApi *ort_api, OrtSession *session,
 void ort_maybe_force_single_thread(const OrtApi *ort_api,
                                    OrtSessionOptions *session_options);
 
+// Session flags for already-optimized .ort files loaded via mmap +
+// CreateSessionFromArray. use_ort_model_bytes_directly keeps ORT on the
+// mapped bytes instead of copying the weight buffer at load; disable_prepacking
+// and DisableCpuMemArena skip work the converter already did. Call after
+// CreateSessionOptions (and ort_maybe_force_single_thread).
+void ort_configure_ort_file_session(const OrtApi *ort_api,
+                                    OrtSessionOptions *session_options);
+
 std::vector<std::string> ort_parse_provider_names(const std::string &csv);
 
 OrtStatus *ort_append_execution_providers(

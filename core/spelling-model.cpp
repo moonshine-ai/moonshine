@@ -138,18 +138,7 @@ void SpellingModel::initialize_session_options() {
   LOG_ORT_ERROR(ort_api_,
                 ort_api_->CreateSessionOptions(&ort_session_options_));
   ort_maybe_force_single_thread(ort_api_, ort_session_options_);
-  LOG_ORT_ERROR(ort_api_, ort_api_->SetSessionGraphOptimizationLevel(
-                              ort_session_options_, ORT_ENABLE_EXTENDED));
-  LOG_ORT_ERROR(ort_api_,
-                ort_api_->AddSessionConfigEntry(
-                    ort_session_options_, "session.load_model_format", "ORT"));
-  LOG_ORT_ERROR(ort_api_, ort_api_->AddSessionConfigEntry(
-                              ort_session_options_,
-                              "session.use_ort_model_bytes_directly", "1"));
-  LOG_ORT_ERROR(ort_api_,
-                ort_api_->AddSessionConfigEntry(
-                    ort_session_options_, "session.disable_prepacking", "1"));
-  LOG_ORT_ERROR(ort_api_, ort_api_->DisableCpuMemArena(ort_session_options_));
+  ort_configure_ort_file_session(ort_api_, ort_session_options_);
   ort_configure_execution_providers(ort_api_, ort_session_options_,
                                     ort_provider_names_, coreml_cache_dir_);
 }

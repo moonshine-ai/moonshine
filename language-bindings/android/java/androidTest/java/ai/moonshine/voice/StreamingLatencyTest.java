@@ -78,7 +78,22 @@ public class StreamingLatencyTest {
         Assume.assumeFalse(
                 "medium-streaming-en skipped on API < 28 (CI emulator OOM)",
                 "medium-streaming-en".equals(modelName) && Build.VERSION.SDK_INT < 28);
-        tempDir = Files.createTempDirectory("voice-streaming-latency");
+        // Pixel 16 test packages can be PARTIALLY_DIRECT_BOOT_AWARE and never
+        // launched, so credential-encrypted /data/user/0/<pkg> does not exist
+        // (ceDataInode=0). Device-protected storage does.
+        Context ctx = InstrumentationRegistry.getInstrumentation()
+                .getTargetContext()
+                .createDeviceProtectedStorageContext();
+        File base = ctx.getFilesDir();
+        if (base == null || (!base.isDirectory() && !base.mkdirs())) {
+            throw new IOException("no device-protected files dir for "
+                    + ctx.getPackageName());
+        }
+        File dir = new File(base, "voice-streaming-latency-" + System.nanoTime());
+        if (!dir.mkdirs()) {
+            throw new IOException("Failed to create " + dir.getAbsolutePath());
+        }
+        tempDir = dir.toPath();
     }
 
     @Test
@@ -121,7 +136,9 @@ public class StreamingLatencyTest {
         }
 
         Transcriber transcriber = new Transcriber(options);
+        long loadStartNs = System.nanoTime();
         transcriber.loadFromFiles(root.getAbsolutePath() + "/", modelArch);
+        double loadMs = (System.nanoTime() - loadStartNs) / 1e6;
         transcriber.start();
 
         List<Integer> latencies = new ArrayList<>();
@@ -165,8 +182,8 @@ public class StreamingLatencyTest {
         double avgMs = sum / (double) latencies.size();
         String device = android.os.Build.MODEL.replace(' ', '_');
         String summary = String.format(Locale.US,
-                "MOONSHINE_LATENCY platform=android device=%s model=%s avg_ms=%.0f lines=%d wall_s=%.2f keyterms=%d",
-                device, modelName, avgMs, latencies.size(), wallSeconds,
+                "MOONSHINE_LATENCY platform=android device=%s model=%s avg_ms=%.0f load_ms=%.0f lines=%d wall_s=%.2f keyterms=%d",
+                device, modelName, avgMs, loadMs, latencies.size(), wallSeconds,
                 (keyterms == null || keyterms.isEmpty()) ? 0 : keyterms.split(",").length);
         Log.i(TAG, summary);
         System.out.println(summary);
