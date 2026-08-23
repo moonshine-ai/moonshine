@@ -136,7 +136,7 @@ fetch_tts_via_hf() {
   # Download only the tts/ tree, then flatten into data/ (HF paths are tts/<key>).
   local staging
   staging="$(mktemp -d "${TMPDIR:-/tmp}/moonshine-tts-hf.XXXXXX")"
-  if ! hf download "${HF_REPO}" --include "tts/**" --local-dir "${staging}"; then
+  if ! hf download "${HF_REPO}" --revision "35d84fc0eb2d7451da9973c990e8a77066abb105" --include "tts/**" --local-dir "${staging}"; then
     rm -rf "${staging}"
     return 1
   fi
@@ -193,7 +193,7 @@ fetch_tts_via_cdn_inventory() {
   local tsv
   tsv="$(mktemp)"
   if ! curl -fL -o "${tsv}" \
-    "https://huggingface.co/${HF_REPO}/resolve/main/FILES.tsv"; then
+    "https://huggingface.co/${HF_REPO}/resolve/35d84fc0eb2d7451da9973c990e8a77066abb105/FILES.tsv"; then
     rm -f "${tsv}"
     return 1
   fi
