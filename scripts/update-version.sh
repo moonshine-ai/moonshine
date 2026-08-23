@@ -133,6 +133,7 @@ main() {
 		--exclude-dir=artifacts \
 		--exclude-dir=lang-specific \
 		--exclude-dir=node_modules \
+		--exclude-dir=.idea \
 		--exclude-dir=.release-state \
 		--exclude-dir=site \
 		--exclude=Package.resolved \
