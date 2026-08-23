@@ -201,18 +201,18 @@ final class TextToSpeechTests: XCTestCase {
     }
 
     func testSplitSayUtterances() {
-        XCTAssertEqual(TextToSpeech.splitSayUtterances(""), [])
-        XCTAssertEqual(TextToSpeech.splitSayUtterances("Hello"), ["Hello"])
-        XCTAssertEqual(TextToSpeech.splitSayUtterances("Hello."), ["Hello."])
+        XCTAssertEqual(TextToSpeech.splitUtterances(""), [])
+        XCTAssertEqual(TextToSpeech.splitUtterances("Hello"), ["Hello"])
+        XCTAssertEqual(TextToSpeech.splitUtterances("Hello."), ["Hello."])
         XCTAssertEqual(
-            TextToSpeech.splitSayUtterances("Hello. World"), ["Hello.", "World"])
+            TextToSpeech.splitUtterances("Hello. World"), ["Hello.", "World"])
         XCTAssertEqual(
-            TextToSpeech.splitSayUtterances("Hello! World? Yes."),
+            TextToSpeech.splitUtterances("Hello! World? Yes."),
             ["Hello!", "World?", "Yes."])
         XCTAssertEqual(
-            TextToSpeech.splitSayUtterances("3.14 is pi."), ["3.14 is pi."])
+            TextToSpeech.splitUtterances("3.14 is pi."), ["3.14 is pi."])
         XCTAssertEqual(
-            TextToSpeech.splitSayUtterances("Warning: the core is hot."),
+            TextToSpeech.splitUtterances("Warning: the core is hot."),
             ["Warning:", "the core is hot."])
     }
 
