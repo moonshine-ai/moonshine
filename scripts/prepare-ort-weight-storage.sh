@@ -7,6 +7,14 @@
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR="$(dirname "${SCRIPTS_DIR}")"
 
+# Git Bash on Windows often has a Store-stub `python3` that prints an install
+# prompt and exits non-zero. Treat a working interpreter as required for both
+# the split and the weight-storage check; otherwise skip both.
+if ! python3 -c "import sys" >/dev/null 2>&1; then
+  echo "warning: python3 not usable; skipping frontend split and .ort weight-storage check" >&2
+  exit 0
+fi
+
 # The published streaming frontend.ort is the pre-split pin (int8 folded back
 # to float32 at ORT conversion). Split it locally so tests load the pair and
 # the weight-storage check can see int8 on disk. Idempotent if the pair exists.

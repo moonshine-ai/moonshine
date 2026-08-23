@@ -18,9 +18,9 @@
 // piper-voice-levels.h declares. Run it after changing a model or the shipped
 // voice set:
 //
-//   tts-voice-level-calibrate --model-root core/moonshine-tts/data \
+//   tts-voice-level-calibrate --model-root core/moonshine-tts/data
 //       --out core/moonshine-tts/src/kokoro-voice-levels-data.h
-//   tts-voice-level-calibrate --model-root core/moonshine-tts/data \
+//   tts-voice-level-calibrate --model-root core/moonshine-tts/data
 //       --engine piper --out core/moonshine-tts/src/piper-voice-levels-data.h
 //
 // Without --out it prints the measurements and the accuracy they imply, which

@@ -1265,11 +1265,16 @@ TEST_CASE("moonshine-tts-streaming-c-api") {
     // Not a sample-for-sample comparison. The decoder normalizes over whatever
     // span it is given and its excitation restarts per chunk, so a chunked
     // render is a different render of the same words. What has to hold is that
-    // it lasts as long and comes out at the same level.
-    REQUIRE(streamed.size() == whole_n);
+    // it lasts about as long and comes out at the same level. Linux x86_64
+    // ORT can differ from Apple Silicon by one 50 ms Kokoro frame (1200
+    // samples at 24 kHz); that is still the same utterance.
+    const auto whole_len = static_cast<long long>(whole_n);
+    const auto stream_len = static_cast<long long>(streamed.size());
+    REQUIRE(std::llabs(stream_len - whole_len) <= 1200);
+    const uint64_t n = std::min(whole_n, static_cast<uint64_t>(streamed.size()));
     double whole_energy = 0.0;
     double streamed_energy = 0.0;
-    for (uint64_t i = 0; i < whole_n; ++i) {
+    for (uint64_t i = 0; i < n; ++i) {
       whole_energy += static_cast<double>(whole[i]) * whole[i];
       streamed_energy += static_cast<double>(streamed[i]) * streamed[i];
     }

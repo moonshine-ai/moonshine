@@ -194,11 +194,12 @@ def main() -> int:
         )
     except ImportError:
         print(
-            "onnxruntime Python package required "
-            "(pip install onnxruntime)",
+            "warning: onnxruntime Python package not installed; "
+            "skipping .ort weight-storage check "
+            "(pip install onnxruntime to enable it)",
             file=sys.stderr,
         )
-        return 1
+        return 0
     roots = args.roots or default_roots()
     if not roots:
         print("no model roots found", file=sys.stderr)
