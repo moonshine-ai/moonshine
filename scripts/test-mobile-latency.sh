@@ -19,6 +19,8 @@
 #   --android-only            Only run the Android stage
 #   --ios-only                Only run the iOS stage
 #   --skip-macos              Skip the MacBook Pro stage
+#   --skip-ios                Skip the on-device iOS stage (e.g. when Xcode
+#                             has no signed-in Apple ID / provisioning profile)
 #   --skip-build-swift        Do not run build-swift.sh before iOS/macOS tests
 #                             (assumes language-bindings/swift/Moonshine.xcframework is current)
 #   --keyterms LIST           Comma-separated key terms to enable contextual
@@ -55,6 +57,7 @@ ANDROID_ONLY=0
 IOS_ONLY=0
 MACOS_ONLY=0
 SKIP_MACOS=0
+SKIP_IOS=0
 SKIP_BUILD_SWIFT=0
 UPDATE_README=0
 KEYTERMS=""
@@ -98,6 +101,10 @@ while [[ $# -gt 0 ]]; do
 		;;
 	--skip-macos)
 		SKIP_MACOS=1
+		shift
+		;;
+	--skip-ios)
+		SKIP_IOS=1
 		shift
 		;;
 	--skip-build-swift)
@@ -416,7 +423,9 @@ run_ios() {
 
 	local out="${RESULTS_DIR}/ios${RUN_TAG}.log"
 	local dest="platform=iOS,id=${IOS_UDID}"
-	(
+	# `if` so a failed pipeline is not aborted by `set -e`/`pipefail` before
+	# we can treat a missing Xcode Apple ID as skippable.
+	if ! (
 		cd "${proj_dir}"
 		# xcodebuild forwards variables from its own environment whose names
 		# start with TEST_RUNNER_ to the test process, with the prefix stripped.
@@ -433,7 +442,12 @@ run_ios() {
 			CODE_SIGN_STYLE=Automatic \
 			-allowProvisioningUpdates \
 			2>&1
-	) | tee "${out}"
+	) | tee "${out}"; then
+		if rg -q "No Accounts:|No profiles for " "${out}"; then
+			skip_or_die "iOS on-device test needs a signed-in Xcode Apple ID / provisioning profile for ${DEVELOPMENT_TEAM}"
+		fi
+		die "iOS xcodebuild test failed"
+	fi
 
 	local xcresult
 	xcresult="$(ls -dt "${HOME}/Library/Developer/Xcode/DerivedData"/StreamingLatency-*/Logs/Test/*.xcresult 2>/dev/null | head -1 || true)"
@@ -582,6 +596,9 @@ if [[ "${IOS_ONLY}" -eq 1 ]]; then
 fi
 if [[ "${SKIP_MACOS}" -eq 1 ]]; then
 	RUN_MACOS=0
+fi
+if [[ "${SKIP_IOS}" -eq 1 ]]; then
+	RUN_IOS=0
 fi
 
 MACOS_TINY_MS=""; MACOS_SMALL_MS=""; MACOS_MEDIUM_MS=""; MACOS_DEVICE=""
