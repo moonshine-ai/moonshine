@@ -2012,8 +2012,12 @@ TEST_CASE("moonshine-stt-embedding-dependency-api") {
   }
 
   SUBCASE("stt-unknown-arch-for-language") {
+    // Base streaming (3) is the one architecture the catalog publishes for no
+    // language at all, so it stays an unpublished combination as languages gain
+    // models. This subcase previously asked for tiny streaming on Spanish,
+    // which stopped being unpublished the moment Spanish shipped one.
     const moonshine_option_t opts[] = {
-        {"model_arch", "2"},  // streaming arch not published for Spanish
+        {"model_arch", "3"},
     };
     char* out = nullptr;
     CHECK(moonshine_get_stt_dependencies("es", opts, 1, &out) ==
