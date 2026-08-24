@@ -1,10 +1,13 @@
 The code in this repo (https://github.com/moonshine-ai/moonshine), apart from 
 the source in core/third-party, is licensed under the MIT License. The 
-English-language models are also released under the MIT License.  See 
-SECTION 1 for terms.
+English-language models are also released under the MIT License, as are the 
+streaming speech-to-text models in every language they are published for: 
+currently Arabic, English, German, Japanese, Mandarin, Spanish, Tagalog and 
+Vietnamese. See SECTION 1 for terms.
 
-Models for other languages are released under the Moonshine Community License, 
-which is a non-commercial license. See SECTION 2 for terms.
+Models for other languages, apart from the streaming speech-to-text models 
+named above, are released under the Moonshine Community License, which is a 
+non-commercial license. See SECTION 2 for terms.
 
 
 SECTION 1 -----------------------------------------------------------------
