@@ -118,7 +118,8 @@ const std::vector<SttLanguageEntry>& stt_catalog() {
             std::string(kCdnModelBase) + "/base-ar/quantized/base-ar"},
        }},
       // Small and tiny streaming measure 4.9 and 6.2 WER across FLEURS and MLS
-      // on a seeded 400-clip sample at batch 1. As for Arabic, the base entry is
+      // on a seeded 400-clip sample at batch 1. As for Arabic, the base entry
+      // is
       // kept for callers that name that architecture and was never scored here.
       {"es",
        "Spanish",
@@ -190,7 +191,8 @@ const std::vector<SttLanguageEntry>& stt_catalog() {
        {{MOONSHINE_MODEL_ARCH_TINY,
          std::string(kCdnModelBase) + "/tiny-ko/quantized/tiny-ko"}}},
       // Tiny streaming measures 9.4 WER across FLEURS and LSVSC on a seeded
-      // 400-clip sample at batch 1. The base entry is kept for callers that name
+      // 400-clip sample at batch 1. The base entry is kept for callers that
+      // name
       // that architecture and was never scored here.
       {"vi",
        "Vietnamese",
@@ -209,7 +211,8 @@ const std::vector<SttLanguageEntry>& stt_catalog() {
       // Japanese: the language is written without spaces, so word-level
       // alignment measures the tokenizer rather than the model. Tiny streaming
       // measures 16.1 no-space CER across FLEURS and WenetSpeech on a seeded
-      // 400-clip sample at batch 1. The base entry is kept for callers that name
+      // 400-clip sample at batch 1. The base entry is kept for callers that
+      // name
       // that architecture and was never scored here.
       {"zh",
        "Chinese",
@@ -455,6 +458,69 @@ std::string embedding_variant_unsupported_message(const std::string& variant) {
            "Use \"q4\" (the default) or \"q8\".";
   }
   return {};
+}
+
+namespace {
+
+std::string model_arch_label(int32_t model_arch) {
+  const char* name = nullptr;
+  switch (model_arch) {
+    case MOONSHINE_MODEL_ARCH_TINY:
+      name = "TINY";
+      break;
+    case MOONSHINE_MODEL_ARCH_BASE:
+      name = "BASE";
+      break;
+    case MOONSHINE_MODEL_ARCH_TINY_STREAMING:
+      name = "TINY_STREAMING";
+      break;
+    case MOONSHINE_MODEL_ARCH_BASE_STREAMING:
+      name = "BASE_STREAMING";
+      break;
+    case MOONSHINE_MODEL_ARCH_SMALL_STREAMING:
+      name = "SMALL_STREAMING";
+      break;
+    case MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING:
+      name = "MEDIUM_STREAMING";
+      break;
+    default:
+      break;
+  }
+  std::string label = std::to_string(model_arch);
+  if (name != nullptr) {
+    label += " (";
+    label += name;
+    label += ")";
+  }
+  return label;
+}
+
+}  // namespace
+
+std::string stt_missing_dependencies_message(
+    const std::string& language, std::optional<int32_t> model_arch) {
+  const SttLanguageEntry* lang = find_stt_language(language);
+  if (lang == nullptr || lang->models.empty()) {
+    return "unknown language \"" + language + "\"";
+  }
+  if (!model_arch.has_value()) {
+    return {};
+  }
+  for (const SttModelEntry& candidate : lang->models) {
+    if (candidate.model_arch == *model_arch) {
+      return {};
+    }
+  }
+  std::string supported;
+  const char* sep = "";
+  for (const SttModelEntry& model : lang->models) {
+    supported += sep;
+    supported += model_arch_label(model.model_arch);
+    sep = ", ";
+  }
+  return "language \"" + language + "\" has no model_arch " +
+         model_arch_label(*model_arch) +
+         "; supported architectures: " + supported;
 }
 
 std::vector<SttCatalogLanguage> stt_catalog_listing() {

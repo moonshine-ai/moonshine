@@ -110,6 +110,14 @@ std::vector<std::string> embedding_supported_variants(
 // treating it as an unknown name.
 std::string embedding_variant_unsupported_message(const std::string& variant);
 
+// Human-readable reason `stt_model_dependencies` returned nullopt.
+// Distinguishes an unknown language from a known language that does not
+// publish `model_arch`. In the latter case the published architecture numbers
+// (and their MOONSHINE_MODEL_ARCH_* names) are listed. Empty when the
+// language (and architecture, if given) is actually in the catalog.
+std::string stt_missing_dependencies_message(const std::string& language,
+                                             std::optional<int32_t> model_arch);
+
 // --- Full catalog listings ------------------------------------------------
 // These expose the catalog tables themselves (languages, friendly names,
 // architectures, variants) so language bindings can present model pickers and

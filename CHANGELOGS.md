@@ -34,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- `moonshine_get_stt_dependencies` now says whether the language is unknown or the architecture is unpublished, and lists that language's architectures (GitHub issue #214).
 - Streaming no longer logs `Memory is empty` or drops hypotheses when short chunks arrive faster than encoder lookahead, including on medium-streaming (GitHub issue #218).
 - AgentFlow no longer downloads the q4 embedding model and then tries to open the fp32 file, which crashed `load()` (GitHub issue #210).
 - Destroying a file-backed Transcriber now unmaps every `.ort` it opened, so creating and closing one in a loop no longer retains tens of megabytes per instance.

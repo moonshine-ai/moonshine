@@ -748,6 +748,35 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
         )
     endif()
 
+    add_executable(moonshine-model-catalog-test moonshine-model-catalog-test.cpp)
+    set_target_properties(moonshine-model-catalog-test PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(moonshine-model-catalog-test PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+    )
+
+    if (IOS OR MOONSHINE_BUILD_SWIFT)
+        set_target_properties(moonshine-model-catalog-test PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.moonshine-model-catalog-test"
+            MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        )
+        target_link_libraries(moonshine-model-catalog-test PRIVATE
+            moonshine
+            "-framework CoreFoundation"
+            "-framework Foundation"
+        )
+    else()
+        target_link_libraries(moonshine-model-catalog-test PRIVATE
+            moonshine
+        )
+    endif()
+
     add_executable(spelling-fusion-test spelling-fusion-test.cpp spelling-fusion.cpp spelling-fusion-data.cpp)
     set_target_properties(spelling-fusion-test PROPERTIES
         CXX_STANDARD 20

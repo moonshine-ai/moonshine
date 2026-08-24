@@ -1110,9 +1110,10 @@ MOONSHINE_EXPORT int32_t moonshine_get_tts_voices(
    and ``checksum_type`` (e.g. "crc32c", or ""). A model is a single group,
    plus an optional second group for the spelling model (which uses a different
    ``base_url``). The buffer is allocated with ``malloc``; release it with
-   ``free``. On failure (empty/unknown language, or an unknown language+arch
-   pair) returns a non-zero error code and sets ``*out_dependencies_json`` to
-   NULL. */
+   ``free``. On failure (empty language, unknown language, or a language that
+   does not publish the requested architecture) returns a non-zero error code,
+   logs which case it is (listing the architectures that language does publish
+   when the language is known), and sets ``*out_dependencies_json`` to NULL. */
 MOONSHINE_EXPORT int32_t moonshine_get_stt_dependencies(
     const char *language, const struct moonshine_option_t *options,
     uint64_t options_count, char **out_dependencies_json);

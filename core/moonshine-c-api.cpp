@@ -2483,15 +2483,15 @@ int32_t moonshine_get_stt_dependencies(const char *language,
       }
     }
 
+    const std::string trimmed_language = trim(language_str);
     const std::optional<moonshine::ModelDependencies> deps =
-        moonshine::stt_model_dependencies(trim(language_str), model_arch,
+        moonshine::stt_model_dependencies(trimmed_language, model_arch,
                                           include_spelling,
                                           include_word_timestamps);
     if (!deps.has_value()) {
-      LOGF(
-          "moonshine_get_stt_dependencies: unknown language \"%s\" or "
-          "model_arch\n",
-          language_str.c_str());
+      const std::string reason = moonshine::stt_missing_dependencies_message(
+          trimmed_language, model_arch);
+      LOGF("moonshine_get_stt_dependencies: %s\n", reason.c_str());
       return MOONSHINE_ERROR_INVALID_ARGUMENT;
     }
     const std::string dumped = json_model_dependencies(*deps);

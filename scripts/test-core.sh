@@ -57,6 +57,7 @@ ${REPO_ROOT_DIR}/core/build/transcriber-memory-files-test
 ${REPO_ROOT_DIR}/core/build/moonshine-c-api-test
 ${REPO_ROOT_DIR}/core/build/moonshine-cpp-test
 ${REPO_ROOT_DIR}/core/build/cosine-distance-test
+${REPO_ROOT_DIR}/core/build/moonshine-model-catalog-test
 ${REPO_ROOT_DIR}/core/build/word-alignment-test
 ${REPO_ROOT_DIR}/core/build/context-biaser-test
 ${REPO_ROOT_DIR}/core/build/context-extractor-test
