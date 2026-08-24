@@ -26,6 +26,9 @@
 #   MOONSHINE_TTS_CACHE_CONTROL Cache-Control applied to uploaded objects
 #                              (default: "public, max-age=2592000"; 30 days).
 #   MOONSHINE_INVALIDATE_CDN   When non-empty, purge the objects this run replaced.
+#   MOONSHINE_CDN_ALLOW_OVERWRITE  Permit replacing keys that already exist. Off by
+#                              default: existing URLs are immutable so that older
+#                              clients keep getting the bytes they shipped against.
 #   MOONSHINE_RCLONE_EXTRA     Extra flags passed to rclone (e.g. "--dry-run", or
 #                              "--delete-excluded" if you really mean to remove things).
 #
@@ -66,14 +69,37 @@ for flag in ${EXTRA}; do
   [[ "${flag}" == "--dry-run" || "${flag}" == "-n" ]] && DRY_RUN=1
 done
 
+# TTS keys are path-based and undated, so replacing one changes what every
+# already-released client downloads from a URL it has hardcoded. --immutable
+# makes that an error: brand-new keys upload, byte-identical keys are skipped so
+# re-runs stay cheap, and a changed body stops the run. Publish a changed voice
+# under a new key instead. MOONSHINE_CDN_ALLOW_OVERWRITE=1 restores the old
+# replace-in-place behaviour for retracting a bad asset, which is also the only
+# case where the purge below genuinely matters.
+IMMUTABLE="--immutable"
+if [[ -n "${MOONSHINE_CDN_ALLOW_OVERWRITE:-}" ]]; then
+  IMMUTABLE=""
+  echo "WARNING replacing existing TTS keys in place; released clients pinned to" >&2
+  echo "these paths will receive the new bytes. Set MOONSHINE_INVALIDATE_CDN too." >&2
+fi
+
 echo "Copy ${SRC} -> ${DEST} (Cache-Control: ${CACHE_CONTROL})" >&2
 # --checksum compares hashes rather than mtime/size, matching what gsutil rsync -c did.
 # --header-upload is how the caching header reaches R2; without it objects are served with
 # no Cache-Control at all. The JSON log is parsed below to find what actually changed.
 # shellcheck disable=SC2086
-rclone copy "${SRC}" "${DEST}" --checksum \
+if ! rclone copy "${SRC}" "${DEST}" --checksum ${IMMUTABLE} \
   --header-upload "Cache-Control: ${CACHE_CONTROL}" \
-  --use-json-log --log-level INFO --log-file "${LOG}" ${EXTRA}
+  --use-json-log --log-level INFO --log-file "${LOG}" ${EXTRA}; then
+  if [[ -n "${IMMUTABLE}" ]]; then
+    echo >&2
+    echo "Upload stopped: a key already on the CDN has different content locally." >&2
+    echo "Existing TTS URLs are immutable because released clients hardcode them." >&2
+    echo "Give the changed asset a new key, or set MOONSHINE_CDN_ALLOW_OVERWRITE=1" >&2
+    echo "with MOONSHINE_INVALIDATE_CDN=1 to deliberately retract the old bytes." >&2
+  fi
+  exit 1
+fi
 
 TRANSFERRED=$(python3 - "${LOG}" "${DRY_RUN}" <<'PY'
 import json, sys

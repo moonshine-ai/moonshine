@@ -13,6 +13,11 @@
 #   CLOUDFLARE_ACCESS_KEY_ID      R2 access key with write access to the bucket.
 #   CLOUDFLARE_SECRET_ACCESS_KEY  Matching secret.
 #   CLOUDFLARE_API_TOKEN          Only needed for cache purges.
+#
+# Published objects are immutable. cdn_publish_file below refuses to change the
+# bytes behind an existing URL, because released clients pin paths and would
+# otherwise start downloading files they were never tested against. Ship updates
+# as a new dated path.
 
 CDN_R2_BUCKET="${MOONSHINE_R2_BUCKET:-download-moonshine-ai}"
 CDN_ZONE_NAME="${MOONSHINE_CDN_ZONE:-moonshine.ai}"
@@ -44,6 +49,67 @@ cdn_setup_r2() {
   export RCLONE_CONFIG_R2_ACCESS_KEY_ID="${CLOUDFLARE_ACCESS_KEY_ID}"
   export RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="${CLOUDFLARE_SECRET_ACCESS_KEY}"
   export RCLONE_CONFIG_R2_ENDPOINT="https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com"
+}
+
+# Uploads one file, and refuses to change the bytes behind a URL that already
+# exists.
+#
+# Every client keys its download cache off the URL, and released libraries pin
+# specific paths, so replacing an object retroactively changes what an old
+# version downloads. A user who installed last year's wheel and never upgraded
+# would silently start fetching graphs their runtime was never tested against —
+# and because these objects carry a 30-day Cache-Control, the two populations
+# disagree for a month. New bytes therefore go to a new path (a dated directory
+# for models), and old paths keep serving what they always served.
+#
+# Re-running a publish is still safe. An object already present with identical
+# content is skipped rather than refused, so a partial upload can be finished by
+# repeating the command; only a *different* body is an error. That is why this
+# is a comparison and not an existence check, which would make repair impossible.
+#
+# The comparison is explicit because rclone's `--immutable` does not cover
+# `copyto`: with a named destination it overwrites regardless, which was
+# verified against the live bucket rather than assumed. `--immutable` does work
+# for directory-mode `copy`, which is what upload-tts-assets.sh uses.
+#
+# An object whose remote hash cannot be read is refused rather than replaced.
+# R2 returns no usable MD5 for multipart uploads, and "cannot prove it is the
+# same" has to fail closed or the guard is decorative.
+#
+# MOONSHINE_CDN_ALLOW_OVERWRITE=1 disables the check. It exists because a
+# genuinely bad object (wrong bytes, a licence problem) must be retractable, but
+# it is never the way to ship an update: it breaks old clients by design, and it
+# needs a cache purge to take effect at all.
+cdn_publish_file() {
+  local src="$1" dest="$2" cache_control="$3"
+  local remote_md5 local_md5
+
+  if [[ -n "${MOONSHINE_CDN_ALLOW_OVERWRITE:-}" ]]; then
+    echo "  WARNING overwriting ${dest} in place; clients pinned to this path" >&2
+    echo "  will receive the new bytes, and the edge cache needs purging." >&2
+  elif [[ -n "$(rclone lsf "${dest}" 2>/dev/null)" ]]; then
+    remote_md5="$(rclone hashsum md5 "${dest}" 2>/dev/null | awk 'NR==1{print $1}')"
+    local_md5="$(rclone hashsum md5 "${src}" 2>/dev/null | awk 'NR==1{print $1}')"
+    if [[ -n "${remote_md5}" && "${remote_md5}" == "${local_md5}" ]]; then
+      echo "  unchanged, already published: ${dest}" >&2
+      return 0
+    fi
+    echo >&2
+    echo "Refusing to modify ${dest}: it already exists on the CDN" >&2
+    if [[ -z "${remote_md5}" ]]; then
+      echo "and its content could not be verified as identical." >&2
+    else
+      echo "with different content (${remote_md5} vs ${local_md5})." >&2
+    fi
+    echo "Publish to a new dated path rather than rewriting a pinned one, so" >&2
+    echo "clients on older library versions keep resolving the bytes they were" >&2
+    echo "tested against. Override with MOONSHINE_CDN_ALLOW_OVERWRITE=1 only to" >&2
+    echo "retract a bad object, and purge the cache afterwards." >&2
+    return 1
+  fi
+
+  rclone copyto "${src}" "${dest}" \
+    --header-upload "Cache-Control: ${cache_control}"
 }
 
 cdn_zone_id() {

@@ -17,6 +17,11 @@
 # purge: it writes objects that did not exist before. Set
 # MOONSHINE_INVALIDATE_CDN if you are overwriting anyway and know why.
 #
+# That paragraph used to be an assumption; cdn_publish_file now enforces it, so
+# a second run against a changed model fails instead of silently re-pointing
+# `diarization-community1` at different bytes. Note this directory carries a
+# name rather than a date, so the new-pair case means choosing a new name.
+#
 # After running this, regenerate the integrity metadata, which reads sizes and
 # checksums back off the CDN, and commit the result:
 #   python3 scripts/generate-model-file-metadata.py
@@ -71,8 +76,7 @@ echo "Upload ${SRC} -> ${DEST} (Cache-Control: ${CACHE_CONTROL})" >&2
 # that is not asked for explicitly, and an object uploaded without it is served
 # with no Cache-Control at all.
 for file in "${FILES[@]}"; do
-  rclone copyto "${SRC}/${file}" "${DEST}/${file}" \
-    --header-upload "Cache-Control: ${CACHE_CONTROL}"
+  cdn_publish_file "${SRC}/${file}" "${DEST}/${file}" "${CACHE_CONTROL}"
 done
 
 if [[ -n "${MOONSHINE_INVALIDATE_CDN:-}" ]]; then
