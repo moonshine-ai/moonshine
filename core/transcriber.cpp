@@ -1368,7 +1368,19 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
     const float *new_audio_data = audio_data + new_samples_start;
     size_t new_audio_length = audio_length - new_samples_start;
 
-    const int chunk_size = 1280;  // 80ms at 16kHz
+    // 80ms at 16kHz. Feeding whole chunks and carrying the remainder over to
+    // the next call is a hard requirement of the exported frontend graph, not a
+    // tidiness preference: a chunk length that is not a multiple of 80 samples
+    // leaves leftover samples that every streaming .ort published before
+    // 2026-08-23 drops on the floor while still reporting them as buffered, so
+    // the following chunk reads silence in place of audio. The graphs were
+    // exported from a traced PyTorch module and the branch that saved the
+    // remainder was traced away against an aligned example input; models
+    // exported after that date handle it, but English ships pre-fix graphs
+    // until it is re-exported. Any new binding or test that feeds arbitrary
+    // chunk sizes needs to do its own aligning here rather than assume the
+    // graph will.
+    const int chunk_size = 1280;
     const size_t chunk_count = new_audio_length / chunk_size;
 
     for (size_t chunk_index = 0; chunk_index < chunk_count; chunk_index++) {
