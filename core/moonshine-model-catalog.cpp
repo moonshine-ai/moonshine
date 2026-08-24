@@ -49,9 +49,9 @@ constexpr const char* kStreamingQuantizedDir = "/quantized_26_08_21";
 // shared constant would force every language to move at once.
 constexpr const char* kJapaneseStreamingQuantizedDir = "/quantized_26_08_23";
 
-// The six languages published for 0.1.5, each with its own constant for the
-// reason above. Tagalog in particular is a snapshot of a run that was still
-// training, so it is the one most likely to move on its own.
+// The six additional languages published as streaming, each with its own
+// constant for the reason above. Tagalog in particular is a snapshot of a run
+// that was still training, so it is the one most likely to move on its own.
 constexpr const char* kGermanStreamingQuantizedDir = "/quantized_26_08_24";
 constexpr const char* kSpanishStreamingQuantizedDir = "/quantized_26_08_24";
 constexpr const char* kVietnameseStreamingQuantizedDir = "/quantized_26_08_24";
