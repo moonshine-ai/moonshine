@@ -49,6 +49,16 @@ constexpr const char* kStreamingQuantizedDir = "/quantized_26_08_21";
 // shared constant would force every language to move at once.
 constexpr const char* kJapaneseStreamingQuantizedDir = "/quantized_26_08_23";
 
+// The six languages published for 0.1.5, each with its own constant for the
+// reason above. Tagalog in particular is a snapshot of a run that was still
+// training, so it is the one most likely to move on its own.
+constexpr const char* kGermanStreamingQuantizedDir = "/quantized_26_08_24";
+constexpr const char* kSpanishStreamingQuantizedDir = "/quantized_26_08_24";
+constexpr const char* kVietnameseStreamingQuantizedDir = "/quantized_26_08_24";
+constexpr const char* kArabicStreamingQuantizedDir = "/quantized_26_08_24";
+constexpr const char* kChineseStreamingQuantizedDir = "/quantized_26_08_24";
+constexpr const char* kTagalogStreamingQuantizedDir = "/quantized_26_08_24";
+
 struct SttModelEntry {
   int32_t model_arch;
   std::string download_url;
@@ -92,14 +102,49 @@ bool is_streaming_arch(int32_t model_arch) {
 // listed for a language is its default.
 const std::vector<SttLanguageEntry>& stt_catalog() {
   static const std::vector<SttLanguageEntry> catalog = {
+      // Streaming first, so it is the default, mirroring English and Japanese.
+      // Tiny streaming measures 15.5 WER across Common Voice and FLEURS on a
+      // seeded 400-clip sample at batch 1, as deployed. The older base entry
+      // stays listed for callers that ask for that architecture by name; it was
+      // never scored on this panel, so this is not a claim that streaming beats
+      // it, only that streaming is what we now measure and ship.
       {"ar",
        "Arabic",
-       {{MOONSHINE_MODEL_ARCH_BASE,
-         std::string(kCdnModelBase) + "/base-ar/quantized/base-ar"}}},
+       {
+           {MOONSHINE_MODEL_ARCH_TINY_STREAMING,
+            std::string(kCdnModelBase) + "/tiny-streaming-ar" +
+                kArabicStreamingQuantizedDir},
+           {MOONSHINE_MODEL_ARCH_BASE,
+            std::string(kCdnModelBase) + "/base-ar/quantized/base-ar"},
+       }},
+      // Small and tiny streaming measure 4.9 and 6.2 WER across FLEURS and MLS
+      // on a seeded 400-clip sample at batch 1. As for Arabic, the base entry is
+      // kept for callers that name that architecture and was never scored here.
       {"es",
        "Spanish",
-       {{MOONSHINE_MODEL_ARCH_BASE,
-         std::string(kCdnModelBase) + "/base-es/quantized/base-es"}}},
+       {
+           {MOONSHINE_MODEL_ARCH_SMALL_STREAMING,
+            std::string(kCdnModelBase) + "/small-streaming-es" +
+                kSpanishStreamingQuantizedDir},
+           {MOONSHINE_MODEL_ARCH_TINY_STREAMING,
+            std::string(kCdnModelBase) + "/tiny-streaming-es" +
+                kSpanishStreamingQuantizedDir},
+           {MOONSHINE_MODEL_ARCH_BASE,
+            std::string(kCdnModelBase) + "/base-es/quantized/base-es"},
+       }},
+      // German is a new language for the catalog: there is no older base model
+      // to fall back to. Small and tiny streaming measure 7.5 and 12.0 WER
+      // across FLEURS and MLS on a seeded 400-clip sample at batch 1.
+      {"de",
+       "German",
+       {
+           {MOONSHINE_MODEL_ARCH_SMALL_STREAMING,
+            std::string(kCdnModelBase) + "/small-streaming-de" +
+                kGermanStreamingQuantizedDir},
+           {MOONSHINE_MODEL_ARCH_TINY_STREAMING,
+            std::string(kCdnModelBase) + "/tiny-streaming-de" +
+                kGermanStreamingQuantizedDir},
+       }},
       {"en",
        "English",
        {
@@ -144,18 +189,48 @@ const std::vector<SttLanguageEntry>& stt_catalog() {
        "Korean",
        {{MOONSHINE_MODEL_ARCH_TINY,
          std::string(kCdnModelBase) + "/tiny-ko/quantized/tiny-ko"}}},
+      // Tiny streaming measures 9.4 WER across FLEURS and LSVSC on a seeded
+      // 400-clip sample at batch 1. The base entry is kept for callers that name
+      // that architecture and was never scored here.
       {"vi",
        "Vietnamese",
-       {{MOONSHINE_MODEL_ARCH_BASE,
-         std::string(kCdnModelBase) + "/base-vi/quantized/base-vi"}}},
+       {
+           {MOONSHINE_MODEL_ARCH_TINY_STREAMING,
+            std::string(kCdnModelBase) + "/tiny-streaming-vi" +
+                kVietnameseStreamingQuantizedDir},
+           {MOONSHINE_MODEL_ARCH_BASE,
+            std::string(kCdnModelBase) + "/base-vi/quantized/base-vi"},
+       }},
       {"uk",
        "Ukrainian",
        {{MOONSHINE_MODEL_ARCH_BASE,
          std::string(kCdnModelBase) + "/base-uk/quantized/base-uk"}}},
+      // Mandarin is scored with no-space CER, never WER, for the same reason as
+      // Japanese: the language is written without spaces, so word-level
+      // alignment measures the tokenizer rather than the model. Tiny streaming
+      // measures 16.1 no-space CER across FLEURS and WenetSpeech on a seeded
+      // 400-clip sample at batch 1. The base entry is kept for callers that name
+      // that architecture and was never scored here.
       {"zh",
        "Chinese",
-       {{MOONSHINE_MODEL_ARCH_BASE,
-         std::string(kCdnModelBase) + "/base-zh/quantized/base-zh"}}},
+       {
+           {MOONSHINE_MODEL_ARCH_TINY_STREAMING,
+            std::string(kCdnModelBase) + "/tiny-streaming-zh" +
+                kChineseStreamingQuantizedDir},
+           {MOONSHINE_MODEL_ARCH_BASE,
+            std::string(kCdnModelBase) + "/base-zh/quantized/base-zh"},
+       }},
+      // Tagalog is a new language for the catalog, and its entry is a snapshot
+      // of a Stage A run that had not finished training when it was taken:
+      // 14.9 WER on FLEURS at batch 1, the only Tagalog panel we hold, so this
+      // number rests on one read-speech set rather than a macro over two.
+      {"tl",
+       "Tagalog",
+       {
+           {MOONSHINE_MODEL_ARCH_TINY_STREAMING,
+            std::string(kCdnModelBase) + "/tiny-streaming-tl" +
+                kTagalogStreamingQuantizedDir},
+       }},
   };
   return catalog;
 }
