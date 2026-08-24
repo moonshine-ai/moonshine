@@ -4,6 +4,7 @@
 # Runtime SDKs still download from https://download.moonshine.ai. This script
 # fills local trees used by offline tests, examples, and CDN publish:
 #   test-assets/…              STT / diarization / embedding fixtures
+#                              (tiny streaming for every published language)
 #   core/moonshine-tts/data/…  TTS + G2P bundles (READMEs stay in git)
 #   language-bindings/android/java/androidTest/assets/tiny-en/   (optional; mirrors CDN tiny-en)
 #
@@ -34,8 +35,20 @@ HF_REPO="${MOONSHINE_HF_REPO:-moonshine-ai/moonshine-voice-assets}"
 FORCE="${MOONSHINE_FETCH_FORCE:-}"
 HF_REVISION=""
 
-# Catalog pin for streaming fixtures (must match core/moonshine-model-catalog.cpp).
-STREAMING_PIN="tiny-streaming-en/quantized_26_08_21"
+# Catalog pins for tiny streaming fixtures (must match
+# core/moonshine-model-catalog.cpp). Tiny is fetched for every published
+# streaming language so streaming-language-smoke-test can load each one
+# offline. English also ships the attention decoder used by word-timestamp tests.
+STREAMING_TINY_PINS=(
+  tiny-streaming-ar/quantized_26_08_24
+  tiny-streaming-de/quantized_26_08_24
+  tiny-streaming-en/quantized_26_08_21
+  tiny-streaming-es/quantized_26_08_24
+  tiny-streaming-ja/quantized_26_08_23
+  tiny-streaming-tl/quantized_26_08_24
+  tiny-streaming-vi/quantized_26_08_24
+  tiny-streaming-zh/quantized_26_08_24
+)
 
 usage() {
   sed -n '2,28p' "$0" | sed 's/^# \?//'
@@ -87,6 +100,24 @@ fetch_cdn() {
   fetch_url "${CDN_BASE}/${rel}" "${dest}"
 }
 
+# Tiny streaming graphs shared by every language. English also has the
+# attention decoder; other languages 404 if we ask for it.
+fetch_tiny_streaming_model() {
+  local ta="$1"
+  local pin="$2"
+  local dest="${ta}/${pin%%/*}"
+  local f
+  for f in adapter.ort cross_kv.ort decoder_kv.ort encoder.ort \
+           frontend.model.ort frontend.weights.ort \
+           streaming_config.json tokenizer.bin; do
+    fetch_cdn "model/${pin}/${f}" "${dest}/${f}"
+  done
+  if [[ "${pin}" == tiny-streaming-en/* ]]; then
+    fetch_cdn "model/${pin}/decoder_kv_with_attention.ort" \
+      "${dest}/decoder_kv_with_attention.ort"
+  fi
+}
+
 fetch_test_assets() {
   echo "=== test-assets (CDN) ==="
   local ta="${ROOT}/test-assets"
@@ -100,10 +131,9 @@ fetch_test_assets() {
   fetch_cdn "model/tiny-en/quantized/tiny-en/tokenizer.bin" \
     "${ta}/tiny-en/tokenizer.bin"
 
-  for f in adapter.ort cross_kv.ort decoder_kv.ort decoder_kv_with_attention.ort \
-           encoder.ort frontend.model.ort frontend.weights.ort \
-           streaming_config.json tokenizer.bin; do
-    fetch_cdn "model/${STREAMING_PIN}/${f}" "${ta}/tiny-streaming-en/${f}"
+  local pin
+  for pin in "${STREAMING_TINY_PINS[@]}"; do
+    fetch_tiny_streaming_model "${ta}" "${pin}"
   done
 
   fetch_cdn "model/diarization-community1/segmentation.ort" \

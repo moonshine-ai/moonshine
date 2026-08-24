@@ -187,6 +187,21 @@ download_and_run "Diarization community1" diarization
 if [[ "${RUN_ALL}" -eq 1 ]]; then
     download_and_run "STT base-es" stt es 1
     download_and_run "STT base-zh" stt zh 1
+    # Tiny streaming for every published streaming language (arch 2). The
+    # hermetic core smoke uses fetched copies of these; this path checks the
+    # download manifest still lists every file each one needs.
+    download_and_run "STT tiny-streaming-ar" stt ar 2
+    download_and_run "STT tiny-streaming-de" stt de 2
+    download_and_run "STT tiny-streaming-es" stt es 2
+    download_and_run "STT tiny-streaming-ja" stt ja 2
+    download_and_run "STT tiny-streaming-tl" stt tl 2
+    download_and_run "STT tiny-streaming-vi" stt vi 2
+    download_and_run "STT tiny-streaming-zh" stt zh 2
+    download_and_run "STT small-streaming-de" stt de 4
+    download_and_run "STT small-streaming-en" stt en 4
+    download_and_run "STT small-streaming-es" stt es 4
+    download_and_run "STT small-streaming-ja" stt ja 4
+    download_and_run "STT medium-streaming-en" stt en 5
     download_and_run "Embedding embeddinggemma-300m q8" embedding embeddinggemma-300m q8
     download_and_run "Embedding embeddinggemma-300m fp16" embedding embeddinggemma-300m fp16
 fi

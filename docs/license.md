@@ -16,7 +16,7 @@ The only speech-to-text models that are **not** MIT are the legacy non-streaming
 | Ukrainian | Base, Tiny |
 | Vietnamese | Base, Tiny |
 
-Any speech-to-text model not named in that table is MIT, including every streaming model and the English Tiny and Base models. These legacy models stay available by naming the architecture, for the languages that now default to streaming.
+Any speech-to-text model not named in that table is MIT, including every streaming model and the English Tiny and Base models. These legacy models stay available by naming the architecture, for the languages that now default to streaming. Where a streaming replacement exists, they are deprecated; see [Available Models](models/available-models.md).
 
 The code in `core/third-party` is licensed according to the terms of the open source projects it originates from, with details in a LICENSE file in each subfolder. 
 

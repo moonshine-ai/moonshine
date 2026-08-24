@@ -1,31 +1,31 @@
 #!/usr/bin/env python3
-"""Evaluate Moonshine English WER on LibriSpeech test-clean.
+"""Evaluate Moonshine speech-to-text accuracy.
 
-This script reproduces the LibriSpeech (clean) numbers reported in the
-Moonshine v2 paper (arXiv:2602.12241, Table 3) and lets us compare three
-different code paths so we can see where any accuracy gap comes from:
+English defaults to LibriSpeech ``test-clean`` and reproduces the numbers in
+the Moonshine v2 paper (arXiv:2602.12241, Table 3). Other languages default to
+FLEURS, which is the fast public set that every published streaming model can
+run. Neither path is part of ``scripts/test-*.sh`` or the release build.
+
+Three backends:
 
   * ``moonshine_c``   - the shipped C++/ONNX library via the ``moonshine_voice``
                         Python bindings. These are the *quantized* ``.ort``
                         models that real users run. Uses
                         ``transcribe_without_streaming`` (batch, whole-utterance).
   * ``moonshine_c_streaming`` - same library, but fed in small chunks through a
-                        streaming ``Stream`` (mimics issue #148's setup, which
-                        reports ~11.8% WER).
-  * ``hf``            - the Hugging Face Transformers reference implementation
-                        with the *float* safetensors checkpoints. This is the
-                        code path the paper used to measure WER (see paper
-                        section 4.1.2), so it should reproduce ~4.49% for tiny.
+                        streaming ``Stream`` (mimics issue #148's setup).
+  * ``hf``            - Hugging Face Transformers with the *float* safetensors
+                        checkpoints. English streaming models should reproduce
+                        the paper (~4.49% tiny on LibriSpeech clean).
 
-WER is aggregated corpus-wide (total edits / total reference words), which is
-the Open ASR Leaderboard convention the paper follows. We also print the
-character-weighted per-utterance average that ``scripts/eval-model-accuracy.py``
-uses, because that alternative aggregation is itself a source of confusion.
+Error rate is corpus-wide (total edits / total reference units), the Open ASR
+Leaderboard convention. Japanese and Mandarin report no-space CER; everything
+else reports WER. ``scripts/eval-model-accuracy.py`` still exists for the older
+character-weighted FLEURS average used on the deprecated non-streaming models.
 
-The VAD is disabled by default for the ``moonshine_c`` backend (the samples are
-known to be single speech utterances, so VAD segmentation only adds errors):
-``vad_threshold=0`` and a very large ``vad_max_segment_duration`` so the whole
-clip is transcribed as one segment.
+The VAD is disabled by default (``vad_threshold=0`` and a very large
+``vad_max_segment_duration``) because these eval clips are already single
+utterances.
 
 Examples
 --------
@@ -37,7 +37,15 @@ Quick smoke test (25 utterances, quantized tiny streaming C library)::
 Full reproduction of the paper number with the HF float model::
 
     python scripts/eval-librispeech.py --backend hf \
-        --hf-model UsefulSensors/moonshine-streaming-tiny
+        --hf-model moonshine-ai/moonshine-streaming-tiny
+
+Quick FLEURS check for a non-English streaming model (400 seeded clips)::
+
+    python scripts/eval-librispeech.py --language ar --model-arch tiny_streaming --quick
+
+Every published streaming model, FLEURS (or LibriSpeech for English), 400 clips::
+
+    python scripts/eval-librispeech.py --all-streaming --quick
 
 On a Mac you may need ffmpeg for audio decoding::
 
@@ -54,34 +62,154 @@ import io
 import numpy as np
 import soundfile as sf
 from datasets import Audio, load_dataset
-from jiwer import process_words
+from jiwer import process_characters, process_words
 from scipy.signal import resample_poly
 from tqdm import tqdm
-from whisper.normalizers import EnglishTextNormalizer
+from whisper.normalizers import BasicTextNormalizer, EnglishTextNormalizer
 
 TARGET_SAMPLE_RATE = 16000
+QUICK_SAMPLE_SIZE = 400
+ESB_REPO = "hf-audio/esb-datasets-test-only-sorted"
+OFFICIAL_REPO = "hf-audio/open-asr-leaderboard"
+FLEURS_REPO = "google/fleurs"
 
-
-# Map friendly arch names to the moonshine_voice ModelArch and the matching
-# language string used to download the quantized C-library model.
-C_ARCH_TO_LANGUAGE = {
-    "tiny": "en",
-    "base": "en",
-    "tiny_streaming": "en",
-    "small_streaming": "en",
-    "medium_streaming": "en",
+# Per-language defaults. ``fleurs`` is the google/fleurs config id. Japanese
+# and Mandarin are scored with no-space CER because the writing systems do not
+# mark word boundaries. ``max_tokens_per_second`` matches the transcriber
+# guidance for Latin vs non-Latin tokenizers.
+LANGUAGE_CONFIGS = {
+    "en": {
+        "name": "English",
+        "fleurs": "en_us",
+        "metric": "wer",
+        "normalizer": "english",
+        "strip_spaces": False,
+        "max_tokens_per_second": 6.5,
+        "latin_script": True,
+    },
+    "ar": {
+        "name": "Arabic",
+        "fleurs": "ar_eg",
+        "metric": "wer",
+        "normalizer": "basic",
+        "strip_spaces": False,
+        "max_tokens_per_second": 13.0,
+        "latin_script": False,
+    },
+    "de": {
+        "name": "German",
+        "fleurs": "de_de",
+        "metric": "wer",
+        "normalizer": "basic",
+        "strip_spaces": False,
+        "max_tokens_per_second": 6.5,
+        "latin_script": True,
+    },
+    "es": {
+        "name": "Spanish",
+        "fleurs": "es_419",
+        "metric": "wer",
+        "normalizer": "basic",
+        "strip_spaces": False,
+        "max_tokens_per_second": 6.5,
+        "latin_script": True,
+    },
+    "ja": {
+        "name": "Japanese",
+        "fleurs": "ja_jp",
+        "metric": "cer",
+        "normalizer": "basic",
+        "strip_spaces": True,
+        "max_tokens_per_second": 13.0,
+        "latin_script": False,
+    },
+    "ko": {
+        "name": "Korean",
+        "fleurs": "ko_kr",
+        "metric": "wer",
+        "normalizer": "basic",
+        "strip_spaces": False,
+        "max_tokens_per_second": 13.0,
+        "latin_script": False,
+    },
+    "tl": {
+        "name": "Tagalog",
+        "fleurs": "fil_ph",
+        "metric": "wer",
+        "normalizer": "basic",
+        "strip_spaces": False,
+        "max_tokens_per_second": 6.5,
+        "latin_script": True,
+    },
+    "uk": {
+        "name": "Ukrainian",
+        "fleurs": "uk_ua",
+        "metric": "wer",
+        "normalizer": "basic",
+        "strip_spaces": False,
+        "max_tokens_per_second": 13.0,
+        "latin_script": False,
+    },
+    "vi": {
+        "name": "Vietnamese",
+        "fleurs": "vi_vn",
+        "metric": "wer",
+        "normalizer": "basic",
+        "strip_spaces": False,
+        "max_tokens_per_second": 6.5,
+        "latin_script": True,
+    },
+    "zh": {
+        "name": "Mandarin",
+        "fleurs": "cmn_hans_cn",
+        "metric": "cer",
+        "normalizer": "basic",
+        "strip_spaces": True,
+        "max_tokens_per_second": 13.0,
+        "latin_script": False,
+    },
 }
 
-# Default HF safetensors checkpoint per arch (float reference models).
+# Every streaming (language, arch) pair the catalog publishes. Used by
+# --all-streaming. English stays on LibriSpeech; the rest use FLEURS.
+STREAMING_JOBS = [
+    ("ar", "tiny_streaming"),
+    ("de", "small_streaming"),
+    ("de", "tiny_streaming"),
+    ("en", "medium_streaming"),
+    ("en", "small_streaming"),
+    ("en", "tiny_streaming"),
+    ("es", "small_streaming"),
+    ("es", "tiny_streaming"),
+    ("ja", "small_streaming"),
+    ("ja", "tiny_streaming"),
+    ("tl", "tiny_streaming"),
+    ("vi", "tiny_streaming"),
+    ("zh", "tiny_streaming"),
+]
+
+ARCH_CHOICES = sorted(
+    {
+        "tiny",
+        "base",
+        "tiny_streaming",
+        "small_streaming",
+        "medium_streaming",
+        *(arch for _, arch in STREAMING_JOBS),
+    }
+)
+
+# Default HF safetensors checkpoint per arch (English float reference models).
 HF_DEFAULT_CHECKPOINT = {
-    "tiny_streaming": "UsefulSensors/moonshine-streaming-tiny",
-    "small_streaming": "UsefulSensors/moonshine-streaming-small",
-    "medium_streaming": "UsefulSensors/moonshine-streaming-medium",
-    "tiny": "UsefulSensors/moonshine-tiny",
-    "base": "UsefulSensors/moonshine-base",
+    "tiny_streaming": "moonshine-ai/moonshine-streaming-tiny",
+    "small_streaming": "moonshine-ai/moonshine-streaming-small",
+    "medium_streaming": "moonshine-ai/moonshine-streaming-medium",
+    "tiny": "moonshine-ai/moonshine-tiny",
+    "base": "moonshine-ai/moonshine-base",
 }
 
-normalizer = EnglishTextNormalizer()
+english_normalizer = EnglishTextNormalizer()
+basic_normalizer = BasicTextNormalizer()
 
 
 def _parse_pad_ms(value):
@@ -112,10 +240,28 @@ def parse_args():
         default="moonshine_c",
     )
     parser.add_argument(
+        "--language",
+        default="en",
+        choices=sorted(LANGUAGE_CONFIGS.keys()),
+        help="Language code (default: en). Non-English defaults to FLEURS.",
+    )
+    parser.add_argument(
         "--model-arch",
         default="tiny_streaming",
-        choices=sorted(C_ARCH_TO_LANGUAGE.keys()),
+        choices=ARCH_CHOICES,
         help="Architecture for the moonshine_c backends (default: tiny_streaming).",
+    )
+    parser.add_argument(
+        "--quick",
+        action="store_true",
+        help=f"Evaluate {QUICK_SAMPLE_SIZE} seeded clips (a fast check, not the "
+        "paper or shipping-panel number).",
+    )
+    parser.add_argument(
+        "--all-streaming",
+        action="store_true",
+        help="Run a quick eval of every published streaming language/arch pair. "
+        "Implies --quick unless --limit is set. Not used by CI or release.",
     )
     parser.add_argument(
         "--hf-model",
@@ -171,8 +317,9 @@ def parse_args():
     parser.add_argument(
         "--max-tokens-per-second",
         type=float,
-        default=6.5,
-        help="Hallucination guard for English (C library default 6.5).",
+        default=None,
+        help="Hallucination guard. Default is 6.5 for Latin-script languages "
+        "and 13.0 otherwise.",
     )
     parser.add_argument(
         "--chunk-duration",
@@ -228,10 +375,59 @@ def parse_args():
     return parser.parse_args()
 
 
-# Matches moonshine-internal-2/scripts/eval_seq2seq_librispeech.py.
-ESB_REPO = "hf-audio/esb-datasets-test-only-sorted"
-OFFICIAL_REPO = "hf-audio/open-asr-leaderboard"
+def language_config(language):
+    try:
+        return LANGUAGE_CONFIGS[language]
+    except KeyError as exc:
+        raise SystemExit(
+            f"Unknown language '{language}'. Known: {sorted(LANGUAGE_CONFIGS)}"
+        ) from exc
 
+
+def make_text_normalizer(lang_cfg):
+    if lang_cfg["normalizer"] == "english":
+        def normalize(text):
+            return english_normalizer(text)
+
+        return normalize
+
+    def normalize(text):
+        out = basic_normalizer(text)
+        if lang_cfg.get("strip_spaces"):
+            out = "".join(out.split())
+        return out
+
+    return normalize
+
+
+def apply_language_defaults(args):
+    """Fill dataset / token-guard defaults for ``args.language``.
+
+    English keeps LibriSpeech test-clean unless the caller overrode the
+    dataset flags. Every other language switches the still-default LibriSpeech
+    pointing at FLEURS.
+    """
+    lang_cfg = language_config(args.language)
+    args.lang_config = lang_cfg
+    args.normalize = make_text_normalizer(lang_cfg)
+    args.metric = lang_cfg["metric"]
+    if args.max_tokens_per_second is None:
+        args.max_tokens_per_second = lang_cfg["max_tokens_per_second"]
+    using_english_default = (
+        args.dataset == ESB_REPO
+        and args.dataset_config == "librispeech"
+        and args.split == "test.clean"
+    )
+    if args.language != "en" and using_english_default:
+        args.dataset = FLEURS_REPO
+        args.dataset_config = lang_cfg["fleurs"]
+        args.split = "test"
+    if args.quick and args.limit is None:
+        args.limit = QUICK_SAMPLE_SIZE
+    return lang_cfg
+
+
+# Matches moonshine-internal-2/scripts/eval_seq2seq_librispeech.py.
 EVAL_SETS = {
     "librispeech": {
         "dataset": ESB_REPO,
@@ -358,20 +554,6 @@ def detect_text_column(sample):
     )
 
 
-def load_eval_dataset(args):
-    print(
-        f"Loading {args.dataset} ({args.dataset_config}, split={args.split})...",
-        file=sys.stderr,
-    )
-    dataset = load_dataset(args.dataset, args.dataset_config, split=args.split)
-    if args.limit is not None:
-        dataset = dataset.select(range(min(args.limit, len(dataset))))
-    # Decode audio ourselves via soundfile. datasets 4.x otherwise pulls in
-    # torchcodec, which needs an ffmpeg build (4-7) that isn't available here.
-    dataset = dataset.cast_column("audio", Audio(decode=False))
-    return dataset
-
-
 def decode_audio(audio_field):
     """Return (float32 mono @16kHz, sample_rate) from a non-decoded audio field."""
     if audio_field.get("bytes") is not None:
@@ -417,16 +599,21 @@ def summarize_durations(durations):
     )
 
 
-def corpus_wer(references, hypotheses):
-    corpus = process_words(references, hypotheses)
+def corpus_error(references, hypotheses, metric="wer"):
+    if metric == "cer":
+        corpus = process_characters(references, hypotheses)
+    else:
+        corpus = process_words(references, hypotheses)
     errors = corpus.substitutions + corpus.deletions + corpus.insertions
-    words = corpus.hits + corpus.substitutions + corpus.deletions
+    units = corpus.hits + corpus.substitutions + corpus.deletions
     return {
-        "wer": errors / max(1, words),
-        "words": words,
+        "error": errors / max(1, units),
+        "wer": errors / max(1, units),
+        "words": units,
         "subs": corpus.substitutions,
         "dels": corpus.deletions,
         "ins": corpus.insertions,
+        "metric": metric.upper(),
     }
 
 
@@ -454,7 +641,7 @@ def make_moonshine_c_backend(args, streaming):
     if args.model_path:
         path = args.model_path
     else:
-        language = C_ARCH_TO_LANGUAGE[args.model_arch]
+        language = args.language
         path, arch = get_model_for_language(language, arch)
 
     options = {"max_tokens_per_second": args.max_tokens_per_second}
@@ -516,7 +703,15 @@ def make_hf_backend(args):
     import torch
     from transformers import AutoProcessor
 
-    checkpoint = args.hf_model or HF_DEFAULT_CHECKPOINT[args.model_arch]
+    if args.hf_model:
+        checkpoint = args.hf_model
+    elif args.language == "en" and args.model_arch in HF_DEFAULT_CHECKPOINT:
+        checkpoint = HF_DEFAULT_CHECKPOINT[args.model_arch]
+    else:
+        raise SystemExit(
+            "The hf backend needs --hf-model for non-English checkpoints "
+            "(there is no default float id per language)."
+        )
 
     # Streaming (v2) checkpoints need MoonshineStreamingForConditionalGeneration;
     # older v1 checkpoints use MoonshineForConditionalGeneration.
@@ -578,7 +773,11 @@ def evaluate_one(args, transcribe, dataset_config, split, text_column_override,
         + "...",
         file=sys.stderr,
     )
-    dataset = load_dataset(args.dataset, dataset_config, split=split)
+    dataset = load_dataset(
+        args.dataset,
+        dataset_config,
+        split=split,
+    )
     dataset = dataset.cast_column("audio", Audio(decode=False))
     n_loaded = len(dataset)
 
@@ -619,7 +818,7 @@ def evaluate_one(args, transcribe, dataset_config, split, text_column_override,
         durations.append(duration)
         total_audio_seconds += duration
 
-        reference = normalizer(sample[text_column])
+        reference = args.normalize(sample[text_column])
         if not reference:
             continue
 
@@ -627,7 +826,7 @@ def evaluate_one(args, transcribe, dataset_config, split, text_column_override,
         for pad in pads:
             padded = apply_trailing_pad(audio, sample_rate, pad)
             t0 = time.time()
-            hypothesis = normalizer(transcribe(padded, sample_rate))
+            hypothesis = args.normalize(transcribe(padded, sample_rate))
             buckets[pad]["elapsed_s"] += time.time() - t0
             buckets[pad]["references"].append(reference)
             buckets[pad]["hypotheses"].append(hypothesis)
@@ -668,7 +867,7 @@ def evaluate_one(args, transcribe, dataset_config, split, text_column_override,
                 }
             )
             continue
-        stats = corpus_wer(refs, hyps)
+        stats = corpus_error(refs, hyps, getattr(args, "metric", "wer"))
         stats.update(
             {
                 "label": pad_label,
@@ -683,19 +882,59 @@ def evaluate_one(args, transcribe, dataset_config, split, text_column_override,
     return results
 
 
-def main():
-    args = parse_args()
-
-    if args.use_speculative_decoding and args.backend != "moonshine_c_streaming":
+def print_result_block(args, results):
+    print("\n" + "=" * 60)
+    print(f"Backend:            {args.backend}")
+    print(f"Language:           {args.language}")
+    print(f"Model arch:         {args.model_arch}")
+    print(f"Metric:             {getattr(args, 'metric', 'wer').upper()}")
+    print(f"Speculative:        {args.use_speculative_decoding}")
+    print(f"pad-ms:             {','.join(str(p) for p in args.pad_ms)}")
+    if args.min_duration is not None or args.max_duration is not None:
+        lo = args.min_duration if args.min_duration is not None else 0
+        hi = args.max_duration if args.max_duration is not None else float("inf")
+        print(f"duration filter:    {lo:g}s .. {hi:g}s")
+    if args.backend == "hf":
+        hf_id = args.hf_model
+        if hf_id is None and args.language == "en":
+            hf_id = HF_DEFAULT_CHECKPOINT.get(args.model_arch)
+        print(f"HF checkpoint:      {hf_id}")
+    else:
+        print(f"VAD:                {'enabled' if args.enable_vad else 'DISABLED'}")
+        print(f"max_tokens_per_sec: {args.max_tokens_per_second}")
+        keyterms = load_keyterms(args)
+        boost = args.keyterm_boost if args.keyterm_boost is not None else "default"
+        print(f"key terms:          {len(keyterms)} (boost {boost})")
+        if args.backend == "moonshine_c_streaming":
+            print(f"update_interval:    {args.update_interval}s")
+            print(f"chunk_duration:     {args.chunk_duration}s")
+    print("-" * 60)
+    unique_sets = {r["label"].split("/pad")[0] for r in results}
+    unique_pads = {r.get("pad_ms", 0) for r in results}
+    errors = []
+    metric_name = getattr(args, "metric", "wer").upper()
+    for r in results:
+        if r["wer"] is None:
+            print(f"{r['label']:24s}  n/a (n=0)")
+            continue
         print(
-            "Note: --use-speculative-decoding forces moonshine_c_streaming "
-            "(batch path only decodes once).",
-            file=sys.stderr,
+            f"{r['label']:24s}  {metric_name}={r['wer']:.2%}  n={r['n']}  "
+            f"units={r['words']}  "
+            f"S/D/I={r.get('subs',0)}/{r.get('dels',0)}/{r.get('ins',0)}  "
+            f"diff={r.get('n_diff', 0)}  "
+            f"RTF={r['elapsed_s'] / max(1e-9, r['audio_s']):.3f}"
         )
-        args.backend = "moonshine_c_streaming"
+        errors.append(r["wer"])
+    if len(errors) > 1 and len(unique_sets) > 1 and len(unique_pads) == 1:
+        macro = float(np.mean(errors))
+        print("-" * 60)
+        print(f"{'macro average':24s}  {metric_name}={macro:.2%}  ({len(errors)} sets)")
+    print("=" * 60)
+    return errors
 
-    suite = resolve_suite(args.suite)
 
+def run_one_eval(args):
+    apply_language_defaults(args)
     if args.backend == "hf":
         transcribe = make_hf_backend(args)
     else:
@@ -704,18 +943,15 @@ def main():
         )
 
     results = []
+    suite = resolve_suite(args.suite)
     if suite is None:
-        # Legacy single-set mode.
-        dataset = load_eval_dataset(args)
-        text_column = args.text_column or detect_text_column(dataset[0])
-        # Reuse evaluate_one via a thin adapter: reload is fine / consistent.
         results.extend(
             evaluate_one(
                 args,
                 transcribe,
                 args.dataset_config,
                 args.split,
-                text_column,
+                args.text_column,
                 args.limit,
                 args.dataset_config,
             )
@@ -727,9 +963,10 @@ def main():
                 limits[k] = args.limit
         for name in suite:
             if name not in EVAL_SETS:
-                raise SystemExit(f"Unknown eval set '{name}'. Known: {sorted(EVAL_SETS)}")
+                raise SystemExit(
+                    f"Unknown eval set '{name}'. Known: {sorted(EVAL_SETS)}"
+                )
             cfg = EVAL_SETS[name]
-            # Temporarily point args.dataset at the set's repo.
             saved_dataset = args.dataset
             args.dataset = cfg["dataset"]
             pad_results = evaluate_one(
@@ -744,54 +981,72 @@ def main():
             args.dataset = saved_dataset
             results.extend(pad_results)
             for result in pad_results:
-                wer_s = f"{result['wer']:.2%}" if result["wer"] is not None else "n/a"
+                metric_name = getattr(args, "metric", "wer").upper()
+                err_s = (
+                    f"{result['wer']:.2%}" if result["wer"] is not None else "n/a"
+                )
                 print(
-                    f"{result['label']} WER = {wer_s} (n={result['n']})",
+                    f"{result['label']} {metric_name} = {err_s} (n={result['n']})",
                     file=sys.stderr,
                 )
+    print_result_block(args, results)
+    return results
 
-    print("\n" + "=" * 60)
-    print(f"Backend:            {args.backend}")
-    print(f"Model arch:         {args.model_arch}")
-    print(f"Speculative:        {args.use_speculative_decoding}")
-    print(f"pad-ms:             {','.join(str(p) for p in args.pad_ms)}")
-    if args.min_duration is not None or args.max_duration is not None:
-        lo = args.min_duration if args.min_duration is not None else 0
-        hi = args.max_duration if args.max_duration is not None else float("inf")
-        print(f"duration filter:    {lo:g}s .. {hi:g}s")
-    if args.backend == "hf":
-        print(f"HF checkpoint:      {args.hf_model or HF_DEFAULT_CHECKPOINT[args.model_arch]}")
-    else:
-        print(f"VAD:                {'enabled' if args.enable_vad else 'DISABLED'}")
-        print(f"max_tokens_per_sec: {args.max_tokens_per_second}")
-        keyterms = load_keyterms(args)
-        boost = args.keyterm_boost if args.keyterm_boost is not None else "default"
-        print(f"key terms:          {len(keyterms)} (boost {boost})")
-        if args.backend == "moonshine_c_streaming":
-            print(f"update_interval:    {args.update_interval}s")
-            print(f"chunk_duration:     {args.chunk_duration}s")
-    print("-" * 60)
-    # Averaging WER across pad lengths would hide the thing we are measuring.
-    unique_sets = {r["label"].split("/pad")[0] for r in results}
-    unique_pads = {r.get("pad_ms", 0) for r in results}
-    wers = []
-    for r in results:
-        if r["wer"] is None:
-            print(f"{r['label']:24s}  n/a (n=0)")
-            continue
+
+def main():
+    args = parse_args()
+
+    if args.use_speculative_decoding and args.backend != "moonshine_c_streaming":
         print(
-            f"{r['label']:24s}  WER={r['wer']:.2%}  n={r['n']}  "
-            f"words={r['words']}  "
-            f"S/D/I={r.get('subs',0)}/{r.get('dels',0)}/{r.get('ins',0)}  "
-            f"diff={r.get('n_diff', 0)}  "
-            f"RTF={r['elapsed_s'] / max(1e-9, r['audio_s']):.3f}"
+            "Note: --use-speculative-decoding forces moonshine_c_streaming "
+            "(batch path only decodes once).",
+            file=sys.stderr,
         )
-        wers.append(r["wer"])
-    if len(wers) > 1 and len(unique_sets) > 1 and len(unique_pads) == 1:
-        macro = float(np.mean(wers))
+        args.backend = "moonshine_c_streaming"
+
+    if args.all_streaming:
+        if args.limit is None:
+            args.quick = True
+        saved_dataset = args.dataset
+        saved_config = args.dataset_config
+        saved_split = args.split
+        saved_tokens = args.max_tokens_per_second
+        summary = []
+        for language, arch in STREAMING_JOBS:
+            args.language = language
+            args.model_arch = arch
+            args.dataset = saved_dataset
+            args.dataset_config = saved_config
+            args.split = saved_split
+            args.max_tokens_per_second = saved_tokens
+            print(
+                f"\n>>> {language} {arch}",
+                file=sys.stderr,
+            )
+            results = run_one_eval(args)
+            primary = next((r for r in results if r.get("wer") is not None), None)
+            summary.append(
+                {
+                    "language": language,
+                    "arch": arch,
+                    "metric": getattr(args, "metric", "wer").upper(),
+                    "error": None if primary is None else primary["wer"],
+                    "n": 0 if primary is None else primary["n"],
+                }
+            )
+        print("\n" + "=" * 60)
+        print("Streaming models (quick)")
         print("-" * 60)
-        print(f"{'macro average':24s}  WER={macro:.2%}  ({len(wers)} sets)")
-    print("=" * 60)
+        for row in summary:
+            err = "n/a" if row["error"] is None else f"{row['error']:.2%}"
+            print(
+                f"{row['language']:4s} {row['arch']:18s}  "
+                f"{row['metric']}={err}  n={row['n']}"
+            )
+        print("=" * 60)
+        return
+
+    run_one_eval(args)
 
 
 if __name__ == "__main__":

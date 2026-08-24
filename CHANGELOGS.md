@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The available-models table lists streaming STT for every published language. Older Community non-streaming models that have a streaming replacement are marked deprecated.
 - Streaming speech-to-text models open faster by reusing mapped `.ort` bytes at session create instead of copying them, matching the non-streaming path.
 - Importing `moonshine-voice` no longer loads `requests`, so a CLI call against a cached model starts sooner.
 - Text to speech now splits sentences with one shared implementation that keeps `Dr. Smith` and `J. R. R. Tolkien` whole and understands `。！？؟।` terminators, replacing four different naive rules.

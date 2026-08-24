@@ -232,6 +232,7 @@ run_test context-extractor "${BUILD_DIR}/context-extractor-test"
 run_test spelling-fusion "${BUILD_DIR}/spelling-fusion-test"
 run_test voice-activity  "${BUILD_DIR}/voice-activity-detector-test"
 run_test transcriber     "${BUILD_DIR}/transcriber-test"
+run_test streaming-language-smoke "${BUILD_DIR}/streaming-language-smoke-test"
 if [[ "${MOONSHINE_STREAM_MEMORY_TEST_DISABLE:-0}" != "1" ]]; then
   echo "  run  transcriber-streaming-memory (timeout ${STREAM_MEMORY_TEST_TIMEOUT}s)"
   stream_memory_rc=0

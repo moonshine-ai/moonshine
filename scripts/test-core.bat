@@ -83,6 +83,8 @@ if errorlevel 1 exit /b 1
 if errorlevel 1 exit /b 1
 "!REPO_ROOT_DIR!\core\build\!BUILD_TYPE!\transcriber-test.exe"
 if errorlevel 1 exit /b 1
+"!REPO_ROOT_DIR!\core\build\!BUILD_TYPE!\streaming-language-smoke-test.exe"
+if errorlevel 1 exit /b 1
 "!REPO_ROOT_DIR!\core\build\!BUILD_TYPE!\moonshine-c-api-test.exe"
 if errorlevel 1 exit /b 1
 "!REPO_ROOT_DIR!\core\build\!BUILD_TYPE!\context-biaser-test.exe"
