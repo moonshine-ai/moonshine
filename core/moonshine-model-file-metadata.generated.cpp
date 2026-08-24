@@ -4,7 +4,7 @@
 //   python3 scripts/generate-model-file-metadata.py
 //
 // This maps every downloadable model file's full CDN URL to its expected size
-// (bytes) and CRC32C checksum (base64, as reported by Google Cloud Storage).
+// (bytes) and CRC32C checksum (base64).
 // It is the single source of truth for per-file integrity metadata that
 // moonshine-model-catalog.cpp joins into the download manifest.
 
@@ -25,7 +25,7 @@ struct Entry {
 };
 
 // Sorted by `url` (ascending) so lookups can binary-search.
-constexpr std::array<Entry, 69> kEntries = {{
+constexpr std::array<Entry, 82> kEntries = {{
     {"https://download.moonshine.ai/model/base-ar/quantized/base-ar/"
      "decoder_model_merged.ort",
      109424552, "u17PkA==", "crc32c"},
@@ -97,14 +97,8 @@ constexpr std::array<Entry, 69> kEntries = {{
     {"https://download.moonshine.ai/model/diarization-community1/"
      "segmentation.ort",
      1594080, "hcqhEA==", "crc32c"},
-    {"https://download.moonshine.ai/model/embeddinggemma-300m/model.ort",
-     1235247424, "ZKybVA==", "crc32c"},
-    {"https://download.moonshine.ai/model/embeddinggemma-300m/model_fp16.ort",
-     831143896, "g/tW1w==", "crc32c"},
     {"https://download.moonshine.ai/model/embeddinggemma-300m/model_q4.ort",
      197683216, "7LR/2g==", "crc32c"},
-    {"https://download.moonshine.ai/model/embeddinggemma-300m/model_q4f16.ort",
-     176777928, "lp47kA==", "crc32c"},
     {"https://download.moonshine.ai/model/embeddinggemma-300m/"
      "model_quantized.ort",
      309797160, "aQOaDQ==", "crc32c"},
@@ -164,6 +158,30 @@ constexpr std::array<Entry, 69> kEntries = {{
     {"https://download.moonshine.ai/model/small-streaming-en/"
      "quantized_26_08_21/tokenizer.bin",
      249974, "B7s10Q==", "crc32c"},
+    {"https://download.moonshine.ai/model/small-streaming-ja/"
+     "quantized_26_08_23/adapter.ort",
+     2869296, "GzlnQA==", "crc32c"},
+    {"https://download.moonshine.ai/model/small-streaming-ja/"
+     "quantized_26_08_23/cross_kv.ort",
+     5358752, "0btjiw==", "crc32c"},
+    {"https://download.moonshine.ai/model/small-streaming-ja/"
+     "quantized_26_08_23/decoder_kv.ort",
+     61314512, "qXEgyA==", "crc32c"},
+    {"https://download.moonshine.ai/model/small-streaming-ja/"
+     "quantized_26_08_23/encoder.ort",
+     44358376, "fltsVQ==", "crc32c"},
+    {"https://download.moonshine.ai/model/small-streaming-ja/"
+     "quantized_26_08_23/frontend.model.ort",
+     31208, "RhG3gA==", "crc32c"},
+    {"https://download.moonshine.ai/model/small-streaming-ja/"
+     "quantized_26_08_23/frontend.weights.ort",
+     7769288, "VjqzBw==", "crc32c"},
+    {"https://download.moonshine.ai/model/small-streaming-ja/"
+     "quantized_26_08_23/streaming_config.json",
+     512, "Y/oEHw==", "crc32c"},
+    {"https://download.moonshine.ai/model/small-streaming-ja/"
+     "quantized_26_08_23/tokenizer.bin",
+     101836, "M94Ogg==", "crc32c"},
     {"https://download.moonshine.ai/model/spelling-en/spelling_cnn.ort",
      1664920, "fKPVyA==", "crc32c"},
     {"https://download.moonshine.ai/model/spelling-en/spelling_cnn_meta.json",
@@ -225,6 +243,30 @@ constexpr std::array<Entry, 69> kEntries = {{
     {"https://download.moonshine.ai/model/tiny-streaming-en/quantized_26_08_21/"
      "tokenizer.bin",
      249974, "B7s10Q==", "crc32c"},
+    {"https://download.moonshine.ai/model/tiny-streaming-ja/quantized_26_08_23/"
+     "adapter.ort",
+     1318472, "obzOjg==", "crc32c"},
+    {"https://download.moonshine.ai/model/tiny-streaming-ja/quantized_26_08_23/"
+     "cross_kv.ort",
+     1288120, "gbYCsw==", "crc32c"},
+    {"https://download.moonshine.ai/model/tiny-streaming-ja/quantized_26_08_23/"
+     "decoder_kv.ort",
+     19717336, "Mc/YqQ==", "crc32c"},
+    {"https://download.moonshine.ai/model/tiny-streaming-ja/quantized_26_08_23/"
+     "encoder.ort",
+     7772792, "ZS0TPg==", "crc32c"},
+    {"https://download.moonshine.ai/model/tiny-streaming-ja/quantized_26_08_23/"
+     "frontend.model.ort",
+     27608, "BTpcfg==", "crc32c"},
+    {"https://download.moonshine.ai/model/tiny-streaming-ja/quantized_26_08_23/"
+     "frontend.weights.ort",
+     2093288, "T4l/3Q==", "crc32c"},
+    {"https://download.moonshine.ai/model/tiny-streaming-ja/quantized_26_08_23/"
+     "streaming_config.json",
+     509, "wH/VeA==", "crc32c"},
+    {"https://download.moonshine.ai/model/tiny-streaming-ja/quantized_26_08_23/"
+     "tokenizer.bin",
+     101836, "M94Ogg==", "crc32c"},
 }};
 
 }  // namespace

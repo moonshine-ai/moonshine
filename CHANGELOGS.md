@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `AgentFlow.say_stream()` and `Dialog.say_stream()` speak a language model's reply as it is generated, instead of waiting for the whole thing.
 - `moonshine_tts_split_utterances()` exposes the sentence splitter that streaming and `say()` share.
 - `EmbeddingModel` is a public low-level type in Python, JavaScript, Swift, and Java, for embedding text and scoring similarity without adopting AgentFlow.
+- Japanese streaming speech-to-text in small and tiny sizes, and small streaming is now what `"ja"` selects by default. The older non-streaming Japanese models stay available by architecture.
 
 ### Changed
 

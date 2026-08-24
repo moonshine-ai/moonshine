@@ -43,6 +43,12 @@ constexpr const char* kCdnModelBase = "https://download.moonshine.ai/model";
 // silently reusing stale files.
 constexpr const char* kStreamingQuantizedDir = "/quantized_26_08_21";
 
+// The same scheme for Japanese, which was quantized from different checkpoints
+// on a different day. Per-language rather than shared, because a language's
+// weights are re-quantized when that language gets a better checkpoint, and one
+// shared constant would force every language to move at once.
+constexpr const char* kJapaneseStreamingQuantizedDir = "/quantized_26_08_23";
+
 struct SttModelEntry {
   int32_t model_arch;
   std::string download_url;
@@ -111,9 +117,22 @@ const std::vector<SttLanguageEntry>& stt_catalog() {
            {MOONSHINE_MODEL_ARCH_TINY,
             std::string(kCdnModelBase) + "/tiny-en/quantized/tiny-en"},
        }},
+      // Streaming first, so it is the default, mirroring English. Small and
+      // tiny streaming measure 17.2 and 19.7 no-space CER across FLEURS and
+      // ReazonSpeech (batch 1, as deployed). The older non-streaming base and
+      // tiny entries stay listed for callers that ask for those architectures
+      // by name; they were never scored on this panel, so this is not a claim
+      // that streaming beats them, only that streaming is what we now measure
+      // and ship.
       {"ja",
        "Japanese",
        {
+           {MOONSHINE_MODEL_ARCH_SMALL_STREAMING,
+            std::string(kCdnModelBase) + "/small-streaming-ja" +
+                kJapaneseStreamingQuantizedDir},
+           {MOONSHINE_MODEL_ARCH_TINY_STREAMING,
+            std::string(kCdnModelBase) + "/tiny-streaming-ja" +
+                kJapaneseStreamingQuantizedDir},
            {MOONSHINE_MODEL_ARCH_BASE,
             std::string(kCdnModelBase) + "/base-ja/quantized/base-ja"},
            {MOONSHINE_MODEL_ARCH_TINY,
