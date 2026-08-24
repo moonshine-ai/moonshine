@@ -75,13 +75,9 @@ for ARCH in ${ARCHS[@]}; do
 	mkdir -p ${HEADERS_PATH}
 	cp ${CORE_DIR}/moonshine-c-api.h ${HEADERS_PATH}/moonshine-c-api.h
 	cp ${CORE_DIR}/module.modulemap ${HEADERS_PATH}/module.modulemap
-	RESOURCES_PATH=${CORE_BUILD_DIR}/Moonshine.xcframework/${ARCH}/Resources/
-	mkdir -p ${RESOURCES_PATH}
-	# -c is an APFS clone: same bytes, no extra disk until something writes.
-	cp -cR ${REPO_ROOT_DIR}/test-assets ${RESOURCES_PATH}/test-assets
-	rm -rf ${RESOURCES_PATH}/test-assets/.git
-	rm -rf ${RESOURCES_PATH}/test-assets/.DS_Store
-	rm -rf ${RESOURCES_PATH}/test-assets/output
+	# Do not copy test-assets into the xcframework. Three copies of that
+	# tree blow the 2 GB GitHub release-asset limit; Swift tests load them
+	# from Tests/MoonshineVoiceTests/test-assets instead.
 done
 
 rm -rf ${REPO_ROOT_DIR}/language-bindings/swift/Moonshine.xcframework
