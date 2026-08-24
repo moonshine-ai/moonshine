@@ -19,7 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `EmbeddingModel` is a public low-level type in Python, JavaScript, Swift, and Java, for embedding text and scoring similarity without adopting AgentFlow.
 - Japanese streaming speech-to-text in small and tiny sizes, and small streaming is now what `"ja"` selects by default. The older non-streaming Japanese models stay available by architecture.
 - Streaming speech-to-text for German and Spanish in small and tiny, and for Arabic, Mandarin, Tagalog and Vietnamese in tiny. Streaming is now the default for each of these languages; older models stay available by architecture.
-- All streaming speech-to-text models are released under the MIT License, in every language. Non-streaming models for languages other than English remain under the Moonshine Community License.
+- Moonshine models are now MIT by default, in every language and at every size. Only the legacy non-streaming models for languages other than English stay under the Moonshine Community License, and that list is now enumerated in LICENSE.
 
 ### Changed
 

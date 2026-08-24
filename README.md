@@ -39,4 +39,4 @@ Building with a coding agent? Copy [`.agents/skills/moonshine-voice/`](https://g
 
 ## License
 
-Licensed under the [MIT License](LICENSE).
+Licensed under the [MIT License](LICENSE). The models are MIT by default too, in every language and at every size — the only exceptions are the legacy non-streaming models for languages other than English, which stay under the non-commercial Moonshine Community License and are enumerated in [LICENSE](LICENSE).

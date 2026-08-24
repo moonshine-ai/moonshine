@@ -11,13 +11,16 @@ Here are the models currently available. See [Downloading Models](../using/downl
 | English    | Medium Streaming | 245 million  | 6.65%   | MIT       |
 | Arabic     | Base             | 58 million   | 5.63%   | Community |
 | Japanese   | Base             | 58 million   | 13.62%  | Community |
+| Japanese   | Tiny             | 26 million   | —       | Community |
 | Korean     | Tiny             | 26 million   | 6.46%   | Community |
 | Mandarin   | Base             | 58 million   | 25.76%  | Community |
 | Spanish    | Base             | 58 million   | 4.33%   | Community |
 | Ukrainian  | Base             | 58 million   | 14.55%  | Community |
 | Vietnamese | Base             | 58 million   | 8.82%   | Community |
 
-Streaming speech-to-text is also published for Arabic, German, Japanese, Mandarin, Spanish, Tagalog and Vietnamese — Tiny in all seven, and Small in German, Japanese and Spanish. **All streaming models are released under the MIT License, in every language**, unlike the non-streaming models above for languages other than English, which are under the non-commercial [Moonshine Community License](../license.md). Streaming is what each of these languages now selects by default; the non-streaming models stay reachable by naming the architecture.
+Japanese Tiny is reachable by naming the architecture but has never been scored with `scripts/eval-model-accuracy`, so its cell is left empty rather than filled from another harness.
+
+Streaming speech-to-text is also published for Arabic, German, Japanese, Mandarin, Spanish, Tagalog and Vietnamese — Tiny in all seven, and Small in German, Japanese and Spanish. **Moonshine models are MIT by default, in every language and at every size.** The rows marked Community above are the complete set of exceptions: the legacy non-streaming models for languages other than English, under the non-commercial [Moonshine Community License](../license.md). Every streaming model is MIT, as are the English Tiny and Base models. Streaming is what each of these languages now selects by default; the non-streaming models stay reachable by naming the architecture.
 
 Their accuracy is not listed in the table above because it has not yet been measured with `scripts/eval-model-accuracy`, and quoting figures from a different harness in the same column would make the rows look comparable when they are not. Per-language numbers, including the cost of quantization, are on each model's [HuggingFace](huggingface.md) card.
 
