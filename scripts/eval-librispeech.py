@@ -84,6 +84,24 @@ HF_DEFAULT_CHECKPOINT = {
 normalizer = EnglishTextNormalizer()
 
 
+def _parse_pad_ms(value):
+    """Parse a comma-separated list of trailing-pad lengths in milliseconds."""
+    if isinstance(value, list):
+        return value
+    pads = []
+    for part in str(value).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        pad = int(part)
+        if pad < 0:
+            raise argparse.ArgumentTypeError("pad-ms values must be >= 0")
+        pads.append(pad)
+    if not pads:
+        raise argparse.ArgumentTypeError("need at least one pad-ms value")
+    return pads
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -124,6 +142,26 @@ def parse_args():
     )
     parser.add_argument(
         "--limit", type=int, default=None, help="Only evaluate the first N samples."
+    )
+    parser.add_argument(
+        "--pad-ms",
+        type=_parse_pad_ms,
+        default=[0],
+        help="Trailing zero-padding in milliseconds after each clip. Comma-separated "
+        "to sweep, e.g. 0,100,250,500,1000,2000.",
+    )
+    parser.add_argument(
+        "--min-duration",
+        type=float,
+        default=None,
+        help="Keep only clips at least this many seconds long.",
+    )
+    parser.add_argument(
+        "--max-duration",
+        type=float,
+        default=None,
+        help="Keep only clips at most this many seconds long. Use this to score "
+        "short utterances, where trailing silence has the largest effect.",
     )
     parser.add_argument(
         "--enable-vad",
@@ -349,6 +387,49 @@ def decode_audio(audio_field):
     return data, sample_rate
 
 
+def audio_duration_seconds(audio_field):
+    """Duration of an undecoded datasets audio field, without resampling."""
+    if audio_field.get("bytes") is not None:
+        info = sf.info(io.BytesIO(audio_field["bytes"]))
+    else:
+        info = sf.info(audio_field["path"])
+    return float(info.duration)
+
+
+def apply_trailing_pad(audio, sample_rate, pad_ms):
+    """Append `pad_ms` milliseconds of digital zeros after `audio`."""
+    if pad_ms <= 0:
+        return audio
+    n = int(round(pad_ms * sample_rate / 1000.0))
+    if n <= 0:
+        return audio
+    return np.concatenate([audio, np.zeros(n, dtype=audio.dtype)])
+
+
+def summarize_durations(durations):
+    arr = np.asarray(durations, dtype=np.float64)
+    if arr.size == 0:
+        return "n=0"
+    return (
+        f"n={arr.size} mean={arr.mean():.2f}s median={np.median(arr):.2f}s "
+        f"p10={np.percentile(arr, 10):.2f}s p90={np.percentile(arr, 90):.2f}s "
+        f"<2s={(arr < 2).mean():.1%} <3s={(arr < 3).mean():.1%} <5s={(arr < 5).mean():.1%}"
+    )
+
+
+def corpus_wer(references, hypotheses):
+    corpus = process_words(references, hypotheses)
+    errors = corpus.substitutions + corpus.deletions + corpus.insertions
+    words = corpus.hits + corpus.substitutions + corpus.deletions
+    return {
+        "wer": errors / max(1, words),
+        "words": words,
+        "subs": corpus.substitutions,
+        "dels": corpus.deletions,
+        "ins": corpus.insertions,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Backends: each returns a callable transcribe(audio_float32, sample_rate)->str
 # ---------------------------------------------------------------------------
@@ -482,69 +563,124 @@ def make_hf_backend(args):
 
 def evaluate_one(args, transcribe, dataset_config, split, text_column_override,
                  limit, label):
+    pads = list(args.pad_ms)
+    extra = []
+    if args.min_duration is not None:
+        extra.append(f"min={args.min_duration:g}s")
+    if args.max_duration is not None:
+        extra.append(f"max={args.max_duration:g}s")
+    if limit is not None:
+        extra.append(f"limit={limit}")
+    extra.append("pad=" + ",".join(str(p) for p in pads) + "ms")
     print(
         f"Loading {args.dataset} ({dataset_config}, split={split})"
-        + (f" limit={limit}" if limit else "")
+        + (f" [{', '.join(extra)}]" if extra else "")
         + "...",
         file=sys.stderr,
     )
     dataset = load_dataset(args.dataset, dataset_config, split=split)
+    dataset = dataset.cast_column("audio", Audio(decode=False))
+    n_loaded = len(dataset)
+
+    if args.min_duration is not None or args.max_duration is not None:
+        keep = []
+        for i, sample in enumerate(tqdm(dataset, desc=f"{label} duration filter")):
+            duration = audio_duration_seconds(sample["audio"])
+            if args.min_duration is not None and duration < args.min_duration:
+                continue
+            if args.max_duration is not None and duration > args.max_duration:
+                continue
+            keep.append(i)
+        dataset = dataset.select(keep)
+        print(
+            f"{label}: kept {len(keep)}/{n_loaded} clips after duration filter",
+            file=sys.stderr,
+        )
+
     if limit is not None:
         # ESB splits are sorted longest-first; a plain head() would only score
         # the longest clips. Seeded shuffle matches the internal eval harness.
         dataset = dataset.shuffle(seed=0).select(range(min(limit, len(dataset))))
-    dataset = dataset.cast_column("audio", Audio(decode=False))
 
     text_column = text_column_override or detect_text_column(dataset[0])
 
-    references = []
-    hypotheses = []
+    buckets = {
+        pad: {"references": [], "hypotheses": [], "elapsed_s": 0.0} for pad in pads
+    }
+    durations = []
     total_audio_seconds = 0.0
+    n_diff = {pad: 0 for pad in pads}
+    baseline_pad = 0 if 0 in pads else pads[0]
 
     start_time = time.time()
     for sample in tqdm(dataset, desc=label):
         audio, sample_rate = decode_audio(sample["audio"])
-        total_audio_seconds += len(audio) / sample_rate
+        duration = len(audio) / sample_rate
+        durations.append(duration)
+        total_audio_seconds += duration
 
         reference = normalizer(sample[text_column])
-        hypothesis = normalizer(transcribe(audio, sample_rate))
-
         if not reference:
             continue
 
-        references.append(reference)
-        hypotheses.append(hypothesis)
+        hyps_this_clip = {}
+        for pad in pads:
+            padded = apply_trailing_pad(audio, sample_rate, pad)
+            t0 = time.time()
+            hypothesis = normalizer(transcribe(padded, sample_rate))
+            buckets[pad]["elapsed_s"] += time.time() - t0
+            buckets[pad]["references"].append(reference)
+            buckets[pad]["hypotheses"].append(hypothesis)
+            hyps_this_clip[pad] = hypothesis
+
+        for pad in pads:
+            if hyps_this_clip[pad] != hyps_this_clip[baseline_pad]:
+                n_diff[pad] += 1
 
         if args.verbose:
             print(f"\nREF: {reference}", file=sys.stderr)
-            print(f"HYP: {hypothesis}", file=sys.stderr)
+            for pad in pads:
+                print(f"HYP pad={pad}ms: {hyps_this_clip[pad]}", file=sys.stderr)
 
-    elapsed = time.time() - start_time
-    if not references:
-        return {
-            "label": label,
-            "n": 0,
-            "wer": None,
-            "words": 0,
-            "audio_s": total_audio_seconds,
-            "elapsed_s": elapsed,
-        }
+    wall_s = time.time() - start_time
+    print(
+        f"{label} durations ({summarize_durations(durations)}); "
+        f"wall={wall_s:.1f}s",
+        file=sys.stderr,
+    )
 
-    corpus = process_words(references, hypotheses)
-    corpus_errors = corpus.substitutions + corpus.deletions + corpus.insertions
-    corpus_words = corpus.hits + corpus.substitutions + corpus.deletions
-    corpus_wer = corpus_errors / max(1, corpus_words)
-    return {
-        "label": label,
-        "n": len(references),
-        "wer": corpus_wer,
-        "words": corpus_words,
-        "subs": corpus.substitutions,
-        "dels": corpus.deletions,
-        "ins": corpus.insertions,
-        "audio_s": total_audio_seconds,
-        "elapsed_s": elapsed,
-    }
+    results = []
+    for pad in pads:
+        refs = buckets[pad]["references"]
+        hyps = buckets[pad]["hypotheses"]
+        pad_label = label if pads == [0] else f"{label}/pad{pad}"
+        if not refs:
+            results.append(
+                {
+                    "label": pad_label,
+                    "pad_ms": pad,
+                    "n": 0,
+                    "wer": None,
+                    "words": 0,
+                    "n_diff": 0,
+                    "audio_s": total_audio_seconds,
+                    "elapsed_s": buckets[pad]["elapsed_s"],
+                }
+            )
+            continue
+        stats = corpus_wer(refs, hyps)
+        stats.update(
+            {
+                "label": pad_label,
+                "pad_ms": pad,
+                "n": len(refs),
+                "n_diff": n_diff[pad],
+                "audio_s": total_audio_seconds,
+                "elapsed_s": buckets[pad]["elapsed_s"],
+            }
+        )
+        results.append(stats)
+    return results
 
 
 def main():
@@ -567,27 +703,28 @@ def main():
             args, streaming=(args.backend == "moonshine_c_streaming")
         )
 
+    results = []
     if suite is None:
         # Legacy single-set mode.
         dataset = load_eval_dataset(args)
         text_column = args.text_column or detect_text_column(dataset[0])
         # Reuse evaluate_one via a thin adapter: reload is fine / consistent.
-        result = evaluate_one(
-            args,
-            transcribe,
-            args.dataset_config,
-            args.split,
-            text_column,
-            args.limit,
-            args.dataset_config,
+        results.extend(
+            evaluate_one(
+                args,
+                transcribe,
+                args.dataset_config,
+                args.split,
+                text_column,
+                args.limit,
+                args.dataset_config,
+            )
         )
-        results = [result]
     else:
         limits = parse_sample_size(args.sample_size, suite)
         if args.limit is not None:
             for k in list(limits.keys()):
                 limits[k] = args.limit
-        results = []
         for name in suite:
             if name not in EVAL_SETS:
                 raise SystemExit(f"Unknown eval set '{name}'. Known: {sorted(EVAL_SETS)}")
@@ -595,7 +732,7 @@ def main():
             # Temporarily point args.dataset at the set's repo.
             saved_dataset = args.dataset
             args.dataset = cfg["dataset"]
-            result = evaluate_one(
+            pad_results = evaluate_one(
                 args,
                 transcribe,
                 cfg["name"],
@@ -605,17 +742,23 @@ def main():
                 name,
             )
             args.dataset = saved_dataset
-            results.append(result)
-            wer_s = f"{result['wer']:.2%}" if result["wer"] is not None else "n/a"
-            print(
-                f"{name} WER = {wer_s} (n={result['n']})",
-                file=sys.stderr,
-            )
+            results.extend(pad_results)
+            for result in pad_results:
+                wer_s = f"{result['wer']:.2%}" if result["wer"] is not None else "n/a"
+                print(
+                    f"{result['label']} WER = {wer_s} (n={result['n']})",
+                    file=sys.stderr,
+                )
 
     print("\n" + "=" * 60)
     print(f"Backend:            {args.backend}")
     print(f"Model arch:         {args.model_arch}")
     print(f"Speculative:        {args.use_speculative_decoding}")
+    print(f"pad-ms:             {','.join(str(p) for p in args.pad_ms)}")
+    if args.min_duration is not None or args.max_duration is not None:
+        lo = args.min_duration if args.min_duration is not None else 0
+        hi = args.max_duration if args.max_duration is not None else float("inf")
+        print(f"duration filter:    {lo:g}s .. {hi:g}s")
     if args.backend == "hf":
         print(f"HF checkpoint:      {args.hf_model or HF_DEFAULT_CHECKPOINT[args.model_arch]}")
     else:
@@ -628,22 +771,26 @@ def main():
             print(f"update_interval:    {args.update_interval}s")
             print(f"chunk_duration:     {args.chunk_duration}s")
     print("-" * 60)
+    # Averaging WER across pad lengths would hide the thing we are measuring.
+    unique_sets = {r["label"].split("/pad")[0] for r in results}
+    unique_pads = {r.get("pad_ms", 0) for r in results}
     wers = []
     for r in results:
         if r["wer"] is None:
-            print(f"{r['label']:20s}  n/a (n=0)")
+            print(f"{r['label']:24s}  n/a (n=0)")
             continue
         print(
-            f"{r['label']:20s}  WER={r['wer']:.2%}  n={r['n']}  "
+            f"{r['label']:24s}  WER={r['wer']:.2%}  n={r['n']}  "
             f"words={r['words']}  "
             f"S/D/I={r.get('subs',0)}/{r.get('dels',0)}/{r.get('ins',0)}  "
+            f"diff={r.get('n_diff', 0)}  "
             f"RTF={r['elapsed_s'] / max(1e-9, r['audio_s']):.3f}"
         )
         wers.append(r["wer"])
-    if len(wers) > 1:
+    if len(wers) > 1 and len(unique_sets) > 1 and len(unique_pads) == 1:
         macro = float(np.mean(wers))
         print("-" * 60)
-        print(f"{'macro average':20s}  WER={macro:.2%}  ({len(wers)} sets)")
+        print(f"{'macro average':24s}  WER={macro:.2%}  ({len(wers)} sets)")
     print("=" * 60)
 
 
