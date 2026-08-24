@@ -866,7 +866,9 @@ main() {
     # MOBILE_LATENCY_OPTIONAL=1 to skip when hardware is absent. Does not rewrite
     # the README here (this is a disposable worktree) -- refresh figures with
     # scripts/test-mobile-latency.sh --update-readme on the candidate branch.
-    run_stage test-mobile-latency scripts/test-mobile-latency.sh --skip-build-swift
+    # --skip-ios: this Mac has no signed-in Xcode Apple ID, so on-device
+    # iOS signing fails. macOS + Android latency still run.
+    run_stage test-mobile-latency scripts/test-mobile-latency.sh --skip-build-swift --skip-ios
     run_stage build-android      scripts/build-android.sh "${ANDROID_ARGS[@]}"
     run_stage build-pip          scripts/build-pip.sh "${UPLOAD_ARGS[@]}"
     run_stage build-pip-docker   scripts/build-pip-docker.sh "${UPLOAD_ARGS[@]}"
