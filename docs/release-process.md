@@ -51,9 +51,12 @@ scripts/build-all-platforms.sh publish
 ```
 
 This runs preflight, builds the newest `dev-v*` branch, publishes to PyPI, Maven
-Central, SwiftPM and GitHub Releases, and finishes by fast-forwarding
-`main` to what it just shipped and deleting the candidate branch. The wasm npm
-package is not uploaded here — after the run finishes, publish it with
+Central, SwiftPM and GitHub Releases, tags
+[`moonshine-ai/moonshine-voice-assets`](https://huggingface.co/moonshine-ai/moonshine-voice-assets)
+with `v<version>` (so a later checkout of this release still fetches the asset
+snapshot it shipped against), and finishes by fast-forwarding `main` to what it
+just shipped and deleting the candidate branch. The wasm npm package is not
+uploaded here — after the run finishes, publish it with
 `scripts/publish-wasm-npm.sh` (so npm login cannot stall the multi-hour build).
 
 It is resumable — completed stages are skipped on a re-run, so if something
@@ -78,6 +81,8 @@ version. It fails the release if:
 - any version-bearing file is out of sync with the rest
 - that version is already published and this is a fresh (non-resumed) run
 - `gh` is missing or not authenticated
+- `hf` is missing or not authenticated (needed to tag the voice-asset mirror; a
+  dry run reports this as a warning)
 - the branch has unpushed commits, so the remote hosts would build other code
 - `origin/main` is not an ancestor of the build commit, so the final fold-in
   into `main` would fail

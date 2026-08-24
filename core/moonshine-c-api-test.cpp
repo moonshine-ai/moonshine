@@ -1271,7 +1271,8 @@ TEST_CASE("moonshine-tts-streaming-c-api") {
     const auto whole_len = static_cast<long long>(whole_n);
     const auto stream_len = static_cast<long long>(streamed.size());
     REQUIRE(std::llabs(stream_len - whole_len) <= 1200);
-    const uint64_t n = std::min(whole_n, static_cast<uint64_t>(streamed.size()));
+    const uint64_t n =
+        std::min(whole_n, static_cast<uint64_t>(streamed.size()));
     double whole_energy = 0.0;
     double streamed_energy = 0.0;
     for (uint64_t i = 0; i < n; ++i) {

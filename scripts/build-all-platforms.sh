@@ -12,6 +12,7 @@
 #   - move or push the v<version> tag
 #   - upload to PyPI, Maven Central or GitHub Releases
 #   - publish the Swift package (scripts/publish-swift.sh is skipped entirely)
+#   - tag moonshine-ai/moonshine-voice-assets with v<version>
 #   - fast-forward main or delete the candidate branch (finish-release is skipped)
 #
 # The Android stage uses publishToMavenLocal instead of publishAndReleaseToMaven-
@@ -888,6 +889,15 @@ main() {
              "left alone."
         echo "Ship it with: scripts/build-all-platforms.sh ${RELEASE_REF} publish"
         return 0
+    fi
+
+    # Snapshot the HF asset mirror at this version before main advances, so a
+    # later checkout of the tag still fetches the files this release shipped
+    # against. Skipped on dry runs (run_publish_stage) and left alone if the
+    # tag already exists.
+    if [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        run_publish_stage tag-hf-voice-assets \
+            scripts/tag-hf-voice-assets.sh
     fi
 
     # Everything is published, so main can now advance to what shipped. This is

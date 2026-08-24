@@ -49,6 +49,7 @@ KNOWN_FILES=(
 	./examples/android/AgentFlow/gradle/libs.versions.toml
 	./scripts/build-wasm.sh
 	./scripts/publish-swift.sh
+	./scripts/tag-hf-voice-assets.sh
 	./scripts/publish-binary.sh
 	./scripts/publish-binary.bat
 	./scripts/build-pip-docker.sh

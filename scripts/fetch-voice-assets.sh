@@ -20,6 +20,10 @@
 # Environment:
 #   MOONSHINE_CDN_BASE   default https://download.moonshine.ai
 #   MOONSHINE_HF_REPO    default moonshine-ai/moonshine-voice-assets
+#   MOONSHINE_HF_REVISION
+#       Hugging Face revision for the TTS tree (branch, tag, or sha). When
+#       unset, uses v<MOONSHINE_VERSION> if that tag exists on the Hub, else
+#       `main` (the open candidate, before the release has tagged a snapshot).
 #   MOONSHINE_FETCH_FORCE  if non-empty, re-download even when size matches
 #
 set -euo pipefail
@@ -28,12 +32,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CDN_BASE="${MOONSHINE_CDN_BASE:-https://download.moonshine.ai}"
 HF_REPO="${MOONSHINE_HF_REPO:-moonshine-ai/moonshine-voice-assets}"
 FORCE="${MOONSHINE_FETCH_FORCE:-}"
+HF_REVISION=""
 
 # Catalog pin for streaming fixtures (must match core/moonshine-model-catalog.cpp).
 STREAMING_PIN="tiny-streaming-en/quantized_26_08_21"
 
 usage() {
-  sed -n '2,22p' "$0" | sed 's/^# \?//'
+  sed -n '2,28p' "$0" | sed 's/^# \?//'
   exit "${1:-0}"
 }
 
@@ -127,16 +132,58 @@ fetch_android_test() {
     "${dest}/tokenizer.bin"
 }
 
+library_version() {
+  sed -n 's/^set(MOONSHINE_VERSION "\([^"]*\)").*/\1/p' \
+    "${ROOT}/core/CMakeLists.txt" | head -n1
+}
+
+# True if FILES.tsv exists at this Hub revision (tag, branch, or sha).
+hf_revision_exists() {
+  local rev="$1"
+  local code
+  code="$(curl -sI -o /dev/null -w "%{http_code}" \
+    "https://huggingface.co/${HF_REPO}/resolve/${rev}/FILES.tsv" || true)"
+  case "${code}" in
+    200|301|302|303|307|308) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+resolve_hf_revision() {
+  if [[ -n "${MOONSHINE_HF_REVISION:-}" ]]; then
+    printf '%s\n' "${MOONSHINE_HF_REVISION}"
+    return
+  fi
+  local version tag
+  version="$(library_version)"
+  if [[ -n "${version}" ]]; then
+    tag="v${version}"
+    if hf_revision_exists "${tag}"; then
+      printf '%s\n' "${tag}"
+      return
+    fi
+  fi
+  printf 'main\n'
+}
+
+ensure_hf_revision() {
+  if [[ -z "${HF_REVISION}" ]]; then
+    HF_REVISION="$(resolve_hf_revision)"
+  fi
+}
+
 fetch_tts_via_hf() {
   need_cmd hf
   need_cmd rsync
-  echo "=== TTS via Hugging Face (${HF_REPO}) ==="
+  ensure_hf_revision
+  echo "=== TTS via Hugging Face (${HF_REPO} @ ${HF_REVISION}) ==="
   local dest="${ROOT}/core/moonshine-tts/data"
   mkdir -p "${dest}"
   # Download only the tts/ tree, then flatten into data/ (HF paths are tts/<key>).
   local staging
   staging="$(mktemp -d "${TMPDIR:-/tmp}/moonshine-tts-hf.XXXXXX")"
-  if ! hf download "${HF_REPO}" --include "tts/**" --local-dir "${staging}"; then
+  if ! hf download "${HF_REPO}" --revision "${HF_REVISION}" \
+    --include "tts/**" --local-dir "${staging}"; then
     rm -rf "${staging}"
     return 1
   fi
@@ -187,13 +234,14 @@ urlencode_cdn_path() {
 
 fetch_tts_via_cdn_inventory() {
   need_cmd curl
-  echo "=== TTS via CDN (inventory from HF FILES.tsv) ==="
+  ensure_hf_revision
+  echo "=== TTS via CDN (inventory from HF FILES.tsv @ ${HF_REVISION}) ==="
   local dest="${ROOT}/core/moonshine-tts/data"
   mkdir -p "${dest}"
   local tsv
   tsv="$(mktemp)"
   if ! curl -fL -o "${tsv}" \
-    "https://huggingface.co/${HF_REPO}/resolve/main/FILES.tsv"; then
+    "https://huggingface.co/${HF_REPO}/resolve/${HF_REVISION}/FILES.tsv"; then
     rm -f "${tsv}"
     return 1
   fi

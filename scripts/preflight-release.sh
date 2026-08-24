@@ -159,6 +159,24 @@ main() {
         fail "gh is not installed; the release upload stages need it."
     fi
 
+    # The publish flow tags moonshine-ai/moonshine-voice-assets with v<version>
+    # so old checkouts keep fetching the snapshot they shipped against.
+    if command -v hf >/dev/null 2>&1; then
+        local hf_user
+        hf_user="$(hf auth whoami 2>/dev/null || true)"
+        if [ -n "${hf_user}" ]; then
+            pass "hf is authenticated (${hf_user})"
+        else
+            publish_only_fail "hf is not authenticated; tagging" \
+                "moonshine-ai/moonshine-voice-assets will fail." \
+                "  hf auth login"
+        fi
+    else
+        publish_only_fail "hf CLI is not installed; the release tags" \
+            "moonshine-ai/moonshine-voice-assets with v${version}." \
+            "  pip install huggingface_hub && hf auth login"
+    fi
+
     # The build is from the pushed commit, so anything local and uncommitted or
     # unpushed silently will not be in the release.
     local remote_tip
