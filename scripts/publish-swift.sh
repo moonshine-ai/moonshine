@@ -5,7 +5,7 @@ REPO_ROOT_DIR="$(dirname "${SCRIPTS_DIR}")"
 SWIFT_DIR="${REPO_ROOT_DIR}/language-bindings/swift"
 
 FRAMEWORK_NAME="Moonshine"
-VERSION="0.1.5"
+VERSION="0.1.6"
 REPO="moonshine-ai/moonshine-swift"
 TAG="v${VERSION}"
 

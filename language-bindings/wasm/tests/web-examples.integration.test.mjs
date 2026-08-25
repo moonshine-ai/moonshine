@@ -2361,7 +2361,7 @@ const TAB_PAGES = [
       'npm i @moonshine-ai/moonshine-wasm',
       'pip install moonshine-voice',
       'https://github.com/moonshine-ai/moonshine-swift/',
-      'ai.moonshine:moonshine-voice:0.1.5',
+      'ai.moonshine:moonshine-voice:0.1.6',
     ],
   },
   {
@@ -2379,7 +2379,7 @@ const TAB_PAGES = [
       'npm i @moonshine-ai/moonshine-wasm',
       'pip install moonshine-voice',
       'https://github.com/moonshine-ai/moonshine-swift/',
-      'ai.moonshine:moonshine-voice:0.1.5',
+      'ai.moonshine:moonshine-voice:0.1.6',
     ],
   },
   {
@@ -2398,7 +2398,7 @@ const TAB_PAGES = [
       'npm i @moonshine-ai/moonshine-wasm',
       'pip install moonshine-voice',
       'https://github.com/moonshine-ai/moonshine-swift/',
-      'ai.moonshine:moonshine-voice:0.1.5',
+      'ai.moonshine:moonshine-voice:0.1.6',
     ],
   },
 ];

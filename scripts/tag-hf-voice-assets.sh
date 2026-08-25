@@ -17,7 +17,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.5"
+VERSION="0.1.6"
 HF_REPO="${MOONSHINE_HF_REPO:-moonshine-ai/moonshine-voice-assets}"
 TAG="v${VERSION}"
 
