@@ -2,6 +2,8 @@
 
 This is an example of using the [Moonshine Voice](https://github.com/moonshine-ai/moonshine) library to build a voice interface that could control a robot from your Raspberry Pi (Dalek not included).
 
+- Speech to text in English, Spanish, German, Mandarin, Japanese, Korean, Vietnamese, Tagalog, Ukrainian, and Arabic, and text to speech in English, Spanish, Arabic, German, French, Hindi, Italian, Japanese, Korean, Dutch, Portuguese, Russian, Turkish, Ukrainian, Vietnamese, and Mandarin.
+
 To run it, first `cd` into this directory and install the Moonshine Voice pip package:
 
 ```bash

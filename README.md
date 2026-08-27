@@ -12,6 +12,7 @@ Full guides, models, and API reference are at **[moonshine-voice.readthedocs.io]
 - Optimized for live streaming, with low latency by doing work while the user is still talking.
 - Speech to text models trained from scratch, from [higher accuracy than Whisper Large V3](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard) down to [tiny 1MB models](micro/README.md).
 - One library across [Python, JavaScript/WASM, iOS, Android, macOS, Linux, Windows, and Raspberry Pi](https://moonshine-voice.readthedocs.io/en/latest/quickstart/).
+- Speech to text in English, Spanish, German, Mandarin, Japanese, Korean, Vietnamese, Tagalog, Ukrainian, and Arabic, and text to speech in English, Spanish, Arabic, German, French, Hindi, Italian, Japanese, Korean, Dutch, Portuguese, Russian, Turkish, Ukrainian, Vietnamese, and Mandarin.
 
 ## Quickstart
 

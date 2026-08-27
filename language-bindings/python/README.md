@@ -250,7 +250,7 @@ tts.clone_from(clone)
 
 ## Multiple Languages
 
-The framework currently supports English, Spanish, Mandarin, Japanese, Korean, Vietnamese, Arabic, and Ukrainian. We are working on wider language support, and you can see which are supported in your version by calling `supported_languages()`. To use a language, request it using `get_model_for_language()` passing in the two-letter language code. For example `get_model_for_language("es")` will download the Spanish models and pass the information you need to create `Transcriber` objects using them.
+The framework currently supports English, Spanish, German, Mandarin, Japanese, Korean, Vietnamese, Tagalog, Ukrainian, and Arabic for speech to text. We are working on wider language support, and you can see which are supported in your version by calling `supported_languages()`. To use a language, request it using `get_model_for_language()` passing in the two-letter language code. For example `get_model_for_language("es")` will download the Spanish models and pass the information you need to create `Transcriber` objects using them.
 
 ## Documentation
 

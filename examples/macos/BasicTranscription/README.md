@@ -61,13 +61,15 @@ swift run BasicTranscription --help
 ## Supported Languages
 
 - `en` / `english` - English
-- `ja` / `japanese` - Japanese
 - `es` / `spanish` - Spanish
-- `ar` / `arabic` - Arabic
+- `de` / `german` - German
+- `zh` / `chinese` - Chinese
+- `ja` / `japanese` - Japanese
 - `ko` / `korean` - Korean
 - `vi` / `vietnamese` - Vietnamese
+- `tl` / `tagalog` - Tagalog
 - `uk` / `ukrainian` - Ukrainian
-- `zh` / `chinese` - Chinese
+- `ar` / `arabic` - Arabic
 
 ## Example Output
 
