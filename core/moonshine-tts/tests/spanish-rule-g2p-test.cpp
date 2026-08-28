@@ -73,3 +73,44 @@ TEST_CASE(
   const auto dialect = moonshine_tts::spanish_dialect_from_cli_id("es-ES");
   check_wiki_parity(wiki, golden, dialect);
 }
+
+TEST_CASE(
+    "spanish: r / rr contrast and rhotic context across syllable boundaries") {
+  const auto dialect = moonshine_tts::spanish_dialect_from_cli_id("es-MX");
+  // Intervocalic single r is tap ɾ vs double rr is trill r
+  CHECK(moonshine_tts::spanish_text_to_ipa("pero", dialect) ==
+        std::string("p\xcb\x88"
+                    "e\xc9\xbeo"));  // pˈeɾo
+  CHECK(moonshine_tts::spanish_text_to_ipa("perro", dialect) ==
+        std::string("p\xcb\x88"
+                    "ero"));  // pˈero
+  CHECK(moonshine_tts::spanish_text_to_ipa("caro", dialect) ==
+        std::string("k\xcb\x88"
+                    "a\xc9\xbeo"));  // kˈaɾo
+  CHECK(moonshine_tts::spanish_text_to_ipa("carro", dialect) ==
+        std::string("k\xcb\x88"
+                    "aro"));  // kˈaro
+  CHECK(moonshine_tts::spanish_text_to_ipa("pera", dialect) ==
+        std::string("p\xcb\x88"
+                    "e\xc9\xbea"));  // pˈeɾa
+  CHECK(moonshine_tts::spanish_text_to_ipa("perra", dialect) ==
+        std::string("p\xcb\x88"
+                    "era"));  // pˈera
+
+  // Word-initial r is trill r
+  CHECK(moonshine_tts::spanish_text_to_ipa("ratón", dialect) ==
+        std::string("rat\xcb\x88on"));  // ratˈon
+  CHECK(moonshine_tts::spanish_text_to_ipa("rosa", dialect) ==
+        std::string("r\xcb\x88osa"));  // rˈosa
+
+  // Post-consonantal r after l, n, s is trill r across syllable boundaries
+  CHECK(moonshine_tts::spanish_text_to_ipa("honra", dialect) ==
+        std::string("\xcb\x88onra"));  // ˈonra
+  CHECK(moonshine_tts::spanish_text_to_ipa("Israel", dialect) ==
+        std::string("isra\xcb\x88"
+                    "el"));  // israˈel
+  CHECK(moonshine_tts::spanish_text_to_ipa("alrededor", dialect) ==
+        std::string("alrede\xcb\x88"
+                    "do\xc9\xbe"));  // alredeˈdoɾ (trill after l, tap at coda)
+}
+

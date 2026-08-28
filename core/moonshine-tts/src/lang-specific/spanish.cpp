@@ -502,6 +502,7 @@ char32_t to_lower_cp(char32_t c) {
 }
 
 std::string letters_to_ipa_no_stress(const std::u32string &syl_lower,
+                                     const std::u32string &full_word,
                                      const SpanishDialect &dialect,
                                      size_t grapheme_offset) {
   const std::u32string &lw = syl_lower;
@@ -665,13 +666,14 @@ std::string letters_to_ipa_no_stress(const std::u32string &syl_lower,
     }
 
     if (ch == U'r') {
-      const bool at_word_start = (i == 0);
-      const bool after_lns = i > 0 && (lw[i - 1] == U'l' || lw[i - 1] == U'n' ||
-                                       lw[i - 1] == U's');
+      const size_t abs_pos = grapheme_offset + i;
+      const bool at_word_start = (abs_pos == 0);
+      const bool after_lns =
+          abs_pos > 0 && (full_word[abs_pos - 1] == U'l' ||
+                          full_word[abs_pos - 1] == U'n' ||
+                          full_word[abs_pos - 1] == U's');
       if (at_word_start || after_lns) {
         out.push_back(dialect.trill_ipa);
-      } else if (prev_phoneme_was_vowel(out) && peek_vowel(i + 1)) {
-        out.push_back(dialect.tap_ipa);
       } else {
         out.push_back(dialect.tap_ipa);
       }
@@ -983,7 +985,7 @@ std::string SpanishRuleG2p::word_to_ipa(const std::string &word) const {
   std::vector<std::string> parts;
   for (const auto &s : syl) {
     const std::u32string su = spanish_unicode::utf8_to_utf32(s);
-    parts.push_back(letters_to_ipa_no_stress(su, dialect_, offset));
+    parts.push_back(letters_to_ipa_no_stress(su, lw, dialect_, offset));
     offset += su.size();
   }
   if (with_stress_ && !parts.empty() && stress_idx < parts.size()) {

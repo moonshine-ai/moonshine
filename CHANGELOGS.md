@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Spanish rule G2P preserves the r/rr (tap vs trill) contrast across syllable boundaries.
 - RP2350 firmware links on Pico SDK versions that pass `-nostartfiles` (undefined `__dso_handle` from libstdc++, GitHub issue #204).
 
 ## [0.1.5]
