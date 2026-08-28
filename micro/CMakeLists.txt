@@ -166,6 +166,21 @@ add_compile_options(
   $<$<COMPILE_LANGUAGE:CXX>:-fno-use-cxa-atexit>
 )
 
+# crtbegin.o normally defines __dso_handle. Pico SDK versions that pass
+# -nostartfiles for GCC omit it, so libstdc++ fails to link (GitHub issue #204).
+# Weak stubs keep SDK 2.2.0 (which still links crtbegin) working. --undefined
+# pulls the archive even when libstdc++ is last on the link line; compiling
+# without -ffunction-sections keeps _fini in the same object as __dso_handle.
+add_library(moonshine_micro_toolchain_stubs STATIC toolchain_stubs.c)
+target_compile_options(moonshine_micro_toolchain_stubs PRIVATE
+  -fno-function-sections
+  -fno-data-sections)
+link_libraries(moonshine_micro_toolchain_stubs)
+add_link_options(
+  "LINKER:--undefined=__dso_handle"
+  "LINKER:--undefined=_fini"
+)
+
 # --- Modules ---------------------------------------------------------------
 add_subdirectory(feature-generation)
 add_subdirectory(stt)

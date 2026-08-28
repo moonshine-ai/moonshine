@@ -4,6 +4,12 @@ All notable user-facing changes to Moonshine Voice are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Please keep the bullets high level, and no more than about 200 characters.
 
+## [0.1.6]
+
+### Fixed
+
+- RP2350 firmware links on Pico SDK versions that pass `-nostartfiles` (undefined `__dso_handle` from libstdc++, GitHub issue #204).
+
 ## [0.1.5]
 
 ### Added
