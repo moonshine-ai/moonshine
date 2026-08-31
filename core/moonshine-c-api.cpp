@@ -43,6 +43,7 @@ SOFTWARE.
 #include <cstring>  // For strerror
 #include <filesystem>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <numeric>
 #include <optional>
@@ -68,16 +69,6 @@ SOFTWARE.
 #include "string-utils.h"
 #include "text-embedder.h"
 #include "transcriber.h"
-
-// Defined as a macro to ensure we get meaningful line numbers in the error
-// message.
-#define CHECK_TRANSCRIBER_HANDLE(handle)                                  \
-  do {                                                                    \
-    if (handle < 0 || !transcriber_map.contains(handle)) {                \
-      LOGF("Moonshine transcriber handle is invalid: handle %d", handle); \
-      return MOONSHINE_ERROR_INVALID_HANDLE;                              \
-    }                                                                     \
-  } while (0)
 
 namespace {
 
@@ -198,24 +189,58 @@ void parse_transcriber_options(const OptionVector &options,
 }
 
 std::mutex transcriber_map_mutex;
-std::map<int32_t, Transcriber *> transcriber_map;
+std::map<int32_t, std::shared_ptr<Transcriber>> transcriber_map;
 int32_t next_transcriber_handle = 0;
 
-int32_t allocate_transcriber_handle(Transcriber *transcriber) {
+int32_t allocate_transcriber_handle(std::shared_ptr<Transcriber> transcriber) {
+  if (!transcriber) {
+    return MOONSHINE_ERROR_UNKNOWN;
+  }
   std::lock_guard<std::mutex> lock(transcriber_map_mutex);
   int32_t transcriber_handle = next_transcriber_handle++;
-  transcriber_map[transcriber_handle] = transcriber;
+  transcriber_map[transcriber_handle] = std::move(transcriber);
   return transcriber_handle;
 }
 
 void free_transcriber_handle(int32_t handle) {
+  // Destroy outside the map lock so a long Transcriber destructor cannot
+  // stall every other handle lookup. In-flight accessors keep their own
+  // shared_ptr, so this only drops the table's reference.
+  std::shared_ptr<Transcriber> doomed;
+  {
+    std::lock_guard<std::mutex> lock(transcriber_map_mutex);
+    auto it = transcriber_map.find(handle);
+    if (it == transcriber_map.end()) {
+      return;
+    }
+    doomed = std::move(it->second);
+    transcriber_map.erase(it);
+  }
+}
+
+std::shared_ptr<Transcriber> resolve_transcriber_handle(int32_t handle) {
   std::lock_guard<std::mutex> lock(transcriber_map_mutex);
-  delete transcriber_map[handle];
-  transcriber_map[handle] = nullptr;
-  transcriber_map.erase(handle);
+  const auto it = transcriber_map.find(handle);
+  if (it == transcriber_map.end() || it->second == nullptr) {
+    return nullptr;
+  }
+  return it->second;
 }
 
 }  // namespace
+
+// Copies the handle's shared_ptr under transcriber_map_mutex, then the
+// accessor runs on that local copy after the lock is dropped. Freeing a
+// handle only erases the map entry; the Transcriber stays alive until the
+// last in-flight call releases its copy (GitHub issue #223).
+#define RESOLVE_TRANSCRIBER_HANDLE(handle, transcriber)                   \
+  do {                                                                    \
+    (transcriber) = resolve_transcriber_handle(handle);                   \
+    if (!(transcriber)) {                                                 \
+      LOGF("Moonshine transcriber handle is invalid: handle %d", handle); \
+      return MOONSHINE_ERROR_INVALID_HANDLE;                              \
+    }                                                                     \
+  } while (0)
 
 extern "C" int32_t moonshine_get_version(void) {
   if (log_api_calls) {
@@ -273,20 +298,19 @@ extern "C" int32_t moonshine_load_transcriber_from_files(
       LOGF("  option[%" PRIu64 "] = %s=%s", i, option.name, option.value);
     }
   }
-  Transcriber *transcriber = nullptr;
+  std::shared_ptr<Transcriber> transcriber;
   try {
     TranscriberOptions transcriber_options;
     transcriber_options.model_source = TranscriberOptions::ModelSource::FILES;
     transcriber_options.model_path = path;
     transcriber_options.model_arch = model_arch;
     parse_transcriber_options(uncommon_options, transcriber_options);
-    transcriber = new Transcriber(transcriber_options);
+    transcriber = std::make_shared<Transcriber>(transcriber_options);
   } catch (const std::exception &e) {
     LOGF("Failed to load transcriber: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
-  int32_t transcriber_handle = allocate_transcriber_handle(transcriber);
-  return transcriber_handle;
+  return allocate_transcriber_handle(std::move(transcriber));
 }
 
 int32_t moonshine_load_transcriber_from_memory(
@@ -331,7 +355,7 @@ int32_t moonshine_load_transcriber_from_memory(
     return MOONSHINE_ERROR_INVALID_ARGUMENT;
   }
 
-  Transcriber *transcriber = nullptr;
+  std::shared_ptr<Transcriber> transcriber;
   try {
     TranscriberOptions transcriber_options;
     transcriber_options.model_source = TranscriberOptions::ModelSource::MEMORY;
@@ -345,13 +369,12 @@ int32_t moonshine_load_transcriber_from_memory(
     transcriber_options.spelling_model_data_size = spelling_model_data_size;
     transcriber_options.model_arch = model_arch;
     parse_transcriber_options(uncommon_options, transcriber_options);
-    transcriber = new Transcriber(transcriber_options);
+    transcriber = std::make_shared<Transcriber>(transcriber_options);
   } catch (const std::exception &e) {
     LOGF("Failed to load transcriber: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
-  int32_t transcriber_handle = allocate_transcriber_handle(transcriber);
-  return transcriber_handle;
+  return allocate_transcriber_handle(std::move(transcriber));
 }
 
 int32_t moonshine_load_transcriber_from_memory_files(
@@ -380,7 +403,7 @@ int32_t moonshine_load_transcriber_from_memory_files(
     }
   }
 
-  Transcriber *transcriber = nullptr;
+  std::shared_ptr<Transcriber> transcriber;
   try {
     TranscriberOptions transcriber_options;
     transcriber_options.model_source =
@@ -418,13 +441,12 @@ int32_t moonshine_load_transcriber_from_memory_files(
       }
     }
     parse_transcriber_options(uncommon_options, transcriber_options);
-    transcriber = new Transcriber(transcriber_options);
+    transcriber = std::make_shared<Transcriber>(transcriber_options);
   } catch (const std::exception &e) {
     LOGF("Failed to load transcriber from memory files: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
   }
-  int32_t transcriber_handle = allocate_transcriber_handle(transcriber);
-  return transcriber_handle;
+  return allocate_transcriber_handle(std::move(transcriber));
 }
 
 void moonshine_free_transcriber(int32_t transcriber_handle) {
@@ -447,9 +469,10 @@ int32_t moonshine_transcribe_without_streaming(
         transcriber_handle, (void *)(audio_data), audio_length, sample_rate,
         flags, (void *)(out_transcript));
   }
-  CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
+  std::shared_ptr<Transcriber> transcriber;
+  RESOLVE_TRANSCRIBER_HANDLE(transcriber_handle, transcriber);
   try {
-    transcriber_map[transcriber_handle]->transcribe_without_streaming(
+    transcriber->transcribe_without_streaming(
         audio_data, audio_length, sample_rate, flags, out_transcript);
   } catch (const std::exception &e) {
     LOGF("Failed to transcribe without streaming: %s\n", e.what());
@@ -463,9 +486,10 @@ int32_t moonshine_create_stream(int32_t transcriber_handle, uint32_t flags) {
     LOGF("moonshine_create_stream(transcriber_handle=%d, flags=%d)",
          transcriber_handle, flags);
   }
-  CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
+  std::shared_ptr<Transcriber> transcriber;
+  RESOLVE_TRANSCRIBER_HANDLE(transcriber_handle, transcriber);
   try {
-    return transcriber_map[transcriber_handle]->create_stream();
+    return transcriber->create_stream();
   } catch (const std::exception &e) {
     LOGF("Failed to create stream: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
@@ -478,9 +502,10 @@ int32_t moonshine_free_stream(int32_t transcriber_handle,
     LOGF("moonshine_free_stream(transcriber_handle=%d, stream_handle=%d)",
          transcriber_handle, stream_handle);
   }
-  CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
+  std::shared_ptr<Transcriber> transcriber;
+  RESOLVE_TRANSCRIBER_HANDLE(transcriber_handle, transcriber);
   try {
-    transcriber_map[transcriber_handle]->free_stream(stream_handle);
+    transcriber->free_stream(stream_handle);
   } catch (const std::exception &e) {
     LOGF("Failed to free stream: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
@@ -494,9 +519,10 @@ int32_t moonshine_start_stream(int32_t transcriber_handle,
     LOGF("moonshine_start_stream(transcriber_handle=%d, stream_handle=%d)",
          transcriber_handle, stream_handle);
   }
-  CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
+  std::shared_ptr<Transcriber> transcriber;
+  RESOLVE_TRANSCRIBER_HANDLE(transcriber_handle, transcriber);
   try {
-    transcriber_map[transcriber_handle]->start_stream(stream_handle);
+    transcriber->start_stream(stream_handle);
   } catch (const std::exception &e) {
     LOGF("Failed to start stream: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
@@ -510,9 +536,10 @@ int32_t moonshine_stop_stream(int32_t transcriber_handle,
     LOGF("moonshine_stop_stream(transcriber_handle=%d, stream_handle=%d)",
          transcriber_handle, stream_handle);
   }
-  CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
+  std::shared_ptr<Transcriber> transcriber;
+  RESOLVE_TRANSCRIBER_HANDLE(transcriber_handle, transcriber);
   try {
-    transcriber_map[transcriber_handle]->stop_stream(stream_handle);
+    transcriber->stop_stream(stream_handle);
   } catch (const std::exception &e) {
     LOGF("Failed to stop stream: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
@@ -528,12 +555,13 @@ int32_t moonshine_transcriber_set_keyterms(int32_t transcriber_handle,
         "keyterms='%s')",
         transcriber_handle, keyterms == nullptr ? "" : keyterms);
   }
-  CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
+  std::shared_ptr<Transcriber> transcriber;
+  RESOLVE_TRANSCRIBER_HANDLE(transcriber_handle, transcriber);
   try {
     const std::vector<std::string> parsed =
         keyterms == nullptr ? std::vector<std::string>()
                             : parse_keyterms(std::string(keyterms));
-    transcriber_map[transcriber_handle]->set_keyterms(parsed);
+    transcriber->set_keyterms(parsed);
   } catch (const std::exception &e) {
     LOGF("Failed to set key terms: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
@@ -553,9 +581,10 @@ int32_t moonshine_transcriber_set_context(int32_t transcriber_handle,
         transcriber_handle,
         context == nullptr ? size_t{0} : std::strlen(context), max_terms);
   }
-  CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
+  std::shared_ptr<Transcriber> transcriber;
+  RESOLVE_TRANSCRIBER_HANDLE(transcriber_handle, transcriber);
   try {
-    transcriber_map[transcriber_handle]->set_context(
+    transcriber->set_context(
         context == nullptr ? std::string() : std::string(context), max_terms);
   } catch (const std::exception &e) {
     LOGF("Failed to set context: %s\n", e.what());
@@ -589,10 +618,11 @@ int32_t moonshine_transcribe_add_audio_to_stream(int32_t transcriber_handle,
         transcriber_handle, stream_handle, (void *)(new_audio_data),
         audio_length, sample_rate, flags);
   }
-  CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
+  std::shared_ptr<Transcriber> transcriber;
+  RESOLVE_TRANSCRIBER_HANDLE(transcriber_handle, transcriber);
   try {
-    transcriber_map[transcriber_handle]->add_audio_to_stream(
-        stream_handle, new_audio_data, audio_length, sample_rate);
+    transcriber->add_audio_to_stream(stream_handle, new_audio_data,
+                                     audio_length, sample_rate);
   } catch (const std::exception &e) {
     LOGF("Failed to add audio to stream: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
@@ -609,10 +639,10 @@ int32_t moonshine_transcribe_stream(int32_t transcriber_handle,
         "flags=%d, out_transcript=%p)",
         transcriber_handle, stream_handle, flags, (void *)(out_transcript));
   }
-  CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
+  std::shared_ptr<Transcriber> transcriber;
+  RESOLVE_TRANSCRIBER_HANDLE(transcriber_handle, transcriber);
   try {
-    transcriber_map[transcriber_handle]->transcribe_stream(stream_handle, flags,
-                                                           out_transcript);
+    transcriber->transcribe_stream(stream_handle, flags, out_transcript);
   } catch (const std::exception &e) {
     LOGF("Failed to transcribe stream: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
@@ -1080,8 +1110,8 @@ int32_t try_create_clone_asr_from_assets(
       dir_str = clone_dir.string();
       transcriber_options.model_path = dir_str.c_str();
     }
-    auto *transcriber = new Transcriber(transcriber_options);
-    return allocate_transcriber_handle(transcriber);
+    return allocate_transcriber_handle(
+        std::make_shared<Transcriber>(transcriber_options));
   } catch (const std::exception &e) {
     LOGF("Failed to create clone ASR from ZipVoice assets: %s", e.what());
     return -1;
@@ -1133,21 +1163,18 @@ int32_t refine_clip_with_asr(const std::vector<float> &audio,
                            std::max(0.0f, audio_seconds - requested_duration));
 
   transcript_t *asr_transcript = nullptr;
-  {
-    std::lock_guard<std::mutex> lock(transcriber_map_mutex);
-    const auto tit = transcriber_map.find(asr_handle);
-    if (tit == transcriber_map.end() || tit->second == nullptr) {
-      return MOONSHINE_ERROR_INVALID_HANDLE;
-    }
-    try {
-      tit->second->transcribe_without_streaming(
-          const_cast<float *>(audio.data()),
-          static_cast<uint64_t>(audio.size()), kCloneClipSampleRate, 0,
-          &asr_transcript);
-    } catch (const std::exception &e) {
-      LOGF("clone ASR transcription failed: %s", e.what());
-      return MOONSHINE_ERROR_UNKNOWN;
-    }
+  std::shared_ptr<Transcriber> transcriber =
+      resolve_transcriber_handle(asr_handle);
+  if (!transcriber) {
+    return MOONSHINE_ERROR_INVALID_HANDLE;
+  }
+  try {
+    transcriber->transcribe_without_streaming(
+        const_cast<float *>(audio.data()), static_cast<uint64_t>(audio.size()),
+        kCloneClipSampleRate, 0, &asr_transcript);
+  } catch (const std::exception &e) {
+    LOGF("clone ASR transcription failed: %s", e.what());
+    return MOONSHINE_ERROR_UNKNOWN;
   }
 
   const std::vector<CloneClipWord> words =

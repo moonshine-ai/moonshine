@@ -510,4 +510,49 @@ public class TranscriberTest {
         assertTrue(allText.contains("best of times"));
         assertTrue(allText.contains("worst of times"));
     }
+
+    /**
+     * GitHub issue #223: stop() then close() while addAudio is still inside
+     * the native decode used to abort the process (destroyed mutex). The C API
+     * now keeps the Transcriber alive until that call returns.
+     */
+    @Test
+    public void testCloseWhileTranscribingDoesNotCrash() throws Exception {
+        Context testContext = InstrumentationRegistry.getInstrumentation().getContext();
+        Utils.WavData wavData;
+        try {
+            wavData = Utils.loadWavFromAssets(testContext, "two_cities.wav");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        assertTrue(wavData.data != null);
+        assertTrue(wavData.data.length > 0);
+
+        Utils.copyAssetToTempDir(testContext, tempDir, "tiny-en/encoder_model.ort");
+        Utils.copyAssetToTempDir(testContext, tempDir, "tiny-en/decoder_model_merged.ort");
+        Utils.copyAssetToTempDir(testContext, tempDir, "tiny-en/tokenizer.bin");
+        final String modelsPath = tempDir.toAbsolutePath().toString() + "/tiny-en/";
+
+        Transcriber transcriber = new Transcriber();
+        transcriber.loadFromFiles(modelsPath, JNI.MOONSHINE_MODEL_ARCH_TINY);
+        transcriber.setUpdateInterval(0.0);
+        transcriber.start();
+
+        final int clipSamples = Math.min(wavData.data.length, wavData.sampleRate * 2);
+        final float[] clip = Arrays.copyOf(wavData.data, clipSamples);
+        Thread worker = new Thread(() -> {
+            try {
+                transcriber.addAudio(clip, wavData.sampleRate);
+            } catch (RuntimeException ignored) {
+                // close() may retire the handle before this call finishes;
+                // INVALID_HANDLE must not become a native abort.
+            }
+        }, "close-race-transcribe");
+        worker.start();
+        Thread.sleep(20);
+        transcriber.stop();
+        transcriber.close();
+        worker.join(30_000);
+        assertTrue("transcription worker should finish after close()", !worker.isAlive());
+    }
 }

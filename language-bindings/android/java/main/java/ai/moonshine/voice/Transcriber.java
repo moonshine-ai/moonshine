@@ -26,8 +26,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 
 public class Transcriber {
-  private int transcriberHandle = -1;
-  private int defaultStreamHandle = -1;
+  private volatile int transcriberHandle = -1;
+  private volatile int defaultStreamHandle = -1;
   private final List<Consumer<TranscriptEvent>> listeners =
       new CopyOnWriteArrayList<>();
   private final ExecutorService executor = Executors.newSingleThreadExecutor();

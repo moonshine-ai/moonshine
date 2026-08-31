@@ -252,16 +252,28 @@ public class MicTranscriber extends Transcriber {
         }
         if (processing != null) {
             processing.interrupt();
-            try {
-                processing.join(1000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
         }
+        // Thread.interrupt() does not preempt an in-flight native decode, and
+        // a 1s join can time out while decode_full is still running. The C API
+        // keeps the Transcriber alive until that call returns (issue #223), so
+        // freeing the handle here is safe even if a join expires.
+        joinQuietly(processing, 1000);
+        joinQuietly(mic, 1000);
         super.close();
     }
 
     // -- Internals -----------------------------------------------------------
+
+    private static void joinQuietly(Thread thread, long timeoutMillis) {
+        if (thread == null) {
+            return;
+        }
+        try {
+            thread.join(timeoutMillis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
 
     private void dispatch(TranscriptEvent event) {
         if (event instanceof TranscriptEvent.LineTextChanged) {
