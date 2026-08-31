@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -9,6 +11,7 @@
 #include <fstream>
 #include <optional>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -818,6 +821,55 @@ TEST_CASE("moonshine-test-v2") {
     std::free(audio);
     moonshine_free_tts_synthesizer(h);
   }
+}
+
+TEST_CASE("moonshine-free-transcriber-races-in-flight-stream-call") {
+  // GitHub issue #223: moonshine_free_transcriber() used to delete the
+  // Transcriber (and its member mutexes) while another thread's unlocked
+  // read of transcriber_map was still dereferencing it, aborting with
+  // "FORTIFY: pthread_mutex_lock called on a destroyed mutex" inside
+  // Transcriber::decode_full, reached via transcribe_stream. Drive a stream
+  // from a background thread while the main thread frees the transcriber
+  // mid-flight; every call must resolve its own reference under
+  // transcriber_map_mutex instead of racing the free.
+  std::string root_model_path = "tiny-en";
+  REQUIRE(std::filesystem::exists(root_model_path));
+  int32_t transcriber_handle = moonshine_load_transcriber_from_files(
+      root_model_path.c_str(), MOONSHINE_MODEL_ARCH_TINY, nullptr, 0,
+      MOONSHINE_HEADER_VERSION);
+  REQUIRE(transcriber_handle >= 0);
+
+  int32_t stream_id = moonshine_create_stream(transcriber_handle, 0);
+  REQUIRE(stream_id >= 0);
+  REQUIRE(moonshine_start_stream(transcriber_handle, stream_id) ==
+          MOONSHINE_ERROR_NONE);
+
+  const std::vector<float> silence(1600, 0.0f);  // 100ms at 16kHz.
+  std::atomic<bool> stop_streaming{false};
+  std::thread streamer([&]() {
+    while (!stop_streaming.load()) {
+      moonshine_transcribe_add_audio_to_stream(transcriber_handle, stream_id,
+                                               silence.data(), silence.size(),
+                                               16000, 0);
+      struct transcript_t* transcript = nullptr;
+      moonshine_transcribe_stream(transcriber_handle, stream_id, 0,
+                                  &transcript);
+    }
+  });
+
+  // Give the streamer thread a head start so the free below lands in the
+  // middle of its loop rather than before it begins.
+  std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  moonshine_free_transcriber(transcriber_handle);
+  stop_streaming.store(true);
+  streamer.join();
+
+  // The handle is gone: every accessor must report it as invalid rather than
+  // touching freed memory.
+  struct transcript_t* transcript = nullptr;
+  CHECK(moonshine_transcribe_stream(transcriber_handle, stream_id, 0,
+                                    &transcript) ==
+        MOONSHINE_ERROR_INVALID_HANDLE);
 }
 
 TEST_CASE("moonshine-phonemes-to-speech-c-api") {

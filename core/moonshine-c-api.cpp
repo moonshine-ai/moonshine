@@ -43,6 +43,7 @@ SOFTWARE.
 #include <cstring>  // For strerror
 #include <filesystem>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <numeric>
 #include <optional>
@@ -69,11 +70,14 @@ SOFTWARE.
 #include "text-embedder.h"
 #include "transcriber.h"
 
-// Defined as a macro to ensure we get meaningful line numbers in the error
-// message.
-#define CHECK_TRANSCRIBER_HANDLE(handle)                                  \
+// Resolves ``handle`` to a ``shared_ptr`` under ``transcriber_map_mutex`` and
+// binds it to ``var``, so callers hold their own reference instead of reading
+// ``transcriber_map`` again later. Defined as a macro to ensure we get
+// meaningful line numbers in the error message.
+#define RESOLVE_TRANSCRIBER_HANDLE(handle, var)                           \
+  std::shared_ptr<Transcriber> var = resolve_transcriber_handle(handle);  \
   do {                                                                    \
-    if (handle < 0 || !transcriber_map.contains(handle)) {                \
+    if (handle < 0 || !var) {                                             \
       LOGF("Moonshine transcriber handle is invalid: handle %d", handle); \
       return MOONSHINE_ERROR_INVALID_HANDLE;                              \
     }                                                                     \
@@ -197,21 +201,36 @@ void parse_transcriber_options(const OptionVector &options,
   }
 }
 
+// ``transcriber_map`` holds a ``shared_ptr`` per handle rather than an owning
+// raw pointer so a concurrent ``moonshine_free_transcriber`` cannot delete the
+// ``Transcriber`` (and its member mutexes) out from under a call that is still
+// in flight on another thread. Every accessor must resolve its own shared_ptr
+// copy under ``transcriber_map_mutex`` via ``resolve_transcriber_handle``
+// (GitHub issue #223); once resolved, the local copy keeps the object alive
+// for the rest of the call even if the handle is freed concurrently.
 std::mutex transcriber_map_mutex;
-std::map<int32_t, Transcriber *> transcriber_map;
+std::map<int32_t, std::shared_ptr<Transcriber>> transcriber_map;
 int32_t next_transcriber_handle = 0;
 
 int32_t allocate_transcriber_handle(Transcriber *transcriber) {
   std::lock_guard<std::mutex> lock(transcriber_map_mutex);
   int32_t transcriber_handle = next_transcriber_handle++;
-  transcriber_map[transcriber_handle] = transcriber;
+  transcriber_map[transcriber_handle] =
+      std::shared_ptr<Transcriber>(transcriber);
   return transcriber_handle;
+}
+
+std::shared_ptr<Transcriber> resolve_transcriber_handle(int32_t handle) {
+  std::lock_guard<std::mutex> lock(transcriber_map_mutex);
+  const auto it = transcriber_map.find(handle);
+  if (it == transcriber_map.end()) {
+    return nullptr;
+  }
+  return it->second;
 }
 
 void free_transcriber_handle(int32_t handle) {
   std::lock_guard<std::mutex> lock(transcriber_map_mutex);
-  delete transcriber_map[handle];
-  transcriber_map[handle] = nullptr;
   transcriber_map.erase(handle);
 }
 
@@ -447,9 +466,9 @@ int32_t moonshine_transcribe_without_streaming(
         transcriber_handle, (void *)(audio_data), audio_length, sample_rate,
         flags, (void *)(out_transcript));
   }
-  CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
+  RESOLVE_TRANSCRIBER_HANDLE(transcriber_handle, transcriber);
   try {
-    transcriber_map[transcriber_handle]->transcribe_without_streaming(
+    transcriber->transcribe_without_streaming(
         audio_data, audio_length, sample_rate, flags, out_transcript);
   } catch (const std::exception &e) {
     LOGF("Failed to transcribe without streaming: %s\n", e.what());
@@ -463,9 +482,9 @@ int32_t moonshine_create_stream(int32_t transcriber_handle, uint32_t flags) {
     LOGF("moonshine_create_stream(transcriber_handle=%d, flags=%d)",
          transcriber_handle, flags);
   }
-  CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
+  RESOLVE_TRANSCRIBER_HANDLE(transcriber_handle, transcriber);
   try {
-    return transcriber_map[transcriber_handle]->create_stream();
+    return transcriber->create_stream();
   } catch (const std::exception &e) {
     LOGF("Failed to create stream: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
@@ -478,9 +497,9 @@ int32_t moonshine_free_stream(int32_t transcriber_handle,
     LOGF("moonshine_free_stream(transcriber_handle=%d, stream_handle=%d)",
          transcriber_handle, stream_handle);
   }
-  CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
+  RESOLVE_TRANSCRIBER_HANDLE(transcriber_handle, transcriber);
   try {
-    transcriber_map[transcriber_handle]->free_stream(stream_handle);
+    transcriber->free_stream(stream_handle);
   } catch (const std::exception &e) {
     LOGF("Failed to free stream: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
@@ -494,9 +513,9 @@ int32_t moonshine_start_stream(int32_t transcriber_handle,
     LOGF("moonshine_start_stream(transcriber_handle=%d, stream_handle=%d)",
          transcriber_handle, stream_handle);
   }
-  CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
+  RESOLVE_TRANSCRIBER_HANDLE(transcriber_handle, transcriber);
   try {
-    transcriber_map[transcriber_handle]->start_stream(stream_handle);
+    transcriber->start_stream(stream_handle);
   } catch (const std::exception &e) {
     LOGF("Failed to start stream: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
@@ -510,9 +529,9 @@ int32_t moonshine_stop_stream(int32_t transcriber_handle,
     LOGF("moonshine_stop_stream(transcriber_handle=%d, stream_handle=%d)",
          transcriber_handle, stream_handle);
   }
-  CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
+  RESOLVE_TRANSCRIBER_HANDLE(transcriber_handle, transcriber);
   try {
-    transcriber_map[transcriber_handle]->stop_stream(stream_handle);
+    transcriber->stop_stream(stream_handle);
   } catch (const std::exception &e) {
     LOGF("Failed to stop stream: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
@@ -528,12 +547,12 @@ int32_t moonshine_transcriber_set_keyterms(int32_t transcriber_handle,
         "keyterms='%s')",
         transcriber_handle, keyterms == nullptr ? "" : keyterms);
   }
-  CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
+  RESOLVE_TRANSCRIBER_HANDLE(transcriber_handle, transcriber);
   try {
     const std::vector<std::string> parsed =
         keyterms == nullptr ? std::vector<std::string>()
                             : parse_keyterms(std::string(keyterms));
-    transcriber_map[transcriber_handle]->set_keyterms(parsed);
+    transcriber->set_keyterms(parsed);
   } catch (const std::exception &e) {
     LOGF("Failed to set key terms: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
@@ -553,9 +572,9 @@ int32_t moonshine_transcriber_set_context(int32_t transcriber_handle,
         transcriber_handle,
         context == nullptr ? size_t{0} : std::strlen(context), max_terms);
   }
-  CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
+  RESOLVE_TRANSCRIBER_HANDLE(transcriber_handle, transcriber);
   try {
-    transcriber_map[transcriber_handle]->set_context(
+    transcriber->set_context(
         context == nullptr ? std::string() : std::string(context), max_terms);
   } catch (const std::exception &e) {
     LOGF("Failed to set context: %s\n", e.what());
@@ -589,10 +608,10 @@ int32_t moonshine_transcribe_add_audio_to_stream(int32_t transcriber_handle,
         transcriber_handle, stream_handle, (void *)(new_audio_data),
         audio_length, sample_rate, flags);
   }
-  CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
+  RESOLVE_TRANSCRIBER_HANDLE(transcriber_handle, transcriber);
   try {
-    transcriber_map[transcriber_handle]->add_audio_to_stream(
-        stream_handle, new_audio_data, audio_length, sample_rate);
+    transcriber->add_audio_to_stream(stream_handle, new_audio_data,
+                                     audio_length, sample_rate);
   } catch (const std::exception &e) {
     LOGF("Failed to add audio to stream: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
@@ -609,10 +628,9 @@ int32_t moonshine_transcribe_stream(int32_t transcriber_handle,
         "flags=%d, out_transcript=%p)",
         transcriber_handle, stream_handle, flags, (void *)(out_transcript));
   }
-  CHECK_TRANSCRIBER_HANDLE(transcriber_handle);
+  RESOLVE_TRANSCRIBER_HANDLE(transcriber_handle, transcriber);
   try {
-    transcriber_map[transcriber_handle]->transcribe_stream(stream_handle, flags,
-                                                           out_transcript);
+    transcriber->transcribe_stream(stream_handle, flags, out_transcript);
   } catch (const std::exception &e) {
     LOGF("Failed to transcribe stream: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
