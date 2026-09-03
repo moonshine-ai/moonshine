@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cinttypes>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <random>
 #include <string>
@@ -109,7 +110,8 @@ class TranscriberStream {
   std::string get_wav_filename();
 };
 
-typedef std::map<int32_t, TranscriberStream *> TranscriberStreamMap;
+typedef std::map<int32_t, std::shared_ptr<TranscriberStream>>
+    TranscriberStreamMap;
 
 // Every canonical asset key the keyed in-memory loader
 // (``ModelSource::MEMORY_FILES``, reached through
@@ -337,6 +339,13 @@ class Transcriber {
       const std::vector<SpeakerTurn> &turns, TranscriptStreamOutput *output);
 
  private:
+  // Copies the stream's shared_ptr under streams_mutex and returns it, or
+  // nullptr if stream_id is not in the map. Callers keep the accessor's
+  // work outside the lock on this local copy, so free_stream() erasing the
+  // map entry on another thread cannot delete the TranscriberStream out
+  // from under it (sibling of GitHub issue #223, one layer down).
+  std::shared_ptr<TranscriberStream> resolve_stream(int32_t stream_id);
+
   void update_transcript_from_segments(
       const std::vector<VoiceActivitySegment> &segments,
       TranscriberStream *stream, uint32_t flags,
