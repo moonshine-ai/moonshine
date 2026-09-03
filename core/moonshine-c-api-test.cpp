@@ -890,6 +890,72 @@ TEST_CASE("moonshine-free-transcriber-races-in-flight-stream-call") {
   std::free(wav_data);
 }
 
+// Sibling of the #223 race, one layer down: Transcriber::free_stream deletes
+// the raw TranscriberStream* while holding streams_mutex only around the
+// erase/delete, but Transcriber::transcribe_stream releases streams_mutex
+// after resolving the pointer and then spends the rest of the call (VAD,
+// decode, diarizer) dereferencing that same raw pointer unlocked. A
+// moonshine_free_stream on another thread for the same stream_id can delete
+// the TranscriberStream out from under an in-flight
+// moonshine_transcribe_stream.
+TEST_CASE("moonshine-free-stream-races-in-flight-transcribe-stream-call") {
+  std::string wav_path = "two_cities.wav";
+  REQUIRE(std::filesystem::exists(wav_path));
+  float* wav_data = nullptr;
+  size_t wav_data_size = 0;
+  int32_t wav_sample_rate = 0;
+  REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
+                        &wav_sample_rate));
+  REQUIRE(wav_data != nullptr);
+  REQUIRE(wav_data_size > 0);
+  const size_t clip_samples =
+      std::min(wav_data_size, static_cast<size_t>(wav_sample_rate) * 2);
+
+  std::string root_model_path = "tiny-en";
+  REQUIRE(std::filesystem::exists(root_model_path));
+  int32_t transcriber_handle = moonshine_load_transcriber_from_files(
+      root_model_path.c_str(), MOONSHINE_MODEL_ARCH_TINY, nullptr, 0,
+      MOONSHINE_HEADER_VERSION);
+  REQUIRE(transcriber_handle >= 0);
+
+  int32_t stream_id = moonshine_create_stream(transcriber_handle, 0);
+  REQUIRE(stream_id >= 0);
+  REQUIRE(moonshine_start_stream(transcriber_handle, stream_id) ==
+          MOONSHINE_ERROR_NONE);
+  REQUIRE(moonshine_transcribe_add_audio_to_stream(
+              transcriber_handle, stream_id, wav_data, clip_samples,
+              wav_sample_rate, 0) == MOONSHINE_ERROR_NONE);
+
+  std::atomic<int32_t> transcribe_error{MOONSHINE_ERROR_NONE};
+  std::atomic<bool> started{false};
+  std::thread worker([&]() {
+    started.store(true, std::memory_order_release);
+    struct transcript_t* transcript = nullptr;
+    transcribe_error.store(
+        moonshine_transcribe_stream(transcriber_handle, stream_id,
+                                    MOONSHINE_FLAG_FORCE_UPDATE, &transcript),
+        std::memory_order_release);
+  });
+
+  while (!started.load(std::memory_order_acquire)) {
+    std::this_thread::yield();
+  }
+  // Give the worker time to pass the streams_mutex-protected handle lookup
+  // in transcribe_stream and start using the unlocked raw TranscriberStream*
+  // (VAD/decode), which is where free_stream's delete can now race it.
+  std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  moonshine_free_stream(transcriber_handle, stream_id);
+  worker.join();
+
+  const int32_t in_flight = transcribe_error.load();
+  CHECK((in_flight == MOONSHINE_ERROR_NONE ||
+         in_flight == MOONSHINE_ERROR_INVALID_HANDLE ||
+         in_flight == MOONSHINE_ERROR_UNKNOWN));
+
+  moonshine_free_transcriber(transcriber_handle);
+  std::free(wav_data);
+}
+
 TEST_CASE("moonshine-phonemes-to-speech-c-api") {
   SUBCASE("invalid-handle") {
     float* audio = nullptr;
