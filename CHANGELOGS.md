@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Voice activity detection no longer carries its recurrent state between streams, which made a new or concurrent stream score its first second against audio it never heard.
 - RP2350 firmware links on Pico SDK versions that pass `-nostartfiles` (undefined `__dso_handle` from libstdc++, GitHub issue #204).
 - Closing a Transcriber while a stream transcription is still running no longer crashes the process (GitHub issue #223).
 

@@ -28,9 +28,11 @@ class VoiceActivityDetector {
   const size_t max_segment_sample_count;
 
   // Raw pointer intentionally not deleted to avoid static destruction order
-  // issues
+  // issues. Shared, so the recurrent state it advances cannot live with it:
+  // this detector keeps its own below, and start() clears it.
   static SileroVad *silero_vad;
 
+  SileroVadState vad_state;
   bool _is_active;
   std::vector<float> probability_window;
   int32_t probability_window_index;

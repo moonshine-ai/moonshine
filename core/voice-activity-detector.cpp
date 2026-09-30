@@ -49,6 +49,9 @@ VoiceActivityDetector::~VoiceActivityDetector() {}
 
 void VoiceActivityDetector::start() {
   _is_active = true;
+  // Silero is recurrent, so without this a stream opens with the model still
+  // primed by whatever the previous one heard.
+  vad_state.reset();
   samples_processed_count = 0;
   segments.clear();
   current_segment_audio_buffer.resize(0);
@@ -152,7 +155,8 @@ void VoiceActivityDetector::process_audio_chunk(const float *audio_data,
     {
       std::lock_guard<std::mutex> lock(vad_mutex);
       int current_flag;
-      silero_vad->predict(audio_vec, &current_probability, &current_flag);
+      silero_vad->predict(audio_vec, vad_state, &current_probability,
+                          &current_flag);
     }
     probability_window[probability_window_index] = current_probability;
     probability_window_index =

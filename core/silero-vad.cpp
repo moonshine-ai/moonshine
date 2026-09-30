@@ -45,9 +45,7 @@ SileroVad::SileroVad(int sample_rate, int windows_frame_size, float threshold,
       window_size_samples + context_samples;  // 512 + 64 = 576 samples
   input_node_dims[0] = 1;
   input_node_dims[1] = effective_window_size;
-  _state.resize(size_state);
-  _context.resize(context_samples, 0.0f);  // Initialize context to zeros
-  sr = sample_rate;                        // scalar
+  sr = sample_rate;  // scalar
   min_speech_samples = sr_per_ms * min_speech_duration_ms;
   max_speech_samples = (sample_rate * max_speech_duration_s -
                         window_size_samples - 2 * speech_pad_samples);
@@ -76,11 +74,12 @@ SileroVad::~SileroVad() {
 // data_chunk is expected to have window_size_samples samples (e.g., 512 for
 // 16kHz).
 void SileroVad::predict(const std::vector<float> &data_chunk,
-                        float *out_probability, int *out_flag) {
+                        SileroVadState &state, float *out_probability,
+                        int *out_flag) {
   // Build input by prepending context (64 samples) to data_chunk (512 samples)
   // = 576 total
-  input.resize(effective_window_size);
-  std::copy(_context.begin(), _context.end(), input.begin());
+  std::vector<float> input(effective_window_size);
+  std::copy(state.context.begin(), state.context.end(), input.begin());
   std::copy(data_chunk.begin(), data_chunk.end(),
             input.begin() + context_samples);
 
@@ -102,7 +101,7 @@ void SileroVad::predict(const std::vector<float> &data_chunk,
   }
 
   status = ort_api->CreateTensorWithDataAsOrtValue(
-      memory_info, _state.data(), _state.size() * sizeof(float),
+      memory_info, state.state.data(), state.state.size() * sizeof(float),
       state_node_dims, 3, ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &state_ort);
   if (status != nullptr) {
     const char *msg = ort_api->GetErrorMessage(status);
@@ -125,17 +124,13 @@ void SileroVad::predict(const std::vector<float> &data_chunk,
     return;
   }
 
-  ort_inputs.clear();
-  ort_inputs.push_back(input_ort);
-  ort_inputs.push_back(state_ort);
-  ort_inputs.push_back(sr_ort);
+  OrtValue *ort_inputs[3] = {input_ort, state_ort, sr_ort};
 
   // Prepare output OrtValue* array
   OrtValue *output_ort[2] = {nullptr, nullptr};
-  status =
-      ort_api->Run(session, nullptr, input_node_names.data(), ort_inputs.data(),
-                   ort_inputs.size(), output_node_names.data(),
-                   output_node_names.size(), output_ort);
+  status = ort_api->Run(session, nullptr, input_node_names.data(), ort_inputs,
+                        std::size(ort_inputs), output_node_names.data(),
+                        output_node_names.size(), output_ort);
 
   if (status != nullptr) {
     const char *msg = ort_api->GetErrorMessage(status);
@@ -155,10 +150,10 @@ void SileroVad::predict(const std::vector<float> &data_chunk,
   float *stateN = nullptr;
   LOG_ORT_ERROR(ort_api,
                 ort_api->GetTensorMutableData(output_ort[1], (void **)&stateN));
-  std::memcpy(_state.data(), stateN, size_state * sizeof(float));
+  std::memcpy(state.state.data(), stateN, size_state * sizeof(float));
 
   // Update context with last context_samples samples of the full input
-  std::copy(input.end() - context_samples, input.end(), _context.begin());
+  std::copy(input.end() - context_samples, input.end(), state.context.begin());
 
   // Set output values
   if (out_probability) *out_probability = speech_prob;

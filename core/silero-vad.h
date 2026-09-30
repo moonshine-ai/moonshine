@@ -19,6 +19,31 @@
 
 #include "onnxruntime_c_api.h"
 
+// Everything Silero carries from one frame to the next: the LSTM cells, and the
+// 64 samples of the previous frame that the model expects prepended to the next
+// one. It belongs to the caller rather than to SileroVad because one model
+// instance serves every stream in the process, so the state cannot live beside
+// the session without streams overwriting each other's.
+//
+// Sharing it is not a subtle error. A stream that inherits another's state
+// scores its opening second against a conversation it never heard, and a fresh
+// stream in a long-lived process inherits whatever the last one was saying.
+// Both show up as speech detected where the audio is silent.
+struct SileroVadState {
+  static constexpr size_t state_size = 2 * 1 * 128;
+  // For 16 kHz, 64 samples are prepended as context.
+  static constexpr size_t context_samples = 64;
+
+  std::vector<float> state = std::vector<float>(state_size, 0.0f);
+  std::vector<float> context = std::vector<float>(context_samples, 0.0f);
+
+  // Back to "no audio has been seen". Every stream boundary needs this.
+  void reset() {
+    state.assign(state_size, 0.0f);
+    context.assign(context_samples, 0.0f);
+  }
+};
+
 class SileroVad {
  private:
   // ONNX Runtime C API resources
@@ -29,11 +54,8 @@ class SileroVad {
   OrtAllocator *allocator;
   OrtMemoryInfo *memory_info;
 
-  // ----- Context-related additions -----
   static const int context_samples =
-      64;                       // For 16kHz, 64 samples are added as context.
-  std::vector<float> _context;  // Holds the last 64 samples from the previous
-                                // chunk (initialized to zero).
+      static_cast<int>(SileroVadState::context_samples);
 
   // Original window size (e.g., 32ms corresponds to 512 samples)
   int window_size_samples;
@@ -43,12 +65,11 @@ class SileroVad {
   // Additional declaration: samples per millisecond
   int sr_per_ms;
 
-  // ONNX Runtime input/output buffers
-  std::vector<OrtValue *> ort_inputs;
+  // ONNX Runtime input/output buffers. The per-call scratch that used to live
+  // here -- the input window and the tensor array -- is local to predict now,
+  // so that two streams scoring a frame at the same time cannot tread on it.
   std::vector<const char *> input_node_names = {"input", "state", "sr"};
-  std::vector<float> input;
-  unsigned int size_state = 2 * 1 * 128;
-  std::vector<float> _state;
+  unsigned int size_state = SileroVadState::state_size;
   int64_t sr;  // scalar sample rate
   int64_t input_node_dims[2] = {};
   const int64_t state_node_dims[3] = {2, 1, 128};
@@ -84,6 +105,8 @@ class SileroVad {
 
   bool is_loaded() const { return session != nullptr; }
 
-  void predict(const std::vector<float> &data_chunk, float *out_probability,
-               int *out_flag);
+  // Scores one frame, advancing `state`. The caller owns that state and must
+  // give each stream its own; see SileroVadState.
+  void predict(const std::vector<float> &data_chunk, SileroVadState &state,
+               float *out_probability, int *out_flag);
 };
