@@ -847,9 +847,37 @@ main() {
         rm -f "${STATE_DIR}/build-pip-docker.done"
     fi
 
+    # test-docs --skip-build installs the macOS wheel test-python built. That
+    # wheel lives in the worktree, which is recreated every run, so a resumed
+    # run that skips test-python would reach test-docs with an empty dist/.
+    if [[ -f "${STATE_DIR}/test-python.done" ]]; then
+        local host_wheel cached_wheel
+        host_wheel="$(ls "${RELEASE_DIR}"/language-bindings/python/dist/moonshine_voice-*macosx*.whl 2>/dev/null | head -n 1 || true)"
+        if [[ -z "${host_wheel}" ]]; then
+            cached_wheel="$(ls "${STATE_DIR}"/moonshine_voice-*macosx*.whl 2>/dev/null | head -n 1 || true)"
+            if [[ -n "${cached_wheel}" ]]; then
+                echo "Restoring cached macOS wheel into the fresh worktree..."
+                mkdir -p "${RELEASE_DIR}/language-bindings/python/dist"
+                cp "${STATE_DIR}"/moonshine_voice-*macosx*.whl \
+                    "${RELEASE_DIR}/language-bindings/python/dist/"
+            else
+                echo "test-python.done but no macOS wheel in the worktree or cache;" \
+                     "clearing the breadcrumb so it rebuilds."
+                rm -f "${STATE_DIR}/test-python.done"
+            fi
+        fi
+    fi
+
     cd "${RELEASE_DIR}"
     run_stage test-core          scripts/test-core.sh
     run_stage test-python        scripts/test-python.sh
+    # Keep the macOS wheel outside the disposable worktree so a later resume
+    # can still feed test-docs --skip-build without rebuilding it.
+    if compgen -G "${RELEASE_DIR}/language-bindings/python/dist/moonshine_voice-"*macosx*.whl >/dev/null; then
+        rm -f "${STATE_DIR}"/moonshine_voice-*macosx*.whl
+        cp "${RELEASE_DIR}"/language-bindings/python/dist/moonshine_voice-*macosx*.whl \
+            "${STATE_DIR}/"
+    fi
     run_stage test-docs          scripts/test-docs.sh --skip-build
     run_stage build-swift        scripts/build-swift.sh
     # Keep a copy outside the disposable worktree so resumed runs can skip the
