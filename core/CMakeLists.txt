@@ -441,6 +441,13 @@ endif()
 target_link_libraries(moonshine-c-api-test PRIVATE
     moonshine
 )
+# The free-during-stream race test spawns std::thread. Debian bullseye still
+# keeps pthread in its own library, so this executable has to name it;
+# bookworm's libc already contains those symbols.
+if (NOT IOS AND NOT MOONSHINE_BUILD_SWIFT)
+    find_package(Threads REQUIRED)
+    target_link_libraries(moonshine-c-api-test PRIVATE Threads::Threads)
+endif()
 
 add_executable(moonshine-c-api-memory-test moonshine-c-api-memory-test.cpp)
 set_target_properties(moonshine-c-api-memory-test PROPERTIES
