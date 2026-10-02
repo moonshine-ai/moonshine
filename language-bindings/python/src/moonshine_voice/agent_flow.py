@@ -1769,9 +1769,12 @@ class AgentFlow:
 
         The microphone stays muted and self-capture stays suppressed for the
         whole passage, exactly as in :meth:`say`, and the block does not exit
-        until playback has finished. Falls back to buffering the text and
-        speaking it in one go when no built-in synthesizer is configured
-        (:meth:`speak_with`, or no TTS at all).
+        until playback has finished. Text goes into the synthesizer itself;
+        the handle this method holds can only wait for or stop the reply.
+        Leaving the block, including because the caller raised, stops that
+        reply. Falls back to buffering the text and speaking it in one go
+        when no built-in synthesizer is configured (:meth:`speak_with`, or
+        no TTS at all).
         """
         if self._tts is None:
             buffered: List[str] = []
@@ -1782,19 +1785,22 @@ class AgentFlow:
         spoken: List[str] = []
         muted = self._mute_for_speech()
         self._speaking = True
+        # Text goes into the synthesizer, not into the handle: `say_stream` hands back
+        # something that can only wait for or stop the reply, because the push side is
+        # shared with everything else the synthesizer is speaking.
         stream = self._tts.say_stream()
         try:
             def push(text: str) -> None:
                 if not text:
                     return
                 spoken.append(text)
-                stream.push_text(text)
+                self._tts.push_text(text)
 
             yield push
-            stream.close_input()
+            self._tts.end_input()
             stream.wait()
         finally:
-            stream.close()
+            stream.stop()
             self._speaking = False
             self._unmute_after_speech(muted)
             joined = "".join(spoken).strip()

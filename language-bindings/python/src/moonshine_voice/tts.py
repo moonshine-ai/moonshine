@@ -102,6 +102,15 @@ class _ChunkPump:
         self._thread = threading.Thread(target=self._pump, daemon=True)
         self._thread.start()
 
+    @property
+    def finished(self) -> bool:
+        """Whether the worker has stopped, so no further audio will be produced.
+
+        Separate from :meth:`wait` because `wait` blocks and then runs `drain_hook`,
+        which also waits out playback.
+        """
+        return self._done_event.is_set()
+
     def wait(self, timeout: Optional[float] = None) -> bool:
         """Block until the worker has drained the stream."""
         drained = self._done_event.wait(timeout)
@@ -157,6 +166,17 @@ class SpeechInProgress:
         self._synthesizer = synthesizer
         self._pump = pump
 
+    @property
+    def finished(self) -> bool:
+        """Whether the reply is over, in the only sense that settles it.
+
+        The synthesizer's own ``is_streaming`` answers a different question -- whether a
+        generation is still open -- and a generation can be left open by a reply nothing is
+        producing audio for any more. This tracks the thing that produces the audio, so a
+        caller can tell "still speaking" from "nothing more is coming" without blocking.
+        """
+        return self._pump.finished
+
     def wait(self, timeout: Optional[float] = None) -> bool:
         """Block until everything pushed has been spoken."""
         return self._pump.wait(timeout)
@@ -164,7 +184,9 @@ class SpeechInProgress:
     def stop(self) -> None:
         """Stop the reply and drop anything still queued."""
         self._pump.stop()
-        self._synthesizer.cancel_stream()
+        # Worker first, then the generation, so that nothing is racing the cancel report this
+        # takes delivery of; see TextToSpeech._abandon_stream.
+        self._synthesizer._abandon_stream()
 
     def __enter__(self) -> "SpeechInProgress":
         return self
@@ -214,6 +236,16 @@ _SHUTDOWN_SENTINEL = object()
 # Long enough that a reply arriving sentence by sentence plays through one
 # stream, short enough not to hold an exclusive ALSA device from an idle app.
 _OUTPUT_STREAM_IDLE_SECONDS = 1.0
+
+# How long a teardown waits for a worker thread to notice the stop flag. The playback
+# worker checks it every block, so this only has to cover one blocking write plus the
+# synthesis of an utterance already in flight, which cannot be interrupted.
+_WORKER_JOIN_SECONDS = 5.0
+
+# How much audio is handed to the device per blocking write. ``stop()`` can only take
+# effect between writes, and one write of a whole utterance blocks for the length of
+# the sentence. 20 ms is short enough that a stop cuts playback off promptly.
+_PLAY_BLOCK_SECONDS = 0.020
 
 # Beep WAVs shipped with the package.  The bundled clips are short,
 # pre-recorded cues that already include any lead-in / fade
@@ -941,6 +973,9 @@ class TextToSpeech:
         # the speaker. Everything written is buffered, so this is what
         # ``is_talking`` and ``wait`` go by.
         self._playback_tail_until: float = 0.0
+        # The worker draining the one streamed reply that can be in flight, so that `stop`
+        # can end it; see _abandon_stream.
+        self._stream_pump: Optional[Any] = None
 
         self._say_queue: queue.Queue = queue.Queue()
         self._play_queue: queue.Queue = queue.Queue(maxsize=1)
@@ -1204,6 +1239,36 @@ class TextToSpeech:
         """
         moonshine_tts_cancel(self._require_loaded("cancel_stream()"))
 
+    def _abandon_stream(self) -> None:
+        """Stop the reply in progress and take delivery of the cancel it reports.
+
+        A cancel is reported exactly once, to whichever consumer calls
+        :meth:`next_chunk` next -- that is what lets a worker pulling chunks tell an
+        abandoned reply from one merely waiting for more text. Stopping a reply is
+        precisely the moment its worker goes away, so with nobody left to ask, the report
+        sits there until the *next* reply's worker makes its first call and exits on a status
+        about a reply it never spoke. The reply after a cancelled one is then never spoken.
+
+        Consuming it here keeps a cancel local to the reply it cancelled. Safe to do
+        unconditionally, because the cancel has already dropped anything queued, so there is
+        no audio left for this call to swallow.
+
+        The worker is stopped first so that nothing is racing that call. A synthesizer
+        speaks one thing at a time, so knowing which worker that is takes no bookkeeping
+        beyond the last one handed out -- and it means :meth:`stop` can abandon a streamed
+        reply on its own, rather than only working when the caller remembers to stop the
+        handle as well.
+        """
+        pump = self._stream_pump
+        if pump is not None:
+            pump.stop()
+            self._stream_pump = None
+        self.cancel_stream()
+        try:
+            self.next_chunk()
+        except Exception as e:  # pragma: no cover - defensive
+            self._log(f"abandon_stream: draining the cancel report failed: {e!r}")
+
     @property
     def is_streaming(self) -> bool:
         """Whether a reply is part-spoken."""
@@ -1310,6 +1375,7 @@ class TextToSpeech:
         self._ensure_say_workers()
         pump = _ChunkPump(self, handle, enqueue)
         pump.drain_hook = self.wait
+        self._stream_pump = pump
         return SpeechInProgress(self, pump)
 
     def say(
@@ -1422,19 +1488,20 @@ class TextToSpeech:
 
     def _ensure_say_workers(self) -> None:
         with self._say_lock:
-            alive = (
-                self._synth_thread is not None and self._synth_thread.is_alive()
-                and self._play_thread is not None and self._play_thread.is_alive()
-            )
-            if alive:
-                return
+            # Cleared unconditionally, because a worker that outlived a `stop` is still
+            # watching this flag and would exit on its next iteration if it stayed set.
             self._say_stop_event.clear()
-            st = threading.Thread(target=self._synth_worker, daemon=True)
-            pt = threading.Thread(target=self._play_worker, daemon=True)
-            st.start()
-            pt.start()
-            self._synth_thread = st
-            self._play_thread = pt
+            # Each thread is replaced only if it is actually gone. Starting both whenever
+            # either had died duplicated the survivor, and two playback threads writing to
+            # one output stream corrupt PortAudio's ring buffer.
+            if self._synth_thread is None or not self._synth_thread.is_alive():
+                st = threading.Thread(target=self._synth_worker, daemon=True)
+                st.start()
+                self._synth_thread = st
+            if self._play_thread is None or not self._play_thread.is_alive():
+                pt = threading.Thread(target=self._play_worker, daemon=True)
+                pt.start()
+                self._play_thread = pt
 
     # -- synthesis thread ----------------------------------------------------
 
@@ -1628,7 +1695,16 @@ class TextToSpeech:
             # keeps the queue paced without ever stopping the stream, so
             # consecutive utterances run together instead of being separated by
             # a device teardown and reopen.
-            stream.write(data)
+            #
+            # It is handed one block at a time rather than the whole utterance. A single
+            # write blocks for the entire sentence, so ``stop()`` could not take effect
+            # until that sentence had already been spoken, and the playback thread stayed
+            # inside the write for the whole of it.
+            block = max(1, int(target_sr * _PLAY_BLOCK_SECONDS))
+            for start in range(0, len(data), block):
+                if self._say_stop_event.is_set():
+                    break
+                stream.write(data[start:start + block])
             try:
                 self._playback_tail_until = time.perf_counter() + float(stream.latency)
             except Exception:  # pragma: no cover - backend without a latency
@@ -1693,8 +1769,17 @@ class TextToSpeech:
             self._log(f"release_output_stream: close raised: {err!r}")
 
     def is_talking(self) -> bool:
-        """Return ``True`` if utterances are queued, being synthesized, or currently playing."""
-        if not self._say_queue.empty() or not self._play_queue.empty():
+        """Return ``True`` if utterances are queued, being synthesized, or currently playing.
+
+        Counts work still owed rather than work still queued. An item being synthesized has
+        left the say queue and not yet reached the play queue; an item being written to the
+        device has left the play queue and has not yet set the tail below. Asking whether
+        the queues are empty answers "no" through both of those windows, so a caller waiting
+        on this concludes the reply finished while it is still being spoken.
+        ``unfinished_tasks`` spans put to ``task_done``, and the play queue is fed before
+        the say queue's item is retired, so there is no gap between the two.
+        """
+        if self._say_queue.unfinished_tasks or self._play_queue.unfinished_tasks:
             return True
         # ``write`` returns once PortAudio has taken the samples, with up to a
         # buffer's worth still to come out of the speaker. The stream itself
@@ -1717,6 +1802,16 @@ class TextToSpeech:
         """
         self._say_stop_event.set()
 
+        # A streamed reply lives inside the synthesizer rather than in these queues, and
+        # nothing else here would end it. Left running, its pump goes on turning pushed text
+        # into audio and refilling the queue this is about to drain, and `is_streaming` goes
+        # on reporting a reply in progress to whoever is waiting for one to finish.
+        if self._handle is not None:
+            try:
+                self._abandon_stream()
+            except Exception as e:  # pragma: no cover - defensive
+                self._log(f"stop: cancelling the streamed reply failed: {e!r}")
+
         for q in (self._say_queue, self._play_queue):
             while True:
                 try:
@@ -1725,19 +1820,51 @@ class TextToSpeech:
                 except queue.Empty:
                     break
 
-        self._release_output_stream(abort=True)
+        # The workers have to be gone before the device is touched, and the playback worker
+        # has to be the one that closes it. Closing the stream from this thread frees
+        # PortAudio's ring buffer while that worker may be inside `write`, which is a
+        # segfault rather than an exception. It checks the stop flag every block, so waiting
+        # for it costs a couple of tens of milliseconds and it aborts the stream on the way
+        # out, which is the same immediate cut this used to reach for directly.
+        current = threading.current_thread()
+        survivors = []
+        for name in ("_synth_thread", "_play_thread"):
+            thread = getattr(self, name)
+            if thread is None or thread is current:
+                continue
+            thread.join(timeout=_WORKER_JOIN_SECONDS)
+            if thread.is_alive():
+                # Dropping a worker that is still running is what lets the next `say` start
+                # a second one, and two playback threads writing to one output stream
+                # corrupt it. Keeping the reference makes the next `say` reuse this pair.
+                self._log(f"stop: {name} has not exited, so it will be reused")
+                survivors.append(name)
+            else:
+                setattr(self, name, None)
+
+        if not survivors:
+            self._release_output_stream(abort=True)
         self._playback_tail_until = 0.0
 
-        for thread in (self._synth_thread, self._play_thread):
-            if thread is not None and thread.is_alive():
-                thread.join(timeout=2.0)
-        self._synth_thread = None
-        self._play_thread = None
+        # Fresh queues rather than drained ones, because draining races the synthesis
+        # worker. It checks the stop flag before handing an utterance over, but the handover
+        # itself blocks while the play queue is full, so the drain above is what lets it
+        # through -- and by then the playback worker has exited and will never retire it.
+        # The queue is then owed work nothing will ever do, which `is_talking` reports
+        # forever and a caller waiting on it never comes back from. Replacing the objects
+        # once both workers are gone makes that unrepresentable rather than unlikely. A
+        # worker that outlived the join still holds an item from the old queue and would
+        # retire it against the new one, so that case keeps the drained queues.
+        if not survivors:
+            with self._say_lock:
+                self._say_queue = queue.Queue()
+                self._play_queue = queue.Queue(maxsize=1)
 
     def close(self) -> None:
         if getattr(self, "_closed", False):
             return
         self._closed = True
+        survivors: List[str] = []
         if getattr(self, "_say_queue", None) is not None:
             self._say_stop_event.set()
 
@@ -1749,14 +1876,36 @@ class TextToSpeech:
                     except queue.Empty:
                         break
 
-            self._release_output_stream(abort=True)
             self._playback_tail_until = 0.0
 
+            # Joined before the stream is closed, for the same reason as in `stop`: closing
+            # it from this thread while the playback worker is inside `write` is a segfault.
+            current = threading.current_thread()
             for thread in (self._synth_thread, self._play_thread):
-                if thread is not None and thread.is_alive():
-                    thread.join(timeout=2.0)
-            self._synth_thread = None
-            self._play_thread = None
+                if thread is not None and thread is not current and thread.is_alive():
+                    thread.join(timeout=_WORKER_JOIN_SECONDS)
+                    if thread.is_alive():
+                        survivors.append(thread.name)
+            if not survivors:
+                self._synth_thread = None
+                self._play_thread = None
+
+        if survivors:
+            # Everything below frees something a worker still running is using: the
+            # device it is writing to, and the synthesizer the other one is generating
+            # from. Doing that under a live native call is the segfault this waits to
+            # avoid, and a join that timed out has not avoided it -- it has only found
+            # out. What is left of the process can keep the handles.
+            self._log(
+                f"close: {', '.join(survivors)} still running, so the device and "
+                "synthesizer are being left open rather than freed underneath them"
+            )
+            return
+        if self._stream_pump is not None and self._handle is not None:
+            try:
+                self._abandon_stream()
+            except Exception as e:  # pragma: no cover - defensive
+                self._log(f"close: cancelling the streamed reply failed: {e!r}")
         self._release_output_stream(abort=True)
         self._say_device_cache = None
         self._say_settings_ok = None

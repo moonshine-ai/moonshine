@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - Voice activity detection no longer carries its recurrent state between streams, which made a new or concurrent stream score its first second against audio it never heard.
+- `AgentFlow.say_stream()` feeds the synthesizer. It called `push_text` on the playback handle, so the first token of a streamed reply raised `AttributeError`.
+- `TextToSpeech.is_talking()` stays true while an utterance is being synthesized or written to the device, not only while it is still queued.
+- `SpeechInProgress.finished` reports whether any more streamed audio is coming, without waiting for playback to end.
+- Cancelling a streamed reply no longer ends the following one. The one-shot cancel report was left for the next reply, which then stopped after its first sentence.
+- `stop()` waits for the playback thread to leave the audio device before closing it, and reuses a thread that outlives that wait instead of starting a second writer on the same stream.
+- `stop()` no longer leaves `is_talking()` true forever when an utterance is handed to playback as the workers shut down.
 - RP2350 firmware links on Pico SDK versions that pass `-nostartfiles` (undefined `__dso_handle` from libstdc++, GitHub issue #204).
 - Closing a Transcriber while a stream transcription is still running no longer crashes the process (GitHub issue #223).
 

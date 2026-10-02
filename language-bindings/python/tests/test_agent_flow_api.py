@@ -178,3 +178,103 @@ def test_say_stream_outside_a_flow_speaks_as_one_utterance(agent):
         push("the model.")
 
     assert spoken == ["Downloading the model."]
+
+
+class _FakeStreamHandle:
+    """Stand-in for :class:`moonshine_voice.tts.SpeechInProgress`.
+
+    As narrow as the real thing on purpose: you can wait for the reply or stop it,
+    and that is all. A fake that also accepted text would have let the bug these
+    tests guard against straight through.
+    """
+
+    def __init__(self, events):
+        self._events = events
+
+    def wait(self, timeout=None):
+        self._events.append("wait")
+        return True
+
+    def stop(self):
+        self._events.append("stop")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.stop()
+
+
+class _FakeSynthesizer:
+    """The slice of :class:`moonshine_voice.TextToSpeech` that streamed speech uses."""
+
+    def __init__(self):
+        self.events = []
+        self.pushed = []
+
+    def say_stream(self):
+        self.events.append("say_stream")
+        return _FakeStreamHandle(self.events)
+
+    def push_text(self, text):
+        self.events.append("push_text")
+        self.pushed.append(text)
+
+    def end_input(self):
+        self.events.append("end_input")
+
+
+def _agent_with(tts):
+    moonshine_voice = pytest.importorskip("moonshine_voice")
+    return (
+        moonshine_voice.AgentFlow()
+        .microphone(False)
+        .use_embeddings(False)
+        .use_text_to_speech(tts)
+    )
+
+
+def test_say_stream_pushes_text_into_the_synthesizer_not_the_handle():
+    """A streamed reply has to reach a real synthesizer, which takes text on itself.
+
+    Every other ``say_stream`` test above configures ``speech(False)``, so they run the
+    buffering fallback and say nothing about the branch that runs once audio is
+    attached. That is how this path came to call three methods the handle does not
+    have, raising ``AttributeError`` on the first token of the first reply.
+    """
+    tts = _FakeSynthesizer()
+
+    with _agent_with(tts).say_stream() as push:
+        push("The answer ")
+        push("")
+        push("is forty two.")
+
+    assert tts.pushed == ["The answer ", "is forty two."]
+    assert tts.events == [
+        "say_stream", "push_text", "push_text", "end_input", "wait", "stop",
+    ]
+
+
+def test_a_streamed_reply_is_stopped_even_when_the_producer_raises():
+    """The handle is released on the way out, or the next reply talks over this one."""
+    tts = _FakeSynthesizer()
+
+    with pytest.raises(RuntimeError):
+        with _agent_with(tts).say_stream() as push:
+            push("This much arrived")
+            raise RuntimeError("the model hung up")
+
+    assert tts.events == ["say_stream", "push_text", "stop"]
+
+
+def test_the_streaming_handle_takes_no_text():
+    """Pins the contract the fake above imitates.
+
+    If :class:`SpeechInProgress` ever grows a ``push_text``, the fake stops standing for
+    the real thing and the regression test above quietly loses its teeth.
+    """
+    pytest.importorskip("moonshine_voice")
+    from moonshine_voice.tts import SpeechInProgress
+
+    public = {name for name in vars(SpeechInProgress) if not name.startswith("_")}
+    assert public == {"wait", "stop", "finished"}

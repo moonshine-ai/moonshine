@@ -390,7 +390,7 @@ Every setter returns the synthesizer, so one can be built in a single expression
   - `device`: (Python/Swift-macOS) `None` for the host default output, an integer PortAudio output device index, a decimal string index, or a case-insensitive substring of a device name. On Android, pass a `Context` (required) and optionally an `AudioDeviceInfo`.
   - `options`: Optional per-call native options (see [TTS options](options.md#text-to-speech); only `speed` is honored per call).
 
-- <a id="texttospeech-say-stream"></a>`say_stream()`: Speaks text that is still being produced — an LLM reply, say — playing each chunk as it is synthesized. Push the text with [`push_text()`](#texttospeech-push-text). Named `sayStream()` on Swift and Android. See [Streaming text in](../using/text-to-speech.md#streaming-text-in).
+- <a id="texttospeech-say-stream"></a>`say_stream()`: Speaks text that is still being produced — an LLM reply, say — playing each chunk as it is synthesized. Push the text with [`push_text()`](#texttospeech-push-text). The handle it returns can wait, stop the reply, or report `finished` without blocking. Named `sayStream()` on Swift and Android. See [Streaming text in](../using/text-to-speech.md#streaming-text-in).
   - `device`, `options`: As for [`say()`](#texttospeech-say).
 
 - <a id="texttospeech-stream"></a>`stream()`: Iterates the chunks of a reply instead of playing them. Each chunk carries its samples, sample rate, the text it covers, an utterance id, and whether it ends that utterance. Given text, that whole reply is pushed and ended for you; given nothing, drive [`push_text()`](#texttospeech-push-text) from another thread.
