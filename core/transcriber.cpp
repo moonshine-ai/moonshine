@@ -638,9 +638,9 @@ Transcriber::~Transcriber() {
   delete this->streaming_model;
   delete this->speaker_diarizer;
   delete this->spelling_model;
-  for (auto &stream : this->streams) {
-    delete stream.second;
-  }
+  // this->streams holds shared_ptr<TranscriberStream> now, so map
+  // destruction below already deletes each TranscriberStream once no
+  // in-flight accessor still holds a copy.
   if (this->batch_stream != nullptr) {
     delete this->batch_stream;
   }
@@ -695,12 +695,13 @@ int32_t Transcriber::create_stream() {
       this->options.vad_window_duration, this->options.vad_hop_size);
   const size_t vad_max_segment_sample_count =
       vad_sample_count_from_duration(this->options.vad_max_segment_duration);
-  TranscriberStream *stream = new TranscriberStream(
-      new VoiceActivityDetector(this->options.vad_threshold, vad_window_size,
-                                this->options.vad_hop_size,
-                                this->options.vad_look_behind_sample_count,
-                                vad_max_segment_sample_count),
-      stream_id, this->options.save_input_wav_path);
+  std::shared_ptr<TranscriberStream> stream =
+      std::make_shared<TranscriberStream>(
+          new VoiceActivityDetector(this->options.vad_threshold,
+                                    vad_window_size, this->options.vad_hop_size,
+                                    this->options.vad_look_behind_sample_count,
+                                    vad_max_segment_sample_count),
+          stream_id, this->options.save_input_wav_path);
   if (this->speaker_diarizer != nullptr) {
     stream->diarizer_stream_id = this->speaker_diarizer->create_stream();
   }
@@ -709,19 +710,44 @@ int32_t Transcriber::create_stream() {
   return stream_id;
 }
 
-void Transcriber::free_stream(int32_t stream_id) {
+std::shared_ptr<TranscriberStream> Transcriber::resolve_stream(
+    int32_t stream_id) {
   std::lock_guard<std::mutex> lock(this->streams_mutex);
-  TranscriberStream *stream = this->streams[stream_id];
-  this->streams.erase(stream_id);
+  const auto it = this->streams.find(stream_id);
+  if (it == this->streams.end()) {
+    return nullptr;
+  }
+  return it->second;
+}
+
+void Transcriber::free_stream(int32_t stream_id) {
+  // Erase under the lock, but let the TranscriberStream itself be destroyed
+  // outside it once this function's shared_ptr copy goes out of scope. An
+  // in-flight transcribe_stream() call holds its own copy of the same
+  // shared_ptr, so the TranscriberStream stays alive until that call
+  // finishes even though free_stream() has already made it unreachable
+  // through the map (sibling of GitHub issue #223, one layer down).
+  std::shared_ptr<TranscriberStream> stream;
+  {
+    std::lock_guard<std::mutex> lock(this->streams_mutex);
+    const auto it = this->streams.find(stream_id);
+    if (it == this->streams.end()) {
+      return;
+    }
+    stream = std::move(it->second);
+    this->streams.erase(it);
+  }
   if (this->speaker_diarizer != nullptr && stream->diarizer_stream_id >= 0) {
     this->speaker_diarizer->free_stream(stream->diarizer_stream_id);
   }
-  delete stream;
 }
 
 void Transcriber::start_stream(int32_t stream_id) {
-  std::lock_guard<std::mutex> lock(this->streams_mutex);
-  TranscriberStream *stream = this->streams[stream_id];
+  std::shared_ptr<TranscriberStream> stream = this->resolve_stream(stream_id);
+  if (!stream) {
+    throw std::runtime_error("Stream with ID " + std::to_string(stream_id) +
+                             " not found");
+  }
   // Starting a stream invalidates any pointers to stream data (audio, strings)
   // that have been returned to the client during prior sessions.
   {
@@ -739,8 +765,11 @@ void Transcriber::start_stream(int32_t stream_id) {
 }
 
 void Transcriber::stop_stream(int32_t stream_id) {
-  std::lock_guard<std::mutex> lock(this->streams_mutex);
-  TranscriberStream *stream = this->streams[stream_id];
+  std::shared_ptr<TranscriberStream> stream = this->resolve_stream(stream_id);
+  if (!stream) {
+    throw std::runtime_error("Stream with ID " + std::to_string(stream_id) +
+                             " not found");
+  }
   {
     // Refuse further add_audio_to_stream calls, but keep leftover samples and
     // the current VAD utterance open so the next transcribe_stream can drain
@@ -765,8 +794,11 @@ void Transcriber::add_audio_to_stream(int32_t stream_id,
                                       const float *audio_data,
                                       uint64_t audio_length,
                                       int32_t sample_rate) {
-  std::lock_guard<std::mutex> lock(this->streams_mutex);
-  TranscriberStream *stream = this->streams[stream_id];
+  std::shared_ptr<TranscriberStream> stream = this->resolve_stream(stream_id);
+  if (!stream) {
+    throw std::runtime_error("Stream with ID " + std::to_string(stream_id) +
+                             " not found");
+  }
   if (!stream->vad->is_active()) {
     std::string error_message =
         "Adding new audio for stream with ID " + std::to_string(stream_id) +
@@ -778,7 +810,13 @@ void Transcriber::add_audio_to_stream(int32_t stream_id,
 
 void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
                                     struct transcript_t **out_transcript) {
-  TranscriberStream *stream = nullptr;
+  // Resolved as a shared_ptr copy below, entirely under streams_mutex, and
+  // kept alive on the stack for the rest of this call. Earlier this was a
+  // raw pointer, which meant a free_stream() call for the same stream_id on
+  // another thread could delete the TranscriberStream out from under the
+  // VAD/decode/diarizer work below, after streams_mutex was released
+  // (sibling of GitHub issue #223, one layer down).
+  std::shared_ptr<TranscriberStream> stream;
   std::vector<float> audio_snapshot;
   bool should_update = false;
   bool is_stopped = false;
@@ -800,7 +838,7 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
           std::to_string(this->streams.size()) + " streams: ";
       for (const auto &entry : this->streams) {
         char addr_str[32];
-        snprintf(addr_str, sizeof(addr_str), "%p", (void *)entry.second);
+        snprintf(addr_str, sizeof(addr_str), "%p", (void *)entry.second.get());
         error_message += "ID: " + std::to_string(entry.first) +
                          ", Address: " + std::string(addr_str) + "\n";
       }
@@ -903,7 +941,7 @@ void Transcriber::transcribe_stream(int32_t stream_id, uint32_t flags,
       segments.push_back(std::move(segment_copy));
     }
   }
-  this->update_transcript_from_segments(segments, stream, flags,
+  this->update_transcript_from_segments(segments, stream.get(), flags,
                                         out_transcript);
   if (!this->options.return_audio_data) {
     std::lock_guard<std::mutex> lock(stream->vad_mutex);
@@ -925,7 +963,7 @@ size_t Transcriber::stream_vad_retained_audio_bytes(int32_t stream_id) {
   if (it == this->streams.end() || it->second == nullptr) {
     return 0;
   }
-  TranscriberStream *stream = it->second;
+  const std::shared_ptr<TranscriberStream> &stream = it->second;
   std::lock_guard<std::mutex> vad_lock(stream->vad_mutex);
   return stream->vad->retained_segment_audio_byte_count();
 }
@@ -936,7 +974,7 @@ size_t Transcriber::stream_vad_completed_audio_bytes(int32_t stream_id) {
   if (it == this->streams.end() || it->second == nullptr) {
     return 0;
   }
-  TranscriberStream *stream = it->second;
+  const std::shared_ptr<TranscriberStream> &stream = it->second;
   std::lock_guard<std::mutex> vad_lock(stream->vad_mutex);
   return stream->vad->completed_segment_audio_byte_count();
 }
