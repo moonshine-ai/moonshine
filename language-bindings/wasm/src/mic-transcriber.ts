@@ -396,12 +396,22 @@ export function downmixToMono(channels: readonly Float32Array[]): Float32Array {
 
 /**
  * AudioWorklet that downmixes the input to mono and forwards it to the main
- * thread. A worklet gets its own global scope, so {@link downmixToMono} is
- * inlined by source rather than imported — that way the function under test is
- * literally the one that runs.
+ * thread. A worklet gets its own global scope, so the downmix logic is inlined
+ * directly inside the source string to protect against bundler minification /
+ * identifier mangling.
  */
 const CAPTURE_WORKLET_SOURCE = `
-${downmixToMono.toString()}
+function downmixToMono(channels) {
+  if (channels.length === 1) return new Float32Array(channels[0]);
+  const frames = channels[0].length;
+  const mixed = new Float32Array(frames);
+  for (let c = 0; c < channels.length; c++) {
+    const channel = channels[c];
+    for (let i = 0; i < frames; i++) mixed[i] += channel[i];
+  }
+  for (let i = 0; i < frames; i++) mixed[i] /= channels.length;
+  return mixed;
+}
 
 class MoonshineCaptureProcessor extends AudioWorkletProcessor {
   process(inputs) {
