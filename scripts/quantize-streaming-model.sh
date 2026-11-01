@@ -21,11 +21,26 @@ for ONNX_NAME in frontend encoder adapter cross_kv decoder_kv; do
 		METHOD="integer_activations"
 		FILE_SUFFIX="quantized_activations"
 	fi
+    INPUT_ONNX="${ONNX_NAME}.onnx"
+    if [ "${ONNX_NAME}" == "decoder_kv" ]; then
+        # The decoder's output projection reuses the embedding table through
+        # a Transpose, which the quantizer will not turn into an int8 MatMul.
+        # Left alone it dequantizes the whole 84 MB table on every token; see
+        # untie-output-projection.py. Rewrite into a sibling file so the float
+        # export stays untouched.
+        python3 "${SCRIPT_DIR}/untie-output-projection.py" \
+          "${ONNX_NAME}.onnx" -o "${ONNX_NAME}_untied.onnx"
+        INPUT_ONNX="${ONNX_NAME}_untied.onnx"
+    fi
     python3 -m onnx_shrink_ray.shrink \
       --ir-version 10 \
       --method ${METHOD} \
       "${PER_CHANNEL_ARGS[@]}" \
-      ${ONNX_NAME}.onnx
+      "${INPUT_ONNX}"
+    if [ "${ONNX_NAME}" == "decoder_kv" ]; then
+        mv "${ONNX_NAME}_untied_${FILE_SUFFIX}.onnx" "${ONNX_NAME}_${FILE_SUFFIX}.onnx"
+        rm "${ONNX_NAME}_untied.onnx"
+    fi
     if [ "${ONNX_NAME}" == "frontend" ]; then
         # integer_weights stores int8 + Cast/Mul/Add. Full ORT optimization
         # folds that chain back to float32 (~4x the file) and the frontend is

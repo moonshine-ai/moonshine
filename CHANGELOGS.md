@@ -17,6 +17,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `stop()` no longer leaves `is_talking()` true forever when an utterance is handed to playback as the workers shut down.
 - RP2350 firmware links on Pico SDK versions that pass `-nostartfiles` (undefined `__dso_handle` from libstdc++, GitHub issue #204).
 - Closing a Transcriber while a stream transcription is still running no longer crashes the process (GitHub issue #223).
+- Speech-to-text on Windows was up to 10x slower on Intel hybrid CPUs. ONNX Runtime's spin-waiting worker threads now stop spinning and are sized to the performance-core count (GitHub issue #129).
+- Windows keeps ONNX Runtime's memory arena enabled, avoiding page-fault churn from the system heap on every decoder step.
+
+### Changed
+
+- `scripts/quantize-streaming-model.sh` unties the decoder output projection before quantization, so the 84MB logits weight is quantized once instead of being dequantized on every token. Cuts medium decode time by about 20%.
 
 ## [0.1.5]
 

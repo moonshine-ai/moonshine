@@ -115,10 +115,33 @@ OrtStatus *ort_run(const OrtApi *ort_api, OrtSession *session,
 void ort_maybe_force_single_thread(const OrtApi *ort_api,
                                    OrtSessionOptions *session_options);
 
+// Number of physical cores in the CPU's fastest core class: the P-cores on a
+// hybrid Intel part, every core on a homogeneous one. Returns 0 where the
+// platform does not expose the distinction (currently everything but Windows),
+// meaning "leave ORT's default alone".
+int ort_performance_core_count();
+
+// Sizes and configures the intra-op thread pool for the CPU this process is
+// running on. ORT's defaults are a thread per physical core, E-cores included,
+// with workers that spin-wait between ops. On Windows that combination is
+// catastrophic on hybrid Intel CPUs
+// (github.com/moonshine-ai/moonshine/issues/129): the OS parks the E-cores and
+// HT siblings whenever it can, so two dozen spinning workers fight over eight
+// logical processors and the spinners starve the thread holding the work.
+// Measured on an i9-13900HX, the streaming decoders ran 4-12x slower than
+// single-threaded. This turns spinning off and sizes the pool to the
+// performance cores, which on that machine is 9x faster than the default for
+// tiny and 12x for medium. No-op on other platforms, where it has not been
+// measured, and when MOONSHINE_ORT_SINGLE_THREAD is set.
+void ort_configure_cpu_threading(const OrtApi *ort_api,
+                                 OrtSessionOptions *session_options);
+
 // Session flags for already-optimized .ort files loaded via mmap +
 // CreateSessionFromArray. use_ort_model_bytes_directly keeps ORT on the
 // mapped bytes instead of copying the weight buffer at load; disable_prepacking
-// and DisableCpuMemArena skip work the converter already did. Call after
+// skips work the converter already did. The CPU memory arena stays off except
+// on Windows, where its allocator makes it worth the footprint (see the
+// definition). Also applies ort_configure_cpu_threading. Call after
 // CreateSessionOptions (and ort_maybe_force_single_thread).
 void ort_configure_ort_file_session(const OrtApi *ort_api,
                                     OrtSessionOptions *session_options);

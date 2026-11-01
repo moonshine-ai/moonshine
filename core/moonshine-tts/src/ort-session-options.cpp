@@ -12,6 +12,11 @@ Ort::SessionOptions make_ort_session_options(
   opts.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
   opts.SetIntraOpNumThreads(intra_op_num_threads);
   opts.SetInterOpNumThreads(inter_op_num_threads);
+  if (intra_op_num_threads == 0) {
+    // Caller wants ORT's default pool; apply the same per-CPU policy as STT so
+    // the voices do not hit the hybrid-core spin problem either.
+    ort_configure_cpu_threading(&Ort::GetApi(), opts);
+  }
   // Match STT and the spelling model, which have always been ORT-only. On a
   // full ORT build this is what makes a stray .onnx fail here rather than
   // loading fine on desktop and failing later in the browser.

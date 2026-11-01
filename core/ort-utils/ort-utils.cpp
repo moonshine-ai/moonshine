@@ -1,10 +1,17 @@
 #include "ort-utils.h"
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <map>
+#include <vector>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -122,10 +129,82 @@ void ort_maybe_force_single_thread(const OrtApi *ort_api,
                                                           ORT_SEQUENTIAL));
 }
 
+#ifdef _WIN32
+int ort_performance_core_count() {
+  DWORD length = 0;
+  GetLogicalProcessorInformationEx(RelationProcessorCore, nullptr, &length);
+  if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || length == 0) {
+    return 0;
+  }
+  std::vector<unsigned char> buffer(length);
+  auto *records = static_cast<SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *>(
+      static_cast<void *>(buffer.data()));
+  if (!GetLogicalProcessorInformationEx(RelationProcessorCore, records,
+                                        &length)) {
+    return 0;
+  }
+  // Records are variable length, and a core record is shorter than the struct
+  // (its union is sized for the largest relationship), so copy only the bytes
+  // each record actually has rather than reading past the end of the buffer.
+  std::map<unsigned, int> cores_per_class;
+  for (DWORD offset = 0; offset < length;) {
+    SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX record{};
+    DWORD size = 0;
+    if (offset + offsetof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX, Size) +
+            sizeof(size) >
+        length) {
+      break;
+    }
+    std::memcpy(&size,
+                buffer.data() + offset +
+                    offsetof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX, Size),
+                sizeof(size));
+    if (size == 0 || offset + size > length) {
+      break;
+    }
+    std::memcpy(&record, buffer.data() + offset,
+                std::min<size_t>(size, sizeof(record)));
+    if (record.Relationship == RelationProcessorCore) {
+      cores_per_class[record.Processor.EfficiencyClass] += 1;
+    }
+    offset += size;
+  }
+  if (cores_per_class.empty()) {
+    return 0;
+  }
+  // std::map orders by key, and a higher EfficiencyClass is a faster core.
+  return cores_per_class.rbegin()->second;
+}
+#else
+int ort_performance_core_count() { return 0; }
+#endif
+
+void ort_configure_cpu_threading(const OrtApi *ort_api,
+                                 OrtSessionOptions *session_options) {
+#ifdef _WIN32
+  const char *forced = std::getenv("MOONSHINE_ORT_SINGLE_THREAD");
+  if (forced != nullptr && forced[0] != '\0' && std::strcmp(forced, "0") != 0) {
+    return;
+  }
+  LOG_ORT_ERROR(ort_api,
+                ort_api->AddSessionConfigEntry(
+                    session_options, "session.intra_op.allow_spinning", "0"));
+  const int performance_cores = ort_performance_core_count();
+  if (performance_cores > 0) {
+    LOG_ORT_ERROR(ort_api, ort_api->SetIntraOpNumThreads(session_options,
+                                                         performance_cores));
+  }
+#else
+  (void)ort_api;
+  (void)session_options;
+#endif
+}
+
 void ort_configure_ort_file_session(const OrtApi *ort_api,
                                     OrtSessionOptions *session_options) {
   LOG_ORT_ERROR(ort_api, ort_api->SetSessionGraphOptimizationLevel(
                              session_options, ORT_ENABLE_EXTENDED));
+  ort_configure_cpu_threading(ort_api, session_options);
   LOG_ORT_ERROR(ort_api,
                 ort_api->AddSessionConfigEntry(
                     session_options, "session.load_model_format", "ORT"));
@@ -138,7 +217,19 @@ void ort_configure_ort_file_session(const OrtApi *ort_api,
   LOG_ORT_ERROR(ort_api,
                 ort_api->AddSessionConfigEntry(
                     session_options, "session.disable_prepacking", "1"));
+#ifdef _WIN32
+  // Keep ORT's arena on Windows. Without it every activation tensor is a fresh
+  // HeapAlloc, and the NT heap hands anything over about a megabyte straight
+  // to VirtualAlloc, so each decoder step page-faults its way through tens of
+  // megabytes of zero-filled memory and gives it all back again. On the
+  // i9-13900HX testbed that was 44% of the tiny streaming model's time and
+  // 12% of medium's, for 40-100 MB of extra peak working set. macOS and glibc
+  // cache large frees themselves and measured no difference, so they keep
+  // the smaller footprint.
+  LOG_ORT_ERROR(ort_api, ort_api->EnableCpuMemArena(session_options));
+#else
   LOG_ORT_ERROR(ort_api, ort_api->DisableCpuMemArena(session_options));
+#endif
 }
 
 #if defined(ANDROID)
