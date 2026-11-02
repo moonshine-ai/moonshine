@@ -42,7 +42,7 @@ HF_REVISION=""
 STREAMING_TINY_PINS=(
   tiny-streaming-ar/quantized_26_08_24
   tiny-streaming-de/quantized_26_08_24
-  tiny-streaming-en/quantized_26_08_21
+  tiny-streaming-en/quantized_26_11_02
   tiny-streaming-es/quantized_26_08_24
   tiny-streaming-ja/quantized_26_08_23
   tiny-streaming-tl/quantized_26_08_24

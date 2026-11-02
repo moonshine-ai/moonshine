@@ -54,10 +54,14 @@ CACHE_CONTROL="${MOONSHINE_MODEL_CACHE_CONTROL:-public, max-age=2592000}"
 
 # Must match stt_component_files() in core/moonshine-model-catalog.cpp for a
 # streaming architecture. English additionally publishes
-# decoder_kv_with_attention.ort for word timestamps; nothing else does yet.
+# decoder_kv_with_attention.ort for word timestamps; nothing else does yet, so
+# that one is picked up when present rather than required.
 FILES=(adapter.ort cross_kv.ort decoder_kv.ort encoder.ort
        frontend.model.ort frontend.weights.ort
        streaming_config.json tokenizer.bin)
+if [[ -f "${SRC}/decoder_kv_with_attention.ort" ]]; then
+  FILES+=(decoder_kv_with_attention.ort)
+fi
 
 if [[ ! "${QUANTIZED_DIR}" =~ ^quantized_[0-9]{2}_[0-9]{2}_[0-9]{2}$ ]]; then
   echo "Directory should look like quantized_YY_MM_DD, got '${QUANTIZED_DIR}'." >&2

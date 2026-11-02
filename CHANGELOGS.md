@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - `scripts/quantize-streaming-model.sh` unties the decoder output projection before quantization, so the 84MB logits weight is quantized once instead of being dequantized on every token. Cuts medium decode time by about 20%.
+- English streaming models (tiny, small, medium) are republished on `quantized_26_11_02` with that fix. LibriSpeech test-clean WER is unchanged (tiny 5.45→5.40, medium 2.59→2.58). Other languages already had an untied projection and are unchanged.
 
 ## [0.1.5]
 

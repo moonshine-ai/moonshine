@@ -105,31 +105,31 @@ constexpr std::array<Entry, 146> kEntries = {{
     {"https://download.moonshine.ai/model/embeddinggemma-300m/tokenizer.bin",
      2578500, "uuSrLw==", "crc32c"},
     {"https://download.moonshine.ai/model/medium-streaming-en/"
-     "quantized_26_08_21/adapter.ort",
-     3651296, "Ds3Hsg==", "crc32c"},
+     "quantized_26_11_02/adapter.ort",
+     3651256, "z/YpJw==", "crc32c"},
     {"https://download.moonshine.ai/model/medium-streaming-en/"
-     "quantized_26_08_21/cross_kv.ort",
-     11643776, "liqlOg==", "crc32c"},
+     "quantized_26_11_02/cross_kv.ort",
+     11643720, "B8yR7Q==", "crc32c"},
     {"https://download.moonshine.ai/model/medium-streaming-en/"
-     "quantized_26_08_21/decoder_kv.ort",
-     146972408, "GPnzeQ==", "crc32c"},
+     "quantized_26_11_02/decoder_kv.ort",
+     147137432, "XHfhHg==", "crc32c"},
     {"https://download.moonshine.ai/model/medium-streaming-en/"
-     "quantized_26_08_21/decoder_kv_with_attention.ort",
-     146813344, "2SQOQA==", "crc32c"},
+     "quantized_26_11_02/decoder_kv_with_attention.ort",
+     146971752, "QiJI0A==", "crc32c"},
     {"https://download.moonshine.ai/model/medium-streaming-en/"
-     "quantized_26_08_21/encoder.ort",
-     94705376, "yWvDwA==", "crc32c"},
+     "quantized_26_11_02/encoder.ort",
+     94705336, "NOcutw==", "crc32c"},
     {"https://download.moonshine.ai/model/medium-streaming-en/"
-     "quantized_26_08_21/frontend.model.ort",
-     28720, "k1kKsQ==", "crc32c"},
+     "quantized_26_11_02/frontend.model.ort",
+     28768, "8DJD0w==", "crc32c"},
     {"https://download.moonshine.ai/model/medium-streaming-en/"
-     "quantized_26_08_21/frontend.weights.ort",
-     11889560, "w5QjIA==", "crc32c"},
+     "quantized_26_11_02/frontend.weights.ort",
+     11889512, "IvbcFg==", "crc32c"},
     {"https://download.moonshine.ai/model/medium-streaming-en/"
-     "quantized_26_08_21/streaming_config.json",
+     "quantized_26_11_02/streaming_config.json",
      513, "+1bE9Q==", "crc32c"},
     {"https://download.moonshine.ai/model/medium-streaming-en/"
-     "quantized_26_08_21/tokenizer.bin",
+     "quantized_26_11_02/tokenizer.bin",
      249974, "B7s10Q==", "crc32c"},
     {"https://download.moonshine.ai/model/small-streaming-de/"
      "quantized_26_08_24/adapter.ort",
@@ -156,31 +156,31 @@ constexpr std::array<Entry, 146> kEntries = {{
      "quantized_26_08_24/tokenizer.bin",
      103319, "x219Qw==", "crc32c"},
     {"https://download.moonshine.ai/model/small-streaming-en/"
-     "quantized_26_08_21/adapter.ort",
-     2870368, "XlWjTg==", "crc32c"},
+     "quantized_26_11_02/adapter.ort",
+     2870320, "yw6hxQ==", "crc32c"},
     {"https://download.moonshine.ai/model/small-streaming-en/"
-     "quantized_26_08_21/cross_kv.ort",
-     5356536, "5ySK8g==", "crc32c"},
+     "quantized_26_11_02/cross_kv.ort",
+     5356496, "1rJswQ==", "crc32c"},
     {"https://download.moonshine.ai/model/small-streaming-en/"
-     "quantized_26_08_21/decoder_kv.ort",
-     81878600, "Rn/VUA==", "crc32c"},
+     "quantized_26_11_02/decoder_kv.ort",
+     82043616, "+Q3U0Q==", "crc32c"},
     {"https://download.moonshine.ai/model/small-streaming-en/"
-     "quantized_26_08_21/decoder_kv_with_attention.ort",
-     81766608, "IzJXVA==", "crc32c"},
+     "quantized_26_11_02/decoder_kv_with_attention.ort",
+     81926592, "Nhv1OQ==", "crc32c"},
     {"https://download.moonshine.ai/model/small-streaming-en/"
-     "quantized_26_08_21/encoder.ort",
-     44148576, "41D2jQ==", "crc32c"},
+     "quantized_26_11_02/encoder.ort",
+     44148536, "vJtYUQ==", "crc32c"},
     {"https://download.moonshine.ai/model/small-streaming-en/"
-     "quantized_26_08_21/frontend.model.ort",
-     26944, "WW2/2g==", "crc32c"},
+     "quantized_26_11_02/frontend.model.ort",
+     26992, "PJW8eA==", "crc32c"},
     {"https://download.moonshine.ai/model/small-streaming-en/"
-     "quantized_26_08_21/frontend.weights.ort",
-     7769464, "9pROuQ==", "crc32c"},
+     "quantized_26_11_02/frontend.weights.ort",
+     7769416, "Fdny+w==", "crc32c"},
     {"https://download.moonshine.ai/model/small-streaming-en/"
-     "quantized_26_08_21/streaming_config.json",
+     "quantized_26_11_02/streaming_config.json",
      512, "dPbFiw==", "crc32c"},
     {"https://download.moonshine.ai/model/small-streaming-en/"
-     "quantized_26_08_21/tokenizer.bin",
+     "quantized_26_11_02/tokenizer.bin",
      249974, "B7s10Q==", "crc32c"},
     {"https://download.moonshine.ai/model/small-streaming-es/"
      "quantized_26_08_24/adapter.ort",
@@ -312,31 +312,31 @@ constexpr std::array<Entry, 146> kEntries = {{
     {"https://download.moonshine.ai/model/tiny-streaming-de/quantized_26_08_24/"
      "tokenizer.bin",
      103319, "x219Qw==", "crc32c"},
-    {"https://download.moonshine.ai/model/tiny-streaming-en/quantized_26_08_21/"
+    {"https://download.moonshine.ai/model/tiny-streaming-en/quantized_26_11_02/"
      "adapter.ort",
-     1319664, "kwQ+Bw==", "crc32c"},
-    {"https://download.moonshine.ai/model/tiny-streaming-en/quantized_26_08_21/"
+     1319616, "8tL9VQ==", "crc32c"},
+    {"https://download.moonshine.ai/model/tiny-streaming-en/quantized_26_11_02/"
      "cross_kv.ort",
-     1287544, "76wzFQ==", "crc32c"},
-    {"https://download.moonshine.ai/model/tiny-streaming-en/quantized_26_08_21/"
+     1287504, "nwGoTw==", "crc32c"},
+    {"https://download.moonshine.ai/model/tiny-streaming-en/quantized_26_11_02/"
      "decoder_kv.ort",
-     32583720, "KJjeNw==", "crc32c"},
-    {"https://download.moonshine.ai/model/tiny-streaming-en/quantized_26_08_21/"
+     32748720, "rpn9LA==", "crc32c"},
+    {"https://download.moonshine.ai/model/tiny-streaming-en/quantized_26_11_02/"
      "decoder_kv_with_attention.ort",
-     32515016, "zFeWyQ==", "crc32c"},
-    {"https://download.moonshine.ai/model/tiny-streaming-en/quantized_26_08_21/"
+     32676624, "DAVP5Q==", "crc32c"},
+    {"https://download.moonshine.ai/model/tiny-streaming-en/quantized_26_11_02/"
      "encoder.ort",
-     7675440, "UjAIpQ==", "crc32c"},
-    {"https://download.moonshine.ai/model/tiny-streaming-en/quantized_26_08_21/"
+     7675392, "9j4G6g==", "crc32c"},
+    {"https://download.moonshine.ai/model/tiny-streaming-en/quantized_26_11_02/"
      "frontend.model.ort",
-     23344, "aM/+wQ==", "crc32c"},
-    {"https://download.moonshine.ai/model/tiny-streaming-en/quantized_26_08_21/"
+     23392, "AxTn9Q==", "crc32c"},
+    {"https://download.moonshine.ai/model/tiny-streaming-en/quantized_26_11_02/"
      "frontend.weights.ort",
-     2093464, "WYZ7EQ==", "crc32c"},
-    {"https://download.moonshine.ai/model/tiny-streaming-en/quantized_26_08_21/"
+     2093416, "lNoOfg==", "crc32c"},
+    {"https://download.moonshine.ai/model/tiny-streaming-en/quantized_26_11_02/"
      "streaming_config.json",
      509, "HGL0Ug==", "crc32c"},
-    {"https://download.moonshine.ai/model/tiny-streaming-en/quantized_26_08_21/"
+    {"https://download.moonshine.ai/model/tiny-streaming-en/quantized_26_11_02/"
      "tokenizer.bin",
      249974, "B7s10Q==", "crc32c"},
     {"https://download.moonshine.ai/model/tiny-streaming-es/quantized_26_08_24/"

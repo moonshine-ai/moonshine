@@ -41,7 +41,7 @@ constexpr const char* kCdnModelBase = "https://download.moonshine.ai/model";
 // against and a rollback is a one-line change. Clients key their download cache
 // off this URL, so a new directory also guarantees a clean re-fetch instead of
 // silently reusing stale files.
-constexpr const char* kStreamingQuantizedDir = "/quantized_26_08_21";
+constexpr const char* kStreamingQuantizedDir = "/quantized_26_11_02";
 
 // The same scheme for Japanese, which was quantized from different checkpoints
 // on a different day. Per-language rather than shared, because a language's
