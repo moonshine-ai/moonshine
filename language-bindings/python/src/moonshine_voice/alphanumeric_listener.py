@@ -977,9 +977,9 @@ class AlphanumericListener:
                     file=sys.stderr,
                 )
 
+
 if __name__ == "__main__":
     import argparse
-    import sys
     import threading
     import time
 
