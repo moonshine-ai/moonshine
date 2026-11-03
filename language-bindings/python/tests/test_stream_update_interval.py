@@ -14,8 +14,6 @@ The clock here is the test's to say, so that none of this depends on how long
 anything really takes.
 """
 
-import ctypes
-
 import pytest
 
 from moonshine_voice import transcriber as transcriber_module

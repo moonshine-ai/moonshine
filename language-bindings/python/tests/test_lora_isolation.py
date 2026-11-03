@@ -3,8 +3,6 @@
 import subprocess
 import sys
 
-import pytest
-
 from moonshine_voice.lora._deps import lora_deps_error
 
 

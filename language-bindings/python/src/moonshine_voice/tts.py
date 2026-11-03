@@ -1825,7 +1825,6 @@ def _write_wav_mono_pcm16(path: Path, samples: List[float], sample_rate_hz: int)
 
 if __name__ == "__main__":
     import argparse
-    import sys
 
     parser = argparse.ArgumentParser(
         description="Synthesize speech with Moonshine TTS (downloads assets if needed)."

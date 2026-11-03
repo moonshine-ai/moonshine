@@ -462,11 +462,11 @@ def main(argv=None):
         "frontend_state_shapes": {k: list(v) for k, v in state_shapes.items()},
     }
     (out / "streaming_config.json").write_text(json.dumps(streaming_config, indent=2))
-    print(f"  wrote streaming_config.json")
+    print("  wrote streaming_config.json")
 
     if args.tokenizer_bin:
         (out / "tokenizer.bin").write_bytes(Path(args.tokenizer_bin).read_bytes())
-        print(f"  copied tokenizer.bin")
+        print("  copied tokenizer.bin")
 
 
 def export_checkpoint(model, output_dir, graphs="all", tokenizer_bin=None):
