@@ -8,7 +8,7 @@ To run it, first `cd` into this directory and install the Moonshine Voice pip pa
 pip install moonshine-voice
 ```
 
-If you see a warning about system packages, you can either override that with an uneccessarily scary-sounding flag:
+If you see a warning about system packages, you can either override that with an unnecessarily scary-sounding flag:
 
 ```bash
 pip install --break-system-packages moonshine-voice
