@@ -94,6 +94,18 @@ struct MemoryBundle {
   }
 };
 
+// The published streaming frontend is the split pair. Pins from before the
+// split still ship a single frontend.ort, so load whichever is on disk.
+void add_streaming_frontend(MemoryBundle& bundle, const fs::path& dir) {
+  if (fs::exists(dir / "frontend.model.ort") &&
+      fs::exists(dir / "frontend.weights.ort")) {
+    bundle.add(dir, "frontend.model.ort");
+    bundle.add(dir, "frontend.weights.ort");
+    return;
+  }
+  bundle.add(dir, "frontend.ort");
+}
+
 std::vector<float> load_audio_clip(float max_seconds) {
   float* wav_data = nullptr;
   size_t wav_samples = 0;
@@ -231,7 +243,7 @@ TEST_CASE(
 TEST_CASE("stt-memory-files: streaming loads full buffer set and transcribes") {
   const fs::path dir = g_assets_root / "tiny-streaming-en";
   MemoryBundle bundle;
-  bundle.add(dir, "frontend.ort");
+  add_streaming_frontend(bundle, dir);
   bundle.add(dir, "encoder.ort");
   bundle.add(dir, "adapter.ort");
   bundle.add(dir, "cross_kv.ort");
@@ -325,7 +337,7 @@ TEST_CASE("stt-memory-files: streaming split frontend pair loads") {
 TEST_CASE("stt-memory-files: streaming with attention decoder loads") {
   const fs::path dir = g_assets_root / "tiny-streaming-en";
   MemoryBundle bundle;
-  bundle.add(dir, "frontend.ort");
+  add_streaming_frontend(bundle, dir);
   bundle.add(dir, "encoder.ort");
   bundle.add(dir, "adapter.ort");
   bundle.add(dir, "cross_kv.ort");
