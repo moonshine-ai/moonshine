@@ -139,7 +139,8 @@ public class TranscriberTest {
             throw new RuntimeException(e);
         }
 
-        for (String file : new String[] {"frontend.ort", "encoder.ort", "adapter.ort",
+        Utils.copyStreamingFrontend(testContext, tempDir, "tiny-streaming-en");
+        for (String file : new String[] {"encoder.ort", "adapter.ort",
                      "cross_kv.ort", "decoder_kv.ort", "decoder_kv_with_attention.ort",
                      "streaming_config.json", "tokenizer.bin"}) {
             Utils.copyAssetToTempDir(testContext, tempDir, "tiny-streaming-en/" + file);
@@ -189,7 +190,8 @@ public class TranscriberTest {
             throw new RuntimeException(e);
         }
 
-        for (String file : new String[] {"frontend.ort", "encoder.ort", "adapter.ort",
+        Utils.copyStreamingFrontend(testContext, tempDir, "tiny-streaming-en");
+        for (String file : new String[] {"encoder.ort", "adapter.ort",
                      "cross_kv.ort", "decoder_kv.ort", "decoder_kv_with_attention.ort",
                      "streaming_config.json", "tokenizer.bin"}) {
             Utils.copyAssetToTempDir(testContext, tempDir, "tiny-streaming-en/" + file);
@@ -240,7 +242,8 @@ public class TranscriberTest {
             throw new RuntimeException(e);
         }
 
-        for (String file : new String[] {"frontend.ort", "encoder.ort", "adapter.ort",
+        Utils.copyStreamingFrontend(testContext, tempDir, "tiny-streaming-en");
+        for (String file : new String[] {"encoder.ort", "adapter.ort",
                      "cross_kv.ort", "decoder_kv.ort", "decoder_kv_with_attention.ort",
                      "streaming_config.json", "tokenizer.bin"}) {
             Utils.copyAssetToTempDir(testContext, tempDir, "tiny-streaming-en/" + file);

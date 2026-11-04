@@ -185,6 +185,31 @@ public class Utils {
         }
     }
 
+    public static boolean assetExists(Context context, String path) {
+        try {
+            InputStream is = context.getAssets().open(path);
+            is.close();
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    /**
+     * The published streaming frontend is the split pair. Pins from before the
+     * split still ship a single frontend.ort, so copy whichever is bundled.
+     */
+    public static void copyStreamingFrontend(Context context, Path tempDir, String modelDir) {
+        String prefix = modelDir.endsWith("/") ? modelDir : modelDir + "/";
+        if (assetExists(context, prefix + "frontend.model.ort")
+                && assetExists(context, prefix + "frontend.weights.ort")) {
+            copyAssetToTempDir(context, tempDir, prefix + "frontend.model.ort");
+            copyAssetToTempDir(context, tempDir, prefix + "frontend.weights.ort");
+            return;
+        }
+        copyAssetToTempDir(context, tempDir, prefix + "frontend.ort");
+    }
+
     public static void copyAssetToTempDir(Context context, Path tempDir, String assetPath) {
         try {
             InputStream is = context.getAssets().open(assetPath);
