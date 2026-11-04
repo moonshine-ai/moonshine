@@ -7,19 +7,18 @@ from typing import Any, Callable, List, Optional, Sequence
 
 from moonshine_voice.errors import MoonshineError
 from moonshine_voice.moonshine_api import moonshine_extract_speech_clip
+from moonshine_voice._sounddevice import import_sounddevice
 
 
 def _import_microphone_deps():
     """Import numpy and sounddevice for `VoiceClone.from_microphone`."""
     try:
         import numpy as np
-        import sounddevice as sd
     except ImportError as e:
         raise MoonshineError(
-            "VoiceClone.from_microphone() requires numpy and sounddevice "
-            "(e.g. `pip install numpy sounddevice`)."
+            "VoiceClone.from_microphone() requires numpy (e.g. `pip install numpy`)."
         ) from e
-    return np, sd
+    return np, import_sounddevice("VoiceClone.from_microphone()")
 
 
 class VoiceClone:

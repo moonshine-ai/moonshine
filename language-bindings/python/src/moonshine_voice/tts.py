@@ -31,6 +31,7 @@ from moonshine_voice.download import (
     validate_tts_voice_known,
 )
 from moonshine_voice.errors import MoonshineAudioOutputError, MoonshineError
+from moonshine_voice._sounddevice import import_sounddevice
 from moonshine_voice.moonshine_api import (
     MOONSHINE_HEADER_VERSION,
     MOONSHINE_TTS_CANCELLED,
@@ -295,16 +296,14 @@ def _load_beep_samples(np: Any, kind: str) -> Tuple[Any, int]:
 
 
 def _import_say_audio_deps():
-    """Import numpy and sounddevice for `TextToSpeech.say`; raise MoonshineError if missing."""
+    """Import numpy and sounddevice for `TextToSpeech.say`; raise MoonshineError if unusable."""
     try:
         import numpy as np
-        import sounddevice as sd
     except ImportError as e:
         raise MoonshineError(
-            "TextToSpeech.say() requires numpy and sounddevice "
-            "(e.g. `pip install numpy sounddevice`)."
+            "TextToSpeech.say() requires numpy (e.g. `pip install numpy`)."
         ) from e
-    return np, sd
+    return np, import_sounddevice("TextToSpeech.say()")
 
 
 def _resolve_default_output_index(sd: Any) -> Optional[int]:

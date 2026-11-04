@@ -163,11 +163,12 @@ class FakeInputStream:
 
 
 def test_capture_callback_is_not_blocked_by_transcription(monkeypatch):
-    pytest.importorskip("sounddevice")
+    sounddevice = pytest.importorskip("sounddevice")
     from moonshine_voice import mic_transcriber
 
     monkeypatch.setattr(mic_transcriber, "Transcriber", FakeTranscriber)
-    monkeypatch.setattr(mic_transcriber.sd, "InputStream", FakeInputStream)
+    # mic_transcriber imports sounddevice on first use, so patch the module itself.
+    monkeypatch.setattr(sounddevice, "InputStream", FakeInputStream)
 
     transcriber = (
         mic_transcriber.MicTranscriber()

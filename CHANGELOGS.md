@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Closing a Transcriber while a stream transcription is still running no longer crashes the process (GitHub issue #223).
 - Speech-to-text on Windows was up to 10x slower on Intel hybrid CPUs. ONNX Runtime's spin-waiting worker threads now stop spinning and are sized to the performance-core count (GitHub issue #129).
 - Windows keeps ONNX Runtime's memory arena enabled, avoiding page-fault churn from the system heap on every decoder step.
+- Python `MicTranscriber` and `AgentFlow` no longer initialize PortAudio on import, so they construct and load on machines without a working audio subsystem. Opening a stream there raises a `MoonshineError` that names the Windows Audio service when it is stopped.
 
 ### Changed
 
