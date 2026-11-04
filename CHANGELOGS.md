@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Restarting a stream after a mid-speech stop no longer creates a phantom transcript line from the next session's leading silence.
 - Voice activity detection no longer carries its recurrent state between streams, which made a new or concurrent stream score its first second against audio it never heard.
 - `AgentFlow.say_stream()` feeds the synthesizer. It called `push_text` on the playback handle, so the first token of a streamed reply raised `AttributeError`.
 - `TextToSpeech.is_talking()` stays true while an utterance is being synthesized or written to the device, not only while it is still queued.

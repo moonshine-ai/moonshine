@@ -1,5 +1,6 @@
 #include "voice-activity-detector.h"
 
+#include <algorithm>
 #include <cassert>
 #include <mutex>
 #include <numeric>
@@ -57,7 +58,7 @@ void VoiceActivityDetector::start() {
   current_segment_audio_buffer.resize(0);
   look_behind_audio_buffer.resize(look_behind_sample_count, 0.0f);
   processing_remainder_audio_buffer.resize(0);
-  probability_window.resize(window_size, 0.0f);
+  std::fill(probability_window.begin(), probability_window.end(), 0.0f);
   probability_window_index = 0;
   previous_is_voice = false;
 }
