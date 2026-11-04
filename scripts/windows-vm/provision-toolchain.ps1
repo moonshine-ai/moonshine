@@ -50,6 +50,19 @@ if (Test-Path $pwshPath) {
     Write-Host "pwsh not found at $pwshPath; leaving Windows PowerShell as the shell"
 }
 
+Write-Step 'Windows Audio service'
+# Windows Server leaves Windows Audio on manual start, and a headless VM never
+# triggers it. PortAudio's WASAPI backend then fails device enumeration with
+# paInternalError (-9986), which sounddevice raises from `import sounddevice`,
+# so every Python test that touches the mic or TTS modules errors before it
+# can stub a stream. With the service running PortAudio sees zero devices and
+# initializes normally.
+foreach ($svc in 'AudioEndpointBuilder', 'Audiosrv') {
+    Set-Service $svc -StartupType Automatic
+    Start-Service $svc
+}
+Get-Service Audiosrv, AudioEndpointBuilder | Format-Table Name, Status, StartType -AutoSize
+
 Write-Step 'Repository'
 # Public over HTTPS, so no credentials are needed to clone or fetch. Only the
 # release upload steps need secrets, and those are set up separately.
