@@ -59,9 +59,11 @@
 #                            warnings rather than failures. macOS ceilings were
 #                            removed (timings are printed only). Grep the log
 #                            for MOONSHINE_LATENCY_WARNING afterwards.
-#   LINUX_CLOUD_HOST       - SSH host for Linux cloud
+#   LINUX_CLOUD_HOST       - SSH host for Linux cloud, used when no GCP
+#                            instance is configured
+#   LINUX_CLOUD_USER       - SSH user for a GCP Linux VM (default: pete)
 #   LINUX_CLOUD_INSTANCE   - GCP instance name for the Linux VM (optional)
-#   LINUX_CLOUD_ZONE       - GCP zone for the Linux VM (e.g. us-central1-b)
+#   LINUX_CLOUD_ZONE       - GCP zone for the Linux VM (e.g. us-west1-b)
 #   LINUX_CLOUD_PROJECT    - GCP project ID for the Linux VM
 #   WINDOWS_CLOUD_USER     - SSH user for Windows cloud
 #   WINDOWS_CLOUD_HOST     - SSH host for Windows cloud
@@ -77,10 +79,13 @@
 #                            gcloud calls below. Optional, but see the note.
 #
 # When the LINUX_CLOUD_INSTANCE / WINDOWS_CLOUD_INSTANCE variables are set the
-# script will start the corresponding GCP VM before connecting and stop it
-# again on exit (including on error) to minimize compute costs. The local
-# Windows KVM guest (WINDOWS_LIBVIRT_DOMAIN) gets the same start/stop treatment
-# via virsh on LINUX_CLOUD_HOST.
+# script starts that GCP VM immediately before the stage that needs it and
+# stops it when the stage finishes. A stage that fails mid-run still stops the
+# VM on the way out, so a release does not leave either machine billing.
+# Stopped (not suspended): a suspended VM keeps paying for its memory snapshot,
+# and these hosts are only needed for one stage each. The local Windows KVM
+# guest (WINDOWS_LIBVIRT_DOMAIN) gets the same start/stop treatment via virsh
+# on LINUX_CLOUD_HOST, and only when WINDOWS_CLOUD_INSTANCE is unset.
 #
 # Those gcloud calls are why GCP_SERVICE_ACCOUNT_KEY exists. A personal login's
 # session expires part-way through a multi-hour release, and the next gcloud
@@ -89,17 +94,20 @@
 # way. The key is activated in a gcloud configuration of its own, so an
 # interactive gcloud in another terminal keeps using whatever account you had.
 #
-# The account in use is moonshine-release-ci@useful-sensors-website.iam
-# .gserviceaccount.com, which can do nothing but suspend and resume the release
-# VMs: a custom moonshineVmControl role bound on each VM individually, a
-# moonshineVmOperations role at project level so gcloud can poll the resulting
-# operation, and serviceAccountUser on the VM's own attached service account,
-# without which Compute Engine refuses to start it. Recreate it with
-# `gcloud iam service-accounts create` plus those bindings, and note that its
-# key never expires -- delete the key in IAM if the laptop holding it is lost.
+# The account is moonshine-release-ci@charming-opus-506200-t3.iam.gserviceaccount
+# .com. It can describe, start, stop, suspend, and resume only the release VMs:
+# custom role moonshineVmControl is bound on each VM, moonshineVmOperations at
+# project level lets gcloud poll the zone operation, and roles/iam.serviceAccountUser
+# on the VM's attached service account is required or Compute Engine refuses to
+# start it. The key never expires -- delete it in IAM if the laptop holding it
+# is lost.
 
 # Name of the throwaway gcloud configuration the service account is activated in.
 GCLOUD_RELEASE_CONFIG=moonshine-release
+# Filled in by gcp_power_on. Declared here so an unset expansion is an empty
+# array rather than a bash error under `set -u` in a caller.
+GCP_SSH_IDENTITY_OPTS=()
+GCP_SSH_TARGET=""
 
 # Authenticate gcloud as the release service account, if one is configured.
 # Everything this script runs inherits CLOUDSDK_ACTIVE_CONFIG_NAME, so the
@@ -146,46 +154,159 @@ gcp_check_instance_access() {
     fi
 }
 
-# Resume a GCP compute instance and wait for SSH to become available.
-gcp_resume_instance() {
+# Keys accepted on the release VMs. Linux uses the ed25519 key installed at
+# create time; Windows OpenSSH is authorized by `gcloud compute ssh`, which
+# writes ~/.ssh/google_compute_engine. Try both, and no agent keys.
+gcp_prepare_ssh_identities() {
+    GCP_SSH_IDENTITY_OPTS=()
+    local key
+    for key in "${HOME}/.ssh/id_ed25519" "${HOME}/.ssh/google_compute_engine"; do
+        if [ -r "${key}" ]; then
+            GCP_SSH_IDENTITY_OPTS+=(-i "${key}")
+        fi
+    done
+    if [ ${#GCP_SSH_IDENTITY_OPTS[@]} -gt 0 ]; then
+        GCP_SSH_IDENTITY_OPTS+=(-o IdentitiesOnly=yes)
+    fi
+}
+
+gcp_instance_status() {
+    gcloud compute instances describe "$1" \
+        --zone="$2" \
+        --project="$3" \
+        --format="value(status)"
+}
+
+# Start a stopped instance, or resume a suspended one, then wait until SSH
+# answers. Sets GCP_SSH_TARGET to user@external-ip. Ephemeral IPs change across
+# stop/start, so callers must use GCP_SSH_TARGET rather than a cached address.
+gcp_power_on() {
     local instance="$1"
     local zone="$2"
     local project="$3"
-    local ssh_target="$4"
+    local user="$4"
+    local status
 
-    echo "Resuming GCP instance ${instance} in ${zone} (project ${project})..."
-    gcloud compute instances resume "${instance}" \
-        --zone="${zone}" \
-        --project="${project}"
+    status="$(gcp_instance_status "${instance}" "${zone}" "${project}")"
+    case "${status}" in
+        RUNNING)
+            echo "GCP instance ${instance} is already running."
+            ;;
+        SUSPENDED)
+            echo "Resuming GCP instance ${instance} in ${zone} (project ${project})..."
+            gcloud compute instances resume "${instance}" \
+                --zone="${zone}" \
+                --project="${project}"
+            ;;
+        TERMINATED|STOPPED)
+            echo "Starting GCP instance ${instance} in ${zone} (project ${project})..."
+            gcloud compute instances start "${instance}" \
+                --zone="${zone}" \
+                --project="${project}"
+            ;;
+        *)
+            echo "GCP instance ${instance} is ${status}; waiting for it to settle."
+            ;;
+    esac
 
-    echo "Waiting for SSH on ${ssh_target} to be ready..."
     local attempt=0
-    until ssh -o BatchMode=yes \
-              -o ConnectTimeout=5 \
-              -o StrictHostKeyChecking=accept-new \
-              "${ssh_target}" exit 2>/dev/null; do
+    while [ "${status}" != "RUNNING" ]; do
         attempt=$((attempt + 1))
         if [ ${attempt} -ge 60 ]; then
-            echo "Timed out waiting for SSH on ${ssh_target}." >&2
+            echo "Timed out waiting for ${instance} to reach RUNNING (last: ${status})." >&2
+            return 1
+        fi
+        sleep 5
+        status="$(gcp_instance_status "${instance}" "${zone}" "${project}")"
+    done
+
+    local ip=""
+    attempt=0
+    while [ -z "${ip}" ]; do
+        ip="$(gcloud compute instances describe "${instance}" \
+            --zone="${zone}" \
+            --project="${project}" \
+            --format="value(networkInterfaces[0].accessConfigs[0].natIP)")"
+        if [ -n "${ip}" ]; then
+            break
+        fi
+        attempt=$((attempt + 1))
+        if [ ${attempt} -ge 30 ]; then
+            echo "Timed out waiting for an external IP on ${instance}." >&2
             return 1
         fi
         sleep 5
     done
-    echo "SSH on ${ssh_target} is ready."
+
+    GCP_SSH_TARGET="${user}@${ip}"
+    gcp_prepare_ssh_identities
+    echo "Waiting for SSH on ${GCP_SSH_TARGET}..."
+    attempt=0
+    while true; do
+        local ssh_err=""
+        if ssh_err="$(ssh "${GCP_SSH_IDENTITY_OPTS[@]}" \
+                -o BatchMode=yes \
+                -o ConnectTimeout=10 \
+                -o StrictHostKeyChecking=accept-new \
+                "${GCP_SSH_TARGET}" exit 2>&1)"; then
+            break
+        fi
+        if printf '%s\n' "${ssh_err}" | grep -q "REMOTE HOST IDENTIFICATION HAS CHANGED"; then
+            echo "Host key for ${ip} changed after a restart; refreshing known_hosts."
+            ssh-keygen -R "${ip}" >/dev/null 2>&1 || true
+        fi
+        attempt=$((attempt + 1))
+        if [ ${attempt} -ge 60 ]; then
+            echo "Timed out waiting for SSH on ${GCP_SSH_TARGET}." >&2
+            printf '%s\n' "${ssh_err}" >&2
+            return 1
+        fi
+        sleep 10
+    done
+    echo "SSH on ${GCP_SSH_TARGET} is ready."
 }
 
-# Suspend a GCP compute instance. Failures here are reported but do not abort
-# cleanup of any other instances.
-gcp_suspend_instance() {
+# Stop a GCP instance so it stops billing for CPU and RAM. A suspended instance
+# is resumed and then stopped: suspend still bills for the saved memory, which
+# is what this is trying to avoid. Failures are reported but do not abort
+# cleanup of any other instance.
+gcp_power_off() {
     local instance="$1"
     local zone="$2"
     local project="$3"
+    local status
 
-    echo "Suspending GCP instance ${instance} in ${zone} (project ${project})..."
-    gcloud compute instances suspend "${instance}" \
-        --zone="${zone}" \
-        --project="${project}" \
-        || echo "Warning: failed to suspend ${instance}." >&2
+    status="$(gcp_instance_status "${instance}" "${zone}" "${project}" 2>/dev/null || true)"
+    case "${status}" in
+        RUNNING)
+            echo "Stopping GCP instance ${instance} in ${zone} (project ${project})..."
+            gcloud compute instances stop "${instance}" \
+                --zone="${zone}" \
+                --project="${project}" \
+                || echo "Warning: failed to stop ${instance}." >&2
+            ;;
+        SUSPENDED)
+            echo "Resuming suspended ${instance} so it can be stopped..."
+            gcloud compute instances resume "${instance}" \
+                --zone="${zone}" \
+                --project="${project}" \
+                || echo "Warning: failed to resume ${instance} before stopping." >&2
+            echo "Stopping GCP instance ${instance}..."
+            gcloud compute instances stop "${instance}" \
+                --zone="${zone}" \
+                --project="${project}" \
+                || echo "Warning: failed to stop ${instance}." >&2
+            ;;
+        TERMINATED|STOPPED)
+            echo "GCP instance ${instance} is already stopped."
+            ;;
+        "")
+            echo "Warning: could not read status of ${instance}; not stopping." >&2
+            ;;
+        *)
+            echo "GCP instance ${instance} is ${status}; leaving it."
+            ;;
+    esac
 }
 
 # True when Windows CI runs against a libvirt KVM guest on LINUX_CLOUD_HOST
@@ -274,13 +395,13 @@ cleanup() {
             2>/dev/null || rm -rf "${RELEASE_DIR}"
     fi
     if [ -n "${LINUX_CLOUD_INSTANCE:-}" ]; then
-        gcp_suspend_instance \
+        gcp_power_off \
             "${LINUX_CLOUD_INSTANCE}" \
             "${LINUX_CLOUD_ZONE}" \
             "${LINUX_CLOUD_PROJECT}"
     fi
     if [ -n "${WINDOWS_CLOUD_INSTANCE:-}" ]; then
-        gcp_suspend_instance \
+        gcp_power_off \
             "${WINDOWS_CLOUD_INSTANCE}" \
             "${WINDOWS_CLOUD_ZONE}" \
             "${WINDOWS_CLOUD_PROJECT}"
@@ -339,18 +460,32 @@ run_publish_stage() {
 # used to) baked in a GLIBC_2.43 floor from this host's bleeding-edge glibc that
 # no released distro satisfies -- see issue #206.
 stage_linux() {
+    local ssh_target="${LINUX_CLOUD_HOST}"
     if [ -n "${LINUX_CLOUD_INSTANCE:-}" ]; then
-        gcp_resume_instance \
+        gcp_power_on \
             "${LINUX_CLOUD_INSTANCE}" \
             "${LINUX_CLOUD_ZONE}" \
             "${LINUX_CLOUD_PROJECT}" \
-            "${LINUX_CLOUD_HOST}"
+            "${LINUX_CLOUD_USER:-pete}" || exit 1
+        ssh_target="${GCP_SSH_TARGET}"
     fi
 
-    ssh ${LINUX_CLOUD_HOST} "cd '${LINUX_CLOUD_REPO_PATH}' \
+    # bash -lc so the host's ~/.profile can export JAVA_HOME and ANDROID_HOME.
+    # A non-interactive ssh command would otherwise skip both.
+    ssh ${GCP_SSH_IDENTITY_OPTS[@]+"${GCP_SSH_IDENTITY_OPTS[@]}"} \
+        -o BatchMode=yes \
+        -o StrictHostKeyChecking=accept-new \
+        "${ssh_target}" "bash -lc \"cd '${LINUX_CLOUD_REPO_PATH}' \
       && ${REMOTE_GIT_SYNC} \
       && scripts/test-core.sh \
-      && scripts/test-android.sh --avd '${ANDROID_X86_64_AVD:-moonshine_api26_x86_64}'" || exit 1
+      && scripts/test-android.sh --avd '${ANDROID_X86_64_AVD:-moonshine_api26_x86_64}'\"" || exit 1
+
+    if [ -n "${LINUX_CLOUD_INSTANCE:-}" ]; then
+        gcp_power_off \
+            "${LINUX_CLOUD_INSTANCE}" \
+            "${LINUX_CLOUD_ZONE}" \
+            "${LINUX_CLOUD_PROJECT}"
+    fi
 }
 
 # Where build-pip-docker's arm64 container leaves the wheel, and where we keep a
@@ -411,12 +546,14 @@ stage_pi() {
 # The Windows cloud host runs the CI orchestrator over SSH with
 # disconnect-surviving retries.
 stage_windows() {
+    local windows_ssh_target="${WINDOWS_CLOUD_USER}@${WINDOWS_CLOUD_HOST}"
     if [ -n "${WINDOWS_CLOUD_INSTANCE:-}" ]; then
-        gcp_resume_instance \
+        gcp_power_on \
             "${WINDOWS_CLOUD_INSTANCE}" \
             "${WINDOWS_CLOUD_ZONE}" \
             "${WINDOWS_CLOUD_PROJECT}" \
-            "${WINDOWS_CLOUD_USER}@${WINDOWS_CLOUD_HOST}"
+            "${WINDOWS_CLOUD_USER}" || exit 1
+        windows_ssh_target="${GCP_SSH_TARGET}"
     elif windows_uses_libvirt_guest; then
         libvirt_windows_start
     fi
@@ -430,6 +567,13 @@ stage_windows() {
         -o ServerAliveCountMax=8
         -o TCPKeepAlive=yes
     )
+    if [ -n "${WINDOWS_CLOUD_INSTANCE:-}" ]; then
+        windows_ssh_opts+=(
+            "${GCP_SSH_IDENTITY_OPTS[@]}"
+            -o BatchMode=yes
+            -o StrictHostKeyChecking=accept-new
+        )
+    fi
 
     # The Windows guest has no persistent gh auth or PyPI credentials. For
     # upload runs, push secrets from this Mac into a short-lived env script on
@@ -456,7 +600,7 @@ stage_windows() {
         # Build a PowerShell env script locally and stream it over SSH stdin so
         # neither GH nor PyPI secrets appear in process argv.
         python3 - "${gh_token}" "${pypirc}" <<'PY' | ssh "${windows_ssh_opts[@]}" \
-            "${WINDOWS_CLOUD_USER}@${WINDOWS_CLOUD_HOST}" \
+            "${windows_ssh_target}" \
             "powershell -NoProfile -Command \"Set-Content -LiteralPath (Join-Path \$env:USERPROFILE '.moonshine-release-env.ps1') -Value ([Console]::In.ReadToEnd()) -Encoding utf8\""
 import configparser, sys
 from pathlib import Path
@@ -517,7 +661,7 @@ PY
         echo "Windows build attempt ${windows_attempt}/${windows_attempts}..."
         set +e
         ssh "${windows_ssh_opts[@]}" \
-            "${WINDOWS_CLOUD_USER}@${WINDOWS_CLOUD_HOST}" \
+            "${windows_ssh_target}" \
             "${windows_remote_cmd}"
         windows_ssh_rc=$?
         set -e
@@ -539,6 +683,13 @@ PY
         echo "SSH connection dropped (exit 255); retrying in 15s..."
         sleep 15
     done
+
+    if [ -n "${WINDOWS_CLOUD_INSTANCE:-}" ]; then
+        gcp_power_off \
+            "${WINDOWS_CLOUD_INSTANCE}" \
+            "${WINDOWS_CLOUD_ZONE}" \
+            "${WINDOWS_CLOUD_PROJECT}"
+    fi
 }
 
 # All imperative work lives inside main() so that bash parses the entire
