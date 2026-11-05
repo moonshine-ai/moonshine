@@ -201,8 +201,13 @@ std::u32string fold_characters(const std::u32string& in) {
   std::optional<char32_t> prev;
   for (size_t i = 0; i < in.size(); ++i) {
     const char32_t c = in[i];
-    const std::optional<char32_t> next =
-        (i + 1 < in.size()) ? std::optional<char32_t>(in[i + 1]) : std::nullopt;
+    // Assigned rather than built with a ternary: GCC's -Wmaybe-uninitialized
+    // misreads `cond ? std::optional(x) : std::nullopt` and the Linux wheel
+    // builds with -Werror.
+    std::optional<char32_t> next;
+    if (i + 1 < in.size()) {
+      next = in[i + 1];
+    }
     if (is_double_quote(c)) {
       res.push(U'"');
     } else if (is_single_quote(c)) {
