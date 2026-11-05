@@ -950,6 +950,26 @@ MOONSHINE_EXPORT int32_t moonshine_extract_speech_clip(
    ``moonshine_extract_speech_clip``. When a caller-supplied
    ``zipvoice/clone_audio`` clip has no ``zipvoice_clone_transcript``, the clip
    is refined with that ASR at create time.
+
+   Phonon (Gradium's 31M-parameter autoregressive English model,
+   https://huggingface.co/gradium/phonon-31m-en, Apache 2.0, built on Kyutai's
+   Pocket TTS and Mimi codec) is selected with ``voice`` = ``phonon_<id>`` for
+   a catalog voice listed in ``phonon/voices.json`` (e.g. ``phonon_zoey``; the
+   catalog is Gradium's Apache 2.0 ``phonon-voices`` set), or a bare ``phonon``
+   with a caller-supplied voice file under key ``phonon/voice`` (a Phonon
+   ``.safetensors`` of speaker latents, such as a voice designed or cloned in
+   Gradium's hosted Studio and downloaded for Phonon; the speaker encoder is
+   not published, so on-device cloning is ZipVoice only). Model assets are the
+   six
+   ``phonon/<graph>.ort`` files, ``phonon/model.json``, ``phonon/tokenizer.bin``
+   and
+   ``phonon/voices/<id>.safetensors``. Options: ``phonon_temperature`` (0 is
+   deterministic; default 0.3), ``phonon_seed``, ``phonon_duration_delta``
+   (direct duration conditioning, positive is slower; otherwise derived from
+   ``speed``), ``phonon_normalize_text``. Phonon reads text, so
+   ``moonshine_phonemes_to_speech`` is refused for it. Streaming cuts on
+   generated frames rather than planned ones, so the first chunk arrives after
+   roughly ``stream_first_chunk_seconds`` of audio has been generated.
 */
 MOONSHINE_EXPORT int32_t moonshine_create_tts_synthesizer_from_files(
     const char *language, const char **filenames, uint64_t filenames_count,

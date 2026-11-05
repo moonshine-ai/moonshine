@@ -87,6 +87,32 @@ inline constexpr std::string_view kTtsZipVoiceModelJsonKey =
 inline constexpr std::string_view kTtsZipVoiceCloneAudioKey =
     "zipvoice/clone_audio";
 
+/// Phonon autoregressive TTS assets: six ORT graphs (see
+/// ``scripts/export-phonon-model.py``), the model metadata, the Unigram
+/// tokenizer in BinTokenizer form, and the voice catalog.
+inline constexpr std::string_view kTtsPhononEmbedPromptKey =
+    "phonon/embed_prompt.ort";
+inline constexpr std::string_view kTtsPhononEmbedLatentKey =
+    "phonon/embed_latent.ort";
+inline constexpr std::string_view kTtsPhononBackboneKey = "phonon/backbone.ort";
+inline constexpr std::string_view kTtsPhononFlowHeadKey =
+    "phonon/flow_head.ort";
+inline constexpr std::string_view kTtsPhononMimiTransformerKey =
+    "phonon/mimi_transformer.ort";
+inline constexpr std::string_view kTtsPhononMimiSeanetKey =
+    "phonon/mimi_seanet.ort";
+inline constexpr std::string_view kTtsPhononModelJsonKey = "phonon/model.json";
+inline constexpr std::string_view kTtsPhononTokenizerKey =
+    "phonon/tokenizer.bin";
+/// The voice catalog and the directory its ``file`` entries are relative to.
+inline constexpr std::string_view kTtsPhononVoicesJsonKey =
+    "phonon/voices.json";
+inline constexpr std::string_view kTtsPhononVoicesDirKey = "phonon/voices";
+/// Optional user-supplied voice as a Phonon ``.safetensors`` file (a
+/// ``speaker_wavs`` tensor of ``[1, 512, frames]`` float32), used when
+/// ``voice`` is bare ``phonon`` with no catalog id.
+inline constexpr std::string_view kTtsPhononVoiceFileKey = "phonon/voice";
+
 /// Shared configuration for ``MoonshineTTS`` (Kokoro and Piper file paths, G2P,
 /// ORT, CLI-oriented fields). Vocoder assets use ``files`` (same pattern as
 /// ``MoonshineG2POptions::files``). The **language** is passed to
@@ -105,10 +131,10 @@ struct MoonshineTTSOptions {
   std::string coreml_cache_dir{};
   MoonshineG2POptions g2p_options{};
   FileInformationMap files{};
-  /// ``kokoro``, ``piper``, or ``auto`` (pick Kokoro when
-  /// ``kokoro_tts_lang_supported(language, g2p_options)``). Normally derived
-  /// from the ``voice`` prefix; remains ``auto`` when ``voice`` has no engine
-  /// prefix.
+  /// ``kokoro``, ``piper``, ``zipvoice``, ``phonon``, or ``auto`` (pick Kokoro
+  /// when ``kokoro_tts_lang_supported(language, g2p_options)``). Normally
+  /// derived from the ``voice`` prefix; remains ``auto`` when ``voice`` has
+  /// no engine prefix.
   std::string vocoder_engine = "auto";
   /// Peak-normalize the waveform produced by ``MoonshineTTS::synthesize``
   /// (Kokoro or Piper) before applying
@@ -149,6 +175,17 @@ struct MoonshineTTSOptions {
   float zipvoice_guidance_scale = -1.F;
   float zipvoice_t_shift = 0.5F;
 
+  /// Phonon controls (used only when the ``phonon`` engine is selected).
+  /// ``phonon_temperature`` < 0 means the model default (0.3; 0 is
+  /// deterministic). ``phonon_duration_delta`` directly sets the model's
+  /// duration conditioning when finite and overrides the mapping from
+  /// ``speed``; positive is slower. ``phonon_normalize_text`` runs the
+  /// reference runtime's typography and number normalization.
+  float phonon_temperature = -1.F;
+  std::optional<float> phonon_duration_delta{};
+  unsigned int phonon_seed = 0U;
+  bool phonon_normalize_text = true;
+
   /// Default WAV path for CLI-style tooling (``-o`` / ``output`` in
   /// ``parse_options``).
   std::filesystem::path output_path = "out.wav";
@@ -182,10 +219,12 @@ struct MoonshineTTSOptions {
       const std::vector<std::pair<std::string, std::string>>& options,
       std::string* cli_language = nullptr, bool* language_was_set = nullptr);
 
-  /// If ``voice`` starts with ``kokoro_`` or ``piper_`` (ASCII
-  /// case-insensitive), sets ``vocoder_engine`` accordingly and removes that
-  /// prefix from ``voice`` (after trim). Idempotent when there is no matching
-  /// prefix.
+  /// If ``voice`` starts with ``kokoro_``, ``piper_``, ``zipvoice_`` or
+  /// ``phonon_`` (ASCII case-insensitive), sets ``vocoder_engine``
+  /// accordingly and removes that prefix from ``voice`` (after trim). A bare
+  /// ``zipvoice`` or ``phonon`` selects the engine with no built-in voice, for
+  /// a caller-supplied clip or voice file. Idempotent when there is no
+  /// matching prefix.
   void apply_voice_engine_prefix();
 };
 

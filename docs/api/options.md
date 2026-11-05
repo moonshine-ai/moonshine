@@ -69,7 +69,7 @@ Passed to `TextToSpeech.options()`, AgentFlow `.speech_options()`, and `moonshin
 
 | Key | Description |
 | --- | --- |
-| `voice` | Catalog voice id. Prefix with `kokoro_`, `piper_`, or `zipvoice_` to select the vocoder (for example `kokoro_af_heart`). |
+| `voice` | Catalog voice id. Prefix with `kokoro_`, `piper_`, `zipvoice_`, or `phonon_` to select the vocoder (for example `kokoro_af_heart`, `phonon_zoey`). |
 | `speed` | Speaking-rate multiplier. Also the only per-call override honored by `say()` / `synthesize()` / `moonshine_text_to_speech()` / `moonshine_phonemes_to_speech()`. |
 | `lang` / `language` | Language tag when supplied via options (usually set by the constructor/`language()` setter instead). |
 | `kokoro_dir` | Override Kokoro directory (`prosody.model.ort` + `prosody.weights.ort` + `decoder.model.ort` + `decoder.weights.ort` + `config.json` under it). |
@@ -90,12 +90,17 @@ Passed to `TextToSpeech.options()`, AgentFlow `.speech_options()`, and `moonshin
 | `zipvoice_num_step` / `num_step` | Diffusion steps; `<=0` → model default. |
 | `zipvoice_guidance_scale` / `guidance_scale` | Guidance scale; `<0` → model default. |
 | `zipvoice_t_shift` / `t_shift` | Time-shift (default `0.5`). |
+| `phonon_temperature` / `temperature` | Phonon sampling temperature; `0` is deterministic, `<0` → model default (`0.3`). |
+| `phonon_seed` / `seed` | Seed for Phonon's sampling noise (default `0`). |
+| `phonon_duration_delta` / `duration_delta` | Phonon duration conditioning, positive is slower; when set it replaces the mapping from `speed`. |
+| `phonon_normalize_text` | Run Phonon's typography and number normalization before tokenizing (default true). |
+| `phonon_voice_file` / `phonon_voice` | A Phonon voice `.safetensors` to speak with, for the bare `phonon` voice. |
 | `output` / `o` | Default WAV path for CLI-style tooling (default `out.wav`). |
 | `engine` / `vocoder_engine` | Accepted but ignored (engine comes from the `voice` prefix). |
 
 Also accepts [shared](#shared-options) root aliases and ORT keys. Unknown TTS keys are forwarded to the [G2P](#grapheme-to-phonemes) parser.
 
-In-memory create uses file map keys (for example `kokoro/prosody.model.ort`, `zipvoice/clone_audio`, `clone_asr/...`) rather than option names — see the [C API](c-api.md#moonshine_create_tts_synthesizer_from_memory).
+In-memory create uses file map keys (for example `kokoro/prosody.model.ort`, `zipvoice/clone_audio`, `phonon/voice`, `clone_asr/...`) rather than option names — see the [C API](c-api.md#moonshine_create_tts_synthesizer_from_memory).
 
 ## Grapheme to Phonemes
 

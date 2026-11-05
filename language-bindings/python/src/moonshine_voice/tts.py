@@ -636,10 +636,17 @@ class TextToSpeech:
     `list_tts_languages` and `list_tts_voices` (``present`` /
     ``downloadable``), or `get_tts_voice_catalog`, to discover the options.
 
-    Prefix a voice id with ``kokoro_``, ``piper_``, or ``zipvoice_`` to pin the
-    vocoder (e.g. ``kokoro_af_heart``, ``zipvoice_american_female``). ZipVoice
-    is a zero-shot voice cloner, so besides its built-in reference voices you
-    can clone one of your own with :meth:`clone_from`.
+    Prefix a voice id with ``kokoro_``, ``piper_``, ``zipvoice_``, or
+    ``phonon_`` to pin the vocoder (e.g. ``kokoro_af_heart``,
+    ``zipvoice_american_female``, ``phonon_zoey``). ZipVoice is a zero-shot
+    voice cloner, so besides its built-in reference voices you can clone one of
+    your own with :meth:`clone_from`. Phonon is Gradium's small autoregressive
+    English model (Apache 2.0, with an Apache 2.0 voice catalog) that streams a
+    frame at a time; it samples, so pass ``phonon_temperature=0`` through
+    :meth:`options` for a repeatable render. Phonon voices beyond the catalog
+    come from Gradium's hosted Studio (voice design or cloning, downloaded as
+    a ``.safetensors`` file and passed as ``phonon_voice_file``); on-device
+    cloning with :meth:`clone_from` is ZipVoice.
     """
 
     # Voice id the native layer uses for a caller-supplied reference clip.
@@ -1986,7 +1993,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--voice",
         default=None,
-        help="Voice id with kokoro_ or piper_ prefix (e.g. kokoro_af_heart)",
+        help=(
+            "Voice id with kokoro_, piper_, zipvoice_ or phonon_ prefix "
+            "(e.g. kokoro_af_heart, phonon_zoey)"
+        ),
     )
     parser.add_argument(
         "--clone",

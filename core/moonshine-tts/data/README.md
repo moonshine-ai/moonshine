@@ -25,6 +25,7 @@ When this project is embedded as the `moonshine-tts` submodule, canonical Python
 | [ko](ko/README.md) | Korean IPA lexicon |
 | [kokoro](kokoro/README.md) | Kokoro-82M ONNX TTS + `.kokorovoice` bundles (`moonshine-tts` speak CLI) |
 | [nl](nl/README.md) | Dutch IPA lexicon |
+| [phonon](phonon/README.md) | Phonon autoregressive English TTS (six ORT graphs + voice latents) |
 | [pt_br](pt_br/README.md) | Brazilian Portuguese IPA lexicon |
 | [pt_pt](pt_pt/README.md) | European Portuguese IPA lexicon |
 | [ru](ru/README.md) | Russian IPA lexicon |

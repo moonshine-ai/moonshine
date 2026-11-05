@@ -53,6 +53,7 @@ void MoonshineTTSOptions::apply_voice_engine_prefix() {
   static constexpr std::string_view k_k = "kokoro_";
   static constexpr std::string_view k_p = "piper_";
   static constexpr std::string_view k_z = "zipvoice_";
+  static constexpr std::string_view k_ph = "phonon_";
   if (low.size() >= k_k.size() && low.compare(0, k_k.size(), k_k) == 0) {
     vocoder_engine = "kokoro";
     voice = trim(voice.substr(k_k.size()));
@@ -66,6 +67,14 @@ void MoonshineTTSOptions::apply_voice_engine_prefix() {
     // Bare engine selector with no built-in id: caller supplies a clone
     // reference clip.
     vocoder_engine = "zipvoice";
+    voice.clear();
+  } else if (low.size() >= k_ph.size() &&
+             low.compare(0, k_ph.size(), k_ph) == 0) {
+    vocoder_engine = "phonon";
+    voice = trim(voice.substr(k_ph.size()));
+  } else if (low == "phonon") {
+    // Bare engine selector: the caller supplies a voice file.
+    vocoder_engine = "phonon";
     voice.clear();
   }
 }
@@ -220,6 +229,30 @@ void MoonshineTTSOptions::parse_options(
       const std::string t = trim(value);
       if (!t.empty()) {
         zipvoice_t_shift = float_from_string(t.c_str());
+      }
+    } else if (key == "phonon_temperature" || key == "temperature") {
+      const std::string t = trim(value);
+      if (!t.empty()) {
+        phonon_temperature = float_from_string(t.c_str());
+      }
+    } else if (key == "phonon_duration_delta" || key == "duration_delta") {
+      const std::string t = trim(value);
+      phonon_duration_delta =
+          t.empty() ? std::nullopt
+                    : std::optional<float>(float_from_string(t.c_str()));
+    } else if (key == "phonon_seed" || key == "seed") {
+      const std::string t = trim(value);
+      if (!t.empty()) {
+        phonon_seed = static_cast<unsigned int>(std::stoul(t));
+      }
+    } else if (key == "phonon_normalize_text") {
+      phonon_normalize_text = bool_from_string(value.c_str());
+    } else if (key == "phonon_voice_file" || key == "phonon_voice") {
+      const std::string t = trim(value);
+      if (t.empty()) {
+        files.erase_key(std::string(kTtsPhononVoiceFileKey));
+      } else {
+        files.set_path(kTtsPhononVoiceFileKey, std::filesystem::path(t));
       }
     } else if (key == "log_profiling") {
       log_profiling = bool_from_string(value.c_str());
