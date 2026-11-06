@@ -176,10 +176,11 @@ void VoiceActivityDetector::process_audio_chunk(const float *audio_data,
   const size_t fade_sample_count = (max_segment_sample_count * 2) / 3;
   if (max_segment_sample_count &&
       (current_segment_audio_buffer.size() > fade_sample_count)) {
-    const float fade_factor =
-        static_cast<float>(current_segment_audio_buffer.size() -
-                           fade_sample_count) /
-        fade_sample_count;
+    const size_t remaining_sample_count =
+        max_segment_sample_count -
+        std::min(current_segment_audio_buffer.size(), max_segment_sample_count);
+    const float fade_factor = static_cast<float>(remaining_sample_count) /
+                              (max_segment_sample_count - fade_sample_count);
     smoothed_probability = smoothed_probability * fade_factor;
   }
   bool current_is_voice = smoothed_probability > threshold;

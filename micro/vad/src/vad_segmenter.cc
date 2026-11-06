@@ -43,12 +43,17 @@ VadEvent VadSegmenter::ProcessFrame(float raw_probability) {
     smoothed = 1.0f;  // threshold 0 -> always voice (still split on max).
   }
 
-  // Max-segment linear fade: force a break in long continuous speech.
+  // Max-segment linear fade: force a break in long continuous speech. The score
+  // falls to 0 at max_segment_samples_.
   const std::size_t fade_samples = (max_segment_samples_ * 2) / 3;
   if (max_segment_samples_ && current_segment_samples_ > fade_samples) {
+    const std::size_t remaining_samples =
+        current_segment_samples_ < max_segment_samples_
+            ? max_segment_samples_ - current_segment_samples_
+            : 0;
     const float fade_factor =
-        static_cast<float>(current_segment_samples_ - fade_samples) /
-        static_cast<float>(fade_samples);
+        static_cast<float>(remaining_samples) /
+        static_cast<float>(max_segment_samples_ - fade_samples);
     smoothed = smoothed * fade_factor;
   }
 

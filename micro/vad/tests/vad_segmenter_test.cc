@@ -43,6 +43,20 @@ std::vector<std::pair<std::size_t, std::size_t>> Segments(
   return segs;
 }
 
+// Length of the first segment closed by continuous speech (raw probability 1),
+// or 0 if no segment closes within four times the maximum length.
+std::size_t FirstForcedSegmentLength(float threshold, std::size_t max_segment) {
+  spelling::VadSegmenter seg(threshold, 16, kHop, 0, max_segment);
+  seg.Start();
+  const int max_frames = static_cast<int>(max_segment * 4 / kHop);
+  for (int i = 0; i < max_frames; ++i) {
+    if (seg.ProcessFrame(1.0f) == spelling::VadEvent::kSpeechEnd) {
+      return seg.segment_end_sample() - seg.segment_start_sample();
+    }
+  }
+  return 0;
+}
+
 }  // namespace
 
 TF_LITE_MICRO_TESTS_BEGIN
@@ -81,6 +95,20 @@ TF_LITE_MICRO_TEST(NoLookBehindStartsLater) {
   TF_LITE_MICRO_EXPECT_EQ(static_cast<int>(no_lb.size()), 1);
   // Without the pre-roll the segment starts at or after the look-behind case.
   TF_LITE_MICRO_EXPECT_GE(no_lb[0].first, with_lb[0].first);
+}
+
+TF_LITE_MICRO_TEST(MaxSegmentFadeCutsBeforeMaxSegment) {
+  // The score starts at 1 and falls to 0 over the last third of the segment,
+  // so it crosses a threshold of 0.5 at five sixths of the maximum length.
+  const std::size_t length = FirstForcedSegmentLength(0.5f, kMaxSeg);
+  TF_LITE_MICRO_EXPECT_GE(length, kMaxSeg * 5 / 6 - 2 * kHop);
+  TF_LITE_MICRO_EXPECT_LE(length, kMaxSeg * 5 / 6 + 2 * kHop);
+}
+
+TF_LITE_MICRO_TEST(ThresholdZeroCutsAtMaxSegment) {
+  const std::size_t length = FirstForcedSegmentLength(0.0f, kMaxSeg);
+  TF_LITE_MICRO_EXPECT_GE(length, kMaxSeg);
+  TF_LITE_MICRO_EXPECT_LE(length, kMaxSeg + 2 * kHop);
 }
 
 TF_LITE_MICRO_TEST(ExtractClipFrontAlignedZeroPads) {
