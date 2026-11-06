@@ -51,6 +51,7 @@ add_library(moonshine_tts_core STATIC
   src/lang-specific/french-oov.cpp
   src/text-normalize.cpp
   src/sentence-splitter.cpp
+  src/phonon-text.cpp
   src/tts-stream.cpp
   src/chunk-policy.cpp
   src/kokoro-voice-levels.cpp
@@ -140,6 +141,7 @@ moonshine_tts_add_test(ukrainian_rule_g2p_test moonshine_tts_core)
 moonshine_tts_add_test(hindi_rule_g2p_test moonshine_tts_core)
 moonshine_tts_add_test(text_normalize_test moonshine_tts_core)
 moonshine_tts_add_test(sentence_splitter_test moonshine_tts_core)
+moonshine_tts_add_test(phonon_text_test moonshine_tts_core)
 moonshine_tts_add_test(tts_stream_test moonshine_tts_core)
 moonshine_tts_add_test(chunk_policy_test moonshine_tts_core)
 moonshine_tts_add_test(kokoro_voice_levels_test moonshine_tts_core)
@@ -181,14 +183,18 @@ if(MOONSHINE_TTS_BUILD_ONNX)
     src/zipvoice-custom-ops.cpp
     src/zipvoice-voices.cpp
     src/zipvoice-voices-data.cpp
+    # Phonon autoregressive engine: six ORT graphs driven from C++, with the
+    # Unigram tokenizer read through bin-tokenizer.
+    src/phonon-tts.cpp
   )
 
   target_link_libraries(moonshine_tts_ort PUBLIC moonshine_tts_core)
   target_include_directories(moonshine_tts_ort PRIVATE
     ${_MOONSHINE_CORE_ROOT}/moonshine-utils
     ${_MOONSHINE_CORE_ROOT}/ort-utils
+    ${_MOONSHINE_CORE_ROOT}/bin-tokenizer
   )
-  target_link_libraries(moonshine_tts_ort PUBLIC ort-utils)
+  target_link_libraries(moonshine_tts_ort PUBLIC ort-utils bin-tokenizer)
   set_target_properties(moonshine_tts_ort PROPERTIES POSITION_INDEPENDENT_CODE ON)
   if(MSVC)
     target_compile_options(moonshine_tts_ort PRIVATE /utf-8)
@@ -267,6 +273,12 @@ if(MOONSHINE_TTS_BUILD_ONNX)
   moonshine_tts_set_ort_rpath(zipvoice_tts_test)
   if(WIN32)
     copy_onnxruntime_dll(zipvoice_tts_test)
+  endif()
+
+  moonshine_tts_add_test(phonon_tts_test moonshine_tts_ort)
+  moonshine_tts_set_ort_rpath(phonon_tts_test)
+  if(WIN32)
+    copy_onnxruntime_dll(phonon_tts_test)
   endif()
 
   moonshine_tts_add_test(korean_tok_pos_onnx_test moonshine_tts_ort)

@@ -4,10 +4,10 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 
 #include "debug-utils.h"
-#include "file-utils.h"
 #include "string-utils.h"
 
 namespace {
@@ -31,49 +31,59 @@ size_t utf8_sequence_length(uint8_t lead) {
   return 1;
 }
 
+// The header a tokenizer.bin may start with; see bin-tokenizer.h.
+constexpr uint8_t kHeaderMagic[] = {0xFF, 0xFF, 'B', 'T', 'O', 'K'};
+constexpr size_t kHeaderSize = sizeof(kHeaderMagic) + 1 + 1 + 4 + 4;
+constexpr uint8_t kHeaderVersion = 1;
+constexpr uint32_t kNoUnkId = 0xFFFFFFFFu;
+
+// The penalty below the lowest piece score that the ``tokenizers`` crate
+// gives an unknown character, so the lattice only uses one where no piece
+// fits.
+constexpr float kUnigramUnkPenalty = 10.0f;
+
+uint32_t read_u32_le(const uint8_t *p) {
+  return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) |
+         (static_cast<uint32_t>(p[2]) << 16) |
+         (static_cast<uint32_t>(p[3]) << 24);
+}
+
+float read_f32_le(const uint8_t *p) {
+  const uint32_t bits = read_u32_le(p);
+  float value = 0.0f;
+  std::memcpy(&value, &bits, sizeof(value));
+  return value;
+}
+
+std::vector<uint8_t> read_whole_file(const char *path) {
+  FILE *file = std::fopen(path, "rb");
+  if (!file) {
+    std::string message =
+        "Failed to open tokenizer file at " + std::string(path);
+    std::perror(message.c_str());
+    throw std::runtime_error(message);
+  }
+  std::vector<uint8_t> data;
+  uint8_t buffer[65536];
+  while (true) {
+    const size_t got = std::fread(buffer, 1, sizeof(buffer), file);
+    data.insert(data.end(), buffer, buffer + got);
+    if (got < sizeof(buffer)) {
+      break;
+    }
+  }
+  std::fclose(file);
+  return data;
+}
+
 }  // namespace
 
 BinTokenizer::BinTokenizer(const char *tokenizer_path, const char *space_string,
                            BinTokenizerEncoding encoding) {
   this->space_string = space_string;
   this->encoding = encoding;
-  FILE *file = std::fopen(tokenizer_path, "rb");
-  if (!file) {
-    std::string message =
-        "Failed to open tokenizer file at " + std::string(tokenizer_path);
-    std::perror(message.c_str());
-    throw std::runtime_error(message);
-  }
-  while (true) {
-    uint8_t first_byte;
-    if (std::fread(&first_byte, 1, 1, file) != 1) {
-      break;
-    }
-    if (first_byte == 0) {
-      tokens_to_bytes.push_back(std::vector<uint8_t>());
-      continue;
-    }
-    size_t byte_count;
-    if (first_byte < 128) {
-      byte_count = first_byte;
-    } else {
-      uint8_t second_byte;
-      fread_exact(&second_byte, 1, 1, file, "tokenizer length byte");
-      byte_count = (second_byte * 128) + first_byte - 128;
-    }
-    std::vector<uint8_t> bytes(byte_count);
-    fread_exact(bytes.data(), 1, byte_count, file, "tokenizer token bytes");
-    tokens_to_bytes.push_back(bytes);
-  }
-  std::fclose(file);
-  if (tokens_to_bytes.size() == 0) {
-    throw std::runtime_error("No tokens found in tokenizer file '" +
-                             std::string(tokenizer_path) + "'");
-  }
-  this->build_first_byte_index();
-  if (this->encoding == BinTokenizerEncoding::kBpe) {
-    this->build_merge_index();
-  }
+  const std::vector<uint8_t> data = read_whole_file(tokenizer_path);
+  this->parse(data.data(), data.size(), tokenizer_path);
 }
 
 BinTokenizer::BinTokenizer(const uint8_t *tokenizer_data,
@@ -85,55 +95,7 @@ BinTokenizer::BinTokenizer(const uint8_t *tokenizer_data,
     std::string message = "Tokenizer data is nullptr or empty";
     throw std::runtime_error(message);
   }
-  size_t offset = 0;
-  while (offset < tokenizer_data_size) {
-    uint8_t first_byte = tokenizer_data[offset];
-    offset++;
-    if (first_byte == 0) {
-      tokens_to_bytes.push_back(std::vector<uint8_t>());
-      continue;
-    }
-    size_t byte_count;
-    if (first_byte < 128) {
-      byte_count = first_byte;
-    } else {
-      if (offset >= tokenizer_data_size) {
-        throw std::runtime_error(
-            "Truncated tokenizer data: missing length byte at offset " +
-            std::to_string(offset));
-      }
-      uint8_t second_byte = tokenizer_data[offset];
-      byte_count = (second_byte * 128) + first_byte - 128;
-      offset++;
-    }
-    // Guard against a truncated blob so the memcpy below cannot read past the
-    // end of the input (offset is always <= tokenizer_data_size here, so the
-    // subtraction cannot underflow).
-    if (byte_count > tokenizer_data_size - offset) {
-      throw std::runtime_error(
-          "Truncated tokenizer data: token of " + std::to_string(byte_count) +
-          " bytes at offset " + std::to_string(offset) +
-          " exceeds input size " + std::to_string(tokenizer_data_size));
-    }
-    std::vector<uint8_t> bytes(byte_count);
-    // A two-byte length can legitimately encode a zero-length token; skip the
-    // copy in that case, since bytes.data() is null for an empty vector and
-    // memcpy() is declared nonnull (passing null is UB even when count is 0).
-    if (byte_count > 0) {
-      std::memcpy(bytes.data(), tokenizer_data + offset, byte_count);
-    }
-    offset += byte_count;
-    tokens_to_bytes.push_back(bytes);
-  }
-  if (tokens_to_bytes.size() == 0) {
-    throw std::runtime_error(
-        "No tokens found in tokenizer input data of size " +
-        std::to_string(tokenizer_data_size));
-  }
-  this->build_first_byte_index();
-  if (this->encoding == BinTokenizerEncoding::kBpe) {
-    this->build_merge_index();
-  }
+  this->parse(tokenizer_data, tokenizer_data_size, "tokenizer data");
 }
 
 #if defined(ANDROID)
@@ -151,11 +113,87 @@ BinTokenizer::BinTokenizer(const char *tokenizer_path,
     throw std::runtime_error("Failed to open tokenizer file at " +
                              std::string(tokenizer_path));
   }
+  std::vector<uint8_t> data;
+  uint8_t buffer[65536];
   while (true) {
-    uint8_t first_byte;
-    if (AAsset_read(asset, &first_byte, 1) != 1) {
+    const int got = AAsset_read(asset, buffer, sizeof(buffer));
+    if (got <= 0) {
       break;
     }
+    data.insert(data.end(), buffer, buffer + got);
+  }
+  AAsset_close(asset);
+  this->parse(data.data(), data.size(), tokenizer_path);
+}
+#endif
+
+void BinTokenizer::parse(const uint8_t *data, size_t size, const char *what) {
+  const bool has_header =
+      size >= kHeaderSize &&
+      std::memcmp(data, kHeaderMagic, sizeof(kHeaderMagic)) == 0;
+  size_t offset = 0;
+  size_t count = 0;
+  if (has_header) {
+    offset = sizeof(kHeaderMagic);
+    const uint8_t version = data[offset++];
+    if (version != kHeaderVersion) {
+      throw std::runtime_error("Unsupported tokenizer format version " +
+                               std::to_string(version) + " in " +
+                               std::string(what));
+    }
+    const uint8_t encoding_byte = data[offset++];
+    switch (encoding_byte) {
+      case 0:
+        this->encoding = BinTokenizerEncoding::kLongestMatch;
+        break;
+      case 1:
+        this->encoding = BinTokenizerEncoding::kBpe;
+        break;
+      case 2:
+        this->encoding = BinTokenizerEncoding::kUnigram;
+        break;
+      default:
+        throw std::runtime_error("Unknown tokenizer encoding " +
+                                 std::to_string(encoding_byte) + " in " +
+                                 std::string(what));
+    }
+    count = read_u32_le(data + offset);
+    offset += 4;
+    const uint32_t unk = read_u32_le(data + offset);
+    offset += 4;
+    this->unk_id = unk == kNoUnkId ? -1 : static_cast<int32_t>(unk);
+    if (count == 0) {
+      throw std::runtime_error("No tokens found in " + std::string(what));
+    }
+  }
+  this->parse_entries(data, size, offset, count, what);
+  if (has_header && this->encoding == BinTokenizerEncoding::kUnigram) {
+    const size_t needed = this->tokens_to_bytes.size() * 4;
+    if (size - offset < needed) {
+      throw std::runtime_error("Truncated tokenizer data: missing scores in " +
+                               std::string(what));
+    }
+    this->scores.resize(this->tokens_to_bytes.size());
+    for (size_t i = 0; i < this->scores.size(); i++) {
+      this->scores[i] = read_f32_le(data + offset);
+      offset += 4;
+    }
+  }
+  if (this->tokens_to_bytes.empty()) {
+    throw std::runtime_error("No tokens found in " + std::string(what));
+  }
+  this->finish_setup();
+}
+
+// Reads entries from `offset`: exactly `count_or_zero` of them when that is
+// set, else until the data runs out (the flat form).
+void BinTokenizer::parse_entries(const uint8_t *data, size_t size,
+                                 size_t &offset, size_t count_or_zero,
+                                 const char *what) {
+  while (offset < size &&
+         (count_or_zero == 0 || this->tokens_to_bytes.size() < count_or_zero)) {
+    uint8_t first_byte = data[offset];
+    offset++;
     if (first_byte == 0) {
       tokens_to_bytes.push_back(std::vector<uint8_t>());
       continue;
@@ -164,25 +202,51 @@ BinTokenizer::BinTokenizer(const char *tokenizer_path,
     if (first_byte < 128) {
       byte_count = first_byte;
     } else {
-      uint8_t second_byte;
-      AAsset_read(asset, &second_byte, 1);
+      if (offset >= size) {
+        throw std::runtime_error(
+            "Truncated tokenizer data: missing length byte at offset " +
+            std::to_string(offset) + " in " + std::string(what));
+      }
+      uint8_t second_byte = data[offset];
       byte_count = (second_byte * 128) + first_byte - 128;
+      offset++;
+    }
+    // Guard against a truncated blob so the memcpy below cannot read past the
+    // end of the input (offset is always <= size here, so the subtraction
+    // cannot underflow).
+    if (byte_count > size - offset) {
+      throw std::runtime_error("Truncated tokenizer data: token of " +
+                               std::to_string(byte_count) +
+                               " bytes at offset " + std::to_string(offset) +
+                               " exceeds input size " + std::to_string(size) +
+                               " in " + std::string(what));
     }
     std::vector<uint8_t> bytes(byte_count);
-    AAsset_read(asset, bytes.data(), byte_count);
+    // A two-byte length can legitimately encode a zero-length token; skip the
+    // copy in that case, since bytes.data() is null for an empty vector and
+    // memcpy() is declared nonnull (passing null is UB even when count is 0).
+    if (byte_count > 0) {
+      std::memcpy(bytes.data(), data + offset, byte_count);
+    }
+    offset += byte_count;
     tokens_to_bytes.push_back(bytes);
   }
-  AAsset_close(asset);
-  if (tokens_to_bytes.size() == 0) {
-    throw std::runtime_error("No data found in tokenizer file at " +
-                             std::string(tokenizer_path));
+  if (count_or_zero != 0 && this->tokens_to_bytes.size() != count_or_zero) {
+    throw std::runtime_error("Truncated tokenizer data: header promises " +
+                             std::to_string(count_or_zero) + " tokens, found " +
+                             std::to_string(this->tokens_to_bytes.size()) +
+                             " in " + std::string(what));
   }
+}
+
+void BinTokenizer::finish_setup() {
   this->build_first_byte_index();
   if (this->encoding == BinTokenizerEncoding::kBpe) {
     this->build_merge_index();
+  } else if (this->encoding == BinTokenizerEncoding::kUnigram) {
+    this->build_unigram_index();
   }
 }
-#endif
 
 template <typename T>
 T BinTokenizer::text_to_special_token(const std::string &text) {
@@ -275,10 +339,61 @@ void BinTokenizer::build_merge_index() {
   }
 }
 
+void BinTokenizer::build_unigram_index() {
+  if (this->scores.size() != this->tokens_to_bytes.size()) {
+    throw std::runtime_error(
+        "Unigram encoding needs a score per token, which only a tokenizer.bin "
+        "with a header carries");
+  }
+  this->byte_piece_ids.fill(-1);
+  this->piece_ids.reserve(this->tokens_to_bytes.size());
+  this->max_piece_bytes = 1;
+  this->min_score = std::numeric_limits<float>::max();
+  const auto hex_value = [](uint8_t c) -> int {
+    if (c >= '0' && c <= '9') {
+      return c - '0';
+    }
+    if (c >= 'a' && c <= 'f') {
+      return c - 'a' + 10;
+    }
+    if (c >= 'A' && c <= 'F') {
+      return c - 'A' + 10;
+    }
+    return -1;
+  };
+  for (size_t i = 0; i < this->tokens_to_bytes.size(); i++) {
+    const std::vector<uint8_t> &bytes = this->tokens_to_bytes[i];
+    if (bytes.empty()) {
+      continue;
+    }
+    // "<0xNN>" is the byte fallback piece SentencePiece writes for byte NN.
+    // It is a spelling of the unknown, not of the text "<0xNN>", so it goes in
+    // the byte table rather than the piece index.
+    if (bytes.size() == 6 && bytes[0] == '<' && bytes[1] == '0' &&
+        bytes[2] == 'x' && bytes[5] == '>' && hex_value(bytes[3]) >= 0 &&
+        hex_value(bytes[4]) >= 0) {
+      this->byte_piece_ids[static_cast<size_t>(hex_value(bytes[3]) * 16 +
+                                               hex_value(bytes[4]))] =
+          static_cast<int32_t>(i);
+      continue;
+    }
+    this->piece_ids.emplace(std::string(bytes.begin(), bytes.end()),
+                            static_cast<int32_t>(i));
+    this->max_piece_bytes = std::max(this->max_piece_bytes, bytes.size());
+    this->min_score = std::min(this->min_score, this->scores[i]);
+  }
+  if (this->min_score == std::numeric_limits<float>::max()) {
+    this->min_score = 0.0f;
+  }
+}
+
 template <typename T>
 std::vector<T> BinTokenizer::text_to_tokens(const std::string &text) {
   if (this->encoding == BinTokenizerEncoding::kBpe) {
     return this->text_to_tokens_bpe<T>(text);
+  }
+  if (this->encoding == BinTokenizerEncoding::kUnigram) {
+    return this->text_to_tokens_unigram<T>(text);
   }
   return this->text_to_tokens_longest_match<T>(text);
 }
@@ -393,6 +508,138 @@ std::vector<T> BinTokenizer::text_to_tokens_bpe(const std::string &text) {
     }
   }
   return result;
+}
+
+// Unigram encoding, the SentencePiece way: the space marker is prepended,
+// spaces become the marker, and the text is cut before each marker so every
+// word is encoded on its own. Matches the ``tokenizers`` crate's Metaspace
+// pre-tokenizer with `prepend_scheme: always` and `split: true`.
+template <typename T>
+std::vector<T> BinTokenizer::text_to_tokens_unigram(const std::string &text) {
+  const std::string marker(this->space_string);
+  std::string replaced = replace_all(text, " ", marker);
+  // Prepended whether or not the text starts with a space, so "  x" gets
+  // three markers, as the reference does.
+  if (!replaced.empty()) {
+    replaced.insert(0, marker);
+  }
+  std::vector<T> result;
+  if (marker.empty()) {
+    this->encode_unigram_word<T>(replaced, result);
+    return result;
+  }
+  size_t start = 0;
+  while (start < replaced.size()) {
+    size_t next = replaced.find(marker, start + marker.size());
+    if (next == std::string::npos) {
+      next = replaced.size();
+    }
+    this->encode_unigram_word<T>(replaced.substr(start, next - start), result);
+    start = next;
+  }
+  return result;
+}
+
+// Viterbi over the lattice of pieces covering `word`, one node per character
+// boundary. Same tie-break as the ``tokenizers`` crate's
+// `Unigram::encode_optimized`: candidates at a position are tried shortest
+// first and only a strictly better score displaces one, so a tie keeps the
+// shorter piece. A character with no single-character piece gets an unknown
+// node at a penalty, which the byte fallback then spells out.
+template <typename T>
+void BinTokenizer::encode_unigram_word(const std::string &word,
+                                       std::vector<T> &out) {
+  // Byte offsets of every character start, plus one past the end.
+  std::vector<size_t> bounds;
+  bounds.reserve(word.size() + 1);
+  for (size_t i = 0; i < word.size();) {
+    bounds.push_back(i);
+    i += std::min(utf8_sequence_length(static_cast<uint8_t>(word[i])),
+                  word.size() - i);
+  }
+  bounds.push_back(word.size());
+  const size_t n = bounds.size() - 1;
+  if (n == 0) {
+    return;
+  }
+
+  const float unreached = -std::numeric_limits<float>::infinity();
+  const float unk_score = this->min_score - kUnigramUnkPenalty;
+  std::vector<float> best(n + 1, unreached);
+  std::vector<size_t> prev(n + 1, 0);
+  std::vector<int32_t> ids(n + 1, this->unk_id);
+  best[0] = 0.0f;
+  std::string key;
+  for (size_t i = 0; i < n; i++) {
+    if (best[i] == unreached) {
+      continue;
+    }
+    bool has_single = false;
+    for (size_t j = i + 1; j <= n; j++) {
+      const size_t length = bounds[j] - bounds[i];
+      if (length > this->max_piece_bytes) {
+        break;
+      }
+      key.assign(word, bounds[i], length);
+      const auto found = this->piece_ids.find(key);
+      if (found == this->piece_ids.end()) {
+        continue;
+      }
+      if (j == i + 1) {
+        has_single = true;
+      }
+      const float score = best[i] + this->scores[found->second];
+      if (best[j] == unreached || score > best[j]) {
+        best[j] = score;
+        prev[j] = i;
+        ids[j] = found->second;
+      }
+    }
+    if (!has_single) {
+      const float score = best[i] + unk_score;
+      if (best[i + 1] == unreached || score > best[i + 1]) {
+        best[i + 1] = score;
+        prev[i + 1] = i;
+        ids[i + 1] = this->unk_id;
+      }
+    }
+  }
+
+  // Walk the best path back from the end, then emit it forwards.
+  std::vector<size_t> ends;
+  for (size_t j = n; j > 0; j = prev[j]) {
+    ends.push_back(j);
+  }
+  std::reverse(ends.begin(), ends.end());
+  for (const size_t j : ends) {
+    const int32_t id = ids[j];
+    if (id != this->unk_id) {
+      out.push_back(static_cast<T>(id));
+      continue;
+    }
+    // An unknown span becomes its UTF-8 bytes when the vocabulary can spell
+    // every one of them, otherwise the unknown id itself.
+    const size_t a = bounds[prev[j]];
+    const size_t b = bounds[j];
+    bool all_bytes_known = true;
+    for (size_t k = a; k < b; k++) {
+      if (this->byte_piece_ids[static_cast<uint8_t>(word[k])] < 0) {
+        all_bytes_known = false;
+        break;
+      }
+    }
+    if (!all_bytes_known) {
+      if (this->unk_id < 0) {
+        throw std::runtime_error("No piece or unknown id for text " + word);
+      }
+      out.push_back(static_cast<T>(this->unk_id));
+      continue;
+    }
+    for (size_t k = a; k < b; k++) {
+      out.push_back(
+          static_cast<T>(this->byte_piece_ids[static_cast<uint8_t>(word[k])]));
+    }
+  }
 }
 
 // Instantiated after both encoders, so each is defined before the dispatcher

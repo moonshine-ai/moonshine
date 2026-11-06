@@ -9,6 +9,20 @@ FROM ${BASE_IMAGE}
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
+# bullseye reached end of life in August 2026 and its packages have moved from
+# deb.debian.org to archive.debian.org (the main mirror still serves the index
+# but the pool returns 404, so apt-get update succeeds and the install fails).
+# Point apt at the archive on that base. Its Release files are no longer
+# re-signed, so the Valid-Until check has to be turned off.
+RUN if grep -q '^VERSION_CODENAME=bullseye' /etc/os-release; then \
+    printf '%s\n' \
+    'deb http://archive.debian.org/debian bullseye main' \
+    'deb http://archive.debian.org/debian bullseye-updates main' \
+    'deb http://archive.debian.org/debian-security bullseye-security main' \
+    > /etc/apt/sources.list && \
+    echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99archive; \
+    fi
+
 # Installl essential build tools
 RUN apt-get update && \
     apt-get install -y \

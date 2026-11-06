@@ -1485,6 +1485,7 @@ int32_t moonshine_create_tts_synthesizer_from_memory(
           (key.size() >= 7 && key.compare(0, 7, "kokoro/") == 0) ||
           (key.size() >= 6 && key.compare(0, 6, "piper/") == 0) ||
           (key.size() >= 9 && key.compare(0, 9, "zipvoice/") == 0) ||
+          (key.size() >= 7 && key.compare(0, 7, "phonon/") == 0) ||
           (key.size() >= 10 && key.compare(0, 10, "clone_asr/") == 0);
       FileInformationMap &dest =
           is_tts_only ? tts_options.files : tts_options.g2p_options.files;

@@ -131,6 +131,8 @@ tts.wait()
 
 `cloning()` tells `load()` to fetch ZipVoice and its clone-ASR assets up front, so `clone_from()` only swaps the reference clip. Call `cloning()` before `load()` — without it, `clone_from()` / `start_cloning()` raise a clear error. Catalog voices and cloning are mutually exclusive: `voice()` clears cloning, and `cloning()` clears the catalog voice.
 
+On-device cloning is ZipVoice only. Phonon voices can also be cloned or designed, but through Gradium's hosted service rather than on the device; see [Phonon](#phonon) below.
+
 To clone from someone speaking into the microphone rather than from a file, `start_cloning()` hands back a `VoiceClone` that listens until it has heard enough usable speech:
 
 ```python
@@ -169,6 +171,21 @@ These voices were created using the zero-shot voice cloning capabilities of [Zip
 | `zipvoice_irish_female` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_irish_female.wav) | `zipvoice_irish_male` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_irish_male.wav) | `zipvoice_new_zealand_female` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_new_zealand_female.wav) |
 | `zipvoice_northern_irish_female` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_northern_irish_female.wav) | `zipvoice_south_african_female` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_south_african_female.wav) | `zipvoice_south_african_male` [▶](https://cdn.jsdelivr.net/gh/moonshine-ai/moonshine@main/docs/audio/zipvoice_south_african_male.wav) |
 
+### Phonon
+
+[Phonon](https://gradium.ai/phonon) is a family of small streaming text-to-speech models from [Gradium](https://gradium.ai), built on Kyutai's [Pocket TTS](https://github.com/kyutai-labs/pocket-tts) and Mimi codec. Moonshine ships the 31-million-parameter English model, [phonon-31m-en](https://huggingface.co/gradium/phonon-31m-en), ported to C++ on ONNX Runtime from Gradium's [`xn-ptts`](https://github.com/gradium-ai/xn-ptts) runtime. The weights, its [Mimi decoder](https://huggingface.co/gradium/phonon-mimi) and the voice catalog are all released under Apache 2.0, so they are usable in commercial applications on the same terms as the rest of Moonshine's voices. (Gradium's larger 40M models are CC BY-NC and are not included.)
+
+It is small and fast, generates a frame at a time so streaming starts after only a few hundred milliseconds of audio, and each voice is a 256 KB file of speaker latents rather than a model. Phonon reads text directly rather than phonemes, so it does not use Moonshine's G2P, and sampling is stochastic by default (`phonon_temperature` 0.3; set it to `0` for a deterministic render). Speed is a conditioning signal rather than a time-stretch, so the effect is approximate and saturates past about 0.7x–1.4x.
+
+The 37 catalog voices are the English ones from [gradium/phonon-voices](https://huggingface.co/gradium/phonon-voices): American and British speakers plus a set of character voices.
+
+| American | British | Characters |
+| --- | --- | --- |
+| `phonon_delia`, `phonon_everly`, `phonon_hadley`, `phonon_harper`, `phonon_juniper`, `phonon_zoey` | `phonon_bryony`, `phonon_elodie-rose`, `phonon_freya`, `phonon_imogen`, `phonon_lottie`, `phonon_maeve`, `phonon_pippa` | `phonon_azgorath`, `phonon_captain_silas_blackwater`, `phonon_fairy_godmother`, `phonon_fennick_the_young_elf`, `phonon_grub_the_ogre`, `phonon_master_aldric` |
+| `phonon_easton`, `phonon_micah`, `phonon_miles`, `phonon_preston`, `phonon_russell`, `phonon_trevor` | `phonon_alfie`, `phonon_edwin`, `phonon_hugh`, `phonon_spencer`, `phonon_teddy`, `phonon_toby` | `phonon_morwenna_of_the_deep`, `phonon_old_mortlake`, `phonon_sir_bramwell`, `phonon_the_snow_queen`, `phonon_the_thing_under_the_stairs`, `phonon_vyrmathrax_the_ancient` |
+
+**Custom and cloned Phonon voices.** The encoder that turns a recording into Phonon speaker latents has not been released, so Moonshine cannot clone into a Phonon voice on the device; `clone_from()` and `cloning()` use ZipVoice. Gradium offers cloning (from about ten seconds of clear speech) and voice design from a text description as a hosted, account-based service in [Gradium Studio](https://studio.gradium.ai/), with an API and [download scripts](https://github.com/gradium-ai/xn-ptts#voices) that produce a `.safetensors` voice file. Such a file loads here unchanged: pass the bare voice name `phonon` and the file as the `phonon_voice_file` option. Voices made that way are governed by Gradium's terms rather than the catalog's Apache 2.0 license, and as with any cloning, use a voice only with its speaker's consent.
+
 ### Kokoro
 
 These voices come from the excellent [Kokoro](https://github.com/hexgrad/kokoro) project, an 82-million-parameter open-weight TTS model that delivers quality comparable to much larger models.
@@ -193,7 +210,7 @@ The [Piper](https://github.com/OHF-Voice/piper1-gpl) project provides over a hun
 
 ## Converting Graphemes to Phonemes
 
-As you may notice from the voice names, Moonshine Voice uses models from the fantastic [Kokoro](https://github.com/hexgrad/kokoro) and [PiperTTS](https://huggingface.co/rhasspy/piper-voices) projects. You can find full details on all the model and data sources we use for text to speech at [core/moonshine-tts/data/README.md](https://github.com/moonshine-ai/moonshine/blob/main/core/moonshine-tts/data/README.md). 
+As you may notice from the voice names, Moonshine Voice uses models from the fantastic [Kokoro](https://github.com/hexgrad/kokoro) and [PiperTTS](https://huggingface.co/rhasspy/piper-voices) projects (Phonon reads text directly, so the rest of this section does not apply to it). You can find full details on all the model and data sources we use for text to speech at [core/moonshine-tts/data/README.md](https://github.com/moonshine-ai/moonshine/blob/main/core/moonshine-tts/data/README.md). 
 
 Given that there are other great TTS projects out there, why does the world need yet another implementation? Moonshine tries to run on as many platforms as possible and supports commercial applications, and both Kokoro and Piper use [espeak-ng](https://github.com/espeak-ng/espeak-ng/) to convert text strings into phonemes, representations of the noises associated with the sentence, in the International Pronunciation Alphabet. Espeak-ng is licensed under the GPL, and while I am a fan of free software, the terms do make it hard to incorporate into applications that don't also release their source code under a similar license.
 

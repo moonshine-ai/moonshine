@@ -5,6 +5,7 @@ from moonshine_voice.download import (
     get_spelling_model_path,
 )
 from moonshine_voice.errors import MoonshineError
+from moonshine_voice._sounddevice import import_sounddevice
 from moonshine_voice.transcriber import (
     LineCompleted,
     LineTextChanged,
@@ -17,7 +18,6 @@ from moonshine_voice.transcriber import (
 
 import numpy as np
 import queue
-import sounddevice as sd
 import sys
 import threading
 import time
@@ -36,6 +36,17 @@ chainable setters and call load():
 The old model_path argument is now .models_from(directory), and every other
 argument has a setter of the same name (.model_arch(), .update_interval(),
 .device(), .options(), and so on)."""
+
+
+def _sounddevice():
+    """The sounddevice module, imported on first use.
+
+    Importing it initializes PortAudio, so it is deferred until a stream is
+    about to be opened. Constructing or loading a MicTranscriber on a machine
+    with no working audio subsystem then succeeds, and ``start()`` raises a
+    MoonshineError that says what is wrong.
+    """
+    return import_sounddevice("MicTranscriber.start()")
 
 
 def _is_true(value: Any) -> bool:
@@ -310,6 +321,7 @@ class MicTranscriber:
         Used as a fallback when the requested rate isn't natively supported by
         the capture device (common on USB mics that only do 44100/48000 Hz).
         """
+        sd = _sounddevice()
         try:
             info = sd.query_devices(self._device, "input")
         except (sd.PortAudioError, OSError, ValueError) as e:
@@ -322,8 +334,8 @@ class MicTranscriber:
             rate = None
         return rate if rate and rate > 0 else None
 
-    def _open_input_stream(self, samplerate: int, callback) -> sd.InputStream:
-        stream = sd.InputStream(
+    def _open_input_stream(self, samplerate: int, callback) -> Any:
+        stream = _sounddevice().InputStream(
             samplerate=samplerate,
             blocksize=self._blocksize,
             device=self._device,
@@ -354,6 +366,7 @@ class MicTranscriber:
                 # time-critical PortAudio thread.
                 self._audio_queue.put((audio_data, self._samplerate))
 
+        sd = _sounddevice()
         try:
             self._sd_stream = self._open_input_stream(self._samplerate, audio_callback)
         except sd.PortAudioError as e:

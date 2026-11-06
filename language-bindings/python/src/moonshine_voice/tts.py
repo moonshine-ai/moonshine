@@ -31,6 +31,7 @@ from moonshine_voice.download import (
     validate_tts_voice_known,
 )
 from moonshine_voice.errors import MoonshineAudioOutputError, MoonshineError
+from moonshine_voice._sounddevice import import_sounddevice
 from moonshine_voice.moonshine_api import (
     MOONSHINE_HEADER_VERSION,
     MOONSHINE_TTS_CANCELLED,
@@ -295,16 +296,14 @@ def _load_beep_samples(np: Any, kind: str) -> Tuple[Any, int]:
 
 
 def _import_say_audio_deps():
-    """Import numpy and sounddevice for `TextToSpeech.say`; raise MoonshineError if missing."""
+    """Import numpy and sounddevice for `TextToSpeech.say`; raise MoonshineError if unusable."""
     try:
         import numpy as np
-        import sounddevice as sd
     except ImportError as e:
         raise MoonshineError(
-            "TextToSpeech.say() requires numpy and sounddevice "
-            "(e.g. `pip install numpy sounddevice`)."
+            "TextToSpeech.say() requires numpy (e.g. `pip install numpy`)."
         ) from e
-    return np, sd
+    return np, import_sounddevice("TextToSpeech.say()")
 
 
 def _resolve_default_output_index(sd: Any) -> Optional[int]:
@@ -637,10 +636,17 @@ class TextToSpeech:
     `list_tts_languages` and `list_tts_voices` (``present`` /
     ``downloadable``), or `get_tts_voice_catalog`, to discover the options.
 
-    Prefix a voice id with ``kokoro_``, ``piper_``, or ``zipvoice_`` to pin the
-    vocoder (e.g. ``kokoro_af_heart``, ``zipvoice_american_female``). ZipVoice
-    is a zero-shot voice cloner, so besides its built-in reference voices you
-    can clone one of your own with :meth:`clone_from`.
+    Prefix a voice id with ``kokoro_``, ``piper_``, ``zipvoice_``, or
+    ``phonon_`` to pin the vocoder (e.g. ``kokoro_af_heart``,
+    ``zipvoice_american_female``, ``phonon_zoey``). ZipVoice is a zero-shot
+    voice cloner, so besides its built-in reference voices you can clone one of
+    your own with :meth:`clone_from`. Phonon is Gradium's small autoregressive
+    English model (Apache 2.0, with an Apache 2.0 voice catalog) that streams a
+    frame at a time; it samples, so pass ``phonon_temperature=0`` through
+    :meth:`options` for a repeatable render. Phonon voices beyond the catalog
+    come from Gradium's hosted Studio (voice design or cloning, downloaded as
+    a ``.safetensors`` file and passed as ``phonon_voice_file``); on-device
+    cloning with :meth:`clone_from` is ZipVoice.
     """
 
     # Voice id the native layer uses for a caller-supplied reference clip.
@@ -1987,7 +1993,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--voice",
         default=None,
-        help="Voice id with kokoro_ or piper_ prefix (e.g. kokoro_af_heart)",
+        help=(
+            "Voice id with kokoro_, piper_, zipvoice_ or phonon_ prefix "
+            "(e.g. kokoro_af_heart, phonon_zoey)"
+        ),
     )
     parser.add_argument(
         "--clone",

@@ -10,6 +10,7 @@
 #include "moonshine-g2p.h"
 #include "ort-session-options.h"
 #include "ort-utils-cxx.h"
+#include "phonon-tts.h"
 #include "piper-tts.h"
 #include "sentence-splitter.h"
 #include "split-weights.h"
@@ -964,6 +965,84 @@ list_zipvoice_voices_with_availability(const MoonshineTTSOptions& opt) {
   return out;
 }
 
+PhononTTSOptions make_phonon_options(std::string_view language,
+                                     const MoonshineTTSOptions& opt) {
+  PhononTTSOptions p;
+  p.lang = std::string(language);
+  p.speed = opt.speed;
+  if (opt.phonon_duration_delta.has_value()) {
+    p.duration_delta = *opt.phonon_duration_delta;
+  }
+  p.g2p_options = opt.g2p_options;
+  p.ort_provider_names = opt.ort_provider_names;
+  p.coreml_cache_dir = opt.coreml_cache_dir;
+  p.normalize_audio = opt.normalize_audio;
+  p.output_volume = opt.output_volume;
+  p.temperature = opt.phonon_temperature;
+  p.seed = opt.phonon_seed;
+  p.normalize_text = opt.phonon_normalize_text;
+  p.tts_asset_files = opt.files;
+  p.voice_id = opt.voice;  // engine prefix already stripped
+  return p;
+}
+
+/// The model files every Phonon voice needs. With a voice id, its latent file
+/// too, named from the id rather than the catalog so a download prefetch can
+/// run before the catalog is on disk (the exporter writes
+/// ``voices/<id>.safetensors``).
+std::vector<std::string> phonon_vocoder_dependency_keys(
+    std::string_view voice_id = {}) {
+  std::vector<std::string> keys = {std::string(kTtsPhononEmbedPromptKey),
+                                   std::string(kTtsPhononEmbedLatentKey),
+                                   std::string(kTtsPhononBackboneKey),
+                                   std::string(kTtsPhononFlowHeadKey),
+                                   std::string(kTtsPhononMimiTransformerKey),
+                                   std::string(kTtsPhononMimiSeanetKey),
+                                   std::string(kTtsPhononModelJsonKey),
+                                   std::string(kTtsPhononTokenizerKey),
+                                   std::string(kTtsPhononVoicesJsonKey)};
+  const std::string vid = trim_ascii_ws_copy(voice_id);
+  if (!vid.empty()) {
+    keys.push_back(std::string(kTtsPhononVoicesDirKey) + "/" + vid +
+                   ".safetensors");
+  }
+  return keys;
+}
+
+bool phonon_assets_available(const MoonshineTTSOptions& opt) {
+  for (const std::string& key : phonon_vocoder_dependency_keys()) {
+    if (!zipvoice_asset_present(opt, key)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/// Catalog voices from ``phonon/voices.json``; each is available when the
+/// model graphs and its own latent file are.
+std::vector<std::pair<std::string, bool>> list_phonon_voices_with_availability(
+    const MoonshineTTSOptions& opt) {
+  const bool models = phonon_assets_available(opt);
+  std::vector<std::pair<std::string, bool>> out;
+  const std::filesystem::path catalog =
+      opt.files.entries.count(std::string(kTtsPhononVoicesJsonKey)) != 0 &&
+              !opt.files.entries.at(std::string(kTtsPhononVoicesJsonKey))
+                   .path.empty()
+          ? resolve_path_under_root(
+                opt.g2p_options.g2p_root,
+                opt.files.entries.at(std::string(kTtsPhononVoicesJsonKey)).path)
+          : resolve_path_under_root(
+                opt.g2p_options.g2p_root,
+                std::filesystem::path(kTtsPhononVoicesJsonKey));
+  for (const PhononVoiceInfo& v :
+       PhononTTS::list_voices(opt.g2p_options.g2p_root, opt.files)) {
+    const bool have_voice = std::filesystem::is_regular_file(
+        catalog.parent_path() / std::filesystem::path(v.file));
+    out.emplace_back(v.id, models && have_voice);
+  }
+  return out;
+}
+
 /// Audio samples one Kokoro prosody frame is worth: 24 kHz at 40 frames per
 /// second, fixed by the decoder's upsampling ratio.
 inline constexpr int kKokoroSamplesPerFrame = 600;
@@ -1714,6 +1793,7 @@ struct MoonshineTTS::Impl {
   std::unique_ptr<KokoroTtsEngine> kokoro_;
   std::unique_ptr<PiperTTS> piper_;
   std::unique_ptr<ZipVoiceTTS> zipvoice_;
+  std::unique_ptr<PhononTTS> phonon_;
   std::mutex synth_mu_;
   bool log_profiling_ = false;
   std::string language_{};
@@ -1741,7 +1821,8 @@ struct MoonshineTTS::Impl {
       const bool is_tts_only =
           (map_key.size() >= 7 && map_key.compare(0, 7, "kokoro/") == 0) ||
           (map_key.size() >= 6 && map_key.compare(0, 6, "piper/") == 0) ||
-          (map_key.size() >= 9 && map_key.compare(0, 9, "zipvoice/") == 0);
+          (map_key.size() >= 9 && map_key.compare(0, 9, "zipvoice/") == 0) ||
+          (map_key.size() >= 7 && map_key.compare(0, 7, "phonon/") == 0);
       if (is_tts_only) {
         opt.files.entries[map_key] = fi;
       } else {
@@ -1761,29 +1842,36 @@ struct MoonshineTTS::Impl {
       eng = "auto";
     }
     if (eng != "kokoro" && eng != "piper" && eng != "zipvoice" &&
-        eng != "auto") {
+        eng != "phonon" && eng != "auto") {
       throw std::runtime_error(
-          "MoonshineTTS: vocoder_engine must be kokoro, piper, zipvoice, or "
-          "auto (got \"" +
+          "MoonshineTTS: vocoder_engine must be kokoro, piper, zipvoice, "
+          "phonon, or auto (got \"" +
           eng + "\")");
     }
     const bool kokoro_ok =
         kokoro_tts_lang_supported_inner(language, opt.g2p_options);
     const bool use_zipvoice = (eng == "zipvoice");
-    const bool use_kokoro =
-        !use_zipvoice && ((eng == "kokoro") || (eng == "auto" && kokoro_ok));
+    const bool use_phonon = (eng == "phonon");
+    const bool use_kokoro = !use_zipvoice && !use_phonon &&
+                            ((eng == "kokoro") || (eng == "auto" && kokoro_ok));
 
     LOGF_IF(log_profiling_,
             "MoonshineTTS: language='%.*s', vocoder_engine='%s' (resolved=%s), "
             "voice='%s'",
             (int)std::string_view(language).size(),
             std::string_view(language).data(), opt_in.vocoder_engine.c_str(),
-            use_zipvoice ? "zipvoice" : (use_kokoro ? "kokoro" : "piper"),
+            use_zipvoice
+                ? "zipvoice"
+                : (use_phonon ? "phonon" : (use_kokoro ? "kokoro" : "piper")),
             opt.voice.c_str());
 
     if (use_zipvoice) {
       zipvoice_ =
           std::make_unique<ZipVoiceTTS>(make_zipvoice_options(language, opt));
+    } else if (use_phonon) {
+      TIMER_START_IF(log_profiling_, phonon_init);
+      phonon_ = std::make_unique<PhononTTS>(make_phonon_options(language, opt));
+      TIMER_END_IF(log_profiling_, phonon_init);
     } else if (use_kokoro) {
       kokoro_ = std::make_unique<KokoroTtsEngine>(language, std::move(opt));
     } else {
@@ -1859,6 +1947,9 @@ struct MoonshineTTS::Impl {
       return std::make_unique<ExactSliceChunkSource>(
           std::move(analyze), std::move(decode), std::move(fallback), exact,
           piper_->frames_per_second(), MoonshineTTS::kSampleRateHz);
+    }
+    if (phonon_) {
+      return std::make_unique<PhononChunkSource>(*phonon_, policy);
     }
     return std::make_unique<WholeUtteranceChunkSource>(
         [this](std::string_view text) { return synthesize_unlocked(text); },
@@ -1937,6 +2028,9 @@ struct MoonshineTTS::Impl {
     if (zipvoice_) {
       return zipvoice_->synthesize(text);
     }
+    if (phonon_) {
+      return phonon_->synthesize(text);
+    }
     if (kokoro_) {
       return kokoro_->synthesize(text);
     }
@@ -1954,6 +2048,10 @@ struct MoonshineTTS::Impl {
       std::string_view phonemes) {
     if (zipvoice_) {
       return zipvoice_->synthesize_from_ipa(phonemes);
+    }
+    if (phonon_) {
+      throw std::runtime_error(
+          "MoonshineTTS: the Phonon engine reads text, not phonemes");
     }
     if (kokoro_) {
       return kokoro_->synthesize_from_ipa(phonemes);
@@ -2002,6 +2100,31 @@ struct MoonshineTTS::Impl {
   std::vector<float> run_with_overrides(const SynthesisOverrides& ov,
                                         Produce&& produce) {
     std::lock_guard<std::mutex> lock(synth_mu_);
+    if (phonon_) {
+      const double prev_speed = phonon_->speed();
+      const float prev_delta = phonon_->duration_delta();
+      const bool prev_normalize = phonon_->normalize_audio();
+      const float prev_volume = phonon_->output_volume();
+      const auto restore = [&] {
+        phonon_->set_speed(prev_speed);
+        phonon_->set_duration_delta(prev_delta);
+        phonon_->set_normalize_audio(prev_normalize);
+        phonon_->set_output_volume(prev_volume);
+      };
+      if (ov.speed.has_value()) {
+        phonon_->set_speed(*ov.speed);
+      }
+      phonon_->set_normalize_audio(ov.normalize_audio.value_or(prev_normalize));
+      phonon_->set_output_volume(ov.output_volume.value_or(prev_volume));
+      try {
+        std::vector<float> wave = produce();
+        restore();
+        return wave;
+      } catch (...) {
+        restore();
+        throw;
+      }
+    }
     if (zipvoice_) {
       const double prev_speed = zipvoice_->speed();
       const bool prev_normalize = zipvoice_->normalize_audio();
@@ -2197,11 +2320,15 @@ std::vector<std::string> moonshine_catalog_tts_vocoder_only_dependency_keys(
   if (eng.empty()) {
     eng = "auto";
   }
-  if (eng != "kokoro" && eng != "piper" && eng != "zipvoice" && eng != "auto") {
+  if (eng != "kokoro" && eng != "piper" && eng != "zipvoice" &&
+      eng != "phonon" && eng != "auto") {
     return {};
   }
   if (eng == "zipvoice") {
     return zipvoice_vocoder_dependency_keys();
+  }
+  if (eng == "phonon") {
+    return phonon_vocoder_dependency_keys(opt.voice);
   }
   const std::string lk = normalize_lang_key(lang_cli);
   const bool kokoro_ok = kokoro_tts_lang_supported_inner(lk, opt.g2p_options);
@@ -2248,7 +2375,8 @@ moonshine_list_tts_voices_with_availability(std::string_view language_cli,
   if (eng.empty()) {
     eng = "auto";
   }
-  if (eng != "kokoro" && eng != "piper" && eng != "zipvoice" && eng != "auto") {
+  if (eng != "kokoro" && eng != "piper" && eng != "zipvoice" &&
+      eng != "phonon" && eng != "auto") {
     return {};
   }
   if (eng == "zipvoice") {
@@ -2258,6 +2386,14 @@ moonshine_list_tts_voices_with_availability(std::string_view language_cli,
           std::string("zipvoice_") + pr.first, pr.second});
     }
     return zv;
+  }
+  if (eng == "phonon") {
+    std::vector<MoonshineTtsVoiceAvailability> pv;
+    for (const auto& pr : list_phonon_voices_with_availability(opt)) {
+      pv.push_back(MoonshineTtsVoiceAvailability{
+          std::string("phonon_") + pr.first, pr.second});
+    }
+    return pv;
   }
   const std::string lk = normalize_lang_key(language_cli);
   const bool kokoro_ok = kokoro_tts_lang_supported_inner(lk, opt.g2p_options);
@@ -2289,6 +2425,11 @@ moonshine_list_tts_voices_with_availability(std::string_view language_cli,
       for (const auto& pr : list_zipvoice_voices_with_availability(opt_z)) {
         out.push_back(MoonshineTtsVoiceAvailability{
             std::string("zipvoice_") + pr.first, pr.second});
+      }
+      // Phonon's catalog voices are English too.
+      for (const auto& pr : list_phonon_voices_with_availability(opt_z)) {
+        out.push_back(MoonshineTtsVoiceAvailability{
+            std::string("phonon_") + pr.first, pr.second});
       }
     }
     std::sort(
