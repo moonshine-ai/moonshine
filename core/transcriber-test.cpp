@@ -1585,3 +1585,149 @@ TEST_CASE("streaming-short-chunk-ingestion") {
                                    MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING);
   }
 }
+
+namespace {
+
+// Encodes the first ``seconds`` of a 16 kHz test clip with a streaming model,
+// so decoder tests can work on real memory rather than a stub.
+std::unique_ptr<MoonshineStreamingState> encode_test_clip(
+    MoonshineStreamingModel &model, const char *wav_path, float seconds) {
+  float *wav_data = nullptr;
+  size_t wav_data_size = 0;
+  int32_t wav_sample_rate = 0;
+  REQUIRE(load_wav_data(wav_path, &wav_data, &wav_data_size, &wav_sample_rate));
+  REQUIRE(wav_sample_rate == 16000);
+  std::unique_ptr<MoonshineStreamingState> state(model.create_state());
+  REQUIRE(state != nullptr);
+  // Whole 80 ms chunks, as the transcriber feeds them.
+  const size_t chunk = 1280;
+  const size_t length =
+      std::min(wav_data_size, static_cast<size_t>(seconds * 16000)) / chunk *
+      chunk;
+  for (size_t offset = 0; offset < length; offset += chunk) {
+    REQUIRE(model.process_audio_chunk(state.get(), wav_data + offset, chunk,
+                                      nullptr) == 0);
+  }
+  free(wav_data);
+  int new_frames = 0;
+  REQUIRE(model.encode(state.get(), true, &new_frames) == 0);
+  REQUIRE(state->memory_len > 0);
+  return state;
+}
+
+struct DecodeResult {
+  std::vector<int> tokens;
+  uint64_t decoder_runs = 0;
+};
+
+DecodeResult decode_with_draft(MoonshineStreamingModel &model,
+                               MoonshineStreamingState *state,
+                               const std::vector<int> &draft,
+                               ContextBiaser *biaser, bool resync_draft) {
+  model.decoder_reset(state);
+  const uint64_t runs_before = model.decoder_run_count;
+  int *tokens = nullptr;
+  int tokens_len = 0;
+  REQUIRE(model.decode_full(state, draft.empty() ? nullptr : draft.data(),
+                            static_cast<int>(draft.size()), &tokens,
+                            &tokens_len, biaser, resync_draft) == 0);
+  std::unique_ptr<int, decltype(&std::free)> owned_tokens(tokens, &std::free);
+  DecodeResult result;
+  result.tokens.assign(tokens, tokens + tokens_len);
+  result.decoder_runs = model.decoder_run_count - runs_before;
+  return result;
+}
+
+// The single-token edits a streaming update makes to the previous hypothesis,
+// at every other position: the token replaced, preceded by an extra token, or
+// dropped. Plus the hypothesis cut short (the usual case, more audio arrived)
+// and run on with tokens that are no longer heard. Decoding with any of these
+// drafts must give exactly the tokens that decoding with no draft gives.
+void check_resync_matches_plain_decoding(MoonshineStreamingModel &model,
+                                         MoonshineStreamingState *state,
+                                         ContextBiaser *biaser) {
+  const DecodeResult plain = decode_with_draft(model, state, {}, biaser, false);
+  const std::vector<int> &expected = plain.tokens;
+  const int n = static_cast<int>(expected.size());
+  REQUIRE(n >= 12);
+
+  std::vector<std::vector<int>> drafts;
+  for (int i = 0; i < n; i += 2) {
+    const int other = expected.at(static_cast<size_t>((i + n / 2) % n));
+    if (other != expected.at(static_cast<size_t>(i))) {
+      std::vector<int> replaced = expected;
+      replaced.at(static_cast<size_t>(i)) = other;
+      drafts.push_back(replaced);
+    }
+    std::vector<int> inserted = expected;
+    inserted.insert(inserted.begin() + i, other);
+    drafts.push_back(inserted);
+    std::vector<int> dropped = expected;
+    dropped.erase(dropped.begin() + i);
+    drafts.push_back(dropped);
+  }
+  std::vector<int> two_edits = expected;
+  two_edits.at(2) = expected.at(static_cast<size_t>(n - 1));
+  two_edits.erase(two_edits.begin() + n / 2);
+  drafts.push_back(two_edits);
+  drafts.emplace_back(expected.begin(), expected.begin() + n / 2);
+  std::vector<int> run_on = expected;
+  run_on.insert(run_on.end(), expected.begin(), expected.begin() + 5);
+  drafts.push_back(run_on);
+
+  uint64_t resync_runs = 0;
+  uint64_t one_token_runs = 0;
+  for (size_t d = 0; d < drafts.size(); ++d) {
+    CAPTURE(d);
+    const DecodeResult one_token =
+        decode_with_draft(model, state, drafts[d], biaser, false);
+    const DecodeResult resync =
+        decode_with_draft(model, state, drafts[d], biaser, true);
+    CHECK(resync.tokens == expected);
+    // Every batched pass still yields at least one token, so a resync decode
+    // can never take more decoder runs than decoding the rest of the line one
+    // token at a time.
+    CHECK(resync.decoder_runs <= one_token.decoder_runs);
+    resync_runs += resync.decoder_runs;
+    one_token_runs += one_token.decoder_runs;
+  }
+  // A one-token edit costs the verification pass, the re-run of the accepted
+  // prefix and a pass or two more, not a pass per token left in the line.
+  MESSAGE("decoder runs over ", drafts.size(), " edited drafts: one token at ",
+          "a time ", one_token_runs, ", resync ", resync_runs);
+  CHECK(resync_runs * 2 < one_token_runs);
+}
+
+}  // namespace
+
+TEST_CASE("streaming-decode-full-resync") {
+  const std::string model_dir = "tiny-streaming-en";
+  REQUIRE(std::filesystem::exists(model_dir));
+  MoonshineStreamingModel model;
+  const std::string tokenizer_path = model_dir + "/tokenizer.bin";
+  REQUIRE(model.load(model_dir.c_str(), tokenizer_path.c_str(),
+                     MOONSHINE_MODEL_ARCH_TINY_STREAMING) == 0);
+  std::unique_ptr<MoonshineStreamingState> state =
+      encode_test_clip(model, "beckett.wav", 10.0f);
+
+  SUBCASE("edited-drafts") {
+    check_resync_matches_plain_decoding(model, state.get(), nullptr);
+  }
+  SUBCASE("edited-drafts-with-keyterms") {
+    // The biaser walks the emitted tokens, so it has to follow the path the
+    // resync passes take. A boost high enough to change the transcript makes
+    // a walk that drifts from that path show up as different tokens.
+    ContextBiaser biaser;
+    for (const std::string &variant :
+         ContextBiaser::variants_for_term("Kubernetes")) {
+      biaser.add_token_sequence(model.text_to_tokens(variant));
+    }
+    biaser.set_boost(30.0f);
+    const DecodeResult unbiased =
+        decode_with_draft(model, state.get(), {}, nullptr, false);
+    const DecodeResult biased =
+        decode_with_draft(model, state.get(), {}, &biaser, false);
+    REQUIRE(biased.tokens != unbiased.tokens);
+    check_resync_matches_plain_decoding(model, state.get(), &biaser);
+  }
+}

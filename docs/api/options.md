@@ -37,6 +37,7 @@ Passed to `Transcriber(..., options=…)`, MicTranscriber `.options()`, and `moo
 | `skip_transcription` | false | When true, run VAD/segmentation only (no STT). Use each line's audio buffer for further processing. |
 | `max_tokens_per_second` | `6.5` | Truncate decoder loops when token rate looks pathological. Use about `13.0` for many non-Latin languages. |
 | `use_speculative_decoding` | true | Streaming: verify the previous hypothesis and continue from the first mismatch. False falls back to greedy redecode from BOS. |
+| `speculative_resync` | false | Streaming: when the previous hypothesis is rejected partway, find where the rest of it lines up again and verify it in batched passes instead of decoding one token at a time. Fewer decoder runs; text can differ on rare near-ties. |
 | `keyterms` | (none) | Comma-separated bias terms (streaming architectures only). See [Domain Customization](../models/domain-customization.md). Can also be set at runtime with `set_keyterms` / `moonshine_transcriber_set_keyterms()`. |
 | `keyterm_boost` | `2.0` | Strength of key-term biasing. Raise towards 4.0 to favor the list at the cost of the words around it, lower towards 1.0 for the reverse. Above 4.0 it stops working. |
 | `context` | (none) | A passage of free-form text to pick key terms out of, for when you have context but not a list (streaming architectures only). Added to any `keyterms`. Can also be set at runtime with `set_context` / `moonshine_transcriber_set_context()`. |

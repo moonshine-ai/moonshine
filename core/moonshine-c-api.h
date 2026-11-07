@@ -413,6 +413,9 @@ MOONSHINE_EXPORT const char *moonshine_transcript_to_string(
    Pass ``use_speculative_decoding`` (bool, default true) to control
    speculative re-decode of the previous hypothesis on streaming updates
    (set false to fall back to greedy redecode from BOS).
+   Pass ``speculative_resync`` (bool, default false) to keep using the rest
+   of a rejected draft: after the first mismatch, find where the draft lines
+   up again and verify it in batched passes instead of one token at a time.
    Pass ``decode_incomplete_lines`` (bool, default true) to run the
    decoder on in-progress lines so the transcript can update while someone
    is still talking. Set false to encode (and diarize) as audio arrives

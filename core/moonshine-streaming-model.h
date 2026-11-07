@@ -125,6 +125,10 @@ struct MoonshineStreamingModel {
   int cross_attn_enc_len = 0;
   int cross_attn_steps = 0;  // total layer*step entries collected
 
+  // Number of decoder runs so far, each covering one or more token positions.
+  // Read by tests and benchmarks to check how much work a decode took.
+  uint64_t decoder_run_count = 0;
+
   MoonshineStreamingModel(
       bool log_ort_run = false,
       const std::vector<std::string> &ort_provider_names = {},
@@ -193,10 +197,16 @@ struct MoonshineStreamingModel {
    * reject the biased draft from the previous pass and then re-decode without
    * the bias, losing the biasing entirely on streaming updates. The biaser's
    * walk state is reset and advanced by this call.
+   * When ``resync_draft`` is set and the draft is rejected partway, decoding
+   * looks for where the rest of the draft lines up again and verifies it in
+   * batched passes instead of decoding the rest of the line one token at a
+   * time. Each token is still the one greedy decoding picks given the tokens
+   * before it, but it may come from a batched row instead of a one-token
+   * step, and the two can round differently on a near-tie.
    * Returns 0 on success. */
   int decode_full(MoonshineStreamingState *state, const int *speculative_tokens,
                   int speculative_len, int **tokens_out, int *tokens_len_out,
-                  ContextBiaser *biaser = nullptr);
+                  ContextBiaser *biaser = nullptr, bool resync_draft = false);
 
   void decoder_reset(MoonshineStreamingState *state);
 

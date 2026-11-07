@@ -147,6 +147,8 @@ void parse_transcriber_options(const OptionVector &options,
       out_options.max_tokens_per_second = float_from_string(option_value);
     } else if (option_name == "use_speculative_decoding") {
       out_options.use_speculative_decoding = bool_from_string(option_value);
+    } else if (option_name == "speculative_resync") {
+      out_options.speculative_resync = bool_from_string(option_value);
     } else if (option_name == "decode_incomplete_lines") {
       out_options.decode_incomplete_lines = bool_from_string(option_value);
     } else if (option_name == "keyterms") {
