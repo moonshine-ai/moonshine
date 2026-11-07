@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Synthesizing text whose script the voice's language cannot pronounce, such as Latin text with a Hindi voice, raises an error instead of returning silence (GitHub issue #241).
 - Phonon voices work in the browser. The WebAssembly ONNX Runtime predated Phonon and lacked its `Elu` kernel, and a catalog voice supplied as bytes was looked for on disk.
 - Phonon voices are listed by `voices()` before `phonon/voices.json` has been downloaded, and on the web, where the catalog never reaches a filesystem.
+- Word confidence is the decoder's lowest probability for the word's tokens, before key-term biasing and leaving out punctuation, on all models. It was always 1.0 (GitHub issue #230).
 
 ## [0.1.6]
 

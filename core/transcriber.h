@@ -263,6 +263,10 @@ class Transcriber {
   uint64_t current_streaming_segment_id = UINT64_MAX;
   size_t streaming_samples_processed = 0;
   std::vector<int> last_streaming_tokens;
+  // Parallel to last_streaming_tokens when word timestamps are on: the
+  // probability the decoder gave each token, which becomes the words'
+  // confidence. Empty otherwise.
+  std::vector<float> last_streaming_token_probabilities;
 
   TranscriberStreamMap streams;
   int32_t next_stream_id;

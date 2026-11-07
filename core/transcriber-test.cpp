@@ -1585,3 +1585,236 @@ TEST_CASE("streaming-short-chunk-ingestion") {
                                    MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING);
   }
 }
+
+namespace {
+
+struct WordConfidence {
+  std::string text;
+  float confidence;
+};
+
+// Streams up to ``max_seconds`` of ``wav_path`` through a transcriber half a
+// second at a time, so most updates land mid-utterance and the speculative
+// re-decode gets exercised, then returns the words of the finished transcript.
+std::vector<WordConfidence> stream_word_confidences(
+    const TranscriberOptions &options, const std::string &wav_path,
+    float max_seconds) {
+  REQUIRE(std::filesystem::exists(wav_path));
+  float *wav_data = nullptr;
+  size_t wav_data_size = 0;
+  int32_t sample_rate = 0;
+  REQUIRE(
+      load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size, &sample_rate));
+  std::unique_ptr<float, decltype(&std::free)> owned_wav(wav_data, &std::free);
+  const size_t sample_count =
+      std::min(wav_data_size, static_cast<size_t>(max_seconds * sample_rate));
+
+  Transcriber transcriber(options);
+  const int32_t stream_id = transcriber.create_stream();
+  REQUIRE(stream_id >= 0);
+  transcriber.start_stream(stream_id);
+  const size_t chunk = static_cast<size_t>(sample_rate / 2);
+  struct transcript_t *transcript = nullptr;
+  for (size_t offset = 0; offset < sample_count; offset += chunk) {
+    const size_t count = std::min(chunk, sample_count - offset);
+    transcriber.add_audio_to_stream(stream_id, wav_data + offset, count,
+                                    sample_rate);
+    transcriber.transcribe_stream(stream_id, 0, &transcript);
+  }
+  transcriber.stop_stream(stream_id);
+  transcriber.transcribe_stream(stream_id, 0, &transcript);
+  REQUIRE(transcript != nullptr);
+
+  std::vector<WordConfidence> words;
+  for (uint64_t i = 0; i < transcript->line_count; i++) {
+    const struct transcript_line_t &line = transcript->lines[i];
+    for (uint64_t w = 0; w < line.word_count; w++) {
+      words.push_back({line.words[w].text, line.words[w].confidence});
+    }
+  }
+  return words;
+}
+
+}  // namespace
+
+TEST_CASE("word-confidence") {
+  SUBCASE("choose-token-scores-before-biasing") {
+    const int vocab_size = 64;
+    std::vector<float> raw(vocab_size, 0.0f);
+    raw.at(5) = 3.0f;
+    raw.at(10) = 2.0f;
+
+    // No biaser: the argmax, scored by the plain softmax, and the row is left
+    // alone.
+    std::vector<float> logits = raw;
+    float probability = -1.0f;
+    CHECK(choose_token(logits.data(), vocab_size, nullptr, &probability) == 5);
+    CHECK(probability ==
+          doctest::Approx(token_probability(raw.data(), vocab_size, 5)));
+    CHECK(logits == raw);
+
+    // Ties go to the lowest ID, as the argmax loops this replaced did.
+    std::vector<float> flat(vocab_size, 1.0f);
+    CHECK(choose_token(flat.data(), vocab_size, nullptr, &probability) == 0);
+    CHECK(probability == doctest::Approx(1.0f / vocab_size));
+
+    // Token 10 starts a key term, and the bonus lifts it from 2 to 4, past
+    // token 5. The probability reported is the one the decoder gave token 10
+    // before the bonus, which is lower than token 5's.
+    ContextBiaser biaser;
+    biaser.set_boost(2.0f);
+    biaser.add_token_sequence({10, 11});
+    logits = raw;
+    CHECK(choose_token(logits.data(), vocab_size, &biaser, &probability) == 10);
+    CHECK(probability ==
+          doctest::Approx(token_probability(raw.data(), vocab_size, 10)));
+    CHECK(probability < token_probability(raw.data(), vocab_size, 5));
+    // The row still carries the bonus, as it did before.
+    CHECK(logits.at(10) == doctest::Approx(4.0f));
+    // Not asking for the probability does not change the choice.
+    logits = raw;
+    CHECK(choose_token(logits.data(), vocab_size, &biaser, nullptr) == 10);
+
+    // One level down the bonus is larger, and it comes off just the same.
+    biaser.advance(10);
+    std::vector<float> deeper_raw(vocab_size, 0.0f);
+    deeper_raw.at(11) = 1.0f;
+    deeper_raw.at(20) = 2.0f;
+    std::vector<float> deeper = deeper_raw;
+    CHECK(choose_token(deeper.data(), vocab_size, &biaser, &probability) == 11);
+    CHECK(probability == doctest::Approx(token_probability(deeper_raw.data(),
+                                                           vocab_size, 11)));
+  }
+
+  SUBCASE("decode-full-reports-a-probability-per-token") {
+    const std::string model_dir = "tiny-streaming-en";
+    REQUIRE(std::filesystem::exists(model_dir));
+    MoonshineStreamingModel model;
+    const std::string tokenizer_path = model_dir + "/tokenizer.bin";
+    REQUIRE(model.load(model_dir.c_str(), tokenizer_path.c_str(),
+                       MOONSHINE_MODEL_ARCH_TINY_STREAMING) == 0);
+    std::unique_ptr<MoonshineStreamingState> state(model.create_state());
+    REQUIRE(state != nullptr);
+
+    float *wav_data = nullptr;
+    size_t wav_data_size = 0;
+    int32_t sample_rate = 0;
+    REQUIRE(load_wav_data("two_cities_16k.wav", &wav_data, &wav_data_size,
+                          &sample_rate));
+    std::unique_ptr<float, decltype(&std::free)> owned_wav(wav_data,
+                                                           &std::free);
+    REQUIRE(sample_rate == 16000);
+    // Five seconds, in the whole 80 ms chunks the frontend graph needs.
+    const size_t chunk = 1280;
+    const size_t chunk_count = std::min(wav_data_size, size_t{80000}) / chunk;
+    for (size_t i = 0; i < chunk_count; i++) {
+      REQUIRE(model.process_audio_chunk(state.get(), wav_data + i * chunk,
+                                        chunk, nullptr) == 0);
+    }
+    int new_frames = 0;
+    REQUIRE(model.encode(state.get(), true, &new_frames) == 0);
+    REQUIRE(state->memory_len > 0);
+
+    const auto decode = [&](const std::vector<int> &draft,
+                            std::vector<float> *probabilities) {
+      model.decoder_reset(state.get());
+      int *out = nullptr;
+      int out_len = 0;
+      REQUIRE(model.decode_full(state.get(),
+                                draft.empty() ? nullptr : draft.data(),
+                                static_cast<int>(draft.size()), &out, &out_len,
+                                nullptr, probabilities) == 0);
+      std::unique_ptr<int, decltype(&std::free)> owned(out, &std::free);
+      return std::vector<int>(out, out + out_len);
+    };
+
+    std::vector<float> first_probabilities;
+    const std::vector<int> first = decode({}, &first_probabilities);
+    REQUIRE(first.size() > 4);
+    REQUIRE(first_probabilities.size() == first.size());
+    for (const float probability : first_probabilities) {
+      CHECK(probability > 0.0f);
+      CHECK(probability <= 1.0f);
+    }
+    // Asking for the probabilities does not change what is decoded.
+    CHECK(decode({}, nullptr) == first);
+
+    // Verifying a draft keeps the tokens it got right, and those keep (to
+    // rounding) the probabilities they were first decoded with. A batched and
+    // an incremental decode are not bit-identical, which can flip a close call,
+    // so only the prefix the two passes share is compared.
+    const auto shared_with_first = [&](const std::vector<int> &draft) {
+      std::vector<float> probabilities;
+      const std::vector<int> tokens = decode(draft, &probabilities);
+      REQUIRE(probabilities.size() == tokens.size());
+      size_t shared = 0;
+      while (shared < tokens.size() && shared < first.size() &&
+             tokens.at(shared) == first.at(shared)) {
+        CHECK(probabilities.at(shared) ==
+              doctest::Approx(first_probabilities.at(shared)).epsilon(0.02));
+        shared++;
+      }
+      return shared;
+    };
+    // The whole first pass as the draft: everything should verify.
+    WARN(shared_with_first(first) == first.size());
+    // A draft that goes wrong halfway is cut back at the mistake and decoded
+    // on from there. BOS is never a prediction, so it is always a mistake.
+    std::vector<int> wrong = first;
+    wrong.at(wrong.size() / 2) = model.config.bos_id;
+    WARN(shared_with_first(wrong) == first.size());
+  }
+
+  SUBCASE("streaming-words-carry-confidence") {
+    for (const bool speculative : {true, false}) {
+      CAPTURE(speculative);
+      TranscriberOptions options;
+      options.model_source = TranscriberOptions::ModelSource::FILES;
+      options.model_path = "tiny-streaming-en";
+      options.model_arch = MOONSHINE_MODEL_ARCH_TINY_STREAMING;
+      options.word_timestamps = true;
+      options.use_speculative_decoding = speculative;
+      const std::vector<WordConfidence> words =
+          stream_word_confidences(options, "beckett.wav", 10.0f);
+      REQUIRE_FALSE(words.empty());
+      float min_confidence = 1.0f;
+      for (const WordConfidence &word : words) {
+        CAPTURE(word.text);
+        CHECK(word.confidence > 0.0f);
+        CHECK(word.confidence <= 1.0f);
+        min_confidence = std::min(min_confidence, word.confidence);
+      }
+      CHECK(min_confidence < 0.99f);
+    }
+  }
+
+  SUBCASE("biased-words-keep-the-decoder's-doubt") {
+    // At this boost the key term is forced into a clip that never says it
+    // (see keyterm-biasing above). The words it lands in are ones the model
+    // itself did not believe, and their confidence has to say so. Scored after
+    // the bonus they would read as near-certain instead.
+    for (const bool speculative : {true, false}) {
+      CAPTURE(speculative);
+      TranscriberOptions options;
+      options.model_source = TranscriberOptions::ModelSource::FILES;
+      options.model_path = "tiny-streaming-en";
+      options.model_arch = MOONSHINE_MODEL_ARCH_TINY_STREAMING;
+      options.word_timestamps = true;
+      options.use_speculative_decoding = speculative;
+      options.keyterms = {"Kubernetes"};
+      options.keyterm_boost = 30.0f;
+      const std::vector<WordConfidence> words =
+          stream_word_confidences(options, "two_cities.wav", 10.0f);
+      size_t biased = 0;
+      for (const WordConfidence &word : words) {
+        if (word.text.find("Kubernetes") == std::string::npos) {
+          continue;
+        }
+        CAPTURE(word.text);
+        CHECK(word.confidence < 0.5f);
+        biased++;
+      }
+      REQUIRE(biased > 0);
+    }
+  }
+}

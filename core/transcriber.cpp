@@ -259,6 +259,7 @@ void Transcriber::set_keyterms(const std::vector<std::string> &keyterms) {
   // produce, and letting it stand means a changed list keeps influencing the
   // next decode through the tokens it verifies. Costs one re-decode from BOS.
   this->last_streaming_tokens.clear();
+  this->last_streaming_token_probabilities.clear();
   if (keyterms.empty()) {
     return;
   }
@@ -1084,8 +1085,9 @@ void Transcriber::update_transcript_from_segments(
           float time_per_frame = seg_duration / static_cast<float>(E);
           std::vector<TranscriberWord> words =
               align_words(rearranged.data(), L, H, total_steps, E,
-                          this->last_streaming_tokens, time_per_frame,
-                          this->streaming_model->tokenizer);
+                          this->last_streaming_tokens,
+                          this->last_streaming_token_probabilities,
+                          time_per_frame, this->streaming_model->tokenizer);
 
           if (!words.empty()) {
             for (auto &w : words) {
@@ -1360,6 +1362,7 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
     this->current_streaming_segment_id = segment_id;
     this->streaming_samples_processed = 0;
     this->last_streaming_tokens.clear();
+    this->last_streaming_token_probabilities.clear();
   }
 
   size_t new_samples_start = this->streaming_samples_processed;
@@ -1421,6 +1424,9 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
                                           this->options.max_tokens_per_second)),
                256);
   std::vector<int64_t> tokens;
+  // Parallel to tokens, and only collected for word confidence.
+  const bool want_probabilities = this->options.word_timestamps;
+  std::vector<float> probabilities;
 
   ContextBiaser *biaser =
       this->context_biaser.empty() ? nullptr : &this->context_biaser;
@@ -1436,10 +1442,11 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
 
     int *out = nullptr;
     int out_len = 0;
+    std::vector<float> out_probabilities;
     const int *draft_ptr = draft.empty() ? nullptr : draft.data();
     int err = this->streaming_model->decode_full(
         &this->streaming_state, draft_ptr, static_cast<int>(draft.size()), &out,
-        &out_len, biaser);
+        &out_len, biaser, want_probabilities ? &out_probabilities : nullptr);
     if (err != 0) {
       LOGF("Speculative decode_full failed: %d", err);
       throw std::runtime_error("Speculative decode_full failed: " +
@@ -1450,11 +1457,20 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
     for (int i = 0; i < out_len; ++i) {
       tokens.push_back(out[i]);
     }
+    if (want_probabilities) {
+      // BOS was given, not chosen; align_words skips its entry.
+      probabilities.push_back(1.0f);
+      probabilities.insert(probabilities.end(), out_probabilities.begin(),
+                           out_probabilities.end());
+    }
     if (tokens.empty() || tokens.back() != config.eos_id) {
       // decode_full omits EOS; leave as-is for text conversion.
     }
   } else {
     tokens.push_back(config.bos_id);
+    if (want_probabilities) {
+      probabilities.push_back(1.0f);
+    }
     std::vector<float> logits(config.vocab_size);
     int current_token = config.bos_id;
     if (biaser != nullptr) {
@@ -1468,20 +1484,15 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
         break;
       }
 
-      if (biaser != nullptr) {
-        biaser->apply(logits.data(), config.vocab_size);
-      }
-
-      int next_token = 0;
-      float max_logit = logits[0];
-      for (int i = 1; i < config.vocab_size; ++i) {
-        if (logits[i] > max_logit) {
-          max_logit = logits[i];
-          next_token = i;
-        }
-      }
+      float probability = 1.0f;
+      const int next_token =
+          choose_token(logits.data(), config.vocab_size, biaser,
+                       want_probabilities ? &probability : nullptr);
 
       tokens.push_back(next_token);
+      if (want_probabilities) {
+        probabilities.push_back(probability);
+      }
       current_token = next_token;
 
       if (next_token == config.eos_id) break;
@@ -1495,6 +1506,7 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
   for (auto t : tokens) {
     this->last_streaming_tokens.push_back(static_cast<int>(t));
   }
+  this->last_streaming_token_probabilities = std::move(probabilities);
 
   std::string text = this->streaming_model->tokens_to_text(tokens);
   if (this->options.log_output_text) {

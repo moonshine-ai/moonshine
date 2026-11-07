@@ -59,6 +59,9 @@ struct MoonshineModel {
   std::vector<float> last_encoder_hidden_states;
   int last_encoder_frames = 0;
   std::vector<int64_t> last_tokens;
+  // Parallel to last_tokens: the probability the decoder gave each token when
+  // it chose it, which becomes the words' confidence.
+  std::vector<float> last_token_probabilities;
 
   // Single-pass attention collection (when decoder has cross_attentions
   // outputs)

@@ -169,6 +169,103 @@ static bool token_starts_new_word(BinTokenizer* tokenizer, int token_id) {
   return false;
 }
 
+// Punctuation marks, by code point, for is_punctuation_token. Rather than carry
+// a Unicode table, this lists the ASCII marks and the non-ASCII ones the
+// shipped languages write: Spanish inverted marks and guillemets, typographic
+// quotes, dashes and the ellipsis, CJK and fullwidth marks, and Arabic.
+// Symbols that carry meaning in a transcript ($, %, +, @ and the like) are
+// deliberately not here.
+static bool is_punctuation_code_point(uint32_t c) {
+  switch (c) {
+    case '!':
+    case '"':
+    case '\'':
+    case '(':
+    case ')':
+    case ',':
+    case '-':
+    case '.':
+    case ':':
+    case ';':
+    case '?':
+    case '[':
+    case ']':
+    case '{':
+    case '}':
+    case 0x00A1:  // ¡
+    case 0x00AB:  // «
+    case 0x00BB:  // »
+    case 0x00BF:  // ¿
+    case 0x2026:  // …
+    case 0x2039:  // ‹
+    case 0x203A:  // ›
+    case 0x30FB:  // ・
+    case 0x060C:  // Arabic comma
+    case 0x061B:  // Arabic semicolon
+    case 0x061F:  // Arabic question mark
+    case 0x06D4:  // Arabic full stop
+      return true;
+    default:
+      break;
+  }
+  return (c >= 0x2013 && c <= 0x2014) ||  // – —
+         (c >= 0x2018 && c <= 0x201F) ||  // typographic quotes
+         (c >= 0x3001 && c <= 0x3002) ||  // 、 。
+         (c >= 0x3008 && c <= 0x3011) ||  // CJK brackets
+         c == 0xFF01 || c == 0xFF08 || c == 0xFF09 || c == 0xFF0C ||
+         c == 0xFF0E || c == 0xFF1A || c == 0xFF1B || c == 0xFF1F;
+}
+
+// Helper: whether a token is nothing but punctuation, apart from the word
+// boundary marker. A token holding part of a UTF-8 sequence, or any byte this
+// cannot decode, counts as text, so the check can only ever leave a token in.
+static bool is_punctuation_token(BinTokenizer* tokenizer, int token_id) {
+  if (token_id < 0 || token_id >= (int)tokenizer->tokens_to_bytes.size()) {
+    return false;
+  }
+  const std::vector<uint8_t>& bytes = tokenizer->tokens_to_bytes[token_id];
+  bool any_punctuation = false;
+  size_t i = 0;
+  while (i < bytes.size()) {
+    const uint8_t lead = bytes[i];
+    size_t length = 0;
+    uint32_t c = 0;
+    if (lead < 0x80) {
+      length = 1;
+      c = lead;
+    } else if ((lead & 0xE0) == 0xC0) {
+      length = 2;
+      c = lead & 0x1F;
+    } else if ((lead & 0xF0) == 0xE0) {
+      length = 3;
+      c = lead & 0x0F;
+    } else if ((lead & 0xF8) == 0xF0) {
+      length = 4;
+      c = lead & 0x07;
+    } else {
+      return false;
+    }
+    if (i + length > bytes.size()) {
+      return false;
+    }
+    for (size_t k = 1; k < length; k++) {
+      if ((bytes[i + k] & 0xC0) != 0x80) {
+        return false;
+      }
+      c = (c << 6) | (bytes[i + k] & 0x3F);
+    }
+    i += length;
+    if (c == 0x2581) {
+      continue;  // The word boundary marker says where a word starts, not what.
+    }
+    if (!is_punctuation_code_point(c)) {
+      return false;
+    }
+    any_punctuation = true;
+  }
+  return any_punctuation;
+}
+
 // Helper: decode a list of token IDs to text.
 
 static std::string decode_tokens(BinTokenizer* tokenizer,
@@ -176,14 +273,30 @@ static std::string decode_tokens(BinTokenizer* tokenizer,
   return tokenizer->tokens_to_text(token_ids, true);
 }
 
+float token_probability(const float* logits, int vocab_size, int token_id) {
+  if (logits == nullptr || token_id < 0 || token_id >= vocab_size) {
+    return 0.0f;
+  }
+  // Unchecked indexing is deliberate: this runs once per decoded token over the
+  // whole vocabulary, and token_id was range-checked above.
+  float max_logit = logits[0];
+  for (int i = 1; i < vocab_size; i++) {
+    max_logit = std::max(max_logit, logits[i]);
+  }
+  float sum = 0.0f;
+  for (int i = 0; i < vocab_size; i++) {
+    sum += std::exp(logits[i] - max_logit);
+  }
+  return std::exp(logits[token_id] - max_logit) / sum;
+}
+
 // align_words: main entry point
 
-std::vector<TranscriberWord> align_words(const float* cross_attention_data,
-                                         int num_layers, int num_heads,
-                                         int num_tokens, int encoder_frames,
-                                         const std::vector<int>& tokens,
-                                         float time_per_frame,
-                                         BinTokenizer* tokenizer) {
+std::vector<TranscriberWord> align_words(
+    const float* cross_attention_data, int num_layers, int num_heads,
+    int num_tokens, int encoder_frames, const std::vector<int>& tokens,
+    const std::vector<float>& token_probabilities, float time_per_frame,
+    BinTokenizer* tokenizer) {
   if (!cross_attention_data || num_tokens <= 0 || encoder_frames <= 0) {
     return {};
   }
@@ -299,6 +412,8 @@ std::vector<TranscriberWord> align_words(const float* cross_attention_data,
     return {};
   }
 
+  const bool has_probabilities = token_probabilities.size() == tokens.size();
+
   // Group tokens into words
   // Each word is a pair: (list of token IDs, list of step indices)
   struct WordGroup {
@@ -365,7 +480,30 @@ std::vector<TranscriberWord> align_words(const float* cross_attention_data,
 
     TranscriberWord tw;
     tw.text = word_text;
-    tw.confidence = 1.0f;  // default confidence
+    // A word is only as sure as its least sure token: one doubtful subword is
+    // enough to get the word wrong. Punctuation the decoder attached to the
+    // word is left out, though: in "tried?" the model is often torn between "?"
+    // and ".", and that doubt is about the sentence, not about "tried". A word
+    // made of nothing but punctuation is scored on all of it. Step i produced
+    // tokens[i + 1].
+    tw.confidence = 1.0f;
+    if (has_probabilities) {
+      float text_confidence = 1.0f;
+      float punctuation_confidence = 1.0f;
+      bool has_text = false;
+      for (size_t k = 0; k < word_group.step_indices.size(); k++) {
+        const float probability =
+            token_probabilities.at(word_group.step_indices[k] + 1);
+        if (is_punctuation_token(tokenizer, word_group.token_ids[k])) {
+          punctuation_confidence =
+              std::min(punctuation_confidence, probability);
+        } else {
+          text_confidence = std::min(text_confidence, probability);
+          has_text = true;
+        }
+      }
+      tw.confidence = has_text ? text_confidence : punctuation_confidence;
+    }
 
     if (max_frame < 0) {
       // No DTW match found for this word
