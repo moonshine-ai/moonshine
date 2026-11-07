@@ -755,6 +755,54 @@ TEST_CASE("moonshine-test-v2") {
     }
     moonshine_free_tts_synthesizer(h);
   }
+  SUBCASE("tts-text-in-the-wrong-script-is-an-error-not-silence") {
+    // GitHub issue #241: Latin text into a Hindi voice used to come back as
+    // zero samples with MOONSHINE_ERROR_NONE, so say() played nothing and the
+    // caller had no idea why. Words the G2P cannot read are now an
+    // invalid-argument error; punctuation-only input, which the sentence
+    // splitter produces, stays a successful empty result.
+    const auto data_root = find_moonshine_tts_data_dir();
+    if (!data_root) {
+      MESSAGE("skip: moonshine-tts data directory not found");
+      return;
+    }
+    const std::string model_root_str = data_root->string();
+    const moonshine_option_t create_opts[] = {
+        {"model_root", model_root_str.c_str()},
+        {"lang", "hi_in"},
+        {"voice", "kokoro_hf_alpha"},
+    };
+    const int32_t h = moonshine_create_tts_synthesizer_from_files(
+        "hi_in", nullptr, 0, create_opts,
+        static_cast<uint64_t>(sizeof(create_opts) / sizeof(create_opts[0])),
+        MOONSHINE_HEADER_VERSION);
+    REQUIRE(h >= 0);
+
+    float* audio = nullptr;
+    uint64_t count = 0;
+    int32_t sr = 0;
+    CHECK(moonshine_text_to_speech(h, "Hello, welcome to Moonshine.", nullptr,
+                                   0, &audio, &count,
+                                   &sr) == MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(audio == nullptr);
+
+    audio = nullptr;
+    count = 1;
+    CHECK(moonshine_text_to_speech(h, " ... ", nullptr, 0, &audio, &count,
+                                   &sr) == MOONSHINE_ERROR_NONE);
+    CHECK(count == 0);
+    CHECK(audio == nullptr);
+
+    audio = nullptr;
+    count = 0;
+    REQUIRE(moonshine_text_to_speech(h, "मूनशाइन में आपका स्वागत है।", nullptr, 0,
+                                     &audio, &count,
+                                     &sr) == MOONSHINE_ERROR_NONE);
+    CHECK(count > 2000);
+    REQUIRE(audio != nullptr);
+    std::free(audio);
+    moonshine_free_tts_synthesizer(h);
+  }
   SUBCASE("tts-piper-german-from-memory") {
     const std::filesystem::path voices_dir = find_de_piper_voices_dir();
     if (voices_dir.empty()) {

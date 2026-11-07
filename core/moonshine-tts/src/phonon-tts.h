@@ -155,6 +155,12 @@ class PhononTTS {
   static std::vector<PhononVoiceInfo> list_voices(
       const std::filesystem::path& root, const FileInformationMap& files);
 
+  /// The ids in the shipped ``phonon/voices.json``, compiled in so a voice
+  /// can be listed and chosen before that file has been fetched (the WASM
+  /// binding never has it on disk). Each voice's latent lives at
+  /// ``phonon/voices/<id>.safetensors``.
+  static const std::vector<std::string>& builtin_voice_ids();
+
  private:
   struct Impl;
   std::unique_ptr<Impl> impl_;

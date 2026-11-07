@@ -345,3 +345,73 @@ test('loading in clone mode builds ZipVoice for startCloning', { skip: cloneLoad
     tts.close();
   }
 });
+
+// Phonon is the third catalog engine. It runs six ORT graphs a frame at a
+// time, and its Mimi decoder uses operators (Elu) that entered the operator
+// config after the other engines, so this is also the check that the vendored
+// ORT-wasm archive was built from a config new enough for every engine.
+const PHONON_VOICE = 'phonon_zoey';
+const phononDepKeys = ttsSupported
+  ? flattenTtsDependencyKeys(JSON.parse(mod.ttsDependencies('en_us', PHONON_VOICE)))
+  : [];
+const phononAssets = ttsSupported ? ttsAssetMapOrNull(phononDepKeys) : null;
+const phononSkip = !ttsSupported
+  ? 'no TTS support in this build'
+  : phononAssets === null
+    ? 'phonon TTS assets not vendored locally (download-only)'
+    : false;
+
+test('the en_us voice catalog lists phonon voices', { skip: skipSurface }, () => {
+  const catalog = JSON.parse(mod.ttsVoices('en_us', ['voice'], [PHONON_VOICE]));
+  const ids = catalog.en_us.map((v) => v.id);
+  assert.ok(ids.includes(PHONON_VOICE), `expected ${PHONON_VOICE} in ${ids.join(', ')}`);
+});
+
+test('the phonon dependency manifest lists its graphs and the voice latent', { skip: skipSurface }, () => {
+  assert.ok(phononDepKeys.includes('phonon/backbone.ort'));
+  assert.ok(phononDepKeys.includes('phonon/mimi_seanet.ort'));
+  assert.ok(phononDepKeys.includes('phonon/voices/zoey.safetensors'));
+});
+
+test('a phonon voice synthesizes non-empty PCM', { skip: phononSkip }, async () => {
+  const { TextToSpeech } = await importApi();
+  const tts = await new TextToSpeech()
+    .language('en_us')
+    .voice(PHONON_VOICE)
+    .assets(phononAssets)
+    // Deterministic render so a regression in output is reproducible.
+    .nativeOptions({ phonon_temperature: '0' })
+    .useModule(mod)
+    .load();
+  try {
+    const { audio, sampleRate } = tts.synthesize('Hello from Phonon.');
+    assert.ok(audio instanceof Float32Array);
+    assert.ok(audio.length > sampleRate / 4, `only ${audio.length} samples`);
+    assert.ok(sampleRate > 0);
+  } finally {
+    tts.close();
+  }
+});
+
+test('a phonon voice streams chunks that add up to the reply', { skip: phononSkip }, async () => {
+  const { TextToSpeech } = await importApi();
+  const tts = await new TextToSpeech()
+    .language('en_us')
+    .voice(PHONON_VOICE)
+    .assets(phononAssets)
+    .nativeOptions({ phonon_temperature: '0' })
+    .useModule(mod)
+    .load();
+  try {
+    let samples = 0;
+    let chunks = 0;
+    for await (const chunk of tts.stream('One sentence here. And a second one.')) {
+      samples += chunk.audio.length;
+      chunks += 1;
+    }
+    assert.ok(chunks >= 1);
+    assert.ok(samples > 0);
+  } finally {
+    tts.close();
+  }
+});

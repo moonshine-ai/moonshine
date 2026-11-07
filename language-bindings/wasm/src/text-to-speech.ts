@@ -100,7 +100,7 @@ export interface TtsVoicesOptions {
   language?: string;
   /**
    * A representative voice id whose prefix selects the engine to list:
-   * `kokoro_*` (default), `piper_*`, or `zipvoice_*`.
+   * `kokoro_*` (default), `piper_*`, `zipvoice_*`, or `phonon_*`.
    */
   voice?: string;
   moduleOptions?: LoadModuleOptions;
@@ -462,7 +462,7 @@ export class TextToSpeech {
   /**
    * Lists the voices known for a language, with availability state. Pass a
    * `voice` whose prefix selects the engine to enumerate: `kokoro_*` (the
-   * default), `piper_*`, or `zipvoice_*`.
+   * default), `piper_*`, `zipvoice_*`, or `phonon_*`.
    */
   static async voices(options: TtsVoicesOptions = {}): Promise<TtsVoiceEntry[]> {
     const module =

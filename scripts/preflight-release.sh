@@ -218,6 +218,34 @@ main() {
         fi
     done
 
+    # The vendored minimal ORT builds are rebuilt by hand per platform, so
+    # they can lag the operator config that the models need. 0.1.5 and 0.1.6
+    # shipped an Android ORT without QLinearMatMul and Kokoro could not load
+    # (GitHub issue #242). Check the committed prebuilts, not the working
+    # tree, since the release builds from the pushed commit.
+    local ops_log
+    ops_log="$(mktemp)"
+    if ! git -C "${REPO_ROOT_DIR}" diff --quiet "${commit}" -- \
+            core/third-party/onnxruntime/lib \
+            core/third-party/onnxruntime/moonshine-required-operators.config; then
+        fail "ONNX Runtime prebuilts or the operator config differ from" \
+            "${commit}; commit and push them so the check reflects the release."
+    elif "${REPO_ROOT_DIR}/scripts/check-ort-prebuilt-ops.sh" >"${ops_log}" 2>&1; then
+        pass "vendored ONNX Runtime prebuilts carry every required operator"
+    else
+        local -a ops_lines=()
+        local line
+        while IFS= read -r line; do
+            ops_lines+=("  ${line}")
+        done < <(grep -E '^FAIL|^       ' "${ops_log}")
+        fail "a vendored ONNX Runtime prebuilt lacks operators the models need:" \
+            ${ops_lines[@]+"${ops_lines[@]}"} \
+            "Rebuild and re-vendor it (scripts/build-ort-android.sh force," \
+            "scripts/build-ort-ios.sh force), then rerun" \
+            "  scripts/check-ort-prebuilt-ops.sh"
+    fi
+    rm -f "${ops_log}"
+
     if [ ${FAILURES} -gt 0 ]; then
         echo >&2
         echo "Preflight found ${FAILURES} problem(s); not starting the release." >&2
