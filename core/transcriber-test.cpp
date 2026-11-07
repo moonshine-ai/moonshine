@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -1583,5 +1584,273 @@ TEST_CASE("streaming-short-chunk-ingestion") {
     }
     run_short_chunk_streaming_case("medium-streaming-en",
                                    MOONSHINE_MODEL_ARCH_MEDIUM_STREAMING);
+  }
+}
+
+namespace {
+
+// Feeds audio to a streaming model the way the transcriber does, in whole
+// 80 ms frontend chunks, with a varying number of chunks between encode()
+// calls so the cached encoder sees irregular step sizes.
+struct EncoderFeeder {
+  EncoderFeeder(MoonshineStreamingModel *streaming_model,
+                MoonshineStreamingState *streaming_state, const float *audio,
+                size_t audio_count)
+      : model(streaming_model),
+        state(streaming_state),
+        samples(audio),
+        sample_count(audio_count) {}
+
+  MoonshineStreamingModel *model;
+  MoonshineStreamingState *state;
+  const float *samples;
+  size_t sample_count;
+  size_t offset = 0;
+  int update = 0;
+  std::vector<int> memory_lens;
+  // Updates that released rows, and how many of those the cached encoder
+  // produced: only it advances encoder_cache_frames to the features seen.
+  int emitting_updates = 0;
+  int cached_updates = 0;
+  // The final flush went through the cached encoder, which marks the caches
+  // as no longer continuable (-1).
+  bool cached_flush = false;
+
+  // Returns false once all whole chunks have been fed and encoded.
+  bool step() {
+    static const int kChunksPerUpdate[] = {1, 3, 2, 7, 1, 1, 12, 4};
+    const size_t chunk = 1280;
+    if (offset + chunk > sample_count) return false;
+    const int chunks = kChunksPerUpdate[update++ % 8];
+    for (int i = 0; i < chunks && offset + chunk <= sample_count; ++i) {
+      REQUIRE(model->process_audio_chunk(state, samples + offset, chunk,
+                                         nullptr) == 0);
+      offset += chunk;
+    }
+    const int memory_before = state->memory_len;
+    REQUIRE(model->encode(state, false, nullptr) == 0);
+    memory_lens.push_back(state->memory_len);
+    if (state->memory_len > memory_before) {
+      ++emitting_updates;
+      if (state->encoder_cache_frames == state->accumulated_feature_count) {
+        ++cached_updates;
+      }
+    }
+    return true;
+  }
+
+  void finish() {
+    while (step()) {
+    }
+    REQUIRE(model->encode(state, true, nullptr) == 0);
+    memory_lens.push_back(state->memory_len);
+    cached_flush = state->encoder_cache_frames == -1;
+  }
+};
+
+// Fails unless every update that released rows, and the final flush, ran the
+// cached encoder rather than falling back to the windowed one.
+void check_cached_encoder_ran(const EncoderFeeder &feeder) {
+  CHECK(feeder.cached_updates == feeder.emitting_updates);
+  CHECK(feeder.cached_flush);
+}
+
+// Largest and mean relative L2 difference between matching memory rows.
+std::pair<double, double> memory_row_differences(const std::vector<float> &a,
+                                                 const std::vector<float> &b,
+                                                 int dim) {
+  REQUIRE(a.size() == b.size());
+  double largest = 0.0, total = 0.0;
+  const size_t rows = a.size() / dim;
+  for (size_t row = 0; row < rows; ++row) {
+    double diff = 0.0, norm = 0.0;
+    for (int j = 0; j < dim; ++j) {
+      const double x = a[row * dim + j], y = b[row * dim + j];
+      diff += (x - y) * (x - y);
+      norm += x * x;
+    }
+    const double relative = std::sqrt(diff / std::max(norm, 1e-12));
+    REQUIRE(std::isfinite(relative));
+    largest = std::max(largest, relative);
+    total += relative;
+  }
+  return {largest, rows > 0 ? total / rows : 0.0};
+}
+
+// The cached encoder's rows are not bit-identical to the windowed encoder's:
+// both quantize activations dynamically, one scale per matmul input, and the
+// cached one sees a few rows per call instead of the whole window. A real
+// fault (a stale cache, a row out of place) would leave rows about as far from
+// the right ones as neighbouring frames are from each other, so that distance
+// is the yardstick.
+void check_rows_close(const std::vector<float> &windowed,
+                      const std::vector<float> &cached, int dim) {
+  const auto [largest, mean] = memory_row_differences(windowed, cached, dim);
+  const std::vector<float> later(windowed.begin() + dim, windowed.end());
+  const std::vector<float> earlier(windowed.begin(), windowed.end() - dim);
+  const auto [neighbour_largest, neighbour_mean] =
+      memory_row_differences(earlier, later, dim);
+  MESSAGE("memory rows vs windowed: mean relative difference "
+          << mean << ", largest " << largest << "; neighbouring frames: mean "
+          << neighbour_mean << ", largest " << neighbour_largest);
+  CHECK(mean < 0.25 * neighbour_mean);
+  CHECK(largest < neighbour_largest);
+}
+
+}  // namespace
+
+TEST_CASE("streaming-encoder-cache-rejects-a-mismatched-model") {
+  // encoder.ort has none of the cache inputs, so it must be refused and the
+  // windowed encoder left in charge.
+  const std::string model_dir = "tiny-streaming-en";
+  REQUIRE(std::filesystem::exists(model_dir));
+  MoonshineStreamingModel model;
+  REQUIRE(model.load(model_dir.c_str(), (model_dir + "/tokenizer.bin").c_str(),
+                     MOONSHINE_MODEL_ARCH_TINY_STREAMING) == 0);
+  CHECK(model.load_encoder_stream_from_path(
+            (model_dir + "/encoder.ort").c_str()) != 0);
+  CHECK(model.encoder_stream_session == nullptr);
+
+  std::vector<float> tone(16000);
+  for (size_t i = 0; i < tone.size(); ++i) {
+    tone[i] = 0.1f * std::sin(0.05f * static_cast<float>(i));
+  }
+  std::unique_ptr<MoonshineStreamingState> state(model.create_state());
+  EncoderFeeder feeder{&model, state.get(), tone.data(), tone.size()};
+  feeder.finish();
+  CHECK(state->memory_len > 0);
+}
+
+// encoder_stream.ort is not shipped with the models. Make it with
+// scripts/export-encoder-stream.py and scripts/quantize-streaming-model.sh and
+// put it in test-assets/tiny-streaming-en/ to run these cases.
+TEST_CASE("streaming-encoder-cache") {
+  const std::string model_dir = "tiny-streaming-en";
+  const std::string stream_path = model_dir + "/encoder_stream.ort";
+  if (!std::filesystem::exists(stream_path)) {
+    MESSAGE(
+        "tiny-streaming-en/encoder_stream.ort is not in test-assets, "
+        "skipping");
+    return;
+  }
+  float *wav_data = nullptr;
+  size_t wav_data_size = 0;
+  int32_t wav_sample_rate = 0;
+  REQUIRE(load_wav_data("two_cities_16k.wav", &wav_data, &wav_data_size,
+                        &wav_sample_rate));
+  std::unique_ptr<float, decltype(&std::free)> owned(wav_data, &std::free);
+  REQUIRE(wav_sample_rate == 16000);
+  const size_t clip = std::min(wav_data_size, static_cast<size_t>(20 * 16000));
+
+  const std::string tokenizer_path = model_dir + "/tokenizer.bin";
+  MoonshineStreamingModel windowed;
+  REQUIRE(windowed.load(model_dir.c_str(), tokenizer_path.c_str(),
+                        MOONSHINE_MODEL_ARCH_TINY_STREAMING) == 0);
+  MoonshineStreamingModel cached;
+  REQUIRE(cached.load(model_dir.c_str(), tokenizer_path.c_str(),
+                      MOONSHINE_MODEL_ARCH_TINY_STREAMING) == 0);
+  REQUIRE(cached.load_encoder_stream_from_path(stream_path.c_str()) == 0);
+  const int dim = cached.config.decoder_dim;
+
+  SUBCASE("rows-match-the-windowed-encoder") {
+    std::unique_ptr<MoonshineStreamingState> a(windowed.create_state());
+    std::unique_ptr<MoonshineStreamingState> b(cached.create_state());
+    EncoderFeeder feed_a{&windowed, a.get(), wav_data, clip};
+    EncoderFeeder feed_b{&cached, b.get(), wav_data, clip};
+    feed_a.finish();
+    feed_b.finish();
+    CHECK(feed_b.emitting_updates > 50);
+    check_cached_encoder_ran(feed_b);
+    CHECK(feed_a.cached_updates == 0);
+    CHECK_FALSE(feed_a.cached_flush);
+    // Same rows released at every update, including the final flush.
+    CHECK(feed_a.memory_lens == feed_b.memory_lens);
+    REQUIRE(a->memory_len > 900);
+    check_rows_close(a->memory, b->memory, dim);
+  }
+
+  SUBCASE("streams-are-independent-and-restart-cleanly") {
+    const size_t half = clip / 2;
+    std::unique_ptr<MoonshineStreamingState> solo_a(cached.create_state());
+    std::unique_ptr<MoonshineStreamingState> solo_b(cached.create_state());
+    EncoderFeeder{&cached, solo_a.get(), wav_data, half}.finish();
+    EncoderFeeder{&cached, solo_b.get(), wav_data + half, clip - half}.finish();
+
+    // The same two streams interleaved on one model.
+    std::unique_ptr<MoonshineStreamingState> a(cached.create_state());
+    std::unique_ptr<MoonshineStreamingState> b(cached.create_state());
+    EncoderFeeder feed_a{&cached, a.get(), wav_data, half};
+    EncoderFeeder feed_b{&cached, b.get(), wav_data + half, clip - half};
+    bool more_a = true, more_b = true;
+    while (more_a || more_b) {
+      if (more_a) more_a = feed_a.step();
+      if (more_b) more_b = feed_b.step();
+    }
+    REQUIRE(cached.encode(a.get(), true, nullptr) == 0);
+    REQUIRE(cached.encode(b.get(), true, nullptr) == 0);
+    CHECK(feed_a.cached_updates == feed_a.emitting_updates);
+    CHECK(feed_b.cached_updates == feed_b.emitting_updates);
+    CHECK(feed_a.emitting_updates > 0);
+    CHECK(a->encoder_cache_frames == -1);
+    CHECK(b->encoder_cache_frames == -1);
+    CHECK(a->memory == solo_a->memory);
+    CHECK(b->memory == solo_b->memory);
+
+    // A new line on a used state gives the same rows as a fresh state.
+    a->reset(cached.config);
+    EncoderFeeder again{&cached, a.get(), wav_data, half};
+    again.finish();
+    check_cached_encoder_ran(again);
+    CHECK(a->memory == solo_a->memory);
+  }
+
+  SUBCASE("short-and-silent-audio") {
+    // Less audio than the lookahead: nothing until the final flush.
+    {
+      std::unique_ptr<MoonshineStreamingState> a(windowed.create_state());
+      std::unique_ptr<MoonshineStreamingState> b(cached.create_state());
+      EncoderFeeder feed_a{&windowed, a.get(), wav_data + 16000, 3 * 1280};
+      EncoderFeeder feed_b{&cached, b.get(), wav_data + 16000, 3 * 1280};
+      feed_a.finish();
+      feed_b.finish();
+      check_cached_encoder_ran(feed_b);
+      CHECK(feed_a.memory_lens == feed_b.memory_lens);
+      REQUIRE(b->memory_len > 0);
+      check_rows_close(a->memory, b->memory, dim);
+    }
+    // Silence. Its frames are nearly all alike, so the neighbouring-frame
+    // yardstick says nothing, and here the windowed encoder's own rounding is
+    // large (about 13% from the float model, against 5% for the cached one),
+    // so only the shape of the output is checked.
+    const std::vector<float> silence(2 * 16000, 0.0f);
+    std::unique_ptr<MoonshineStreamingState> a(windowed.create_state());
+    std::unique_ptr<MoonshineStreamingState> b(cached.create_state());
+    EncoderFeeder feed_a{&windowed, a.get(), silence.data(), silence.size()};
+    EncoderFeeder feed_b{&cached, b.get(), silence.data(), silence.size()};
+    feed_a.finish();
+    feed_b.finish();
+    check_cached_encoder_ran(feed_b);
+    CHECK(feed_a.memory_lens == feed_b.memory_lens);
+    CHECK(std::all_of(b->memory.begin(), b->memory.end(),
+                      [](float x) { return std::isfinite(x); }));
+  }
+
+  SUBCASE("audio-after-a-flush-uses-the-windowed-encoder") {
+    // The flush computes the last rows without lookahead, so the caches cannot
+    // carry on from it. Anything after it goes through the windowed encoder.
+    const size_t first = 3 * 16000;
+    std::unique_ptr<MoonshineStreamingState> a(windowed.create_state());
+    std::unique_ptr<MoonshineStreamingState> b(cached.create_state());
+    EncoderFeeder{&windowed, a.get(), wav_data, first}.finish();
+    EncoderFeeder first_part{&cached, b.get(), wav_data, first};
+    first_part.finish();
+    check_cached_encoder_ran(first_part);
+    const int flushed_len = b->memory_len;
+    REQUIRE(a->memory_len == flushed_len);
+    EncoderFeeder{&windowed, a.get(), wav_data + first, first}.finish();
+    EncoderFeeder{&cached, b.get(), wav_data + first, first}.finish();
+    REQUIRE(a->memory_len == b->memory_len);
+    CHECK(std::equal(a->memory.begin() + flushed_len * dim, a->memory.end(),
+                     b->memory.begin() + flushed_len * dim));
   }
 }

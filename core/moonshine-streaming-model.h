@@ -58,6 +58,19 @@ struct MoonshineStreamingState {
   // Encoder output tracking
   int encoder_frames_emitted;
 
+  // Per-layer caches for encoder_stream.ort, used only when that model is
+  // loaded. ``encoder_cache_frames`` counts the features the caches have seen,
+  // or is -1 once the line has been flushed and the caches can no longer be
+  // continued. The ``_next`` buffers receive each run's output and are swapped
+  // in only when the run succeeds.
+  std::vector<float> encoder_k_cache;  // [depth, 1, cache_rows, nheads*hdim]
+  std::vector<float> encoder_v_cache;
+  std::vector<float> encoder_x_cache;  // [depth, 1, pending_rows, encoder_dim]
+  std::vector<float> encoder_k_cache_next;
+  std::vector<float> encoder_v_cache_next;
+  std::vector<float> encoder_x_cache_next;
+  int64_t encoder_cache_frames;
+
   // Adapter position tracking
   int64_t adapter_pos_offset;
 
@@ -91,6 +104,16 @@ struct MoonshineStreamingModel {
   OrtSession *encoder_session;
   OrtSession *adapter_session;
 
+  // Optional encoder with per-layer caches (encoder_stream.ort, made by
+  // scripts/export-encoder-stream.py). When loaded, encode() runs it over the
+  // new features only instead of re-running encoder_session over the whole
+  // window. Its rows match encoder_session's up to rounding, but are not
+  // bit-identical, so it is only loaded when asked for.
+  OrtSession *encoder_stream_session = nullptr;
+  int encoder_stream_cache_rows = 0;
+  int encoder_stream_kv_dim = 0;
+  int encoder_stream_pending_rows = 0;
+
   // Optimized decoding sessions (cross_kv.onnx/decoder_kv.onnx)
   OrtSession *cross_kv_session;    // Computes cross-attention K/V from memory
   OrtSession *decoder_kv_session;  // Decoder that takes precomputed cross K/V
@@ -113,6 +136,8 @@ struct MoonshineStreamingModel {
   size_t cross_kv_mmapped_data_size = 0;
   const char *decoder_kv_mmapped_data = nullptr;
   size_t decoder_kv_mmapped_data_size = 0;
+  const char *encoder_stream_mmapped_data = nullptr;
+  size_t encoder_stream_mmapped_data_size = 0;
 
   std::string last_result;
 
@@ -138,6 +163,12 @@ struct MoonshineStreamingModel {
   // loads a replacement from ``path``. Used to swap in
   // decoder_kv_with_attention.ort when word timestamps are requested.
   int replace_decoder_kv_from_path(const char *path);
+
+  // Loads encoder_stream.ort (see encoder_stream_session) from a file or from
+  // memory the caller keeps alive. Fails, leaving the windowed encoder in use,
+  // if its cache shapes do not match this model.
+  int load_encoder_stream_from_path(const char *path);
+  int load_encoder_stream_from_memory(const uint8_t *data, size_t size);
 
   // Parses a streaming_config.json payload (from disk or an in-memory buffer)
   // into ``this->config``. Exposed so the transcriber's in-memory load path can
@@ -221,6 +252,22 @@ struct MoonshineStreamingModel {
 
   /* Compute cross-attention K/V from current memory state */
   int compute_cross_kv(MoonshineStreamingState *state);
+
+  /* Session options for encoder_stream_session; caller releases them */
+  int create_encoder_stream_options(OrtSessionOptions **options);
+
+  /* Checks a newly created encoder_stream_session and reads its cache sizes */
+  int init_encoder_stream();
+
+  /* Runs the adapter over new encoder rows and appends them to memory */
+  int append_encoder_rows(MoonshineStreamingState *state,
+                          std::vector<float> &new_encoded, int new_frames,
+                          int stable_count, int *new_frames_out);
+
+  /* Runs encoder_stream_session over the features it has not seen yet and
+   * returns the next ``new_frames`` encoder rows in ``encoded``. */
+  int run_encoder_stream(MoonshineStreamingState *state, bool is_final,
+                         int new_frames, std::vector<float> *encoded);
 
   // Populated when the frontend ships as a split ORT pair. Empty means the
   // frontend session already has its weights baked in (``frontend.ort``).

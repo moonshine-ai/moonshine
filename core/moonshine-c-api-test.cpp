@@ -9,6 +9,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <optional>
 #include <string>
 #include <thread>
@@ -507,6 +508,7 @@ TEST_CASE("moonshine-test-v2") {
         {"keyterm_boost", "4.0"},
         {"context", "Migration notes for the platform team."},
         {"context_max_terms", "50"},
+        {"streaming_encoder_cache", "true"},
     };
     const uint64_t options_count = sizeof(options) / sizeof(options[0]);
     std::string root_model_path = "tiny-en";
@@ -515,6 +517,47 @@ TEST_CASE("moonshine-test-v2") {
         root_model_path.c_str(), model_arch, options, options_count,
         MOONSHINE_HEADER_VERSION);
     REQUIRE(transcriber_handle >= 0);
+  }
+  SUBCASE("streaming-encoder-cache-option") {
+    // Off, or on without encoder_stream.ort beside the model, the transcript
+    // must be exactly what the default gives.
+    std::string wav_path = "two_cities.wav";
+    REQUIRE(std::filesystem::exists(wav_path));
+    float* wav_data = nullptr;
+    size_t wav_data_size = 0;
+    int32_t wav_sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
+                          &wav_sample_rate));
+    std::unique_ptr<float, decltype(&std::free)> owned(wav_data, &std::free);
+    const std::string root_model_path = "tiny-streaming-en";
+    REQUIRE(std::filesystem::exists(root_model_path));
+    auto transcribe = [&](const char* value) {
+      const moonshine_option_t options[] = {
+          {"streaming_encoder_cache", value},
+      };
+      int32_t handle = moonshine_load_transcriber_from_files(
+          root_model_path.c_str(), MOONSHINE_MODEL_ARCH_TINY_STREAMING, options,
+          value == nullptr ? 0 : 1, MOONSHINE_HEADER_VERSION);
+      REQUIRE(handle >= 0);
+      struct transcript_t* transcript = nullptr;
+      REQUIRE(moonshine_transcribe_without_streaming(
+                  handle, wav_data, wav_data_size, wav_sample_rate, 0,
+                  &transcript) == MOONSHINE_ERROR_NONE);
+      REQUIRE(transcript != nullptr);
+      std::string text = moonshine_transcript_to_string(transcript);
+      moonshine_free_transcriber(handle);
+      return text;
+    };
+    const std::string expected = transcribe(nullptr);
+    REQUIRE(!expected.empty());
+    CHECK(transcribe("false") == expected);
+    const std::string cached = transcribe("true");
+    if (std::filesystem::exists(root_model_path + "/encoder_stream.ort")) {
+      MESSAGE("with encoder_stream.ort: " << cached);
+      CHECK(!cached.empty());
+    } else {
+      CHECK(cached == expected);
+    }
   }
   SUBCASE("set-keyterms-at-runtime") {
     std::string root_model_path = "tiny-streaming-en";

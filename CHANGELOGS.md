@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.1.7]
 
+### Added
+
+- `streaming_encoder_cache` option: with an `encoder_stream.ort` from `scripts/export-encoder-stream.py` beside a streaming model, each update encodes only the new audio. Off by default.
+
 ### Fixed
 
 - Kokoro text to speech loads on Android again. The 0.1.5 and 0.1.6 AARs shipped an ONNX Runtime built before `QLinearMatMul` and other kernels were required, so the voice failed at session creation (GitHub issue #242).

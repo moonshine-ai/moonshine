@@ -194,6 +194,13 @@ struct TranscriberOptions {
   // (and diarization) still run on each update so the final decode has
   // current memory; there is no live/provisional text.
   bool decode_incomplete_lines = true;
+  // When true and the streaming model directory (or ``model_files``) has an
+  // ``encoder_stream.ort``, run that cached encoder over just the new audio on
+  // each update instead of re-running ``encoder.ort`` over a window of several
+  // seconds. Much less encoder work per update; the encoder rows match only up
+  // to rounding, so transcripts can differ slightly. Off by default, and a
+  // missing file leaves the windowed encoder in use.
+  bool streaming_encoder_cache = false;
   // Terms to bias the decoder towards at runtime — jargon, product names,
   // proper nouns. No retraining is involved: each term is compiled into a
   // subword trie and used to nudge the logits during decoding (see

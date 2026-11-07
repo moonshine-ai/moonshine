@@ -52,6 +52,7 @@ Passed to `Transcriber(..., options=…)`, MicTranscriber `.options()`, and `moo
 | `word_timestamps` | false | Fill each line's `words` array. Needs the attention decoder asset. Implied by `identify_speakers`. |
 | `use_speculative_decoding` | true | Streaming re-decode verifies the previous hypothesis instead of restarting from BOS. |
 | `decode_incomplete_lines` | true | Decode in-progress lines so text can update while someone is still talking. Set false to wait until the line is complete. |
+| `streaming_encoder_cache` | false | Streaming only. Run the optional `encoder_stream.ort` (made by `scripts/export-encoder-stream.py`) over just the new audio on each update instead of re-running the encoder over the whole window. Output matches up to rounding, so text can differ slightly. No effect without the file. |
 | `identify_speakers` | false | Enable diarization and `speaker_spans`. Needs diarization models ([details](https://github.com/moonshine-ai/moonshine/blob/main/docs/diarization-models.md)). |
 | `diarization_model_dir` | (none) | Directory with `segmentation.ort` and `embedding.ort` when constructing a transcriber directly. |
 | `diarization_cluster_cadence` | `2.0` | Minimum seconds of new audio between re-clustering passes. |
