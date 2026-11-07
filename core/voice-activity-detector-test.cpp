@@ -1,9 +1,11 @@
 #include "voice-activity-detector.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "debug-utils.h"
 
@@ -193,5 +195,61 @@ TEST_CASE("voice-activity-detector-test") {
     LOGF("Segment: start_time=%f, end_time=%f", segment.start_time,
          segment.end_time);
     LOGF("Segments count: %zu", segments->size());
+  }
+  SUBCASE("vad-max-segment-threshold-0") {
+    // With the threshold at 0 every hop counts as voice, so the maximum segment
+    // length is the only thing that can end a segment.
+    const int32_t sample_rate = 16000;
+    const int32_t hop_size = 512;
+    const size_t max_segment_sample_count = sample_rate;
+    VoiceActivityDetector vad(0.0f, 32, hop_size, 4096,
+                              max_segment_sample_count);
+    const std::vector<float> audio(max_segment_sample_count * 3, 0.0f);
+    vad.start();
+    vad.process_audio(audio.data(), audio.size(), sample_rate);
+    vad.stop();
+    const std::vector<VoiceActivitySegment> *segments = vad.get_segments();
+    REQUIRE(segments->size() > 1);
+    // The last segment is closed by stop(), so it can be any length. The others
+    // end on the first hop at or past the maximum, and keep that hop's audio.
+    for (size_t i = 0; i + 1 < segments->size(); i++) {
+      const VoiceActivitySegment &segment = segments->at(i);
+      REQUIRE(segment.is_complete);
+      REQUIRE(segment.audio_data.size() >= max_segment_sample_count);
+      REQUIRE(segment.audio_data.size() <=
+              max_segment_sample_count + (2 * hop_size));
+    }
+  }
+  SUBCASE("vad-max-segment-fade") {
+    // Speech should run on past the start of the fade, rather than being cut
+    // as soon as it reaches two thirds of the maximum length.
+    std::string wav_path = "two_cities.wav";
+    REQUIRE(std::filesystem::exists(wav_path));
+    float *wav_data = nullptr;
+    size_t wav_data_size = 0;
+    int32_t wav_sample_rate = 0;
+    REQUIRE(load_wav_data(wav_path.c_str(), &wav_data, &wav_data_size,
+                          &wav_sample_rate));
+    REQUIRE(wav_data != nullptr);
+    REQUIRE(wav_data_size > 0);
+    std::unique_ptr<float, decltype(&std::free)> owned(wav_data, &std::free);
+
+    const int32_t hop_size = 512;
+    const size_t max_segment_sample_count = 3 * 16000;
+    const size_t fade_sample_count = (max_segment_sample_count * 2) / 3;
+    VoiceActivityDetector vad(0.5f, 32, hop_size, 4096,
+                              max_segment_sample_count);
+    vad.start();
+    vad.process_audio(wav_data, wav_data_size, wav_sample_rate);
+    vad.stop();
+    size_t longest_segment_sample_count = 0;
+    for (const VoiceActivitySegment &segment : *vad.get_segments()) {
+      longest_segment_sample_count =
+          std::max(longest_segment_sample_count, segment.audio_data.size());
+    }
+    LOGF("Longest segment: %zu samples", longest_segment_sample_count);
+    REQUIRE(longest_segment_sample_count > fade_sample_count + (2 * hop_size));
+    REQUIRE(longest_segment_sample_count <=
+            max_segment_sample_count + (2 * hop_size));
   }
 }
