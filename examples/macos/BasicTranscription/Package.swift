@@ -7,7 +7,7 @@ let package = Package(
     dependencies: [
         // Uncomment this back in when you want to use the locally-built Swift package.
         // .package(path: "../../../language-bindings/swift")
-        .package(url: "https://github.com/moonshine-ai/moonshine-swift.git", from: "0.1.6")
+        .package(url: "https://github.com/moonshine-ai/moonshine-swift.git", from: "0.1.7")
     ],
     targets: [
         .executableTarget(
