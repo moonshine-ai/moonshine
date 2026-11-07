@@ -4,6 +4,12 @@ All notable user-facing changes to Moonshine Voice are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Please keep the bullets high level, and no more than about 200 characters.
 
+## [Unreleased]
+
+### Fixed
+
+- Restarting a stream after a mid-speech stop no longer creates a phantom transcript line from the next session's leading silence.
+
 ## [0.1.6]
 
 ### Fixed

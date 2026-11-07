@@ -152,6 +152,54 @@ TEST_CASE("voice-activity-detector-test") {
       REQUIRE(segment.audio_data.size() > 0);
     }
   }
+  SUBCASE("vad-restart-after-speech") {
+    float *wav_data = nullptr;
+    size_t wav_data_size = 0;
+    int32_t wav_sample_rate = 0;
+    REQUIRE(load_wav_data("two_cities.wav", &wav_data, &wav_data_size,
+                          &wav_sample_rate));
+    std::unique_ptr<float, decltype(&std::free)> owned(wav_data, &std::free);
+    REQUIRE(wav_data != nullptr);
+    REQUIRE(wav_sample_rate > 0);
+    REQUIRE(wav_data_size >= 14 * static_cast<size_t>(wav_sample_rate));
+
+    VoiceActivityDetector reused;
+    reused.start();
+    reused.process_audio(wav_data, 3 * wav_sample_rate, wav_sample_rate);
+    REQUIRE_FALSE(reused.get_segments()->empty());
+    REQUIRE_FALSE(reused.get_segments()->back().is_complete);
+    reused.stop();
+
+    VoiceActivityDetector fresh;
+    fresh.start();
+    reused.start();
+    size_t silence_samples = wav_sample_rate / 2;
+    SUBCASE("leading-silence") {}
+    SUBCASE("immediate-speech") { silence_samples = 0; }
+    const std::vector<float> silence(silence_samples, 0.0f);
+    if (silence_samples > 0) {
+      fresh.process_audio(silence.data(), silence.size(), wav_sample_rate);
+      reused.process_audio(silence.data(), silence.size(), wav_sample_rate);
+    }
+    CHECK(fresh.get_segments()->empty());
+    CHECK(reused.get_segments()->empty());
+
+    const float *speech = wav_data + 10 * wav_sample_rate;
+    fresh.process_audio(speech, 4 * wav_sample_rate, wav_sample_rate);
+    reused.process_audio(speech, 4 * wav_sample_rate, wav_sample_rate);
+    fresh.stop();
+    reused.stop();
+    const auto &expected = *fresh.get_segments();
+    const auto &actual = *reused.get_segments();
+    REQUIRE_FALSE(expected.empty());
+    REQUIRE(actual.size() == expected.size());
+    for (size_t i = 0; i < expected.size(); ++i) {
+      CHECK(actual.at(i).start_time == expected.at(i).start_time);
+      CHECK(actual.at(i).end_time == expected.at(i).end_time);
+      CHECK(actual.at(i).is_complete == expected.at(i).is_complete);
+      CHECK(actual.at(i).audio_data == expected.at(i).audio_data);
+    }
+  }
   SUBCASE("vad-threshold-0") {
     VoiceActivityDetector vad(0.0f);
     std::string wav_path = "beckett.wav";
