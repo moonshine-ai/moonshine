@@ -2,7 +2,9 @@
 
 ## Overview
 
-Moonshine now supports optional word-level timestamps on transcription output. When enabled, each transcript line includes an array of words with `start`, `end`, and `confidence` values derived from the model's own cross-attention alignment — no external alignment model or second pass required.
+Moonshine now supports optional word-level timestamps on transcription output. When enabled, each transcript line includes an array of words with `start` and `end` times derived from the model's own cross-attention alignment — no external alignment model or second pass required — and a `confidence` for each word.
+
+A word's `confidence` is the lowest softmax probability the decoder gave any of its tokens when it chose them, taken before key-term biasing, so a word that biasing pulled in still reads as doubtful. Punctuation attached to a word is left out, so doubt over `?` or `.` does not count against the word itself.
 
 Works with both non-streaming and streaming models.
 

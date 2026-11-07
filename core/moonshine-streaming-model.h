@@ -80,6 +80,15 @@ struct MoonshineStreamingState {
   void reset(const MoonshineStreamingConfig &cfg);
 };
 
+/* Picks the next token from one row of decoder logits: the argmax once the
+ * key-term bonuses of ``biaser`` (if non-null) have been added to the row,
+ * which is modified in place. Ties go to the lowest token ID. When
+ * ``probability_out`` is non-null it receives the softmax probability of the
+ * chosen token under the row as it was *before* biasing, so a word the bias
+ * pulled in keeps the model's own doubt about it. */
+int choose_token(float *logits, int vocab_size, ContextBiaser *biaser,
+                 float *probability_out);
+
 struct MoonshineStreamingModel {
   const OrtApi *ort_api;
   OrtEnv *ort_env;
@@ -193,10 +202,15 @@ struct MoonshineStreamingModel {
    * reject the biased draft from the previous pass and then re-decode without
    * the bias, losing the biasing entirely on streaming updates. The biaser's
    * walk state is reset and advanced by this call.
+   * When ``token_probabilities_out`` is non-null it is filled with one entry
+   * per token in ``tokens_out``: the probability the decoder gave that token
+   * when it chose it, before biasing (see choose_token). A draft token kept by
+   * the verification gets its probability from the verifying pass.
    * Returns 0 on success. */
   int decode_full(MoonshineStreamingState *state, const int *speculative_tokens,
                   int speculative_len, int **tokens_out, int *tokens_len_out,
-                  ContextBiaser *biaser = nullptr);
+                  ContextBiaser *biaser = nullptr,
+                  std::vector<float> *token_probabilities_out = nullptr);
 
   void decoder_reset(MoonshineStreamingState *state);
 

@@ -87,6 +87,52 @@ void write_empty_decode_logits(const MoonshineStreamingConfig &config,
 
 }  // namespace
 
+int choose_token(float *logits, int vocab_size, ContextBiaser *biaser,
+                 float *probability_out) {
+  if (logits == nullptr || vocab_size <= 0) {
+    if (probability_out != nullptr) {
+      *probability_out = 0.0f;
+    }
+    return 0;
+  }
+  // Unchecked indexing is deliberate in the loops below: this runs on every
+  // decoded token, over the whole vocabulary.
+  //
+  // The softmax normalizer comes from the row before the bonuses go in. The
+  // bonus on the winning token is taken back off afterwards, rather than
+  // copying the row first, since only key-term continuations ever carry one.
+  float max_logit = 0.0f;
+  float sum = 0.0f;
+  if (probability_out != nullptr) {
+    max_logit = logits[0];
+    for (int i = 1; i < vocab_size; ++i) {
+      max_logit = std::max(max_logit, logits[i]);
+    }
+    for (int i = 0; i < vocab_size; ++i) {
+      sum += std::exp(logits[i] - max_logit);
+    }
+  }
+  if (biaser != nullptr) {
+    biaser->apply(logits, vocab_size);
+  }
+  int best = 0;
+  float best_score = logits[0];
+  for (int i = 1; i < vocab_size; ++i) {
+    if (logits[i] > best_score) {
+      best_score = logits[i];
+      best = i;
+    }
+  }
+  if (probability_out != nullptr) {
+    float unbiased_logit = best_score;
+    if (biaser != nullptr) {
+      unbiased_logit -= biaser->bonus_for_token(best);
+    }
+    *probability_out = std::exp(unbiased_logit - max_logit) / sum;
+  }
+  return best;
+}
+
 /* ============================================================================
  * Helper Functions
  * ============================================================================
@@ -1404,11 +1450,10 @@ int MoonshineStreamingModel::decode_tokens(MoonshineStreamingState *state,
  * ============================================================================
  */
 
-int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
-                                         const int *speculative_tokens,
-                                         int speculative_len, int **tokens_out,
-                                         int *tokens_len_out,
-                                         ContextBiaser *biaser) {
+int MoonshineStreamingModel::decode_full(
+    MoonshineStreamingState *state, const int *speculative_tokens,
+    int speculative_len, int **tokens_out, int *tokens_len_out,
+    ContextBiaser *biaser, std::vector<float> *token_probabilities_out) {
   if (state == nullptr) {
     LOG("State is null\n");
     return 1;
@@ -1416,6 +1461,9 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
   if (tokens_out == nullptr || tokens_len_out == nullptr) {
     LOG("Output pointers are null\n");
     return 1;
+  }
+  if (token_probabilities_out != nullptr) {
+    token_probabilities_out->clear();
   }
   if (state->memory_len == 0) {
     *tokens_out = nullptr;
@@ -1426,24 +1474,14 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
   std::lock_guard<std::mutex> lock(processing_mutex);
 
   std::vector<int> result_tokens;
+  // Parallel to result_tokens. Only filled in with real values when the caller
+  // asked for them, so a caller that does not pays nothing for the softmax.
+  std::vector<float> result_probabilities;
 
   // Compute max tokens based on memory length (similar to new decoder)
   float duration_sec = state->memory_len * 0.020f;
   int max_tokens = std::min(static_cast<int>(std::ceil(duration_sec * 6.5)),
                             config.max_seq_len);
-
-  // Helper lambda for argmax
-  auto argmax = [this](const float *logits) -> int {
-    int best = 0;
-    float best_score = logits[0];
-    for (int i = 1; i < config.vocab_size; ++i) {
-      if (logits[i] > best_score) {
-        best_score = logits[i];
-        best = i;
-      }
-    }
-    return best;
-  };
 
   // Contextual biasing, if the caller supplied key terms. The bonuses go into
   // the logits row in place, which is safe because every logits buffer here is
@@ -1452,11 +1490,11 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
   if (biaser != nullptr) {
     biaser->reset();
   }
-  auto biased_argmax = [&](float *logits_row) -> int {
-    if (biaser != nullptr) {
-      biaser->apply(logits_row, config.vocab_size);
-    }
-    return argmax(logits_row);
+  const bool want_probabilities = token_probabilities_out != nullptr;
+  auto biased_argmax = [&](float *logits_row, float *probability_out) -> int {
+    *probability_out = 1.0f;
+    return choose_token(logits_row, config.vocab_size, biaser,
+                        want_probabilities ? probability_out : nullptr);
   };
 
   // Helper to run decoder (requires cross_kv path)
@@ -1482,13 +1520,15 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
   }
 
   // Helper lambda for auto-regressive decoding
-  auto continue_ar_decoding = [&](int start_token) {
+  auto continue_ar_decoding = [&](int start_token, float start_probability) {
     int current_token = start_token;
+    float current_probability = start_probability;
     std::vector<float> logits;
 
     while (current_token != config.eos_id &&
            result_tokens.size() < static_cast<size_t>(max_tokens)) {
       result_tokens.push_back(current_token);
+      result_probabilities.push_back(current_probability);
       if (biaser != nullptr) {
         biaser->advance(current_token);
       }
@@ -1497,7 +1537,7 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
       int err = run_decoder(next_input, logits);
       if (err != 0) break;
 
-      current_token = biased_argmax(logits.data());
+      current_token = biased_argmax(logits.data(), &current_probability);
     }
   };
 
@@ -1519,9 +1559,12 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
     // rather than the predictions, because that prefix is what position t is
     // actually conditioned on.
     std::vector<int> predictions;
+    std::vector<float> prediction_probabilities;
     for (int t = 0; t < static_cast<int>(tokens_with_bos.size()); ++t) {
+      float probability = 1.0f;
       predictions.push_back(
-          biased_argmax(logits.data() + t * config.vocab_size));
+          biased_argmax(logits.data() + t * config.vocab_size, &probability));
+      prediction_probabilities.push_back(probability);
       if (biaser != nullptr &&
           t + 1 < static_cast<int>(tokens_with_bos.size())) {
         biaser->advance(static_cast<int32_t>(tokens_with_bos.at(t + 1)));
@@ -1538,15 +1581,18 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
       }
     }
 
-    // Accept verified tokens
+    // Accept verified tokens. Each one matched the prediction at its position,
+    // so the verifying pass's probability for that prediction is the token's.
     for (int i = 0; i < diverge_point; ++i) {
       result_tokens.push_back(speculative_tokens[i]);
+      result_probabilities.push_back(prediction_probabilities.at(i));
     }
 
     if (diverge_point == speculative_len) {
       // All speculative tokens verified, continue from final prediction
       int final_pred = predictions[speculative_len];
-      continue_ar_decoding(final_pred);
+      continue_ar_decoding(final_pred,
+                           prediction_probabilities.at(speculative_len));
     } else {
       // Diverged: reset cache and re-run with only accepted tokens
       state->cache_seq_len = 0;
@@ -1574,9 +1620,10 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
         }
       }
 
-      int new_pred =
-          biased_argmax(logits2.data() + diverge_point * config.vocab_size);
-      continue_ar_decoding(new_pred);
+      float new_probability = 1.0f;
+      int new_pred = biased_argmax(
+          logits2.data() + diverge_point * config.vocab_size, &new_probability);
+      continue_ar_decoding(new_pred, new_probability);
     }
   } else {
     // Regular decoding: start from BOS
@@ -1588,8 +1635,13 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
       return err;
     }
 
-    int first_pred = biased_argmax(logits.data());
-    continue_ar_decoding(first_pred);
+    float first_probability = 1.0f;
+    int first_pred = biased_argmax(logits.data(), &first_probability);
+    continue_ar_decoding(first_pred, first_probability);
+  }
+
+  if (token_probabilities_out != nullptr) {
+    *token_probabilities_out = std::move(result_probabilities);
   }
 
   // Allocate and copy output

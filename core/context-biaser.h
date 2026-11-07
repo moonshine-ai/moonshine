@@ -71,8 +71,10 @@ class ContextBiaser {
   // Advances the walk over a token that has actually been emitted.
   void advance(int32_t token);
 
-  // The bonus that apply() would currently add to ``token``. Exposed for
-  // tests, which need to check the depth ramp without a decoder.
+  // The bonus that apply() would currently add to ``token``. choose_token()
+  // subtracts it from the winning logit to score the token as the decoder saw
+  // it, so it has to stay in step with apply(). Tests also use it to check the
+  // depth ramp without a decoder.
   float bonus_for_token(int32_t token) const;
 
  private:

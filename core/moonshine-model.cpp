@@ -381,6 +381,16 @@ int MoonshineModel::transcribe(const float *input_audio_data,
   std::vector<int64_t> tokens = {MOONSHINE_DECODER_START_TOKEN_ID};
   std::vector<int64_t> inputIDs = tokens;
 
+  // Parallel to tokens, and only collected when the decode will be aligned
+  // (the same test that decides whether last_tokens is saved below), so plain
+  // transcription pays nothing for the softmax. The start token was given, not
+  // chosen; align_words skips its entry.
+  const bool want_probabilities =
+      alignment_session != nullptr ||
+      decoder_output_name_to_index.find("cross_attentions.0") !=
+          decoder_output_name_to_index.end();
+  std::vector<float> token_probabilities = {1.0f};
+
   // Buffer for collecting cross-attention weights during single-pass decoding.
   // Filled when the decoder model has cross_attentions.* outputs.
   std::vector<float> cross_attention_buffer;
@@ -521,6 +531,14 @@ int MoonshineModel::transcribe(const float *input_audio_data,
 
     int64_t next_token = logits_tensor_view.argmax();
     tokens.push_back(next_token);
+    if (want_probabilities) {
+      // argmax() searches the whole tensor as one row, which is right because
+      // each step feeds the decoder a single token.
+      token_probabilities.push_back(token_probability(
+          logits_tensor_view.data<float>(),
+          static_cast<int>(logits_tensor_view.element_count()),
+          static_cast<int>(next_token)));
+    }
     if (next_token == MOONSHINE_EOS_TOKEN_ID) {
       break;
     }
@@ -555,6 +573,7 @@ int MoonshineModel::transcribe(const float *input_audio_data,
   // Save tokens and attention for word alignment (only when needed)
   if (!cross_attention_buffer.empty() || alignment_session != nullptr) {
     last_tokens = tokens;
+    last_token_probabilities = std::move(token_probabilities);
   }
 
   // If we collected attention during single-pass decoding, save it
@@ -652,8 +671,9 @@ int MoonshineModel::compute_word_timestamps(
     }
 
     float time_per_frame = audio_duration / static_cast<float>(E);
-    words_out = align_words(rearranged.data(), L, H, total_steps, E, tokens_int,
-                            time_per_frame, tokenizer);
+    words_out =
+        align_words(rearranged.data(), L, H, total_steps, E, tokens_int,
+                    last_token_probabilities, time_per_frame, tokenizer);
     last_cross_attention_buffer.clear();
     last_cross_attn_steps = 0;
     return 0;
@@ -790,9 +810,9 @@ int MoonshineModel::compute_word_timestamps(
 
   float time_per_frame = audio_duration / static_cast<float>(enc_len);
 
-  words_out =
-      align_words(cross_attention_data.data(), attn_layers, num_heads, dec_len,
-                  enc_len, tokens_int, time_per_frame, tokenizer);
+  words_out = align_words(cross_attention_data.data(), attn_layers, num_heads,
+                          dec_len, enc_len, tokens_int,
+                          last_token_probabilities, time_per_frame, tokenizer);
 
   return 0;
 }
