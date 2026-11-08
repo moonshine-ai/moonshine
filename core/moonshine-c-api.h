@@ -417,6 +417,13 @@ MOONSHINE_EXPORT const char *moonshine_transcript_to_string(
    decoder on in-progress lines so the transcript can update while someone
    is still talking. Set false to encode (and diarize) as audio arrives
    but wait until the line is complete before decoding.
+   Pass ``streaming_encoder_cache`` (bool, default false) to run the
+   streaming encoder over only the new audio on each update, using the
+   optional ``encoder_stream.ort`` from the model directory
+   (``scripts/export-encoder-stream.py`` makes it). It cuts encoder work per
+   update by keeping each encoder layer's short history between updates. The
+   encoder output matches only up to rounding, so transcripts can differ
+   slightly. Without the file the option has no effect.
    Pass ``keyterms`` (comma-separated terms, e.g.
    ``Kubernetes,Anushka Sharma,ANSI/ISO``) to bias the decoder towards words it
    would otherwise be unlikely to produce - jargon, product names, contact

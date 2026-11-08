@@ -325,6 +325,17 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
     const MoonshineStreamingConfig &config = this->streaming_model->config;
     this->streaming_state.reset(config);
 
+    if (this->options.streaming_encoder_cache) {
+      std::string encoder_stream_path =
+          append_path_component(model_path, "encoder_stream.ort");
+      if (std::filesystem::exists(encoder_stream_path) &&
+          this->streaming_model->load_encoder_stream_from_path(
+              encoder_stream_path.c_str()) != 0) {
+        LOGF("Warning: Failed to load encoder_stream from %s\n",
+             encoder_stream_path.c_str());
+      }
+    }
+
     // Load attention-enabled streaming decoder if word timestamps requested
     if (this->options.word_timestamps) {
       std::string decoder_attn_path =
@@ -566,6 +577,18 @@ void Transcriber::load_from_memory_files(uint32_t model_arch) {
           std::to_string(load_error));
     }
     this->streaming_state.reset(this->streaming_model->config);
+
+    if (this->options.streaming_encoder_cache &&
+        this->options.model_files.contains("encoder_stream.ort")) {
+      const uint8_t *stream_data = nullptr;
+      size_t stream_size = 0;
+      this->options.model_files.load("encoder_stream.ort", &stream_data,
+                                     &stream_size);
+      if (this->streaming_model->load_encoder_stream_from_memory(
+              stream_data, stream_size) != 0) {
+        LOG("Warning: Failed to load encoder_stream.ort from memory\n");
+      }
+    }
 
     // Swap in the attention-enabled streaming decoder for word timestamps.
     if (this->options.word_timestamps &&

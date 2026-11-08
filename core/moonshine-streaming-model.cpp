@@ -164,6 +164,10 @@ void MoonshineStreamingState::reset(const MoonshineStreamingConfig &cfg) {
 
   // Encoder tracking
   encoder_frames_emitted = 0;
+  encoder_k_cache.clear();
+  encoder_v_cache.clear();
+  encoder_x_cache.clear();
+  encoder_cache_frames = 0;
 
   // Adapter position
   adapter_pos_offset = 0;
@@ -225,6 +229,7 @@ MoonshineStreamingModel::~MoonshineStreamingModel() {
   if (adapter_session) ort_api->ReleaseSession(adapter_session);
   if (cross_kv_session) ort_api->ReleaseSession(cross_kv_session);
   if (decoder_kv_session) ort_api->ReleaseSession(decoder_kv_session);
+  if (encoder_stream_session) ort_api->ReleaseSession(encoder_stream_session);
   delete ort_allocator;
   delete tokenizer;
 #ifndef _WIN32
@@ -233,6 +238,7 @@ MoonshineStreamingModel::~MoonshineStreamingModel() {
   unmap_model(&adapter_mmapped_data, &adapter_mmapped_data_size);
   unmap_model(&cross_kv_mmapped_data, &cross_kv_mmapped_data_size);
   unmap_model(&decoder_kv_mmapped_data, &decoder_kv_mmapped_data_size);
+  unmap_model(&encoder_stream_mmapped_data, &encoder_stream_mmapped_data_size);
 #endif
 }
 
@@ -458,6 +464,83 @@ int MoonshineStreamingModel::replace_decoder_kv_from_path(const char *path) {
       ort_api, ort_env, ort_session_options, path, &decoder_kv_session,
       &decoder_kv_mmapped_data, &decoder_kv_mmapped_data_size));
   RETURN_ON_NULL(decoder_kv_session);
+  return 0;
+}
+
+int MoonshineStreamingModel::load_encoder_stream_from_path(const char *path) {
+  if (encoder_stream_session != nullptr) {
+    ort_api->ReleaseSession(encoder_stream_session);
+    encoder_stream_session = nullptr;
+  }
+#ifndef _WIN32
+  unmap_model(&encoder_stream_mmapped_data, &encoder_stream_mmapped_data_size);
+#endif
+  OrtSessionOptions *options = nullptr;
+  RETURN_ON_ERROR(create_encoder_stream_options(&options));
+  const int err = ort_session_from_path(
+      ort_api, ort_env, options, path, &encoder_stream_session,
+      &encoder_stream_mmapped_data, &encoder_stream_mmapped_data_size);
+  ort_api->ReleaseSessionOptions(options);
+  RETURN_ON_ERROR(err);
+  RETURN_ON_NULL(encoder_stream_session);
+  return init_encoder_stream();
+}
+
+int MoonshineStreamingModel::load_encoder_stream_from_memory(
+    const uint8_t *data, size_t size) {
+  if (encoder_stream_session != nullptr) {
+    ort_api->ReleaseSession(encoder_stream_session);
+    encoder_stream_session = nullptr;
+  }
+  OrtSessionOptions *options = nullptr;
+  RETURN_ON_ERROR(create_encoder_stream_options(&options));
+  const int err = ort_session_from_memory(ort_api, ort_env, options, data, size,
+                                          &encoder_stream_session);
+  ort_api->ReleaseSessionOptions(options);
+  RETURN_ON_ERROR(err);
+  RETURN_ON_NULL(encoder_stream_session);
+  return init_encoder_stream();
+}
+
+int MoonshineStreamingModel::create_encoder_stream_options(
+    OrtSessionOptions **options) {
+  // The other sessions skip weight prepacking. The cached encoder runs each
+  // matmul over only a few rows, so repacking the weights on every call would
+  // cost more than the matmuls themselves: pack them once, at load.
+  RETURN_ON_ORT_ERROR(
+      ort_api, ort_api->CloneSessionOptions(ort_session_options, options));
+  RETURN_ON_ORT_ERROR(ort_api,
+                      ort_api->AddSessionConfigEntry(
+                          *options, "session.disable_prepacking", "0"));
+  return 0;
+}
+
+int MoonshineStreamingModel::init_encoder_stream() {
+  // Inputs are features, k_cache, v_cache, x_cache, frames, flush. The caches
+  // are [depth, 1, rows, width]: the key and value width is the encoder's
+  // attention width, the pending inputs are encoder_dim wide.
+  size_t input_count = 0;
+  RETURN_ON_ORT_ERROR(ort_api, ort_api->SessionGetInputCount(
+                                   encoder_stream_session, &input_count));
+  std::vector<int64_t> k_shape, x_shape;
+  if (input_count == 6) {
+    k_shape = ort_get_input_shape(ort_api, encoder_stream_session, 1);
+    x_shape = ort_get_input_shape(ort_api, encoder_stream_session, 3);
+  }
+  auto matches = [this](const std::vector<int64_t> &shape) {
+    return shape.size() == 4 && shape[0] == config.depth && shape[1] == 1 &&
+           shape[2] >= 0 && shape[3] > 0;
+  };
+  if (!matches(k_shape) || !matches(x_shape) || k_shape[2] == 0 ||
+      x_shape[3] != config.encoder_dim) {
+    LOG("encoder_stream.ort does not match this model\n");
+    ort_api->ReleaseSession(encoder_stream_session);
+    encoder_stream_session = nullptr;
+    return 1;
+  }
+  encoder_stream_cache_rows = static_cast<int>(k_shape[2]);
+  encoder_stream_kv_dim = static_cast<int>(k_shape[3]);
+  encoder_stream_pending_rows = static_cast<int>(x_shape[2]);
   return 0;
 }
 
@@ -862,6 +945,20 @@ int MoonshineStreamingModel::encode(MoonshineStreamingState *state,
 
   std::lock_guard<std::mutex> lock(processing_mutex);
 
+  // The cached encoder carries on from where its caches left off, so it is
+  // used only while it has produced every row emitted on this line so far.
+  // Otherwise, or after the line was flushed, the windowed encoder runs.
+  if (encoder_stream_session != nullptr && state->encoder_cache_frames >= 0 &&
+      std::max<int64_t>(0,
+                        state->encoder_cache_frames - config.total_lookahead) ==
+          state->encoder_frames_emitted) {
+    std::vector<float> new_encoded;
+    RETURN_ON_ERROR(
+        run_encoder_stream(state, is_final, new_frames, &new_encoded));
+    return append_encoder_rows(state, new_encoded, new_frames, stable_count,
+                               new_frames_out);
+  }
+
   // Run encoder on windowed accumulated features.
   std::vector<int64_t> feat_shape = {1, window_size, config.encoder_dim};
 
@@ -926,7 +1023,13 @@ int MoonshineStreamingModel::encode(MoonshineStreamingState *state,
   }
 
   ort_api->ReleaseValue(enc_outputs[0]);
+  return append_encoder_rows(state, new_encoded, new_frames, stable_count,
+                             new_frames_out);
+}
 
+int MoonshineStreamingModel::append_encoder_rows(
+    MoonshineStreamingState *state, std::vector<float> &new_encoded,
+    int new_frames, int stable_count, int *new_frames_out) {
   std::vector<int64_t> enc_slice_shape = {1, new_frames, config.encoder_dim};
   std::vector<int64_t> pos_shape = {1};
 
@@ -950,8 +1053,9 @@ int MoonshineStreamingModel::encode(MoonshineStreamingState *state,
   OrtValue *adapter_inputs[] = {encoded_slice_tensor, pos_tensor};
   OrtValue *adapter_outputs[1] = {nullptr};
 
-  status = ORT_RUN(ort_api, adapter_session, adapter_input_names,
-                   adapter_inputs, 2, adapter_output_names, 1, adapter_outputs);
+  OrtStatus *status =
+      ORT_RUN(ort_api, adapter_session, adapter_input_names, adapter_inputs, 2,
+              adapter_output_names, 1, adapter_outputs);
 
   ort_api->ReleaseValue(encoded_slice_tensor);
   ort_api->ReleaseValue(pos_tensor);
@@ -982,6 +1086,133 @@ int MoonshineStreamingModel::encode(MoonshineStreamingState *state,
   state->adapter_pos_offset += new_frames;
 
   if (new_frames_out) *new_frames_out = new_frames;
+  return 0;
+}
+
+int MoonshineStreamingModel::run_encoder_stream(MoonshineStreamingState *state,
+                                                bool is_final, int new_frames,
+                                                std::vector<float> *encoded) {
+  const int64_t dim = config.encoder_dim;
+  const size_t cache_size = static_cast<size_t>(config.depth) *
+                            encoder_stream_cache_rows * encoder_stream_kv_dim;
+  const size_t pending_size =
+      static_cast<size_t>(config.depth) * encoder_stream_pending_rows * dim;
+  if (state->encoder_k_cache.size() != cache_size ||
+      state->encoder_x_cache.size() != pending_size) {
+    state->encoder_k_cache.assign(cache_size, 0.0f);
+    state->encoder_v_cache.assign(cache_size, 0.0f);
+    state->encoder_x_cache.assign(pending_size, 0.0f);
+  }
+  state->encoder_k_cache_next.resize(cache_size);
+  state->encoder_v_cache_next.resize(cache_size);
+  state->encoder_x_cache_next.resize(pending_size);
+
+  int64_t frames = state->encoder_cache_frames;
+  const int64_t feature_count = state->accumulated_feature_count - frames;
+  int64_t flush = is_final ? 1 : 0;
+
+  std::vector<int64_t> feat_shape = {1, feature_count, dim};
+  std::vector<int64_t> cache_shape = {
+      config.depth, 1, encoder_stream_cache_rows, encoder_stream_kv_dim};
+  std::vector<int64_t> pending_shape = {config.depth, 1,
+                                        encoder_stream_pending_rows, dim};
+  std::vector<int64_t> scalar_shape = {1};
+  struct TensorSpec {
+    float *data;
+    size_t size;
+    const std::vector<int64_t> *shape;
+  };
+  const TensorSpec float_inputs[] = {
+      {state->accumulated_features.data() + frames * dim,
+       static_cast<size_t>(feature_count * dim), &feat_shape},
+      {state->encoder_k_cache.data(), cache_size, &cache_shape},
+      {state->encoder_v_cache.data(), cache_size, &cache_shape},
+      {state->encoder_x_cache.data(), pending_size, &pending_shape},
+  };
+  // The caches are written straight into the _next buffers. encoded has a
+  // length only the run knows, so ORT allocates it.
+  const TensorSpec float_outputs[] = {
+      {state->encoder_k_cache_next.data(), cache_size, &cache_shape},
+      {state->encoder_v_cache_next.data(), cache_size, &cache_shape},
+      {state->encoder_x_cache_next.data(), pending_size, &pending_shape},
+  };
+
+  OrtValue *inputs[6] = {nullptr};
+  OrtValue *outputs[4] = {nullptr};
+  auto release_all = [&]() {
+    for (OrtValue *value : inputs) {
+      if (value != nullptr) ort_api->ReleaseValue(value);
+    }
+    for (OrtValue *value : outputs) {
+      if (value != nullptr) ort_api->ReleaseValue(value);
+    }
+  };
+  auto make_float = [&](const TensorSpec &spec, OrtValue **value) {
+    return ort_api->CreateTensorWithDataAsOrtValue(
+        ort_memory_info, spec.data, spec.size * sizeof(float),
+        spec.shape->data(), spec.shape->size(),
+        ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, value);
+  };
+  OrtStatus *status = nullptr;
+  for (int i = 0; i < 4 && status == nullptr; ++i) {
+    status = make_float(float_inputs[i], &inputs[i]);
+  }
+  for (int i = 0; i < 3 && status == nullptr; ++i) {
+    status = make_float(float_outputs[i], &outputs[i + 1]);
+  }
+  if (status == nullptr) {
+    status = ort_api->CreateTensorWithDataAsOrtValue(
+        ort_memory_info, &frames, sizeof(int64_t), scalar_shape.data(),
+        scalar_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, &inputs[4]);
+  }
+  if (status == nullptr) {
+    status = ort_api->CreateTensorWithDataAsOrtValue(
+        ort_memory_info, &flush, sizeof(int64_t), scalar_shape.data(),
+        scalar_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, &inputs[5]);
+  }
+  const char *input_names[] = {"features", "k_cache", "v_cache",
+                               "x_cache",  "frames",  "flush"};
+  const char *output_names[] = {"encoded", "k_cache_out", "v_cache_out",
+                                "x_cache_out"};
+  if (status == nullptr) {
+    status = ORT_RUN(ort_api, encoder_stream_session, input_names, inputs, 6,
+                     output_names, 4, outputs);
+  }
+  if (status != nullptr) {
+    LOG_ORT_ERROR(ort_api, status);
+    release_all();
+    return 1;
+  }
+
+  std::vector<int64_t> enc_shape = ort_get_value_shape(ort_api, outputs[0]);
+  if (enc_shape.size() != 3 || enc_shape[1] != new_frames ||
+      enc_shape[2] != dim) {
+    LOGF("encoder_stream returned %lld rows, expected %d",
+         enc_shape.size() == 3 ? static_cast<long long>(enc_shape[1]) : -1LL,
+         new_frames);
+    release_all();
+    return 1;
+  }
+  float *encoded_data = nullptr;
+  status = ort_api->GetTensorMutableData(outputs[0], (void **)&encoded_data);
+  if (status != nullptr) {
+    LOG_ORT_ERROR(ort_api, status);
+    release_all();
+    return 1;
+  }
+  encoded->assign(encoded_data, encoded_data + new_frames * dim);
+  release_all();
+
+  // Commit only now that the run has succeeded. A flushed line has computed
+  // its last rows without lookahead, which the caches cannot continue from.
+  if (is_final) {
+    state->encoder_cache_frames = -1;
+  } else {
+    std::swap(state->encoder_k_cache, state->encoder_k_cache_next);
+    std::swap(state->encoder_v_cache, state->encoder_v_cache_next);
+    std::swap(state->encoder_x_cache, state->encoder_x_cache_next);
+    state->encoder_cache_frames = state->accumulated_feature_count;
+  }
   return 0;
 }
 

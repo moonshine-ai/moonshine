@@ -9,11 +9,25 @@
 # on medium, for 0.5% more model size. See experiments.md in moonshine-internal.
 PER_CHANNEL_ARGS=(--per-channel)
 
+# Usage: quantize-streaming-model.sh <model_dir> [graph ...]
+# With no graph names, quantizes every streaming graph. Name graphs (for example
+# encoder_stream) to quantize only those, from a directory that holds just them.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MODEL_DIR="$(cd "$1" && pwd)"
+shift
 cd "${MODEL_DIR}" || exit 1
 
-for ONNX_NAME in frontend encoder adapter cross_kv decoder_kv; do
+if [ "$#" -gt 0 ]; then
+    ONNX_NAMES=("$@")
+else
+    ONNX_NAMES=(frontend encoder adapter cross_kv decoder_kv)
+    # Optional cached encoder from scripts/export-encoder-stream.py.
+    if [ -f encoder_stream.onnx ]; then
+        ONNX_NAMES+=(encoder_stream)
+    fi
+fi
+
+for ONNX_NAME in "${ONNX_NAMES[@]}"; do
     if [ "${ONNX_NAME}" == "frontend" ]; then
 	    METHOD="integer_weights"
 		FILE_SUFFIX="quantized_weights"
