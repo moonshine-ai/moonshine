@@ -3,6 +3,7 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
@@ -80,6 +81,56 @@ TEST_CASE("PhononTTS lists the catalog voices") {
     found = found || v.id == "zoey";
   }
   CHECK(found);
+
+  // The compiled-in id list stands in for voices.json where that file is not
+  // available (nothing fetched yet, or the WASM binding), so it has to agree
+  // with the shipped file exactly.
+  std::vector<std::string> from_json;
+  for (const PhononVoiceInfo& v : voices) {
+    from_json.push_back(v.id);
+    CHECK(v.file == "voices/" + v.id + ".safetensors");
+  }
+  std::vector<std::string> builtin = PhononTTS::builtin_voice_ids();
+  std::sort(from_json.begin(), from_json.end());
+  std::sort(builtin.begin(), builtin.end());
+  CHECK(builtin == from_json);
+}
+
+TEST_CASE("PhononTTS takes a catalog voice latent supplied in memory") {
+  // The WASM binding hands every asset over as bytes under its canonical key
+  // and has no filesystem to fall back to, so a catalog voice has to resolve
+  // through the in-memory map rather than a path beside voices.json.
+  const std::filesystem::path root =
+      r::moonshine_tts_bundled_data_dir_relative();
+  if (!phonon_data_present(root)) {
+    return;
+  }
+  std::ifstream f(root / "phonon" / "voices" / "zoey.safetensors",
+                  std::ios::binary);
+  const std::vector<uint8_t> latent((std::istreambuf_iterator<char>(f)),
+                                    std::istreambuf_iterator<char>());
+  REQUIRE(!latent.empty());
+
+  PhononTTSOptions opt = base_options(root);
+  // Point the disk lookup somewhere empty so only the in-memory copy can
+  // satisfy it; the graphs still come from the data directory by path.
+  for (const std::string_view key :
+       {kTtsPhononEmbedPromptKey, kTtsPhononEmbedLatentKey,
+        kTtsPhononBackboneKey, kTtsPhononFlowHeadKey,
+        kTtsPhononMimiTransformerKey, kTtsPhononMimiSeanetKey,
+        kTtsPhononModelJsonKey, kTtsPhononTokenizerKey,
+        kTtsPhononVoicesJsonKey}) {
+    opt.tts_asset_files.set_path(
+        key, std::filesystem::absolute(root / std::filesystem::path(key)));
+  }
+  opt.tts_asset_files.set_memory("phonon/voices/zoey.safetensors",
+                                 latent.data(), latent.size());
+  opt.g2p_options.g2p_root = std::filesystem::temp_directory_path();
+
+  PhononTTS tts(opt);
+  const std::vector<float> a = tts.synthesize("Hello from memory.");
+  CHECK(a.size() > 0.5 * PhononTTS::kSampleRateHz);
+  CHECK(rms(a) > 0.01F);
 }
 
 TEST_CASE(

@@ -1648,6 +1648,10 @@ int32_t moonshine_text_to_speech(int32_t tts_synthesizer_handle,
       }
       std::memcpy(*out_audio_data, wave.data(), wave.size() * sizeof(float));
     }
+  } catch (const std::invalid_argument &e) {
+    // Text the voice's language cannot pronounce (GitHub issue #241).
+    LOGF("Failed to synthesize text to speech: %s", e.what());
+    return MOONSHINE_ERROR_INVALID_ARGUMENT;
   } catch (const std::exception &e) {
     LOGF("Failed to synthesize text to speech: %s", e.what());
     return MOONSHINE_ERROR_UNKNOWN;

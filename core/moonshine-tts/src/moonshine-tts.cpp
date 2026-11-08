@@ -45,6 +45,23 @@ namespace {
 
 constexpr std::string_view kVoiceMagic = "KVO1";
 
+/// True when ``text`` holds at least one Unicode letter, in any script. Used to
+/// tell "nothing to say" (punctuation, whitespace, digits the language drops)
+/// from "the words were there and the pipeline dropped them".
+bool text_has_letters(std::string_view text) {
+  const std::u32string cps = utf8_str_to_u32(std::string(text));
+  for (const char32_t cp : cps) {
+    const utf8proc_category_t cat =
+        utf8proc_category(static_cast<utf8proc_int32_t>(cp));
+    if (cat == UTF8PROC_CATEGORY_LU || cat == UTF8PROC_CATEGORY_LL ||
+        cat == UTF8PROC_CATEGORY_LT || cat == UTF8PROC_CATEGORY_LM ||
+        cat == UTF8PROC_CATEGORY_LO) {
+      return true;
+    }
+  }
+  return false;
+}
+
 std::string utf8_nfc(std::string_view s) {
   const std::string tmp(s);
   utf8proc_uint8_t* p =
@@ -1018,12 +1035,24 @@ bool phonon_assets_available(const MoonshineTTSOptions& opt) {
   return true;
 }
 
-/// Catalog voices from ``phonon/voices.json``; each is available when the
-/// model graphs and its own latent file are.
+/// Catalog voices from ``phonon/voices.json``, or the compiled-in copy of its
+/// ids when that file is not to hand (nothing downloaded yet, or the WASM
+/// binding, which has no filesystem); each is available when the model graphs
+/// and its own latent file are.
 std::vector<std::pair<std::string, bool>> list_phonon_voices_with_availability(
     const MoonshineTTSOptions& opt) {
   const bool models = phonon_assets_available(opt);
   std::vector<std::pair<std::string, bool>> out;
+  const std::vector<PhononVoiceInfo> catalog_voices =
+      PhononTTS::list_voices(opt.g2p_options.g2p_root, opt.files);
+  if (catalog_voices.empty()) {
+    for (const std::string& id : PhononTTS::builtin_voice_ids()) {
+      const std::string key =
+          std::string(kTtsPhononVoicesDirKey) + "/" + id + ".safetensors";
+      out.emplace_back(id, models && zipvoice_asset_present(opt, key));
+    }
+    return out;
+  }
   const std::filesystem::path catalog =
       opt.files.entries.count(std::string(kTtsPhononVoicesJsonKey)) != 0 &&
               !opt.files.entries.at(std::string(kTtsPhononVoicesJsonKey))
@@ -1034,8 +1063,7 @@ std::vector<std::pair<std::string, bool>> list_phonon_voices_with_availability(
           : resolve_path_under_root(
                 opt.g2p_options.g2p_root,
                 std::filesystem::path(kTtsPhononVoicesJsonKey));
-  for (const PhononVoiceInfo& v :
-       PhononTTS::list_voices(opt.g2p_options.g2p_root, opt.files)) {
+  for (const PhononVoiceInfo& v : catalog_voices) {
     const bool have_voice = std::filesystem::is_regular_file(
         catalog.parent_path() / std::filesystem::path(v.file));
     out.emplace_back(v.id, models && have_voice);
@@ -2025,6 +2053,29 @@ struct MoonshineTTS::Impl {
   }
 
   std::vector<float> synthesize_unlocked(std::string_view text) {
+    std::vector<float> result = run_engine_synthesize(text);
+    // Every engine returns an empty wave when grapheme-to-phoneme conversion
+    // found nothing to pronounce. For punctuation or whitespace that is the
+    // right answer and the sentence splitter relies on it. For text that has
+    // words in it, it means the words were in a script this language's G2P
+    // does not read (Latin text into a Hindi or Japanese voice, say), and
+    // returning silence hid that from the caller (GitHub issue #241). It is
+    // an invalid_argument so the C API can report it as a bad input rather
+    // than an unknown failure.
+    if (result.empty() && text_has_letters(text)) {
+      throw std::invalid_argument(
+          "MoonshineTTS: no speech was produced for \"" +
+          std::string(text.substr(0, 80)) +
+          "\" because the grapheme-to-phoneme stage for language '" +
+          language_ +
+          "' found no pronounceable words. Check that the text is written in "
+          "the script that language expects, choose a voice for the text's "
+          "language, or pass IPA through synthesize_from_phonemes.");
+    }
+    return result;
+  }
+
+  std::vector<float> run_engine_synthesize(std::string_view text) {
     if (zipvoice_) {
       return zipvoice_->synthesize(text);
     }

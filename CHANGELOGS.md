@@ -4,11 +4,17 @@ All notable user-facing changes to Moonshine Voice are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Please keep the bullets high level, and no more than about 200 characters.
 
-## [Unreleased]
+## [0.1.7]
 
 ### Fixed
 
 - Restarting a stream after a mid-speech stop no longer creates a phantom transcript line from the next session's leading silence.
+- Kokoro text to speech loads on Android again. The 0.1.5 and 0.1.6 AARs shipped an ONNX Runtime built before `QLinearMatMul` and other kernels were required, so the voice failed at session creation (GitHub issue #242).
+- A release preflight check now verifies every vendored ONNX Runtime prebuilt carries every operator in the required-operators config, so a stale platform library fails before it ships.
+- The Android JNI layer releases the audio arrays it pins for `transcribeWithoutStreaming` and `addAudioToStream`. Each call leaked a copy of the input buffer (GitHub issue #232).
+- Synthesizing text whose script the voice's language cannot pronounce, such as Latin text with a Hindi voice, raises an error instead of returning silence (GitHub issue #241).
+- Phonon voices work in the browser. The WebAssembly ONNX Runtime predated Phonon and lacked its `Elu` kernel, and a catalog voice supplied as bytes was looked for on disk.
+- Phonon voices are listed by `voices()` before `phonon/voices.json` has been downloaded, and on the web, where the catalog never reaches a filesystem.
 
 ## [0.1.6]
 

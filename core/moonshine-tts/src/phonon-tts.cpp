@@ -436,21 +436,31 @@ struct PhononTTS::Impl {
           break;
         }
       }
-      std::filesystem::path voice_path;
+      // The latent is addressed by its canonical asset key so that a caller
+      // who supplied it in memory (the WASM binding has no filesystem) is
+      // honoured; on disk the key resolves under the data root as before.
+      std::string voice_key;
       if (match != nullptr) {
-        voice_path = asset_path(kTtsPhononVoicesJsonKey).parent_path() /
-                     std::filesystem::path(match->file);
+        // ``file`` is relative to voices.json, e.g. "voices/zoey.safetensors".
+        voice_key = std::string(kTtsPhononVoicesJsonKey.substr(
+                        0, kTtsPhononVoicesJsonKey.rfind('/') + 1)) +
+                    match->file;
       } else {
         // Not in the catalog: try the voices directory by name.
-        voice_path = asset_path(kTtsPhononVoicesDirKey) /
-                     (opt.voice_id + ".safetensors");
-        if (!std::filesystem::is_regular_file(voice_path)) {
+        voice_key = std::string(kTtsPhononVoicesDirKey) + "/" + opt.voice_id +
+                    ".safetensors";
+      }
+      if (!asset_in_memory(voice_key) &&
+          !std::filesystem::is_regular_file(asset_path(voice_key))) {
+        if (match == nullptr) {
           throw std::runtime_error("PhononTTS: unknown voice '" + opt.voice_id +
                                    "'");
         }
+        throw std::runtime_error("PhononTTS: missing voice file " +
+                                 asset_path(voice_key).string());
       }
       voice_latents_ =
-          parse_voice_safetensors(read_file_bytes(voice_path, "voice file"),
+          parse_voice_safetensors(load_asset_bytes(voice_key, "voice file"),
                                   meta_.audio_prompt_dim, &voice_frames_);
     }
   }
@@ -974,6 +984,51 @@ std::vector<float> PhononChunkSource::next() {
 bool PhononChunkSource::has_more() const { return gen_ != nullptr; }
 
 int PhononChunkSource::sample_rate() const { return PhononTTS::kSampleRateHz; }
+
+const std::vector<std::string>& PhononTTS::builtin_voice_ids() {
+  // Mirrors core/moonshine-tts/data/phonon/voices.json; phonon_tts_test
+  // checks the two agree when the data directory is present.
+  static const std::vector<std::string> ids = {
+      "alfie",
+      "azgorath",
+      "bryony",
+      "captain_silas_blackwater",
+      "delia",
+      "easton",
+      "edwin",
+      "elodie-rose",
+      "everly",
+      "fairy_godmother",
+      "fennick_the_young_elf",
+      "freya",
+      "grub_the_ogre",
+      "hadley",
+      "harper",
+      "hugh",
+      "imogen",
+      "juniper",
+      "lottie",
+      "maeve",
+      "master_aldric",
+      "micah",
+      "miles",
+      "morwenna_of_the_deep",
+      "old_mortlake",
+      "pippa",
+      "preston",
+      "russell",
+      "sir_bramwell",
+      "spencer",
+      "teddy",
+      "the_snow_queen",
+      "the_thing_under_the_stairs",
+      "toby",
+      "trevor",
+      "vyrmathrax_the_ancient",
+      "zoey",
+  };
+  return ids;
+}
 
 std::vector<PhononVoiceInfo> PhononTTS::list_voices(
     const std::filesystem::path& root, const FileInformationMap& files) {

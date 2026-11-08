@@ -43,7 +43,19 @@ static jmethodID get_method(JNIEnv *env, jclass clazz, const char *methodName,
   return method;
 }
 
-static std::unique_ptr<transcript_t> c_transcript_from_jobject(
+// A C transcript built from a Java one, with the strings and sample buffers
+// the line structs point into. Everything is copied out of the JVM at
+// construction, so no Get*/Release* pair is left open: the previous version
+// handed GetFloatArrayElements and GetStringUTFChars pointers straight to
+// transcript_line_t and never released them.
+struct OwnedTranscript {
+  std::vector<std::string> texts;
+  std::vector<std::vector<float>> audio;
+  std::vector<transcript_line_t> lines;
+  transcript_t transcript{};
+};
+
+static std::unique_ptr<OwnedTranscript> c_transcript_from_jobject(
     JNIEnv *env, jobject javaTranscript) {
   jclass transcriptClass = env->GetObjectClass(javaTranscript);
   jfieldID linesField =
@@ -74,39 +86,53 @@ static std::unique_ptr<transcript_t> c_transcript_from_jobject(
       get_field(env, lineClass, "haveSpeakersChanged", "Z");
 
   jsize lineCount = env->CallIntMethod(linesList, sizeMethod);
-  std::unique_ptr<transcript_t> transcript(new transcript_t());
-  transcript->line_count = lineCount;
-  transcript->lines = new transcript_line_t[lineCount];
+  auto owned = std::make_unique<OwnedTranscript>();
+  owned->texts.resize(lineCount);
+  owned->audio.resize(lineCount);
+  owned->lines.resize(lineCount);
   for (int i = 0; i < lineCount; i++) {
+    transcript_line_t &out = owned->lines[i];
+    out = transcript_line_t{};
     jobject line = env->CallObjectMethod(linesList, getMethod, i);
     jstring text = (jstring)env->GetObjectField(line, textField);
     // Mirror the C→Java direction: a null Java String stays null on the C side
     // rather than being fed to GetStringUTFChars (which is undefined for null).
-    transcript->lines[i].text =
-        (text != nullptr) ? env->GetStringUTFChars(text, nullptr) : nullptr;
+    if (text != nullptr) {
+      const char *utf = env->GetStringUTFChars(text, nullptr);
+      owned->texts[i] = (utf != nullptr) ? utf : "";
+      if (utf != nullptr) {
+        env->ReleaseStringUTFChars(text, utf);
+      }
+      out.text = owned->texts[i].c_str();
+    }
     jfloatArray audioData =
         (jfloatArray)env->GetObjectField(line, audioDataField);
-    transcript->lines[i].audio_data =
-        env->GetFloatArrayElements(audioData, nullptr);
-    transcript->lines[i].audio_data_count = env->GetArrayLength(audioData);
-    transcript->lines[i].start_time = env->GetFloatField(line, startTimeField);
-    transcript->lines[i].duration = env->GetFloatField(line, durationField);
-    transcript->lines[i].id = env->GetLongField(line, idField);
-    transcript->lines[i].is_complete =
-        env->GetBooleanField(line, isCompleteField);
-    transcript->lines[i].is_updated =
-        env->GetBooleanField(line, isUpdatedField);
-    transcript->lines[i].is_new = env->GetBooleanField(line, isNewField);
-    transcript->lines[i].has_text_changed =
-        env->GetBooleanField(line, hasTextChangedField);
-    transcript->lines[i].have_speakers_changed =
+    if (audioData != nullptr) {
+      const jsize count = env->GetArrayLength(audioData);
+      owned->audio[i].resize(count);
+      if (count > 0) {
+        env->GetFloatArrayRegion(audioData, 0, count, owned->audio[i].data());
+      }
+      out.audio_data = owned->audio[i].data();
+      out.audio_data_count = static_cast<size_t>(count);
+    }
+    out.start_time = env->GetFloatField(line, startTimeField);
+    out.duration = env->GetFloatField(line, durationField);
+    out.id = env->GetLongField(line, idField);
+    out.is_complete = env->GetBooleanField(line, isCompleteField);
+    out.is_updated = env->GetBooleanField(line, isUpdatedField);
+    out.is_new = env->GetBooleanField(line, isNewField);
+    out.has_text_changed = env->GetBooleanField(line, hasTextChangedField);
+    out.have_speakers_changed =
         env->GetBooleanField(line, haveSpeakersChangedField);
     // Speaker spans are output-only metadata, so this Java-to-C conversion
     // (used only for test round-trips) doesn't copy them back.
-    transcript->lines[i].speaker_spans = nullptr;
-    transcript->lines[i].speaker_span_count = 0;
+    out.speaker_spans = nullptr;
+    out.speaker_span_count = 0;
   }
-  return transcript;
+  owned->transcript.lines = owned->lines.data();
+  owned->transcript.line_count = lineCount;
+  return owned;
 }
 
 static jobject c_transcript_to_jobject(JNIEnv *env,
@@ -339,15 +365,13 @@ Java_ai_moonshine_voice_JNI_moonshineErrorToString(JNIEnv *env,
 extern "C" JNIEXPORT jstring JNICALL
 Java_ai_moonshine_voice_JNI_moonshineTranscriptToString(
     JNIEnv *env, jobject /* this */, jobject javaTranscript) {
-  std::unique_ptr<transcript_t> transcript =
+  std::unique_ptr<OwnedTranscript> transcript =
       c_transcript_from_jobject(env, javaTranscript);
   if (transcript == nullptr) {
     return env->NewStringUTF("");
   }
-  jstring result =
-      env->NewStringUTF(moonshine_transcript_to_string(transcript.get()));
-  delete[] transcript->lines;
-  return result;
+  return env->NewStringUTF(
+      moonshine_transcript_to_string(&transcript->transcript));
 }
 
 extern "C" JNIEXPORT int JNICALL
@@ -532,12 +556,21 @@ Java_ai_moonshine_voice_JNI_moonshineTranscribeWithoutStreaming(
     JNIEnv *env, jobject /* this */, jint transcriber_handle,
     jfloatArray audio_data, jint sample_rate, jint flags) {
   try {
+    if (audio_data == nullptr) {
+      return nullptr;
+    }
     float *audio_data_ptr = env->GetFloatArrayElements(audio_data, nullptr);
+    if (audio_data_ptr == nullptr) {
+      return nullptr;
+    }
     size_t audio_data_size = env->GetArrayLength(audio_data);
     struct transcript_t *transcript = nullptr;
     int transcription_error = moonshine_transcribe_without_streaming(
         transcriber_handle, audio_data_ptr, audio_data_size, sample_rate, flags,
         &transcript);
+    // The library copies what it needs before returning, and we never write
+    // to the array, so JNI_ABORT frees ART's copy without copying it back.
+    env->ReleaseFloatArrayElements(audio_data, audio_data_ptr, JNI_ABORT);
     if (transcription_error != 0) {
       return nullptr;
     }
@@ -648,10 +681,19 @@ Java_ai_moonshine_voice_JNI_moonshineAddAudioToStream(
       return MOONSHINE_ERROR_INVALID_ARGUMENT;
     }
     float *audio_data_ptr = env->GetFloatArrayElements(audio_data, nullptr);
+    if (audio_data_ptr == nullptr) {
+      return MOONSHINE_ERROR_UNKNOWN;
+    }
     size_t audio_data_size = env->GetArrayLength(audio_data);
-    return moonshine_transcribe_add_audio_to_stream(
+    int result = moonshine_transcribe_add_audio_to_stream(
         transcriber_handle, stream_handle, audio_data_ptr, audio_data_size,
         sample_rate, flags);
+    // ART hands back a malloc'd copy here, and the stream has already taken
+    // its own copy of the samples, so this release is what keeps the native
+    // heap flat: without it every addAudio() leaked one chunk of audio
+    // (GitHub issue #232).
+    env->ReleaseFloatArrayElements(audio_data, audio_data_ptr, JNI_ABORT);
+    return result;
   } catch (const std::exception &e) {
     ALOGE("moonshineAddAudioToStream: %s\n", e.what());
     return MOONSHINE_ERROR_UNKNOWN;
