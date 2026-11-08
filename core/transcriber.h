@@ -190,6 +190,12 @@ struct TranscriberOptions {
   // decode_full and continue from the first mismatch instead of greedy
   // redecode from BOS. On by default for lower end-of-phrase latency.
   bool use_speculative_decoding = true;
+  // When true and a speculative draft is rejected partway through, the
+  // re-decode looks for where the rest of the draft lines up again and
+  // verifies it in batched passes, instead of decoding the rest of the line
+  // one token at a time. Batched and one-token passes can round differently,
+  // so on rare near-ties the text can differ from the default.
+  bool speculative_resync = false;
   // When false, skip the decoder until VAD completes the line. Encoder
   // (and diarization) still run on each update so the final decode has
   // current memory; there is no live/provisional text.

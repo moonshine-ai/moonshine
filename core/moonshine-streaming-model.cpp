@@ -85,6 +85,51 @@ void write_empty_decode_logits(const MoonshineStreamingConfig &config,
   }
 }
 
+// How far either side of the expected position decode_full looks for the
+// token it just emitted when lining a rejected draft up again. A few positions
+// covers the usual edits (a dropped or added comma, a split word) without
+// matching a common token from an unrelated part of the line.
+constexpr int kResyncWindow = 4;
+
+// Where a draft lines up again after an edit. ``token`` has just been emitted
+// in place of draft[cursor]. Returns the draft index to verify from next: just
+// past the nearest copy of ``token`` within kResyncWindow positions, else just
+// past draft[cursor] if ``guess`` is set (``token`` replaced it), else -1.
+int find_resync_point(const int *draft, int draft_len, int token, int cursor,
+                      bool guess) {
+  for (int distance = 0; distance <= kResyncWindow; ++distance) {
+    for (const int j : {cursor + distance, cursor - distance}) {
+      if (j >= 0 && j < draft_len && draft[j] == token) {
+        return j + 1;
+      }
+    }
+  }
+  return (guess && cursor + 1 < draft_len) ? cursor + 1 : -1;
+}
+
+// Drops self-attention cache positions from ``keep`` onward. The cache is laid
+// out [depth, 1, nheads, cache_len, head_dim], so every (layer, head) block
+// moves down to the shorter stride. Blocks only move towards the start, so
+// copying them in order never overwrites one that has not moved yet.
+void truncate_self_kv(const MoonshineStreamingConfig &config,
+                      MoonshineStreamingState *state, int keep) {
+  if (keep >= state->cache_seq_len) {
+    return;
+  }
+  const size_t blocks = static_cast<size_t>(config.depth) * config.nheads;
+  const size_t old_stride =
+      static_cast<size_t>(state->cache_seq_len) * config.head_dim;
+  const size_t new_stride = static_cast<size_t>(keep) * config.head_dim;
+  for (std::vector<float> *cache : {&state->k_self, &state->v_self}) {
+    for (size_t b = 1; b < blocks; ++b) {
+      std::memmove(cache->data() + b * new_stride,
+                   cache->data() + b * old_stride, new_stride * sizeof(float));
+    }
+    cache->resize(blocks * new_stride);
+  }
+  state->cache_seq_len = keep;
+}
+
 }  // namespace
 
 /* ============================================================================
@@ -1177,6 +1222,7 @@ int MoonshineStreamingModel::run_decoder_with_cross_kv(
                         k_cross_tensor, v_cross_tensor};
   std::vector<OrtValue *> outputs(decoder_output_count, nullptr);
 
+  decoder_run_count++;
   OrtStatus *status =
       ORT_RUN(ort_api, decoder_kv_session, input_names, inputs, 5,
               output_names_vec.data(), decoder_output_count, outputs.data());
@@ -1408,7 +1454,8 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
                                          const int *speculative_tokens,
                                          int speculative_len, int **tokens_out,
                                          int *tokens_len_out,
-                                         ContextBiaser *biaser) {
+                                         ContextBiaser *biaser,
+                                         bool resync_draft) {
   if (state == nullptr) {
     LOG("State is null\n");
     return 1;
@@ -1501,6 +1548,67 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
     }
   };
 
+  // Auto-regressive decoding after a rejected draft that keeps using the rest
+  // of the draft. After each emitted token it looks for where the draft lines
+  // up again and feeds the token together with the draft from that point in
+  // one batched pass. The rows are teacher-forced exactly as greedy decoding
+  // would feed them for as long as the predictions agree with the draft, so
+  // the tokens are the ones greedy decoding picks (up to rounding differences
+  // between batched and one-token passes). Every pass still yields at least
+  // one new token, so this never takes more decoder runs than decoding the
+  // same tokens one at a time.
+  // ``cursor`` is the draft index ``start_token`` stands in for.
+  auto continue_resync_decoding = [&](int start_token, int cursor) {
+    int current_token = start_token;
+    // A blind guess that the token replaced one draft token is made once per
+    // edit; after a failed realignment only a matching token can start one.
+    bool guess = true;
+    std::vector<int64_t> rows;
+    std::vector<float> logits;
+
+    while (current_token != config.eos_id &&
+           result_tokens.size() < static_cast<size_t>(max_tokens)) {
+      result_tokens.push_back(current_token);
+      if (biaser != nullptr) {
+        biaser->advance(current_token);
+      }
+
+      const int resume = find_resync_point(speculative_tokens, speculative_len,
+                                           current_token, cursor, guess);
+      const int room = max_tokens - static_cast<int>(result_tokens.size());
+      const int draft_rows =
+          resume < 0 ? 0 : std::min(speculative_len - resume, room);
+      rows.assign(1, current_token);
+      for (int i = 0; i < draft_rows; ++i) {
+        rows.push_back(static_cast<int64_t>(speculative_tokens[resume + i]));
+      }
+      if (run_decoder(rows, logits) != 0) break;
+
+      int accepted = 0;
+      current_token = biased_argmax(logits.data());
+      while (accepted < draft_rows &&
+             current_token == speculative_tokens[resume + accepted]) {
+        result_tokens.push_back(current_token);
+        if (biaser != nullptr) {
+          biaser->advance(current_token);
+        }
+        accepted++;
+        current_token =
+            biased_argmax(logits.data() + accepted * config.vocab_size);
+      }
+      // Rows past the first rejected draft token were fed a token that was
+      // not emitted, so their cache entries are dropped.
+      truncate_self_kv(config, state,
+                       state->cache_seq_len - (draft_rows - accepted));
+      if (draft_rows > 0) {
+        cursor = resume + accepted;
+        guess = accepted > 0;
+      } else {
+        cursor++;
+      }
+    }
+  };
+
   if (speculative_tokens != nullptr && speculative_len > 0) {
     // Speculative decoding: verify previous tokens
     std::vector<int64_t> tokens_with_bos;
@@ -1576,7 +1684,11 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
 
       int new_pred =
           biased_argmax(logits2.data() + diverge_point * config.vocab_size);
-      continue_ar_decoding(new_pred);
+      if (resync_draft) {
+        continue_resync_decoding(new_pred, diverge_point);
+      } else {
+        continue_ar_decoding(new_pred);
+      }
     }
   } else {
     // Regular decoding: start from BOS

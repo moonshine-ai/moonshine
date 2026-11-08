@@ -1439,7 +1439,7 @@ std::string *Transcriber::transcribe_segment_with_streaming_model(
     const int *draft_ptr = draft.empty() ? nullptr : draft.data();
     int err = this->streaming_model->decode_full(
         &this->streaming_state, draft_ptr, static_cast<int>(draft.size()), &out,
-        &out_len, biaser);
+        &out_len, biaser, this->options.speculative_resync);
     if (err != 0) {
       LOGF("Speculative decode_full failed: %d", err);
       throw std::runtime_error("Speculative decode_full failed: " +
