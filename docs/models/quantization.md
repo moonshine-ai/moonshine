@@ -12,4 +12,4 @@ The frontend is the one graph that cannot keep those int8 weights inside a singl
 
 A leftover single-file `frontend.ort` still loads, which is how pins published before the split keep working. `scripts/check-ort-weight-storage.py` walks every shipped `.ort` and fails if that fold comes back.
 
-Re-quantized models are published to a new dated directory on our CDN (currently `quantized_26_11_02`) instead of overwriting the previous files. That way a given version of this library always resolves the exact weights it was tested against, and your local model cache never mixes old and new files.
+Re-quantized models are published to a new dated directory on our CDN (currently `quantized_26_11_07`) instead of overwriting the previous files. That way a given version of this library always resolves the exact weights it was tested against, and your local model cache never mixes old and new files.

@@ -1055,6 +1055,52 @@ if (NOT WIN32 OR NOT MOONSHINE_BUILD_SHARED)
     )
     target_link_libraries(speculative-decode-bench PRIVATE moonshine moonshine-utils)
 
+    add_executable(streaming-model-test streaming-model-test.cpp)
+    set_target_properties(streaming-model-test PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(streaming-model-test PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+        ${CMAKE_CURRENT_LIST_DIR}/ort-utils
+        ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/doctest
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
+    )
+    if (IOS OR MOONSHINE_BUILD_SWIFT)
+        set_target_properties(streaming-model-test PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_GUI_IDENTIFIER "ai.moonshine.voice.streaming-model-test"
+            MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        )
+    endif()
+    target_link_libraries(streaming-model-test PRIVATE moonshine moonshine-utils)
+    add_test(
+        NAME streaming-model
+        COMMAND streaming-model-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/../test-assets
+    )
+
+    # Per-update latency of the live streaming loop, baseline toggles vs
+    # optimized, with transcript comparison. See the file header.
+    add_executable(streaming-latency-bench streaming-latency-bench.cpp)
+    set_target_properties(streaming-latency-bench PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+    target_include_directories(streaming-latency-bench PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/moonshine-utils
+        ${CMAKE_CURRENT_LIST_DIR}/ort-utils
+        ${CMAKE_CURRENT_LIST_DIR}/bin-tokenizer
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
+    )
+    target_link_libraries(streaming-latency-bench PRIVATE moonshine moonshine-utils)
+
     add_executable(speculative-mismatch-investigate speculative-mismatch-investigate.cpp)
     set_target_properties(speculative-mismatch-investigate PROPERTIES
         CXX_STANDARD 20
@@ -1238,6 +1284,14 @@ endif()
 add_test(
     NAME check-banned-constructs
     COMMAND bash ${CMAKE_CURRENT_LIST_DIR}/../scripts/check-banned-constructs.sh
+    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/..
+)
+
+# Every MoonshineStreamingState member must be cleared by reset(); a field that
+# survives reset leaks one stream's audio into the next (issues #229, #231).
+add_test(
+    NAME check-streaming-state-reset
+    COMMAND bash ${CMAKE_CURRENT_LIST_DIR}/../scripts/check-streaming-state-reset.sh
     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/..
 )
 

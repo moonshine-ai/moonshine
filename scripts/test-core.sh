@@ -53,6 +53,7 @@ ${REPO_ROOT_DIR}/core/build/resampler-test
 ${REPO_ROOT_DIR}/core/build/voice-activity-detector-test
 ${REPO_ROOT_DIR}/core/build/speech-clip-test
 ${REPO_ROOT_DIR}/core/build/transcriber-test
+${REPO_ROOT_DIR}/core/build/streaming-model-test
 ${REPO_ROOT_DIR}/core/build/streaming-language-smoke-test
 ${REPO_ROOT_DIR}/core/build/transcriber-memory-files-test
 ${REPO_ROOT_DIR}/core/build/moonshine-c-api-test
@@ -66,6 +67,10 @@ ${REPO_ROOT_DIR}/core/build/context-extractor-test
 # Sweeps every .ort we ship. Run from the repository root, which is where it
 # looks for the bundled data and the downloaded catalog models.
 (cd "${REPO_ROOT_DIR}" && ${REPO_ROOT_DIR}/core/build/ort-load-sweep-test)
+
+# Source-level gates (also registered as ctests).
+"${SCRIPTS_DIR}/check-banned-constructs.sh"
+"${SCRIPTS_DIR}/check-streaming-state-reset.sh"
 
 # Run this test in a temporary directory to ensure no file assets are being accessed
 # from default paths when they should be accessed from memory.

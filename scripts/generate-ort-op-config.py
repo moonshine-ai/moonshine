@@ -146,7 +146,13 @@ def fetch(url, cache_dir, offline=False):
     target.parent.mkdir(parents=True, exist_ok=True)
     print(f"  fetching {url}", flush=True)
     partial = target.with_suffix(target.suffix + ".partial")
-    with urllib.request.urlopen(url) as response, open(partial, "wb") as out:
+    # Cloudflare answers urllib's default "Python-urllib/3.x" User-Agent with
+    # 403 on every object, so the request has to identify itself as something
+    # else (generate-model-file-metadata.py does the same).
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "moonshine-ort-op-config/1.0 (+curl-like)"}
+    )
+    with urllib.request.urlopen(request) as response, open(partial, "wb") as out:
         while True:
             chunk = response.read(1 << 20)
             if not chunk:

@@ -41,23 +41,31 @@ constexpr const char* kCdnModelBase = "https://download.moonshine.ai/model";
 // against and a rollback is a one-line change. Clients key their download cache
 // off this URL, so a new directory also guarantees a clean re-fetch instead of
 // silently reusing stale files.
-constexpr const char* kStreamingQuantizedDir = "/quantized_26_11_02";
+//
+// quantized_26_11_07 carries the encoder graph that keeps each layer's left
+// context between streaming updates (see MoonshineStreamingModel::encode). Its
+// other graphs are byte-identical to the previous directory's. A runtime older
+// than 0.1.7 cannot load that encoder, which is the other reason it is a new
+// directory rather than a replacement.
+constexpr const char* kStreamingQuantizedDir = "/quantized_26_11_07";
 
 // The same scheme for Japanese, which was quantized from different checkpoints
 // on a different day. Per-language rather than shared, because a language's
 // weights are re-quantized when that language gets a better checkpoint, and one
-// shared constant would force every language to move at once.
-constexpr const char* kJapaneseStreamingQuantizedDir = "/quantized_26_08_23";
+// shared constant would force every language to move at once. Every language
+// moved together on 26_11_07 because the cached encoder is a graph change, not
+// a weights change.
+constexpr const char* kJapaneseStreamingQuantizedDir = "/quantized_26_11_07";
 
 // The six additional languages published as streaming, each with its own
 // constant for the reason above. Tagalog in particular is a snapshot of a run
 // that was still training, so it is the one most likely to move on its own.
-constexpr const char* kGermanStreamingQuantizedDir = "/quantized_26_08_24";
-constexpr const char* kSpanishStreamingQuantizedDir = "/quantized_26_08_24";
-constexpr const char* kVietnameseStreamingQuantizedDir = "/quantized_26_08_24";
-constexpr const char* kArabicStreamingQuantizedDir = "/quantized_26_08_24";
-constexpr const char* kChineseStreamingQuantizedDir = "/quantized_26_08_24";
-constexpr const char* kTagalogStreamingQuantizedDir = "/quantized_26_08_24";
+constexpr const char* kGermanStreamingQuantizedDir = "/quantized_26_11_07";
+constexpr const char* kSpanishStreamingQuantizedDir = "/quantized_26_11_07";
+constexpr const char* kVietnameseStreamingQuantizedDir = "/quantized_26_11_07";
+constexpr const char* kArabicStreamingQuantizedDir = "/quantized_26_11_07";
+constexpr const char* kChineseStreamingQuantizedDir = "/quantized_26_11_07";
+constexpr const char* kTagalogStreamingQuantizedDir = "/quantized_26_11_07";
 
 struct SttModelEntry {
   int32_t model_arch;

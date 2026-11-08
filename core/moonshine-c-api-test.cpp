@@ -1977,7 +1977,7 @@ TEST_CASE("moonshine-stt-embedding-dependency-api") {
     const std::string json(out);
     CHECK(json.find("\"groups\"") != std::string::npos);
     CHECK(json.find("\"https://download.moonshine.ai/model/medium-streaming-en/"
-                    "quantized_26_11_02\"") != std::string::npos);
+                    "quantized_26_11_07\"") != std::string::npos);
     CHECK(json.find("\"adapter.ort\"") != std::string::npos);
     CHECK(json.find("\"frontend.model.ort\"") != std::string::npos);
     CHECK(json.find("\"frontend.weights.ort\"") != std::string::npos);

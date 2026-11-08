@@ -71,12 +71,25 @@ struct MoonshineStreamingState {
   int cache_seq_len;
 
   // Cross-attention KV cache (precomputed from memory)
-  // Used with decoder_kv.onnx for more efficient decoding
+  // Used with decoder_kv.onnx for more efficient decoding. Covers memory
+  // frames [0, cross_len); when memory grows, compute_cross_kv only projects
+  // the frames past cross_len and appends them.
   std::vector<float> k_cross;
   std::vector<float> v_cross;
   int cross_len;
   bool cross_kv_valid;  // True if k_cross/v_cross are valid for current memory
 
+  // Per-layer encoder input cache for the cached encoder graph: the 16 frames
+  // of each layer's input that precede the next window. Shape
+  // [depth, 1, 16, encoder_dim]. encoder_cache_len is how many of those frames
+  // are real (less than 16 only at the start of a stream). Unused when the
+  // encoder graph is the stateless kind.
+  std::vector<float> encoder_cache;
+  int encoder_cache_len;
+
+  // Every field above belongs to one stream. Anything added here must be
+  // cleared in reset(); a field that survives reset() leaks one stream's
+  // audio into the next (see issues #229 and #231).
   void reset(const MoonshineStreamingConfig &cfg);
 };
 
@@ -117,6 +130,44 @@ struct MoonshineStreamingModel {
   std::string last_result;
 
   bool log_ort_run = false;
+
+  // Latency controls. Defaults are the fast path; tests and
+  // streaming-latency-bench flip them to compare against the plain
+  // recompute-everything behaviour, which stays the reference for output.
+  //
+  // Project only the new memory frames into cross K/V and append, instead of
+  // re-projecting the whole memory on every update.
+  bool append_cross_kv = true;
+  // After a draft token is rejected, try to line the rest of the draft back
+  // up with the new token (one word changed, inserted or dropped) and verify
+  // it in one decoder call instead of regenerating it token by token. Each
+  // attempt is one call over the remaining draft, so this caps how many
+  // misses are paid for per update. 0 disables realignment.
+  int max_realign_attempts = 3;
+  // Use the per-layer cache when encoder.ort is the cached graph. When false
+  // (or the graph is stateless) the encoder re-runs the full left context.
+  bool use_encoder_cache = true;
+
+  // True when encoder.ort takes (features, cache, cache_valid) rather than
+  // just features. Set at load.
+  bool encoder_has_cache = false;
+  // Frames of left context each encoder layer attends over. Read from the
+  // cached graph's cache input; 16 for a stateless graph.
+  int encoder_cache_frames = 16;
+
+  // Work counters, cumulative since construction or the last reset_stats().
+  // Not thread-safe to read while another thread is decoding; they exist so
+  // tests and streaming-latency-bench can see what a call cost without
+  // timing it.
+  struct Stats {
+    int64_t decoder_calls = 0;     // runs of decoder_kv
+    int64_t decoder_tokens = 0;    // tokens fed through decoder_kv
+    int64_t cross_kv_frames = 0;   // memory frames projected to K/V
+    int64_t encoder_frames = 0;    // feature frames fed to the encoder
+    int64_t realign_attempts = 0;  // realignment verify passes in decode_full
+  };
+  Stats stats;
+  void reset_stats() { stats = Stats(); }
 
   // Word timestamp support: collected during decode when decoder has
   // cross_attentions.* outputs
@@ -221,6 +272,25 @@ struct MoonshineStreamingModel {
 
   /* Compute cross-attention K/V from current memory state */
   int compute_cross_kv(MoonshineStreamingState *state);
+
+  /* Drop every self-attention cache entry past position keep_len. The cache
+   * is causal, so the entries that remain are exactly what a fresh run over
+   * the first keep_len tokens would have produced. */
+  void truncate_self_cache(MoonshineStreamingState *state, int keep_len);
+
+  /* Inspect encoder_session's inputs and set encoder_has_cache. */
+  int detect_encoder_kind();
+
+  /* Run the encoder over accumulated_features[window_start, total) and return
+   * the encoded frames in encoded_out, [frames, encoder_dim]. The cached
+   * variant also reads and writes state->encoder_cache. */
+  int run_encoder_stateless(MoonshineStreamingState *state, int window_start,
+                            int total_features, std::vector<float> *encoded_out,
+                            int *encoded_frames_out);
+  int run_encoder_cached(MoonshineStreamingState *state, int window_start,
+                         int total_features, bool use_cache, bool is_final,
+                         std::vector<float> *encoded_out,
+                         int *encoded_frames_out);
 
   // Populated when the frontend ships as a split ORT pair. Empty means the
   // frontend session already has its weights baked in (``frontend.ort``).

@@ -27,6 +27,15 @@ Useful scripts (prefer these over ad-hoc cmake/pytest invocations):
 
 C++ policy lives in [core/STYLE_GUIDE.md](core/STYLE_GUIDE.md): C++20, RAII, no new owning `new`/`delete` or `reinterpret_cast` outside the baseline allow-list, no unsafe C string functions. Do not format or lint `core/third-party/` or `core/cpp-annote/`.
 
+## Streaming model
+
+- Every field of `MoonshineStreamingState` is per-stream and must be cleared in `reset()`; `scripts/check-streaming-state-reset.sh` (a ctest) fails otherwise. A field that survives reset leaks one stream's audio into the next (issues #229, #231).
+- `decode_full` output is defined as greedy decoding: every emitted token is the argmax given the tokens before it. Speculative verification and realignment only change how many decoder calls that takes, never the tokens. Keep the control loop in `core/speculative-realign.h` free of ONNX Runtime so `streaming-model-test` can drive it with a scripted decoder.
+- Before changing `encode`, `compute_cross_kv`, or `decode_full`, run `core/build/streaming-latency-bench` from `core/` on tiny and medium (`-m` twice to compare a stateless and a cached `encoder.ort`). Report mean/p90, decoder calls, divergence rate, and the transcript-difference count against the baseline row; the dynamically quantized graphs make a few percent of updates differ between any two numerically distinct paths, so compare WER on a corpus (`--transcripts` writes one line per update for scoring) rather than demand identical text.
+- Every published streaming pin from `quantized_26_11_07` on carries the cached encoder graph (`lora --export --encoder-cache`); older pins are stateless and still load. The runtime tells them apart by the encoder's input count and reads the cache width from the graph. `test-assets/tiny-streaming-en-stateless` (fetched by `scripts/fetch-voice-assets.sh`) is the stateless reference `streaming-model-test` compares against.
+- Checkpoints store sliding windows in two conventions; `inclusive_windows()` in `lora/export.py` normalises them. Any new export must be checked against the published stateless encoder's memory and scored on in-language audio before it is pinned.
+- Publishing a model is three steps, in order: `scripts/upload-streaming-model.sh` to the CDN, point the catalog at the new dated directory and run `scripts/generate-model-file-metadata.py`, then `scripts/mirror-model-to-hf.sh` so the archive mirror stays complete.
+
 ## Public API
 
 Language bindings follow construct → chainable setters → `load()`. Constructors are cheap and cannot fail. Do not put downloads or model opens in a constructor. The high-level types are `MicTranscriber`, `AgentFlow`, and `TextToSpeech`; `Transcriber` is the low-level PCM path and `EmbeddingModel` is the low-level text-embedding path. `DialogFlow` and the Intent API are gone.

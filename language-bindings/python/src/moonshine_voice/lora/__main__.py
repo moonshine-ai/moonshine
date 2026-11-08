@@ -168,6 +168,13 @@ def build_parser(prog: Optional[str] = None) -> argparse.ArgumentParser:
         default=None,
         help="tokenizer.bin to copy next to the exported graphs",
     )
+    export.add_argument(
+        "--encoder-cache",
+        action="store_true",
+        help="export encoder.onnx as the graph that carries each layer's left "
+        "context between streaming updates (what the published models use; "
+        "needs moonshine-voice 0.1.7 or later to load)",
+    )
     return parser
 
 
@@ -196,6 +203,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         ]
         if args.tokenizer_bin:
             export_argv += ["--tokenizer-bin", args.tokenizer_bin]
+        if args.encoder_cache:
+            export_argv.append("--encoder-cache")
         export_main(export_argv)
         return 0
 

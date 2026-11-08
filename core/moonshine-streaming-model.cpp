@@ -21,6 +21,7 @@
 
 #include "bin-tokenizer.h"
 #include "moonshine-ort-allocator.h"
+#include "speculative-realign.h"
 #include "string-utils.h"
 
 #define DEBUG_ALLOC_ENABLED 1
@@ -69,6 +70,12 @@ const char *kSpaceString = "▁";
 // Contextual biasing was the first caller to encode text, and it was waiting on
 // subwords the decoder never emits.
 const BinTokenizerEncoding kTokenizerEncoding = BinTokenizerEncoding::kBpe;
+
+// How many frames each encoder layer attends back over, for a stateless
+// encoder graph that gives no other clue. Every published model uses 16. A
+// cached encoder graph bakes its own width into its cache shape, and
+// detect_encoder_kind reads it from there instead of trusting this.
+constexpr int kDefaultEncoderCacheFrames = 16;
 
 // When the encoder has not emitted memory yet (lookahead still filling, or a
 // new segment just reset), decoding is a no-op. Point argmax at EOS so a
@@ -182,6 +189,10 @@ void MoonshineStreamingState::reset(const MoonshineStreamingConfig &cfg) {
   v_cross.clear();
   cross_len = 0;
   cross_kv_valid = false;
+
+  // Encoder layer cache
+  encoder_cache.clear();
+  encoder_cache_len = 0;
 }
 
 /* ============================================================================
@@ -250,6 +261,76 @@ int MoonshineStreamingModel::load_config_from_string(const std::string &json) {
     LOG("Failed to parse streaming config JSON\n");
     return 1;
   }
+  return 0;
+}
+
+int MoonshineStreamingModel::detect_encoder_kind() {
+  encoder_has_cache = false;
+  encoder_cache_frames = kDefaultEncoderCacheFrames;
+  if (encoder_session == nullptr) return 1;
+  size_t input_count = 0;
+  RETURN_ON_ORT_ERROR(
+      ort_api, ort_api->SessionGetInputCount(encoder_session, &input_count));
+  if (input_count == 1) {
+    return 0;
+  }
+  if (input_count != 3) {
+    LOGF("encoder graph has %zu inputs; expected 1 (stateless) or 3 (cached)",
+         input_count);
+    return 1;
+  }
+  // The cached graph is identified by its input names so a stray third input
+  // on some future graph is an error rather than a misread cache.
+  static const char *const kExpected[] = {"features", "cache", "cache_valid"};
+  for (size_t i = 0; i < 3; ++i) {
+    char *name = nullptr;
+    RETURN_ON_ORT_ERROR(
+        ort_api, ort_api->SessionGetInputName(encoder_session, i,
+                                              &ort_allocator->base, &name));
+    const bool matches = name != nullptr && strcmp(name, kExpected[i]) == 0;
+    if (name != nullptr) {
+      ort_allocator->base.Free(&ort_allocator->base, name);
+    }
+    if (!matches) {
+      LOGF("encoder input %zu is not '%s'", i, kExpected[i]);
+      return 1;
+    }
+  }
+  // The cache input must be [depth, 1, cache_frames, encoder_dim]; the
+  // cache_frames axis is how far each layer looks back and is taken from the
+  // graph.
+  OrtTypeInfo *type_info = nullptr;
+  RETURN_ON_ORT_ERROR(ort_api, ort_api->SessionGetInputTypeInfo(encoder_session,
+                                                                1, &type_info));
+  const OrtTensorTypeAndShapeInfo *shape_info = nullptr;
+  OrtStatus *cast_status =
+      ort_api->CastTypeInfoToTensorInfo(type_info, &shape_info);
+  std::vector<int64_t> dims;
+  if (cast_status == nullptr && shape_info != nullptr) {
+    size_t num_dims = 0;
+    if (ort_api->GetDimensionsCount(shape_info, &num_dims) == nullptr) {
+      dims.resize(num_dims);
+      if (ort_api->GetDimensions(shape_info, dims.data(), num_dims) !=
+          nullptr) {
+        dims.clear();
+      }
+    }
+  }
+  ort_api->ReleaseTypeInfo(type_info);
+  if (dims.size() != 4 || dims[0] != config.depth || dims[1] != 1 ||
+      dims[2] <= 0 || dims[2] > 1024 || dims[3] != config.encoder_dim) {
+    LOGF(
+        "encoder cache input has %zu dims (%lld, %lld, %lld, %lld); expected "
+        "(%d, 1, <frames>, %d)",
+        dims.size(), dims.size() > 0 ? (long long)dims[0] : -1LL,
+        dims.size() > 1 ? (long long)dims[1] : -1LL,
+        dims.size() > 2 ? (long long)dims[2] : -1LL,
+        dims.size() > 3 ? (long long)dims[3] : -1LL, config.depth,
+        config.encoder_dim);
+    return 1;
+  }
+  encoder_cache_frames = static_cast<int>(dims[2]);
+  encoder_has_cache = true;
   return 0;
 }
 
@@ -413,6 +494,7 @@ int MoonshineStreamingModel::load(const char *model_dir,
       ort_api, ort_env, ort_session_options, encoder_path.c_str(),
       &encoder_session, &encoder_mmapped_data, &encoder_mmapped_data_size));
   RETURN_ON_NULL(encoder_session);
+  RETURN_ON_ERROR(detect_encoder_kind());
 
   RETURN_ON_ERROR(ort_session_from_path(
       ort_api, ort_env, ort_session_options, adapter_path.c_str(),
@@ -485,6 +567,7 @@ int MoonshineStreamingModel::load_from_memory(
       ort_api, ort_env, ort_session_options, encoder_model_data,
       encoder_model_data_size, &encoder_session));
   RETURN_ON_NULL(encoder_session);
+  RETURN_ON_ERROR(detect_encoder_kind());
 
   RETURN_ON_ERROR(ort_session_from_memory(
       ort_api, ort_env, ort_session_options, adapter_model_data,
@@ -587,6 +670,7 @@ int MoonshineStreamingModel::load_from_assets(const char *model_dir,
       ort_api, ort_env, ort_session_options, assetManager, encoder_path.c_str(),
       &encoder_session, &encoder_mmapped_data, &encoder_mmapped_data_size));
   RETURN_ON_NULL(encoder_session);
+  RETURN_ON_ERROR(detect_encoder_kind());
 
   RETURN_ON_ERROR(ort_session_from_asset(
       ort_api, ort_env, ort_session_options, assetManager, adapter_path.c_str(),
@@ -815,6 +899,175 @@ int MoonshineStreamingModel::process_audio_chunk(MoonshineStreamingState *state,
   return 0;
 }
 
+namespace {
+
+// Reads a [1, frames, dim] float tensor into a vector. Returns the frame
+// count, or -1 on error.
+int read_frames_tensor(const OrtApi *ort_api, OrtValue *value, int dim,
+                       std::vector<float> *out) {
+  OrtTensorTypeAndShapeInfo *info = nullptr;
+  if (ort_api->GetTensorTypeAndShape(value, &info) != nullptr) return -1;
+  size_t num_dims = 0;
+  if (ort_api->GetDimensionsCount(info, &num_dims) != nullptr) {
+    ort_api->ReleaseTensorTypeAndShapeInfo(info);
+    return -1;
+  }
+  std::vector<int64_t> shape(num_dims);
+  if (ort_api->GetDimensions(info, shape.data(), num_dims) != nullptr) {
+    ort_api->ReleaseTensorTypeAndShapeInfo(info);
+    return -1;
+  }
+  ort_api->ReleaseTensorTypeAndShapeInfo(info);
+  if (num_dims != 3 || shape[2] != dim) return -1;
+  const int frames = static_cast<int>(shape[1]);
+  float *data = nullptr;
+  if (ort_api->GetTensorMutableData(value, (void **)&data) != nullptr) {
+    return -1;
+  }
+  out->assign(data, data + static_cast<size_t>(frames) * dim);
+  return frames;
+}
+
+}  // namespace
+
+int MoonshineStreamingModel::run_encoder_stateless(
+    MoonshineStreamingState *state, int window_start, int total_features,
+    std::vector<float> *encoded_out, int *encoded_frames_out) {
+  const int window_size = total_features - window_start;
+  std::vector<int64_t> feat_shape = {1, window_size, config.encoder_dim};
+
+  OrtValue *features_tensor = nullptr;
+  const float *features_ptr =
+      state->accumulated_features.data() +
+      static_cast<size_t>(window_start) * config.encoder_dim;
+  RETURN_ON_ORT_ERROR(
+      ort_api,
+      ort_api->CreateTensorWithDataAsOrtValue(
+          ort_memory_info, const_cast<float *>(features_ptr),
+          static_cast<size_t>(window_size) * config.encoder_dim * sizeof(float),
+          feat_shape.data(), feat_shape.size(),
+          ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &features_tensor));
+
+  const char *enc_input_names[] = {"features"};
+  const char *enc_output_names[] = {"encoded"};
+  OrtValue *enc_outputs[1] = {nullptr};
+
+  stats.encoder_frames += window_size;
+  OrtStatus *status =
+      ORT_RUN(ort_api, encoder_session, enc_input_names, &features_tensor, 1,
+              enc_output_names, 1, enc_outputs);
+  ort_api->ReleaseValue(features_tensor);
+  if (status != nullptr) {
+    LOG_ORT_ERROR(ort_api, status);
+    return 1;
+  }
+
+  const int frames = read_frames_tensor(ort_api, enc_outputs[0],
+                                        config.encoder_dim, encoded_out);
+  ort_api->ReleaseValue(enc_outputs[0]);
+  if (frames < 0) {
+    LOG("Unexpected encoder output shape\n");
+    return 1;
+  }
+  *encoded_frames_out = frames;
+  return 0;
+}
+
+int MoonshineStreamingModel::run_encoder_cached(MoonshineStreamingState *state,
+                                                int window_start,
+                                                int total_features,
+                                                bool use_cache, bool is_final,
+                                                std::vector<float> *encoded_out,
+                                                int *encoded_frames_out) {
+  const int window_size = total_features - window_start;
+  const size_t cache_size = static_cast<size_t>(config.depth) *
+                            encoder_cache_frames * config.encoder_dim;
+  if (state->encoder_cache.size() != cache_size) {
+    state->encoder_cache.assign(cache_size, 0.0f);
+    state->encoder_cache_len = 0;
+  }
+  // Valid cache slots are the last encoder_cache_len of each layer's; with
+  // use_cache false every slot is masked and the window carries the context.
+  std::vector<float> cache_valid(encoder_cache_frames, 0.0f);
+  if (use_cache) {
+    for (int i = encoder_cache_frames - state->encoder_cache_len;
+         i < encoder_cache_frames; ++i) {
+      cache_valid[i] = 1.0f;
+    }
+  }
+
+  std::vector<int64_t> feat_shape = {1, window_size, config.encoder_dim};
+  std::vector<int64_t> cache_shape = {config.depth, 1, encoder_cache_frames,
+                                      config.encoder_dim};
+  std::vector<int64_t> valid_shape = {encoder_cache_frames};
+
+  OrtValue *inputs[3] = {nullptr, nullptr, nullptr};
+  const float *features_ptr =
+      state->accumulated_features.data() +
+      static_cast<size_t>(window_start) * config.encoder_dim;
+  RETURN_ON_ORT_ERROR(
+      ort_api,
+      ort_api->CreateTensorWithDataAsOrtValue(
+          ort_memory_info, const_cast<float *>(features_ptr),
+          static_cast<size_t>(window_size) * config.encoder_dim * sizeof(float),
+          feat_shape.data(), feat_shape.size(),
+          ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &inputs[0]));
+  RETURN_ON_ORT_ERROR(
+      ort_api,
+      ort_api->CreateTensorWithDataAsOrtValue(
+          ort_memory_info, state->encoder_cache.data(),
+          cache_size * sizeof(float), cache_shape.data(), cache_shape.size(),
+          ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &inputs[1]));
+  RETURN_ON_ORT_ERROR(
+      ort_api,
+      ort_api->CreateTensorWithDataAsOrtValue(
+          ort_memory_info, cache_valid.data(),
+          cache_valid.size() * sizeof(float), valid_shape.data(),
+          valid_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &inputs[2]));
+
+  const char *input_names[] = {"features", "cache", "cache_valid"};
+  const char *output_names[] = {"encoded", "cache_out"};
+  OrtValue *outputs[2] = {nullptr, nullptr};
+  stats.encoder_frames += window_size;
+  OrtStatus *status = ORT_RUN(ort_api, encoder_session, input_names, inputs, 3,
+                              output_names, 2, outputs);
+  for (OrtValue *value : inputs) ort_api->ReleaseValue(value);
+  if (status != nullptr) {
+    LOG_ORT_ERROR(ort_api, status);
+    return 1;
+  }
+
+  const int frames =
+      read_frames_tensor(ort_api, outputs[0], config.encoder_dim, encoded_out);
+  int err = 0;
+  if (frames < 0) {
+    LOG("Unexpected cached encoder output shape\n");
+    err = 1;
+  } else if (is_final) {
+    // The graph cuts the next cache from before the lookahead, and a final
+    // flush has none, so what it produced does not line up with any frame
+    // boundary. Nothing follows a final flush in this stream anyway; mark the
+    // cache unusable so a caller that keeps going gets the full-context path.
+    state->encoder_cache_len = -1;
+  } else {
+    float *cache_out = nullptr;
+    if (ort_api->GetTensorMutableData(outputs[1], (void **)&cache_out) !=
+        nullptr) {
+      err = 1;
+    } else {
+      memcpy(state->encoder_cache.data(), cache_out,
+             cache_size * sizeof(float));
+      // The new cache ends at the frame after the last one emitted this call.
+      const int emitted_after = total_features - config.total_lookahead;
+      state->encoder_cache_len = std::min(encoder_cache_frames, emitted_after);
+    }
+  }
+  for (OrtValue *value : outputs) ort_api->ReleaseValue(value);
+  if (err != 0) return err;
+  *encoded_frames_out = frames;
+  return 0;
+}
+
 int MoonshineStreamingModel::encode(MoonshineStreamingState *state,
                                     bool is_final, int *new_frames_out) {
   if (state == nullptr) {
@@ -848,84 +1101,53 @@ int MoonshineStreamingModel::encode(MoonshineStreamingState *state,
     return 0;
   }
 
-  // Encoder uses a sliding window with fixed per-layer left context.
-  const int left_context_frames = 16 * config.depth;
-  int window_start = state->encoder_frames_emitted - left_context_frames;
+  // Every layer looks back encoder_cache_frames frames, so an exact recompute
+  // of the new frames needs that much left context per layer.
+  const int left_context_frames = encoder_cache_frames * config.depth;
+  const int emitted = state->encoder_frames_emitted;
+  // The cached graph only needs the window to start at the first unemitted
+  // frame, provided the cache really holds the frames before it. After a
+  // reset, a final flush, or with the cache switched off, the cache is not
+  // trusted and the full left context is fed instead, which the cached graph
+  // computes identically to the stateless one.
+  const bool cache_ready =
+      encoder_has_cache && use_encoder_cache &&
+      state->encoder_cache_len == std::min(encoder_cache_frames, emitted) &&
+      !state->encoder_cache.empty();
+  int window_start = cache_ready ? emitted : emitted - left_context_frames;
   if (window_start < 0) {
     window_start = 0;
   }
   const int window_size = total_features - window_start;
   if (log_ort_run) {
-    LOGF("streaming encode: window_start=%d, window_size=%d", window_start,
-         window_size);
+    LOGF("streaming encode: window_start=%d, window_size=%d, cached=%d",
+         window_start, window_size, cache_ready ? 1 : 0);
   }
 
   std::lock_guard<std::mutex> lock(processing_mutex);
 
-  // Run encoder on windowed accumulated features.
-  std::vector<int64_t> feat_shape = {1, window_size, config.encoder_dim};
-
-  OrtValue *features_tensor = nullptr;
-  const float *features_ptr =
-      state->accumulated_features.data() + window_start * config.encoder_dim;
-  RETURN_ON_ORT_ERROR(
-      ort_api,
-      ort_api->CreateTensorWithDataAsOrtValue(
-          ort_memory_info, const_cast<float *>(features_ptr),
-          static_cast<size_t>(window_size) * config.encoder_dim * sizeof(float),
-          feat_shape.data(), feat_shape.size(),
-          ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &features_tensor));
-
-  const char *enc_input_names[] = {"features"};
-  const char *enc_output_names[] = {"encoded"};
-  OrtValue *enc_outputs[1] = {nullptr};
-
-  OrtStatus *status =
-      ORT_RUN(ort_api, encoder_session, enc_input_names, &features_tensor, 1,
-              enc_output_names, 1, enc_outputs);
-
-  ort_api->ReleaseValue(features_tensor);
-
-  if (status != nullptr) {
-    LOG_ORT_ERROR(ort_api, status);
-    return 1;
+  std::vector<float> encoded;
+  int total_encoded = 0;
+  if (encoder_has_cache) {
+    RETURN_ON_ERROR(run_encoder_cached(state, window_start, total_features,
+                                       cache_ready, is_final, &encoded,
+                                       &total_encoded));
+  } else {
+    RETURN_ON_ERROR(run_encoder_stateless(state, window_start, total_features,
+                                          &encoded, &total_encoded));
   }
 
-  // Get encoded shape
-  OrtTensorTypeAndShapeInfo *enc_info = nullptr;
-  RETURN_ON_ORT_ERROR(
-      ort_api, ort_api->GetTensorTypeAndShape(enc_outputs[0], &enc_info));
-  size_t num_dims = 0;
-  RETURN_ON_ORT_ERROR(ort_api,
-                      ort_api->GetDimensionsCount(enc_info, &num_dims));
-  std::vector<int64_t> enc_shape(num_dims);
-  RETURN_ON_ORT_ERROR(
-      ort_api, ort_api->GetDimensions(enc_info, enc_shape.data(), num_dims));
-  ort_api->ReleaseTensorTypeAndShapeInfo(enc_info);
-
-  int total_encoded = static_cast<int>(enc_shape[1]);
-
   // Run adapter on new frames
-  float *encoded_data = nullptr;
-  RETURN_ON_ORT_ERROR(ort_api, ort_api->GetTensorMutableData(
-                                   enc_outputs[0], (void **)&encoded_data));
-  int start_idx = state->encoder_frames_emitted - window_start;
+  const int start_idx = emitted - window_start;
   if (start_idx < 0 || start_idx + new_frames > total_encoded) {
-    ort_api->ReleaseValue(enc_outputs[0]);
     LOGF("Encoder window misaligned: start_idx=%d, new_frames=%d, total=%d",
          start_idx, new_frames, total_encoded);
     return 1;
   }
-
-  std::vector<float> new_encoded(new_frames * config.encoder_dim);
-  for (int i = 0; i < new_frames; ++i) {
-    for (int j = 0; j < config.encoder_dim; ++j) {
-      new_encoded[i * config.encoder_dim + j] =
-          encoded_data[(start_idx + i) * config.encoder_dim + j];
-    }
-  }
-
-  ort_api->ReleaseValue(enc_outputs[0]);
+  std::vector<float> new_encoded(
+      encoded.begin() + static_cast<size_t>(start_idx) * config.encoder_dim,
+      encoded.begin() +
+          static_cast<size_t>(start_idx + new_frames) * config.encoder_dim);
 
   std::vector<int64_t> enc_slice_shape = {1, new_frames, config.encoder_dim};
   std::vector<int64_t> pos_shape = {1};
@@ -950,8 +1172,9 @@ int MoonshineStreamingModel::encode(MoonshineStreamingState *state,
   OrtValue *adapter_inputs[] = {encoded_slice_tensor, pos_tensor};
   OrtValue *adapter_outputs[1] = {nullptr};
 
-  status = ORT_RUN(ort_api, adapter_session, adapter_input_names,
-                   adapter_inputs, 2, adapter_output_names, 1, adapter_outputs);
+  OrtStatus *status =
+      ORT_RUN(ort_api, adapter_session, adapter_input_names, adapter_inputs, 2,
+              adapter_output_names, 1, adapter_outputs);
 
   ort_api->ReleaseValue(encoded_slice_tensor);
   ort_api->ReleaseValue(pos_tensor);
@@ -998,17 +1221,39 @@ int MoonshineStreamingModel::compute_cross_kv(MoonshineStreamingState *state) {
     return 1;
   }
 
-  // Input: memory [1, mem_len, decoder_dim]
-  std::vector<int64_t> memory_shape = {1, state->memory_len,
-                                       config.decoder_dim};
+  // Memory is append-only within a stream, so the K/V already held for
+  // frames [0, cross_len) are still right; only the frames past them need
+  // projecting. Anything inconsistent (cache longer than memory, sizes that
+  // do not match) falls back to projecting everything.
+  const size_t per_frame =
+      static_cast<size_t>(config.depth) * config.nheads * config.head_dim;
+  const bool can_append =
+      append_cross_kv && state->cross_len > 0 &&
+      state->cross_len < state->memory_len &&
+      state->k_cross.size() == per_frame * state->cross_len &&
+      state->v_cross.size() == per_frame * state->cross_len;
+  const int first_frame = can_append ? state->cross_len : 0;
+  if (state->cross_len == state->memory_len &&
+      state->k_cross.size() == per_frame * state->cross_len &&
+      state->v_cross.size() == per_frame * state->cross_len) {
+    state->cross_kv_valid = true;
+    return 0;
+  }
+  const int new_frames = state->memory_len - first_frame;
+
+  // Input: memory [1, new_frames, decoder_dim]
+  std::vector<int64_t> memory_shape = {1, new_frames, config.decoder_dim};
 
   OrtValue *memory_tensor = nullptr;
   RETURN_ON_ORT_ERROR(
-      ort_api, ort_api->CreateTensorWithDataAsOrtValue(
-                   ort_memory_info, state->memory.data(),
-                   state->memory.size() * sizeof(float), memory_shape.data(),
-                   memory_shape.size(), ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT,
-                   &memory_tensor));
+      ort_api,
+      ort_api->CreateTensorWithDataAsOrtValue(
+          ort_memory_info,
+          state->memory.data() +
+              static_cast<size_t>(first_frame) * config.decoder_dim,
+          static_cast<size_t>(new_frames) * config.decoder_dim * sizeof(float),
+          memory_shape.data(), memory_shape.size(),
+          ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &memory_tensor));
 
   // Run cross_kv session
   const char *input_names[] = {"memory"};
@@ -1017,6 +1262,7 @@ int MoonshineStreamingModel::compute_cross_kv(MoonshineStreamingState *state) {
   OrtValue *inputs[] = {memory_tensor};
   OrtValue *outputs[2] = {nullptr, nullptr};
 
+  stats.cross_kv_frames += new_frames;
   OrtStatus *status = ORT_RUN(ort_api, cross_kv_session, input_names, inputs, 1,
                               output_names, 2, outputs);
 
@@ -1044,14 +1290,13 @@ int MoonshineStreamingModel::compute_cross_kv(MoonshineStreamingState *state) {
     return 1;
   }
 
-  int cross_len = static_cast<int>(k_shape[3]);
-  size_t kv_size = static_cast<size_t>(config.depth) * config.nheads *
-                   cross_len * config.head_dim;
-
-  // Copy to state
-  state->k_cross.resize(kv_size);
-  state->v_cross.resize(kv_size);
-  state->cross_len = cross_len;
+  const int out_frames = static_cast<int>(k_shape[3]);
+  if (out_frames != new_frames) {
+    LOGF("cross_kv produced %d frames for %d memory frames", out_frames,
+         new_frames);
+    for (int i = 0; i < 2; i++) ort_api->ReleaseValue(outputs[i]);
+    return 1;
+  }
 
   float *k_data = nullptr;
   float *v_data = nullptr;
@@ -1060,8 +1305,39 @@ int MoonshineStreamingModel::compute_cross_kv(MoonshineStreamingState *state) {
   RETURN_ON_ORT_ERROR(
       ort_api, ort_api->GetTensorMutableData(outputs[1], (void **)&v_data));
 
-  memcpy(state->k_cross.data(), k_data, kv_size * sizeof(float));
-  memcpy(state->v_cross.data(), v_data, kv_size * sizeof(float));
+  const int total_frames = first_frame + new_frames;
+  const size_t kv_size = per_frame * total_frames;
+  if (first_frame == 0) {
+    state->k_cross.resize(kv_size);
+    state->v_cross.resize(kv_size);
+    memcpy(state->k_cross.data(), k_data, kv_size * sizeof(float));
+    memcpy(state->v_cross.data(), v_data, kv_size * sizeof(float));
+  } else {
+    // The decoder wants a dense [depth, 1, nheads, frames, head_dim] tensor,
+    // so growing the frames axis means every (layer, head) block moves. That
+    // is one pass of memcpy over the cache, versus a matmul over all of
+    // memory to recompute it.
+    const size_t old_block = static_cast<size_t>(first_frame) * config.head_dim;
+    const size_t new_block = static_cast<size_t>(new_frames) * config.head_dim;
+    const size_t blocks = static_cast<size_t>(config.depth) * config.nheads;
+    std::vector<float> k_next(kv_size);
+    std::vector<float> v_next(kv_size);
+    for (size_t b = 0; b < blocks; ++b) {
+      float *k_dst = k_next.data() + b * (old_block + new_block);
+      float *v_dst = v_next.data() + b * (old_block + new_block);
+      memcpy(k_dst, state->k_cross.data() + b * old_block,
+             old_block * sizeof(float));
+      memcpy(v_dst, state->v_cross.data() + b * old_block,
+             old_block * sizeof(float));
+      memcpy(k_dst + old_block, k_data + b * new_block,
+             new_block * sizeof(float));
+      memcpy(v_dst + old_block, v_data + b * new_block,
+             new_block * sizeof(float));
+    }
+    state->k_cross.swap(k_next);
+    state->v_cross.swap(v_next);
+  }
+  state->cross_len = total_frames;
   state->cross_kv_valid = true;
 
   // Release outputs
@@ -1070,6 +1346,33 @@ int MoonshineStreamingModel::compute_cross_kv(MoonshineStreamingState *state) {
   }
 
   return 0;
+}
+
+void MoonshineStreamingModel::truncate_self_cache(
+    MoonshineStreamingState *state, int keep_len) {
+  if (state == nullptr) return;
+  if (keep_len <= 0) {
+    state->k_self.clear();
+    state->v_self.clear();
+    state->cache_seq_len = 0;
+    return;
+  }
+  if (keep_len >= state->cache_seq_len) return;
+  // Layout is [depth, 1, nheads, cache_seq_len, head_dim]: shrinking the
+  // sequence axis packs each (layer, head) block up against the previous one.
+  const size_t blocks = static_cast<size_t>(config.depth) * config.nheads;
+  const size_t old_block =
+      static_cast<size_t>(state->cache_seq_len) * config.head_dim;
+  const size_t new_block = static_cast<size_t>(keep_len) * config.head_dim;
+  for (size_t b = 1; b < blocks; ++b) {
+    memmove(state->k_self.data() + b * new_block,
+            state->k_self.data() + b * old_block, new_block * sizeof(float));
+    memmove(state->v_self.data() + b * new_block,
+            state->v_self.data() + b * old_block, new_block * sizeof(float));
+  }
+  state->k_self.resize(blocks * new_block);
+  state->v_self.resize(blocks * new_block);
+  state->cache_seq_len = keep_len;
 }
 
 /* ============================================================================
@@ -1177,6 +1480,8 @@ int MoonshineStreamingModel::run_decoder_with_cross_kv(
                         k_cross_tensor, v_cross_tensor};
   std::vector<OrtValue *> outputs(decoder_output_count, nullptr);
 
+  stats.decoder_calls += 1;
+  stats.decoder_tokens += token_len;
   OrtStatus *status =
       ORT_RUN(ort_api, decoder_kv_session, input_names, inputs, 5,
               output_names_vec.data(), decoder_output_count, outputs.data());
@@ -1429,8 +1734,8 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
 
   // Compute max tokens based on memory length (similar to new decoder)
   float duration_sec = state->memory_len * 0.020f;
-  int max_tokens = std::min(static_cast<int>(std::ceil(duration_sec * 6.5)),
-                            config.max_seq_len);
+  const int max_tokens = std::min(
+      static_cast<int>(std::ceil(duration_sec * 6.5)), config.max_seq_len);
 
   // Helper lambda for argmax
   auto argmax = [this](const float *logits) -> int {
@@ -1448,7 +1753,9 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
   // Contextual biasing, if the caller supplied key terms. The bonuses go into
   // the logits row in place, which is safe because every logits buffer here is
   // local scratch. The walk starts at the root: this function always decodes
-  // from BOS, even when it is verifying a draft.
+  // from BOS, even when it is verifying a draft. It is advanced exactly once
+  // per accepted token, so at every argmax it reflects the tokens that
+  // position is conditioned on.
   if (biaser != nullptr) {
     biaser->reset();
   }
@@ -1457,19 +1764,6 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
       biaser->apply(logits_row, config.vocab_size);
     }
     return argmax(logits_row);
-  };
-
-  // Helper to run decoder (requires cross_kv path)
-  auto run_decoder = [this, state](const std::vector<int64_t> &tokens,
-                                   std::vector<float> &logits) -> int {
-    if (!state->cross_kv_valid) {
-      int err = compute_cross_kv(state);
-      if (err != 0) {
-        LOG("Failed to compute cross K/V\n");
-        return err;
-      }
-    }
-    return run_decoder_with_cross_kv(state, tokens, logits);
   };
 
   // Compute cross K/V upfront
@@ -1481,115 +1775,69 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
     }
   }
 
-  // Helper lambda for auto-regressive decoding
-  auto continue_ar_decoding = [&](int start_token) {
-    int current_token = start_token;
-    std::vector<float> logits;
-
-    while (current_token != config.eos_id &&
-           result_tokens.size() < static_cast<size_t>(max_tokens)) {
-      result_tokens.push_back(current_token);
-      if (biaser != nullptr) {
-        biaser->advance(current_token);
-      }
-
-      std::vector<int64_t> next_input = {static_cast<int64_t>(current_token)};
-      int err = run_decoder(next_input, logits);
-      if (err != 0) break;
-
-      current_token = biased_argmax(logits.data());
+  // Emit one token the model has chosen. Returns false when decoding is over.
+  auto accept = [&](int token) -> bool {
+    if (token == config.eos_id ||
+        result_tokens.size() >= static_cast<size_t>(max_tokens)) {
+      return false;
     }
+    result_tokens.push_back(token);
+    if (biaser != nullptr) {
+      biaser->advance(token);
+    }
+    return true;
   };
 
-  if (speculative_tokens != nullptr && speculative_len > 0) {
-    // Speculative decoding: verify previous tokens
-    std::vector<int64_t> tokens_with_bos;
-    tokens_with_bos.push_back(config.bos_id);
-    for (int i = 0; i < speculative_len; ++i) {
-      tokens_with_bos.push_back(static_cast<int64_t>(speculative_tokens[i]));
+  // Feed ``head`` followed by ``cand`` through the decoder in one call and
+  // accept the longest prefix of ``cand`` the model agrees with. ``head`` has
+  // already been accepted (or is BOS); row i of the logits predicts the token
+  // after head + cand[0, i). The self-attention cache is cut back to the
+  // tokens that were accepted, so a rejected tail costs nothing beyond this
+  // call. On return ``*next`` holds the model's token for the first position
+  // it disagreed on (or the position after the whole candidate). Returns the
+  // number of candidate tokens accepted, or -1 on error.
+  auto verify = [&](int head, const int *cand, int cand_len, int *next) -> int {
+    std::vector<int64_t> tokens;
+    tokens.reserve(static_cast<size_t>(cand_len) + 1);
+    tokens.push_back(head);
+    for (int i = 0; i < cand_len; ++i) {
+      tokens.push_back(cand[i]);
     }
-
+    const int cache_before = state->cache_seq_len;
     std::vector<float> logits;
-    int err = run_decoder(tokens_with_bos, logits);
-    if (err != 0) {
-      return err;
+    if (run_decoder_with_cross_kv(state, tokens, logits) != 0) {
+      return -1;
     }
-
-    // Get predictions from logits. The biaser walks the teacher-forced prefix
-    // rather than the predictions, because that prefix is what position t is
-    // actually conditioned on.
-    std::vector<int> predictions;
-    for (int t = 0; t < static_cast<int>(tokens_with_bos.size()); ++t) {
-      predictions.push_back(
-          biased_argmax(logits.data() + t * config.vocab_size));
-      if (biaser != nullptr &&
-          t + 1 < static_cast<int>(tokens_with_bos.size())) {
-        biaser->advance(static_cast<int32_t>(tokens_with_bos.at(t + 1)));
-      }
-    }
-
-    // Find divergence point
-    int diverge_point = 0;
-    for (int i = 0; i < speculative_len; ++i) {
-      if (predictions[i] == speculative_tokens[i]) {
-        diverge_point = i + 1;
-      } else {
+    int accepted = 0;
+    *next = config.eos_id;
+    for (int i = 0; i <= cand_len; ++i) {
+      const int pred = biased_argmax(logits.data() + static_cast<size_t>(i) *
+                                                         config.vocab_size);
+      if (i == cand_len || pred != cand[i]) {
+        *next = pred;
         break;
       }
-    }
-
-    // Accept verified tokens
-    for (int i = 0; i < diverge_point; ++i) {
-      result_tokens.push_back(speculative_tokens[i]);
-    }
-
-    if (diverge_point == speculative_len) {
-      // All speculative tokens verified, continue from final prediction
-      int final_pred = predictions[speculative_len];
-      continue_ar_decoding(final_pred);
-    } else {
-      // Diverged: reset cache and re-run with only accepted tokens
-      state->cache_seq_len = 0;
-      state->k_self.clear();
-      state->v_self.clear();
-
-      std::vector<int64_t> accepted_tokens;
-      accepted_tokens.push_back(config.bos_id);
-      for (int i = 0; i < diverge_point; ++i) {
-        accepted_tokens.push_back(static_cast<int64_t>(speculative_tokens[i]));
+      if (!accept(pred)) {
+        // Hit EOS or the token budget inside the draft: stop here. ``next``
+        // is EOS so the caller ends the line.
+        *next = config.eos_id;
+        break;
       }
-
-      std::vector<float> logits2;
-      err = run_decoder(accepted_tokens, logits2);
-      if (err != 0) {
-        return err;
-      }
-
-      // Rewind the biasing walk to the accepted prefix. It currently reflects
-      // the whole draft, including the tokens we just rejected.
-      if (biaser != nullptr) {
-        biaser->reset();
-        for (int i = 0; i < diverge_point; ++i) {
-          biaser->advance(static_cast<int32_t>(speculative_tokens[i]));
-        }
-      }
-
-      int new_pred =
-          biased_argmax(logits2.data() + diverge_point * config.vocab_size);
-      continue_ar_decoding(new_pred);
+      ++accepted;
     }
-  } else {
-    // Regular decoding: start from BOS
-    std::vector<int64_t> tokens = {static_cast<int64_t>(config.bos_id)};
-    std::vector<float> logits;
+    truncate_self_cache(state, cache_before + 1 + accepted);
+    return accepted;
+  };
 
-    int err = run_decoder(tokens, logits);
-    if (err != 0) {
-      return err;
-    }
-
-    int first_pred = biased_argmax(logits.data());
-    continue_ar_decoding(first_pred);
+  SpeculativeDecodeHooks hooks;
+  hooks.verify = verify;
+  hooks.accept = accept;
+  const SpeculativeDecodeOutcome outcome =
+      run_speculative_decode(speculative_tokens, speculative_len, config.bos_id,
+                             max_realign_attempts, hooks);
+  stats.realign_attempts += outcome.realign_attempts;
+  if (!outcome.ok) {
+    return 1;
   }
 
   // Allocate and copy output

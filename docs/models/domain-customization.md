@@ -264,6 +264,8 @@ bash scripts/quantize-streaming-model.sh ./float
 
 A decoder-only adapter changes only `decoder_kv`, so `--graphs decoder_kv` plus the published `.ort` files for the other four graphs is enough. `--sites encoder|both` or `--adapt full` changes the encoder, so use `--graphs all`. Load the directory with `Transcriber` from the inference wheel — no `[finetune]` extra, no adapter code at runtime.
 
+When you do re-export the encoder, add `--encoder-cache`. That writes `encoder.onnx` as the graph that carries each layer's left context between streaming updates instead of re-encoding it, which is what makes a medium update about a third faster and is what the published models ship since `quantized_26_11_07`. The runtime recognises either kind of `encoder.ort`; the cached one needs moonshine-voice 0.1.7 or later.
+
 Then add the domain's word list with `set_keyterms` / `set_context`. The adapter has already learned how this domain talks; biasing is what recovers the names the training audio barely said.
 
 ### Pitfalls

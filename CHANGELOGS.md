@@ -6,9 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.1.7]
 
+### Changed
+
+- Streaming updates do less decoder work: cross-attention keys and values are computed once per memory frame and appended, and after a draft token is rejected the rest of last update's text is re-verified in one call instead of regenerated token by token (GitHub issue #236).
+- Streaming models may ship an encoder graph that carries each layer's left context across updates (`moonshine_voice.lora --export --encoder-cache`); the runtime detects it and encodes only the new frames. On medium this cuts per-update latency by about a third.
+- All thirteen streaming models (English tiny/small/medium; Japanese, German and Spanish tiny/small; Arabic, Vietnamese, Chinese and Tagalog tiny) are republished on `quantized_26_11_07` with that encoder. Other graphs are unchanged; WER/CER on LibriSpeech and FLEURS is within noise of the previous pins.
+- `scripts/mirror-model-to-hf.sh` copies a published model directory to the `moonshine-voice-assets` archive and updates its `FILES.tsv`; the mirror now holds every streaming pin the catalog references.
+
 ### Fixed
 
 - Restarting a stream after a mid-speech stop no longer creates a phantom transcript line from the next session's leading silence.
+- `moonshine_voice.lora --export` reads the sliding windows of the non-English checkpoints correctly. They store half-open bounds (`[17, 5]`) where the English ones store inclusive counts (`[16, 4]`); taken literally that widened every layer by a frame on each side.
+- `scripts/generate-ort-op-config.py` sends a User-Agent the CDN accepts; it had been getting 403 on every catalog model.
 - Kokoro text to speech loads on Android again. The 0.1.5 and 0.1.6 AARs shipped an ONNX Runtime built before `QLinearMatMul` and other kernels were required, so the voice failed at session creation (GitHub issue #242).
 - A release preflight check now verifies every vendored ONNX Runtime prebuilt carries every operator in the required-operators config, so a stale platform library fails before it ships.
 - The Android JNI layer releases the audio arrays it pins for `transcribeWithoutStreaming` and `addAudioToStream`. Each call leaked a copy of the input buffer (GitHub issue #232).

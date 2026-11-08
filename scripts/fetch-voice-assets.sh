@@ -40,15 +40,19 @@ HF_REVISION=""
 # streaming language so streaming-language-smoke-test can load each one
 # offline. English also ships the attention decoder used by word-timestamp tests.
 STREAMING_TINY_PINS=(
-  tiny-streaming-ar/quantized_26_08_24
-  tiny-streaming-de/quantized_26_08_24
-  tiny-streaming-en/quantized_26_11_02
-  tiny-streaming-es/quantized_26_08_24
-  tiny-streaming-ja/quantized_26_08_23
-  tiny-streaming-tl/quantized_26_08_24
-  tiny-streaming-vi/quantized_26_08_24
-  tiny-streaming-zh/quantized_26_08_24
+  tiny-streaming-ar/quantized_26_11_07
+  tiny-streaming-de/quantized_26_11_07
+  tiny-streaming-en/quantized_26_11_07
+  tiny-streaming-es/quantized_26_11_07
+  tiny-streaming-ja/quantized_26_11_07
+  tiny-streaming-tl/quantized_26_11_07
+  tiny-streaming-vi/quantized_26_11_07
+  tiny-streaming-zh/quantized_26_11_07
 )
+# The last English pin whose encoder.ort was the stateless graph. Kept as
+# test-assets/tiny-streaming-en-stateless so streaming-model-test can check
+# that the cached encoder in tiny-streaming-en reproduces it.
+STREAMING_TINY_STATELESS_PIN="tiny-streaming-en/quantized_26_11_02"
 
 usage() {
   sed -n '2,28p' "$0" | sed 's/^# \?//'
@@ -105,7 +109,7 @@ fetch_cdn() {
 fetch_tiny_streaming_model() {
   local ta="$1"
   local pin="$2"
-  local dest="${ta}/${pin%%/*}"
+  local dest="${ta}/${3:-${pin%%/*}}"
   local f
   for f in adapter.ort cross_kv.ort decoder_kv.ort encoder.ort \
            frontend.model.ort frontend.weights.ort \
@@ -135,6 +139,8 @@ fetch_test_assets() {
   for pin in "${STREAMING_TINY_PINS[@]}"; do
     fetch_tiny_streaming_model "${ta}" "${pin}"
   done
+  fetch_tiny_streaming_model "${ta}" "${STREAMING_TINY_STATELESS_PIN}" \
+    tiny-streaming-en-stateless
 
   fetch_cdn "model/diarization-community1/segmentation.ort" \
     "${ta}/diarization/segmentation.ort"
