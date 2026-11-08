@@ -202,8 +202,8 @@ if [[ "${RUN_ALL}" -eq 1 ]]; then
     download_and_run "STT small-streaming-es" stt es 4
     download_and_run "STT small-streaming-ja" stt ja 4
     download_and_run "STT medium-streaming-en" stt en 5
+    # q4 and q8 are the only published variants; fp16 and fp32 were dropped.
     download_and_run "Embedding embeddinggemma-300m q8" embedding embeddinggemma-300m q8
-    download_and_run "Embedding embeddinggemma-300m fp16" embedding embeddinggemma-300m fp16
 fi
 
 # --- Framework download tests (real AssetDownloader on each platform). --------

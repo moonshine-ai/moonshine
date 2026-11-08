@@ -98,6 +98,24 @@ class Frontend(nn.Module):
                 frame_count + num_frames)
 
 
+def inclusive_windows(windows):
+    """Return the sliding windows as inclusive (past, future) frame counts.
+
+    Two conventions are in circulation. The English checkpoints store the windows
+    the way the graphs below read them: a (16, 4) layer sees itself, 16 frames behind
+    and 4 ahead. The checkpoints exported since then store the half-open bounds that
+    transformers' mask function uses, where the same layer is (17, 5) and a layer with
+    no lookahead is (17, 1) rather than (16, 0). Every published model has at least
+    one no-lookahead layer, and under half-open bounds a future of 0 would mean a
+    layer that cannot even see itself, so a 0 anywhere marks the inclusive form and
+    its absence marks the half-open one. Mixing them up costs a frame on each side of
+    every layer and measurably changes the output.
+    """
+    if any(future == 0 for _, future in windows):
+        return list(windows)
+    return [(past - 1, future - 1) for past, future in windows]
+
+
 class Encoder(nn.Module):
     """Features to encoded states, with each layer's sliding window baked in.
 
@@ -126,6 +144,80 @@ class Encoder(nn.Module):
                                     torch.finfo(hidden.dtype).min)
             hidden = layer(hidden, attention_mask=mask)
         return self.final_norm(hidden)
+
+
+class CachedEncoder(nn.Module):
+    """The encoder with each layer's left context carried across calls.
+
+    The stateless `Encoder` has to be handed the full left context on every call:
+    sixteen frames per layer, so 224 frames on medium, re-encoded from scratch to
+    produce the handful of new frames an update needs. The attention here has no
+    positional encoding of its own (positions are added later by the adapter), and
+    every layer looks back a fixed `past` frames, so the sixteen frames of input that
+    enter each layer just before the new window are all the history the layer can see.
+    Carrying those sixteen frames per layer is exact and makes the call proportional to
+    the new frames rather than to the depth of the network.
+
+    Inputs are the features from the first frame that is not yet emitted through the end
+    of what the frontend has produced (new frames plus lookahead), `cache` of shape
+    `[depth, 1, past, hidden]` holding each layer's input for the `past` frames before
+    that, and `cache_valid` of shape `[past]` marking which cache slots are real (less
+    than all of them at the start of a stream, where slots fill from the end). Outputs
+    are the encoded frames for the window and the cache for the next call, cut from
+    `past` frames before the lookahead so it lines up with the frames the runtime emits.
+
+    A call with an all-zero `cache_valid` and the full left context in `features` is
+    the stateless computation, which is how the runtime recovers after a reset.
+    """
+
+    def __init__(self, encoder, windows):
+        super().__init__()
+        self.layers, self.final_norm = encoder.layers, encoder.final_norm
+        self.windows = windows
+        pasts = {past for past, _ in windows}
+        assert len(pasts) == 1, f"layers disagree on left context: {sorted(pasts)}"
+        self.past = pasts.pop()
+        # The lookahead is how many frames past the emitted ones the runtime feeds, so
+        # it is also where the next call's cache ends.
+        self.lookahead = sum(future for _, future in windows)
+
+    def attend(self, layer, x, hidden, mask):
+        attn = layer.self_attn
+        normed = layer.input_layernorm(x)
+        past = self.past
+        heads = attn.config.num_attention_heads
+        shape_q = (1, -1, heads, attn.head_dim)
+        query = attn.q_proj(normed[:, past:]).view(shape_q).transpose(1, 2)
+        key = attn.k_proj(normed).view(shape_q).transpose(1, 2)
+        value = attn.v_proj(normed).view(shape_q).transpose(1, 2)
+        scores = torch.matmul(query, key.transpose(-2, -1)) * attn.scaling + mask
+        attended = torch.matmul(F.softmax(scores, dim=-1), value)
+        # heads * head_dim is not the hidden size on every model (medium: 640 vs 768).
+        attended = attended.transpose(1, 2).reshape(1, -1, heads * attn.head_dim)
+        hidden = hidden + attn.o_proj(attended)
+        return hidden + layer.mlp(layer.post_attention_layernorm(hidden))
+
+    def forward(self, features: Tensor, cache: Tensor, cache_valid: Tensor):
+        past, lookahead = self.past, self.lookahead
+        hidden = features
+        length = hidden.shape[1]
+        q_pos = torch.arange(length, device=hidden.device) + past
+        k_pos = torch.arange(length + past, device=hidden.device)
+        distance = q_pos.unsqueeze(1) - k_pos.unsqueeze(0)
+        key_ok = torch.cat([cache_valid > 0.5,
+                            torch.ones(length, dtype=torch.bool, device=hidden.device)])
+        next_cache = []
+        for index, (layer, (_, future)) in enumerate(zip(self.layers, self.windows)):
+            x = torch.cat([cache[index], hidden], dim=1)
+            # Frames [-(past + lookahead), -lookahead) of the layer input are the
+            # `past` frames before the next window starts.
+            next_cache.append(x[:, length - lookahead: length - lookahead + past])
+            allowed = (distance >= -future) & (distance <= past) & key_ok.unsqueeze(0)
+            mask = torch.zeros(1, 1, length, length + past, dtype=hidden.dtype)
+            mask = mask.masked_fill(~allowed.unsqueeze(0).unsqueeze(0),
+                                    torch.finfo(hidden.dtype).min)
+            hidden = self.attend(layer, x, hidden, mask)
+        return self.final_norm(hidden), torch.stack(next_cache)
 
 
 class Adapter(nn.Module):
@@ -359,6 +451,11 @@ def main(argv=None):
     parser.add_argument("--tokenizer-bin", default=None,
                         help="tokenizer.bin to copy in; unchanged by fine-tuning, so "
                              "the published one is usually what you want")
+    parser.add_argument("--encoder-cache", action="store_true",
+                        help="export encoder.onnx as the cached-left-context graph "
+                             "(inputs features, cache, cache_valid). The runtime "
+                             "detects which kind it was given; moonshine-voice "
+                             "0.1.7 or later is required to load this one")
     args = parser.parse_args(argv)
 
     from torch.export import Dim
@@ -376,7 +473,7 @@ def main(argv=None):
     heads, head_dim = config.num_attention_heads, config.head_dim
     depth = config.num_hidden_layers
     enc_hidden, dec_hidden = encoder_config.hidden_size, config.hidden_size
-    windows = [tuple(w) for w in encoder_config.sliding_windows]
+    windows = inclusive_windows([tuple(w) for w in encoder_config.sliding_windows])
     frame_len = encoder.embedder.frame_len
     state_shapes = frames_state_shapes(encoder.embedder, enc_hidden)
 
@@ -402,7 +499,24 @@ def main(argv=None):
                    "state_shapes": {k: list(v) for k, v in state_shapes.items()}}},
                scripted=True)
 
-    if "encoder" in wanted:
+    if "encoder" in wanted and args.encoder_cache:
+        cached = CachedEncoder(encoder, windows)
+        # 37 and 41 are unlike each other and unlike `past`, so the exporter keeps
+        # the feature length symbolic instead of tying it to the cache depth.
+        export(cached,
+               (torch.randn(1, 41, enc_hidden),
+                torch.randn(len(windows), 1, cached.past, enc_hidden),
+                torch.ones(cached.past)),
+               out / "encoder.onnx", ["features", "cache", "cache_valid"],
+               ["encoded", "cache_out"],
+               {"features": {1: Dim("feat_len", min=cached.past + 1, max=1 << 16)},
+                "cache": None, "cache_valid": None},
+               {"encoder_config": {
+                   "encoder_dim": enc_hidden,
+                   "total_lookahead": cached.lookahead,
+                   "windows": [list(w) for w in windows],
+                   "cache_frames": cached.past}})
+    elif "encoder" in wanted:
         export(Encoder(encoder, windows), (torch.randn(1, 37, enc_hidden),),
                out / "encoder.onnx", ["features"], ["encoded"],
                {"features": {1: Dim("feat_len", min=2, max=1 << 16)}},

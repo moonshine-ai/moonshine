@@ -118,6 +118,7 @@ echo "Published https://${CDN_HOST}/${REMOTE_DIR}/" >&2
 rclone lsl "${DEST}/" >&2
 echo >&2
 echo "Now: update kJapaneseStreamingQuantizedDir (or equivalent) and stt_catalog()" >&2
-echo "in core/moonshine-model-catalog.cpp, MODEL_INFO in" >&2
-echo "language-bindings/python/src/moonshine_voice/download.py, then run" >&2
-echo "python3 scripts/generate-model-file-metadata.py and commit." >&2
+echo "in core/moonshine-model-catalog.cpp and the pins in scripts/fetch-voice-assets.sh," >&2
+echo "run python3 scripts/generate-model-file-metadata.py, then mirror the same" >&2
+echo "directory with scripts/mirror-model-to-hf.sh ${SRC} ${MODEL_NAME} ${QUANTIZED_DIR}" >&2
+echo "and commit." >&2
