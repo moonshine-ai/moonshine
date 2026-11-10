@@ -2092,9 +2092,15 @@ int32_t moonshine_get_tts_dependencies(const char *languages,
     }
     std::vector<std::string> merged;
     std::vector<std::string> lang_tags_for_clone;
+    // Phonon reads text directly, so it never opens the G2P dictionaries and
+    // models. Leaving them out saves every Phonon user a download of tens of
+    // megabytes per language. A language is still validated below.
+    const bool needs_g2p = tts_opt.vocoder_engine != "phonon";
     if (all_langs) {
-      merged = moonshine_tts::
-          moonshine_asset_catalog_all_g2p_dependency_keys_union();
+      if (needs_g2p) {
+        merged = moonshine_tts::
+            moonshine_asset_catalog_all_g2p_dependency_keys_union();
+      }
       const std::vector<std::string> tags =
           moonshine_tts::moonshine_asset_catalog_all_registered_language_tags();
       for (const std::string &tag : tags) {
@@ -2108,8 +2114,10 @@ int32_t moonshine_get_tts_dependencies(const char *languages,
       const std::vector<std::string> parts =
           split_comma_nonempty_language_tokens(languages);
       if (parts.empty()) {
-        merged = moonshine_tts::
-            moonshine_asset_catalog_all_g2p_dependency_keys_union();
+        if (needs_g2p) {
+          merged = moonshine_tts::
+              moonshine_asset_catalog_all_g2p_dependency_keys_union();
+        }
         const std::vector<std::string> tags = moonshine_tts::
             moonshine_asset_catalog_all_registered_language_tags();
         for (const std::string &tag : tags) {
@@ -2139,7 +2147,9 @@ int32_t moonshine_get_tts_dependencies(const char *languages,
                 part.c_str());
             return MOONSHINE_ERROR_INVALID_ARGUMENT;
           }
-          append_unique_in_order(merged, *g2p);
+          if (needs_g2p) {
+            append_unique_in_order(merged, *g2p);
+          }
           append_unique_in_order(merged, voc);
           lang_tags_for_clone.push_back(part);
         }

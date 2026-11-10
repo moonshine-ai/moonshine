@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The Android JNI layer releases the audio arrays it pins for `transcribeWithoutStreaming` and `addAudioToStream`. Each call leaked a copy of the input buffer (GitHub issue #232).
 - Synthesizing text whose script the voice's language cannot pronounce, such as Latin text with a Hindi voice, raises an error instead of returning silence (GitHub issue #241).
 - Phonon voices work in the browser. The WebAssembly ONNX Runtime predated Phonon and lacked its `Elu` kernel, and a catalog voice supplied as bytes was looked for on disk.
+- Phonon voices no longer download the language's G2P dictionary and model (about 24 MB for English); they read text directly and never used them.
 - Phonon voices are listed by `voices()` before `phonon/voices.json` has been downloaded, and on the web, where the catalog never reaches a filesystem.
 
 ## [0.1.6]

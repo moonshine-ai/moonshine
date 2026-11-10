@@ -1759,6 +1759,41 @@ TEST_CASE("moonshine-tts-g2p-dependency-api") {
     std::free(out);
   }
 
+  SUBCASE("tts-phonon-engine-lists-only-phonon-assets") {
+    const moonshine_option_t opts[] = {
+        {"voice", "phonon_zoey"},
+    };
+    char* out = nullptr;
+    REQUIRE(moonshine_get_tts_dependencies("en_us", opts, 1, &out) ==
+            MOONSHINE_ERROR_NONE);
+    REQUIRE(out != nullptr);
+    const std::string json(out);
+    for (const char* key :
+         {"phonon/embed_prompt.ort", "phonon/embed_latent.ort",
+          "phonon/backbone.ort", "phonon/flow_head.ort",
+          "phonon/mimi_transformer.ort", "phonon/mimi_seanet.ort",
+          "phonon/model.json", "phonon/tokenizer.bin", "phonon/voices.json",
+          "phonon/voices/zoey.safetensors"}) {
+      CHECK(json.find(std::string("\"") + key + "\"") != std::string::npos);
+    }
+    // Phonon reads text directly and never opens the G2P files, so asking for
+    // its dependencies must not make the caller download them.
+    CHECK(json.find("en_us/") == std::string::npos);
+    CHECK(json.find("kokoro/") == std::string::npos);
+    std::free(out);
+  }
+
+  SUBCASE("tts-phonon-engine-still-validates-the-language") {
+    const moonshine_option_t opts[] = {
+        {"voice", "phonon_zoey"},
+    };
+    char* out = nullptr;
+    CHECK(moonshine_get_tts_dependencies("zzz_not_a_supported_language", opts,
+                                         1, &out) ==
+          MOONSHINE_ERROR_INVALID_ARGUMENT);
+    CHECK(out == nullptr);
+  }
+
   SUBCASE("tts-explicit-piper-onnx-map-keys") {
     const moonshine_option_t opts[] = {
         {"voice", "piper_custom"},
