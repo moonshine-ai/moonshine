@@ -44,6 +44,8 @@ Only OnnxRuntime flatbuffer models (`.ort`) are accepted. Do not add `.onnx` loa
 
 User-facing changes go in [CHANGELOGS.md](CHANGELOGS.md): Keep a Changelog, high-level bullets, no more than about 200 characters each.
 
+The Apple static framework (`Moonshine.xcframework`) may only export `moonshine_*` symbols. `scripts/prelink-apple-static-library.sh` relinks each slice with `ld -r` and an export list so the bundled ONNX Runtime and vendored libraries stay private (issue #235), and `scripts/check-framework-exports.sh` fails the build otherwise. New C API functions must be named `moonshine_*` to be exported; a new direct call into ONNX Runtime by symbol name needs a stub in `core/moonshine-ort-shim.c` and an alias in the prelink script.
+
 ## Layout
 
 - `core/` — C++ engine and C API (`moonshine-c-api.h`)
