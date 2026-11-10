@@ -62,6 +62,10 @@ xcodebuild -create-xcframework \
 	-headers ${MOONSHINE_FRAMEWORK_MACOS}/Headers \
 	-output ${CORE_BUILD_DIR}/Moonshine.xcframework
 
+# Only the moonshine_* C API may be global in the shipped slices; the bundled
+# ONNX Runtime and vendored libraries must stay private (issue #235).
+${SCRIPTS_DIR}/check-framework-exports.sh ${CORE_BUILD_DIR}/Moonshine.xcframework
+
 # The three platform trees are only needed to produce the .a files that
 # create-xcframework already copied in. Dropping them before we stage
 # test-assets keeps peak disk use within a laptop-sized volume.

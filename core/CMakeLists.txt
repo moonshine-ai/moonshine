@@ -328,22 +328,42 @@ if (IOS OR MOONSHINE_BUILD_SWIFT)
             "$<TARGET_FILE_DIR:moonshine>/Headers/moonshine-c-api.h"
         COMMENT "Copying public header to framework"
     )
-    # For static frameworks, merge all static dependencies into a single library
-    # This is required because static libraries don't automatically include their dependencies
-    # We merge: moonshine-utils, onnxruntime, ort-utils, bin-tokenizer, optional moonshine-tts
-    # archives, then moonshine. Order matters — dependencies first, then the main library.
+    # For static frameworks, merge all static dependencies into a single library,
+    # because static libraries don't automatically include their dependencies.
+    # scripts/prelink-apple-static-library.sh does the merge with `ld -r` rather
+    # than a plain `libtool -static` so that only the moonshine_* C API stays
+    # global: the bundled ONNX Runtime, utf8proc and the rest become private to
+    # the framework and cannot capture references from another ONNX Runtime in
+    # the same app (issue #235). moonshine-ort-shim.c forwards Moonshine's own
+    # OrtGetApiBase() calls to the renamed bundled copy.
+    add_library(moonshine-ort-shim STATIC moonshine-ort-shim.c)
+    target_include_directories(moonshine-ort-shim PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/third-party/onnxruntime/include
+    )
+    add_dependencies(moonshine moonshine-ort-shim)
+    if (MOONSHINE_BUILD_SWIFT)
+        set(_MOONSHINE_PRELINK_PLATFORM macos)
+    elseif (CMAKE_OSX_SYSROOT STREQUAL "iphonesimulator")
+        set(_MOONSHINE_PRELINK_PLATFORM ios-simulator)
+    else()
+        set(_MOONSHINE_PRELINK_PLATFORM ios)
+    endif()
     add_custom_command(TARGET moonshine POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E echo "Merging static libraries into framework..."
-        COMMAND libtool -static -o "$<TARGET_FILE:moonshine>.merged"
+        COMMAND ${CMAKE_COMMAND} -E echo "Prelinking static libraries into framework..."
+        COMMAND bash ${CMAKE_CURRENT_LIST_DIR}/../scripts/prelink-apple-static-library.sh
+            --platform ${_MOONSHINE_PRELINK_PLATFORM}
+            --min-version "${CMAKE_OSX_DEPLOYMENT_TARGET}"
+            --onnxruntime "${ONNXRUNTIME_LIB_PATH}"
+            --output "$<TARGET_FILE:moonshine>.merged"
             "$<TARGET_FILE:moonshine-utils>"
-            "${ONNXRUNTIME_LIB_PATH}"
             "$<TARGET_FILE:ort-utils>"
             "$<TARGET_FILE:bin-tokenizer>"
             ${_MOONSHINE_FRAMEWORK_MERGE_TTS_ARCHIVES}
+            "$<TARGET_FILE:moonshine-ort-shim>"
             "$<TARGET_FILE:moonshine>"
         COMMAND ${CMAKE_COMMAND} -E remove "$<TARGET_FILE:moonshine>"
         COMMAND ${CMAKE_COMMAND} -E rename "$<TARGET_FILE:moonshine>.merged" "$<TARGET_FILE:moonshine>"
-        COMMENT "Merging static dependencies into framework binary"
+        COMMENT "Prelinking static dependencies into framework binary"
     )
     # Fix Info.plist by adding required iOS framework keys
     # iOS frameworks require CFBundleName, CFBundleVersion, and CFBundleShortVersionString
