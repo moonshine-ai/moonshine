@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Restarting a stream after a mid-speech stop no longer creates a phantom transcript line from the next session's leading silence.
 - The iOS and macOS `Moonshine.xcframework` exports only the `moonshine_*` C API. It used to re-export its bundled ONNX Runtime, so an app that also linked another ONNX Runtime (such as sherpa-onnx) could have that one's calls bound to Moonshine's minimal build (GitHub issue #235).
 - `moonshine_voice.lora --export` reads the sliding windows of the non-English checkpoints correctly. They store half-open bounds (`[17, 5]`) where the English ones store inclusive counts (`[16, 4]`); taken literally that widened every layer by a frame on each side.
 - `scripts/generate-ort-op-config.py` sends a User-Agent the CDN accepts; it had been getting 403 on every catalog model.
