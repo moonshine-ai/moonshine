@@ -313,6 +313,8 @@ void Transcriber::load_from_files(const char *model_path, uint32_t model_arch) {
     this->streaming_model = new MoonshineStreamingModel(
         this->options.log_ort_run, this->options.ort_provider_names,
         this->options.coreml_cache_dir);
+    this->streaming_model->max_tokens_per_second =
+        this->options.max_tokens_per_second;
 
     int32_t load_error = this->streaming_model->load(
         model_path, tokenizer_path.c_str(), model_arch);
@@ -543,6 +545,8 @@ void Transcriber::load_from_memory_files(uint32_t model_arch) {
     this->streaming_model = new MoonshineStreamingModel(
         this->options.log_ort_run, this->options.ort_provider_names,
         this->options.coreml_cache_dir);
+    this->streaming_model->max_tokens_per_second =
+        this->options.max_tokens_per_second;
 
     const std::string config_json(config_data, config_data + config_size);
     int32_t config_error =

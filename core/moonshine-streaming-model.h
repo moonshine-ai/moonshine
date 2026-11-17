@@ -176,6 +176,10 @@ struct MoonshineStreamingModel {
   int cross_attn_enc_len = 0;
   int cross_attn_steps = 0;  // total layer*step entries collected
 
+  // Upper bound on decoded tokens per second of audio in decode_full(); the
+  // Transcriber overwrites it with TranscriberOptions::max_tokens_per_second.
+  float max_tokens_per_second = 6.5f;
+
   MoonshineStreamingModel(
       bool log_ort_run = false,
       const std::vector<std::string> &ort_provider_names = {},

@@ -1735,7 +1735,8 @@ int MoonshineStreamingModel::decode_full(MoonshineStreamingState *state,
   // Compute max tokens based on memory length (similar to new decoder)
   float duration_sec = state->memory_len * 0.020f;
   const int max_tokens = std::min(
-      static_cast<int>(std::ceil(duration_sec * 6.5)), config.max_seq_len);
+      static_cast<int>(std::ceil(duration_sec * max_tokens_per_second)),
+      config.max_seq_len);
 
   // Helper lambda for argmax
   auto argmax = [this](const float *logits) -> int {
