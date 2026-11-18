@@ -27,12 +27,22 @@
 # scripts/check-ep-partitioning.py reproduces them. Pass 'with-nnapi' to build
 # it back in, which is worth doing if that ever changes.
 #
-# Usage:
-#   scripts/build-ort-android.sh [force] [with-nnapi] [abi ...]
+# KleidiAI is disabled by default on Android while ORT_VERSION is pinned to
+# 1.23.2. In ORT 1.23.2, CPUIDInfo::ArmLinuxInit() checks only HWCAP2_SME
+# without checking HWCAP2_SME2, so ArmKleidiAI dispatches SME2 micro-kernels
+# (including `psel` inside its packing routines) on CPUs that implement FEAT_SME
+# without FEAT_SME2 (such as Snapdragon 8 Elite Gen 5), crashing with SIGILL
+# at session creation (microsoft/onnxruntime#26361, #27884; GitHub issue #253).
+# Pass 'with-kleidiai' once ORT_VERSION moves to a release with full SME1/SME2
+# runtime gating.
 #
-#   force       rebuild and re-vendor even if a library is already in place
-#   with-nnapi  include the NNAPI execution provider (see above)
-#   abi         one or more of arm64-v8a, armeabi-v7a, x86_64 (default: all)
+# Usage:
+#   scripts/build-ort-android.sh [force] [with-nnapi] [with-kleidiai] [abi ...]
+#
+#   force          rebuild and re-vendor even if a library is already in place
+#   with-nnapi     include the NNAPI execution provider (see above)
+#   with-kleidiai  enable KleidiAI kernels on arm64-v8a (see above)
+#   abi            one or more of arm64-v8a, armeabi-v7a, x86_64 (default: all)
 #
 # Environment:
 #   ANDROID_SDK_ROOT / ANDROID_HOME  Android SDK (default: ~/Library/Android/sdk)
@@ -64,12 +74,15 @@ ORT_ANDROID_CONFIG="${ORT_ANDROID_CONFIG:-Release}"
 
 FORCE=""
 USE_NNAPI=""
+USE_KLEIDIAI=""
 ABIS=()
 for arg in "$@"; do
     case "$arg" in
         force|--force) FORCE=1 ;;
         with-nnapi|--with-nnapi) USE_NNAPI=1 ;;
         no-nnapi|--no-nnapi) USE_NNAPI="" ;;
+        with-kleidiai|--with-kleidiai) USE_KLEIDIAI=1 ;;
+        no-kleidiai|--no-kleidiai) USE_KLEIDIAI="" ;;
         arm64-v8a|armeabi-v7a|x86_64) ABIS+=("$arg") ;;
         *) echo "Unknown argument: '$arg'" >&2; exit 1 ;;
     esac
@@ -95,7 +108,7 @@ fi
 ort_require_op_config
 
 echo "[build-ort-android] ORT ${ORT_VERSION}, NDK ${ANDROID_NDK_VERSION}, API ${ANDROID_API}"
-echo "[build-ort-android] config: ${ORT_ANDROID_CONFIG}, NNAPI: ${USE_NNAPI:+on}${USE_NNAPI:-off (see the header comment)}"
+echo "[build-ort-android] config: ${ORT_ANDROID_CONFIG}, NNAPI: ${USE_NNAPI:+on}${USE_NNAPI:-off (see the header comment)}, KleidiAI: ${USE_KLEIDIAI:+on (arm64-v8a)}${USE_KLEIDIAI:-off (see the header comment)}"
 echo "[build-ort-android] ABIs: ${ABIS[*]}"
 
 needs_build=""
@@ -132,19 +145,16 @@ build_abi() {
     local nnapi=()
     [ -n "${USE_NNAPI}" ] && nnapi=(--use_nnapi)
 
-    # KleidiAI is aarch64-only, but ORT 1.23 enables it whenever the *host*
-    # machine is arm64, without checking the cross-compilation target (see the
-    # last clause of the onnxruntime_USE_KLEIDIAI logic in
-    # tools/ci_build/build.py). On an Apple Silicon machine that turns on the
-    # KleidiAI code paths for armeabi-v7a and x86_64 while the sources
-    # themselves are excluded, and the link fails on undefined
-    # ArmKleidiAI::Mlas* symbols. Turn it off for every target that is not
-    # arm64, where it would do nothing anyway.
-    local kleidiai=()
-    case "${abi}" in
-        arm64-v8a) ;;
-        *) kleidiai=(--no_kleidiai) ;;
-    esac
+    # KleidiAI is disabled by default across Android ABIs:
+    # - For non-arm64 targets, ORT 1.23 turns it on whenever the *host* machine
+    #   is arm64 (e.g. Apple Silicon), breaking the link on missing
+    #   ArmKleidiAI::Mlas* symbols unless --no_kleidiai is passed.
+    # - For arm64-v8a on ORT 1.23.2, KleidiAI omits the HWCAP2_SME2 check in
+    #   CPUIDInfo::ArmLinuxInit(), triggering SIGILL on SME1-only CPUs.
+    local kleidiai=(--no_kleidiai)
+    if [ "${abi}" = "arm64-v8a" ] && [ -n "${USE_KLEIDIAI}" ]; then
+        kleidiai=()
+    fi
 
     # A forced rebuild starts from an empty build directory. ORT's build.py
     # only *adds* a -D when a feature is enabled, so turning one off leaves the
