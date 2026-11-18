@@ -246,6 +246,79 @@ main() {
     fi
     rm -f "${ops_log}"
 
+    # Under ORT 1.23.x, KleidiAI emits SME2 kernels gated only on HWCAP2_SME,
+    # crashing with SIGILL on SME1-only CPUs (GitHub issue #253). Verify the
+    # vendored Android arm64 binary was built with --no_kleidiai.
+    local ort_version=""
+    ort_version="$( ( ORT_VERSION=""; source "${SCRIPTS_DIR}/ort-build-common.sh" && printf '%s' "${ORT_VERSION}" ) 2>/dev/null || true )"
+    local android_arm64_ort="${REPO_ROOT_DIR}/core/third-party/onnxruntime/lib/android/arm64/libonnxruntime.so"
+    if [[ "${ort_version}" == 1.23.* ]] && [ -f "${android_arm64_ort}" ]; then
+        local py_bin=""
+        if command -v python3 >/dev/null 2>&1; then
+            py_bin="python3"
+        elif command -v python >/dev/null 2>&1; then
+            py_bin="python"
+        fi
+        if [ -z "${py_bin}" ]; then
+            warn "python is not installed; skipping Android arm64 SME instruction check on ${android_arm64_ort}."
+        elif head -c 40 "${android_arm64_ort}" | grep -q 'version https://git-lfs'; then
+            fail "core/third-party/onnxruntime/lib/android/arm64/libonnxruntime.so is a Git LFS pointer; run 'git lfs pull'."
+        else
+            local smstart_hits=""
+            smstart_hits="$("${py_bin}" - "${android_arm64_ort}" <<'PY'
+import struct, sys
+
+with open(sys.argv[1], "rb") as f:
+    data = f.read()
+
+if len(data) < 64 or data[:4] != b"\x7fELF" or data[4] != 2 or data[5] != 1:
+    sys.exit(2)
+
+ranges = []
+e_shoff = struct.unpack_from("<Q", data, 40)[0]
+e_shentsize, e_shnum, e_shstrndx = struct.unpack_from("<HHH", data, 58)
+if e_shoff and e_shentsize >= 64 and e_shnum > 0 and e_shstrndx < e_shnum:
+    shstr_off, shstr_size = struct.unpack_from("<QQ", data, e_shoff + e_shstrndx * e_shentsize + 24)
+    shstr = data[shstr_off : shstr_off + shstr_size]
+    for i in range(e_shnum):
+        off = e_shoff + i * e_shentsize
+        sh_name, sh_type, sh_flags = struct.unpack_from("<IIQ", data, off)
+        sh_offset, sh_size = struct.unpack_from("<QQ", data, off + 24)
+        end = shstr.find(b"\x00", sh_name)
+        name = shstr[sh_name : end if end != -1 else shstr_size]
+        if name == b".text" and sh_size:
+            ranges.append((sh_offset, sh_offset + (sh_size & ~3)))
+
+if not ranges:
+    e_phoff = struct.unpack_from("<Q", data, 32)[0]
+    e_phentsize, e_phnum = struct.unpack_from("<HH", data, 54)
+    for i in range(e_phnum):
+        p_type, p_flags, p_offset, _, _, p_filesz = struct.unpack_from("<IIQQQQ", data, e_phoff + i * e_phentsize)
+        if p_type == 1 and (p_flags & 1):
+            ranges.append((p_offset, p_offset + (p_filesz & ~3)))
+
+opcodes = {0xD503437F, 0xD503457F, 0xD503477F}  # AArch64 smstart {sm, za, both}
+hits = sum(
+    1
+    for start, stop in ranges
+    for (insn,) in struct.iter_unpack("<I", memoryview(data)[start:stop])
+    if insn in opcodes
+)
+print(hits)
+PY
+)"
+            if [ -z "${smstart_hits}" ]; then
+                fail "could not inspect ${android_arm64_ort} for KleidiAI SME instructions."
+            elif [ "${smstart_hits}" -gt 0 ]; then
+                fail "core/third-party/onnxruntime/lib/android/arm64/libonnxruntime.so contains ${smstart_hits} AArch64 smstart instruction(s) from KleidiAI (GitHub issue #253)." \
+                    "Rebuild it with --no_kleidiai before shipping:" \
+                    "  scripts/build-ort-android.sh force arm64-v8a"
+            else
+                pass "Android arm64 ONNX Runtime prebuilt contains no KleidiAI SME instructions"
+            fi
+        fi
+    fi
+
     if [ ${FAILURES} -gt 0 ]; then
         echo >&2
         echo "Preflight found ${FAILURES} problem(s); not starting the release." >&2
