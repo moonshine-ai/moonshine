@@ -179,8 +179,15 @@ export class AssetDownloader {
       );
     }
     if (cache) {
-      // Store a clone so the body below can still be read.
-      await cache.put(url, response.clone());
+      // Store a clone so the body below can still be read. Caching is best
+      // effort: a failed put (e.g. QuotaExceededError) must not discard a
+      // good download. Errors in the body itself still surface when the
+      // original response is read below.
+      try {
+        await cache.put(url, response.clone());
+      } catch {
+        // Ignore; the next load simply misses the cache and refetches.
+      }
     }
     const buf = await this.readWithProgress(response, basename(url));
     this.finishFile(buf.byteLength);
