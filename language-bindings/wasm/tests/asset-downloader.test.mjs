@@ -252,6 +252,167 @@ test('downloadNamedFiles accumulates bytes with an unknown total', async () => {
   for (const call of calls) assert.equal(call.total, undefined);
 });
 
+/**
+ * Installs a mock global `caches` (Cache API) for the duration of `fn`.
+ * `cache` supplies the `match` and `put` methods exercised by the downloader.
+ */
+async function withCaches(cache, fn) {
+  const had = Object.prototype.hasOwnProperty.call(globalThis, 'caches');
+  const original = globalThis.caches;
+  globalThis.caches = { open: async () => cache };
+  try {
+    return await fn();
+  } finally {
+    if (had) globalThis.caches = original;
+    else delete globalThis.caches;
+  }
+}
+
+const CHUNKS = [
+  Uint8Array.of(1, 2, 3),
+  Uint8Array.of(4, 5, 6),
+  Uint8Array.of(7, 8),
+];
+const ALL_BYTES = Uint8Array.of(1, 2, 3, 4, 5, 6, 7, 8);
+
+/**
+ * A real Response streaming CHUNKS one per pull. With `failAfter`, the stream
+ * errors once that many chunks have been delivered instead of closing.
+ */
+function streamingResponse({ failAfter } = {}) {
+  let i = 0;
+  const stream = new ReadableStream({
+    pull(controller) {
+      if (failAfter !== undefined && i >= failAfter) {
+        controller.error(new Error('connection reset'));
+      } else if (i < CHUNKS.length) {
+        controller.enqueue(CHUNKS[i++].slice());
+      } else {
+        controller.close();
+      }
+    },
+  });
+  return new Response(stream, {
+    status: 200,
+    headers: { 'content-length': String(ALL_BYTES.byteLength) },
+  });
+}
+
+/** A cache that always misses and whose put reads one chunk, then hits quota. */
+function quotaCache() {
+  const puts = [];
+  return {
+    puts,
+    async match() {
+      return undefined;
+    },
+    async put(url, response) {
+      puts.push(url);
+      const reader = response.body.getReader();
+      await reader.read();
+      throw new DOMException('Quota exceeded', 'QuotaExceededError');
+    },
+  };
+}
+
+test('a cache.put QuotaExceededError does not lose the downloaded bytes', async () => {
+  const cache = quotaCache();
+  const { calls, downloader } = recordProgress();
+  const url = 'https://cdn.example/en/encoder.ort';
+  await withCaches(cache, () =>
+    withFetch(
+      () => streamingResponse(),
+      async (urls) => {
+        const bytes = await downloader.fetchFile(url);
+        assert.deepEqual(bytes, ALL_BYTES);
+        assert.deepEqual(urls, [url]);
+      },
+    ),
+  );
+  assert.deepEqual(cache.puts, [url]);
+  assert.ok(calls.length > 0);
+  assert.equal(calls.at(-1).loaded, ALL_BYTES.byteLength);
+  assert.equal(calls.at(-1).total, ALL_BYTES.byteLength);
+  assert.equal(calls.at(-1).file, 'encoder.ort');
+});
+
+test('a body read failure still surfaces when cache.put also fails', async () => {
+  const cache = quotaCache();
+  const { downloader } = recordProgress();
+  await withCaches(cache, () =>
+    withFetch(
+      () => streamingResponse({ failAfter: 1 }),
+      async (urls) => {
+        await assert.rejects(
+          () => downloader.fetchFile('https://cdn.example/en/encoder.ort'),
+          /connection reset/,
+        );
+        assert.equal(urls.length, 1);
+      },
+    ),
+  );
+});
+
+test('a cache hit returns the cached bytes without touching the network', async () => {
+  const url = 'https://cdn.example/en/encoder.ort';
+  const cache = {
+    puts: [],
+    async match(key) {
+      return key === url ? new Response(ALL_BYTES.slice()) : undefined;
+    },
+    async put(key) {
+      this.puts.push(key);
+    },
+  };
+  const { calls, downloader } = recordProgress();
+  await withCaches(cache, () =>
+    withFetch(
+      () => {
+        throw new Error('network must not be used on a cache hit');
+      },
+      async (urls) => {
+        assert.deepEqual(await downloader.fetchFile(url), ALL_BYTES);
+        assert.deepEqual(urls, []);
+      },
+    ),
+  );
+  assert.deepEqual(cache.puts, []);
+  assert.equal(calls.at(-1).loaded, ALL_BYTES.byteLength);
+  assert.equal(calls.at(-1).total, ALL_BYTES.byteLength);
+});
+
+test('fetch and HTTP failures still surface when a cache is available', async () => {
+  const cache = quotaCache();
+  const url = 'https://cdn.example/en/encoder.ort';
+
+  await withCaches(cache, () =>
+    withFetch(
+      () => {
+        throw new TypeError('Failed to fetch');
+      },
+      () =>
+        assert.rejects(
+          () => new AssetDownloader().fetchFile(url),
+          (err) => err instanceof TypeError && /Failed to fetch/.test(err.message),
+        ),
+    ),
+  );
+
+  await withCaches(cache, () =>
+    withFetch(
+      () => new Response('unavailable', { status: 503, statusText: 'Service Unavailable' }),
+      () =>
+        assert.rejects(
+          () => new AssetDownloader().fetchFile(url),
+          (err) => err instanceof MoonshineDownloadError && /503/.test(err.message),
+        ),
+    ),
+  );
+
+  // Neither failure is written to the cache.
+  assert.deepEqual(cache.puts, []);
+});
+
 test('fetchFile on its own still reports just that file’s bytes', async () => {
   const { calls, downloader } = recordProgress();
   await withFetch(okResponse, () =>
